@@ -8,60 +8,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useAttachmentSrc } from '../hooks/use-attachment-src';
 import { ImageEntry, PdfEntry, TxtEntry } from '../attachments/attachment-preview-dialog';
 
-const InMessageContextWrapper = () => {
-  return (
-    <AttachmentPrimitive.Root className="pt-4">
-      <div className="max-w-[366px] px-5 py-3 text-icon6 text-ui-lg leading-ui-lg rounded-lg bg-surface3">
-        <InMessageAttachmentWrapper />
-      </div>
-    </AttachmentPrimitive.Root>
-  );
-};
-
-const InMessageAttachmentWrapper = () => {
-  const src = useAttachmentSrc();
-  const attachment = useAttachment(a => a);
-
-  const isUrl = attachment?.name?.startsWith('https://');
-
-  if (attachment.type === 'image') {
-    const actualSrc = isUrl ? attachment?.name : src;
-
-    return (
-      <InMessageAttachment
-        type="image"
-        contentType={undefined}
-        nameSlot={<AttachmentPrimitive.Name />}
-        src={actualSrc}
-        data={undefined}
-      />
-    );
-  }
-
-  if (attachment.contentType === 'application/pdf') {
-    const pdfText = (attachment.content as TextMessagePart[])?.[0]?.text;
-    return (
-      <InMessageAttachment
-        type="document"
-        contentType={attachment.contentType}
-        nameSlot={<AttachmentPrimitive.Name />}
-        src={isUrl ? attachment?.name : src}
-        data={`data:application/pdf;base64,${pdfText}`}
-      />
-    );
-  }
-
-  return (
-    <InMessageAttachment
-      type={attachment.type}
-      contentType={attachment.contentType}
-      nameSlot={<AttachmentPrimitive.Name />}
-      src={src}
-      data={(attachment.content as TextMessagePart[])?.[0]?.text}
-    />
-  );
-};
-
 export interface InMessageAttachmentProps {
   type: string;
   contentType?: string;
@@ -92,10 +38,6 @@ const InMessageAttachment = ({ type, contentType, nameSlot, src, data }: InMessa
   );
 };
 
-export const UserMessageAttachments = () => {
-  return <MessagePrimitive.Attachments components={{ Attachment: InMessageContextWrapper }} />;
-};
-
 export const UserMessage = () => {
   const message = useMessage();
   const messageId = message?.id;
@@ -107,20 +49,21 @@ export const UserMessage = () => {
         <MessagePrimitive.Parts
           components={{
             File: p => {
-              const image = (p as any)?.image;
-              const isUrl = image?.startsWith('https://');
+              const data = p.data;
+              const isUrl = data?.startsWith('https://');
 
               return (
                 <InMessageAttachment
                   type="document"
                   contentType={p.mimeType}
                   nameSlot="Unknown filename"
-                  src={isUrl ? image : undefined}
-                  data={image} // yeah, for some reasons
+                  src={isUrl ? data : undefined}
+                  data={p.data}
                 />
               );
             },
             Image: p => {
+              console.log('loool', p);
               return <InMessageAttachment type="image" nameSlot="Unknown filename" src={p.image} />;
             },
             Text: p => {
@@ -141,7 +84,7 @@ export const UserMessage = () => {
           }}
         />
       </div>
-      <UserMessageAttachments />
+
       {/* <BranchPicker className="col-span-full col-start-1 row-start-3 -mr-1 justify-end" /> */}
     </MessagePrimitive.Root>
   );
