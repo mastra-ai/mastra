@@ -2274,8 +2274,6 @@ export class Run<
       throw new Error('This workflow run was not suspended');
     }
 
-    console.log(`snapshot===`, JSON.stringify(snapshot, null, 2));
-
     const snapshotResumeLabel = params.label ? snapshot?.resumeLabels?.[params.label] : undefined;
     const stepParam = snapshotResumeLabel?.stepId ?? params.step;
 

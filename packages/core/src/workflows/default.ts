@@ -1209,7 +1209,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         }),
       ),
     );
-    console.log(`results===`, JSON.stringify(results, null, 2));
     const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any>;
 
     const hasSuspended = results.find(result => result.status === 'suspended');
@@ -2644,8 +2643,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     if (abortController?.signal?.aborted) {
       execResults = { ...execResults, status: 'canceled' };
     }
-
-    console.log(`execResults===`, JSON.stringify(execResults, null, 2));
 
     await this.persistStepUpdate({
       workflowId,

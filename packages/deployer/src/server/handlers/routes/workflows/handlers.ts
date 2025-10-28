@@ -401,7 +401,6 @@ export async function resumeStreamWorkflowHandler(c: Context) {
       },
     );
   } catch (error) {
-    console.log('error in deployer resumeStreamWorkflowHandler', error);
     return handleError(error, 'Error streaming workflow');
   }
 }
