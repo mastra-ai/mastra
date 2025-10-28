@@ -2076,19 +2076,19 @@ export class MessageList {
       for (const invocation of v2Msg.content.toolInvocations) {
         if (invocation.state === 'result') {
           parts.push({
-            type: `tool-${invocation.toolName}` as const,
+            type: `tool-${invocation.toolName}`,
             toolCallId: invocation.toolCallId,
             state: 'output-available',
             input: invocation.args,
             output: invocation.result,
-          } satisfies AIV5Type.UIMessagePart<unknown, unknown>);
+          } as unknown as AIV5Type.UIMessage['parts'][number]);
         } else {
           parts.push({
-            type: `tool-${invocation.toolName}` as const,
+            type: `tool-${invocation.toolName}`,
             toolCallId: invocation.toolCallId,
             state: invocation.state === 'call' ? 'input-available' : 'input-streaming',
             input: invocation.args,
-          } satisfies AIV5Type.UIMessagePart<unknown, unknown>);
+          } as unknown as AIV5Type.UIMessage['parts'][number]);
         }
       }
     }
