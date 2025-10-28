@@ -21,7 +21,6 @@ import type { ZodType } from 'zod';
 import type {
   GenerateLegacyParams,
   GetAgentResponse,
-  GetEvalsByAgentIdResponse,
   GetToolResponse,
   ClientOptions,
   StreamParams,
@@ -1674,23 +1673,6 @@ export class Agent extends BaseResource {
     });
   }
 
-  /**
-   * Retrieves evaluation results for the agent
-   * @param runtimeContext - Optional runtime context to pass as query parameter
-   * @returns Promise containing agent evaluations
-   */
-  evals(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetEvalsByAgentIdResponse> {
-    return this.request(`/api/agents/${this.agentId}/evals/ci${runtimeContextQueryString(runtimeContext)}`);
-  }
-
-  /**
-   * Retrieves live evaluation results for the agent
-   * @param runtimeContext - Optional runtime context to pass as query parameter
-   * @returns Promise containing live agent evaluations
-   */
-  liveEvals(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetEvalsByAgentIdResponse> {
-    return this.request(`/api/agents/${this.agentId}/evals/live${runtimeContextQueryString(runtimeContext)}`);
-  }
   /**
    * Updates the model for the agent
    * @param params - Parameters for updating the model

@@ -93,54 +93,6 @@ export const referenceSections: Record<
     { title: "Netlify", href: "/docs/reference/deployer/netlify" },
     { title: "Vercel", href: "/docs/reference/deployer/vercel" },
   ],
-  Evals: [
-    {
-      title: "Answer Relevancy",
-      href: "/docs/reference/evals/answer-relevancy",
-    },
-    { title: "Bias", href: "/docs/reference/evals/bias" },
-    { title: "Completeness", href: "/docs/reference/evals/completeness" },
-    {
-      title: "Content Similarity",
-      href: "/docs/reference/evals/content-similarity",
-    },
-    {
-      title: "Context Position",
-      href: "/docs/reference/evals/context-position",
-    },
-    {
-      title: "Context Precision",
-      href: "/docs/reference/evals/context-precision",
-    },
-    {
-      title: "Context Relevancy",
-      href: "/docs/reference/evals/context-relevancy",
-    },
-    {
-      title: "Contextual Recall",
-      href: "/docs/reference/evals/contextual-recall",
-    },
-    { title: "Faithfulness", href: "/docs/reference/evals/faithfulness" },
-    { title: "Hallucination", href: "/docs/reference/evals/hallucination" },
-    {
-      title: "Keyword Coverage",
-      href: "/docs/reference/evals/keyword-coverage",
-    },
-    {
-      title: "Prompt Alignment",
-      href: "/docs/reference/evals/prompt-alignment",
-    },
-    { title: "Summarization", href: "/docs/reference/evals/summarization" },
-    {
-      title: "Textual Difference",
-      href: "/docs/reference/evals/textual-difference",
-    },
-    {
-      title: "Tone Consistency",
-      href: "/docs/reference/evals/tone-consistency",
-    },
-    { title: "Toxicity", href: "/docs/reference/evals/toxicity" },
-  ],
   "Legacy Workflows": [
     { title: "After", href: "/docs/reference/legacyWorkflows/after" },
     { title: "AfterEvent", href: "/docs/reference/legacyWorkflows/afterEvent" },

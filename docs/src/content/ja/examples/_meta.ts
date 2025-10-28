@@ -17,9 +17,6 @@ const meta = {
   memory: {
     title: "メモリ",
   },
-  evals: {
-    title: "評価",
-  },
   voice: {
     title: "音声",
   },
