@@ -97,10 +97,10 @@ Get messages associated with a memory thread:
 
 ```typescript
 // Get all messages in the thread
-const { messages } = await thread.getMessages();
+const { messages } = await thread.listMessages();
 
 // Limit the number of messages retrieved
-const { messages } = await thread.getMessages({ limit: 10 });
+const { messages } = await thread.listMessages({ limit: 10 });
 ```
 
 ### Delete a Message

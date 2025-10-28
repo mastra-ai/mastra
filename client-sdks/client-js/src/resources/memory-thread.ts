@@ -8,6 +8,8 @@ import type {
   GetMemoryThreadMessagesParams,
   GetMemoryThreadMessagesPaginatedParams,
   GetMemoryThreadMessagesPaginatedResponse,
+  ListMemoryThreadMessagesParams,
+  ListMemoryThreadMessagesResponse,
 } from '../types';
 
 import { runtimeContextQueryString } from '../utils';
@@ -63,23 +65,6 @@ export class MemoryThread extends BaseResource {
   }
 
   /**
-   * Retrieves messages associated with the thread
-   * @param params - Optional parameters including limit for number of messages to retrieve and runtime context
-   * @returns Promise containing thread messages and UI messages
-   */
-  getMessages(
-    params?: GetMemoryThreadMessagesParams & { runtimeContext?: RuntimeContext | Record<string, any> },
-  ): Promise<GetMemoryThreadMessagesResponse> {
-    const query = new URLSearchParams({
-      agentId: this.agentId,
-      ...(params?.limit ? { limit: params.limit.toString() } : {}),
-    });
-    return this.request(
-      `/api/memory/threads/${this.threadId}/messages?${query.toString()}${runtimeContextQueryString(params?.runtimeContext, '&')}`,
-    );
-  }
-
-  /**
    * Retrieves paginated messages associated with the thread with advanced filtering and selection options
    * @param params - Pagination parameters including selectBy criteria, page, perPage, date ranges, message inclusion options, and runtime context
    * @returns Promise containing paginated thread messages with pagination metadata (total, page, perPage, hasMore)
@@ -97,6 +82,29 @@ export class MemoryThread extends BaseResource {
     });
     return this.request(
       `/api/memory/threads/${this.threadId}/messages/paginated?${query.toString()}${runtimeContextQueryString(runtimeContext, '&')}`,
+    );
+  }
+
+  /**
+   * Lists messages with advanced filtering and context inclusion options
+   * @param params - Parameters including resourceId, include array for message context, pagination options, format, and runtime context
+   * @returns Promise containing list of messages with pagination metadata (total, page, perPage, hasMore)
+   */
+  listMessages({
+    runtimeContext,
+    ...params
+  }: ListMemoryThreadMessagesParams & {
+    runtimeContext?: RuntimeContext | Record<string, any>;
+  } = {}): Promise<ListMemoryThreadMessagesResponse> {
+    const query = new URLSearchParams({
+      agentId: this.agentId,
+    });
+    return this.request(
+      `/api/memory/threads/${this.threadId}/messages?${query.toString()}${runtimeContextQueryString(runtimeContext, '&')}`,
+      {
+        method: 'POST',
+        body: params,
+      },
     );
   }
 

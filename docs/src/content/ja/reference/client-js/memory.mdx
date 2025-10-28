@@ -97,10 +97,10 @@ const savedMessages = await mastraClient.saveMessageToMemory({
 
 ```typescript
 // スレッド内のすべてのメッセージを取得
-const { messages } = await thread.getMessages();
+const { messages } = await thread.listMessages();
 
 // 取得するメッセージ数を制限
-const { messages } = await thread.getMessages({ limit: 10 });
+const { messages } = await thread.listMessages({ limit: 10 });
 ```
 
 ### メッセージを削除する

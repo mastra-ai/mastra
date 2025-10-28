@@ -82,13 +82,14 @@ export type StorageListMessagesInput = {
     withPreviousMessages?: number;
     withNextMessages?: number;
   }[];
+  limit?: number | false;
   pagination?: PaginationArgs;
   format?: MastraMessageFormat;
-}
+};
 
 export type StorageListMessagesOutput = PaginationInfo & {
   messages: MastraMessageV1[] | MastraMessageV2[];
-}
+};
 
 export type StorageGetMessagesArg = {
   threadId: string;
