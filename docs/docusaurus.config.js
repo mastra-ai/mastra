@@ -95,6 +95,16 @@ const config = {
         mode: "auto",
       },
     ],
+    [
+      "@docusaurus/plugin-content-docs",
+      {
+        id: "models",
+        path: "models",
+        routeBasePath: "models",
+        sidebarPath: "./sidebarsModels.js",
+        editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
+      },
+    ],
   ],
 
   presets: [
