@@ -3866,4 +3866,86 @@ describe('MessageList', () => {
       );
     });
   });
+
+  describe('Issue #9370: Prevent duplicate assistant messages', () => {
+    it('should not merge assistant messages with different IDs', () => {
+      const messageList = new MessageList();
+
+      // Simulate: Storage has assistant-1
+      messageList.add(
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'Hello!' }],
+        },
+        'memory',
+      );
+
+      // Simulate: useChat resends assistant-1 with step-start metadata
+      messageList.add(
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [{ type: 'step-start' }, { type: 'text', text: 'Hello!' }],
+        },
+        'input',
+      );
+
+      // Simulate: New assistant response comes in
+      messageList.add(
+        {
+          id: 'assistant-2',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'Hello again!' }],
+        },
+        'input',
+      );
+
+      const messages = messageList.get.all.v2();
+
+      // Should have 2 separate assistant messages, not merged
+      const assistantMessages = messages.filter(m => m.role === 'assistant');
+      expect(assistantMessages).toHaveLength(2);
+      expect(assistantMessages[0].id).toBe('assistant-1');
+      expect(assistantMessages[1].id).toBe('assistant-2');
+
+      // Assistant-1 should NOT contain assistant-2's content (no duplicate)
+      const assistant1Parts = assistantMessages[0].content.parts;
+      const hasDuplicate = assistant1Parts.some(
+        part => part.type === 'text' && 'text' in part && part.text === 'Hello again!',
+      );
+      expect(hasDuplicate).toBe(false);
+    });
+
+    it('should still merge streaming updates with same ID', () => {
+      const messageList = new MessageList();
+
+      // Initial assistant message (streaming start)
+      messageList.add(
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'Hello' }],
+        },
+        'response',
+      );
+
+      // Streaming update (same ID, more content)
+      messageList.add(
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'Hello' }, { type: 'text', text: ' world!' }],
+        },
+        'response',
+      );
+
+      const messages = messageList.get.all.v2();
+      const assistantMessages = messages.filter(m => m.role === 'assistant');
+
+      // Should merge into single message when IDs match
+      expect(assistantMessages).toHaveLength(1);
+      expect(assistantMessages[0].content.parts).toHaveLength(2);
+    });
+  });
 });
