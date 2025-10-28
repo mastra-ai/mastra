@@ -4,7 +4,7 @@
   "scripts": {
     "docusaurus": "docusaurus",
     "start": "docusaurus start",
-    "build": "pnpm build:llms-txt && docusaurus build",
+    "build": "npm run build:llms-txt && docusaurus build",
     "build:llms-txt": "tsx scripts/build-llms-txt.ts",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
