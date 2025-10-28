@@ -12,7 +12,7 @@ const TEST_CONFIG: MSSQLConfig = {
   password: process.env.MSSQL_PASSWORD || 'Your_password123',
 };
 
-// const connectionString = `mssql://${TEST_CONFIG.user}:${TEST_CONFIG.password}@${TEST_CONFIG.server}:${TEST_CONFIG.port}/${TEST_CONFIG.database}`;
+// const CONNECTION_STRING = `Server=${TEST_CONFIG.server},${TEST_CONFIG.port};Database=${TEST_CONFIG.database};User Id=${TEST_CONFIG.user};Password=${TEST_CONFIG.password};Encrypt=true;TrustServerCertificate=true`;
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
