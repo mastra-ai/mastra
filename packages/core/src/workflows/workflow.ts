@@ -22,22 +22,6 @@ import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step, SuspendOptions } from './step';
-
-// Options that can be passed when wrapping an agent with createStep
-// These work for both stream() (v2) and streamLegacy() (v1) methods
-type AgentStepOptions = Omit<
-  AgentExecutionOptions & AgentStreamOptions,
-  | 'format'
-  | 'tracingContext'
-  | 'runtimeContext'
-  | 'abortSignal'
-  | 'context'
-  | 'onStepFinish'
-  | 'output'
-  | 'experimental_output'
-  | 'resourceId'
-  | 'threadId'
->;
 import type {
   DefaultEngineType,
   DynamicMapping,
