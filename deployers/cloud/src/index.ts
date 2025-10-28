@@ -72,7 +72,6 @@ import { PinoLogger } from '@mastra/loggers';
 import { HttpTransport } from '@mastra/loggers/http';
 import { evaluate } from '@mastra/core/eval';
 import { AvailableHooks, registerHook } from '@mastra/core/hooks';
-import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces';
 const startTime = process.env.RUNNER_START_TIME ? new Date(process.env.RUNNER_START_TIME).getTime() : Date.now();
 const createNodeServerStartTime = Date.now();
@@ -118,21 +117,27 @@ if (mastra?.storage) {
 
 if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {
   const { MastraStorage } = await import('@mastra/core/storage');
+  const { LibSQLStore, LibSQLVector } = await import('@mastra/libsql');
   logger.info('Using Mastra Cloud Storage: ' + process.env.MASTRA_STORAGE_URL)
-  const storage = new LibSQLStore({
-    url: process.env.MASTRA_STORAGE_URL,
-    authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN,
-  })
-  const vector = new LibSQLVector({
-    connectionUrl: process.env.MASTRA_STORAGE_URL,
-    authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN,
-  })
 
-  await storage.init()
-  mastra?.setStorage(storage)
+  if (LibSQLStore) {
+    const storage = new LibSQLStore({
+      url: process.env.MASTRA_STORAGE_URL,
+      authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN,
+    })
 
-  mastra?.memory?.setStorage(storage)
-  mastra?.memory?.setVector(vector)
+    await storage.init()
+    mastra?.setStorage(storage)
+    mastra?.memory?.setStorage(storage)
+  }
+
+  if (LibSQLVector) {
+    const vector = new LibSQLVector({
+      connectionUrl: process.env.MASTRA_STORAGE_URL,
+      authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN,
+    })
+    mastra?.memory?.setVector(vector)
+  }
 
   registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
     evaluate({
