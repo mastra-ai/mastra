@@ -47,6 +47,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   toolLink: (toolId: string) => `/tools/all/${toolId}`,
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
+  mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
 };
 
