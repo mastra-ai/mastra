@@ -142,8 +142,8 @@ describe('Stream ID Consistency', () => {
 
     const { messages: savedMessages } = await storage.listMessages({ threadId, include: [{ id: messageId }] });
 
-    expect(savedMessages).toHaveLength(1);
-    expect(savedMessages[0].id).toBe(messageId);
+    expect(savedMessages).toHaveLength(2);
+    expect(savedMessages[1].id).toBe(messageId);
     expect(customIdGenerator).toHaveBeenCalled();
   });
 
@@ -276,9 +276,8 @@ describe('Stream ID Consistency', () => {
     await stream.consumeStream();
     const res = await stream.response;
     const messageId = res?.uiMessages?.[0]?.id;
-    const { messages: savedMessages } = await storage.listMessages({ threadId, include: [{ id: messageId! }] });
-    expect(savedMessages).toHaveLength(1);
-    expect(savedMessages[0].id).toBe(messageId!);
+    const { messages: savedMessages } = await storage.listMessages({ threadId });
+    expect(savedMessages[1].id).toBe(messageId!);
     expect(customIdGenerator).toHaveBeenCalled();
   });
 

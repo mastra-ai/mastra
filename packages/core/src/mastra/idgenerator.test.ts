@@ -6,11 +6,12 @@ import { MockMemory } from '../agent/test-utils';
 import { MastraError } from '../error';
 import { RuntimeContext } from '../runtime-context';
 import { Mastra } from './index';
+import { InMemoryStore } from '../storage';
 
 // Helper function to create a Mastra instance with proper memory registration
 function createMastraWithMemory(idGenerator?: () => string) {
   // Create a mock memory instance
-  const memory = new MockMemory();
+  const memory = new MockMemory({ storage: new InMemoryStore() });
 
   // Create an agent with the registered memory
   const agent = new Agent({
@@ -371,7 +372,7 @@ describe('Mastra ID Generator', () => {
             expect(mastraInstance.getIdGenerator()).toBe(customIdGenerator);
           }
 
-          return new MockMemory();
+          return new MockMemory({ storage: new InMemoryStore() });
         },
       });
 
@@ -416,7 +417,7 @@ describe('Mastra ID Generator', () => {
           // Verify access to custom ID generator
           expect(mastraInstance?.getIdGenerator()).toBe(customIdGenerator);
 
-          const memory = new MockMemory();
+          const memory = new MockMemory({ storage: new InMemoryStore() });
           // Customize memory based on context
           if (contextUserId && contextSessionId) {
             memory.name = `memory-${contextUserId}-${contextSessionId}`;
@@ -466,7 +467,7 @@ describe('Mastra ID Generator', () => {
           const userId = runtimeContext.get('userId');
           expect(mastraInstance?.getIdGenerator()).toBe(customIdGenerator);
 
-          const memory = new MockMemory();
+          const memory = new MockMemory({ storage: new InMemoryStore() });
           memory.name = `memory-${userId}`;
           memoryInstances.push(memory);
           return memory;
@@ -522,7 +523,7 @@ describe('Mastra ID Generator', () => {
           if (shouldFail) {
             throw new Error('Memory creation failed');
           }
-          return new MockMemory();
+          return new MockMemory({ storage: new InMemoryStore() });
         },
       });
 
@@ -598,7 +599,8 @@ describe('Mastra ID Generator', () => {
 
   describe('End-to-End User Workflows', () => {
     it('should handle complete user conversation workflow', async () => {
-      const memory = new MockMemory();
+      const storage = new InMemoryStore();
+      const memory = new MockMemory({ storage });
       const agent = new Agent({
         name: 'helpAgent',
         instructions: 'You are a helpful assistant',
@@ -630,7 +632,8 @@ describe('Mastra ID Generator', () => {
     });
 
     it('should handle multi-user concurrent conversations', async () => {
-      const memory = new MockMemory();
+      const storage = new InMemoryStore();
+      const memory = new MockMemory({ storage });
       const agent = new Agent({
         name: 'multiUserAgent',
         instructions: 'You are a multi-user assistant',
@@ -672,7 +675,8 @@ describe('Mastra ID Generator', () => {
     });
 
     it('should handle complex workflow with memory operations', async () => {
-      const memory = new MockMemory();
+      const storage = new InMemoryStore();
+      const memory = new MockMemory({ storage });
       const agent = new Agent({
         name: 'workflowAgent',
         instructions: 'You are a workflow assistant',
@@ -719,7 +723,7 @@ describe('Mastra ID Generator', () => {
     });
 
     it('should handle streaming operations with memory persistence', async () => {
-      const memory = new MockMemory();
+      const memory = new MockMemory({ storage: new InMemoryStore() });
       const agent = new Agent({
         name: 'streamingAgent',
         instructions: 'You are a streaming assistant',

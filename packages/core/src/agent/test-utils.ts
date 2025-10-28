@@ -5,7 +5,7 @@ import { InMemoryStore, type StorageListMessagesInput } from '../storage';
 import { MessageList } from './message-list';
 
 export class MockMemory extends MastraMemory {
-  constructor({ storage }: { storage?: InMemoryStore }) {
+  constructor({ storage }: { storage?: InMemoryStore } = {}) {
     super({ name: 'mock', storage: storage || new InMemoryStore() });
     this._hasOwnStorage = true;
   }
