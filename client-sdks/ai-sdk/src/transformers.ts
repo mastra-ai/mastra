@@ -110,7 +110,7 @@ export function WorkflowStreamToAISDKTransformer() {
 export function AgentNetworkToAISDKTransformer() {
   const bufferedNetworks = new Map<
     string,
-    { name: string; steps: StepResult[]; usage: LanguageModelV2Usage; output: unknown }
+    { name: string; steps: StepResult[]; usage: LanguageModelV2Usage | null; output: unknown | null }
   >();
 
   return new TransformStream<
