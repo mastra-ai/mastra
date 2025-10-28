@@ -1,4 +1,3 @@
-import { google } from '@ai-sdk/google-v5';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { RuntimeContext } from '../runtime-context';
@@ -68,7 +67,7 @@ describe('Gemini Model Compatibility Tests', () => {
             outputSchema: z.object({
               benefits: z.array(z.string()),
             }),
-            execute: async ({ context }) => {
+            execute: async () => {
               return { benefits: ['Exercise is good for you', 'Mental health benefits', 'Physical health benefits'] };
             },
           }),
