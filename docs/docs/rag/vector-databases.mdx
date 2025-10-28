@@ -16,30 +16,34 @@ After generating embeddings, you need to store them in a database that supports 
 
 <Tabs>
   <TabItem value="mongodb" label="MongoDB">
-    ```ts title="vector-store.ts" showLineNumbers copy
-    import { MongoDBVector } from '@mastra/mongodb'
 
-    const store = new MongoDBVector({
-      uri: process.env.MONGODB_URI,
-      dbName: process.env.MONGODB_DATABASE
-    })
-    await store.createIndex({
-      indexName: "myCollection",
-      dimension: 1536,
-    });
-    await store.upsert({
-      indexName: "myCollection",
-      vectors: embeddings,
-      metadata: chunks.map(chunk => ({ text: chunk.text })),
-    });
+  ```ts title="vector-store.ts" showLineNumbers copy
+  import { MongoDBVector } from '@mastra/mongodb'
 
-    ```
-    ### Using MongoDB Atlas Vector search
+  const store = new MongoDBVector({
+    uri: process.env.MONGODB_URI,
+    dbName: process.env.MONGODB_DATABASE
+  })
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
 
-    For detailed setup instructions and best practices, see the [official MongoDB Atlas Vector Search documentation](https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-overview/?utm_campaign=devrel&utm_source=third-party-content&utm_medium=cta&utm_content=mastra-docs). 
+  ```
+
+  ### Using MongoDB Atlas Vector search
+
+  For detailed setup instructions and best practices, see the [official MongoDB Atlas Vector Search documentation](https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-overview/?utm_campaign=devrel&utm_source=third-party-content&utm_medium=cta&utm_content=mastra-docs).
+
   </TabItem>
 
   <TabItem value="pg-vector" label="PgVector">
+
   ```ts title="vector-store.ts" showLineNumbers copy
   import { PgVector } from '@mastra/pg';
 
@@ -55,34 +59,38 @@ After generating embeddings, you need to store them in a database that supports 
     vectors: embeddings,
     metadata: chunks.map(chunk => ({ text: chunk.text })),
   });
-```
+  ```
 
-### Using PostgreSQL with pgvector
+  ### Using PostgreSQL with pgvector
 
-PostgreSQL with the pgvector extension is a good solution for teams already using PostgreSQL who want to minimize infrastructure complexity.
-For detailed setup instructions and best practices, see the [official pgvector repository](https://github.com/pgvector/pgvector).
-</TabItem>
+  PostgreSQL with the pgvector extension is a good solution for teams already using PostgreSQL who want to minimize infrastructure complexity.
+  For detailed setup instructions and best practices, see the [official pgvector repository](https://github.com/pgvector/pgvector).
 
-<TabItem value="pinecone" label="Pinecone">
-```ts title="vector-store.ts" showLineNumbers copy
-import { PineconeVector } from '@mastra/pinecone'
+  </TabItem>
 
-const store = new PineconeVector({
-  apiKey: process.env.PINECONE_API_KEY,
-})
-await store.createIndex({
-  indexName: "myCollection",
-  dimension: 1536,
-});
-await store.upsert({
-  indexName: "myCollection",
-  vectors: embeddings,
-  metadata: chunks.map(chunk => ({ text: chunk.text })),
-});
-```
-</TabItem>
+  <TabItem value="pinecone" label="Pinecone">
 
-<TabItem value="qdrant" label="Qdrant">
+  ```ts title="vector-store.ts" showLineNumbers copy
+  import { PineconeVector } from '@mastra/pinecone'
+
+  const store = new PineconeVector({
+    apiKey: process.env.PINECONE_API_KEY,
+  })
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
+  ```
+
+  </TabItem>
+
+  <TabItem value="qdrant" label="Qdrant">
+
   ```ts title="vector-store.ts" showLineNumbers copy
   import { QdrantVector } from '@mastra/qdrant'
 
@@ -101,38 +109,40 @@ await store.upsert({
     vectors: embeddings,
     metadata: chunks.map(chunk => ({ text: chunk.text })),
   });
+  ```
+  </TabItem>
 
-```
-</TabItem>
+  <TabItem value="chroma" label="Chroma">
 
-<TabItem value="chroma" label="Chroma">
-```ts title="vector-store.ts" showLineNumbers copy
-import { ChromaVector } from '@mastra/chroma'
+  ```ts title="vector-store.ts" showLineNumbers copy
+  import { ChromaVector } from '@mastra/chroma'
 
-// Running Chroma locally
-// const store = new ChromaVector()
+  // Running Chroma locally
+  // const store = new ChromaVector()
 
-// Running on Chroma Cloud
-const store = new ChromaVector({
-  apiKey: process.env.CHROMA_API_KEY,
-  tenant: process.env.CHROMA_TENANT,
-  database: process.env.CHROMA_DATABASE
-})
+  // Running on Chroma Cloud
+  const store = new ChromaVector({
+    apiKey: process.env.CHROMA_API_KEY,
+    tenant: process.env.CHROMA_TENANT,
+    database: process.env.CHROMA_DATABASE
+  })
 
-await store.createIndex({
-  indexName: "myCollection",
-  dimension: 1536,
-});
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
 
-await store.upsert({
-  indexName: "myCollection",
-  vectors: embeddings,
-  metadata: chunks.map(chunk => ({ text: chunk.text })),
-});
-```
-</TabItem>
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
+  ```
 
-<TabItem value="astra" label="Astra">
+  </TabItem>
+
+  <TabItem value="astra" label="Astra">
+
   ```ts title="vector-store.ts" showLineNumbers copy
   import { AstraVector } from '@mastra/astra'
 
@@ -152,33 +162,35 @@ await store.upsert({
     vectors: embeddings,
     metadata: chunks.map(chunk => ({ text: chunk.text })),
   });
+  ```
+  </TabItem>
 
-```
-</TabItem>
+  <TabItem value="libsql" label="LibSQL">
 
-<TabItem value="libsql" label="LibSQL">
-```ts title="vector-store.ts" showLineNumbers copy
-import { LibSQLVector } from "@mastra/core/vector/libsql";
+  ```ts title="vector-store.ts" showLineNumbers copy
+  import { LibSQLVector } from "@mastra/core/vector/libsql";
 
-const store = new LibSQLVector({
-  connectionUrl: process.env.DATABASE_URL,
-  authToken: process.env.DATABASE_AUTH_TOKEN // Optional: for Turso cloud databases
-})
+  const store = new LibSQLVector({
+    connectionUrl: process.env.DATABASE_URL,
+    authToken: process.env.DATABASE_AUTH_TOKEN // Optional: for Turso cloud databases
+  })
 
-await store.createIndex({
-  indexName: "myCollection",
-  dimension: 1536,
-});
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
 
-await store.upsert({
-  indexName: "myCollection",
-  vectors: embeddings,
-  metadata: chunks.map(chunk => ({ text: chunk.text })),
-});
-```
-</TabItem>
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
+  ```
 
-<TabItem value="upstash" label="Upstash">
+  </TabItem>
+
+  <TabItem value="upstash" label="Upstash">
+
   ```ts title="vector-store.ts" showLineNumbers copy
   import { UpstashVector } from '@mastra/upstash'
 
@@ -195,50 +207,53 @@ await store.upsert({
     vectors: embeddings,
     metadata: chunks.map(chunk => ({ text: chunk.text })),
   });
-```
-</TabItem>
+  ```
+  </TabItem>
 
-<TabItem value="cloudflare" label="Cloudflare">
-```ts title="vector-store.ts" showLineNumbers copy
-import { CloudflareVector } from '@mastra/vectorize'
+  <TabItem value="cloudflare" label="Cloudflare">
 
-const store = new CloudflareVector({
-  accountId: process.env.CF_ACCOUNT_ID,
-  apiToken: process.env.CF_API_TOKEN
-})
-await store.createIndex({
-  indexName: "myCollection",
-  dimension: 1536,
-});
-await store.upsert({
-  indexName: "myCollection",
-  vectors: embeddings,
-  metadata: chunks.map(chunk => ({ text: chunk.text })),
-});
-```
+  ```ts title="vector-store.ts" showLineNumbers copy
+  import { CloudflareVector } from '@mastra/vectorize'
 
-</TabItem>
+  const store = new CloudflareVector({
+    accountId: process.env.CF_ACCOUNT_ID,
+    apiToken: process.env.CF_API_TOKEN
+  })
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
+  ```
 
-<TabItem value="opensearch" label="OpenSearch">
-```ts title="vector-store.ts" showLineNumbers copy
-import { OpenSearchVector } from '@mastra/opensearch'
+  </TabItem>
 
-const store = new OpenSearchVector({ url: process.env.OPENSEARCH_URL })
+  <TabItem value="opensearch" label="OpenSearch">
 
-await store.createIndex({
-  indexName: "my-collection",
-  dimension: 1536,
-});
+  ```ts title="vector-store.ts" showLineNumbers copy
+  import { OpenSearchVector } from '@mastra/opensearch'
 
-await store.upsert({
-  indexName: "my-collection",
-  vectors: embeddings,
-  metadata: chunks.map(chunk => ({ text: chunk.text })),
-});
-```
+  const store = new OpenSearchVector({ url: process.env.OPENSEARCH_URL })
 
-</TabItem>
-<TabItem value="couchbase" label="Couchbase">
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
+  ```
+
+  </TabItem>
+  <TabItem value="couchbase" label="Couchbase">
+
   ```ts title="vector-store.ts" showLineNumbers copy
   import { CouchbaseVector } from '@mastra/couchbase'
 
@@ -260,19 +275,21 @@ await store.upsert({
     metadata: chunks.map(chunk => ({ text: chunk.text })),
   });
   ```
-</TabItem>
-<TabItem value="lancedb" label="Lance">
+
+  </TabItem>
+  <TabItem value="lancedb" label="Lance">
+
   ```ts title="vector-store.ts" showLineNumbers copy
   import { LanceVectorStore } from '@mastra/lance'
 
   const store = await LanceVectorStore.create('/path/to/db')
-  
+
   await store.createIndex({
     tableName: "myVectors",
     indexName: "myCollection",
     dimension: 1536,
   });
-  
+
   await store.upsert({
     tableName: "myVectors",
     vectors: embeddings,
@@ -281,33 +298,36 @@ await store.upsert({
   ```
 
   ### Using LanceDB
-  
+
   LanceDB is an embedded vector database built on the Lance columnar format, suitable for local development or cloud deployment.
   For detailed setup instructions and best practices, see the [official LanceDB documentation](https://lancedb.github.io/lancedb/).
-</TabItem>
-<TabItem value="s3vectors" label="S3 Vectors">
-```ts title="vector-store.ts" showLineNumbers copy
-import { S3Vectors } from "@mastra/s3vectors";
 
-const store = new S3Vectors({
-  vectorBucketName: "my-vector-bucket",
-  clientConfig: {
-    region: "us-east-1",
-  },
-  nonFilterableMetadataKeys: ["content"],
-});
+  </TabItem>
+  <TabItem value="s3vectors" label="S3 Vectors">
 
-await store.createIndex({
-  indexName: "my-index",
-  dimension: 1536,
-});
-await store.upsert({
-  indexName: "my-index",
-  vectors: embeddings,
-  metadata: chunks.map(chunk => ({ text: chunk.text })),
-});
-```
-</TabItem>
+  ```ts title="vector-store.ts" showLineNumbers copy
+  import { S3Vectors } from "@mastra/s3vectors";
+
+  const store = new S3Vectors({
+    vectorBucketName: "my-vector-bucket",
+    clientConfig: {
+      region: "us-east-1",
+    },
+    nonFilterableMetadataKeys: ["content"],
+  });
+
+  await store.createIndex({
+    indexName: "my-index",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-index",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
+  ```
+
+  </TabItem>
 
 </Tabs>
 
