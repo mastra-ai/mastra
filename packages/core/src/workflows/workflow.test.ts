@@ -12,7 +12,7 @@ import { Agent } from '../agent';
 import { RuntimeContext } from '../di';
 import { MastraError } from '../error';
 import { MockStore } from '../storage/mock';
-import type { ChunkType, StreamEvent, WatchEvent } from './types';
+import type { ChunkType, StreamEvent, WatchEvent, WorkflowStreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
@@ -6396,6 +6396,308 @@ describe('Workflow', () => {
         },
       });
       expect((result.steps?.['test-workflow'] as any)?.error).toMatch(/^Error: Error: Step execution failed/);
+    });
+  });
+
+  describe.only('Error Handling Consistency', () => {
+    it('should preserve Error instance with custom properties in result.error', async () => {
+      const testErrorMessage = 'Custom API error';
+      const testErrorStatusCode = 401;
+      const testErrorRequestId = 'req_123';
+      const testError = new Error(testErrorMessage);
+      // Add custom properties to verify they're preserved
+      (testError as any).statusCode = testErrorStatusCode;
+      (testError as any).requestId = testErrorRequestId;
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: async () => {
+          throw testError;
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'error-test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+      });
+
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        // result.error should be an Error instance (MastraError wrapper)
+        expect(result.error).toBeInstanceOf(Error);
+
+        // The original error with custom properties should be in error.cause
+        expect(result.error.cause).toBeInstanceOf(Error);
+        expect((result.error.cause as Error).message).toBe(testErrorMessage);
+
+        // Custom properties should be preserved on the cause
+        expect((result.error.cause as any).statusCode).toBe(testErrorStatusCode);
+        expect((result.error.cause as any).requestId).toBe(testErrorRequestId);
+      }
+    });
+
+    it('should preserve error.cause chain in result.error', async () => {
+      const rootCauseMessage = 'Root cause error';
+      const rootCause = new Error(rootCauseMessage);
+
+      const intermediateMessage = 'Intermediate error';
+      const intermediateCause = new Error(intermediateMessage, { cause: rootCause });
+
+      const topLevelMessage = 'Top level error';
+      const topLevelError = new Error(topLevelMessage, { cause: intermediateCause });
+      // Add custom properties
+      (topLevelError as any).statusCode = 500;
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: async () => {
+          throw topLevelError;
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'error-cause-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+      });
+
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        // result.error is the MastraError wrapper
+        expect(result.error).toBeInstanceOf(Error);
+
+        // The original error should be in error.cause
+        expect(result.error.cause).toBeInstanceOf(Error);
+        expect((result.error.cause as Error).message).toBe(topLevelMessage);
+
+        // Verify custom properties on the original error (in cause)
+        expect((result.error.cause as any).statusCode).toBe(500);
+
+        // Verify the full error.cause chain is preserved (original error's cause)
+        const originalError = result.error.cause as Error;
+        expect(originalError.cause).toBeInstanceOf(Error);
+        expect((originalError.cause as Error).message).toBe(intermediateMessage);
+
+        // Verify nested cause (intermediate error's cause)
+        const intermediateCauseErr = originalError.cause as Error;
+        expect(intermediateCauseErr.cause).toBeInstanceOf(Error);
+        expect((intermediateCauseErr.cause as Error).message).toBe(rootCauseMessage);
+      }
+    });
+
+    it('should preserve error in both result.error and step result error', async () => {
+      const testErrorMessage = 'Step execution error';
+      const testError = new Error(testErrorMessage);
+      (testError as any).statusCode = 503;
+      (testError as any).isRetryable = true;
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: async () => {
+          throw testError;
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'error-consistency-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+      });
+
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        // Check workflow-level error (MastraError wrapper)
+        expect(result.error).toBeInstanceOf(Error);
+
+        // Check the original error in cause
+        expect(result.error.cause).toBeInstanceOf(Error);
+        expect((result.error.cause as Error).message).toBe(testErrorMessage);
+        expect((result.error.cause as any).statusCode).toBe(503);
+        expect((result.error.cause as any).isRetryable).toBe(true);
+
+        // Check step-level error
+        const stepResult = result.steps['failing-step'];
+        expect(stepResult).toBeDefined();
+        expect(stepResult.status).toBe('failed');
+
+        if (stepResult.status === 'failed') {
+          // Step error should be Error instance
+          expect(stepResult.error).toBeInstanceOf(Error);
+          // The original error properties should be in the cause
+          expect((stepResult.error as any).cause).toBeDefined();
+        }
+      }
+    });
+
+    it('should handle errors from agent.stream() with full error details', async () => {
+      // Simulate an APICallError-like error
+      const apiError = new Error('Service Unavailable');
+      (apiError as any).statusCode = 503;
+      (apiError as any).responseHeaders = { 'retry-after': '60' };
+      (apiError as any).requestId = 'req_abc123';
+      (apiError as any).isRetryable = true;
+
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => {
+          throw apiError;
+        },
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        model: mockModel,
+        instructions: 'Test agent',
+      });
+
+      const agentStep = createStep({
+        id: 'agent-step',
+        execute: async () => {
+          const result = await agent.stream('test input', {
+            modelSettings: {
+              maxRetries: 0,
+            },
+          });
+
+          await result.consumeStream();
+
+          // Throw the error from agent.stream if it exists
+          if (result.error) {
+            throw result.error;
+          }
+
+          return { success: true };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ success: z.boolean() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'agent-error-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ success: z.boolean() }),
+        steps: [agentStep],
+      });
+
+      workflow.then(agentStep).commit();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        // result.error is the MastraError wrapper
+        expect(result.error).toBeInstanceOf(Error);
+
+        // The error from agent.stream() should be preserved in error.cause
+        expect(result.error.cause).toBeInstanceOf(Error);
+        expect((result.error.cause as Error).message).toBe('Service Unavailable');
+
+        // Verify API error properties are preserved on the cause
+        expect((result.error.cause as any).statusCode).toBe(503);
+        expect((result.error.cause as any).responseHeaders).toEqual({ 'retry-after': '60' });
+        expect((result.error.cause as any).requestId).toBe('req_abc123');
+        expect((result.error.cause as any).isRetryable).toBe(true);
+      }
+    });
+
+    it('should preserve error details in streaming workflow', async () => {
+      const testError = new Error('Streaming error');
+      (testError as any).statusCode = 429;
+      (testError as any).responseHeaders = { 'x-ratelimit-reset': '1234567890' };
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: async () => {
+          throw testError;
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'streaming-error-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+      });
+
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRunAsync();
+      const output = run.stream({ inputData: {} });
+
+      // Collect stream events
+      const streamEvents: WorkflowStreamEvent[] = [];
+      for await (const event of output.fullStream) {
+        console.log('event', event);
+        streamEvents.push(event);
+      }
+
+      const result = await output.result;
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        // Verify error is preserved (MastraError wrapper)
+        expect(result.error).toBeInstanceOf(Error);
+
+        // The original error should be in cause
+        expect(result.error.cause).toBeInstanceOf(Error);
+        expect((result.error.cause as Error).message).toBe('Streaming error');
+
+        // Custom properties should be on the cause
+        expect((result.error.cause as any).statusCode).toBe(429);
+        expect((result.error.cause as any).responseHeaders).toEqual({ 'x-ratelimit-reset': '1234567890' });
+      }
+
+      // Check if workflow-step-result event was emitted with error details
+      const stepResultEvent = streamEvents.find(
+        e => e.type === 'workflow-step-result' && (e as any).payload?.status === 'failed',
+      ) as Extract<WorkflowStreamEvent, { type: 'workflow-step-result' }>;
+
+      expect(stepResultEvent).toBeDefined();
+      expect(stepResultEvent.type).toBe('workflow-step-result');
+
+      expect(stepResultEvent.payload.status).toBe('failed');
+
+      // The error should be present in the stream event
+      expect((stepResultEvent.payload as any)?.error).toBeInstanceOf(Error);
+      // The original error with custom properties should be in the cause
+      expect((stepResultEvent.payload as any)?.error?.cause).toBeInstanceOf(Error);
+      expect((stepResultEvent.payload as any)?.error?.cause?.statusCode).toBe(429);
+      expect((stepResultEvent.payload as any)?.error?.cause?.responseHeaders).toEqual({
+        'x-ratelimit-reset': '1234567890',
+      });
     });
   });
 
