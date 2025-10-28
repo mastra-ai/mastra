@@ -32,8 +32,8 @@ export default function NavbarLayout({ children }: Props): ReactNode {
       ref={navbarRef}
       aria-label={translate({
         id: "theme.NavBar.navAriaLabel",
-        message: "Main",
-        description: "The ARIA label for the main navigation",
+        message: "Primary navigation",
+        description: "The ARIA label for the primary navigation",
       })}
       className={clsx(
         ThemeClassNames.layout.navbar.container,

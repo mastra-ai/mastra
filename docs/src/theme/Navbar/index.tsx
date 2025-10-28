@@ -12,12 +12,12 @@ function NavbarContentDesktop() {
   return (
     <>
       <div className="flex px-4 border-b-[0.5px] h-[47px] border-(--border-subtle) mx-auto w-full items-center justify-between">
-        <Link href="/docs">
-          <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center">
+          <Link href="/docs">
             <Logo />
-            <TabSwitcher />
-          </div>
-        </Link>
+          </Link>
+          <TabSwitcher />
+        </div>
         <SearchContainer locale="en" />
         <div className="flex gap-2 items-center">
           <div className="flex gap-4 items-center">
