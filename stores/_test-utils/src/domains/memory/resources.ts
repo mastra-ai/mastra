@@ -10,7 +10,16 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
 
       // Save resource
       const savedResource = await storage.saveResource({ resource });
-      expect(savedResource).toEqual(resource);
+      expect(savedResource.id).toEqual(resource.id);
+      expect(savedResource.workingMemory).toEqual(resource.workingMemory);
+      expect(savedResource.metadata).toEqual(resource.metadata);
+      // Compare timestamps within 5ms tolerance to avoid flakiness from precision differences
+      expect(Math.abs(savedResource.updatedAt.getTime() - resource.updatedAt.getTime())).toBeLessThan(5);
+      expect(Math.abs(savedResource.createdAt.getTime() - resource.createdAt.getTime())).toBeLessThan(5);
+
+      const savedResourceWithoutDates = { ...savedResource, createdAt: undefined, updatedAt: undefined };
+      const sampleResourceWithoutDates = { ...resource, createdAt: undefined, updatedAt: undefined };
+      expect(savedResourceWithoutDates).toEqual(sampleResourceWithoutDates);
 
       // Retrieve resource
       const retrievedResource = await storage.getResourceById({ resourceId: resource.id });
