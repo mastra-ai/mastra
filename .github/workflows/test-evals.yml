@@ -4,8 +4,8 @@ on:
   pull_request:
     branches: [main, 0.x]
     paths:
-      - "packages/evals/**"
-      - ".github/workflows/test-evals.yml"
+      - 'packages/evals/**'
+      - '.github/workflows/test-evals.yml'
 
 jobs:
   test:
