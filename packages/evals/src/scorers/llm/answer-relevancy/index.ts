@@ -1,7 +1,7 @@
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { createScorer } from '@mastra/core/scores';
 import { z } from 'zod';
-import { roundToTwoDecimals } from '../../../metrics/llm/utils';
+import { roundToTwoDecimals } from '../../utils';
 import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
 import { createExtractPrompt, createReasonPrompt, createScorePrompt } from './prompts';
 
