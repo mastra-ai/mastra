@@ -197,6 +197,7 @@ export class Agent<
         details: {
           agentName: config.name,
         },
+        text: `ID is required to create an Agent. Please provide the 'id'.`,
       });
       this.logger.trackException(mastraError);
       this.logger.error(mastraError.toString());
