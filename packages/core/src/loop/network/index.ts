@@ -1,7 +1,7 @@
 import z from 'zod';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
-import { Agent, tryGenerateWithJsonFallback, tryStreamWithJsonFallback } from '../../agent/index';
+import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraMessageV2, MessageListInput } from '../../agent/message-list';
 import type { TracingContext } from '../../ai-tracing/types';
@@ -305,7 +305,7 @@ export async function createNetworkLoop({
                           }
                       `;
 
-        const completionStream = await tryStreamWithJsonFallback(routingAgent, completionPrompt, {
+        const streamOptions = {
           structuredOutput: {
             schema: completionSchema,
           },
@@ -317,11 +317,14 @@ export async function createNetworkLoop({
             readOnly: true,
           },
           ...routingAgentOptions,
-        });
+        };
+
+        // Try streaming with structured output
+        let completionStream = await routingAgent.stream(completionPrompt, streamOptions);
 
         let currentText = '';
         let currentTextIdx = 0;
-
+        console.log('routing-agent-text-start');
         await writer.write({
           type: 'routing-agent-text-start',
           payload: {
@@ -331,6 +334,7 @@ export async function createNetworkLoop({
           runId,
         });
 
+        // Stream and check for errors
         for await (const chunk of completionStream.objectStream) {
           if (chunk?.finalResult) {
             currentText = chunk.finalResult;
@@ -347,6 +351,44 @@ export async function createNetworkLoop({
               runId,
             });
             currentTextIdx = currentText.length;
+          }
+        }
+
+        // If error detected, retry with JSON prompt injection fallback
+        if (completionStream.error) {
+          console.warn('Error detected in structured output stream. Attempting fallback with JSON prompt injection.');
+
+          // Reset text tracking for fallback
+          currentText = '';
+          currentTextIdx = 0;
+
+          // Create fallback stream with jsonPromptInjection
+          completionStream = await routingAgent.stream(completionPrompt, {
+            ...streamOptions,
+            structuredOutput: {
+              ...streamOptions.structuredOutput,
+              jsonPromptInjection: true,
+            },
+          });
+
+          // Stream from fallback
+          for await (const chunk of completionStream.objectStream) {
+            if (chunk?.finalResult) {
+              currentText = chunk.finalResult;
+            }
+
+            const currentSlice = currentText.slice(currentTextIdx);
+            if (chunk?.isComplete && currentSlice.length) {
+              await writer.write({
+                type: 'routing-agent-text-delta',
+                payload: {
+                  text: currentSlice,
+                },
+                from: ChunkFrom.NETWORK,
+                runId,
+              });
+              currentTextIdx = currentText.length;
+            }
           }
         }
 
