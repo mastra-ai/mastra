@@ -106,6 +106,7 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithProcessor = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
@@ -115,8 +116,8 @@ describe('Input and Output Processors', () => {
       const result = await agentWithProcessor.generate('Hello world');
 
       // The processor should have added a message
-      expect((result.response.messages[0].content[0] as any).text).toContain('processed:');
-      expect((result.response.messages[0].content[0] as any).text).toContain('Processor was here!');
+      expect((result.response?.messages?.[0]?.content?.[0] as any).text).toContain('processed:');
+      expect((result.response?.messages?.[0]?.content?.[0] as any).text).toContain('Processor was here!');
     }, 50000);
 
     it('should run multiple processors in order', async () => {
@@ -137,6 +138,7 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithProcessors = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
@@ -145,8 +147,8 @@ describe('Input and Output Processors', () => {
 
       const result = await agentWithProcessors.generate('Hello');
 
-      expect((result.response.messages[0].content[0] as any).text).toContain('First processor');
-      expect((result.response.messages[0].content[0] as any).text).toContain('Second processor');
+      expect((result.response?.messages?.[0]?.content?.[0] as any).text).toContain('First processor');
+      expect((result.response?.messages?.[0]?.content?.[0] as any).text).toContain('Second processor');
     });
 
     it('should support async processors running in sequence', async () => {
@@ -168,6 +170,7 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithAsyncProcessors = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
@@ -177,8 +180,8 @@ describe('Input and Output Processors', () => {
       const result = await agentWithAsyncProcessors.generate('Test async');
 
       // Processors run sequentially, so "First processor" should appear before "Second processor"
-      expect((result.response.messages[0].content[0] as any).text).toContain('First processor');
-      expect((result.response.messages[0].content[0] as any).text).toContain('Second processor');
+      expect((result.response?.messages?.[0]?.content?.[0] as any).text).toContain('First processor');
+      expect((result.response?.messages?.[0]?.content?.[0] as any).text).toContain('Second processor');
     });
 
     it('should handle processor abort with default message', async () => {
@@ -191,6 +194,7 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithAbortProcessor = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
@@ -223,6 +227,7 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithCustomAbort = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
@@ -263,6 +268,7 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithAbortSequence = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
@@ -295,6 +301,7 @@ describe('Input and Output Processors', () => {
       };
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a test agent',
         model: mockModel,
@@ -329,6 +336,7 @@ describe('Input and Output Processors', () => {
       };
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a test agent',
         model: mockModel,
@@ -353,6 +361,7 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithStreamProcessor = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
@@ -381,6 +390,7 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithStreamAbort = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
@@ -408,6 +418,7 @@ describe('Input and Output Processors', () => {
       runtimeContext.set('processorMessage', 'Dynamic message');
 
       const agentWithDynamicProcessors = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
@@ -429,7 +440,7 @@ describe('Input and Output Processors', () => {
         runtimeContext,
       });
 
-      expect((result.response.messages[0].content[0] as any).text).toContain('Dynamic message');
+      expect((result.response?.messages?.[0]?.content?.[0] as any).text).toContain('Dynamic message');
     });
 
     it('should allow processors to modify message content', async () => {
@@ -448,6 +459,7 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithModifier = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
@@ -456,8 +468,10 @@ describe('Input and Output Processors', () => {
 
       const result = await agentWithModifier.generate('Original user message');
 
-      expect((result.response.messages[0].content[0] as any).text).toContain('MODIFIED: Original message was received');
-      expect((result.response.messages[0].content[0] as any).text).toContain('Original user message');
+      expect((result.response?.messages?.[0]?.content?.[0] as any).text).toContain(
+        'MODIFIED: Original message was received',
+      );
+      expect((result.response?.messages?.[0]?.content?.[0] as any).text).toContain('Original user message');
     });
 
     it('should allow processors to filter or validate messages', async () => {
@@ -486,6 +500,7 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithValidator = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
@@ -494,7 +509,7 @@ describe('Input and Output Processors', () => {
 
       // Test valid content
       const validResult = await agentWithValidator.generate('This is appropriate content');
-      expect((validResult.response.messages[0].content[0] as any).text).toContain('Content validated');
+      expect((validResult.response?.messages?.[0]?.content?.[0] as any).text).toContain('Content validated');
 
       // Test invalid content
       const invalidResult = await agentWithValidator.generate('This contains inappropriate content');
@@ -504,6 +519,7 @@ describe('Input and Output Processors', () => {
 
     it('should handle empty processors array', async () => {
       const agentWithEmptyProcessors = new Agent({
+        id: 'empty-processors-test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
@@ -512,8 +528,8 @@ describe('Input and Output Processors', () => {
 
       const result = await agentWithEmptyProcessors.generate('No processors test');
 
-      expect((result.response.messages[0].content[0] as any).text).toContain('processed:');
-      expect((result.response.messages[0].content[0] as any).text).toContain('No processors test');
+      expect((result.response?.messages?.[0]?.content?.[0] as any).text).toContain('processed:');
+      expect((result.response?.messages?.[0]?.content?.[0] as any).text).toContain('No processors test');
     });
   });
 
@@ -544,6 +560,7 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
+        id: 'generate-output-processor-test-agent',
         name: 'generate-output-processor-test-agent',
         instructions: 'You are a helpful assistant.',
         model: new MockLanguageModelV2({
@@ -579,7 +596,9 @@ describe('Input and Output Processors', () => {
         });
 
         // The output processors should modify the returned result
-        expect((result.response.messages[0].content[0] as any).text).toBe('This is a TEST response with TEST words');
+        expect((result.response?.messages?.[0]?.content?.[0] as any).text).toBe(
+          'This is a TEST response with TEST words',
+        );
 
         // And the processor should have been called and processed the text
         expect(processedText).toBe('This is a TEST response with TEST words');
@@ -630,6 +649,7 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
+        id: 'multi-processor-generate-test-agent',
         name: 'multi-processor-generate-test-agent',
         instructions: 'Respond with: "hello world"',
         model: new MockLanguageModelV2({
@@ -665,7 +685,7 @@ describe('Input and Output Processors', () => {
         });
 
         // The output processors should modify the returned result
-        expect((result.response.messages[0].content[0] as any).text).toBe('[PROCESSED] HELLO world');
+        expect((result.response?.messages?.[0]?.content?.[0] as any).text).toBe('[PROCESSED] HELLO world');
 
         // And both processors should have been called in sequence
         expect(finalProcessedText).toBe('[PROCESSED] HELLO world');
@@ -694,6 +714,7 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
+        id: 'aborting-generate-test-agent',
         name: 'aborting-generate-test-agent',
         instructions: 'You are a helpful assistant.',
         model: new MockLanguageModelV2({
@@ -761,6 +782,7 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
+        id: 'mixed-processor-test-agent',
         name: 'mixed-processor-test-agent',
         instructions: 'You are a helpful assistant.',
         model: new MockLanguageModelV2({
@@ -796,7 +818,7 @@ describe('Input and Output Processors', () => {
         });
 
         // Only the complete processor should have run
-        expect((result.response.messages[0].content[0] as any).text).toBe('[COMPLETE] This is a test response');
+        expect((result.response?.messages?.[0]?.content?.[0] as any).text).toBe('[COMPLETE] This is a test response');
       }
 
       await testWithFormat('aisdk');
@@ -831,6 +853,7 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'output-processor-test-agent',
         instructions: 'You are a helpful assistant. Respond with exactly: "This is a test response"',
         model: mockModel,
@@ -846,9 +869,9 @@ describe('Input and Output Processors', () => {
         for await (const chunk of stream.fullStream) {
           if (chunk.type === 'text-delta') {
             if (format === 'aisdk') {
-              collectedText += chunk.text;
+              if (chunk.type) collectedText += (chunk as any).text;
             } else {
-              collectedText += chunk.payload.text;
+              collectedText += (chunk as any).payload.text;
             }
           }
         }
@@ -876,6 +899,7 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
+        id: 'blocking-processor-test-agent',
         name: 'blocking-processor-test-agent',
         instructions: 'You are a helpful assistant.',
         model: mockModel,
@@ -891,9 +915,9 @@ describe('Input and Output Processors', () => {
         for await (const chunk of stream.fullStream) {
           if (chunk.type === 'text-delta') {
             if (format === 'aisdk') {
-              collectedText += chunk.text;
+              collectedText += (chunk as any).text;
             } else {
-              collectedText += chunk.payload.text;
+              collectedText += (chunk as any).payload.text;
             }
           }
         }
@@ -920,6 +944,7 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
+        id: 'aborting-processor-test-agent',
         name: 'aborting-processor-test-agent',
         instructions: 'You are a helpful assistant.',
         model: mockModel,
@@ -1003,6 +1028,7 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
+        id: 'multi-processor-test-agent',
         name: 'multi-processor-test-agent',
         instructions: 'Respond with: "This is a test response"',
         model: mockModel,
@@ -1018,9 +1044,9 @@ describe('Input and Output Processors', () => {
         for await (const chunk of stream.fullStream) {
           if (chunk.type === 'text-delta') {
             if (format === 'aisdk') {
-              collectedText += chunk.text;
+              collectedText += (chunk as any).text;
             } else {
-              collectedText += chunk.payload.text;
+              collectedText += (chunk as any).payload.text;
             }
           }
         }
@@ -1086,6 +1112,7 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
+        id: 'stream-structured-processor-test-agent',
         name: 'stream-structured-processor-test-agent',
         instructions: 'You know about US elections.',
         model: new MockLanguageModelV2({
@@ -1140,9 +1167,9 @@ describe('Input and Output Processors', () => {
         for await (const chunk of response.fullStream) {
           if (chunk.type === 'text-delta') {
             if (format === 'aisdk') {
-              streamedContent += chunk.text;
+              streamedContent += (chunk as any).text;
             } else {
-              streamedContent += chunk.payload.text;
+              streamedContent += (chunk as any).payload.text;
             }
           }
         }
@@ -1182,6 +1209,7 @@ describe('Input and Output Processors', () => {
         } satisfies Processor;
 
         const agent = new Agent({
+          id: 'output-tripwire-test-agent',
           name: 'output-tripwire-test-agent',
           instructions: 'You are a helpful assistant.',
           model: new MockLanguageModelV2({
@@ -1241,6 +1269,7 @@ describe('Input and Output Processors', () => {
         } satisfies Processor;
 
         const agent = new Agent({
+          id: 'stream-output-tripwire-test-agent',
           name: 'stream-output-tripwire-test-agent',
           instructions: 'You are a helpful assistant.',
           model: mockModel,
@@ -1283,6 +1312,7 @@ describe('Input and Output Processors', () => {
         } satisfies Processor;
 
         const agent = new Agent({
+          id: 'custom-stream-output-tripwire-test-agent',
           name: 'custom-stream-output-tripwire-test-agent',
           instructions: 'You are a helpful assistant.',
           model: mockModel,
@@ -1330,6 +1360,7 @@ describe('Input and Output Processors', () => {
           });
 
           const agent = new Agent({
+            id: 'color-expert-test-agent',
             name: 'Color Expert',
             instructions: `You are an expert on colors. 
               Analyze colors and describe their properties, psychological effects, and technical details.
@@ -1394,6 +1425,7 @@ describe('Input and Output Processors', () => {
           });
 
           const agent = new Agent({
+            id: 'content-analyzer',
             name: 'Content Analyzer',
             instructions: 'You are an expert content analyst. Read and analyze text content to extract key insights.',
             model,
@@ -1468,6 +1500,7 @@ describe('Input and Output Processors', () => {
           };
 
           const agent = new Agent({
+            id: 'test-agent',
             name: 'Test Agent',
             instructions: 'You are a helpful assistant.',
             model,
@@ -1505,6 +1538,7 @@ describe('Input and Output Processors', () => {
           });
 
           const agent = new Agent({
+            id: 'creative-thinker',
             name: 'Creative Thinker',
             instructions: 'You are a creative thinker who generates innovative ideas and explores possibilities.',
             model, // Use faster model for idea generation
@@ -1555,6 +1589,7 @@ describe('Input and Output Processors', () => {
         });
 
         const agent = new Agent({
+          id: 'creative-thinker',
           name: 'Creative Thinker',
           instructions: 'You are a creative thinker who generates innovative ideas and explores possibilities.',
           model: model,
@@ -1603,6 +1638,7 @@ describe('Input and Output Processors', () => {
         });
 
         const agent = new Agent({
+          id: 'creative-thinker',
           name: 'Creative Thinker',
           instructions: 'You are a creative thinker who generates innovative ideas and explores possibilities.',
           model: model,
@@ -1680,6 +1716,7 @@ describe('v1 model - output processors', () => {
       }
 
       const agent = new Agent({
+        id: 'generate-output-processor-test-agent',
         name: 'generate-output-processor-test-agent',
         instructions: 'You are a helpful assistant.',
         model: new MockLanguageModelV1({
@@ -1746,6 +1783,7 @@ describe('v1 model - output processors', () => {
       }
 
       const agent = new Agent({
+        id: 'multi-processor-generate-test-agent',
         name: 'multi-processor-generate-test-agent',
         instructions: 'Respond with: "hello world"',
         model: new MockLanguageModelV1({
@@ -1787,6 +1825,7 @@ describe('v1 model - output processors', () => {
       }
 
       const agent = new Agent({
+        id: 'aborting-generate-test-agent',
         name: 'aborting-generate-test-agent',
         instructions: 'You are a helpful assistant.',
         model: new MockLanguageModelV1({
@@ -1838,6 +1877,7 @@ describe('v1 model - output processors', () => {
 
       // Only include the complete processor - the incomplete one would cause TypeScript errors
       const agent = new Agent({
+        id: 'skipping-generate-test-agent',
         name: 'skipping-generate-test-agent',
         instructions: 'You are a helpful assistant.',
         model: new MockLanguageModelV1({
@@ -1900,6 +1940,7 @@ describe('v1 model - output processors', () => {
       }
 
       const agent = new Agent({
+        id: 'structured-output-processor-test-agent',
         name: 'structured-output-processor-test-agent',
         instructions: 'You know about US elections.',
         model: new MockLanguageModelV1({
@@ -1993,6 +2034,7 @@ describe('v1 model - output processors', () => {
       }
 
       const agent = new Agent({
+        id: 'multi-processor-structured-test-agent',
         name: 'multi-processor-structured-test-agent',
         instructions: 'You are a helpful assistant.',
         model: new MockLanguageModelV1({
@@ -2043,6 +2085,7 @@ describe('v1 model - output processors', () => {
         } satisfies Processor;
 
         const agent = new Agent({
+          id: 'output-tripwire-test-agent',
           name: 'output-tripwire-test-agent',
           instructions: 'You are a helpful assistant.',
           model: new MockLanguageModelV1({
@@ -2074,6 +2117,7 @@ describe('v1 model - output processors', () => {
         } satisfies Processor;
 
         const agent = new Agent({
+          id: 'custom-output-tripwire-test-agent',
           name: 'custom-output-tripwire-test-agent',
           instructions: 'You are a helpful assistant.',
           model: new MockLanguageModelV1({
@@ -2122,6 +2166,7 @@ describe('v1 model - output processors', () => {
         } satisfies Processor;
 
         const agent = new Agent({
+          id: 'output-abort-sequence-test-agent',
           name: 'output-abort-sequence-test-agent',
           instructions: 'You are a helpful assistant.',
           model: new MockLanguageModelV1({

@@ -206,6 +206,7 @@ describe('Gemini Model Compatibility Tests', () => {
   describe('Agent network() method', () => {
     it('should handle basic network generation with Gemini', async () => {
       const helperAgent = new Agent({
+        id: 'helper-agent',
         name: 'helper-agent',
         instructions: 'You answer simple questions. For "what is the capital of France?", respond "Paris".',
         model: MODEL,
@@ -236,6 +237,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
     it('should handle empty user message with system context in network', async () => {
       const helperAgent = new Agent({
+        id: 'helper-agent',
         name: 'helper-agent',
         instructions: 'You help with tasks',
         model: MODEL,
@@ -266,6 +268,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
     it('should handle single turn with maxSteps=1 and messages ending with assistant in network', async () => {
       const helperAgent = new Agent({
+        id: 'helper-agent',
         name: 'helper-agent',
         instructions: 'You are a calculator. When asked for math, respond with just the numeric answer.',
         model: MODEL,
@@ -480,6 +483,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
     it('should handle network with workflow execution', async () => {
       const researchAgent = new Agent({
+        id: 'research-agent',
         name: 'research-agent',
         instructions: 'You research topics and provide brief summaries.',
         model: MODEL,
@@ -564,6 +568,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
     it('should handle messages with only assistant role in network', async () => {
       const helperAgent = new Agent({
+        id: 'helper-agent',
         name: 'helper-agent',
         instructions: 'You help with tasks',
         model: MODEL,

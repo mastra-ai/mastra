@@ -541,6 +541,7 @@ describe('Structured Output with Tool Execution', () => {
     });
 
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions: 'Test agent with structured output and tools',
       model: mockModel as any,
@@ -649,6 +650,7 @@ describe('Structured Output with Tool Execution', () => {
     });
 
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions:
         'You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool. Every tool call you make IMMEDIATELY explain the tool results after executing the tool, before moving on to other steps or tool calls',
@@ -691,6 +693,7 @@ describe('Structured Output with Tool Execution', () => {
     });
 
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions: 'You are a helpful assistant. Respond with JSON matching the required schema.',
       model: openai('gpt-4o-mini'),
@@ -717,6 +720,7 @@ describe('Structured Output with Tool Execution', () => {
     });
 
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions: 'You are a helpful assistant. Answer the question.',
       model: openai('gpt-4o-mini'),

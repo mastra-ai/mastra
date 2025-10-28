@@ -180,6 +180,7 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' }) {
   describe(`structured output ${version}`, () => {
     it('should support ZodSchema structured output type', async () => {
       const electionAgent = new Agent({
+        id: 'electionAgent',
         name: 'US Election agent',
         instructions: 'You know about the past US elections',
         model: zodSchemaModel,
@@ -230,6 +231,7 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should support JSONSchema7 structured output type', async () => {
       const electionAgent = new Agent({
+        id: 'electionAgent',
         name: 'US Election agent',
         instructions: 'You know about the past US elections',
         model: jsonSchemaModel,
@@ -342,6 +344,7 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         const routingAgent = new Agent({
+          id: 'routingAgent',
           name: 'routingAgent',
           instructions: 'Route requests to appropriate agents',
           model: bedrockStyleModel,
@@ -400,6 +403,7 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         const routingAgent = new Agent({
+          id: 'routingAgent',
           name: 'routingAgent',
           instructions: 'Route requests to appropriate agents',
           model: bedrockStyleModel,

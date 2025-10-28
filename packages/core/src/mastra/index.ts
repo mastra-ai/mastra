@@ -48,7 +48,8 @@ import { createOnScorerHook } from './hooks';
  * const mastra = new Mastra({
  *   agents: {
  *     weatherAgent: new Agent({
- *       name: 'weather-agent',
+ *       id: 'weather-agent',
+ *       name: 'Weather Agent',
  *       instructions: 'You help with weather information',
  *       model: 'openai/gpt-5'
  *     })
@@ -199,7 +200,8 @@ export interface Config<
  * const mastra = new Mastra({
  *   agents: {
  *     weatherAgent: new Agent({
- *       name: 'weather-agent',
+ *       id: 'weather-agent',
+ *       name: 'Weather Agent',
  *       instructions: 'You provide weather information',
  *       model: 'openai/gpt-5',
  *       tools: [getWeatherTool]
@@ -348,7 +350,8 @@ export class Mastra<
    * const mastra = new Mastra({
    *   agents: {
    *     assistant: new Agent({
-   *       name: 'assistant',
+   *       id: 'assistant',
+   *       name: 'My Assistant',
    *       instructions: 'You are a helpful assistant',
    *       model: 'openai/gpt-5'
    *     })
@@ -656,6 +659,7 @@ do:
    * const mastra = new Mastra({
    *   agents: {
    *     weatherAgent: new Agent({
+   *       id: 'weather-agent',
    *       name: 'weather-agent',
    *       instructions: 'You provide weather information',
    *       model: 'openai/gpt-5'
@@ -700,7 +704,8 @@ do:
    * const mastra = new Mastra({
    *   agents: {
    *     assistant: new Agent({
-   *       name: 'assistant',
+   *       id: 'assistant',
+   *       name: 'My Assistant',
    *       instructions: 'You are a helpful assistant',
    *       model: 'openai/gpt-5'
    *     })
@@ -751,8 +756,8 @@ do:
    * ```typescript
    * const mastra = new Mastra({
    *   agents: {
-   *     weatherAgent: new Agent({ name: 'weather', model: openai('gpt-4o') }),
-   *     supportAgent: new Agent({ name: 'support', model: openai('gpt-4o') })
+   *     weatherAgent: new Agent({ id: 'weather-agent', name: 'Weather Agent', model: openai('gpt-4o') }),
+   *     supportAgent: new Agent({ id: 'support-agent', name: 'Support Agent', model: openai('gpt-4o') })
    *   }
    * });
    *
@@ -1279,7 +1284,8 @@ do:
    *
    * // Now agents can use memory with the storage
    * const agent = new Agent({
-   *   name: 'assistant',
+   *   id: 'assistant',
+   *   name: 'My Assistant',
    *   memory: new Memory({ storage: mastra.getStorage() })
    * });
    * ```
@@ -1395,7 +1401,8 @@ do:
    *
    * // Use this instead:
    * const agent = new Agent({
-   *   name: 'assistant',
+   *   id: 'assistant',
+   *   name: 'My Assistant',
    *   memory: new Memory({
    *     storage: new LibSQLStore({ url: ':memory:' })
    *   })
@@ -1417,7 +1424,8 @@ do:
    *
    * // Use the storage in agent memory
    * const agent = new Agent({
-   *   name: 'assistant',
+   *   id: 'assistant',
+   *   name: 'My Assistant',
    *   memory: new Memory({
    *     storage: mastra.getStorage()
    *   })

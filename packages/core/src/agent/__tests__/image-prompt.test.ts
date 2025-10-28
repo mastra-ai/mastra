@@ -12,6 +12,7 @@ export function imagePromptTest({ version }: { version: 'v1' | 'v2' }) {
   describe('image prompt test', () => {
     it('should download assets from messages', async () => {
       const agent = new Agent({
+        id: 'llm-prompt-agent',
         name: 'llmPrompt-agent',
         instructions: 'test agent',
         model: openaiModel,

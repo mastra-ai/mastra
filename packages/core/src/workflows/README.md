@@ -730,7 +730,8 @@ vNext workflows can use Mastra agents directly as steps using `createStep(agent)
 ```typescript
 // Agent defined elsewhere
 const myAgent = new Agent({
-  name: 'myAgent',
+  id: 'my-agent'
+  name: 'My Agent',
   instructions: '...',
   model: openai('gpt-4'),
 });

@@ -63,6 +63,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       });
 
       const agent = new Agent({
+        id: 'partial-rescue-agent',
         name: 'partial-rescue-agent',
         instructions:
           'Call each tool in a separate step. Do not use parallel tool calls. Always wait for the result of one tool before calling the next.',
@@ -172,6 +173,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       });
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'If the user prompt contains "Echo:", always call the echoTool. Be verbose in your response.',
         model: openaiModel,
@@ -241,6 +243,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       });
 
       const agent = new Agent({
+        id: 'test-agent-multi',
         name: 'test-agent-multi',
         instructions: [
           'If the user prompt contains "Echo:", call the echoTool.',
@@ -298,6 +301,7 @@ function runStreamTest(version: 'v1' | 'v2') {
     it('should persist the full message after a successful run', async () => {
       const mockMemory = new MockMemory();
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'test',
         model: dummyResponseModel,
@@ -378,6 +382,7 @@ function runStreamTest(version: 'v1' | 'v2') {
             });
 
       const agent = new Agent({
+        id: 'test-agent-7050',
         name: 'test-agent-7050',
         instructions: 'test',
         model: mockModel,
@@ -452,6 +457,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       };
 
       const agent = new Agent({
+        id: 'no-progress-agent',
         name: 'no-progress-agent',
         instructions: 'test',
         model: emptyResponseModel,
@@ -491,6 +497,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       };
 
       const agent = new Agent({
+        id: 'immediate-interrupt-agent',
         name: 'immediate-interrupt-agent',
         instructions: 'test',
         model: errorResponseModel,
@@ -551,6 +558,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       }
 
       const agent = new Agent({
+        id: 'error-agent-stream',
         name: 'error-agent-stream',
         instructions: 'test',
         model: errorModel,

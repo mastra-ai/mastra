@@ -1108,6 +1108,7 @@ describe('AI Tracing Integration Tests', () => {
     ({ name, method, model }) => {
       it(`should trace spans correctly`, async () => {
         const testAgent = new Agent({
+          id: 'test-agent',
           name: 'Test Agent',
           instructions: 'You are a test agent',
           model,
@@ -1209,6 +1210,7 @@ describe('AI Tracing Integration Tests', () => {
     ({ name, method, model }) => {
       it(`should trace spans correctly`, async () => {
         const testAgent = new Agent({
+          id: 'test-agent',
           name: 'Test Agent',
           instructions: 'You are a test agent',
           model,
@@ -1306,6 +1308,7 @@ describe('AI Tracing Integration Tests', () => {
     ({ name, method, model }) => {
       it(`should trace spans correctly`, async () => {
         const testAgent = new Agent({
+          id: 'test-agent',
           name: 'Test Agent',
           instructions: 'You are a test agent',
           model,
@@ -1383,6 +1386,7 @@ describe('AI Tracing Integration Tests', () => {
     ({ method, model }) => {
       it(`should trace spans correctly`, async () => {
         const testAgent = new Agent({
+          id: 'test-agent',
           name: 'Test Agent',
           instructions: 'Return a simple response',
           model,
@@ -1491,6 +1495,7 @@ describe('AI Tracing Integration Tests', () => {
 
           constructor(model: any) {
             this.agent = new Agent({
+              id: 'validator-agent',
               name: 'validator-agent',
               instructions: 'You validate input messages',
               model,
@@ -1522,6 +1527,7 @@ describe('AI Tracing Integration Tests', () => {
 
           constructor(model: any) {
             this.agent = new Agent({
+              id: 'summarizer-agent',
               name: 'summarizer-agent',
               instructions: 'You summarize text concisely',
               model,
@@ -1547,6 +1553,7 @@ describe('AI Tracing Integration Tests', () => {
         }
 
         const testAgent = new Agent({
+          id: 'test-agent',
           name: 'Test Agent',
           instructions: 'You are a helpful assistant',
           model,
@@ -1616,6 +1623,7 @@ describe('AI Tracing Integration Tests', () => {
   describe.each(agentMethods)('agent launched inside workflow step using $name', ({ method, model }) => {
     it(`should trace spans correctly`, async () => {
       const testAgent = new Agent({
+        id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test agent',
         model,
@@ -1674,6 +1682,7 @@ describe('AI Tracing Integration Tests', () => {
       const simpleWorkflow = createSimpleWorkflow();
 
       const workflowAgent = new Agent({
+        id: 'workflow-agent',
         name: 'Workflow Agent',
         instructions: 'You can execute workflows using the workflow executor tool',
         model,
@@ -1728,6 +1737,7 @@ describe('AI Tracing Integration Tests', () => {
       const simpleWorkflow = createSimpleWorkflow();
 
       const workflowAgent = new Agent({
+        id: 'workflow-agent',
         name: 'Workflow Agent',
         instructions: 'You can execute workflows that exist in your config',
         model,
@@ -1791,6 +1801,7 @@ describe('AI Tracing Integration Tests', () => {
       });
 
       const testAgent = new Agent({
+        id: 'metadata-agent',
         name: 'Metadata Agent',
         instructions: 'You use tools and add metadata',
         model,
@@ -1864,6 +1875,7 @@ describe('AI Tracing Integration Tests', () => {
       });
 
       const testAgent = new Agent({
+        id: 'child-span-agent',
         name: 'Child Span Agent',
         instructions: 'You use tools that create child spans',
         model,
@@ -1920,6 +1932,7 @@ describe('AI Tracing Integration Tests', () => {
     });
 
     const structuredAgent = new Agent({
+      id: 'structured-agent',
       name: 'Structured Agent',
       instructions: 'You generate structured data',
       model: structuredMock,
@@ -1972,6 +1985,7 @@ describe('AI Tracing Integration Tests', () => {
     });
 
     const testAgent = new Agent({
+      id: 'workflow-agent',
       name: 'Workflow Agent',
       instructions: 'You are an agent in a workflow',
       model: mockModel,

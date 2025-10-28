@@ -17,8 +17,6 @@ import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
 import type { MastraMessageV2, StorageThreadType } from '../memory';
 import { RuntimeContext } from '../runtime-context';
-import { createScorer } from '../scores';
-import { runScorer } from '../scores/hooks';
 import { MockStore } from '../storage';
 import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
@@ -43,10 +41,6 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
   if (!userInfo) return { message: 'User not found' };
   return userInfo;
 });
-
-vi.mock('../scores/hooks', () => ({
-  runScorer: vi.fn(),
-}));
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
@@ -234,6 +228,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
   describe(`${version} - agent`, () => {
     it('should get a text response from the agent', async () => {
       const electionAgent = new Agent({
+        id: 'electionAgent',
         name: 'US Election agent',
         instructions: 'You know about the past US elections',
         model: electionModel,
@@ -262,6 +257,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should get a streamed text response from the agent', async () => {
       const electionAgent = new Agent({
+        id: 'electionAgent',
         name: 'US Election agent',
         instructions: 'You know about the past US elections',
         model: electionModel,
@@ -296,6 +292,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should get a structured response from the agent with', async () => {
       const electionAgent = new Agent({
+        id: 'electionAgent',
         name: 'US Election agent',
         instructions: 'You know about the past US elections',
         model: obamaObjectModel,
@@ -331,6 +328,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should get a streamed structured response from the agent', async () => {
       const electionAgent = new Agent({
+        id: 'electionAgent',
         name: 'US Election agent',
         instructions: 'You know about the past US elections',
         model: obamaObjectModel,
@@ -398,6 +396,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
 
           const userAgent = new Agent({
+            id: 'userAgent',
             name: 'User agent',
             instructions: 'You are an agent that can get list of users using findUserTool.',
             model: openaiModel,
@@ -446,6 +445,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
 
           const userAgent = new Agent({
+            id: 'userAgent',
             name: 'User agent',
             instructions: 'You are an agent that can get list of users using findUserTool.',
             model: openaiModel,
@@ -508,6 +508,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
 
           const userAgent = new Agent({
+            id: 'userAgent',
             name: 'User agent',
             instructions: 'You are an agent that can get list of users using findUserTool.',
             model: openaiModel,
@@ -582,6 +583,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
 
           const userAgent = new Agent({
+            id: 'userAgent',
             name: 'User agent',
             instructions: 'You are an agent that can get list of users using findUserTool.',
             model: openaiModel,
@@ -631,6 +633,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
 
           const userAgent = new Agent({
+            id: 'user-agent',
             name: 'User agent',
             instructions: 'You are an agent that can get list of users using findUserTool.',
             model: openaiModel,
@@ -713,6 +716,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'You are an agent that can get list of users using findUserTool.',
         model: openaiModel,
@@ -747,6 +751,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('generate - should pass and call client side tools', async () => {
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'You are an agent that can get list of users using client side tools.',
         model: openaiModel,
@@ -786,6 +791,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('stream - should pass and call client side tools', async () => {
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'You are an agent that can get list of users using client side tools.',
         model: openaiModel,
@@ -843,6 +849,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'You are an agent that can get list of users using findUserTool.',
         model: openaiModel,
@@ -879,6 +886,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should reach default max steps', async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'Test agent',
         instructions: 'Test agent',
         model: openaiModel,
@@ -908,6 +916,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should reach default max steps / stopWhen', async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'Test agent',
         instructions: 'Test agent',
         model: openaiModel,
@@ -950,6 +959,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       const agent = new Agent({
+        id: 'retry-agent',
         name: 'retry-agent',
         instructions: 'Call the flakey tool with input "test data".',
         model: openaiModel,
@@ -1148,6 +1158,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
+        id: 'title-test-agent',
         name: 'title-test-agent',
         instructions: 'test agent for title generation',
         model: agentModel,
@@ -1333,6 +1344,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
+        id: 'dynamic-title-agent',
         name: 'dynamic-title-agent',
         instructions: 'test agent',
         model: dummyModel,
@@ -1529,6 +1541,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const agent = new Agent({
+        id: 'update-model-agent',
         name: 'update-model-agent',
         instructions: 'test agent',
         model: standardModel,
@@ -1699,6 +1712,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const agent = new Agent({
+        id: 'boolean-title-agent',
         name: 'boolean-title-agent',
         instructions: 'test agent',
         model: testModel,
@@ -1809,6 +1823,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
+        id: 'error-title-agent',
         name: 'error-title-agent',
         instructions: 'test agent',
         model: dummyModel,
@@ -1988,6 +2003,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const agent = new Agent({
+        id: 'undefined-config-agent',
         name: 'undefined-config-agent',
         instructions: 'test agent',
         model: testModel,
@@ -2187,6 +2203,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
+        id: 'dynamic-instructions-agent',
         name: 'dynamic-instructions-agent',
         instructions: 'test agent',
         model: dummyModel,
@@ -2363,6 +2380,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
+        id: 'custom-instructions-agent',
         name: 'custom-instructions-agent',
         instructions: 'test agent',
         model: dummyModel,
@@ -2502,6 +2520,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
+        id: 'default-instructions-agent',
         name: 'default-instructions-agent',
         instructions: 'test agent',
         model: dummyModel,
@@ -2627,6 +2646,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
+        id: 'error-instructions-agent',
         name: 'error-instructions-agent',
         instructions: 'test agent',
         model: dummyModel,
@@ -2845,6 +2865,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
+        id: 'empty-instructions-agent',
         name: 'empty-instructions-agent',
         instructions: 'test agent',
         model: dummyModel,
@@ -2981,6 +3002,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'Test tool name collision.',
         model: testModel,
@@ -3059,6 +3081,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'Test tool name sanitization.',
         model: testModel,
@@ -3133,6 +3156,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'Test tool name prefix.',
         model: testModel,
@@ -3207,6 +3231,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'Test tool name truncation.',
         model: testModel,
@@ -3466,6 +3491,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should create a new thread with metadata using generate', async () => {
       const mockMemory = new MockMemory();
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'test',
         model: dummyModel,
@@ -3514,6 +3540,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       const saveThreadSpy = vi.spyOn(mockMemory, 'saveThread');
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'test',
         model: dummyModel,
@@ -3561,6 +3588,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       const saveThreadSpy = vi.spyOn(mockMemory, 'saveThread');
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'test',
         model: dummyModel,
@@ -3595,6 +3623,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should create a new thread with metadata using stream', async () => {
       const mockMemory = new MockMemory();
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'test',
         model: dummyModel,
@@ -3635,6 +3664,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('generate - should still work with deprecated threadId and resourceId', async () => {
       const mockMemory = new MockMemory();
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'test',
         model: dummyModel,
@@ -3662,6 +3692,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('stream - should still work with deprecated threadId and resourceId', async () => {
       const mockMemory = new MockMemory();
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'test',
         model: dummyModel,
@@ -3742,6 +3773,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let capturedRuntimeContext: RuntimeContext | undefined;
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: ({ runtimeContext, mastra }) => {
           capturedRuntimeContext = runtimeContext;
@@ -3774,6 +3806,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should work with static instructions (backward compatibility)', async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: dummyModel,
@@ -3794,6 +3827,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let capturedMastra: Mastra | undefined;
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: ({ mastra }) => {
           capturedMastra = mastra;
@@ -3818,6 +3852,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
   describe(`${version} - Agent instructions with SystemMessage types`, () => {
     it('should support string instructions (backward compatibility)', async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: dummyModel,
@@ -3834,6 +3869,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: systemMessage,
         model: dummyModel,
@@ -3850,6 +3886,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: systemMessage,
         model: dummyModel,
@@ -3863,6 +3900,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       const instructionsArray = ['You are a helpful assistant.', 'Always be polite.', 'Provide detailed answers.'];
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: instructionsArray,
         model: dummyModel,
@@ -3879,6 +3917,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       ];
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: instructionsArray,
         model: dummyModel,
@@ -3904,6 +3943,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       ];
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: instructionsArray,
         model: dummyModel,
@@ -3915,6 +3955,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should support dynamic instructions returning string', async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: ({ runtimeContext }) => {
           const role = runtimeContext?.get('role') || 'assistant';
@@ -3932,6 +3973,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should support dynamic instructions returning CoreSystemMessage', async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: ({ runtimeContext }) => {
           const role = runtimeContext?.get('role') || 'assistant';
@@ -3955,6 +3997,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should support dynamic instructions returning array', async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: ({ runtimeContext }) => {
           const expertise = (runtimeContext?.get('expertise') as string[]) || [];
@@ -3984,6 +4027,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should support async dynamic instructions', async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: async ({ runtimeContext }) => {
           // Simulate async operation
@@ -4014,6 +4058,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Full integration testing would require checking the actual messages sent to the LLM
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: dummyModel,
@@ -4051,6 +4096,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       ];
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: agentInstructions,
         model: dummyModel,
@@ -4077,6 +4123,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should handle empty instructions gracefully', async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: '',
         model: dummyModel,
@@ -4088,6 +4135,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should handle empty array instructions', async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: [],
         model: dummyModel,
@@ -4099,6 +4147,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should allow override instructions in generate options', async () => {
       const agent = new Agent({
+        id: 'override-agent',
         name: 'override-agent',
         instructions: 'Default instructions',
         model: dummyModel,
@@ -4131,6 +4180,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
+        id: 'voice-agent',
         name: 'voice-agent',
         instructions: {
           role: 'system',
@@ -4156,6 +4206,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: systemMessage,
         model: dummyModel,
@@ -4180,6 +4231,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       ];
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: instructionsArray,
         model: dummyModel,
@@ -4192,6 +4244,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should combine instructions with system option in stream', async () => {
       if (version === 'v2') {
         const agent = new Agent({
+          id: 'test-agent',
           name: 'test-agent',
           instructions: 'You are a helpful assistant.',
           model: dummyModel,
@@ -4216,6 +4269,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should allow override with array instructions in generate options', async () => {
       const agent = new Agent({
+        id: 'override-array-agent',
         name: 'override-array-agent',
         instructions: 'Default instructions',
         model: dummyModel,
@@ -4237,6 +4291,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should support dynamic instructions returning SystemModelMessage', async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: ({ runtimeContext }) => {
           const mode = runtimeContext?.get('mode') || 'default';
@@ -4266,6 +4321,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // This test verifies that provider options (like Anthropic caching) are preserved
       // when instructions are added to the message list
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: {
           role: 'system',
@@ -5496,6 +5552,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const agent = new Agent({
+        id: 'stream-memory-agent',
         name: 'stream-memory-agent',
         instructions: 'test agent',
         model,
@@ -6258,6 +6315,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       const agent = new Agent({
+        id: 'core-system-message-test',
         name: 'core-system-message-test',
         instructions: 'Default instructions',
         model: testModel,
@@ -6319,6 +6377,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       const agent = new Agent({
+        id: 'system-model-message-stream-test',
         name: 'system-model-message-stream-test',
         instructions: 'Default instructions',
         model: testModel,
@@ -6394,6 +6453,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       const agent = new Agent({
+        id: 'mixed-system-test',
         name: 'mixed-system-test',
         instructions: 'Default instructions',
         model: testModel,
@@ -6484,6 +6544,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       const agent = new Agent({
+        id: 'array-system-test',
         name: 'array-system-test',
         instructions: 'Default instructions',
         model: testModel,
@@ -6657,6 +6718,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const agentWithProcessor = new Agent({
+          id: 'test-agent',
           name: 'test-agent',
           instructions: 'You are a helpful assistant',
           model: mockModel,
@@ -6693,6 +6755,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const agentWithProcessors = new Agent({
+          id: 'test-agent',
           name: 'test-agent',
           instructions: 'You are a helpful assistant',
           model: mockModel,
@@ -6729,6 +6792,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const agentWithAsyncProcessors = new Agent({
+          id: 'test-agent',
           name: 'test-agent',
           instructions: 'You are a helpful assistant',
           model: mockModel,
@@ -6759,6 +6823,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const agentWithAbortProcessor = new Agent({
+          id: 'test-agent',
           name: 'test-agent',
           instructions: 'You are a helpful assistant',
           model: mockModel,
@@ -6788,6 +6853,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const agentWithCustomAbort = new Agent({
+          id: 'test-agent',
           name: 'test-agent',
           instructions: 'You are a helpful assistant',
           model: mockModel,
@@ -6827,6 +6893,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const agentWithAbortSequence = new Agent({
+          id: 'test-agent',
           name: 'test-agent',
           instructions: 'You are a helpful assistant',
           model: mockModel,
@@ -6856,6 +6923,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const agentWithStreamProcessor = new Agent({
+          id: 'test-agent',
           name: 'test-agent',
           instructions: 'You are a helpful assistant',
           model: mockModel,
@@ -6887,6 +6955,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const agentWithStreamAbort = new Agent({
+          id: 'test-agent',
           name: 'test-agent',
           instructions: 'You are a helpful assistant',
           model: mockModel,
@@ -6928,6 +6997,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const agentWithDeployerAbort = new Agent({
+          id: 'test-agent',
           name: 'test-agent',
           instructions: 'You are a helpful assistant',
           model: mockModel,
@@ -7404,6 +7474,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
   it(`${version} - stream - should pass and call client side tools with experimental output`, async () => {
     const userAgent = new Agent({
+      id: 'user-agent',
       name: 'User agent',
       instructions: 'You are an agent that can get list of users using client side tools.',
       model: openaiModel,
@@ -7460,6 +7531,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     `${version} - generate - should pass and call client side tools with experimental output`,
     async () => {
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'You are an agent that can get list of users using client side tools.',
         model: openaiModel,
@@ -7510,6 +7582,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should expose sub-agents as tools when using generate/stream', async () => {
       // Create a research agent that will be used as a tool
       const researchAgent = new Agent({
+        id: 'research-agent',
         name: 'research-agent',
         instructions: 'You are a research agent. Provide concise, factual information.',
         model: dummyModel,
@@ -7517,6 +7590,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // Create an orchestrator agent that has access to the research agent
       const orchestratorAgent = new Agent({
+        id: 'orchestrator-agent',
         name: 'orchestrator-agent',
         instructions: 'You can delegate research tasks to specialized agents.',
         model: openaiModel,
@@ -7559,6 +7633,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
   describe('scorer output data', () => {
     it(`${version} - should return scoring data from generate when returnScorerData is true`, async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'Scorer Agent',
         instructions: 'You are an agent that can score things',
         model: dummyModel,
@@ -7587,6 +7662,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it(`${version} - should not return scoring data from generate when returnScorerData is false`, async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'Scorer Agent',
         instructions: 'You are an agent that can score things',
         model: dummyModel,
@@ -7608,6 +7684,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it(`${version} - should not return scoring data from generate when returnScorerData is not specified`, async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'Scorer Agent',
         instructions: 'You are an agent that can score things',
         model: dummyModel,
@@ -7621,184 +7698,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       expect(result.scoringData).toBeUndefined();
-    });
-  });
-
-  describe('scorer override functionality', () => {
-    let agent: Agent;
-    let mastra: Mastra;
-    let scorerTest: any;
-    let scorer1: any;
-
-    beforeEach(() => {
-      vi.clearAllMocks();
-      scorerTest = createScorer({
-        name: 'scorerTest',
-        description: 'Test Scorer',
-      }).generateScore(() => 0.95);
-
-      scorer1 = createScorer({
-        name: 'scorer1',
-        description: 'Test Scorer 1',
-      }).generateScore(() => 0.95);
-
-      agent = new Agent({
-        name: 'Test Agent',
-        instructions: 'You are a test agent.',
-        model: dummyModel,
-        scorers: {
-          scorerTest: {
-            scorer: scorerTest,
-          },
-        },
-      });
-
-      mastra = new Mastra({
-        agents: { agent },
-        logger: false,
-        scorers: { scorer1 },
-      });
-    });
-
-    it(`${version} - should call scorerTest when no override is provided`, async () => {
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello world');
-      } else {
-        await agent.generate('Hello world');
-      }
-
-      expect(runScorer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          scorerId: 'scorerTest',
-          scorerObject: expect.objectContaining({
-            scorer: scorerTest,
-          }),
-        }),
-      );
-    });
-
-    it(`${version} - should use override scorers when provided in generate options`, async () => {
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello world', {
-          scorers: {
-            scorer1: { scorer: mastra.getScorer('scorer1') },
-          },
-        });
-      } else {
-        await agent.generate('Hello world', {
-          scorers: {
-            scorer1: { scorer: mastra.getScorer('scorer1') },
-          },
-        });
-      }
-
-      expect(runScorer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          scorerId: 'scorer1',
-          scorerObject: expect.objectContaining({
-            scorer: expect.any(Object),
-          }),
-        }),
-      );
-
-      expect(runScorer).not.toHaveBeenCalledWith(
-        expect.objectContaining({
-          scorerId: 'scorerTest',
-          scorerObject: expect.objectContaining({
-            scorer: scorerTest,
-          }),
-        }),
-      );
-
-      expect(runScorer).toHaveBeenCalledTimes(1);
-    });
-
-    it(`${version} - should call scorers when provided in stream options`, async () => {
-      let result: any;
-      if (version === 'v1') {
-        result = await agent.streamLegacy('Hello world', {
-          scorers: {
-            scorer1: { scorer: mastra.getScorer('scorer1') },
-          },
-        });
-      } else {
-        result = await agent.stream('Hello world', {
-          scorers: {
-            scorer1: { scorer: mastra.getScorer('scorer1') },
-          },
-        });
-      }
-      await result.consumeStream();
-
-      expect(runScorer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          scorerId: 'scorer1',
-          scorerObject: expect.objectContaining({
-            scorer: expect.any(Object),
-          }),
-        }),
-      );
-    });
-
-    it(`${version} - can use scorer name for scorer config for generate`, async () => {
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello world', {
-          scorers: {
-            scorer1: { scorer: scorer1.name },
-          },
-        });
-      } else {
-        await agent.generate('Hello world', {
-          scorers: {
-            scorer1: { scorer: scorer1.name },
-          },
-        });
-      }
-
-      expect(runScorer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          scorerId: 'scorer1',
-          scorerObject: expect.objectContaining({
-            scorer: scorer1,
-          }),
-        }),
-      );
-    });
-
-    it(`${version} - should call runScorer with correct parameters`, async () => {
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello world', {
-          scorers: {
-            scorer1: { scorer: scorer1.name },
-          },
-        });
-      } else {
-        await agent.generate('Hello world', {
-          scorers: {
-            scorer1: { scorer: scorer1.name },
-          },
-        });
-      }
-
-      // Verify the exact call parameters
-      expect(runScorer).toHaveBeenCalledWith({
-        scorerId: 'scorer1',
-        scorerObject: { scorer: scorer1 },
-        runId: expect.any(String),
-        input: expect.any(Object),
-        output: expect.any(Object),
-        runtimeContext: expect.any(Object),
-        entity: expect.objectContaining({
-          id: 'Test Agent',
-          name: 'Test Agent',
-        }),
-        source: 'LIVE',
-        entityType: 'AGENT',
-        structuredOutput: false,
-        threadId: undefined,
-        resourceId: undefined,
-        tracingContext: expect.any(Object),
-      });
     });
   });
 

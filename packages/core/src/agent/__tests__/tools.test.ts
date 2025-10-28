@@ -108,6 +108,7 @@ function toolsTest(version: 'v1' | 'v2') {
   describe(`agents using tools ${version}`, () => {
     it('should call testTool from TestIntegration', async () => {
       const testAgent = new Agent({
+        id: 'test-agent',
         name: 'Test agent',
         instructions: 'You are an agent that call testTool',
         model: mockModel,
@@ -223,7 +224,7 @@ function toolsTest(version: 'v1' | 'v2') {
       }
 
       const findUserTool = createTool({
-        id: 'Find user tool',
+        id: 'find-user-tool',
         description: 'This is a test tool that returns the name and email',
         inputSchema: z.object({
           name: z.string(),
@@ -234,6 +235,7 @@ function toolsTest(version: 'v1' | 'v2') {
       });
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'You are an agent that can get list of users using findUserTool.',
         model: findUserToolModel,
@@ -348,6 +350,7 @@ function toolsTest(version: 'v1' | 'v2') {
       }
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'You are an agent that can get list of users using client side tools.',
         model: clientToolModel,
@@ -467,6 +470,7 @@ function toolsTest(version: 'v1' | 'v2') {
       }
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'You are an agent that can get list of users using client side tools.',
         model: clientToolModel,
@@ -613,6 +617,7 @@ function toolsTest(version: 'v1' | 'v2') {
       });
 
       const agent = new Agent({
+        id: 'runtimeContext-test-agent',
         name: 'runtimeContext-test-agent',
         instructions: 'You are an agent that tests runtimeContext availability.',
         model: runtimeContextModel,
@@ -749,7 +754,8 @@ function toolsTest(version: 'v1' | 'v2') {
       });
 
       const agent = new Agent({
-        name: 'runtimeContext-test-agent',
+        id: 'runtimeContext-test-agent',
+        name: 'RuntimeContext Test Agent',
         instructions: 'You are an agent that tests runtimeContext availability.',
         model: runtimeContextModel,
         tools: { testTool },

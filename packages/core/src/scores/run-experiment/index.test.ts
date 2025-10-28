@@ -34,7 +34,8 @@ const createMockAgent = (response: string = 'Dummy response'): Agent => {
   });
 
   const agent = new Agent({
-    name: 'mockAgent',
+    id: 'mockAgent',
+    name: 'Mock Agent',
     instructions: 'Mock agent',
     model: dummyModel,
   });
@@ -74,7 +75,8 @@ const createMockAgentV2 = (response: string = 'Dummy response'): Agent => {
   });
 
   const agent = new Agent({
-    name: 'mockAgent',
+    id: 'mockAgent',
+    name: 'Mock Agent',
     instructions: 'Mock agent',
     model: dummyModel,
   });

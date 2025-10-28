@@ -70,7 +70,8 @@ async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtim
         `;
 
   return new Agent({
-    name: 'routing-agent',
+    id: 'routing-agent',
+    name: 'Routing Agent',
     instructions,
     model: model,
     memory: memoryToUse,

@@ -46,6 +46,7 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions: 'You are a helpful assistant.',
       model,
@@ -120,6 +121,7 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions: 'You are a helpful assistant.',
       model,
@@ -175,6 +177,7 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions: 'You are a helpful assistant.',
       model,
@@ -257,6 +260,7 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions: 'You are a helpful assistant.',
       model,
@@ -300,6 +304,7 @@ describe('Stream ID Consistency', () => {
       });
 
       const agent = new Agent({
+        id: 'test-structured-output-onfinish',
         name: 'test-structured-output-onfinish',
         instructions: 'You are a helpful assistant.',
         model: mockModel,
@@ -386,6 +391,7 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
+      id: 'test-structured-output-processor-onfinish',
       name: 'test-structured-output-processor-onfinish',
       instructions: 'You are a helpful assistant.',
       model: mockModel,
@@ -469,6 +475,7 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions: 'You are a helpful assistant.',
       model: mockModel,

@@ -87,6 +87,7 @@ describe('Output Processor State Persistence Across Tool Execution', () => {
     });
 
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions: 'Test agent with tools',
       model: mockModel as any,
