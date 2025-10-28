@@ -496,11 +496,11 @@ You can also retrieve messages using an array of message IDs. Note that unlike `
 ```typescript copy
 const messagesV1 = await mastra
   .getStorage()
-  .getMessagesById({ messageIds: messageIdArr, format: "v1" });
+  .listMessagesById({ messageIds: messageIdArr, format: "v1" });
 
 const messagesV2 = await mastra
   .getStorage()
-  .getMessagesById({ messageIds: messageIdArr });
+  .listMessagesById({ messageIds: messageIdArr });
 ```
 
 ## Storage Providers

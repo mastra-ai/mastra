@@ -2,7 +2,6 @@ import type { MastraMessageContentV2 } from '../../../agent';
 import { MastraBase } from '../../../base';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '../../../memory/types';
 import type {
-  StorageGetMessagesArg,
   PaginationInfo,
   StorageResourceType,
   ThreadOrderBy,
@@ -40,15 +39,6 @@ export abstract class MemoryStorage extends MastraBase {
 
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
 
-  abstract getMessagesById({ messageIds }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  abstract getMessagesById({ messageIds }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
-  abstract getMessagesById({
-    messageIds,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]>;
-
   abstract saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   abstract saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   abstract saveMessages(
@@ -79,6 +69,8 @@ export abstract class MemoryStorage extends MastraBase {
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
 
   abstract listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
+
+  abstract listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]>;
 
   async getResourceById(_: { resourceId: string }): Promise<StorageResourceType | null> {
     throw new Error(

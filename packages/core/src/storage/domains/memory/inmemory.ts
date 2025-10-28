@@ -120,24 +120,6 @@ export class InMemoryMemory extends MemoryStorage {
     } satisfies MastraMessageV2;
   }
 
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
-  async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    this.logger.debug(`MockStore: getMessagesById called`);
-
-    const rawMessages = messageIds.map(id => this.collection.messages.get(id)).filter(message => !!message);
-
-    const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
-    if (format === 'v1') return list.get.all.v1();
-    return list.get.all.v2();
-  }
-
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   async saveMessages(
@@ -502,6 +484,15 @@ export class InMemoryMemory extends MemoryStorage {
       perPage,
       hasMore,
     };
+  }
+
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
+    this.logger.debug(`MockStore: listMessagesById called`);
+
+    const rawMessages = messageIds.map(id => this.collection.messages.get(id)).filter(message => !!message);
+
+    const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
+    return list.get.all.v2();
   }
 
   async getMessagesPaginated({
