@@ -1022,7 +1022,8 @@ export class MessageList {
       // Only enforce ID check if latestMessage is from memory (fixes issue #9370)
       // This prevents new assistant responses from merging into old responses that were retrieved from storage
       // When useChat resends messages, old assistant messages (from memory) should not merge with new ones (different IDs)
-      (!this.memoryMessages.has(latestMessage) || !latestMessage.id || !messageV2.id || latestMessage.id === messageV2.id) &&
+      // Stricter logic: only merge if BOTH lack IDs (legacy) OR BOTH have IDs and they match
+      (!this.memoryMessages.has(latestMessage) || (!latestMessage.id && !messageV2.id) || (latestMessage.id && messageV2.id && latestMessage.id === messageV2.id)) &&
       // If the message is from memory, don't append to the last assistant message
       messageSource !== 'memory';
     // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
