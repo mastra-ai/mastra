@@ -77,7 +77,7 @@ async function github({ pull_number }: { pull_number: number }) {
       stdio: `inherit`,
     });
   } catch (err) {
-    console.log('[ERROR]: cherry-pick failed');
+    console.log('[ERROR]: cherry-pick failed', err);
 
     await octokit.rest.issues.createComment({
       owner,
