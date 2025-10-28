@@ -6,6 +6,7 @@ description: Learn how to add memory to agents to store conversation history and
 ---
 
 import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 ## Agent memory
 
@@ -32,50 +33,60 @@ Memory requires a storage provider to persist conversation history, including us
 ## Configuring memory
 
 <Steps>
+  <StepItem title="Agent memory">
 
-### Agent memory
+  Enable memory by creating a `Memory` instance and passing it to the agent’s `memory` option.
 
-Enable memory by creating a `Memory` instance and passing it to the agent’s `memory` option.
+  ```typescript {6-9} title="src/mastra/agents/memory-agent.ts" copy
+  import { Agent } from "@mastra/core/agent";
+  import { Memory } from "@mastra/memory";
 
-```typescript {6-9} title="src/mastra/agents/memory-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
+  export const memoryAgent = new Agent({
+    // ...
+    memory: new Memory({
+      options: {
+        lastMessages: 20
+      }
+    })
+  });
+  ```
 
-export const memoryAgent = new Agent({
-  // ...
-  memory: new Memory({
-    options: {
-      lastMessages: 20
-    }
-  })
-});
-```
+  :::note
 
-> See the [Memory Class](../reference/memory/Memory) for a full list of configuration options.
+  See the [Memory Class](../reference/memory/Memory) docs for a full list of configuration options.
 
-### Mastra storage
+  :::
 
-Add a storage provider to your main Mastra instance to enable memory across all configured agents.
+  </StepItem>
 
-```typescript {6-8} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { LibSQLStore } from "@mastra/libsql";
+  <StepItem title="Mastra storage">
 
-export const mastra = new Mastra({
-  // ..
-  storage: new LibSQLStore({
-    url: ":memory:"
-  }),
-});
-```
+  Add a storage provider to your main Mastra instance to enable memory across all configured agents.
 
-> See the [LibSQL Storage](/reference/storage/libsql) for a full list of configuration options.
+  ```typescript {6-8} title="src/mastra/index.ts" copy
+  import { Mastra } from "@mastra/core/mastra";
+  import { LibSQLStore } from "@mastra/libsql";
 
+  export const mastra = new Mastra({
+    // ..
+    storage: new LibSQLStore({
+      url: ":memory:"
+    }),
+  });
+  ```
+
+  :::note
+
+  See the [LibSQL Storage](/reference/storage/libsql) docs for a full list of configuration options.
+
+  :::
+
+  </StepItem>
 </Steps>
 
 Alternatively, add storage directly to an agent’s memory to keep data separate or use different providers per agent.
 
-```typescript {7-10} title="src/mastra/agents/memory-agent.ts" showLineNumbers copy
+```typescript {7-10} title="src/mastra/agents/memory-agent.ts" copy
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
@@ -150,7 +161,11 @@ export const memoryAgent = new Agent({
 });
 ```
 
-> See [Runtime Context](/server-db/runtime-context) for more information.
+:::note
+
+See [Runtime Context](/server-db/runtime-context) docs for more information.
+
+:::
 
 ## Related
 
