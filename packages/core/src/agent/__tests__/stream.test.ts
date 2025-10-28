@@ -903,7 +903,8 @@ function runStreamTest(version: 'v1' | 'v2') {
         expect(secondResponse.request.body.input).toEqual([
           expect.objectContaining({ role: 'system' }),
           expect.objectContaining({ role: 'user' }),
-          expect.objectContaining({ type: 'function_call' }),
+          expect.objectContaining({ type: 'function_call', name: 'get_weather' }),
+          expect.objectContaining({ type: 'function_call', call_id: expect.any(String) }),
           expect.objectContaining({ type: 'function_call_output' }),
           expect.objectContaining({ role: 'assistant' }),
           expect.objectContaining({ role: 'user' }),
