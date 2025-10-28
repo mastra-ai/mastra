@@ -96,10 +96,7 @@ export class CloudflareDeployer extends Deployer {
   private getEntry(): string {
     return `
     import '#polyfills';
-    import { evaluate } from '@mastra/core/eval';
-    import { AvailableHooks, registerHook } from '@mastra/core/hooks';
     import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces';
-    import { checkEvalStorageFields } from '@mastra/core/utils';
 
     export default {
       fetch: async (request, env, context) => {

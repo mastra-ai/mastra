@@ -14,7 +14,7 @@ export class CloudDeployer extends Deployer {
     super({ name: 'cloud' });
   }
 
-  async deploy(_outputDirectory: string): Promise<void> {}
+  async deploy(_outputDirectory: string): Promise<void> { }
   async writeInstrumentationFile(outputDirectory: string) {
     const instrumentationFile = join(outputDirectory, 'instrumentation.mjs');
     const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -32,7 +32,7 @@ export class CloudDeployer extends Deployer {
     return super.writePackageJson(outputDirectory, dependencies);
   }
 
-  async lint() {}
+  async lint() { }
 
   protected async installDependencies(outputDirectory: string, _rootDir = process.cwd()) {
     await installDeps({ path: join(outputDirectory, 'output'), pm: 'npm' });
@@ -70,8 +70,6 @@ import { mastra } from '#mastra';
 import { MultiLogger } from '@mastra/core/logger';
 import { PinoLogger } from '@mastra/loggers';
 import { HttpTransport } from '@mastra/loggers/http';
-import { evaluate } from '@mastra/core/eval';
-import { AvailableHooks, registerHook } from '@mastra/core/hooks';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces';
 const startTime = process.env.RUNNER_START_TIME ? new Date(process.env.RUNNER_START_TIME).getTime() : Date.now();
