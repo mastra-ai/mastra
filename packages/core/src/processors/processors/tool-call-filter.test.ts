@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import type { MastraMessageV2 } from '../../message';
+import type { MastraMessageV2 } from '../../agent/message-list';
 
 import { ToolCallFilter } from './tool-call-filter';
 
@@ -22,6 +22,7 @@ describe('ToolCallFilter', () => {
             content: 'What is the weather?',
             parts: [],
           },
+          createdAt: new Date(),
         },
         {
           id: 'msg-2',
@@ -29,26 +30,40 @@ describe('ToolCallFilter', () => {
           content: {
             format: 2,
             content: '',
-            parts: [],
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: { location: 'NYC' },
+                },
+              },
+            ],
           },
-          tool_calls: [
-            {
-              toolCallId: 'call-1',
-              toolName: 'weather',
-              args: { location: 'NYC' },
-            },
-          ],
+          createdAt: new Date(),
         },
         {
           id: 'msg-3',
-          role: 'tool',
-          toolCallId: 'call-1',
-          toolName: 'weather',
+          role: 'assistant',
           content: {
             format: 2,
-            content: 'Sunny, 72°F',
-            parts: [],
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: {},
+                  result: 'Sunny, 72°F',
+                },
+              },
+            ],
           },
+          createdAt: new Date(),
         },
         {
           id: 'msg-4',
@@ -58,6 +73,7 @@ describe('ToolCallFilter', () => {
             content: 'The weather is sunny and 72°F',
             parts: [],
           },
+          createdAt: new Date(),
         },
       ];
 
@@ -83,6 +99,7 @@ describe('ToolCallFilter', () => {
             content: 'Hello',
             parts: [],
           },
+          createdAt: new Date(),
         },
         {
           id: 'msg-2',
@@ -92,6 +109,7 @@ describe('ToolCallFilter', () => {
             content: 'Hi there!',
             parts: [],
           },
+          createdAt: new Date(),
         },
       ];
 
@@ -127,6 +145,7 @@ describe('ToolCallFilter', () => {
             content: 'What is 2+2 and the weather?',
             parts: [],
           },
+          createdAt: new Date(),
         },
         {
           id: 'msg-2',
@@ -134,26 +153,40 @@ describe('ToolCallFilter', () => {
           content: {
             format: 2,
             content: '',
-            parts: [],
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'calculator',
+                  args: { expression: '2+2' },
+                },
+              },
+            ],
           },
-          tool_calls: [
-            {
-              toolCallId: 'call-1',
-              toolName: 'calculator',
-              args: { expression: '2+2' },
-            },
-          ],
+          createdAt: new Date(),
         },
         {
           id: 'msg-3',
-          role: 'tool',
-          toolCallId: 'call-1',
-          toolName: 'calculator',
+          role: 'assistant',
           content: {
             format: 2,
-            content: '4',
-            parts: [],
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'calculator',
+                  args: {},
+                  result: '4',
+                },
+              },
+            ],
           },
+          createdAt: new Date(),
         },
         {
           id: 'msg-4',
@@ -161,26 +194,40 @@ describe('ToolCallFilter', () => {
           content: {
             format: 2,
             content: '',
-            parts: [],
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-2',
+                  toolName: 'weather',
+                  args: { location: 'NYC' },
+                },
+              },
+            ],
           },
-          tool_calls: [
-            {
-              toolCallId: 'call-2',
-              toolName: 'weather',
-              args: { location: 'NYC' },
-            },
-          ],
+          createdAt: new Date(),
         },
         {
           id: 'msg-5',
-          role: 'tool',
-          toolCallId: 'call-2',
-          toolName: 'weather',
+          role: 'assistant',
           content: {
             format: 2,
-            content: 'Sunny',
-            parts: [],
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-2',
+                  toolName: 'weather',
+                  args: {},
+                  result: 'Sunny',
+                },
+              },
+            ],
           },
+          createdAt: new Date(),
         },
         {
           id: 'msg-6',
@@ -190,6 +237,7 @@ describe('ToolCallFilter', () => {
             content: '2+2 is 4 and the weather is sunny',
             parts: [],
           },
+          createdAt: new Date(),
         },
       ];
 
@@ -217,6 +265,7 @@ describe('ToolCallFilter', () => {
             content: 'What is 2+2 and the weather?',
             parts: [],
           },
+          createdAt: new Date(),
         },
         {
           id: 'msg-2',
@@ -224,26 +273,40 @@ describe('ToolCallFilter', () => {
           content: {
             format: 2,
             content: '',
-            parts: [],
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'calculator',
+                  args: { expression: '2+2' },
+                },
+              },
+            ],
           },
-          tool_calls: [
-            {
-              toolCallId: 'call-1',
-              toolName: 'calculator',
-              args: { expression: '2+2' },
-            },
-          ],
+          createdAt: new Date(),
         },
         {
           id: 'msg-3',
-          role: 'tool',
-          toolCallId: 'call-1',
-          toolName: 'calculator',
+          role: 'assistant',
           content: {
             format: 2,
-            content: '4',
-            parts: [],
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'calculator',
+                  args: {},
+                  result: '4',
+                },
+              },
+            ],
           },
+          createdAt: new Date(),
         },
         {
           id: 'msg-4',
@@ -251,26 +314,40 @@ describe('ToolCallFilter', () => {
           content: {
             format: 2,
             content: '',
-            parts: [],
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-2',
+                  toolName: 'weather',
+                  args: { location: 'NYC' },
+                },
+              },
+            ],
           },
-          tool_calls: [
-            {
-              toolCallId: 'call-2',
-              toolName: 'weather',
-              args: { location: 'NYC' },
-            },
-          ],
+          createdAt: new Date(),
         },
         {
           id: 'msg-5',
-          role: 'tool',
-          toolCallId: 'call-2',
-          toolName: 'weather',
+          role: 'assistant',
           content: {
             format: 2,
-            content: 'Sunny',
-            parts: [],
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-2',
+                  toolName: 'weather',
+                  args: {},
+                  result: 'Sunny',
+                },
+              },
+            ],
           },
+          createdAt: new Date(),
         },
         {
           id: 'msg-6',
@@ -280,6 +357,7 @@ describe('ToolCallFilter', () => {
             content: 'Final answer',
             parts: [],
           },
+          createdAt: new Date(),
         },
       ];
 
@@ -308,6 +386,7 @@ describe('ToolCallFilter', () => {
             content: 'Calculate, search, and check weather',
             parts: [],
           },
+          createdAt: new Date(),
         },
         {
           id: 'msg-2',
@@ -315,26 +394,40 @@ describe('ToolCallFilter', () => {
           content: {
             format: 2,
             content: '',
-            parts: [],
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'calculator',
+                  args: {},
+                },
+              },
+            ],
           },
-          tool_calls: [
-            {
-              toolCallId: 'call-1',
-              toolName: 'calculator',
-              args: {},
-            },
-          ],
+          createdAt: new Date(),
         },
         {
           id: 'msg-3',
-          role: 'tool',
-          toolCallId: 'call-1',
-          toolName: 'calculator',
+          role: 'assistant',
           content: {
             format: 2,
-            content: '42',
-            parts: [],
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'calculator',
+                  args: {},
+                  result: '42',
+                },
+              },
+            ],
           },
+          createdAt: new Date(),
         },
         {
           id: 'msg-4',
@@ -342,26 +435,40 @@ describe('ToolCallFilter', () => {
           content: {
             format: 2,
             content: '',
-            parts: [],
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-2',
+                  toolName: 'search',
+                  args: {},
+                },
+              },
+            ],
           },
-          tool_calls: [
-            {
-              toolCallId: 'call-2',
-              toolName: 'search',
-              args: {},
-            },
-          ],
+          createdAt: new Date(),
         },
         {
           id: 'msg-5',
-          role: 'tool',
-          toolCallId: 'call-2',
-          toolName: 'search',
+          role: 'assistant',
           content: {
             format: 2,
-            content: 'Results',
-            parts: [],
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-2',
+                  toolName: 'search',
+                  args: {},
+                  result: 'Results',
+                },
+              },
+            ],
           },
+          createdAt: new Date(),
         },
         {
           id: 'msg-6',
@@ -369,26 +476,40 @@ describe('ToolCallFilter', () => {
           content: {
             format: 2,
             content: '',
-            parts: [],
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-3',
+                  toolName: 'weather',
+                  args: {},
+                },
+              },
+            ],
           },
-          tool_calls: [
-            {
-              toolCallId: 'call-3',
-              toolName: 'weather',
-              args: {},
-            },
-          ],
+          createdAt: new Date(),
         },
         {
           id: 'msg-7',
-          role: 'tool',
-          toolCallId: 'call-3',
-          toolName: 'weather',
+          role: 'assistant',
           content: {
             format: 2,
-            content: 'Sunny',
-            parts: [],
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-3',
+                  toolName: 'weather',
+                  args: {},
+                  result: 'Sunny',
+                },
+              },
+            ],
           },
+          createdAt: new Date(),
         },
       ];
 
@@ -416,6 +537,7 @@ describe('ToolCallFilter', () => {
             content: 'What is the weather?',
             parts: [],
           },
+          createdAt: new Date(),
         },
         {
           id: 'msg-2',
@@ -423,26 +545,40 @@ describe('ToolCallFilter', () => {
           content: {
             format: 2,
             content: '',
-            parts: [],
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: {},
+                },
+              },
+            ],
           },
-          tool_calls: [
-            {
-              toolCallId: 'call-1',
-              toolName: 'weather',
-              args: {},
-            },
-          ],
+          createdAt: new Date(),
         },
         {
           id: 'msg-3',
-          role: 'tool',
-          toolCallId: 'call-1',
-          toolName: 'weather',
+          role: 'assistant',
           content: {
             format: 2,
-            content: 'Sunny',
-            parts: [],
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: {},
+                  result: 'Sunny',
+                },
+              },
+            ],
           },
+          createdAt: new Date(),
         },
       ];
 
@@ -467,6 +603,7 @@ describe('ToolCallFilter', () => {
             content: 'What is the weather?',
             parts: [],
           },
+          createdAt: new Date(),
         },
         {
           id: 'msg-2',
@@ -474,26 +611,40 @@ describe('ToolCallFilter', () => {
           content: {
             format: 2,
             content: '',
-            parts: [],
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: {},
+                },
+              },
+            ],
           },
-          tool_calls: [
-            {
-              toolCallId: 'call-1',
-              toolName: 'weather',
-              args: {},
-            },
-          ],
+          createdAt: new Date(),
         },
         {
           id: 'msg-3',
-          role: 'tool',
-          toolCallId: 'call-1',
-          toolName: 'weather',
+          role: 'assistant',
           content: {
             format: 2,
-            content: 'Sunny',
-            parts: [],
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: {},
+                  result: 'Sunny',
+                },
+              },
+            ],
           },
+          createdAt: new Date(),
         },
       ];
 
@@ -521,6 +672,7 @@ describe('ToolCallFilter', () => {
             content: 'Hello',
             parts: [],
           },
+          createdAt: new Date(),
         },
         {
           id: 'msg-2',
@@ -530,6 +682,7 @@ describe('ToolCallFilter', () => {
             content: 'Hi there!',
             parts: [],
           },
+          createdAt: new Date(),
           // No tool_calls property
         },
       ];
@@ -555,6 +708,7 @@ describe('ToolCallFilter', () => {
             content: 'Hello',
             parts: [],
           },
+          createdAt: new Date(),
         },
         {
           id: 'msg-2',
@@ -564,7 +718,7 @@ describe('ToolCallFilter', () => {
             content: 'Hi there!',
             parts: [],
           },
-          tool_calls: [],
+          createdAt: new Date(),
         },
       ];
 
@@ -589,17 +743,28 @@ describe('ToolCallFilter', () => {
             content: 'Hello',
             parts: [],
           },
+          createdAt: new Date(),
         },
         {
           id: 'msg-2',
-          role: 'tool',
-          toolName: 'weather',
+          role: 'assistant',
           content: {
             format: 2,
-            content: 'Sunny',
-            parts: [],
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolName: 'weather',
+                  toolCallId: 'call-1',
+                  args: {},
+                  result: 'Sunny',
+                },
+              },
+            ],
           },
-          // No toolCallId
+          createdAt: new Date(),
         },
       ];
 
