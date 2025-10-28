@@ -25,7 +25,7 @@ jobs:
 
       - name: Setup npm auth
         run: |
-          echo "//registry.yarnpkg.com/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
 
       - name: Run build
         run: pnpm build

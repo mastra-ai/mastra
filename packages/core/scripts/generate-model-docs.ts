@@ -1087,7 +1087,7 @@ async function generateDocs() {
   aiSdkProviders.push({
     id: 'ollama',
     name: 'Ollama',
-    npm: 'ollama-ai-provider',
+    npm: 'ollama-ai-provider-v2',
     models: {},
   });
 
