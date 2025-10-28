@@ -6,6 +6,7 @@ description: Guide on creating an AI research assistant that can analyze and ans
 ---
 
 import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 # Building a Research Paper Assistant with RAG
 
@@ -54,7 +55,9 @@ Let's define the agent's behavior, connect it to your Mastra project, and create
 
 <Steps>
 
-### Install additional dependencies
+<StepItem title="Install additional dependencies">
+
+Install additional dependencies
 
 After running the [installation guide](/getting-started/installation) you'll need to install additional dependencies:
 
@@ -70,7 +73,9 @@ you'll need to use v4.
 
 :::
 
-### Define the Agent
+</StepItem>
+
+<StepItem title="Define the Agent">
 
 Now you'll create your RAG-enabled research assistant. The agent uses:
 
@@ -106,7 +111,9 @@ export const researchAgent = new Agent({
 });
 ```
 
-### Create the Vector Store
+</StepItem>
+
+<StepItem title="Create the Vector Store">
 
 In the root of your project, grab the absolute path with the `pwd` command. The path might be similar to this:
 
@@ -140,7 +147,9 @@ use a remote persistent database then.
 
 :::
 
-### Register the Agent with Mastra
+</StepItem>
+
+<StepItem title="Register the Agent with Mastra">
 
 In the `src/mastra/index.ts` file, add the agent to Mastra:
 
@@ -159,6 +168,8 @@ export const mastra = new Mastra({
 });
 ```
 
+</StepItem>
+
 </Steps>
 
 ## Processing documents
@@ -167,7 +178,7 @@ In the following steps you'll fetch the research paper, split it into smaller ch
 
 <Steps>
 
-### Load and Process the Paper
+<StepItem title="Load and Process the Paper">
 
 In this step the research paper is retrieved by providing an URL, then converted to a document object, and split into smaller, manageable chunks. By splitting into chunks the processing is faster and more efficient.
 
@@ -205,7 +216,9 @@ You should get back this response:
 Number of chunks: 892
 ```
 
-### Create and Store Embeddings
+</StepItem>
+
+<StepItem title="Create and Store Embeddings">
 
 Finally, you'll prepare the content for RAG by:
 
@@ -277,6 +290,8 @@ npx bun src/store.ts
 ```
 
 If the operation was successful you should see no output/errors in your terminal.
+
+</StepItem>
 
 </Steps>
 

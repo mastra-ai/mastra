@@ -6,6 +6,7 @@ description: "A step-by-step guide to creating a fully-featured MCP (Model Conte
 ---
 
 import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 # Building a Notes MCP Server
 
@@ -27,7 +28,7 @@ Before you can create an MCP server you first need to install additional depende
 
 <Steps>
 
-### Install `@mastra/mcp`
+<StepItem>
 
 Add `@mastra/mcp` to your project:
 
@@ -35,7 +36,9 @@ Add `@mastra/mcp` to your project:
 npm install @mastra/mcp
 ```
 
-### Clean up the default project
+</StepItem>
+
+<StepItem>
 
 After following the default [installation guide](/getting-started/installation) your project will include files that are not relevant for this guide. You can safely remove them:
 
@@ -62,7 +65,9 @@ export const mastra = new Mastra({
 });
 ```
 
-### Set Up the Directory Structure
+</StepItem>
+
+<StepItem>
 
 Create a dedicated directory for your MCP server's logic and a `notes` directory for your notes:
 
@@ -95,6 +100,8 @@ The resulting directory structure should look like this:
         └── tools/
 ```
 
+</StepItem>
+
 </Steps>
 
 ## Creating the MCP Server
@@ -103,7 +110,7 @@ Let's add the MCP server!
 
 <Steps>
 
-### Create and Register the MCP Server
+<StepItem>
 
 In `src/mastra/mcp/server.ts`, define the MCP server instance:
 
@@ -140,7 +147,9 @@ export const mastra = new Mastra({
 });
 ```
 
-### Implement and Register Resource Handlers
+</StepItem>
+
+<StepItem>
 
 Resource handlers allow clients to discover and read the content your server manages. Implement handlers to work with markdown files in the `notes` directory. Add to the `src/mastra/mcp/resources.ts` file:
 
@@ -212,7 +221,7 @@ export const notes = new MCPServer({
 });
 ```
 
-### Implement and Register a Tool
+<StepItem title="Implement and Register a Tool">
 
 Tools are the actions your server can perform. Let's create a `write` tool.
 First, define the tool in `src/mastra/tools/write-note.ts`:
@@ -272,6 +281,8 @@ export const notes = new MCPServer({
   },
 });
 ```
+
+</StepItem>
 
 ### Implement and Register Prompts
 
@@ -413,6 +424,8 @@ export const notes = new MCPServer({
   },
 });
 ```
+
+</StepItem>
 
 </Steps>
 

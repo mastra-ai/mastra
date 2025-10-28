@@ -8,6 +8,7 @@ description: A step-by-step guide to integrating Mastra with Astro.
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 # Integrate Mastra in your Astro project
 
@@ -29,10 +30,10 @@ This guide assumes you're using Astro's Actions with React and the Vercel adapte
 :::
 
   <Steps>
-## Install Mastra
+
+<StepItem>
 
 Install the required Mastra packages:
-
 
 <Tabs>
   <TabItem value="npm" label="npm">
@@ -57,27 +58,29 @@ Install the required Mastra packages:
   </TabItem>
 </Tabs>
 
-## Integrate Mastra
+</StepItem>
+
+<StepItem>
 
 To integrate Mastra into your project, you have two options:
 
-### 1. Use the One-Liner
+- Use the One-Liner
 
-Run the following command to quickly scaffold the default Weather agent with sensible defaults:
+    Run the following command to quickly scaffold the default Weather agent with sensible defaults:
 
-```bash copy
-npx mastra@latest init --default
-```
+    ```bash copy
+    npx mastra@latest init --default
+    ```
 
-> See [mastra init](/reference/cli/init) for more information.
+    > See [mastra init](/reference/cli/init) for more information.
 
-### 2. Use the Interactive CLI
+- Use the Interactive CLI
 
-If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
+    If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
 
-```bash copy
-npx mastra@latest init
-```
+    ```bash copy
+    npx mastra@latest init
+    ```
 
 Add the `dev` and `build` scripts to `package.json`:
 
@@ -91,7 +94,9 @@ Add the `dev` and `build` scripts to `package.json`:
 }
 ```
 
-## Configure TypeScript
+</StepItem>
+
+<StepItem>
 
 Modify the `tsconfig.json` file in your project root:
 
@@ -102,13 +107,19 @@ Modify the `tsconfig.json` file in your project root:
 }
 ```
 
-## Set Up API Key
+</StepItem>
+
+<StepItem>
+
+Setup your API key in a `.env` file:
 
 ```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
-## Update .gitignore
+</StepItem>
+
+<StepItem>
 
 Add `.mastra` and `.vercel` to your `.gitignore` file:
 
@@ -117,7 +128,9 @@ Add `.mastra` and `.vercel` to your `.gitignore` file:
 .vercel
 ```
 
-## Update the Mastra Agent
+</StepItem>
+
+<StepItem>
 
 Astro uses Vite, which accesses environment variables via `import.meta.env` rather than `process.env`. As a result, the model constructor must explicitly receive the `apiKey` from the Vite environment like this:
 
@@ -133,7 +146,9 @@ Astro uses Vite, which accesses environment variables via `import.meta.env` rath
 
 > More configuration details are available in the AI SDK docs. See [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) for more information.
 
-## Start the Mastra Dev Server
+</StepItem>
+
+<StepItem>
 
 Start the Mastra Dev Server to expose your agents as REST endpoints:
 
@@ -152,17 +167,25 @@ Start the Mastra Dev Server to expose your agents as REST endpoints:
 
 > Once running, your agents are available locally. See [Local Development Environment](/server-db/studio) for more information.
 
-## Start Astro Dev Server
+</StepItem>
+
+<StepItem>
 
 With the Mastra Dev Server running, you can start your Astro site in the usual way.
 
-## Create Actions Directory
+</StepItem>
+
+<StepItem>
+
+Create an `actions` directory:
 
 ```bash copy
 mkdir src/actions
 ```
 
-### Create Test Action
+</StepItem>
+
+<StepItem>
 
 Create a new Action, and add the example code:
 
@@ -193,7 +216,9 @@ export const server = {
 };
 ```
 
-### Create Test Form
+</StepItem>
+
+<StepItem>
 
 Create a new Form component, and add the example code:
 
@@ -227,7 +252,9 @@ export const Form = () => {
 };
 ```
 
-### Create Test Page
+</StepItem>
+
+<StepItem>
 
 Create a new Page, and add the example code:
 
@@ -259,6 +286,9 @@ Agent response: The current weather in London is as follows:
 
 Let me know if you need more information!
 ```
+
+</StepItem>
+
   </Steps>
   </TabItem>
 
@@ -279,10 +309,10 @@ Before proceeding, ensure your Astro project is configured as follows:
  - `astro.config.mjs` is set to `output: "server"`
 
   <Steps>
-## Install Mastra
+
+<StepItem>
 
 Install the required Mastra packages:
-
 
 <Tabs>
   <TabItem value="npm" label="npm">
@@ -307,27 +337,29 @@ Install the required Mastra packages:
   </TabItem>
 </Tabs>
 
-## Integrate Mastra
+</StepItem>
+
+<StepItem>
 
 To integrate Mastra into your project, you have two options:
 
-### 1. Use the One-Liner
+- Use the One-Liner
 
-Run the following command to quickly scaffold the default Weather agent with sensible defaults:
+    Run the following command to quickly scaffold the default Weather agent with sensible defaults:
 
-```bash copy
-npx mastra@latest init --default
-```
+    ```bash copy
+    npx mastra@latest init --default
+    ```
 
-> See [mastra init](/reference/cli/init) for more information.
+    > See [mastra init](/reference/cli/init) for more information.
 
-### 2. Use the Interactive CLI
+- Use the Interactive CLI
 
-If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
+    If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
 
-```bash copy
-npx mastra@latest init
-```
+    ```bash copy
+    npx mastra@latest init
+    ```
 
 Add the `dev` and `build` scripts to `package.json`:
 
@@ -341,7 +373,9 @@ Add the `dev` and `build` scripts to `package.json`:
 }
 ```
 
-## Configure TypeScript
+</StepItem>
+
+<StepItem>
 
 Modify the `tsconfig.json` file in your project root:
 
@@ -352,13 +386,19 @@ Modify the `tsconfig.json` file in your project root:
 }
 ```
 
-## Set Up API Key
+</StepItem>
+
+<StepItem>
+
+Setup your API key in a `.env` file:
 
 ```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
-## Update .gitignore
+</StepItem>
+
+<StepItem>
 
 Add `.mastra` to your `.gitignore` file:
 
@@ -367,7 +407,9 @@ Add `.mastra` to your `.gitignore` file:
 .vercel
 ```
 
-## Update the Mastra Agent
+</StepItem>
+
+<StepItem>
 
 Astro uses Vite, which accesses environment variables via `import.meta.env` rather than `process.env`. As a result, the model constructor must explicitly receive the `apiKey` from the Vite environment like this:
 
@@ -383,7 +425,9 @@ Astro uses Vite, which accesses environment variables via `import.meta.env` rath
 
 > More configuration details are available in the AI SDK docs. See [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) for more information.
 
-## Start the Mastra Dev Server
+</StepItem>
+
+<StepItem>
 
 Start the Mastra Dev Server to expose your agents as REST endpoints:
 
@@ -402,17 +446,25 @@ Start the Mastra Dev Server to expose your agents as REST endpoints:
 
 > Once running, your agents are available locally. See [Local Development Environment](/server-db/studio) for more information.
 
-## Start Astro Dev Server
+</StepItem>
+
+<StepItem>
 
 With the Mastra Dev Server running, you can start your Astro site in the usual way.
 
-## Create API Directory
+</StepItem>
+
+<StepItem>
+
+Create an `api` directory:
 
 ```bash copy
 mkdir src/pages/api
 ```
 
-### Create Test Endpoint
+</StepItem>
+
+<StepItem>
 
 Create a new Endpoint, and add the example code:
 
@@ -435,7 +487,9 @@ export const POST: APIRoute = async ({ request }) => {
 };
 ```
 
-### Create Test Form
+</StepItem>
+
+<StepItem>
 
 Create a new Form component, and add the example code:
 
@@ -477,7 +531,9 @@ export const Form = () => {
 };
 ```
 
-### Create Test Page
+</StepItem>
+
+<StepItem>
 
 Create a new Page, and add the example code:
 
@@ -507,6 +563,9 @@ Agent response: The current weather in London is as follows:
 
 Let me know if you need more information!
 ```
+
+</StepItem>
+
   </Steps>
   </TabItem>
 </Tabs>

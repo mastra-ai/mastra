@@ -6,13 +6,14 @@ description: "Deploy your Mastra applications to AWS Lambda using Docker contain
 ---
 
 import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 # AWS Lambda
 
 Deploy your Mastra applications to AWS Lambda using Docker containers and the AWS Lambda Web Adapter.
 This approach allows you to run your Mastra server as a containerized Lambda function with automatic scaling.
 
-::: note
+:::note
 This guide assumes your Mastra application has been created using the default
 `npx create-mastra@latest` command.
 For more information on how to create a new Mastra application,
@@ -30,7 +31,7 @@ Before deploying to AWS Lambda, ensure you have:
 
 ## Memory Configuration
 
-::: note
+:::note
 AWS Lambda uses an ephemeral file system,
 meaning that any files written to the file system are short-lived and may be lost.
 Avoid using a Mastra storage provider that uses the file system,
@@ -98,7 +99,7 @@ CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/in
 
 <Steps>
 
-### Set up environment variables
+<StepItem>
 
 Set up your environment variables for the deployment process:
 
@@ -108,7 +109,9 @@ export AWS_REGION="us-east-1"
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 ```
 
-### Build the Docker image
+</StepItem>
+
+<StepItem>
 
 Build your Docker image locally:
 
@@ -116,7 +119,9 @@ Build your Docker image locally:
 docker build -t "$PROJECT_NAME" .
 ```
 
-### Create an ECR repository
+</StepItem>
+
+<StepItem>
 
 Create an Amazon ECR repository to store your Docker image:
 
@@ -124,7 +129,9 @@ Create an Amazon ECR repository to store your Docker image:
 aws ecr create-repository --repository-name "$PROJECT_NAME" --region "$AWS_REGION"
 ```
 
-### Authenticate Docker with ECR
+</StepItem>
+
+<StepItem>
 
 Log in to Amazon ECR:
 
@@ -132,7 +139,9 @@ Log in to Amazon ECR:
 aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
 ```
 
-### Tag and push the image
+</StepItem>
+
+<StepItem>
 
 Tag your image with the ECR repository URI and push it:
 
@@ -141,7 +150,9 @@ docker tag "$PROJECT_NAME":latest "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws
 docker push "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME":latest
 ```
 
-### Create the Lambda function
+</StepItem>
+
+<StepItem>
 
 Create a Lambda function using the AWS Console:
 
@@ -153,7 +164,9 @@ Create a Lambda function using the AWS Console:
    - **Container image URI**: Click **Browse images** and select your ECR repository, then choose the `latest` tag
    - **Architecture**: Select the architecture that matches your Docker build (typically `x86_64`)
 
-### Configure Function URL
+</StepItem>
+
+<StepItem>
 
 Enable Function URL for external access:
 
@@ -166,7 +179,9 @@ Enable Function URL for external access:
    - **Allow-Methods**: `*` (audit and restrict in production)
 5. Click **Save**
 
-### Configure environment variables
+</StepItem>
+
+<StepItem>
 
 Add your environment variables in the Lambda function configuration:
 
@@ -177,7 +192,9 @@ Add your environment variables in the Lambda function configuration:
    - `TURSO_AUTH_TOKEN`: Your Turso auth token (if using LibSQL with Turso)
    - Other provider-specific API keys as needed
 
-### Adjust function settings
+</StepItem>
+
+<StepItem>
 
 Configure the function's memory and timeout settings:
 
@@ -186,6 +203,8 @@ Configure the function's memory and timeout settings:
    - **Memory**: 512 MB (adjust based on your application needs)
    - **Timeout**: 30 seconds (adjust based on your application needs)
    - **Ephemeral storage**: 512 MB (optional, for temporary files)
+
+</StepItem>
 
 </Steps>
 

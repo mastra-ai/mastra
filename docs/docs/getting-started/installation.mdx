@@ -8,6 +8,7 @@ description: Guide on installing Mastra and setting up the necessary prerequisit
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 import { VideoPlayer } from "@site/src/components/video-player"
 
 # Install Mastra
@@ -91,7 +92,7 @@ If you prefer not to use our automatic `create mastra` CLI tool, you can set up 
 
 <Steps>
 
-### Create project
+<StepItem>
 
 Create a new project and change directory:
 
@@ -146,7 +147,9 @@ Add `dev` and `build` scripts to your `package.json` file:
 }
 ```
 
-### Initialize TypeScript
+</StepItem>
+
+<StepItem>
 
 Create a `tsconfig.json` file:
 
@@ -181,7 +184,9 @@ Mastra requires modern `module` and `moduleResolution` settings. Using `CommonJS
 
 :::
 
-### Set API key
+</StepItem>
+
+<StepItem>
 
 Create an `.env` file:
 
@@ -201,7 +206,9 @@ This guide uses Google Gemini, but you can use any supported [model provider](/m
 
 :::
 
-### Add tool
+</StepItem>
+
+<StepItem>
 
 Create a `weather-tool.ts` file:
 
@@ -238,7 +245,9 @@ We've shortened and simplified the `weatherTool` example here. You can see the c
 
 :::
 
-### Add agent
+</StepItem>
+
+<StepItem>
 
 Create a `weather-agent.ts` file:
 
@@ -271,7 +280,9 @@ export const weatherAgent = new Agent({
 });
 ```
 
-### Register agent
+</StepItem>
+
+<StepItem>
 
 Create the Mastra entry point and register your agent:
 
@@ -289,7 +300,11 @@ export const mastra = new Mastra({
   agents: { weatherAgent }
 });
 ```
-### Test your agent
+
+</StepItem>
+
+<StepItem>
+
 You can now launch the [Playground](/server-db/studio) and test your agent.
 
 <Tabs>
@@ -315,5 +330,6 @@ You can now launch the [Playground](/server-db/studio) and test your agent.
   </TabItem>
 </Tabs>
 
+</StepItem>
 
 </Steps>

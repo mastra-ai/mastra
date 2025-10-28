@@ -8,6 +8,7 @@ description: Overview of agents in Mastra, detailing their capabilities and how 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 # Using Agents
 
@@ -15,14 +16,19 @@ Agents use LLMs and tools to solve open-ended tasks. They reason about goals, de
 
 ![Agents overview](/img/agents/agents-overview.jpg)
 
-> **📹 Watch**:  → An introduction to agents, and how they compare to workflows [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
+:::tip[Watch an introduction]
+
+An introduction to agents, and how they compare to workflows on [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
+
+:::
 
 ## Setting up agents
 
 <Tabs>
-  <TabItem value="mastra-model-router" label="Mastra model router">
+  <TabItem value="mastra-model-router" label="Model router">
     <Steps>
-### Install dependencies
+
+<StepItem>
 
 Add the Mastra core package to your project:
 
@@ -30,7 +36,9 @@ Add the Mastra core package to your project:
 npm install @mastra/core
 ```
 
-### Set your API key
+</StepItem>
+
+<StepItem>
 
 Mastra's model router auto-detects environment variables for your chosen provider. For OpenAI, set `OPENAI_API_KEY`:
 
@@ -38,13 +46,19 @@ Mastra's model router auto-detects environment variables for your chosen provide
 OPENAI_API_KEY=<your-api-key>
 ```
 
-> Mastra supports more than 600 models. Choose from the full list [here](/models).
+:::note
 
-### Creating an agent
+Mastra supports more than 600 models. Choose from the [full list](/models).
+
+:::
+
+</StepItem>
+
+<StepItem>
 
 Create an agent by instantiating the `Agent` class with system `instructions` and a `model`:
 
-```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/test-agent.ts" copy
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
@@ -53,12 +67,15 @@ export const testAgent = new Agent({
   model: "openai/gpt-4o-mini"
 });
 ```
-    </Steps>
+
+</StepItem>
+
+</Steps>
   </TabItem>
   <TabItem value="vercel-ai-sdk" label="Vercel AI SDK">
     <Steps>
 
-### Install dependencies
+<StepItem>
 
 Include the Mastra core package alongside the Vercel AI SDK provider you want to use:
 
@@ -66,7 +83,9 @@ Include the Mastra core package alongside the Vercel AI SDK provider you want to
 npm install @mastra/core @ai-sdk/openai
 ```
 
-### Set your API key
+</StepItem>
+
+<StepItem>
 
 Set the corresponding environment variable for your provider. For OpenAI via the AI SDK:
 
@@ -74,13 +93,19 @@ Set the corresponding environment variable for your provider. For OpenAI via the
 OPENAI_API_KEY=<your-api-key>
 ```
 
-> See the [AI SDK Providers](https://ai-sdk.dev/providers/ai-sdk-providers) in the Vercel AI SDK docs for additional configuration options.
+:::note
 
-### Creating an agent
+See the [AI SDK Providers](https://ai-sdk.dev/providers/ai-sdk-providers) in the Vercel AI SDK docs for additional configuration options.
+
+:::
+
+</StepItem>
+
+<StepItem>
 
 To create an agent in Mastra, use the `Agent` class. Every agent must include `instructions` to define its behavior, and a `model` parameter to specify the LLM provider and model. When using the Vercel AI SDK, provide the client to your agent's `model` field:
 
-```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/test-agent.ts" copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
@@ -90,11 +115,13 @@ export const testAgent = new Agent({
   model: openai("gpt-4o-mini")
 });
 ```
+
+</StepItem>
     </Steps>
   </TabItem>
 </Tabs>
 
-#### Instruction formats
+### Instruction formats
 
 Instructions define the agent's behavior, personality, and capabilities.
 They are system-level prompts that establish the agent's core identity and expertise.
@@ -119,7 +146,7 @@ instructions: [
 ]
 ```
 
-#### Provider-specific options
+### Provider-specific options
 
 Each model provider also enables a few different options, including prompt caching and configuring reasoning. We provide a `providerOptions` flag to manage these. You can set `providerOptions` on the instruction level to set different caching strategy per system instruction/prompt.
 
@@ -163,9 +190,9 @@ const testAgent = mastra.getAgent("testAgent");
 
 `mastra.getAgent()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
 
-:::
+See [Calling agents](/examples/agents/calling-agents) for more information.
 
-> See [Calling agents](/examples/agents/calling-agents) for more information.
+:::
 
 ## Generating responses
 

@@ -6,6 +6,7 @@ description: "A step-by-step guide to creating an agent that can search the web.
 ---
 
 import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
@@ -28,7 +29,9 @@ Some LLM providers include built-in web search capabilities that can be used dir
 
 <Steps>
 
-### Install dependencies
+<StepItem title="Install dependencies">
+
+Install dependencies
 
 <Tabs>
     <TabItem value="openai" label="Open AI">
@@ -43,7 +46,9 @@ Some LLM providers include built-in web search capabilities that can be used dir
     </TabItem>
 </Tabs>
 
-### Define the Agent
+</StepItem>
+
+<StepItem title="Define the Agent">
 
 Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
 
@@ -78,8 +83,11 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     </TabItem>
 </Tabs>
 
+</StepItem>
 
-### Setup the tool
+<StepItem title="Setup the tool">
+
+Setup the tool:
 
 <Tabs>
     <TabItem value="openai" label="Open AI">
@@ -120,7 +128,9 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     </TabItem>
 </Tabs>
 
-### Register the Agent with Mastra
+</StepItem>
+
+<StepItem title="Register the Agent with Mastra">
 
 In your `src/mastra/index.ts` file, register the agent:
 
@@ -133,7 +143,9 @@ export const mastra = new Mastra({
 });
 ```
 
-### Test your agent
+</StepItem>
+
+<StepItem title="Test your agent">
 
 You can test your agent inside Mastra's [Playground](/getting-started/studio) using the `mastra dev` command:
 
@@ -143,6 +155,8 @@ mastra dev
 
 Inside Playground navigate to the **"Search Agent"** and ask it: "What happened last week in AI news?"
 
+</StepItem>
+
 </Steps>
 
 ## Using Search APIs
@@ -151,13 +165,17 @@ For more control over search behavior, you can integrate external search APIs as
 
 <Steps>
 
-### Install dependencies
+<StepItem title="Install dependencies">
+
+Install dependencies
 
 ```bash copy
 npm install exa-js
 ```
 
-### Define the Agent
+</StepItem>
+
+<StepItem title="Define the Agent">
 
 Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
 
@@ -172,7 +190,11 @@ export const searchAgent = new Agent({
 });
 ```
 
-### Setup the tool
+</StepItem>
+
+<StepItem title="Setup the tool">
+
+Setup the tool
 
 ```ts copy title="src/mastra/tools/searchTool.ts"
 import { createTool } from "@mastra/core/tools";
@@ -215,7 +237,11 @@ export const webSearch = createTool({
 });
 ```
 
-### Add to your Agent
+</StepItem>
+
+<StepItem title="Add to your Agent">
+
+Add to your Agent
 
 ```ts copy title="src/mastra/agents/searchAgent.ts"
 import { webSearch } from './tools/searchTool';
@@ -230,7 +256,9 @@ export const searchAgent = new Agent({
 });
 ```
 
-### Register the Agent with Mastra
+</StepItem>
+
+<StepItem title="Register the Agent with Mastra">
 
 In your `src/mastra/index.ts` file, register the agent:
 
@@ -243,7 +271,9 @@ export const mastra = new Mastra({
 });
 ```
 
-### Test your agent
+</StepItem>
+
+<StepItem title="Test your agent">
 
 You can test your agent inside Mastra's [Playground](/getting-started/studio) using the `mastra dev` command:
 
@@ -252,5 +282,7 @@ mastra dev
 ```
 
 Inside Playground navigate to the **"Search Agent"** and ask it: "What happened last week in AI news?"
+
+</StepItem>
 
 </Steps>

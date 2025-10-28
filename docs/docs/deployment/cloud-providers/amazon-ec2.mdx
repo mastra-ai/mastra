@@ -6,6 +6,7 @@ description: "Deploy your Mastra applications to Amazon EC2."
 ---
 
 import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
@@ -13,7 +14,7 @@ import TabItem from '@theme/TabItem';
 
 Deploy your Mastra applications to Amazon EC2 (Elastic Cloud Compute).
 
-::: note
+:::note
 This guide assumes your Mastra application has been created using the default
 `npx create-mastra@latest` command.
 For more information on how to create a new Mastra application,
@@ -33,7 +34,7 @@ refer to our [getting started guide](/getting-started/installation)
 
 <Steps>
 
-### Clone your Mastra application
+<StepItem>
 
 Connect to your EC2 instance and clone your repository:
 
@@ -61,13 +62,19 @@ Navigate to the repository directory:
 cd "<your-repository>"
 ```
 
-### Install dependencies
+</StepItem>
+
+<StepItem>
+
+Install dependencies:
 
 ```bash copy
 npm install
 ```
 
-### Set up environment variables
+</StepItem>
+
+<StepItem>
 
 Create a `.env` file and add your environment variables:
 
@@ -82,21 +89,31 @@ OPENAI_API_KEY=<your-openai-api-key>
 # Add other required environment variables
 ```
 
-### Build the application
+</StepItem>
+
+<StepItem>
+
+Build the application:
 
 ```bash copy
 npm run build
 ```
 
-### Run the application
+</StepItem>
+
+<StepItem>
+
+Run the application:
 
 ```bash copy
 node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/output/index.mjs
 ```
 
-::: note
+:::note
 Your Mastra application will run on port 4111 by default. Ensure your reverse proxy is configured to forward requests to this port.
 :::
+
+</StepItem>
 
 </Steps>
 

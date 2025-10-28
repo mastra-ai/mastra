@@ -9,6 +9,7 @@ description: 'Build AI-native frontends for your Mastra agents with Cedar-OS'
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 # Integrate Cedar-OS with Mastra
 
@@ -32,7 +33,8 @@ For the first time in history, products can come to life. Cedar is aimed at help
 ## Quick Start
 
 <Steps>
-### Set up your project
+
+<StepItem>
 
 Run Cedar's CLI command:
 ``` bash
@@ -41,10 +43,11 @@ npx cedar-os-cli plant-seed
 
 If starting from scratch, select the **Mastra starter** template for a complete setup with both frontend and backend in a monorepo
 
-If you already have a Mastra backend, use the **blank frontend cedar repo** option instead.
-- This will give you the option to download components and download all dependencies for Cedar. It is recommended to download at least one of the chat components to get started. 
+If you already have a Mastra backend, use the **blank frontend cedar repo** option instead. This will give you the option to download components and download all dependencies for Cedar. It is recommended to download at least one of the chat components to get started. 
 
-### Wrap your app with CedarCopilot
+</StepItem>
+
+<StepItem>
 
 Wrap your application with the CedarCopilot provider to connect to your Mastra backend:
 
@@ -65,7 +68,9 @@ function App() {
 }
 ```
 
-### Configure Mastra endpoints
+</StepItem>
+
+<StepItem>
 
 Configure your Mastra backend to work with Cedar by following the [Mastra Configuration Options](https://docs.cedarcopilot.com/agent-backend-connection/agent-backend-connection#mastra-configuration-options).
 
@@ -94,11 +99,16 @@ registerApiRoute('/chat/stream', {
 });
 ```
 
-### Add Cedar components
+</StepItem>
+
+<StepItem>
 
 Drop Cedar components into your frontend – see [Chat Overview](https://docs.cedarcopilot.com/chat/chat-overview).
 
 Your backend and frontend are now linked! You're ready to start building AI-native experiences with your Mastra agents.
+
+</StepItem>
+
 </Steps>
 
 

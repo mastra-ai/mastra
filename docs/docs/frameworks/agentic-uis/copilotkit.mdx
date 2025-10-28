@@ -8,6 +8,7 @@ description: "Learn how Mastra leverages the CopilotKit's AGUI library and how y
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 # Integrate CopilotKit with Mastra
 
@@ -24,7 +25,8 @@ This guide shows two distinct integration approaches:
   <TabItem value="mastra-server" label="Mastra Server">
 
   <Steps>
-## Install React Dependencies
+
+<StepItem>
 
 In your React frontend, install the required CopilotKit packages:
 
@@ -46,7 +48,9 @@ In your React frontend, install the required CopilotKit packages:
   </TabItem>
 </Tabs>
 
-## Create CopilotKit Component
+</StepItem>
+
+<StepItem>
 
 Create a CopilotKit component in your React frontend:
 
@@ -72,7 +76,9 @@ export function CopilotKitComponent({ runtimeUrl }: { runtimeUrl: string}) {
 }
 ```
 
-## Install Dependencies
+</StepItem>
+
+<StepItem>
 
 If you have not yet set up your Mastra server, follow the [getting started guide](/getting-started/installation) to set up a new Mastra project.
 
@@ -96,7 +102,9 @@ In your Mastra server, install additional packages for CopilotKit integration:
   </TabItem>
 </Tabs>
 
-## Configure Mastra Server
+</StepItem>
+
+<StepItem>
 
 Configure your Mastra instance to include CopilotKit's runtime endpoint:
 
@@ -132,7 +140,9 @@ export const mastra = new Mastra({
 });
 ```
 
-## Usage in your React App
+</StepItem>
+
+<StepItem>
 
 Use the component in your React app with your Mastra server URL:
 
@@ -150,13 +160,16 @@ export default App;
 
 Now start both the Mastra server and your frontend.
 
+</StepItem>
+
   </Steps>
   </TabItem>
 
   <TabItem value="nextjs" label="Next.js">
 
   <Steps>
-  ## Install Dependencies
+
+<StepItem>
 
 In your Next.js app, install the required packages:
 
@@ -178,7 +191,9 @@ In your Next.js app, install the required packages:
   </TabItem>
 </Tabs>
 
-## Create CopilotKit Component
+</StepItem>
+
+<StepItem>
 
 Create a CopilotKit component:
 
@@ -205,7 +220,9 @@ export function CopilotKitComponent({ runtimeUrl }: { runtimeUrl: string}) {
 }
 ```
 
-## Create API Route
+</StepItem>
+
+<StepItem>
 
 There are two approaches for the API route determined by how you're integrating Mastra in your Next.js application.
 
@@ -249,8 +266,6 @@ export const POST = async (req: NextRequest) => {
 
   </TabItem>
   <TabItem value="mastra-client" label="With the Mastra Client SDK">
-
-## Install the Mastra Client SDK
 
 Install the Mastra Client SDK.
 
@@ -307,7 +322,9 @@ export const POST = async (req: NextRequest) => {
       </TabItem>
     </Tabs>
 
-## Use Component
+</StepItem>
+
+<StepItem>
 
 Use the component with the local API endpoint:
 
@@ -322,6 +339,8 @@ function App() {
 
 export default App;
 ```
+
+</StepItem>
 
   </Steps>
   </TabItem>

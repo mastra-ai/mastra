@@ -7,6 +7,7 @@ description: Configuration steps for Mastra Cloud projects
 
 import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
 import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 # Setting Up and Deploying
 
@@ -25,32 +26,40 @@ This page explains how to set up a project on [Mastra Cloud](https://mastra.ai/c
 
 <Steps>
 
-### Sign in to Mastra Cloud
+<StepItem>
 
 Head over to [https://cloud.mastra.ai/](https://cloud.mastra.ai) and sign in with either:
 
 - **GitHub**
 - **Google**
 
-### Install the Mastra GitHub app
+</StepItem>
+
+<StepItem>
 
 When prompted, install the Mastra GitHub app.
 
 ![Install GitHub](/img/mastra-cloud/mastra-cloud-install-github.jpg)
 
-### Create a new project
+</StepItem>
+
+<StepItem>
 
 Click the **Create new project** button to create a new project.
 
 ![Create new project](/img/mastra-cloud/mastra-cloud-create-new-project.jpg)
 
-### Import a Git repository
+</StepItem>
+
+<StepItem>
 
 Search for a repository, then click **Import**.
 
 ![Import Git repository](/img/mastra-cloud/mastra-cloud-import-git-repository.jpg)
 
-### Configure the deployment
+</StepItem>
+
+<StepItem>
 
 Mastra Cloud automatically detects the right build settings, but you can customize them using the options described below.
 
@@ -69,9 +78,13 @@ Mastra Cloud automatically detects the right build settings, but you can customi
    - **Store settings**: Use Mastra Cloud's built-in [LibSQLStore](/storage/overview) storage
 - **Deploy Project**: Starts the deployment process
 
-### Deploy project
+</StepItem>
 
-Click **Deploy Project** to create and deploy your application using the configuration you’ve set.
+<StepItem>
+
+Click **Deploy Project** to create and deploy your application using the configuration you've set.
+
+</StepItem>
 
 </Steps>
 

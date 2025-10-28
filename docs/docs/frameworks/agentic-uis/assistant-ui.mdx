@@ -6,6 +6,7 @@ description: "Learn how to integrate Assistant UI with Mastra"
 ---
 
 import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 # Using with Assistant UI
 
@@ -23,7 +24,8 @@ For a full-stack integration approach where Mastra runs directly in your Next.js
 Run Mastra as a standalone server and connect your Next.js frontend (with Assistant UI) to its API endpoints.
 
 <Steps>
-### Create Standalone Mastra Server
+
+<StepItem>
 
 Set up your directory structure. A possible directory structure could look like this:
 
@@ -66,7 +68,9 @@ Ensure that you have set the appropriate environment variables for your LLM prov
 
 :::
 
-### Run the Mastra Server
+</StepItem>
+
+<StepItem>
 
 Run the Mastra server using the following command:
 
@@ -76,7 +80,9 @@ npm run dev
 
 By default, the Mastra server will run on `http://localhost:4111`. Your `weatherAgent` should now be accessible via a POST request endpoint, typically `http://localhost:4111/api/agents/weatherAgent/stream`. Keep this server running for the next steps where we'll set up the Assistant UI frontend to connect to it.
 
-### Initialize Assistant UI
+</StepItem>
+
+<StepItem>
 
 Create a new `assistant-ui` project with the following command.
 
@@ -90,7 +96,9 @@ For detailed setup instructions, including adding API keys, basic configuration,
 
 :::
 
-### Configure Frontend API Endpoint
+</StepItem>
+
+<StepItem>
 
 The default Assistant UI setup configures the chat runtime to use a local API route (`/api/chat`) within the Next.js project. Since our Mastra agent is running on a separate server, we need to update the frontend to point to that server's endpoint.
 
@@ -111,7 +119,9 @@ const runtime = useChatRuntime({
 
 Now, the Assistant UI frontend will send chat requests directly to your running Mastra server.
 
-### Run the Application
+</StepItem>
+
+<StepItem>
 
 You're ready to connect the pieces! Make sure both the Mastra server and the Assistant UI frontend are running. Start the Next.js development server:
 
@@ -120,6 +130,8 @@ npm run dev
 ```
 
 You should now be able to chat with your agent in the browser.
+
+</StepItem>
 
 </Steps>
 

@@ -6,13 +6,15 @@ description: "Learn how to integrate OpenRouter with Mastra"
 ---
 
 import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 # Use OpenRouter with Mastra
 
 Integrate OpenRouter with Mastra to leverage the numerous models available on OpenRouter.
 
 <Steps>
-## Initialize a Mastra Project
+
+<StepItem>
 
 The simplest way to get started with Mastra is to use the `mastra` CLI to initialize a new project:
 
@@ -26,7 +28,9 @@ You'll be guided through prompts to set up your project. For this example, selec
 - For default provider, select OpenAI (recommended) - we'll configure OpenRouter manually later
 - Optionally include example code
 
-## Configure OpenRouter
+</StepItem>
+
+<StepItem>
 
 After creating your project with `create-mastra`, you'll find a `.env` file in your project root.
 Since we selected OpenAI during setup, we'll configure OpenRouter manually: 
@@ -47,7 +51,9 @@ Then, we install the `@openrouter/ai-sdk-provider` package:
 npm install @openrouter/ai-sdk-provider
 ```
 
-## Configure your Agent to use OpenRouter
+</StepItem>
+
+<StepItem>
 
 We will now configure our agent to use OpenRouter.
 
@@ -76,7 +82,9 @@ export const mastra = new Mastra({
 })
 ```
 
-## Run and Test your Agent
+</StepItem>
+
+<StepItem>
 
 ```bash copy
 npm run dev
@@ -85,6 +93,8 @@ npm run dev
 This will start the Mastra development server.
 
 You can now test your agent by visiting [http://localhost:4111](http://localhost:4111) for the playground or via the Mastra API at [http://localhost:4111/api/agents/assistant/stream](http://localhost:4111/api/agents/assistant/stream).
+
+</StepItem>
 
 </Steps>
 

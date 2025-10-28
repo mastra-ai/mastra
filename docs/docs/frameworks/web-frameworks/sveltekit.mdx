@@ -8,6 +8,7 @@ description: A step-by-step guide to integrating Mastra with SvelteKit.
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 # Integrate Mastra in your SvelteKit project
 
@@ -23,7 +24,10 @@ Use this guide to scaffold and integrate Mastra with your SvelteKit project.
   <TabItem value="actions" label="Actions">
 
   <Steps>
-## Install Mastra
+
+<StepItem>
+
+Install Mastra
 
 Install the required Mastra packages:
 
@@ -51,27 +55,29 @@ Install the required Mastra packages:
   </TabItem>
 </Tabs>
 
-## Integrate Mastra
+</StepItem>
+
+<StepItem>
 
 To integrate Mastra into your project, you have two options:
 
-### 1. Use the One-Liner
+- Use the One-Liner
 
-Run the following command to quickly scaffold the default Weather agent with sensible defaults:
+    Run the following command to quickly scaffold the default Weather agent with sensible defaults:
 
-```bash copy
-npx mastra@latest init --default
-```
+    ```bash copy
+    npx mastra@latest init --default
+    ```
 
-> See [mastra init](/reference/cli/init) for more information.
+    > See [mastra init](/reference/cli/init) for more information.
 
-### 2. Use the Interactive CLI
+- Use the Interactive CLI
 
-If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
+    If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
 
-```bash copy
-npx mastra@latest init
-```
+    ```bash copy
+    npx mastra@latest init
+    ```
 
 Add the `dev` and `build` scripts to `package.json`:
 
@@ -85,7 +91,9 @@ Add the `dev` and `build` scripts to `package.json`:
 }
 ```
 
-## Configure TypeScript
+</StepItem>
+
+<StepItem>
 
 Modify the `tsconfig.json` file in your project root:
 
@@ -96,7 +104,9 @@ Modify the `tsconfig.json` file in your project root:
 }
 ```
 
-## Set Up API Key
+</StepItem>
+
+<StepItem>
 
 The `VITE_` prefix is required for environment variables to be accessible in the Vite environment, that SvelteKit uses.
 [Read more about Vite environment variables](https://vite.dev/guide/env-and-mode.html#env-variables).
@@ -105,7 +115,9 @@ The `VITE_` prefix is required for environment variables to be accessible in the
 VITE_OPENAI_API_KEY=<your-api-key>
 ```
 
-## Update .gitignore
+</StepItem>
+
+<StepItem>
 
 Add `.mastra` to your `.gitignore` file:
 
@@ -113,7 +125,11 @@ Add `.mastra` to your `.gitignore` file:
 .mastra
 ```
 
-## Update the Mastra Agent
+</StepItem>
+
+<StepItem>
+
+Update the Mastra Agent
 
 ```diff title="src/mastra/agents/weather-agent.ts"
 - import { openai } from "@ai-sdk/openai";
@@ -129,7 +145,9 @@ By reading env vars from both `import.meta.env` and `process.env`, we ensure tha
 
 > More configuration details are available in the AI SDK docs. See [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) for more information.
 
-## Start the Mastra Dev Server
+</StepItem>
+
+<StepItem>
 
 Start the Mastra Dev Server to expose your agents as REST endpoints:
 
@@ -148,17 +166,23 @@ Start the Mastra Dev Server to expose your agents as REST endpoints:
 
 > Once running, your agents are available locally. See [Local Development Environment](/server-db/studio) for more information.
 
-## Start SvelteKit Dev Server
+</StepItem>
+
+<StepItem>
 
 With the Mastra Dev Server running, you can start your SvelteKit site in the usual way.
 
-## Create Test Directory
+</StepItem>
+
+<StepItem>
 
 ```bash copy
 mkdir src/routes/test
 ```
 
-### Create Test Action
+</StepItem>
+
+<StepItem>
 
 Create a new Action, and add the example code:
 
@@ -182,7 +206,9 @@ export const actions = {
 
 ```
 
-### Create Test Page
+</StepItem>
+
+<StepItem>
 
 Create a new Page file, and add the example code:
 
@@ -192,7 +218,7 @@ touch src/routes/test/+page.svelte
 
 ```typescript title="src/routes/test/+page.svelte" showLineNumbers copy
 <script lang="ts">
-	import type { PageProps } from './$types';
+	import type { PageProps} from './$types';
 	let { form }: PageProps = $props();
 </script>
 
@@ -224,16 +250,19 @@ The current weather in London is as follows:
 
 If you need more details or information about a different location, feel free to ask!
 ```
-  </Steps>
-  </TabItem>
 
-  <TabItem value="server-endpoints" label="Server Endpoints">
+</StepItem>
+
+  </Steps>
+</TabItem>
+
+<TabItem value="server-endpoints" label="Server Endpoints">
 
   <Steps>
-## Install Mastra
+
+<StepItem>
 
 Install the required Mastra packages:
-
 
 <Tabs>
   <TabItem value="npm" label="npm">
@@ -258,27 +287,29 @@ Install the required Mastra packages:
   </TabItem>
 </Tabs>
 
-## Integrate Mastra
+</StepItem>
+
+<StepItem>
 
 To integrate Mastra into your project, you have two options:
 
-### 1. Use the One-Liner
+- Use the One-Liner
 
-Run the following command to quickly scaffold the default Weather agent with sensible defaults:
+    Run the following command to quickly scaffold the default Weather agent with sensible defaults:
 
-```bash copy
-npx mastra@latest init --default
-```
+    ```bash copy
+    npx mastra@latest init --default
+    ```
 
-> See [mastra init](/reference/cli/init) for more information.
+    > See [mastra init](/reference/cli/init) for more information.
 
-### 2. Use the Interactive CLI
+- Use the Interactive CLI
 
-If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
+    If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
 
-```bash copy
-npx mastra@latest init
-```
+    ```bash copy
+    npx mastra@latest init
+    ```
 
 Add the `dev` and `build` scripts to `package.json`:
 
@@ -292,7 +323,9 @@ Add the `dev` and `build` scripts to `package.json`:
 }
 ```
 
-## Configure TypeScript
+</StepItem>
+
+<StepItem>
 
 Modify the `tsconfig.json` file in your project root:
 
@@ -303,7 +336,9 @@ Modify the `tsconfig.json` file in your project root:
 }
 ```
 
-## Set Up API Key
+</StepItem>
+
+<StepItem>
 
 The `VITE_` prefix is required for environment variables to be accessible in the Vite environment, that SvelteKit uses.
 [Read more about Vite environment variables](https://vite.dev/guide/env-and-mode.html#env-variables).
@@ -312,7 +347,9 @@ The `VITE_` prefix is required for environment variables to be accessible in the
 VITE_OPENAI_API_KEY=<your-api-key>
 ```
 
-## Update .gitignore
+</StepItem>
+
+<StepItem>
 
 Add `.mastra` to your `.gitignore` file:
 
@@ -320,7 +357,11 @@ Add `.mastra` to your `.gitignore` file:
 .mastra
 ```
 
-## Update the Mastra Agent
+</StepItem>
+
+<StepItem>
+
+Update the Mastra Agent
 
 ```diff title="src/mastra/agents/weather-agent.ts"
 - import { openai } from "@ai-sdk/openai";
@@ -336,7 +377,9 @@ By reading env vars from both `import.meta.env` and `process.env`, we ensure tha
 
 > More configuration details are available in the AI SDK docs. See [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) for more information.
 
-## Start the Mastra Dev Server
+</StepItem>
+
+<StepItem>
 
 Start the Mastra Dev Server to expose your agents as REST endpoints:
 
@@ -355,17 +398,23 @@ Start the Mastra Dev Server to expose your agents as REST endpoints:
 
 > Once running, your agents are available locally. See [Local Development Environment](/server-db/studio) for more information.
 
-## Start SvelteKit Dev Server
+</StepItem>
+
+<StepItem>
 
 With the Mastra Dev Server running, you can start your SvelteKit site in the usual way.
 
-## Create API Directory
+</StepItem>
+
+<StepItem>
 
 ```bash copy
 mkdir src/routes/weather-api
 ```
 
-### Create Test Endpoint
+</StepItem>
+
+<StepItem>
 
 Create a new Endpoint, and add the example code:
 
@@ -389,7 +438,9 @@ export async function POST({ request }) {
 
 ```
 
-### Create Test Page
+</StepItem>
+
+<StepItem>
 
 Create a new Page, and add the example code:
 
@@ -445,10 +496,12 @@ The current weather in London is as follows:
 
 If you need more details or information about a different location, feel free to ask!
 ```
+
+</StepItem>
+
   </Steps>
   </TabItem>
 </Tabs>
-
 
 ## Next steps
 

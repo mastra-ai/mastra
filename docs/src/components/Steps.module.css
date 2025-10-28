@@ -8,7 +8,7 @@
   counter-reset: steps-counter 0;
   padding-inline-start: 0;
 
-  li {
+  > li {
     counter-increment: steps-counter;
     position: relative;
     padding-inline-start: calc(var(--bullet-size) + 1rem);
@@ -18,13 +18,13 @@
     min-height: calc(var(--bullet-size) + var(--bullet-margin));
   }
 
-  li + li {
+  > li + li {
     /* Remove margin between steps. */
     margin-top: 0;
   }
 
   /* Custom list marker element. */
-  li::before {
+  > li::before {
     content: counter(steps-counter);
     position: absolute;
     top: 0;
@@ -43,7 +43,7 @@
   }
 
   /* Vertical guideline linking list numbers. */
-  li::after {
+  > li::after {
     --guide-width: 1px;
     content: '';
     position: absolute;
@@ -55,7 +55,7 @@
   }
 
   /* Adjust first item inside a step so that it aligns vertically with the number even if using a larger font size (e.g. a heading) */
-  li > :first-child {
+  > li > :first-child {
     /*
 		The `lh` unit is not yet supported by all browsers in our support matrix
 		— see https://caniuse.com/mdn-css_types_length_lh
@@ -66,7 +66,7 @@
     transform: translateY(var(--shift-y));
   }
 
-  li > :first-child:where(h1, h2, h3, h4, h5, h6) {
+  > li > :first-child:where(h1, h2, h3, h4, h5, h6) {
     --lh: calc(1em * var(--ifm-heading-line-height));
   }
 }

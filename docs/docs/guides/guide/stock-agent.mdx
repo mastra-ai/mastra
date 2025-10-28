@@ -6,6 +6,7 @@ description: Guide on creating a simple stock agent in Mastra to fetch the last 
 ---
 
 import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 import YouTube from "@site/src/components/YouTube";
 
 # Building an AI Stock Agent
@@ -26,7 +27,7 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
 
 <Steps>
 
-### Define the Agent
+<StepItem>
 
 Create a new file `src/mastra/agents/stockAgent.ts` and define your agent:
 
@@ -42,7 +43,9 @@ export const stockAgent = new Agent({
 });
 ```
 
-### Register the Agent with Mastra
+</StepItem>
+
+<StepItem>
 
 In your `src/mastra/index.ts` file, register the agent:
 
@@ -55,6 +58,8 @@ export const mastra = new Mastra({
 });
 ```
 
+</StepItem>
+
 </Steps>
 
 ## Creating the Stock Price Tool
@@ -63,7 +68,7 @@ So far the Stock Agent doesn't know anything about the current stock prices. To 
 
 <Steps>
 
-### Define the Tool
+<StepItem>
 
 Create a new file `src/mastra/tools/stockPrices.ts`. Inside, add a `stockPrices` tool that will fetch the last day's closing stock price for a given symbol:
 
@@ -94,7 +99,9 @@ export const stockPrices = createTool({
 });
 ```
 
-### Add the Tool to the Stock Agent
+</StepItem>
+
+<StepItem>
 
 Inside `src/mastra/agents/stockAgent.ts` import your newly created `stockPrices` tool and add it to the agent.
 
@@ -114,6 +121,8 @@ export const stockAgent = new Agent({
 });
 ```
 
+</StepItem>
+
 </Steps>
 
 ## Running the Agent Server
@@ -122,7 +131,7 @@ Learn how to interact with your agent through Mastra's API.
 
 <Steps>
 
-### Using `mastra dev`
+<StepItem>
 
 You can run your agent as a service using the `mastra dev` command:
 
@@ -132,7 +141,9 @@ mastra dev
 
 This will start a server exposing endpoints to interact with your registered agents. Within the [playground](/server-db/studio) you can test your `stockAgent` and `stockPrices` tool through a UI.
 
-### Accessing the Stock Agent API
+</StepItem>
+
+<StepItem>
 
 By default, `mastra dev` runs on `http://localhost:4111`. Your Stock agent will be available at:
 
@@ -140,7 +151,9 @@ By default, `mastra dev` runs on `http://localhost:4111`. Your Stock agent will 
 POST http://localhost:4111/api/agents/stockAgent/generate
 ```
 
-### Interacting with the Agent via `curl`
+</StepItem>
+
+<StepItem>
 
 You can interact with the agent using `curl` from the command line:
 
@@ -166,5 +179,7 @@ You should receive a JSON response similar to:
 ```
 
 This indicates that your agent successfully processed the request, used the `stockPrices` tool to fetch the stock price, and returned the result.
+
+</StepItem>
 
 </Steps>

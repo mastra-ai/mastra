@@ -6,6 +6,7 @@ description: Guide on building a recruiter workflow in Mastra to gather and proc
 ---
 
 import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 # Building an AI Recruiter
 
@@ -25,7 +26,7 @@ Set up the Workflow, define steps to extract and classify candidate data, and th
 
 <Steps>
 
-### Define the Workflow
+<StepItem>
 
 Create a new file `src/mastra/workflows/candidate-workflow.ts` and define your workflow:
 
@@ -49,7 +50,9 @@ export const candidateWorkflow = createWorkflow({
 }).commit();
 ```
 
-### Step: Gather Candidate Info
+</StepItem>
+
+<StepItem>
 
 You want to extract candidate details from the resume text and classify the person as "technical" or "non-technical". This step calls an LLM to parse the resume and returns structured JSON, including the name, technical status, specialty, and the original resume text. Defined through the `inputSchema` you get access to the `resumeText` inside `execute()`. Use it to prompt an LLM and return the organized fields.
 
@@ -100,7 +103,9 @@ const gatherCandidateInfo = createStep({
 
 Since you're using a Recruiter agent inside `execute()` you need to define it above the step and add the necessary imports.
 
-### Step: Technical Question
+</StepItem>
+
+<StepItem>
 
 This step prompts a candidate who is identified as "technical" for more information about how they got into their specialty. It uses the entire resume text so the LLM can craft a relevant follow-up question.
 
@@ -129,7 +134,9 @@ Resume: ${candidateInfo?.resumeText}`;
 });
 ```
 
-### Step: Behavioral Question
+</StepItem>
+
+<StepItem>
 
 If the candidate is "non-technical", you want a different follow-up question. This step asks what interests them most about the role, again referencing their complete resume text. The `execute()` function solicits a role-focused query from the LLM.
 
@@ -157,7 +164,9 @@ Resume: ${candidateInfo?.resumeText}`;
 });
 ```
 
-### Add Steps to the Workflow
+</StepItem>
+
+<StepItem>
 
 You now combine the steps to implement branching logic based on the candidate's technical status. The workflow first gathers candidate data, then either asks about their specialty or about their role, depending on `isTechnical`. This is done by chaining `gatherCandidateInfo` with `askAboutSpecialty` and `askAboutRole`.
 
@@ -186,7 +195,9 @@ export const candidateWorkflow = createWorkflow({
   .commit();
 ```
 
-### Register the Workflow with Mastra
+</StepItem>
+
+<StepItem>
 
 In your `src/mastra/index.ts` file, register the workflow:
 
@@ -198,6 +209,8 @@ export const mastra = new Mastra({
   workflows: { candidateWorkflow },
 });
 ```
+
+</StepItem>
 
 </Steps>
 
