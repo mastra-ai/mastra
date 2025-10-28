@@ -287,27 +287,6 @@ type ToolChoice<TOOLS extends Record<string, unknown>> =
     };
 ```
 
-## Message Format Changes (v0.22.2+)
-
-As of `v0.22.2`, the internal `MastraMessageV3` intermediary format has been removed. Messages now convert directly between `MastraMessageV2` (storage format) and AI SDK v5 `UIMessage`. This simplifies the architecture and improves accuracy.
-
-### What Changed
-
-- Message conversions are now direct (V2 ↔ V5) instead of going through V3
-- Tool calls with `state: 'input-available'` are now preserved in message history
-- `__originalContent` metadata is no longer added to messages
-- V1 message conversions may change data **shape** (but not content)
-
-### Migration Guide
-
-Most users won't need to change anything. However, if you:
-
-1. **Directly inspect message metadata** - `__originalContent` is no longer present
-2. **Rely on exact V1 message shape preservation** - Shape may differ after conversion (content is still preserved)
-3. **Have custom message processing logic** - Verify it works with the new direct conversion flow
-
-The storage format (`MastraMessageV2`) and all public APIs remain unchanged.
-
 ## Migration Checklist
 
 ### If you're already using `streamVNext` and `generateVNext`
