@@ -6,7 +6,6 @@ import { MessageList } from '../../../agent/message-list';
 import { safeParseErrorObject } from '../../../error/utils.js';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
-import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
 import { MastraModelOutput } from '../../../stream/base/output';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type {
@@ -349,12 +348,19 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
           },
         });
 
-        let e = chunk.payload.error as any;
-        if (typeof e === 'object') {
-          const errorMessage = safeParseErrorObject(e);
-          const originalCause = e instanceof Error ? e.cause : undefined;
-          e = new Error(errorMessage, originalCause ? { cause: originalCause } : undefined);
-          Object.assign(e, chunk.payload.error);
+        const rawError = chunk.payload.error;
+        let e: Error | string;
+        
+        if (typeof rawError === 'object' && rawError !== null) {
+          const errorMessage = safeParseErrorObject(rawError);
+          const originalCause = rawError instanceof Error ? rawError.cause : undefined;
+          const errorObj = new Error(errorMessage, originalCause ? { cause: originalCause } : undefined);
+          Object.assign(errorObj, rawError as Record<string, unknown>);
+          e = errorObj;
+        } else if (typeof rawError === 'string') {
+          e = rawError;
+        } else {
+          e = new Error('Unknown error occurred');
         }
 
         controller.enqueue({ ...chunk, payload: { ...chunk.payload, error: e } });
@@ -378,14 +384,11 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         'raw',
       ].includes(chunk.type)
     ) {
-      const transformedChunk = convertMastraChunkToAISDKv5({
-        chunk,
-      });
       if (chunk.type === 'raw' && !includeRawChunks) {
         return;
       }
 
-      await options?.onChunk?.({ chunk: transformedChunk } as any);
+      await options?.onChunk?.(chunk);
     }
 
     if (runState.state.hasErrored) {
@@ -718,14 +721,14 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
 
       if (toolCalls.length > 0) {
         const assistantContent = [
-          ...(toolCalls.map(toolCall => {
+          ...toolCalls.map(toolCall => {
             return {
-              type: 'tool-call',
+              type: 'tool-call' as const,
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
               args: toolCall.args,
             };
-          }) as any),
+          }),
         ];
 
         messageList.add(
