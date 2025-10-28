@@ -1,9 +1,9 @@
-import { client } from '@/lib/client';
 import { refineTraces } from '../utils/refine-traces';
 import { useInView, useInfiniteQuery } from '@mastra/playground-ui';
 import { useEffect } from 'react';
+import { useMastraClient } from '@mastra/react';
 
-const fetchFn = async ({ componentName, page, perPage }: { componentName: string; page: number; perPage: number }) => {
+const fetchFn = async ({ componentName, page, perPage, client }: { componentName: string; page: number; perPage: number; client: ReturnType<typeof useMastraClient> }) => {
   try {
     const res = await client.getTelemetry({
       attribute: {
@@ -23,10 +23,11 @@ const fetchFn = async ({ componentName, page, perPage }: { componentName: string
 
 export const useTraces = (componentName: string, isWorkflow: boolean = false) => {
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
+  const client = useMastraClient();
 
   const query = useInfiniteQuery({
     queryKey: ['traces', componentName, isWorkflow],
-    queryFn: ({ pageParam }) => fetchFn({ componentName, page: pageParam, perPage: 100 }),
+    queryFn: ({ pageParam }) => fetchFn({ componentName, page: pageParam, perPage: 100, client }),
     initialPageParam: 0,
     getNextPageParam: (lastPage, _, lastPageParam) => {
       if (!lastPage?.length) {
