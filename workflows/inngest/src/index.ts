@@ -217,10 +217,17 @@ export class InngestRun<
   async start({
     inputData,
     initialState,
+    outputOptions,
+    tracingOptions,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     initialState?: z.infer<TState>;
+    tracingOptions?: TracingOptions;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     await this.#mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -250,6 +257,8 @@ export class InngestRun<
         initialState: initialStateToUse,
         runId: this.runId,
         resourceId: this.resourceId,
+        outputOptions,
+        tracingOptions,
       },
     });
 
@@ -420,7 +429,6 @@ export class InngestRun<
   stream({
     inputData,
     runtimeContext,
-    tracingContext,
     tracingOptions,
     closeOnSuspend = true,
     initialState,
@@ -470,19 +478,13 @@ export class InngestRun<
           }
         };
 
-        const executionResultsPromise = self._start({
+        const executionResultsPromise = self.start({
           inputData,
           runtimeContext,
-          tracingContext,
-          tracingOptions,
+          // tracingContext, // We are not able to pass a reference to a span here, what to do?
           initialState,
+          tracingOptions,
           outputOptions,
-          writableStream: new WritableStream<WorkflowStreamEvent>({
-            write(chunk) {
-              // TODO: use the emitter to send a workflow-step-output event that wraps chunk
-              controller.enqueue(chunk);
-            },
-          }),
         });
         let executionResults;
         try {
@@ -514,6 +516,23 @@ export class InngestRun<
     });
 
     return this.streamOutput;
+  }
+
+  streamVNext(
+    args: {
+      inputData?: z.input<TInput>;
+      runtimeContext?: RuntimeContext;
+      tracingContext?: TracingContext;
+      tracingOptions?: TracingOptions;
+      closeOnSuspend?: boolean;
+      initialState?: z.input<TState>;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
+    } = {},
+  ): ReturnType<Run<InngestEngineType, TSteps, TState, TInput, TOutput>['stream']> {
+    return this.stream(args);
   }
 }
 
@@ -748,6 +767,12 @@ export class InngestWorkflow<
           abortController: new AbortController(),
           currentSpan: undefined, // TODO: Pass actual parent AI span from workflow execution context
           outputOptions,
+          writableStream: new WritableStream<WorkflowStreamEvent>({
+            write(chunk) {
+              console.log('writing a chunk', chunk);
+              emitter.emit('watch-v2', chunk);
+            },
+          }),
         });
 
         // Final step to check workflow status and throw NonRetriableError if failed
@@ -1122,6 +1147,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     runtimeContext: RuntimeContext;
     abortController: AbortController;
     currentSpan?: AnyAISpan;
+    writableStream?: WritableStream<ChunkType>;
     outputOptions?: {
       includeState?: boolean;
     };
