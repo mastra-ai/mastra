@@ -464,12 +464,12 @@ export type ProviderModelsMap = {
     'claude-opus-4-1',
     'claude-sonnet-4',
     'claude-sonnet-4-5',
-    'code-supernova',
     'glm-4.6',
     'gpt-5',
     'gpt-5-codex',
     'grok-code',
     'kimi-k2',
+    'minimax-m2',
     'qwen3-coder',
   ];
   readonly fastrouter: readonly [
@@ -545,6 +545,7 @@ export type ProviderModelsMap = {
     'gpt-5-codex',
     'gpt-5-mini',
     'gpt-5-nano',
+    'gpt-5-pro',
     'o1',
     'o1-mini',
     'o1-preview',
@@ -600,6 +601,9 @@ export type ProviderModelsMap = {
     'meta-llama/llama-3.3-70b-instruct:free',
     'meta-llama/llama-4-scout:free',
     'microsoft/mai-ds-r1:free',
+    'minimax/minimax-01',
+    'minimax/minimax-m1',
+    'minimax/minimax-m2:free',
     'mistralai/codestral-2508',
     'mistralai/devstral-medium-2507',
     'mistralai/devstral-small-2505',
@@ -629,6 +633,7 @@ export type ProviderModelsMap = {
     'openai/gpt-5-image',
     'openai/gpt-5-mini',
     'openai/gpt-5-nano',
+    'openai/gpt-5-pro',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-120b:exacto',
     'openai/gpt-oss-20b',
@@ -679,6 +684,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.6:exacto',
   ];
   readonly synthetic: readonly [
+    'hf:MiniMaxAI/MiniMax-M2',
     'hf:Qwen/Qwen2.5-Coder-32B-Instruct',
     'hf:Qwen/Qwen3-235B-A22B-Instruct-2507',
     'hf:Qwen/Qwen3-235B-A22B-Thinking-2507',

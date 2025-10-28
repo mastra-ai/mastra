@@ -45,6 +45,8 @@ import type {
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
   GetMemoryThreadMessagesResponse,
+  MemorySearchResponse,
+  GetAgentsModelProvidersResponse,
 } from './types';
 import { base64RuntimeContext, parseClientRuntimeContext } from './utils';
 
@@ -71,6 +73,10 @@ export class MastraClient extends BaseResource {
 
     const queryString = searchParams.toString();
     return this.request(`/api/agents${queryString ? `?${queryString}` : ''}`);
+  }
+
+  public getAgentsModelProviders(): Promise<GetAgentsModelProvidersResponse> {
+    return this.request(`/api/agents/providers`);
   }
 
   /**
@@ -473,6 +479,36 @@ export class MastraClient extends BaseResource {
     resourceId?: string;
   }) {
     return this.request(`/api/memory/threads/${threadId}/working-memory?agentId=${agentId}&resourceId=${resourceId}`);
+  }
+
+  public searchMemory({
+    agentId,
+    resourceId,
+    threadId,
+    searchQuery,
+    memoryConfig,
+  }: {
+    agentId: string;
+    resourceId: string;
+    threadId?: string;
+    searchQuery: string;
+    memoryConfig?: any;
+  }): Promise<MemorySearchResponse> {
+    const params = new URLSearchParams({
+      searchQuery,
+      resourceId,
+      agentId,
+    });
+
+    if (threadId) {
+      params.append('threadId', threadId);
+    }
+
+    if (memoryConfig) {
+      params.append('memoryConfig', JSON.stringify(memoryConfig));
+    }
+
+    return this.request(`/api/memory/search?${params}`);
   }
 
   /**
