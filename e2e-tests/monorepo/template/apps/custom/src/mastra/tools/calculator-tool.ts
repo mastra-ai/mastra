@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { roundToOneNumber } from '@inner/hello-world';
+import { toPath } from 'unicorn-magic';
 
 export function calculate(a: number, b: number) {
   return a + b;
@@ -15,6 +16,11 @@ export const calculatorTool = createTool({
   }),
   execute: async ({ context }) => {
     const { a, b } = context;
+
+    // Only exists if exports map resolves with node condition
+    // @see https://github.com/sindresorhus/unicorn-magic/blob/main/package.json#L15
+    console.log(toPath);
+
     return calculate(a, b);
   },
 });

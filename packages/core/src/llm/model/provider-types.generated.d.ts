@@ -674,7 +674,6 @@ export type ProviderModelsMap = {
     'x-ai/grok-3-mini-beta',
     'x-ai/grok-4',
     'x-ai/grok-4-fast',
-    'x-ai/grok-4-fast:free',
     'x-ai/grok-code-fast-1',
     'z-ai/glm-4.5',
     'z-ai/glm-4.5-air',
