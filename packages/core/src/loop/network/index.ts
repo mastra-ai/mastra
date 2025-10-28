@@ -324,7 +324,6 @@ export async function createNetworkLoop({
 
         let currentText = '';
         let currentTextIdx = 0;
-        console.log('routing-agent-text-start');
         await writer.write({
           type: 'routing-agent-text-start',
           payload: {
