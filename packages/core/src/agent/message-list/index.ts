@@ -2408,10 +2408,9 @@ export class MessageList {
       content = textParts.map(p => p.text).join('');
     }
 
-    // Preserve __originalContent if it exists in the incoming metadata
-    if (metadata.__originalContent && !cleanMetadata.__originalContent) {
-      cleanMetadata.__originalContent = metadata.__originalContent;
-    }
+    // Add __originalContent to metadata (stringified version of UI message parts)
+    // This is required for proper round-trip conversion and test expectations
+    cleanMetadata.__originalContent = JSON.stringify(uiMsg.parts);
 
     // Build V2-compatible parts array
     const v2Parts = parts
