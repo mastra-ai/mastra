@@ -23,7 +23,7 @@ describe('Gemini Model Compatibility Tests', () => {
         id: 'basic-gemini',
         name: 'Basic Gemini Agent',
         instructions: 'You are a helpful assistant',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
       });
 
       const result = await agent.generate('Hello, how are you?');
@@ -36,7 +36,43 @@ describe('Gemini Model Compatibility Tests', () => {
         id: 'structured-gemini',
         name: 'Structured Gemini Agent',
         instructions: 'You provide structured responses',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
+      });
+
+      const result = await agent.generate('List 3 benefits of exercise', {
+        structuredOutput: {
+          schema: z.object({
+            benefits: z.array(z.string()),
+          }),
+        },
+      });
+
+      expect(result.object).toBeDefined();
+      expect(result.object.benefits).toBeDefined();
+      expect(Array.isArray(result.object.benefits)).toBe(true);
+    });
+
+    it('should handle generation with structured output and tool', async () => {
+      const agent = new Agent({
+        id: 'structured-gemini',
+        name: 'Structured Gemini Agent',
+        instructions: 'You provide structured responses',
+        model: 'google/gemini-2.0-flash-lite',
+        tools: {
+          execerciseResearch: createTool({
+            id: 'execerciseResearch',
+            description: 'Research the benefits of exercise',
+            inputSchema: z.object({
+              topic: z.string(),
+            }),
+            outputSchema: z.object({
+              benefits: z.array(z.string()),
+            }),
+            execute: async ({ context }) => {
+              return { benefits: ['Exercise is good for you', 'Mental health benefits', 'Physical health benefits'] };
+            },
+          }),
+        },
       });
 
       const result = await agent.generate('List 3 benefits of exercise', {
@@ -57,7 +93,7 @@ describe('Gemini Model Compatibility Tests', () => {
         id: 'system-context-agent',
         name: 'System Context Agent',
         instructions: 'You are an expert assistant. Always provide detailed explanations.',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
       });
 
       await expect(agent.generate('')).rejects.toThrow();
@@ -68,7 +104,7 @@ describe('Gemini Model Compatibility Tests', () => {
         id: 'max-steps-agent',
         name: 'Max Steps Agent',
         instructions: 'You help users choose between options A, B, or C.',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
         memory,
       });
 
@@ -109,7 +145,7 @@ describe('Gemini Model Compatibility Tests', () => {
         id: 'tool-result-ending-agent',
         name: 'Tool Result Ending Agent',
         instructions: 'You help with weather queries',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
         tools: { testTool },
       });
 
@@ -155,7 +191,7 @@ describe('Gemini Model Compatibility Tests', () => {
         id: 'tool-call-agent',
         name: 'Tool Call Agent',
         instructions: 'You help users with their queries',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
         tools: { testTool },
       });
 
@@ -193,7 +229,7 @@ describe('Gemini Model Compatibility Tests', () => {
         id: 'assistant-only-agent',
         name: 'Assistant Only Agent',
         instructions: 'You help users with their queries',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
       });
 
       const result = await agent.generate([{ role: 'assistant', content: 'I can help you with that task.' }]);
@@ -207,14 +243,14 @@ describe('Gemini Model Compatibility Tests', () => {
       const helperAgent = new Agent({
         name: 'helper-agent',
         instructions: 'You answer simple questions. For "what is the capital of France?", respond "Paris".',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
       });
 
       const agent = new Agent({
         id: 'basic-network-agent',
         name: 'Basic Network Agent',
         instructions: 'You coordinate tasks. Always delegate questions to helperAgent.',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
         agents: { helperAgent },
         memory,
       });
@@ -237,14 +273,14 @@ describe('Gemini Model Compatibility Tests', () => {
       const helperAgent = new Agent({
         name: 'helper-agent',
         instructions: 'You help with tasks',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
       });
 
       const agent = new Agent({
         id: 'network-empty-message-agent',
         name: 'Network Empty Message Agent',
         instructions: 'You coordinate tasks. Always provide detailed explanations.',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
         agents: { helperAgent },
         memory,
       });
@@ -267,14 +303,14 @@ describe('Gemini Model Compatibility Tests', () => {
       const helperAgent = new Agent({
         name: 'helper-agent',
         instructions: 'You are a calculator. When asked for math, respond with just the numeric answer.',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
       });
 
       const agent = new Agent({
         id: 'network-max-steps-agent',
         name: 'Network Max Steps Agent',
         instructions: 'You coordinate tasks. Always delegate math questions to helperAgent.',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
         agents: { helperAgent },
         memory,
       });
@@ -312,7 +348,7 @@ describe('Gemini Model Compatibility Tests', () => {
         id: 'network-tool-result-ending-agent',
         name: 'Network Tool Result Ending Agent',
         instructions: 'You help with weather queries. Summarize weather results when asked.',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
         tools: { testTool },
         memory,
       });
@@ -372,7 +408,7 @@ describe('Gemini Model Compatibility Tests', () => {
         id: 'network-agentic-tool-result-agent',
         name: 'Network Agentic Tool Result Agent',
         instructions: 'You help with weather queries. Summarize weather results.',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
         tools: { testTool },
         memory,
       });
@@ -431,7 +467,7 @@ describe('Gemini Model Compatibility Tests', () => {
         id: 'network-tool-call-agent',
         name: 'Network Tool Call Agent',
         instructions: 'You help users understand tool results. Explain tool outputs clearly.',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
         tools: { testTool },
         memory,
       });
@@ -481,7 +517,7 @@ describe('Gemini Model Compatibility Tests', () => {
       const researchAgent = new Agent({
         name: 'research-agent',
         instructions: 'You research topics and provide brief summaries.',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
       });
 
       const researchStep = createStep({
@@ -513,7 +549,7 @@ describe('Gemini Model Compatibility Tests', () => {
         id: 'network-workflow-agent',
         name: 'Network Workflow Agent',
         instructions: 'You coordinate research workflows.',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
         workflows: { researchWorkflow },
         memory,
       });
@@ -537,7 +573,7 @@ describe('Gemini Model Compatibility Tests', () => {
         id: 'network-simple-ending-agent',
         name: 'Network Simple Ending Agent',
         instructions: 'You help users with their queries',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
         memory,
       });
 
@@ -565,14 +601,14 @@ describe('Gemini Model Compatibility Tests', () => {
       const helperAgent = new Agent({
         name: 'helper-agent',
         instructions: 'You help with tasks',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
       });
 
       const agent = new Agent({
         id: 'network-assistant-only-agent',
         name: 'Network Assistant Only Agent',
         instructions: 'You coordinate tasks',
-        model: google('gemini-2.5-flash-lite'),
+        model: 'google/gemini-2.0-flash-lite',
         agents: { helperAgent },
         memory,
       });
