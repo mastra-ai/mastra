@@ -2761,7 +2761,7 @@ export class MessageList {
 
     // Store original content in metadata for round-trip
     const metadata: Record<string, unknown> = {
-      __originalContent: content,
+      __originalContent: JSON.stringify(content),
     };
 
     // Generate ID from modelMsg if available, otherwise create a new one
