@@ -38,10 +38,12 @@ export class MastraLLMVNext extends MastraBase {
     mastra,
     models,
     options,
+    workflow,
   }: {
     mastra?: Mastra;
     models: ModelManagerModelConfig[];
     options?: MastraModelOptions;
+    workflow?: ReturnType<typeof createAgenticLoopWorkflow>;
   }) {
     super({ name: 'aisdk' });
 
@@ -68,14 +70,19 @@ export class MastraLLMVNext extends MastraBase {
       this.#firstModel = models[0];
     }
 
-    // Create workflow once at instance level with only static parameters
-    this.#agenticLoopWorkflow = createAgenticLoopWorkflow({
-      logger: this.logger,
-      mastra: this.#mastra,
-    });
+    // Use the provided workflow or create a new one
+    if (workflow) {
+      this.#agenticLoopWorkflow = workflow;
+    } else {
+      // Create workflow once at instance level with only static parameters
+      this.#agenticLoopWorkflow = createAgenticLoopWorkflow({
+        logger: this.logger,
+        mastra: this.#mastra,
+      });
 
-    if (this.#mastra) {
-      this.#agenticLoopWorkflow.__registerMastra(this.#mastra);
+      if (this.#mastra) {
+        this.#agenticLoopWorkflow.__registerMastra(this.#mastra);
+      }
     }
   }
 

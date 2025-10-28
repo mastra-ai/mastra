@@ -35,35 +35,31 @@ export const prepareStreamWorkflowInputSchema = z.object({
     })
     .optional(),
   toolCallId: z.string().optional(),
+  // Add execution-specific params that were in constructor
+  capabilities: z.any(), // AgentCapabilities
+  saveQueueManager: z.any(), // SaveQueueManager
 });
 
 interface CreatePrepareStreamWorkflowOptions {
-  capabilities: AgentCapabilities;
-  saveQueueManager: SaveQueueManager;
   agentId: string;
 }
 
 export function createPrepareStreamWorkflow<OUTPUT extends OutputSchema | undefined = undefined>({
-  capabilities,
-  saveQueueManager,
   agentId,
 }: CreatePrepareStreamWorkflowOptions) {
   const prepareToolsStep = createPrepareToolsStep({
-    capabilities,
+    agentId,
   });
 
   const prepareMemoryStep = createPrepareMemoryStep({
-    capabilities,
+    agentId,
   });
 
   const streamStep = createStreamStep({
-    capabilities,
     agentId,
   });
 
   const mapResultsStep = createMapResultsStep({
-    capabilities,
-    saveQueueManager,
     agentId,
   });
 

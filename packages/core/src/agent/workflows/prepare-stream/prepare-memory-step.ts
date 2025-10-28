@@ -28,16 +28,17 @@ function addSystemMessage(messageList: MessageList, content: SystemMessage | und
 }
 
 interface PrepareMemoryStepOptions {
-  capabilities: AgentCapabilities;
+  agentId: string;
 }
 
-export function createPrepareMemoryStep({ capabilities }: PrepareMemoryStepOptions) {
+export function createPrepareMemoryStep({ agentId }: PrepareMemoryStepOptions) {
   return createStep({
     id: 'prepare-memory-step',
     inputSchema: prepareStreamWorkflowInputSchema,
     outputSchema: prepareMemoryStepOutputSchema,
     execute: async ({ inputData, tracingContext, runtimeContext }) => {
-      const { options, threadFromArgs, resourceId, runId, instructions, memoryConfig, memory } = inputData;
+      const { options, threadFromArgs, resourceId, runId, instructions, memoryConfig, memory, capabilities } =
+        inputData;
       const thread = threadFromArgs;
       const messageList = new MessageList({
         threadId: thread?.id,

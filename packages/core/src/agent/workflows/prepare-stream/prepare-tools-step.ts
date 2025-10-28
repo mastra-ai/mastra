@@ -4,16 +4,16 @@ import { prepareToolsStepOutputSchema } from './schema';
 import { prepareStreamWorkflowInputSchema } from './index';
 
 interface PrepareToolsStepOptions {
-  capabilities: AgentCapabilities;
+  agentId: string;
 }
 
-export function createPrepareToolsStep({ capabilities }: PrepareToolsStepOptions) {
+export function createPrepareToolsStep({ agentId }: PrepareToolsStepOptions) {
   return createStep({
     id: 'prepare-tools-step',
     inputSchema: prepareStreamWorkflowInputSchema,
     outputSchema: prepareToolsStepOutputSchema,
     execute: async ({ inputData, tracingContext, runtimeContext }) => {
-      const { options, threadFromArgs, resourceId, runId, methodType, memory } = inputData;
+      const { options, threadFromArgs, resourceId, runId, methodType, memory, capabilities } = inputData;
       const agentAISpan = tracingContext.currentSpan;
 
       const toolEnhancements = [

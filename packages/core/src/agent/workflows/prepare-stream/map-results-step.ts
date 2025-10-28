@@ -9,15 +9,13 @@ import type { prepareStreamWorkflowInputSchema } from './index';
 import type { z } from 'zod';
 
 interface MapResultsStepOptions {
-  capabilities: AgentCapabilities;
-  saveQueueManager: SaveQueueManager;
   agentId: string;
 }
 
 export function createMapResultsStep<
   OUTPUT extends OutputSchema | undefined = undefined,
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({ capabilities, saveQueueManager, agentId }: MapResultsStepOptions) {
+>({ agentId }: MapResultsStepOptions) {
   return async ({
     inputData,
     bail,
@@ -38,6 +36,8 @@ export function createMapResultsStep<
     const workflowInput = getInitData() as z.infer<typeof prepareStreamWorkflowInputSchema>;
     const {
       options,
+      capabilities,
+      saveQueueManager,
       resourceId,
       runId,
       memory,
@@ -216,6 +216,8 @@ export function createMapResultsStep<
         ...(options.modelSettings || {}),
       },
       messageList: memoryData.messageList!,
+      // Pass capabilities through to streamStep
+      capabilities,
     };
 
     return loopOptions;

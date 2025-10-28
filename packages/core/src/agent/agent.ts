@@ -92,6 +92,7 @@ import type {
   StructuredOutputOptions,
 } from './types';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
+import { createAgenticLoopWorkflow } from '../loop/workflows/agentic-loop';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
@@ -197,6 +198,8 @@ export class Agent<
   #inputProcessors?: DynamicArgument<InputProcessor[]>;
   #outputProcessors?: DynamicArgument<OutputProcessor[]>;
   readonly #options?: AgentCreateOptions;
+  #prepareStreamWorkflow: ReturnType<typeof createPrepareStreamWorkflow>;
+  #agenticLoopWorkflow?: ReturnType<typeof createAgenticLoopWorkflow>;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -325,6 +328,24 @@ export class Agent<
 
     // @ts-ignore Flag for agent network messages
     this._agentNetworkAppend = config._agentNetworkAppend || false;
+
+    // Create the workflow once at instance level
+    // We'll pass execution-specific data (capabilities, saveQueueManager) as inputs
+    this.#prepareStreamWorkflow = createPrepareStreamWorkflow({
+      agentId: this.id,
+    });
+
+    // Create the agentic loop workflow once at instance level for v2 models
+    // This will be passed to MastraLLMVNext when needed
+    this.#agenticLoopWorkflow = createAgenticLoopWorkflow({
+      logger: this.logger,
+      mastra: this.#mastra,
+    });
+
+    // Register mastra on the loop workflow only
+    if (this.#mastra && this.#agenticLoopWorkflow) {
+      this.#agenticLoopWorkflow.__registerMastra(this.#mastra);
+    }
   }
 
   getMastraInstance() {
@@ -1000,6 +1021,7 @@ export class Agent<
             models: enabledModels,
             mastra: this.#mastra,
             options: { tracingPolicy: this.#options?.tracingPolicy },
+            workflow: this.#agenticLoopWorkflow,
           });
         });
       } else {
@@ -3553,12 +3575,8 @@ export class Agent<
       getTelemetry: this.#mastra?.getTelemetry?.bind(this.#mastra),
     };
 
-    // Create the workflow with static (instance-level) context
-    const executionWorkflow = createPrepareStreamWorkflow({
-      capabilities,
-      saveQueueManager,
-      agentId: this.id,
-    });
+    // Use the instance-level workflow created in the constructor
+    const executionWorkflow = this.#prepareStreamWorkflow;
 
     // Pass dynamic (call-level) arguments as workflow input
     const run = await executionWorkflow.createRunAsync({
@@ -3581,6 +3599,9 @@ export class Agent<
         requireToolApproval: options.requireToolApproval,
         resumeContext,
         toolCallId: options.toolCallId,
+        // Pass execution-specific objects as inputs
+        capabilities,
+        saveQueueManager,
       },
       runtimeContext,
       tracingContext: { currentSpan: agentAISpan },
