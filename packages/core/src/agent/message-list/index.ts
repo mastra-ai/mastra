@@ -2064,6 +2064,19 @@ export class MessageList {
     const parts: AIV5Type.UIMessage['parts'] = [];
     const metadata: Record<string, unknown> = { ...(v2Msg.content.metadata || {}) };
 
+    // Debug logging for tool invocations
+    if (v2Msg.content.toolInvocations && v2Msg.content.toolInvocations.length > 0) {
+      console.log('[DEBUG V2→V5] Converting message with tool invocations:', {
+        role: v2Msg.role,
+        toolInvocationsCount: v2Msg.content.toolInvocations.length,
+        toolInvocations: v2Msg.content.toolInvocations.map(ti => ({
+          toolName: ti.toolName,
+          state: ti.state,
+          hasResult: 'result' in ti,
+        })),
+      });
+    }
+
     // Add Mastra-specific metadata
     if (v2Msg.createdAt) metadata.createdAt = v2Msg.createdAt;
     if (v2Msg.threadId) metadata.threadId = v2Msg.threadId;
@@ -2336,6 +2349,17 @@ export class MessageList {
   private static aiV5UIMessageToMastraMessageV2(uiMsg: AIV5Type.UIMessage): MastraMessageV2 {
     const { parts, metadata: rawMetadata } = uiMsg;
     const metadata = (rawMetadata || {}) as Record<string, unknown>;
+
+    // Debug logging for V5 message parts
+    console.log('[DEBUG V5→V2] Converting V5 UI message:', {
+      role: uiMsg.role,
+      partsCount: parts.length,
+      parts: parts.map(p => ({
+        type: p.type,
+        state: 'state' in p ? p.state : undefined,
+        hasOutput: 'output' in p,
+      })),
+    });
 
     // Extract Mastra-specific metadata
     const createdAtValue = metadata.createdAt;
@@ -2820,11 +2844,28 @@ export class MessageList {
           // Keep tool parts with output states OR tool-result-${toolName} parts (which don't have state)
           // tool-result-${toolName} parts are the final format after conversion from V2
           if ('state' in p) {
-            return p.state === 'output-available' || p.state === 'output-error';
+            const keep = p.state === 'output-available' || p.state === 'output-error';
+            if (!keep) {
+              console.log('[DEBUG sanitizeV5UIMessages] Filtering out tool part:', {
+                type: p.type,
+                state: p.state,
+                hasOutput: 'output' in p,
+              });
+            }
+            return keep;
           }
           // If no state property, it's likely a tool-result-${toolName} part, keep it
           return true;
         });
+
+        // Log if we filtered out parts
+        if (safeParts.length !== m.parts.length) {
+          console.log('[DEBUG sanitizeV5UIMessages] Message parts filtered:', {
+            originalPartsCount: m.parts.length,
+            filteredPartsCount: safeParts.length,
+            role: m.role,
+          });
+        }
 
         if (!safeParts.length) return false;
 
