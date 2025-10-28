@@ -212,30 +212,68 @@ export class CoreToolBuilder extends MastraBase {
           // Wrap mastra with tracing context - wrapMastra will handle whether it's a full instance or primitives
           const wrappedMastra = options.mastra ? wrapMastra(options.mastra, { currentSpan: toolSpan }) : options.mastra;
 
-          result = await tool?.execute?.(
-            {
-              context: args,
-              threadId: options.threadId,
-              resourceId: options.resourceId,
-              mastra: wrappedMastra,
-              memory: options.memory,
-              runId: options.runId,
-              runtimeContext: options.runtimeContext ?? new RuntimeContext(),
-              writer: new ToolStream(
-                {
-                  prefix: 'tool',
-                  callId: execOptions.toolCallId,
-                  name: options.name,
-                  runId: options.runId!,
-                },
-                options.writableStream || execOptions.writableStream,
-              ),
-              tracingContext: { currentSpan: toolSpan },
-              // Pass MCP context if available (when executed in MCP server context)
+          // BREAKING CHANGE v1.0: Pass raw args as first parameter, context as second
+          // Properly structure context based on execution source
+          const baseContext = {
+            threadId: options.threadId,
+            resourceId: options.resourceId,
+            mastra: wrappedMastra,
+            memory: options.memory,
+            runId: options.runId,
+            runtimeContext: options.runtimeContext ?? new RuntimeContext(),
+            writer: new ToolStream(
+              {
+                prefix: 'tool',
+                callId: execOptions.toolCallId,
+                name: options.name,
+                runId: options.runId!,
+              },
+              options.writableStream || execOptions.writableStream,
+            ),
+            tracingContext: { currentSpan: toolSpan },
+            suspend: execOptions.suspend,
+            resumeData: execOptions.resumeData,
+          };
+
+          // Check if this is agent execution (has toolCallId and messages)
+          const isAgentExecution = execOptions.toolCallId && execOptions.messages;
+
+          // Check if this is workflow execution (has workflow properties in options)
+          const isWorkflowExecution = options.workflow || options.workflowId;
+
+          let toolContext;
+          if (isAgentExecution) {
+            // Nest agent-specific properties under 'agent' key
+            toolContext = {
+              ...baseContext,
+              agent: {
+                toolCallId: execOptions.toolCallId,
+                messages: execOptions.messages,
+              },
+            };
+          } else if (isWorkflowExecution) {
+            // Nest workflow-specific properties under 'workflow' key
+            toolContext = {
+              ...baseContext,
+              workflow: options.workflow || {
+                runId: options.runId,
+                workflowId: options.workflowId,
+                state: options.state,
+                setState: options.setState,
+              },
+            };
+          } else if (execOptions.mcp) {
+            // MCP execution context
+            toolContext = {
+              ...baseContext,
               mcp: execOptions.mcp,
-            },
-            execOptions as ToolExecutionOptions & ToolCallOptions,
-          );
+            };
+          } else {
+            // Direct execution or unknown context
+            toolContext = baseContext;
+          }
+
+          result = await tool?.execute?.(args, toolContext);
         }
 
         toolSpan?.end({ output: result });

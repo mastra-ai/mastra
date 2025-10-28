@@ -144,9 +144,12 @@ export interface ToolAction<
   suspendSchema?: TSuspendSchema;
   resumeSchema?: TResumeSchema;
   description: string;
+  // BREAKING CHANGE v1.0: New execute signature
+  // First parameter: raw input data (validated against inputSchema)
+  // Second parameter: execution context with metadata
   execute?: (
-    context: TContext,
-    options?: MastraToolInvocationOptions,
+    input: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
+    context?: TContext | MastraToolInvocationOptions,
   ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
   mastra?: Mastra;
   requireApproval?: boolean;

@@ -299,15 +299,22 @@ export function createStep<
       description: params.description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra, runtimeContext, tracingContext, suspend, resumeData }) => {
-        return params.execute({
-          context: inputData,
+      execute: async ({ inputData, mastra, runtimeContext, tracingContext, suspend, resumeData, runId, workflowId, state, setState }) => {
+        // BREAKING CHANGE v1.0: Pass raw input as first arg, context as second
+        const toolContext = {
           mastra,
           runtimeContext,
           tracingContext,
           suspend,
           resumeData,
-        });
+          workflow: {
+            runId,
+            workflowId,
+            state,
+            setState,
+          },
+        };
+        return params.execute(inputData, toolContext);
       },
       component: 'TOOL',
     };

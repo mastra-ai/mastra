@@ -22,17 +22,16 @@ describe('createTool', () => {
     inputSchema: z.object({
       name: z.string(),
     }),
-    execute: ({ context }) => {
-      return mockFindUser(context.name) as Promise<Record<string, any>>;
+    // BREAKING CHANGE v1.0: New signature - input as first param, context as second
+    execute: (input, context) => {
+      return mockFindUser(input.name) as Promise<Record<string, any>>;
     },
   });
 
   it('should call mockFindUser', async () => {
+    // BREAKING CHANGE v1.0: Pass raw input as first arg, context as second
     await testTool.execute?.(
-      {
-        context: { name: 'Dero Israel' },
-        runtimeContext: new RuntimeContext(),
-      },
+      { name: 'Dero Israel' },
       {
         toolCallId: '123',
         messages: [],
@@ -48,10 +47,7 @@ describe('createTool', () => {
 
   it("should return an object containing 'Dero Israel' as name and 'dero@mail.com' as email", async () => {
     const user = await testTool.execute?.(
-      {
-        context: { name: 'Dero Israel' },
-        runtimeContext: new RuntimeContext(),
-      },
+      { name: 'Dero Israel' },
       {
         toolCallId: '123',
         messages: [],
@@ -66,10 +62,7 @@ describe('createTool', () => {
 
   it("should return an object containing 'User not found' message", async () => {
     const user = await testTool.execute?.(
-      {
-        context: { name: 'Taofeeq Oluderu' },
-        runtimeContext: new RuntimeContext(),
-      },
+      { name: 'Taofeeq Oluderu' },
       {
         toolCallId: '123',
         messages: [],

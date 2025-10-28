@@ -1,5 +1,6 @@
 import type { Mastra } from '../mastra';
-import type { ZodLikeSchema } from '../types/zod-compat';
+import { RuntimeContext } from '../runtime-context';
+import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
 import type { ToolAction, ToolExecutionContext, MastraToolInvocationOptions } from './types';
 import { validateToolInput } from './validation';
 
@@ -86,9 +87,9 @@ export class Tool<
   resumeSchema?: TResumeSchema;
 
   /**
-   * Function that performs the tool's action
-   * @param context - Execution context with validated input
-   * @param options - Invocation options including suspend/resume data
+   * BREAKING CHANGE v1.0: New execute signature
+   * @param input - The raw, validated input data
+   * @param context - Optional execution context with metadata
    * @returns Promise resolving to tool output
    */
   execute?: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext>['execute'];
@@ -130,18 +131,70 @@ export class Tool<
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
 
-    // Wrap the execute function with validation if it exists
+    // BREAKING CHANGE v1.0: Tools now receive two parameters:
+    // 1. input - The raw, validated input data
+    // 2. context - Execution metadata (mastra, suspend, etc.)
     if (opts.execute) {
       const originalExecute = opts.execute;
-      this.execute = async (context: TContext, options?: MastraToolInvocationOptions) => {
-        const { resumeData, suspend } = options ?? {};
+      this.execute = async (input: unknown, context?: any) => {
         // Validate input if schema exists
-        const { data, error } = validateToolInput(this.inputSchema, context, this.id);
+        const { data, error } = validateToolInput(this.inputSchema, input, this.id);
         if (error) {
           return error as any;
         }
 
-        return originalExecute({ ...(data as TContext), suspend, resumeData } as TContext, options);
+        // Organize context based on execution source
+        let organizedContext = context;
+        if (!context) {
+          // No context provided - create a minimal context with runtimeContext
+          organizedContext = {
+            runtimeContext: new RuntimeContext(),
+            mastra: undefined,
+          };
+        } else {
+          // Check if this is agent execution (has toolCallId and messages)
+          const isAgentExecution = context.toolCallId && context.messages;
+
+          // Check if this is workflow execution (has workflow properties)
+          const isWorkflowExecution = context.workflow || context.workflowId || context.runId;
+
+          if (isAgentExecution && !context.agent) {
+            // Reorganize agent context - nest agent-specific properties under 'agent' key
+            const { toolCallId, messages, ...rest } = context;
+            organizedContext = {
+              ...rest,
+              agent: {
+                toolCallId,
+                messages,
+              },
+              // Ensure runtimeContext is always present
+              runtimeContext: rest.runtimeContext || new RuntimeContext(),
+            };
+          } else if (isWorkflowExecution && !context.workflow) {
+            // Reorganize workflow context - nest workflow-specific properties under 'workflow' key
+            const { workflowId, runId, state, setState, ...rest } = context;
+            organizedContext = {
+              ...rest,
+              workflow: {
+                workflowId,
+                runId,
+                state,
+                setState,
+              },
+              // Ensure runtimeContext is always present
+              runtimeContext: rest.runtimeContext || new RuntimeContext(),
+            };
+          } else {
+            // Ensure runtimeContext is always present even for direct execution
+            organizedContext = {
+              ...context,
+              runtimeContext: context.runtimeContext || new RuntimeContext(),
+            };
+          }
+        }
+
+        // Call the original execute with validated input and organized context
+        return originalExecute(data as any, organizedContext);
       };
     }
   }
@@ -244,11 +297,12 @@ export function createTool<
   opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
     execute?: TExecute;
   },
-): [TSchemaIn, TSchemaOut, TExecute] extends [ZodLikeSchema, ZodLikeSchema, Function]
+): TExecute extends Function
   ? Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
-      inputSchema: TSchemaIn;
-      outputSchema: TSchemaOut;
-      execute: (context: TContext, options: MastraToolInvocationOptions) => Promise<any>;
+      execute: (
+        input: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
+        context?: TContext | MastraToolInvocationOptions,
+      ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
     }
   : Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> {
   return new Tool(opts) as any;
