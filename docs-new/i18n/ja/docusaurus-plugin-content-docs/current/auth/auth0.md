@@ -1,0 +1,236 @@
+---
+title: Auth0
+description: "Auth0 を用いて Mastra アプリケーションを認証する MastraAuthAuth0 クラスのドキュメント。"
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# MastraAuthAuth0 クラス \{#mastraauthauth0-class\}
+
+`MastraAuthAuth0` クラスは、Auth0 を用いて Mastra の認証を提供します。Auth0 が発行した JWT トークンで受信リクエストを検証し、`experimental_auth` オプションを通じて Mastra サーバーと連携します。
+
+## 前提条件 \{#prerequisites\}
+
+この例では Auth0 認証を使用します。次の点を確認してください:
+
+1. [auth0.com](https://auth0.com/) で Auth0 アカウントを作成する
+2. Auth0 ダッシュボードでアプリケーションを設定する
+3. 識別子（audience）を指定して Auth0 ダッシュボードで API を設定する
+4. アプリケーションの許可されたコールバック URL、Web オリジン、ログアウト URL を設定する
+
+```env filename=".env" copy
+AUTH0_DOMAIN=your-tenant.auth0.com
+AUTH0_AUDIENCE=your-api-identifier
+```
+
+> **注:** ドメインは Auth0 Dashboard の Applications &gt; Settings で確認できます。audience は、Auth0 Dashboard の APIs で設定した API の識別子です。
+
+> 詳細なセットアップ手順は、利用するプラットフォーム向けの [Auth0 quickstarts](https://auth0.com/docs/quickstarts) を参照してください。
+
+## インストール \{#installation\}
+
+`MastraAuthAuth0` クラスを使用する前に、`@mastra/auth-auth0` パッケージをインストールしてください。
+
+```bash copy
+npm install @mastra/auth-auth0@latest
+```
+
+## 使い方の例 \{#usage-examples\}
+
+### 環境変数を使った基本的な使い方 \{#basic-usage-with-environment-variables\}
+
+```typescript {2,7} filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from '@mastra/core/mastra';
+import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthAuth0(),
+  },
+});
+```
+
+### カスタム構成 \{#custom-configuration\}
+
+```typescript {2,7-10} filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from '@mastra/core/mastra';
+import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthAuth0({
+      domain: process.env.AUTH0_DOMAIN,
+      audience: process.env.AUTH0_AUDIENCE,
+    }),
+  },
+});
+```
+
+## 構成 \{#configuration\}
+
+### ユーザー認可 \{#user-authorization\}
+
+デフォルトでは、`MastraAuthAuth0` は、指定した audience に対する有効な Auth0 トークンを持つすべての認証済みユーザーを許可します。トークンの検証では次の点を確認します:
+
+1. トークンが Auth0 によって正しく署名されていること
+2. トークンの有効期限が切れていないこと
+3. トークンの audience が設定した audience と一致していること
+4. トークンの issuer が使用中の Auth0 ドメインと一致していること
+
+ユーザー認可をカスタマイズするには、カスタムの `authorizeUser` 関数を指定します:
+
+```typescript filename="src/mastra/auth.ts" showLineNumbers copy
+import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+
+const auth0Provider = new MastraAuthAuth0({
+  authorizeUser: async user => {
+    // カスタム認可ロジック
+    return user.email?.endsWith('@yourcompany.com') || false;
+  },
+});
+```
+
+> すべての利用可能な構成オプションについては、[MastraAuthAuth0](/docs/reference/auth/auth0) の API リファレンスを参照してください。
+
+## クライアント側のセットアップ \{#client-side-setup\}
+
+Auth0 認証を使用する場合は、Auth0 React SDK をセットアップし、ユーザーを認証して、Mastra へのリクエストに渡すためのアクセストークンを取得する必要があります。
+
+### Auth0 React SDK のセットアップ \{#setting-up-auth0-react-sdk\}
+
+まず、アプリケーションに Auth0 React SDK をインストールして設定します。
+
+```bash copy
+npm install @auth0/auth0-react
+```
+
+```typescript filename="src/auth0-provider.tsx" showLineNumbers copy
+import React from 'react';
+import { Auth0Provider } from '@auth0/auth0-react';
+
+const Auth0ProviderWithHistory = ({ children }) => {
+  return (
+    <Auth0Provider
+      domain={process.env.REACT_APP_AUTH0_DOMAIN}
+      clientId={process.env.REACT_APP_AUTH0_CLIENT_ID}
+      authorizationParams={{
+        redirect_uri: window.location.origin,
+        audience: process.env.REACT_APP_AUTH0_AUDIENCE,
+        scope: "read:current_user update:current_user_metadata"
+      }}
+    >
+      {children}
+    </Auth0Provider>
+  );
+};
+
+export default Auth0ProviderWithHistory;
+```
+
+### アクセス トークンの取得 \{#retrieving-access-tokens\}
+
+Auth0 React SDK を使ってユーザーを認証し、アクセス トークンを取得します：
+
+```typescript filename="lib/auth.ts" showLineNumbers copy
+import { useAuth0 } from '@auth0/auth0-react';
+
+export const useAuth0Token = () => {
+  const { getAccessTokenSilently } = useAuth0();
+
+  const getAccessToken = async () => {
+    const token = await getAccessTokenSilently();
+    return token;
+  };
+
+  return { getAccessToken };
+};
+```
+
+> さらに多くの認証方法や構成オプションについては、[Auth0 React SDK のドキュメント](https://auth0.com/docs/libraries/auth0-react)を参照してください。
+
+## `MastraClient` の設定 \{#configuring-mastraclient\}
+
+`experimental_auth` が有効な場合、`MastraClient` を使用して行うすべてのリクエストには、`Authorization` ヘッダーに有効な Auth0 のアクセス トークンを含める必要があります。
+
+```typescript filename="lib/mastra/mastra-client.ts" showLineNumbers copy
+import { MastraClient } from '@mastra/client-js';
+
+export const createMastraClient = (accessToken: string) => {
+  return new MastraClient({
+    baseUrl: 'https://<mastra-api-url>',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+};
+```
+
+> **注意:** Authorization ヘッダーでは、アクセストークンの前に `Bearer` を付ける必要があります。
+
+> さらに詳しい設定オプションについては、[Mastra Client SDK](/docs/server-db/mastra-client) を参照してください。
+
+### 認証リクエストの送信 \{#making-authenticated-requests\}
+
+`MastraClient` に Auth0 のアクセストークンを設定したら、認証付きリクエストを送信できます：
+
+<Tabs>
+  <TabItem value="react" label="React">
+    ```tsx filename="src/components/mastra-api-test.tsx" showLineNumbers copy
+    import React, { useState } from 'react';
+    import { useAuth0 } from '@auth0/auth0-react';
+    import { MastraClient } from '@mastra/client-js';
+
+    export const MastraApiTest = () => {
+      const { getAccessTokenSilently } = useAuth0();
+      const [result, setResult] = useState(null);
+
+      const callMastraApi = async () => {
+        const token = await getAccessTokenSilently();
+
+        const mastra = new MastraClient({
+          baseUrl: "http://localhost:4111",
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        const weatherAgent = mastra.getAgent("weatherAgent");
+        const response = await weatherAgent.generate({
+          messages: "What's the weather like in New York"
+        });
+
+        setResult(response.text);
+      };
+
+      return (
+        <div>
+          <button onClick={callMastraApi}>
+            Mastra API をテスト
+          </button>
+
+          {result && (
+            <div className="result">
+              <h6>結果：</h6>
+              <pre>{result}</pre>
+            </div>
+          )}
+        </div>
+      );
+    };
+    ```
+  </TabItem>
+
+  <TabItem value="curl" label="cURL">
+    ```bash copy
+    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <your-auth0-access-token>" \
+      -d '{
+        "messages": "Weather in London"
+      }'
+    ```
+  </TabItem>
+</Tabs>

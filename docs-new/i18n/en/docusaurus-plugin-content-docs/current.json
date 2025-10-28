@@ -1,0 +1,314 @@
+{
+  "version.label": {
+    "message": "Next",
+    "description": "The label for version current"
+  },
+  "sidebar.docsSidebar.category.Getting Started": {
+    "message": "Getting Started",
+    "description": "The label for category 'Getting Started' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Agents": {
+    "message": "Agents",
+    "description": "The label for category 'Agents' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Workflows": {
+    "message": "Workflows",
+    "description": "The label for category 'Workflows' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Streaming": {
+    "message": "Streaming",
+    "description": "The label for category 'Streaming' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Tools & MCP": {
+    "message": "Tools & MCP",
+    "description": "The label for category 'Tools & MCP' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Memory": {
+    "message": "Memory",
+    "description": "The label for category 'Memory' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Storage": {
+    "message": "Storage",
+    "description": "The label for category 'Storage' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.RAG": {
+    "message": "RAG",
+    "description": "The label for category 'RAG' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Server & DB": {
+    "message": "Server & DB",
+    "description": "The label for category 'Server & DB' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Deployment": {
+    "message": "Deployment",
+    "description": "The label for category 'Deployment' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Serverless Platforms": {
+    "message": "Serverless Platforms",
+    "description": "The label for category 'Serverless Platforms' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Cloud Providers": {
+    "message": "Cloud Providers",
+    "description": "The label for category 'Cloud Providers' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Mastra Cloud": {
+    "message": "Mastra Cloud",
+    "description": "The label for category 'Mastra Cloud' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Observability": {
+    "message": "Observability",
+    "description": "The label for category 'Observability' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.AI Tracing": {
+    "message": "AI Tracing",
+    "description": "The label for category 'AI Tracing' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Exporters": {
+    "message": "Exporters",
+    "description": "The label for category 'Exporters' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Span Processors": {
+    "message": "Span Processors",
+    "description": "The label for category 'Span Processors' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Scorers": {
+    "message": "Scorers",
+    "description": "The label for category 'Scorers' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Evals (old API)": {
+    "message": "Evals (old API)",
+    "description": "The label for category 'Evals (old API)' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Auth": {
+    "message": "Auth",
+    "description": "The label for category 'Auth' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Voice": {
+    "message": "Voice",
+    "description": "The label for category 'Voice' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Frameworks": {
+    "message": "Frameworks",
+    "description": "The label for category 'Frameworks' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Agentic UIs": {
+    "message": "Agentic UIs",
+    "description": "The label for category 'Agentic UIs' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Servers": {
+    "message": "Servers",
+    "description": "The label for category 'Servers' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Web Frameworks": {
+    "message": "Web Frameworks",
+    "description": "The label for category 'Web Frameworks' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Community": {
+    "message": "Community",
+    "description": "The label for category 'Community' in sidebar 'docsSidebar'"
+  },
+  "sidebar.guidesSidebar.category.Guide": {
+    "message": "Guide",
+    "description": "The label for category 'Guide' in sidebar 'guidesSidebar'"
+  },
+  "sidebar.guidesSidebar.category.Migrations": {
+    "message": "Migrations",
+    "description": "The label for category 'Migrations' in sidebar 'guidesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Agents": {
+    "message": "Agents",
+    "description": "The label for category 'Agents' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Deployment Examples": {
+    "message": "Deployment Examples",
+    "description": "The label for category 'Deployment Examples' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Evals": {
+    "message": "Evals",
+    "description": "The label for category 'Evals' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Memory": {
+    "message": "Memory",
+    "description": "The label for category 'Memory' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Observability": {
+    "message": "Observability",
+    "description": "The label for category 'Observability' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.RAG": {
+    "message": "RAG",
+    "description": "The label for category 'RAG' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.chunking": {
+    "message": "chunking",
+    "description": "The label for category 'chunking' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.embedding": {
+    "message": "embedding",
+    "description": "The label for category 'embedding' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.query": {
+    "message": "query",
+    "description": "The label for category 'query' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Re-ranking Results ": {
+    "message": "Re-ranking Results ",
+    "description": "The label for category 'Re-ranking Results ' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.upsert": {
+    "message": "upsert",
+    "description": "The label for category 'upsert' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.usage": {
+    "message": "usage",
+    "description": "The label for category 'usage' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Scorers": {
+    "message": "Scorers",
+    "description": "The label for category 'Scorers' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Tools": {
+    "message": "Tools",
+    "description": "The label for category 'Tools' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Voice": {
+    "message": "Voice",
+    "description": "The label for category 'Voice' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Workflows": {
+    "message": "Workflows",
+    "description": "The label for category 'Workflows' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Workflows Legacy": {
+    "message": "Workflows Legacy",
+    "description": "The label for category 'Workflows Legacy' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Agents": {
+    "message": "Agents",
+    "description": "The label for category 'Agents' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Auth": {
+    "message": "Auth",
+    "description": "The label for category 'Auth' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.CLI": {
+    "message": "CLI",
+    "description": "The label for category 'CLI' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Client SDK": {
+    "message": "Client SDK",
+    "description": "The label for category 'Client SDK' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Core": {
+    "message": "Core",
+    "description": "The label for category 'Core' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Deployer": {
+    "message": "Deployer",
+    "description": "The label for category 'Deployer' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Evals": {
+    "message": "Evals",
+    "description": "The label for category 'Evals' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Legacy Workflows": {
+    "message": "Legacy Workflows",
+    "description": "The label for category 'Legacy Workflows' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Memory": {
+    "message": "Memory",
+    "description": "The label for category 'Memory' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Observability": {
+    "message": "Observability",
+    "description": "The label for category 'Observability' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.AITracing ": {
+    "message": "AITracing ",
+    "description": "The label for category 'AITracing ' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.exporters": {
+    "message": "exporters",
+    "description": "The label for category 'exporters' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.processors": {
+    "message": "processors",
+    "description": "The label for category 'processors' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.logging": {
+    "message": "logging",
+    "description": "The label for category 'logging' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.otel-tracing": {
+    "message": "otel-tracing",
+    "description": "The label for category 'otel-tracing' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.OTLP Providers ": {
+    "message": "OTLP Providers ",
+    "description": "The label for category 'OTLP Providers ' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Processors": {
+    "message": "Processors",
+    "description": "The label for category 'Processors' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.RAG": {
+    "message": "RAG",
+    "description": "The label for category 'RAG' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Scorers": {
+    "message": "Scorers",
+    "description": "The label for category 'Scorers' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Storage": {
+    "message": "Storage",
+    "description": "The label for category 'Storage' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Streaming": {
+    "message": "Streaming",
+    "description": "The label for category 'Streaming' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.agents": {
+    "message": "agents",
+    "description": "The label for category 'agents' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.workflows": {
+    "message": "workflows",
+    "description": "The label for category 'workflows' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Templates": {
+    "message": "Templates",
+    "description": "The label for category 'Templates' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Tools & MCP": {
+    "message": "Tools & MCP",
+    "description": "The label for category 'Tools & MCP' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Networks": {
+    "message": "Networks",
+    "description": "The label for category 'Networks' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Voice": {
+    "message": "Voice",
+    "description": "The label for category 'Voice' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Workflows": {
+    "message": "Workflows",
+    "description": "The label for category 'Workflows' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.run-methods": {
+    "message": "run-methods",
+    "description": "The label for category 'run-methods' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.workflow-methods": {
+    "message": "workflow-methods",
+    "description": "The label for category 'workflow-methods' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.modelsSidebar.category.Gateways": {
+    "message": "Gateways",
+    "description": "The label for category 'Gateways' in sidebar 'modelsSidebar'"
+  },
+  "sidebar.modelsSidebar.category.Providers": {
+    "message": "Providers",
+    "description": "The label for category 'Providers' in sidebar 'modelsSidebar'"
+  }
+}

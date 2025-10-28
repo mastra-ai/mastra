@@ -1,0 +1,220 @@
+---
+title: "OpenCode Zen"
+description: "Mastra で OpenCode Zen のモデルを使用。利用可能なモデルは 12 個。"
+---
+
+# <img src="https://models.dev/logos/opencode.svg" alt="OpenCode Zen ロゴ" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Zen \{#opencode-zen\}
+
+Mastra のモデルルーター経由で、12 個の OpenCode Zen モデルにアクセスできます。認証は `OPENCODE_API_KEY` 環境変数により自動的に処理されます。
+
+詳しくは [OpenCode Zen のドキュメント](https://opencode.ai/docs/zen)をご覧ください。
+
+```bash
+OPENCODE_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from '@mastra/core';
+
+const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'あなたは親切なアシスタントです',
+  model: 'opencode/claude-3-5-haiku',
+});
+
+// レスポンスを生成
+const response = await agent.generate('Hello!');
+
+// レスポンスをストリーミング
+const stream = await agent.stream('物語を聞かせて');
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::note OpenAI 互換性
+
+Mastra は OpenAI 互換の `/chat/completions` エンドポイントを使用します。プロバイダー固有の機能の一部は利用できない場合があります。詳細は [OpenCode Zen のドキュメント](https://opencode.ai/docs/zen) を参照してください。
+
+:::
+
+## モデル \{#models\}
+
+<ProviderModelsTable
+  models={[
+{
+"model": "opencode/qwen3-coder",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 262144,
+"maxOutput": 65536,
+"inputCost": 0.45,
+"outputCost": 1.8
+},
+{
+"model": "opencode/claude-opus-4-1",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 200000,
+"maxOutput": 32000,
+"inputCost": 15,
+"outputCost": 75
+},
+{
+"model": "opencode/kimi-k2",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 262144,
+"maxOutput": 262144,
+"inputCost": 0.6,
+"outputCost": 2.5
+},
+{
+"model": "opencode/claude-sonnet-4-5",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 1000000,
+"maxOutput": 64000,
+"inputCost": 3,
+"outputCost": 15
+},
+{
+"model": "opencode/gpt-5-codex",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 400000,
+"maxOutput": 128000,
+"inputCost": 1.25,
+"outputCost": 10
+},
+{
+"model": "opencode/claude-3-5-haiku",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 200000,
+"maxOutput": 8192,
+"inputCost": 0.8,
+"outputCost": 4
+},
+{
+"model": "opencode/glm-4.6",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 204800,
+"maxOutput": 131072,
+"inputCost": 0.6,
+"outputCost": 2.2
+},
+{
+"model": "opencode/grok-code",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 256000,
+"maxOutput": 256000,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "opencode/code-supernova",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 1000000,
+"maxOutput": 1000000,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "opencode/qwen3-max",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 262144,
+"maxOutput": 65536,
+"inputCost": 1.6,
+"outputCost": 6.4
+},
+{
+"model": "opencode/claude-sonnet-4",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 1000000,
+"maxOutput": 64000,
+"inputCost": 3,
+"outputCost": 15
+},
+{
+"model": "opencode/gpt-5",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 400000,
+"maxOutput": 128000,
+"inputCost": 1.25,
+"outputCost": 10
+}
+]}
+/>
+
+## 高度な設定 \{#advanced-configuration\}
+
+### カスタムヘッダー \{#custom-headers\}
+
+```typescript
+const agent = new Agent({
+  name: 'custom-agent',
+  model: {
+    url: 'https://opencode.ai/zen/v1',
+    modelId: 'claude-3-5-haiku',
+    apiKey: process.env.OPENCODE_API_KEY,
+    headers: {
+      'X-Custom-Header': 'value',
+    },
+  },
+});
+```
+
+### 動的モデル選択 \{#dynamic-model-selection\}
+
+```typescript
+const agent = new Agent({
+  name: 'dynamic-agent',
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === 'complex';
+    return useAdvanced ? 'opencode/qwen3-max' : 'opencode/claude-3-5-haiku';
+  },
+});
+```

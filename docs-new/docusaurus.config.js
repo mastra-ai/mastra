@@ -22,6 +22,12 @@ const config = {
 
   onBrokenLinks: 'throw',
 
+  // Internationalization
+  i18n: {
+    defaultLocale: 'en',
+    locales: ['en', 'ja'],
+  },
+
   // Markdown configuration
   markdown: {
     hooks: {

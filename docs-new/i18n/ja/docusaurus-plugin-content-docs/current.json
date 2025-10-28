@@ -1,0 +1,314 @@
+{
+  "version.label": {
+    "message": "次へ",
+    "description": "現行バージョンのラベル"
+  },
+  "sidebar.docsSidebar.category.Getting Started": {
+    "message": "はじめての方へ",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Getting Started」のラベル"
+  },
+  "sidebar.docsSidebar.category.Agents": {
+    "message": "エージェント",
+    "description": "サイドバー「docsSidebar」にあるカテゴリ「Agents」のラベル"
+  },
+  "sidebar.docsSidebar.category.Workflows": {
+    "message": "ワークフロー",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Workflows」のラベル"
+  },
+  "sidebar.docsSidebar.category.Streaming": {
+    "message": "ストリーミング",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Streaming」のラベル"
+  },
+  "sidebar.docsSidebar.category.Tools & MCP": {
+    "message": "ツールとMCP",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Tools & MCP」のラベル"
+  },
+  "sidebar.docsSidebar.category.Memory": {
+    "message": "メモリー",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Memory」のラベル"
+  },
+  "sidebar.docsSidebar.category.Storage": {
+    "message": "ストレージ",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Storage」のラベル"
+  },
+  "sidebar.docsSidebar.category.RAG": {
+    "message": "RAG（検索拡張生成）",
+    "description": "サイドバー「docsSidebar」にあるカテゴリ「RAG」のラベル"
+  },
+  "sidebar.docsSidebar.category.Server & DB": {
+    "message": "サーバー＆DB",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Server & DB」のラベル"
+  },
+  "sidebar.docsSidebar.category.Deployment": {
+    "message": "デプロイメント",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Deployment」のラベル"
+  },
+  "sidebar.docsSidebar.category.Serverless Platforms": {
+    "message": "サーバーレス・プラットフォーム",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Serverless Platforms」のラベル"
+  },
+  "sidebar.docsSidebar.category.Cloud Providers": {
+    "message": "クラウドプロバイダ",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Cloud Providers」のラベル"
+  },
+  "sidebar.docsSidebar.category.Mastra Cloud": {
+    "message": "Mastra Cloud",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Mastra Cloud」のラベル"
+  },
+  "sidebar.docsSidebar.category.Observability": {
+    "message": "オブザーバビリティ",
+    "description": "サイドバー「docsSidebar」にあるカテゴリ「Observability」のラベル"
+  },
+  "sidebar.docsSidebar.category.AI Tracing": {
+    "message": "AIトレース",
+    "description": "サイドバー「docsSidebar」のカテゴリ「AI Tracing」のラベル"
+  },
+  "sidebar.docsSidebar.category.Exporters": {
+    "message": "輸出企業",
+    "description": "サイドバー「docsSidebar」にあるカテゴリー「Exporters」のラベル"
+  },
+  "sidebar.docsSidebar.category.Span Processors": {
+    "message": "スパンプロセッサ",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Span Processors」のラベル"
+  },
+  "sidebar.docsSidebar.category.Scorers": {
+    "message": "得点王",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Scorers」のラベル"
+  },
+  "sidebar.docsSidebar.category.Evals (old API)": {
+    "message": "Evals（旧API）",
+    "description": "サイドバー「docsSidebar」にあるカテゴリ「Evals（旧 API）」のラベル"
+  },
+  "sidebar.docsSidebar.category.Auth": {
+    "message": "認証",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Auth」のラベル"
+  },
+  "sidebar.docsSidebar.category.Voice": {
+    "message": "ボイス",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Voice」のラベル"
+  },
+  "sidebar.docsSidebar.category.Frameworks": {
+    "message": "フレームワーク",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Frameworks」のラベル"
+  },
+  "sidebar.docsSidebar.category.Agentic UIs": {
+    "message": "エージェント型UI",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Agentic UIs」のラベル"
+  },
+  "sidebar.docsSidebar.category.Servers": {
+    "message": "サーバー",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Servers」のラベル"
+  },
+  "sidebar.docsSidebar.category.Web Frameworks": {
+    "message": "Webフレームワーク",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Web Frameworks」のラベル"
+  },
+  "sidebar.docsSidebar.category.Community": {
+    "message": "コミュニティ",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Community」のラベル"
+  },
+  "sidebar.guidesSidebar.category.Guide": {
+    "message": "ガイド",
+    "description": "サイドバー「guidesSidebar」にあるカテゴリ「Guide」のラベル"
+  },
+  "sidebar.guidesSidebar.category.Migrations": {
+    "message": "移行",
+    "description": "サイドバー「guidesSidebar」のカテゴリ「Migrations」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Agents": {
+    "message": "エージェント",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Agents」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Deployment Examples": {
+    "message": "デプロイ例",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Deployment Examples」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Evals": {
+    "message": "評価",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Evals」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Memory": {
+    "message": "メモリー",
+    "description": "サイドバー「examplesSidebar」にある「Memory」カテゴリのラベル"
+  },
+  "sidebar.examplesSidebar.category.Observability": {
+    "message": "オブザーバビリティ",
+    "description": "サイドバー「examplesSidebar」にあるカテゴリ「Observability」のラベル"
+  },
+  "sidebar.examplesSidebar.category.RAG": {
+    "message": "RAG",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「RAG」のラベル"
+  },
+  "sidebar.examplesSidebar.category.chunking": {
+    "message": "チャンク分割",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「chunking」のラベル"
+  },
+  "sidebar.examplesSidebar.category.embedding": {
+    "message": "埋め込み表現",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「embedding」のラベル"
+  },
+  "sidebar.examplesSidebar.category.query": {
+    "message": "問い合わせ",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「query」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Re-ranking Results ": {
+    "message": "再ランク付け結果 ",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Re-ranking Results」のラベル"
+  },
+  "sidebar.examplesSidebar.category.upsert": {
+    "message": "アップサート",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「upsert」のラベル"
+  },
+  "sidebar.examplesSidebar.category.usage": {
+    "message": "使用状況",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「usage」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Scorers": {
+    "message": "得点王",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Scorers」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Tools": {
+    "message": "ツール",
+    "description": "サイドバー「examplesSidebar」にあるカテゴリ「Tools」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Voice": {
+    "message": "音声",
+    "description": "サイドバー「examplesSidebar」にあるカテゴリ「Voice」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Workflows": {
+    "message": "ワークフロー",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Workflows」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Workflows Legacy": {
+    "message": "旧 Workflows",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Workflows Legacy」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Agents": {
+    "message": "エージェント",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Agents」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Auth": {
+    "message": "認証",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Auth」のラベル"
+  },
+  "sidebar.referenceSidebar.category.CLI": {
+    "message": "CLI",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「CLI」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Client SDK": {
+    "message": "クライアント SDK",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Client SDK」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Core": {
+    "message": "コア",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Core」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Deployer": {
+    "message": "デプロイ担当者",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Deployer」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Evals": {
+    "message": "評価",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Evals」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Legacy Workflows": {
+    "message": "レガシー ワークフロー",
+    "description": "サイドバー「referenceSidebar」のカテゴリー「Legacy Workflows」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Memory": {
+    "message": "メモリー",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Memory」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Observability": {
+    "message": "オブザーバビリティ",
+    "description": "サイドバー「referenceSidebar」内のカテゴリ「Observability」のラベル"
+  },
+  "sidebar.referenceSidebar.category.AITracing ": {
+    "message": "AITracing ",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「AITracing」のラベル"
+  },
+  "sidebar.referenceSidebar.category.exporters": {
+    "message": "輸出業者",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「exporters」のラベル"
+  },
+  "sidebar.referenceSidebar.category.processors": {
+    "message": "プロセッサ",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「processors」のラベル"
+  },
+  "sidebar.referenceSidebar.category.logging": {
+    "message": "ログ出力",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「logging」のラベル"
+  },
+  "sidebar.referenceSidebar.category.otel-tracing": {
+    "message": "otel-tracing",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「otel-tracing」のラベル"
+  },
+  "sidebar.referenceSidebar.category.OTLP Providers ": {
+    "message": "OTLP プロバイダ ",
+    "description": "サイドバー「referenceSidebar」にあるカテゴリ「OTLP Providers」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Processors": {
+    "message": "プロセッサ",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Processors」のラベル"
+  },
+  "sidebar.referenceSidebar.category.RAG": {
+    "message": "RAG（Retrieval-Augmented Generation）",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「RAG」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Scorers": {
+    "message": "得点者",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Scorers」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Storage": {
+    "message": "保存容量",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Storage」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Streaming": {
+    "message": "ストリーミング",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Streaming」のラベル"
+  },
+  "sidebar.referenceSidebar.category.agents": {
+    "message": "エージェント",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「agents」のラベル"
+  },
+  "sidebar.referenceSidebar.category.workflows": {
+    "message": "ワークフロー",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「workflows」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Templates": {
+    "message": "テンプレート",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Templates」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Tools & MCP": {
+    "message": "ツールとMCP",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Tools & MCP」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Networks": {
+    "message": "ネットワーク",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Networks」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Voice": {
+    "message": "音声",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Voice」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Workflows": {
+    "message": "ワークフロー",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Workflows」のラベル"
+  },
+  "sidebar.referenceSidebar.category.run-methods": {
+    "message": "run-methods",
+    "description": "サイドバー「referenceSidebar」にあるカテゴリ「run-methods」のラベル"
+  },
+  "sidebar.referenceSidebar.category.workflow-methods": {
+    "message": "ワークフロー メソッド",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「workflow-methods」のラベル"
+  },
+  "sidebar.modelsSidebar.category.Gateways": {
+    "message": "ゲートウェイ",
+    "description": "サイドバー「modelsSidebar」のカテゴリ「Gateways」のラベル"
+  },
+  "sidebar.modelsSidebar.category.Providers": {
+    "message": "プロバイダ",
+    "description": "サイドバー「modelsSidebar」のカテゴリ「Providers」のラベル"
+  }
+}

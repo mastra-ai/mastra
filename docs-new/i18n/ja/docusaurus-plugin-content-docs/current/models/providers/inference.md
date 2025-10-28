@@ -1,0 +1,184 @@
+---
+title: "推論"
+description: "Mastra で推論モデルを利用する。利用可能なモデルは 9 件。"
+---
+
+# <img src="https://models.dev/logos/inference.svg" alt="Inference logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Inference \{#inference\}
+
+Mastra のモデルルーター経由で 9 種類の Inference モデルにアクセスできます。認証は `INFERENCE_API_KEY` 環境変数によって自動的に行われます。
+
+詳しくは [Inference のドキュメント](https://inference.net/models)をご覧ください。
+
+```bash
+INFERENCE_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from '@mastra/core';
+
+const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'あなたは役に立つアシスタントです',
+  model: 'inference/google/gemma-3',
+});
+
+// レスポンスを生成
+const response = await agent.generate('こんにちは!');
+
+// レスポンスをストリーム
+const stream = await agent.stream('物語を聞かせてください');
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::note OpenAI 互換性
+
+Mastra は OpenAI 互換の `/chat/completions` エンドポイントを使用します。プロバイダー固有の機能の一部は利用できない場合があります。詳しくは [Inference のドキュメント](https://inference.net/models)をご確認ください。
+
+:::
+
+## モデル \{#models\}
+
+<ProviderModelsTable
+  models={[
+{
+"model": "inference/mistral/mistral-nemo-12b-instruct",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 16000,
+"maxOutput": 4096,
+"inputCost": 0.038,
+"outputCost": 0.1
+},
+{
+"model": "inference/google/gemma-3",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 125000,
+"maxOutput": 4096,
+"inputCost": 0.15,
+"outputCost": 0.3
+},
+{
+"model": "inference/osmosis/osmosis-structure-0.6b",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 4000,
+"maxOutput": 2048,
+"inputCost": 0.1,
+"outputCost": 0.5
+},
+{
+"model": "inference/qwen/qwen3-embedding-4b",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": false,
+"reasoning": false,
+"contextWindow": 32000,
+"maxOutput": 2048,
+"inputCost": 0.01,
+"outputCost": null
+},
+{
+"model": "inference/qwen/qwen-2.5-7b-vision-instruct",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 125000,
+"maxOutput": 4096,
+"inputCost": 0.2,
+"outputCost": 0.2
+},
+{
+"model": "inference/meta/llama-3.2-11b-vision-instruct",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 16000,
+"maxOutput": 4096,
+"inputCost": 0.055,
+"outputCost": 0.055
+},
+{
+"model": "inference/meta/llama-3.1-8b-instruct",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 16000,
+"maxOutput": 4096,
+"inputCost": 0.025,
+"outputCost": 0.025
+},
+{
+"model": "inference/meta/llama-3.2-3b-instruct",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 16000,
+"maxOutput": 4096,
+"inputCost": 0.02,
+"outputCost": 0.02
+},
+{
+"model": "inference/meta/llama-3.2-1b-instruct",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 16000,
+"maxOutput": 4096,
+"inputCost": 0.01,
+"outputCost": 0.01
+}
+]}
+/>
+
+## 高度な設定 \{#advanced-configuration\}
+
+### カスタムヘッダー \{#custom-headers\}
+
+```typescript
+const agent = new Agent({
+  name: 'custom-agent',
+  model: {
+    url: 'https://inference.net/v1',
+    modelId: 'google/gemma-3',
+    apiKey: process.env.INFERENCE_API_KEY,
+    headers: {
+      'X-Custom-Header': 'value',
+    },
+  },
+});
+```
+
+### 動的モデル選択 \{#dynamic-model-selection\}
+
+```typescript
+const agent = new Agent({
+  name: 'dynamic-agent',
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === 'complex';
+    return useAdvanced ? 'inference/qwen/qwen3-embedding-4b' : 'inference/google/gemma-3';
+  },
+});
+```

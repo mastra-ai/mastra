@@ -1,0 +1,100 @@
+---
+title: "Upstage"
+description: "Mastra で Upstage のモデルを利用できます。利用可能なモデルは2件です。"
+---
+
+# <img src="https://models.dev/logos/upstage.svg" alt="Upstage logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Upstage \{#upstage\}
+
+Mastraのモデルルーター経由で、2つのUpstageモデルにアクセスできます。認証は `UPSTAGE_API_KEY` 環境変数によって自動的に行われます。
+
+詳しくは[Upstageのドキュメント](https://developers.upstage.ai)をご覧ください。
+
+```bash
+UPSTAGE_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from '@mastra/core';
+
+const agent = new Agent({
+  name: 'my-agent',
+  instructions: '親切なアシスタントです',
+  model: 'upstage/solar-mini',
+});
+
+// レスポンスを生成
+const response = await agent.generate('Hello!');
+
+// レスポンスをストリーミング
+const stream = await agent.stream('物語を聞かせて');
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::note OpenAI 互換性
+
+Mastra は OpenAI 互換の `/chat/completions` エンドポイントを使用します。プロバイダー固有の機能の一部は利用できない場合があります。詳しくは [Upstage のドキュメント](https://developers.upstage.ai) をご確認ください。
+
+:::
+
+## モデル \{#models\}
+
+<ProviderModelsTable
+  models={[
+{
+"model": "upstage/solar-mini",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 32768,
+"maxOutput": 4096,
+"inputCost": 0.15,
+"outputCost": 0.15
+},
+{
+"model": "upstage/solar-pro2",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 65536,
+"maxOutput": 8192,
+"inputCost": 0.25,
+"outputCost": 0.25
+}
+]}
+/>
+
+## 高度な設定 \{#advanced-configuration\}
+
+### カスタムヘッダー \{#custom-headers\}
+
+```typescript
+const agent = new Agent({
+  name: 'custom-agent',
+  model: {
+    url: 'https://api.upstage.ai',
+    modelId: 'solar-mini',
+    apiKey: process.env.UPSTAGE_API_KEY,
+    headers: {
+      'X-Custom-Header': 'value',
+    },
+  },
+});
+```
+
+### 動的モデル選択 \{#dynamic-model-selection\}
+
+```typescript
+const agent = new Agent({
+  name: 'dynamic-agent',
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === 'complex';
+    return useAdvanced ? 'upstage/solar-pro2' : 'upstage/solar-mini';
+  },
+});
+```

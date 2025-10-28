@@ -1,0 +1,232 @@
+---
+title: "Nvidia"
+description: "Mastra で Nvidia のモデルを利用できます。利用可能なモデルは13件あります。"
+---
+
+# <img src="https://models.dev/logos/nvidia.svg" alt="Nvidia logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Nvidia \{#nvidia\}
+
+Mastraのモデルルーター経由で13種類のNvidiaモデルにアクセスできます。認証は `NVIDIA_API_KEY` 環境変数により自動的に行われます。
+
+詳しくは [Nvidia のドキュメント](https://docs.api.nvidia.com/nim/)をご覧ください。
+
+```bash
+NVIDIA_API_KEY=あなたのAPIキー
+```
+
+```typescript
+import { Agent } from '@mastra/core';
+
+const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'あなたは頼りになるアシスタントです',
+  model: 'nvidia/black-forest-labs/flux.1-dev',
+});
+
+// Generate a response
+const response = await agent.generate('こんにちは！');
+
+// Stream a response
+const stream = await agent.stream('物語を聞かせて');
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::note OpenAI 互換性
+
+Mastra は OpenAI 互換の `/chat/completions` エンドポイントを使用します。プロバイダー固有の機能の一部は利用できない場合があります。詳しくは [NVIDIA のドキュメント](https://docs.api.nvidia.com/nim/)をご確認ください。
+
+:::
+
+## モデル \{#models\}
+
+<ProviderModelsTable
+  models={[
+{
+"model": "nvidia/moonshotai/kimi-k2-instruct",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 128000,
+"maxOutput": 8192,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "nvidia/nvidia/cosmos-nemotron-34b",
+"imageInput": true,
+"audioInput": false,
+"videoInput": true,
+"toolUsage": false,
+"reasoning": true,
+"contextWindow": 131072,
+"maxOutput": 8192,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "nvidia/nvidia/parakeet-tdt-0.6b-v2",
+"imageInput": false,
+"audioInput": true,
+"videoInput": false,
+"toolUsage": false,
+"reasoning": false,
+"contextWindow": null,
+"maxOutput": 4096,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "nvidia/nvidia/nemoretriever-ocr-v1",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": false,
+"reasoning": false,
+"contextWindow": null,
+"maxOutput": 4096,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "nvidia/nvidia/llama-3.1-nemotron-ultra-253b-v1",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 131072,
+"maxOutput": 8192,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "nvidia/google/gemma-3-27b-it",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 131072,
+"maxOutput": 8192,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "nvidia/microsoft/phi-4-mini-instruct",
+"imageInput": true,
+"audioInput": true,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 131072,
+"maxOutput": 8192,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "nvidia/openai/whisper-large-v3",
+"imageInput": false,
+"audioInput": true,
+"videoInput": false,
+"toolUsage": false,
+"reasoning": false,
+"contextWindow": null,
+"maxOutput": 4096,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "nvidia/openai/gpt-oss-120b",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": false,
+"reasoning": true,
+"contextWindow": 128000,
+"maxOutput": 8192,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "nvidia/qwen/qwen3-235b-a22b",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 131072,
+"maxOutput": 8192,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "nvidia/qwen/qwen3-coder-480b-a35b-instruct",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 262144,
+"maxOutput": 66536,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "nvidia/deepseek-ai/deepseek-v3.1",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 128000,
+"maxOutput": 8192,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "nvidia/black-forest-labs/flux.1-dev",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": false,
+"reasoning": false,
+"contextWindow": 4096,
+"maxOutput": null,
+"inputCost": null,
+"outputCost": null
+}
+]}
+/>
+
+## 高度な設定 \{#advanced-configuration\}
+
+### カスタムヘッダー \{#custom-headers\}
+
+```typescript
+const agent = new Agent({
+  name: 'custom-agent',
+  model: {
+    url: 'https://integrate.api.nvidia.com/v1',
+    modelId: 'black-forest-labs/flux.1-dev',
+    apiKey: process.env.NVIDIA_API_KEY,
+    headers: {
+      'X-Custom-Header': 'value',
+    },
+  },
+});
+```
+
+### 動的モデルの選択 \{#dynamic-model-selection\}
+
+```typescript
+const agent = new Agent({
+  name: 'dynamic-agent',
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === 'complex';
+    return useAdvanced ? 'nvidia/qwen/qwen3-coder-480b-a35b-instruct' : 'nvidia/black-forest-labs/flux.1-dev';
+  },
+});
+```
