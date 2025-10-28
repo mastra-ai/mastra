@@ -186,8 +186,22 @@ export class Agent<
   constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
 
+    this.id = config.id;
     this.name = config.name;
-    this.id = config.id ?? config.name;
+
+    if (!this.id) {
+      const mastraError = new MastraError({
+        id: 'AGENT_CONSTRUCTOR_ID_REQUIRED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: config.name,
+        },
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
+    }
 
     this.#instructions = config.instructions;
     this.#description = config.description;

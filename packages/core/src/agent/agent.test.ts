@@ -3021,7 +3021,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      await expect(userAgent['convertTools']({ runtimeContext: new RuntimeContext() })).rejects.toThrow(/same name/i);
+      await expect(
+        userAgent['convertTools']({ runtimeContext: new RuntimeContext(), methodType: 'generate' }),
+      ).rejects.toThrow(/same name/i);
     });
 
     it('should sanitize tool names with invalid characters', async () => {
@@ -3094,7 +3096,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), methodType: 'generate' });
       expect(Object.keys(tools)).toContain('bad___tool_name');
       expect(Object.keys(tools)).not.toContain(badName);
     });
@@ -3169,7 +3171,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), methodType: 'generate' });
       expect(Object.keys(tools)).toContain('_1tool');
       expect(Object.keys(tools)).not.toContain(badStart);
     });
@@ -3244,7 +3246,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), methodType: 'generate' });
       expect(Object.keys(tools).some(k => k.length === 63)).toBe(true);
       expect(Object.keys(tools)).not.toContain(longName);
     });
@@ -4557,6 +4559,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         const agent = new Agent({
+          id: 'partial-rescue-agent-generate',
           name: 'partial-rescue-agent-generate',
           instructions:
             'Call each tool in a separate step. Do not use parallel tool calls. Always wait for the result of one tool before calling the next.',
@@ -4657,6 +4660,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         const agent = new Agent({
+          id: 'test-agent-generate',
           name: 'test-agent-generate',
           instructions: 'If the user prompt contains "Echo:", always call the echoTool. Be verbose in your response.',
           model: openaiModel,
@@ -4723,6 +4727,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         const agent = new Agent({
+          id: 'test-agent-multi-generate',
           name: 'test-agent-multi-generate',
           instructions: [
             'If the user prompt contains "Echo:", call the echoTool.',
@@ -4776,6 +4781,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       it('should persist the full message after a successful run', async () => {
         const mockMemory = new MockMemory();
         const agent = new Agent({
+          id: 'test-agent-generate',
           name: 'test-agent-generate',
           instructions: 'test',
           model: dummyResponseModel,
@@ -4823,6 +4829,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const agent = new Agent({
+          id: 'no-progress-agent-generate',
           name: 'no-progress-agent-generate',
           instructions: 'test',
           model: emptyResponseModel,
@@ -4865,6 +4872,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
+        id: 'immediate-interrupt-agent-generate',
         name: 'immediate-interrupt-agent-generate',
         instructions: 'test',
         model: errorResponseModel,
@@ -4920,6 +4928,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const agent = new Agent({
+        id: 'error-agent',
         name: 'error-agent',
         instructions: 'test',
         model: errorModel,
@@ -5033,7 +5042,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         const agent = new Agent({
-          id: 'test-error-consistency',
+          id: 'test-error-consistency-stream',
           name: 'Test Error Consistency',
           model: errorModel,
           instructions: 'You are a helpful assistant.',
@@ -5109,7 +5118,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         const agent = new Agent({
-          id: 'test-error-consistency',
+          id: 'test-error-consistency-stream',
           name: 'Test Error Consistency',
           model: errorModel,
           instructions: 'You are a helpful assistant.',
@@ -5410,6 +5419,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       const mockMemory = new MockMemory();
 
       const agent = new Agent({
+        id: 'async-memory-agent',
         name: 'async-memory-agent',
         instructions: 'test agent',
         model: dummyModel,
@@ -5437,6 +5447,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should throw error when dynamic memory function returns empty value', async () => {
       const agent = new Agent({
+        id: 'invalid-memory-agent',
         name: 'invalid-memory-agent',
         instructions: 'test agent',
         model: dummyModel,
@@ -5450,6 +5461,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       const mockMemory = new MockMemory();
 
       const agent = new Agent({
+        id: 'generate-memory-agent',
         name: 'generate-memory-agent',
         instructions: 'test agent',
         model: dummyModel,
@@ -5552,7 +5564,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const agent = new Agent({
-        id: 'stream-memory-agent',
+        id: 'test-stream-memory-agent',
         name: 'stream-memory-agent',
         instructions: 'test agent',
         model,
@@ -5664,6 +5676,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const agent = new Agent({
+        id: 'system-message-test-agent',
         name: 'system-message-test-agent',
         instructions: 'You are a test agent',
         model: dummyModel,
@@ -7113,6 +7126,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const agentWithModifier = new Agent({
+          id: 'test-agent-message-modifier',
           name: 'test-agent',
           instructions: 'You are a helpful assistant',
           model: mockModel,
@@ -7156,6 +7170,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const agentWithValidator = new Agent({
+          id: 'test-agent-message-validator',
           name: 'test-agent',
           instructions: 'You are a helpful assistant',
           model: mockModel,
@@ -7236,6 +7251,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should preserve metadata in generate method', async () => {
       const agent = new Agent({
+        id: 'metadata-test-agent',
         name: 'metadata-test-agent',
         instructions: 'You are a helpful assistant',
         model: dummyModel,
@@ -7307,6 +7323,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should preserve metadata in stream method', async () => {
       const agent = new Agent({
+        id: 'metadata-stream-agent',
         name: 'metadata-stream-agent',
         instructions: 'You are a helpful assistant',
         model: dummyModel,
@@ -7388,6 +7405,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should handle mixed messages with and without metadata', async () => {
       const agent = new Agent({
+        id: 'mixed-metadata-agent',
         name: 'mixed-metadata-agent',
         instructions: 'You are a helpful assistant',
         model: dummyModel,
