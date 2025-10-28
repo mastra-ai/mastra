@@ -37,23 +37,18 @@ The Project Dashboard gives you an overview of your application's status and dep
 
 Use a standard Mastra project structure for proper detection and deployment.
 
-<FileTree>
-  <FileTree.Folder name="src" defaultOpen>
-    <FileTree.Folder name="mastra" defaultOpen>
-      <FileTree.Folder name="agents" defaultOpen>
-        <FileTree.File name="agent-name.ts" />
-      </FileTree.Folder>
-      <FileTree.Folder name="tools" defaultOpen>
-        <FileTree.File name="tool-name.ts" />
-      </FileTree.Folder>
-      <FileTree.Folder name="workflows" defaultOpen>
-        <FileTree.File name="workflow-name.ts" />
-      </FileTree.Folder>
-      <FileTree.File name="index.ts" />
-    </FileTree.Folder>
-  </FileTree.Folder>
-  <FileTree.File name="package.json" />
-</FileTree>
+```shell
+src
+└── mastra
+    ├── agents
+    │   └── agent-name.ts
+    ├── tools
+    │   └── tool-name.ts
+    ├── workflows
+    │   └── workflow-name.ts
+    └── index.ts
+package.json
+```
 
 Mastra Cloud scans your repository for:
 

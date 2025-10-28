@@ -27,19 +27,15 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Assist
 
 Set up your directory structure. A possible directory structure could look like this:
 
-<FileTree>
-    <FileTree.Folder name="project-root" defaultOpen>
-        <FileTree.Folder name="mastra-server" defaultOpen>
-            <FileTree.Folder name="src">
-                <FileTree.Folder name="mastra" />
-            </FileTree.Folder>
-            <FileTree.File name="package.json" />
-        </FileTree.Folder>
-        <FileTree.Folder name="nextjs-frontend">
-            <FileTree.File name="package.json" />
-        </FileTree.Folder>
-    </FileTree.Folder>
-</FileTree>
+```shell
+project-root
+├── mastra-server
+│   ├── src
+│   │   └── mastra
+│   └── package.json
+└── nextjs-frontend
+    └── package.json
+```
 
 Bootstrap your Mastra server:
 
@@ -52,22 +48,17 @@ Follow the prompts to create your server project.
 
 You now have a basic Mastra server project ready. You should have the following files and folders:
 
-<FileTree>
-    <FileTree.Folder name="src" defaultOpen>
-      <FileTree.Folder name="mastra" defaultOpen>
-        <FileTree.File name="index.ts" />
-        <FileTree.Folder name="agents" defaultOpen>
-          <FileTree.File name="weather-agent.ts" />
-        </FileTree.Folder>
-        <FileTree.Folder name="tools" defaultOpen>
-          <FileTree.File name="weather-tool.ts" />
-        </FileTree.Folder>
-        <FileTree.Folder name="workflows" defaultOpen>
-          <FileTree.File name="weather-workflow.ts" />
-        </FileTree.Folder>
-      </FileTree.Folder>
-    </FileTree.Folder>
-</FileTree>
+```shell
+src
+└── mastra
+    ├── agents
+    │   └── weather-agent.ts
+    ├── tools
+    │   └── weather-tool.ts
+    ├── workflows
+    │   └── weather-workflow.ts
+    └── index.ts
+```
 
 :::note
 
