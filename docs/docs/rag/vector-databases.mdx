@@ -16,7 +16,7 @@ After generating embeddings, you need to store them in a database that supports 
 
 <Tabs>
   <TabItem value="mongodb" label="MongoDB">
-    ```ts filename="vector-store.ts" showLineNumbers copy
+    ```ts title="vector-store.ts" showLineNumbers copy
     import { MongoDBVector } from '@mastra/mongodb'
 
     const store = new MongoDBVector({
@@ -40,7 +40,7 @@ After generating embeddings, you need to store them in a database that supports 
   </TabItem>
 
   <TabItem value="pg-vector" label="PgVector">
-  ```ts filename="vector-store.ts" showLineNumbers copy
+  ```ts title="vector-store.ts" showLineNumbers copy
   import { PgVector } from '@mastra/pg';
 
   const store = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING })
@@ -64,7 +64,7 @@ For detailed setup instructions and best practices, see the [official pgvector r
 </TabItem>
 
 <TabItem value="pinecone" label="Pinecone">
-```ts filename="vector-store.ts" showLineNumbers copy
+```ts title="vector-store.ts" showLineNumbers copy
 import { PineconeVector } from '@mastra/pinecone'
 
 const store = new PineconeVector({
@@ -83,7 +83,7 @@ await store.upsert({
 </TabItem>
 
 <TabItem value="qdrant" label="Qdrant">
-  ```ts filename="vector-store.ts" showLineNumbers copy
+  ```ts title="vector-store.ts" showLineNumbers copy
   import { QdrantVector } from '@mastra/qdrant'
 
   const store = new QdrantVector({
@@ -106,7 +106,7 @@ await store.upsert({
 </TabItem>
 
 <TabItem value="chroma" label="Chroma">
-```ts filename="vector-store.ts" showLineNumbers copy
+```ts title="vector-store.ts" showLineNumbers copy
 import { ChromaVector } from '@mastra/chroma'
 
 // Running Chroma locally
@@ -133,7 +133,7 @@ await store.upsert({
 </TabItem>
 
 <TabItem value="astra" label="Astra">
-  ```ts filename="vector-store.ts" showLineNumbers copy
+  ```ts title="vector-store.ts" showLineNumbers copy
   import { AstraVector } from '@mastra/astra'
 
   const store = new AstraVector({
@@ -157,7 +157,7 @@ await store.upsert({
 </TabItem>
 
 <TabItem value="libsql" label="LibSQL">
-```ts filename="vector-store.ts" showLineNumbers copy
+```ts title="vector-store.ts" showLineNumbers copy
 import { LibSQLVector } from "@mastra/core/vector/libsql";
 
 const store = new LibSQLVector({
@@ -179,7 +179,7 @@ await store.upsert({
 </TabItem>
 
 <TabItem value="upstash" label="Upstash">
-  ```ts filename="vector-store.ts" showLineNumbers copy
+  ```ts title="vector-store.ts" showLineNumbers copy
   import { UpstashVector } from '@mastra/upstash'
 
   // In upstash they refer to the store as an index
@@ -199,7 +199,7 @@ await store.upsert({
 </TabItem>
 
 <TabItem value="cloudflare" label="Cloudflare">
-```ts filename="vector-store.ts" showLineNumbers copy
+```ts title="vector-store.ts" showLineNumbers copy
 import { CloudflareVector } from '@mastra/vectorize'
 
 const store = new CloudflareVector({
@@ -220,7 +220,7 @@ await store.upsert({
 </TabItem>
 
 <TabItem value="opensearch" label="OpenSearch">
-```ts filename="vector-store.ts" showLineNumbers copy
+```ts title="vector-store.ts" showLineNumbers copy
 import { OpenSearchVector } from '@mastra/opensearch'
 
 const store = new OpenSearchVector({ url: process.env.OPENSEARCH_URL })
@@ -239,7 +239,7 @@ await store.upsert({
 
 </TabItem>
 <TabItem value="couchbase" label="Couchbase">
-  ```ts filename="vector-store.ts" showLineNumbers copy
+  ```ts title="vector-store.ts" showLineNumbers copy
   import { CouchbaseVector } from '@mastra/couchbase'
 
   const store = new CouchbaseVector({
@@ -262,7 +262,7 @@ await store.upsert({
   ```
 </TabItem>
 <TabItem value="lancedb" label="Lance">
-  ```ts filename="vector-store.ts" showLineNumbers copy
+  ```ts title="vector-store.ts" showLineNumbers copy
   import { LanceVectorStore } from '@mastra/lance'
 
   const store = await LanceVectorStore.create('/path/to/db')
@@ -286,7 +286,7 @@ await store.upsert({
   For detailed setup instructions and best practices, see the [official LanceDB documentation](https://lancedb.github.io/lancedb/).
 </TabItem>
 <TabItem value="s3vectors" label="S3 Vectors">
-```ts filename="vector-store.ts" showLineNumbers copy
+```ts title="vector-store.ts" showLineNumbers copy
 import { S3Vectors } from "@mastra/s3vectors";
 
 const store = new S3Vectors({
@@ -319,7 +319,7 @@ Once initialized, all vector stores share the same interface for creating indexe
 
 Before storing embeddings, you need to create an index with the appropriate dimension size for your embedding model:
 
-```ts filename="store-embeddings.ts" showLineNumbers copy
+```ts title="store-embeddings.ts" showLineNumbers copy
 // Create an index with dimension 1536 (for text-embedding-3-small)
 await store.createIndex({
   indexName: "myCollection",
@@ -449,7 +449,7 @@ Each vector database enforces specific naming conventions for indexes and collec
 
 After creating an index, you can store embeddings along with their basic metadata:
 
-```ts filename="store-embeddings.ts" showLineNumbers copy
+```ts title="store-embeddings.ts" showLineNumbers copy
 // Store embeddings with their corresponding metadata
 await store.upsert({
   indexName: "myCollection", // index name

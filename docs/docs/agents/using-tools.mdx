@@ -17,7 +17,7 @@ Use tools when an agent needs additional context or information from remote reso
 
 This example shows how to create a tool that fetches weather data from an API. When the agent calls the tool, it provides the required input as defined by the tool’s `inputSchema`. The tool accesses this data through its `context` argument, which in this example includes the `location` used in the weather API query.
 
-```typescript {14,16} filename="src/mastra/tools/weather-tool.ts" showLineNumbers copy
+```typescript {14,16} title="src/mastra/tools/weather-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -45,7 +45,7 @@ export const weatherTool = createTool({
 
 To make a tool available to an agent, add it to the `tools` option and reference it by name in the agent’s instructions.
 
-```typescript {9,11} filename="src/mastra/agents/weather-agent.ts" showLineNumbers copy
+```typescript {9,11} title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
@@ -64,7 +64,7 @@ export const weatherAgent = new Agent({
 
 The agent uses the tool’s `inputSchema` to infer what data the tool expects. In this case, it extracts `London` as the `location` from the message and makes it available to the tool’s context.
 
-```typescript {5} filename="src/test-tool.ts" showLineNumbers copy
+```typescript {5} title="src/test-tool.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
 const agent = mastra.getAgent("weatherAgent");
@@ -78,7 +78,7 @@ An agent can use multiple tools to handle more complex tasks by delegating speci
 
 When multiple tools are available, the agent may choose to use one, several, or none, depending on what’s needed to answer the query.
 
-```typescript {6} filename="src/mastra/agents/weather-agent.ts" showLineNumbers copy
+```typescript {6} title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
 import { weatherTool } from "../tools/weather-tool";
 import { activitiesTool } from "../tools/activities-tool";
 

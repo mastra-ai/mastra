@@ -25,7 +25,7 @@ Mastra agent networks operate using these principles:
 
 An agent network is built around a top-level routing agent that delegates tasks to agents, workflows, and tools defined in its configuration. Memory is configured on the routing agent using the `memory` option, and `instructions` define the agent's routing behavior.
 
-```typescript {22-23,26,29} filename="src/mastra/agents/routing-agent.ts" showLineNumbers copy
+```typescript {22-23,26,29} title="src/mastra/agents/routing-agent.ts" showLineNumbers copy
   import { openai } from "@ai-sdk/openai";
   import { Agent } from "@mastra/core/agent";
   import { Memory } from "@mastra/memory";
@@ -72,7 +72,7 @@ When configuring a Mastra agent network, each primitive (agent, workflow, or too
 
 Each agent in a network should include a clear `description` that explains what the agent does.
 
-```typescript filename="src/mastra/agents/research-agent.ts" showLineNumbers
+```typescript title="src/mastra/agents/research-agent.ts" showLineNumbers
 export const researchAgent = new Agent({
   name: "research-agent",
   description: `This agent gathers concise research insights in bullet-point form.
@@ -81,7 +81,7 @@ export const researchAgent = new Agent({
   // ...
 });
 ```
-```typescript filename="src/mastra/agents/writing-agent.ts" showLineNumbers
+```typescript title="src/mastra/agents/writing-agent.ts" showLineNumbers
 export const writingAgent = new Agent({
   name: "writing-agent",
   description: `This agent turns researched material into well-structured
@@ -95,7 +95,7 @@ export const writingAgent = new Agent({
 
 Workflows in a network should include a `description` to explain their purpose, along with `inputSchema` and `outputSchema` to describe the expected data.
 
-```typescript filename="src/mastra/workflows/city-workflow.ts" showLineNumbers
+```typescript title="src/mastra/workflows/city-workflow.ts" showLineNumbers
 export const cityWorkflow = createWorkflow({
   id: "city-workflow",
   description: `This workflow handles city-specific research tasks.
@@ -116,7 +116,7 @@ export const cityWorkflow = createWorkflow({
 
 Tools in a network should include a `description` to explain their purpose, along with `inputSchema` and `outputSchema` to describe the expected data.
 
-```typescript filename="src/mastra/tools/weather-tool.ts" showLineNumbers
+```typescript title="src/mastra/tools/weather-tool.ts" showLineNumbers
 export const weatherTool = createTool({
   id: "weather-tool",
   description: ` Retrieves current weather information using the wttr.in API.

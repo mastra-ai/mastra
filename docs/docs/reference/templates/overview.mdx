@@ -83,7 +83,7 @@ Templates must meet these technical requirements:
 
 Use the standard Mastra TypeScript configuration:
 
-```json filename="tsconfig.json"
+```json title="tsconfig.json"
 {
   "compilerOptions": {
     "target": "ES2022",
@@ -104,7 +104,7 @@ Use the standard Mastra TypeScript configuration:
 
 Include a `.env.example` file with all required environment variables:
 
-```bash filename=".env.example"
+```bash title=".env.example"
 # LLM provider API keys (choose one or more)
 OPENAI_API_KEY=your_openai_api_key_here
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
@@ -120,7 +120,7 @@ OTHER_SERVICE_API_KEY=your_api_key_here
 
 We recommend using OpenAI, Anthropic, or Google model providers for templates. Choose the provider that best fits your use case:
 
-```typescript filename="src/mastra/agents/example-agent.ts"
+```typescript title="src/mastra/agents/example-agent.ts"
 import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
 // Or use: import { anthropic } from '@ai-sdk/anthropic';
@@ -151,7 +151,7 @@ Templates must be:
 
 Every template must include a comprehensive README:
 
-```markdown filename="README.md"
+```markdown title="README.md"
 # Template Name
 
 Brief description of what the template demonstrates.

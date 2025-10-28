@@ -15,7 +15,7 @@ The following code snippets provide example implementations of Text-to-Speech (T
 
 The following example shows how to set up a story generator agent with TTS capabilities on the backend:
 
-```typescript filename="src/mastra/agents/index.ts"
+```typescript title="src/mastra/agents/index.ts"
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { OpenAIVoice } from "@mastra/voice-openai";
@@ -38,7 +38,7 @@ export const storyTellerAgent = new Agent({
 
 This snippet demonstrates how to register the agent with your Mastra instance:
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 import { PinoLogger } from "@mastra/loggers";
 import { Mastra } from "@mastra/core/mastra";
 import { storyTellerAgent } from "./agents";
@@ -56,7 +56,7 @@ export const mastra = new Mastra({
 
 Here we use the Mastra Client SDK to interact with our Mastra server. For more information about the Mastra Client SDK, check out the [documentation](/server-db/mastra-client).
 
-```typescript filename="src/app/page.tsx"
+```typescript title="src/app/page.tsx"
 import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
@@ -68,7 +68,7 @@ export const mastraClient = new MastraClient({
 
 This example demonstrates how to get a reference to a Mastra agent, generate story content based on user input, and then convert that content to speech:
 
-```typescript filename="/app/components/StoryManager.tsx"
+```typescript title="/app/components/StoryManager.tsx"
 const handleInitialSubmit = async (formData: FormData) => {
   setIsLoading(true);
   try {
@@ -114,7 +114,7 @@ const handleInitialSubmit = async (formData: FormData) => {
 
 This snippet demonstrates how to handle text-to-speech audio playback by monitoring for new audio data. When audio is received, the code creates a browser-playable URL from the audio blob, assigns it to an audio element, and attempts to play it automatically:
 
-```typescript filename="/app/components/StoryManager.tsx"
+```typescript title="/app/components/StoryManager.tsx"
 useEffect(() => {
   if (!audioRef.current || !audioData) return;
 

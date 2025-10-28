@@ -34,7 +34,7 @@ npm install @mastra/core
 
 Mastra's model router auto-detects environment variables for your chosen provider. For OpenAI, set `OPENAI_API_KEY`:
 
-```bash filename=".env" copy
+```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -44,7 +44,7 @@ OPENAI_API_KEY=<your-api-key>
 
 Create an agent by instantiating the `Agent` class with system `instructions` and a `model`:
 
-```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
@@ -70,7 +70,7 @@ npm install @mastra/core @ai-sdk/openai
 
 Set the corresponding environment variable for your provider. For OpenAI via the AI SDK:
 
-```bash filename=".env" copy
+```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -80,7 +80,7 @@ OPENAI_API_KEY=<your-api-key>
 
 To create an agent in Mastra, use the `Agent` class. Every agent must include `instructions` to define its behavior, and a `model` parameter to specify the LLM provider and model. When using the Vercel AI SDK, provide the client to your agent's `model` field:
 
-```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
@@ -142,7 +142,7 @@ instructions: {
 
 Register your agent in the Mastra instance to make it available throughout your application. Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features:
 
-```typescript {6} showLineNumbers filename="src/mastra/index.ts" copy
+```typescript {6} showLineNumbers title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core/mastra";
 import { testAgent } from './agents/test-agent';
 
@@ -385,7 +385,7 @@ const response = await testAgent.generate("Help me organize my day", {
 
 Agents can use tools to go beyond language generation, enabling structured interactions with external APIs and services. Tools allow agents to access data and perform clearly defined operations in a reliable, repeatable way.
 
-```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers
+```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
 export const testAgent = new Agent({
   // ...
   tools: { testTool }
@@ -398,7 +398,7 @@ export const testAgent = new Agent({
 
 Use `RuntimeContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
-```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers
+```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };

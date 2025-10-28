@@ -176,7 +176,7 @@ await runExperiment({
 
 In this example, the agent's output semantically matches the ground truth perfectly.
 
-```typescript filename="src/example-perfect-similarity.ts" showLineNumbers copy
+```typescript title="src/example-perfect-similarity.ts" showLineNumbers copy
 import { runExperiment } from "@mastra/core/scores";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";
@@ -214,7 +214,7 @@ The output receives a perfect score because both the agent's answer and ground t
 
 In this example, the agent provides the same information as the ground truth but with different phrasing.
 
-```typescript filename="src/example-semantic-similarity.ts" showLineNumbers copy
+```typescript title="src/example-semantic-similarity.ts" showLineNumbers copy
 import { runExperiment } from "@mastra/core/scores";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";
@@ -252,7 +252,7 @@ The output receives a high score because it conveys the same information with eq
 
 In this example, the agent's response is partially correct but missing key information.
 
-```typescript filename="src/example-partial-similarity.ts" showLineNumbers copy
+```typescript title="src/example-partial-similarity.ts" showLineNumbers copy
 import { runExperiment } from "@mastra/core/scores";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";
@@ -290,7 +290,7 @@ The output receives a moderate score because it includes some correct informatio
 
 In this example, the agent provides factually incorrect information that contradicts the ground truth.
 
-```typescript filename="src/example-contradiction.ts" showLineNumbers copy
+```typescript title="src/example-contradiction.ts" showLineNumbers copy
 import { runExperiment } from "@mastra/core/scores";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";
@@ -328,7 +328,7 @@ The output receives a very low score because it contains factually incorrect inf
 
 Use the scorer in your test suites to ensure agent consistency over time:
 
-```typescript filename="src/ci-integration.test.ts" showLineNumbers copy
+```typescript title="src/ci-integration.test.ts" showLineNumbers copy
 import { describe, it, expect } from 'vitest';
 import { runExperiment } from "@mastra/core/scores";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
@@ -382,7 +382,7 @@ describe('Agent Consistency Tests', () => {
 
 Customize the scorer behavior for specific use cases:
 
-```typescript filename="src/custom-config.ts" showLineNumbers copy
+```typescript title="src/custom-config.ts" showLineNumbers copy
 import { runExperiment } from "@mastra/core/scores";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";

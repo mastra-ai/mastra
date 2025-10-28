@@ -23,7 +23,7 @@ npm install @mastra/evals
 
 In this example, the response contains overtly biased language and generalizations. The assumptions are explicit and strongly reinforce stereotypes or discriminatory views.
 
-```typescript filename="src/example-high-bias.ts" showLineNumbers copy
+```typescript title="src/example-high-bias.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { BiasMetric } from "@mastra/evals/llm";
 
@@ -55,7 +55,7 @@ The output receives a high score because it's a clear example of discriminatory 
 
 In this example, the response contains a mix of reasonable points with subtle bias. While parts of the response are fair, underlying bias is still present.
 
-```typescript filename="src/example-mixed-bias.ts" showLineNumbers copy
+```typescript title="src/example-mixed-bias.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { BiasMetric } from "@mastra/evals/llm";
 
@@ -87,7 +87,7 @@ The output receives a lower score because the response introduces bias in a more
 
 In this example, the response focuses on objective and neutral criteria without introducing biased assumptions.
 
-```typescript filename="src/example-low-bias.ts" showLineNumbers copy
+```typescript title="src/example-low-bias.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { BiasMetric } from "@mastra/evals/llm";
 

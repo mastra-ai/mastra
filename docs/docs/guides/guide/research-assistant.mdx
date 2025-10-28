@@ -80,7 +80,7 @@ Now you'll create your RAG-enabled research assistant. The agent uses:
 
 Create a new file `src/mastra/agents/researchAgent.ts` and define your agent:
 
-```ts copy filename="src/mastra/agents/researchAgent.ts"
+```ts copy title="src/mastra/agents/researchAgent.ts"
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { createVectorQueryTool } from "@mastra/rag";
@@ -117,7 +117,7 @@ In the root of your project, grab the absolute path with the `pwd` command. The 
 
 In your `src/mastra/index.ts` file, add the following to your existing file and configuration:
 
-```ts copy filename="src/mastra/index.ts" {2, 4-6, 9}
+```ts copy title="src/mastra/index.ts" {2, 4-6, 9}
 import { Mastra } from "@mastra/core/mastra";
 import { LibSQLVector } from "@mastra/libsql";
 
@@ -144,7 +144,7 @@ use a remote persistent database then.
 
 In the `src/mastra/index.ts` file, add the agent to Mastra:
 
-```ts copy filename="src/mastra/index.ts" {3, 10}
+```ts copy title="src/mastra/index.ts" {3, 10}
 import { Mastra } from "@mastra/core/mastra";
 import { LibSQLVector } from "@mastra/libsql";
 import { researchAgent } from "./agents/researchAgent";
@@ -173,7 +173,7 @@ In this step the research paper is retrieved by providing an URL, then converted
 
 Create a new file `src/store.ts` and add the following:
 
-```ts copy filename="src/store.ts"
+```ts copy title="src/store.ts"
 import { MDocument } from "@mastra/rag";
 
 // Load the paper
@@ -224,7 +224,7 @@ This allows the agent to efficiently search and retrieve relevant information.
 
 Open the `src/store.ts` file and add the following:
 
-```ts copy filename="src/store.ts" {2-4, 20-99}
+```ts copy title="src/store.ts" {2-4, 20-99}
 import { MDocument } from "@mastra/rag";
 import { openai } from "@ai-sdk/openai";
 import { embedMany } from "ai";
@@ -286,7 +286,7 @@ Now that the vector database has all embeddings, you can test the research assis
 
 Create a new file `src/ask-agent.ts` and add different types of queries:
 
-```ts filename="src/ask-agent.ts" copy
+```ts title="src/ask-agent.ts" copy
 import { mastra } from "./mastra";
 const agent = mastra.getAgent("researchAgent");
 
@@ -317,7 +317,7 @@ Response: Sequence modeling with neural networks faces several key challenges:
 
 Try another question:
 
-```ts filename="src/ask-agent.ts" copy
+```ts title="src/ask-agent.ts" copy
 import { mastra } from "./mastra";
 const agent = mastra.getAgent("researchAgent");
 

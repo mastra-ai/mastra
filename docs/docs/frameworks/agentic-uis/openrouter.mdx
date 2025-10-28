@@ -31,7 +31,7 @@ You'll be guided through prompts to set up your project. For this example, selec
 After creating your project with `create-mastra`, you'll find a `.env` file in your project root.
 Since we selected OpenAI during setup, we'll configure OpenRouter manually: 
 
-```bash filename=".env" copy
+```bash title=".env" copy
 OPENROUTER_API_KEY=
 ```
 
@@ -51,7 +51,7 @@ npm install @openrouter/ai-sdk-provider
 
 We will now configure our agent to use OpenRouter.
 
-```typescript filename="src/mastra/agents/assistant.ts" copy showLineNumbers {4-6,11}
+```typescript title="src/mastra/agents/assistant.ts" copy showLineNumbers {4-6,11}
 import { Agent } from "@mastra/core/agent";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 
@@ -68,7 +68,7 @@ export const assistant = new Agent({
 
 Make sure to register your agent to the Mastra instance:
 
-```typescript filename="src/mastra/index.ts" copy showLineNumbers {4}
+```typescript title="src/mastra/index.ts" copy showLineNumbers {4}
 import { assistant } from "./agents/assistant";
 
 export const mastra = new Mastra({
@@ -96,7 +96,7 @@ For more control over your OpenRouter requests, you can pass additional configur
 
 You can pass provider-wide options to the OpenRouter provider:
 
-```typescript filename="src/mastra/agents/assistant.ts" {6-10} copy showLineNumbers
+```typescript title="src/mastra/agents/assistant.ts" {6-10} copy showLineNumbers
 import { Agent } from "@mastra/core/agent";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 
@@ -120,7 +120,7 @@ export const assistant = new Agent({
 
 You can pass model-specific options to the OpenRouter provider:
 
-```typescript filename="src/mastra/agents/assistant.ts" {11-17} copy showLineNumbers
+```typescript title="src/mastra/agents/assistant.ts" {11-17} copy showLineNumbers
 import { Agent } from "@mastra/core/agent";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 

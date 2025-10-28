@@ -24,7 +24,7 @@ AI Traces are created by:
 
 ### Basic Config
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   // ... other config
   observability: {
@@ -48,7 +48,7 @@ When enabled, the default configuration automatically includes:
 
 This default configuration is a minimal helper that equates to this more verbose configuration:
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts" showLineNumbers copy
 import { CloudExporter, DefaultExporter, SensitiveDataFilter } from '@mastra/core/ai-tracing';
 
 export const mastra = new Mastra({
@@ -147,7 +147,7 @@ sampling: {
 
 ### Complete Example
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
     configs: {
@@ -186,7 +186,7 @@ Note that only a single config can be used for a specific execution. But a singl
 
 Use `configSelector` to choose the appropriate tracing configuration based on runtime context:
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
     default: { enabled: true }, // Provides 'default' instance
@@ -232,7 +232,7 @@ export const mastra = new Mastra({
 
 A common pattern is to select configurations based on deployment environment:
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
     configs: {
@@ -266,7 +266,7 @@ export const mastra = new Mastra({
 
 When you have both the default config enabled and custom configs defined, **the default config will always be used** unless you explicitly select a different config:
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
     default: { enabled: true }, // This will always be used!
@@ -311,7 +311,7 @@ observability: {
 
 When creating a custom config with external exporters, you might lose access to Mastra Playground and Cloud. To maintain access while adding external exporters, include the default exporters in your custom config:
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts" showLineNumbers copy
 import { DefaultExporter, CloudExporter } from '@mastra/core/ai-tracing';
 import { ArizeExporter } from '@mastra/arize';
 
@@ -382,7 +382,7 @@ Instead of manually adding metadata to each span, you can configure Mastra to au
 
 Define which RuntimeContext keys to extract in your tracing configuration. These keys will be automatically included as metadata for all spans created with this configuration:
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
     configs: {
@@ -542,7 +542,7 @@ Span processors allow you to transform, filter, or enrich trace data before it's
 
 You can create custom span processors by implementing the `AISpanProcessor` interface. Here's a simple example that converts all input text in spans to lowercase:
 
-```ts filename="src/processors/lowercase-input-processor.ts" showLineNumbers copy
+```ts title="src/processors/lowercase-input-processor.ts" showLineNumbers copy
 import type { AISpanProcessor, AnyAISpan } from '@mastra/core/ai-tracing';
 
 export class LowercaseInputProcessor implements AISpanProcessor {

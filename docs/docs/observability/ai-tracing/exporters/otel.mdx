@@ -53,7 +53,7 @@ npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-http
 
 [Dash0](https://www.dash0.com/) provides real-time observability with automatic insights.
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { OtelExporter } from "@mastra/otel-exporter";
 
@@ -92,7 +92,7 @@ Get your Dash0 endpoint from your dashboard. It should be in the format `ingress
 
 [SigNoz](https://signoz.io/) is an open-source APM alternative with built-in AI tracing support.
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
     signoz: {
@@ -108,7 +108,7 @@ new OtelExporter({
 
 [New Relic](https://newrelic.com/) provides comprehensive observability with AI monitoring capabilities.
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
     newrelic: {
@@ -123,7 +123,7 @@ new OtelExporter({
 
 [Traceloop](https://www.traceloop.com/) specializes in LLM observability with automatic prompt tracking.
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
     traceloop: {
@@ -138,7 +138,7 @@ new OtelExporter({
 
 [Laminar](https://www.lmnr.ai/) provides specialized LLM observability and analytics.
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
     laminar: {
@@ -153,7 +153,7 @@ new OtelExporter({
 
 For other OTEL-compatible platforms or custom collectors:
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
     custom: {

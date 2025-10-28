@@ -23,7 +23,7 @@ npm install @mastra/evals
 
 A custom eval in Mastra can use native JavaScript methods to evaluate conditions.
 
-```typescript filename="src/mastra/evals/example-word-inclusion.ts" showLineNumbers copy
+```typescript title="src/mastra/evals/example-word-inclusion.ts" showLineNumbers copy
 import { Metric, type MetricResult } from "@mastra/core";
 
 export class WordInclusionMetric extends Metric {
@@ -57,7 +57,7 @@ export class WordInclusionMetric extends Metric {
 
 In this example, the response contains all the words listed in the input query. The metric returns a high score indicating complete word inclusion.
 
-```typescript filename="src/example-high-word-inclusion.ts" showLineNumbers copy
+```typescript title="src/example-high-word-inclusion.ts" showLineNumbers copy
 import { WordInclusionMetric } from "./mastra/evals/example-word-inclusion";
 
 const metric = new WordInclusionMetric();
@@ -88,7 +88,7 @@ The output receives a high score because all the unique words from the input are
 
 In this example, the response includes some but not all of the words from the input query. The metric returns a partial score reflecting this incomplete word coverage.
 
-```typescript filename="src/example-partial-word-inclusion.ts" showLineNumbers copy
+```typescript title="src/example-partial-word-inclusion.ts" showLineNumbers copy
 import { WordInclusionMetric } from "./mastra/evals/example-word-inclusion";
 
 const metric = new WordInclusionMetric();
@@ -119,7 +119,7 @@ The score reflects partial success because the response contains only a subset o
 
 In this example, the response does not contain any of the words from the input query. The metric returns a low score indicating no word inclusion.
 
-```typescript filename="src/example-low-word-inclusion.ts" showLineNumbers copy
+```typescript title="src/example-low-word-inclusion.ts" showLineNumbers copy
 import { WordInclusionMetric } from "./mastra/evals/example-word-inclusion";
 
 const metric = new WordInclusionMetric();

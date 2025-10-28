@@ -38,7 +38,7 @@ npm install @mastra/evals@latest
 
 You can add built-in scorers to your agents to automatically evaluate their outputs. See the [full list of built-in scorers](/scorers/off-the-shelf-scorers) for all available options.
 
-```typescript filename="src/mastra/agents/evaluated-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/evaluated-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { 
@@ -65,7 +65,7 @@ export const evaluatedAgent = new Agent({
 
 You can also add scorers to individual workflow steps to evaluate outputs at specific points in your process:
 
-```typescript filename="src/mastra/workflows/content-generation.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/content-generation.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 import { customStepScorer } from "../scorers/custom-step-scorer";

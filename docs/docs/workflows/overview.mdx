@@ -35,7 +35,7 @@ Steps are the building blocks of workflows. Create a step using `createStep()` w
 
 The `execute` function defines what the step does. Use it to call functions in your codebase, external APIs, agents, or tools.
 
-```typescript {6,9,15} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {6,9,15} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createStep } from "@mastra/core/workflows";
 
 const step1 = createStep({
@@ -66,7 +66,7 @@ Workflow steps can also call registered agents or import and execute tools direc
 
 Create a workflow using `createWorkflow()` with `inputSchema` and `outputSchema` to define the data it accepts and returns. Add steps using `.then()` and complete the workflow with `.commit()`.
 
-```typescript {9,12,15,16} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -96,7 +96,7 @@ Workflows can be composed using a number of different methods. The method you ch
 
 When using `.then()`, steps run sequentially. Each step’s `inputSchema` must match the `outputSchema` of the previous step. The final step’s `outputSchema` should match the workflow’s `outputSchema` to ensure end-to-end type safety.
 
-```typescript {4,7,14,17,24,27} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {4,7,14,17,24,27} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
   //...
   inputSchema: z.object({
@@ -135,7 +135,7 @@ export const testWorkflow = createWorkflow({
 
 Register your workflow in the Mastra instance to make it available throughout your application. Once registered, it can be called from agents or tools and has access to shared resources such as logging and observability features:
 
-```typescript {6} filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {6} title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { testWorkflow } from "./workflows/test-workflow";
 
@@ -246,7 +246,7 @@ The workflow output includes the full execution lifecycle, showing the input and
 
 Use [RuntimeContext](/server-db/runtime-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
-```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };

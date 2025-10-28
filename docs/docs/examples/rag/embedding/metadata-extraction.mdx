@@ -25,7 +25,7 @@ The system demonstrates metadata extraction in two ways:
 
 Import the necessary dependencies:
 
-```typescript copy showLineNumbers filename="src/index.ts"
+```typescript copy showLineNumbers title="src/index.ts"
 import { MDocument } from "@mastra/rag";
 ```
 
@@ -33,7 +33,7 @@ import { MDocument } from "@mastra/rag";
 
 Create a document from text content:
 
-```typescript copy showLineNumbers{3} filename="src/index.ts"
+```typescript copy showLineNumbers{3} title="src/index.ts"
 const doc = MDocument.fromText(`Title: The Benefits of Regular Exercise
 
 Regular exercise has numerous health benefits. It improves cardiovascular health, 
@@ -53,7 +53,7 @@ per week.`);
 
 Extract metadata directly from the document:
 
-```typescript copy showLineNumbers{17} filename="src/index.ts"
+```typescript copy showLineNumbers{17} title="src/index.ts"
 // Configure metadata extraction options
 await doc.extractMetadata({
   keywords: true, // Extract important keywords
@@ -82,7 +82,7 @@ console.log("Extracted Metadata:", meta);
 
 Combine document chunking with metadata extraction:
 
-```typescript copy showLineNumbers{40} filename="src/index.ts"
+```typescript copy showLineNumbers{40} title="src/index.ts"
 // Configure chunking with metadata extraction
 await doc.chunk({
   strategy: "recursive", // Use recursive chunking strategy

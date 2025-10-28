@@ -23,7 +23,7 @@ npm install @mastra/evals
 
 In this example, the summary accurately preserves all important facts from the source while maintaining faithful phrasing. The score reflects both complete coverage and perfect factual alignment.
 
-```typescript filename="src/example-accurate-summary.ts" showLineNumbers copy
+```typescript title="src/example-accurate-summary.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { SummarizationMetric } from "@mastra/evals/llm";
 
@@ -56,7 +56,7 @@ A high score indicates that the summary captures all key details from the input 
 
 In this example, the summary is factually accurate but leaves out several key points from the source. The score reflects incomplete coverage despite strong alignment.
 
-```typescript filename="src/example-partial-summary.ts" showLineNumbers copy
+```typescript title="src/example-partial-summary.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { SummarizationMetric } from "@mastra/evals/llm";
 
@@ -89,7 +89,7 @@ The summary receives a moderate score due to missing key information from the in
 
 In this example, the summary includes factual errors and misrepresents key details from the source. The score reflects poor alignment, even if some information is partially covered.
 
-```typescript filename="src/example-inaccurate-summary.ts" showLineNumbers copy
+```typescript title="src/example-inaccurate-summary.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { SummarizationMetric } from "@mastra/evals/llm";
 

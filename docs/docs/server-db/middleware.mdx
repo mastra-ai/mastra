@@ -148,7 +148,7 @@ be inspected by middleware to tailor behaviour:
 
 You can populate `runtimeContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { RuntimeContext } from "@mastra/core/runtime-context";
 import { testWeatherAgent } from "./agents/test-weather-agent";

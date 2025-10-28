@@ -38,7 +38,7 @@ Phoenix is an open-source observability platform that can be self-hosted or used
 3. **API Key**: Optional for unauthenticated instances, required for Phoenix Cloud
 4. **Environment Variables**: Set your configuration
 
-```bash filename=".env"
+```bash title=".env"
 PHOENIX_ENDPOINT=http://localhost:6006/v1/traces  # Or your Phoenix Cloud URL
 PHOENIX_API_KEY=your-api-key  # Optional for local instances
 PHOENIX_PROJECT_NAME=mastra-service  # Optional, defaults to 'mastra-service'
@@ -46,7 +46,7 @@ PHOENIX_PROJECT_NAME=mastra-service  # Optional, defaults to 'mastra-service'
 
 #### Basic Setup
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { ArizeExporter } from "@mastra/arize";
 
@@ -95,7 +95,7 @@ Arize AX is an enterprise observability platform with advanced features for prod
 3. **API Key**: Generate in Arize AX settings
 4. **Environment Variables**: Set your credentials
 
-```bash filename=".env"
+```bash title=".env"
 ARIZE_SPACE_ID=your-space-id
 ARIZE_API_KEY=your-api-key
 ARIZE_PROJECT_NAME=mastra-service  # Optional
@@ -103,7 +103,7 @@ ARIZE_PROJECT_NAME=mastra-service  # Optional
 
 #### Basic Setup
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { ArizeExporter } from "@mastra/arize";
 

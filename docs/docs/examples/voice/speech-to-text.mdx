@@ -15,7 +15,7 @@ The following code snippets provide example implementations of Speech-to-Text (S
 
 The following example shows how to initialize a voice-enabled agent with OpenAI's STT capabilities:
 
-```typescript filename="src/mastra/agents/index.ts"
+```typescript title="src/mastra/agents/index.ts"
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { OpenAIVoice } from "@mastra/voice-openai";
@@ -36,7 +36,7 @@ export const noteTakerAgent = new Agent({
 
 This snippet demonstrates how to register the STT-enabled agent with your Mastra instance:
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 import { PinoLogger } from "@mastra/loggers";
 import { Mastra } from "@mastra/core/mastra";
 
@@ -55,7 +55,7 @@ export const mastra = new Mastra({
 
 The following code shows how to receive audio from a web request and use the agent's STT capabilities to transcribe it:
 
-```typescript filename="app/api/audio/route.ts"
+```typescript title="app/api/audio/route.ts"
 import { mastra } from "@/src/mastra"; // Import the Mastra instance
 import { Readable } from "node:stream";
 

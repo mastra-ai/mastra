@@ -81,7 +81,7 @@ npx mastra@latest init
 
 Add the `dev` and `build` scripts to `package.json`:
 
-```json filename="package.json"
+```json title="package.json"
 {
   "scripts": {
     ...
@@ -95,7 +95,7 @@ Add the `dev` and `build` scripts to `package.json`:
 
 Modify the `tsconfig.json` file in your project root:
 
-```json filename="tsconfig.json"
+```json title="tsconfig.json"
 {
   ...
   "exclude": ["dist", ".mastra"]
@@ -104,7 +104,7 @@ Modify the `tsconfig.json` file in your project root:
 
 ## Set Up API Key
 
-```bash filename=".env" copy
+```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -112,7 +112,7 @@ OPENAI_API_KEY=<your-api-key>
 
 Add `.mastra` and `.vercel` to your `.gitignore` file:
 
-```bash filename=".gitignore" copy
+```bash title=".gitignore" copy
 .mastra
 .vercel
 ```
@@ -121,7 +121,7 @@ Add `.mastra` and `.vercel` to your `.gitignore` file:
 
 Astro uses Vite, which accesses environment variables via `import.meta.env` rather than `process.env`. As a result, the model constructor must explicitly receive the `apiKey` from the Vite environment like this:
 
-```diff filename="src/mastra/agents/weather-agent.ts"
+```diff title="src/mastra/agents/weather-agent.ts"
 - import { openai } from "@ai-sdk/openai";
 + import { createOpenAI } from "@ai-sdk/openai";
 
@@ -170,7 +170,7 @@ Create a new Action, and add the example code:
 touch src/actions/index.ts
 ```
 
-```typescript filename="src/actions/index.ts" showLineNumbers copy
+```typescript title="src/actions/index.ts" showLineNumbers copy
 import { defineAction } from "astro:actions";
 import { z } from "astro:schema";
 
@@ -201,7 +201,7 @@ Create a new Form component, and add the example code:
 touch src/components/form.tsx
 ```
 
-```typescript filename="src/components/form.tsx" showLineNumbers copy
+```typescript title="src/components/form.tsx" showLineNumbers copy
 import { actions } from "astro:actions";
 import { useState } from "react";
 
@@ -235,7 +235,7 @@ Create a new Page, and add the example code:
 touch src/pages/test.astro
 ```
 
-```astro filename="src/pages/test.astro" showLineNumbers copy
+```astro title="src/pages/test.astro" showLineNumbers copy
 ---
 import { Form } from '../components/form'
 ---
@@ -331,7 +331,7 @@ npx mastra@latest init
 
 Add the `dev` and `build` scripts to `package.json`:
 
-```json filename="package.json"
+```json title="package.json"
 {
   "scripts": {
     ...
@@ -345,7 +345,7 @@ Add the `dev` and `build` scripts to `package.json`:
 
 Modify the `tsconfig.json` file in your project root:
 
-```json filename="tsconfig.json"
+```json title="tsconfig.json"
 {
   ...
   "exclude": ["dist", ".mastra"]
@@ -354,7 +354,7 @@ Modify the `tsconfig.json` file in your project root:
 
 ## Set Up API Key
 
-```bash filename=".env" copy
+```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -362,7 +362,7 @@ OPENAI_API_KEY=<your-api-key>
 
 Add `.mastra` to your `.gitignore` file:
 
-```bash filename=".gitignore" copy
+```bash title=".gitignore" copy
 .mastra
 .vercel
 ```
@@ -371,7 +371,7 @@ Add `.mastra` to your `.gitignore` file:
 
 Astro uses Vite, which accesses environment variables via `import.meta.env` rather than `process.env`. As a result, the model constructor must explicitly receive the `apiKey` from the Vite environment like this:
 
-```diff filename="src/mastra/agents/weather-agent.ts"
+```diff title="src/mastra/agents/weather-agent.ts"
 - import { openai } from "@ai-sdk/openai";
 + import { createOpenAI } from "@ai-sdk/openai";
 
@@ -420,7 +420,7 @@ Create a new Endpoint, and add the example code:
 touch src/pages/api/test.ts
 ```
 
-```typescript filename="src/pages/api/test.ts" showLineNumbers copy
+```typescript title="src/pages/api/test.ts" showLineNumbers copy
 import type { APIRoute } from "astro";
 
 import { mastra } from "../../mastra";
@@ -443,7 +443,7 @@ Create a new Form component, and add the example code:
 touch src/components/form.tsx
 ```
 
-```typescript filename="src/components/form.tsx" showLineNumbers copy
+```typescript title="src/components/form.tsx" showLineNumbers copy
 import { useState } from "react";
 
 export const Form = () => {
@@ -484,7 +484,7 @@ Create a new Page, and add the example code:
 ```bash copy
 touch src/pages/test.astro
 ```
-```astro filename="src/pages/test.astro" showLineNumbers copy
+```astro title="src/pages/test.astro" showLineNumbers copy
 ---
 import { Form } from '../components/form'
 ---

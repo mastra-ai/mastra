@@ -21,7 +21,7 @@ This example uses Auth0 authentication. Make sure to:
 3. Configure an API in your Auth0 Dashboard with an identifier (audience)
 4. Configure your application's allowed callback URLs, web origins, and logout URLs
 
-```env filename=".env" copy
+```env title=".env" copy
 AUTH0_DOMAIN=your-tenant.auth0.com
 AUTH0_AUDIENCE=your-api-identifier
 ```
@@ -42,7 +42,7 @@ npm install @mastra/auth-auth0@latest
 
 ### Basic usage with environment variables
 
-```typescript {2,7} filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,7} title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { MastraAuthAuth0 } from '@mastra/auth-auth0';
 
@@ -56,7 +56,7 @@ export const mastra = new Mastra({
 
 ### Custom configuration
 
-```typescript {2,7-10} filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,7-10} title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { MastraAuthAuth0 } from '@mastra/auth-auth0';
 
@@ -84,7 +84,7 @@ By default, `MastraAuthAuth0` allows all authenticated users who have valid Auth
 
 To customize user authorization, provide a custom `authorizeUser` function:
 
-```typescript filename="src/mastra/auth.ts" showLineNumbers copy
+```typescript title="src/mastra/auth.ts" showLineNumbers copy
 import { MastraAuthAuth0 } from '@mastra/auth-auth0';
 
 const auth0Provider = new MastraAuthAuth0({
@@ -109,7 +109,7 @@ First, install and configure the Auth0 React SDK in your application:
 npm install @auth0/auth0-react
 ```
 
-```typescript filename="src/auth0-provider.tsx" showLineNumbers copy
+```typescript title="src/auth0-provider.tsx" showLineNumbers copy
 import React from 'react';
 import { Auth0Provider } from '@auth0/auth0-react';
 
@@ -136,7 +136,7 @@ export default Auth0ProviderWithHistory;
 
 Use the Auth0 React SDK to authenticate users and retrieve their access tokens:
 
-```typescript filename="lib/auth.ts" showLineNumbers copy
+```typescript title="lib/auth.ts" showLineNumbers copy
 import { useAuth0 } from '@auth0/auth0-react';
 
 export const useAuth0Token = () => {
@@ -157,7 +157,7 @@ export const useAuth0Token = () => {
 
 When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Auth0 access token in the `Authorization` header:
 
-```typescript filename="lib/mastra/mastra-client.ts" showLineNumbers copy
+```typescript title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
 
 export const createMastraClient = (accessToken: string) => {
@@ -180,7 +180,7 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
 
 <Tabs>
   <TabItem value="react" label="React">
-    ```tsx filename="src/components/mastra-api-test.tsx" showLineNumbers copy
+    ```tsx title="src/components/mastra-api-test.tsx" showLineNumbers copy
     import React, { useState } from 'react';
     import { useAuth0 } from '@auth0/auth0-react';
     import { MastraClient } from '@mastra/client-js';

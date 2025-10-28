@@ -13,7 +13,7 @@ This example demonstrates how to use Mastra's memory system with MongoDB as the 
 
 This example uses the `openai` model and requires a MongoDB database. Make sure to add the following to your `.env` file:
 
-```bash filename=".env" copy
+```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 MONGODB_URI=<your-connection-string>
 MONGODB_DB_NAME=<your-db-name>
@@ -29,7 +29,7 @@ npm install @mastra/mongodb
 
 To add MongoDB memory to an agent use the `Memory` class and create a new `storage` key using `MongoDBStore`. The configuration supports both local and remote MongoDB instances.
 
-```typescript filename="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
@@ -68,7 +68,7 @@ npm install @mastra/fastembed
 
 Add the following to your agent:
 
-```typescript filename="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
@@ -107,7 +107,7 @@ export const mongodbAgent = new Agent({
 
 Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
 
-```typescript filename="src/test-mongodb-agent.ts" showLineNumbers copy
+```typescript title="src/test-mongodb-agent.ts" showLineNumbers copy
 import "dotenv/config";
 
 import { mastra } from "./mastra";

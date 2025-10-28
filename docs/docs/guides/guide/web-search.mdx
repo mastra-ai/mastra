@@ -50,7 +50,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
 <Tabs>
     <TabItem value="openai" label="Open AI">
 
-    ```ts copy filename="src/mastra/agents/searchAgent.ts"
+    ```ts copy title="src/mastra/agents/searchAgent.ts"
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
@@ -64,7 +64,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     </TabItem>
     <TabItem value="gemini" label="Gemini">
 
-    ```ts copy filename="src/mastra/agents/searchAgent.ts"
+    ```ts copy title="src/mastra/agents/searchAgent.ts"
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
@@ -84,7 +84,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
 <Tabs>
     <TabItem value="openai" label="Open AI">
 
-    ```ts copy filename="src/mastra/agents/searchAgent.ts" {9-11}
+    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-11}
     import { openai } from "@ai-sdk/openai";
     import { Agent } from "@mastra/core/agent";
 
@@ -102,7 +102,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     </TabItem>
     <TabItem value="gemini" label="Gemini">
 
-    ```ts copy filename="src/mastra/agents/searchAgent.ts" {9-11}
+    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-11}
     import { google } from "@ai-sdk/google";
     import { Agent } from "@mastra/core/agent";
 
@@ -124,7 +124,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
 
 In your `src/mastra/index.ts` file, register the agent:
 
-```ts copy filename="src/mastra/index.ts" {2, 5}
+```ts copy title="src/mastra/index.ts" {2, 5}
 import { Mastra } from "@mastra/core";
 import { searchAgent } from "./agents/searchAgent";
 
@@ -161,7 +161,7 @@ npm install exa-js
 
 Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
 
-```ts copy filename="src/mastra/agents/searchAgent.ts"
+```ts copy title="src/mastra/agents/searchAgent.ts"
 import { Agent } from "@mastra/core/agent";
 
 export const searchAgent = new Agent({
@@ -174,7 +174,7 @@ export const searchAgent = new Agent({
 
 ### Setup the tool
 
-```ts copy filename="src/mastra/tools/searchTool.ts"
+```ts copy title="src/mastra/tools/searchTool.ts"
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
 import Exa from 'exa-js';
@@ -217,7 +217,7 @@ export const webSearch = createTool({
 
 ### Add to your Agent
 
-```ts copy filename="src/mastra/agents/searchAgent.ts"
+```ts copy title="src/mastra/agents/searchAgent.ts"
 import { webSearch } from './tools/searchTool';
 
 export const searchAgent = new Agent({
@@ -234,7 +234,7 @@ export const searchAgent = new Agent({
 
 In your `src/mastra/index.ts` file, register the agent:
 
-```ts copy filename="src/mastra/index.ts" {2, 5}
+```ts copy title="src/mastra/index.ts" {2, 5}
 import { Mastra } from "@mastra/core";
 import { searchAgent } from "./agents/searchAgent";
 

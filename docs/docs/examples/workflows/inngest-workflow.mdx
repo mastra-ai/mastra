@@ -25,7 +25,7 @@ Alternatively, you can use the Inngest CLI for local development by following th
 
 Define a planning agent which leverages an LLM call to plan activities given a location and corresponding weather conditions.
 
-```ts showLineNumbers copy filename="agents/planning-agent.ts"
+```ts showLineNumbers copy title="agents/planning-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
@@ -83,7 +83,7 @@ export { planningAgent };
 
 Define the activity planner workflow with 3 steps: one to fetch the weather via a network call, one to plan activities, and another to plan only indoor activities.
 
-```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
+```ts showLineNumbers copy title="workflows/inngest-workflow.ts"
 import { init } from "@mastra/inngest";
 import { Inngest } from "inngest";
 import { z } from "zod";
@@ -130,7 +130,7 @@ const forecastSchema = z.object({
 
 #### Step 1: Fetch weather data for a given city
 
-```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
+```ts showLineNumbers copy title="workflows/inngest-workflow.ts"
 const fetchWeather = createStep({
   id: "fetch-weather",
   description: "Fetches weather forecast for a given city",
@@ -190,7 +190,7 @@ const fetchWeather = createStep({
 
 #### Step 2: Suggest activities (indoor or outdoor) based on weather
 
-```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
+```ts showLineNumbers copy title="workflows/inngest-workflow.ts"
 const planActivities = createStep({
   id: "plan-activities",
   description: "Suggests activities based on weather conditions",
@@ -237,7 +237,7 @@ const planActivities = createStep({
 
 #### Step 3: Suggest indoor activities only (for rainy weather)
 
-```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
+```ts showLineNumbers copy title="workflows/inngest-workflow.ts"
 const planIndoorActivities = createStep({
   id: "plan-indoor-activities",
   description: "Suggests indoor activities based on weather conditions",
@@ -282,7 +282,7 @@ const planIndoorActivities = createStep({
 
 ## Define the activity planner workflow
 
-```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
+```ts showLineNumbers copy title="workflows/inngest-workflow.ts"
 const activityPlanningWorkflow = createWorkflow({
   id: "activity-planning-workflow-step2-if-else",
   inputSchema: z.object({
@@ -319,7 +319,7 @@ export { activityPlanningWorkflow };
 
 Register the agents and workflow with the mastra instance. This allows access to the agents within the workflow.
 
-```ts showLineNumbers copy filename="index.ts"
+```ts showLineNumbers copy title="index.ts"
 import { Mastra } from "@mastra/core/mastra";
 import { serve as inngestServe } from "@mastra/inngest";
 import { PinoLogger } from "@mastra/loggers";
@@ -365,7 +365,7 @@ export const mastra = new Mastra({
 
 Here, we'll get the activity planner workflow from the mastra instance, then create a run and execute the created run with the required inputData.
 
-```ts showLineNumbers copy filename="exec.ts"
+```ts showLineNumbers copy title="exec.ts"
 import { mastra } from "./";
 import { serve } from "@hono/node-server";
 import {

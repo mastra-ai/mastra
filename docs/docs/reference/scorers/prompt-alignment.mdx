@@ -387,7 +387,7 @@ const result = await scorer.run({
 
 In this example, the response fully addresses the user's prompt with all requirements met.
 
-```typescript filename="src/example-excellent-prompt-alignment.ts" showLineNumbers copy
+```typescript title="src/example-excellent-prompt-alignment.ts" showLineNumbers copy
 import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
 
 const scorer = createPromptAlignmentScorerLLM({ 
@@ -432,7 +432,7 @@ The output receives a high score because it perfectly addresses the intent, fulf
 
 In this example, the response addresses the core intent but misses some requirements or has format issues.
 
-```typescript filename="src/example-partial-prompt-alignment.ts" showLineNumbers copy
+```typescript title="src/example-partial-prompt-alignment.ts" showLineNumbers copy
 import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
 
 const scorer = createPromptAlignmentScorerLLM({ 
@@ -471,7 +471,7 @@ The output receives a lower score because while the content is accurate, it does
 
 In this example, the response fails to address the user's specific requirements.
 
-```typescript filename="src/example-poor-prompt-alignment.ts" showLineNumbers copy
+```typescript title="src/example-poor-prompt-alignment.ts" showLineNumbers copy
 import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
 
 const scorer = createPromptAlignmentScorerLLM({ 
@@ -514,7 +514,7 @@ The output receives a low score because it only partially fulfills the requireme
 
 Evaluates how well the response addresses the user's request, ignoring system instructions:
 
-```typescript filename="src/example-user-mode.ts" showLineNumbers copy
+```typescript title="src/example-user-mode.ts" showLineNumbers copy
 const scorer = createPromptAlignmentScorerLLM({ 
   model: 'openai/gpt-4o-mini',
   options: { evaluationMode: 'user' }
@@ -542,7 +542,7 @@ const result = await scorer.run({
 
 Evaluates compliance with system behavioral guidelines and constraints:
 
-```typescript filename="src/example-system-mode.ts" showLineNumbers copy
+```typescript title="src/example-system-mode.ts" showLineNumbers copy
 const scorer = createPromptAlignmentScorerLLM({ 
   model: 'openai/gpt-4o-mini',
   options: { evaluationMode: 'system' }
@@ -570,7 +570,7 @@ const result = await scorer.run({
 
 Evaluates both user intent fulfillment and system compliance with weighted scoring (70% user, 30% system):
 
-```typescript filename="src/example-both-mode.ts" showLineNumbers copy
+```typescript title="src/example-both-mode.ts" showLineNumbers copy
 const scorer = createPromptAlignmentScorerLLM({ 
   model: 'openai/gpt-4o-mini',
   options: { evaluationMode: 'both' } // This is the default

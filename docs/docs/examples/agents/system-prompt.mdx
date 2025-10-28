@@ -17,7 +17,7 @@ In this example, the `system` prompt is used to change the agent’s voice betwe
 
 This example uses the `openai` model. Make sure to add `OPENAI_API_KEY` to your `.env` file.
 
-```bash filename=".env" copy
+```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -25,7 +25,7 @@ OPENAI_API_KEY=<your-api-key>
 
 Define the agent and provide `instructions`, which set its default behavior and describe how it should respond when no system prompt is supplied at runtime.
 
-```typescript filename="src/mastra/agents/example-harry-potter-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/example-harry-potter-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
@@ -45,7 +45,7 @@ export const harryPotterAgent = new Agent({
 
 To use an agent, register it in your main Mastra instance.
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 
 import { harryPotterAgent } from "./agents/example-harry-potter-agent";
@@ -60,7 +60,7 @@ export const mastra = new Mastra({
 
 Use `getAgent()` to retrieve the agent and call `generate()` with a prompt. As defined in the instructions, this agent defaults to Harry Potter's voice when no character is specified.
 
-```typescript filename="src/test-harry-potter-agent.ts" showLineNumbers copy
+```typescript title="src/test-harry-potter-agent.ts" showLineNumbers copy
 import "dotenv/config";
 
 import { mastra } from "./mastra";
@@ -76,7 +76,7 @@ console.log(response.text);
 
 By providing a different system prompt at runtime, the agent’s voice can be switched to another character. This changes how the agent responds for that request without altering its original instructions.
 
-```typescript {9-10} filename="src/test-harry-potter-agent.ts" showLineNumbers copy
+```typescript {9-10} title="src/test-harry-potter-agent.ts" showLineNumbers copy
 import "dotenv/config";
 
 import { mastra } from "./mastra";

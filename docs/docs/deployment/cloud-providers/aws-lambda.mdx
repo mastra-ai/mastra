@@ -41,7 +41,7 @@ Lambda functions have limitations with file system storage. Configure your Mastr
 
 ### Option 1: In-Memory (Simplest)
 
-```typescript filename="src/mastra/index.ts" copy showLineNumbers
+```typescript title="src/mastra/index.ts" copy showLineNumbers
 import { LibSQLStore } from "@mastra/libsql";
 
 const storage = new LibSQLStore({
@@ -53,7 +53,7 @@ const storage = new LibSQLStore({
 
 For persistent memory across Lambda invocations, use external storage providers like `LibSQLStore` with Turso or other storage providers like `PostgreStore`:
 
-```typescript filename="src/mastra/index.ts" copy showLineNumbers
+```typescript title="src/mastra/index.ts" copy showLineNumbers
 import { LibSQLStore } from "@mastra/libsql";
 
 const storage = new LibSQLStore({
@@ -68,7 +68,7 @@ For more memory configuration options, see the [Memory documentation](/memory/ov
 
 Create a `Dockerfile` in your Mastra project root directory:
 
-```dockerfile filename="Dockerfile" copy showLineNumbers
+```dockerfile title="Dockerfile" copy showLineNumbers
 FROM node:22-alpine
 
 WORKDIR /app
@@ -203,7 +203,7 @@ For more information about available API endpoints, see the [Server documentatio
 
 Update your client application to use the Lambda function URL:
 
-```typescript filename="src/client.ts" copy showLineNumbers
+```typescript title="src/client.ts" copy showLineNumbers
 import { MastraClient } from "@mastra/client-js";
 
 const mastraClient = new MastraClient({

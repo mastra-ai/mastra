@@ -32,7 +32,7 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
 
 Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
 
-```ts copy filename="src/mastra/agents/chefAgent.ts"
+```ts copy title="src/mastra/agents/chefAgent.ts"
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
@@ -49,7 +49,7 @@ export const chefAgent = new Agent({
 
 In your `src/mastra/index.ts` file, register the agent:
 
-```ts copy filename="src/mastra/index.ts" {2, 5}
+```ts copy title="src/mastra/index.ts" {2, 5}
 import { Mastra } from "@mastra/core";
 import { chefAgent } from "./agents/chefAgent";
 
@@ -70,7 +70,7 @@ Depending on your requirements you can interact and get responses from the agent
 
 Create a new file `src/index.ts` and add a `main()` function to it. Inside, craft a query to ask the agent and log its response.
 
-```ts copy filename="src/index.ts"
+```ts copy title="src/index.ts"
 import { chefAgent } from "./mastra/agents/chefAgent";
 
 async function main() {
@@ -103,7 +103,7 @@ Query: In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some
 
 In the previous example you might have waited a bit for the response without any sign of progress. To show the agent's output as it creates it you should instead stream its response to the terminal.
 
-```ts copy filename="src/index.ts"
+```ts copy title="src/index.ts"
 import { chefAgent } from "./mastra/agents/chefAgent";
 
 async function main() {
@@ -148,7 +148,7 @@ Instead of showing the agent's response to a human you might want to pass it alo
 
 Change your `src/index.ts` to the following:
 
-```ts copy filename="src/index.ts"
+```ts copy title="src/index.ts"
 import { chefAgent } from "./mastra/agents/chefAgent";
 import { z } from "zod";
 

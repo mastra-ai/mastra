@@ -96,7 +96,7 @@ The default Assistant UI setup configures the chat runtime to use a local API ro
 
 Find the `useChatRuntime` hook in the `assistant-ui` project, typically at `app/assistant.tsx` and change the `api` property to the full URL of your Mastra agent's stream endpoint:
 
-```typescript showLineNumbers copy filename="app/assistant.tsx" {6}
+```typescript showLineNumbers copy title="app/assistant.tsx" {6}
 import {
   useChatRuntime,
   AssistantChatTransport,

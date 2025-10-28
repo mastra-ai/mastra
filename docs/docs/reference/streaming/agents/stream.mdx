@@ -12,7 +12,7 @@ The `.stream()` method enables real-time streaming of responses from an agent wi
 
 ## Usage example
 
-```ts filename="index.ts" copy
+```ts title="index.ts" copy
 // Default Mastra format
 const mastraStream = await agent.stream("message for agent");
 
@@ -588,7 +588,7 @@ const aiSdkStream = await agent.stream("message for agent", {
 
 ### Mastra Format (Default)
 
-```ts filename="index.ts" showLineNumbers copy
+```ts title="index.ts" showLineNumbers copy
 import { stepCountIs } from 'ai-v5';
 
 const stream = await agent.stream("Tell me a story", {
@@ -609,7 +609,7 @@ const fullText = await stream.text;
 
 ### AI SDK v5 Format
 
-```ts filename="index.ts" showLineNumbers copy
+```ts title="index.ts" showLineNumbers copy
 import { stepCountIs } from 'ai-v5';
 
 const stream = await agent.stream("Tell me a story", {
@@ -635,7 +635,7 @@ return stream.toUIMessageStreamResponse();
 
 All callback functions are now available as top-level properties for a cleaner API experience.
 
-```ts filename="index.ts" showLineNumbers copy
+```ts title="index.ts" showLineNumbers copy
 const stream = await agent.stream("Tell me a story", {
   onFinish: (result) => {
     console.log('Streaming finished:', result);
@@ -662,7 +662,7 @@ for await (const chunk of stream.textStream) {
 
 ### Advanced Example with Options
 
-```ts filename="index.ts" showLineNumbers copy
+```ts title="index.ts" showLineNumbers copy
 import { z } from "zod";
 import { stepCountIs } from 'ai-v5';
 

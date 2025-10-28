@@ -17,7 +17,7 @@ This example shows how to manage a todo list using a working memory template.
 
 This example uses the `openai` model. Make sure to add `OPENAI_API_KEY` to your `.env` file.
 
-```bash filename=".env" copy
+```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -39,7 +39,7 @@ Providing a `template` helps define the structure of what should be remembered. 
 
 Threads group related messages into conversations. When `generateTitle` is enabled, each thread is automatically given a descriptive name based on its content.
 
-```typescript filename="src/mastra/agents/example-working-memory-template-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/example-working-memory-template-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
@@ -91,7 +91,7 @@ This example shows how to interact with an agent that uses a working memory temp
 
 This example sends a message to the agent with a new task. The response is streamed and includes the updated todo list.
 
-```typescript filename="src/test-working-memory-template-agent.ts" showLineNumbers copy
+```typescript title="src/test-working-memory-template-agent.ts" showLineNumbers copy
 import "dotenv/config";
 
 import { mastra } from "./mastra";
@@ -117,7 +117,7 @@ for await (const chunk of stream.textStream) {
 
 This example sends a message to the agent with a new task. The response is returned as a single message and includes the updated todo list.
 
-```typescript filename="src/test-working-memory-template-agent.ts" showLineNumbers copy
+```typescript title="src/test-working-memory-template-agent.ts" showLineNumbers copy
 import "dotenv/config";
 
 import { mastra } from "./mastra";

@@ -24,7 +24,7 @@ In Mastra workflows, variables serve as a way to:
 
 You can map data between steps using the `variables` property when adding a step to your workflow:
 
-```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+```typescript showLineNumbers title="src/mastra/workflows/index.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 
 const workflow = new LegacyWorkflow({
@@ -59,7 +59,7 @@ export const mastra = new Mastra({
 
 You can access nested properties using dot notation in the `path` field:
 
-```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+```typescript showLineNumbers title="src/mastra/workflows/index.ts" copy
 workflow
   .step(step1)
   .then(step2, {
@@ -75,7 +75,7 @@ workflow
 
 You can map an entire object by using `.` as the path:
 
-```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+```typescript showLineNumbers title="src/mastra/workflows/index.ts" copy
 workflow
   .step(step1, {
     variables: {
@@ -90,7 +90,7 @@ workflow
 
 Variables can also be passed to `while` and `until` loops. This is useful for passing data between iterations or from outside steps:
 
-```typescript showLineNumbers filename="src/mastra/workflows/loop-variables.ts" copy
+```typescript showLineNumbers title="src/mastra/workflows/loop-variables.ts" copy
 // Step that increments a counter
 const incrementStep = new LegacyStep({
   id: "increment",
@@ -144,7 +144,7 @@ When a workflow executes, Mastra resolves variables at runtime by:
 
 This example shows how to map data from the workflow trigger to a step:
 
-```typescript showLineNumbers filename="src/mastra/workflows/trigger-mapping.ts" copy
+```typescript showLineNumbers title="src/mastra/workflows/trigger-mapping.ts" copy
 import { Mastra } from "@mastra/core";
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
@@ -189,7 +189,7 @@ export const mastra = new Mastra({
 
 This example demonstrates mapping data from one step to another:
 
-```typescript showLineNumbers filename="src/mastra/workflows/step-mapping.ts" copy
+```typescript showLineNumbers title="src/mastra/workflows/step-mapping.ts" copy
 import { Mastra } from "@mastra/core";
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
@@ -253,7 +253,7 @@ export const mastra = new Mastra({
 
 Mastra provides type safety for variable mappings when using TypeScript:
 
-```typescript showLineNumbers filename="src/mastra/workflows/type-safe.ts" copy
+```typescript showLineNumbers title="src/mastra/workflows/type-safe.ts" copy
 import { Mastra } from "@mastra/core";
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";

@@ -15,7 +15,7 @@ This page demonstrates how to call the `harryPotterAgent` described in the [Chan
 
 The `mastra` instance is passed as an argument to a workflow step’s `execute` function. It provides access to registered agents using `getAgent()`. Use this method to retrieve your agent, then call `generate()` with a prompt.
 
-```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -41,7 +41,7 @@ export const testWorkflow = createWorkflow({
 
 The `mastra` instance is available within a tool’s `execute` function. Use `getAgent()` to retrieve a registered agent and call `generate()` with a prompt.
 
-```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
+```typescript title="src/mastra/tools/test-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 

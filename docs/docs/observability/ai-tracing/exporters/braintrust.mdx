@@ -34,14 +34,14 @@ npm install @mastra/braintrust
 3. **API Key**: Generate in Braintrust Settings → API Keys
 4. **Environment Variables**: Set your credentials:
 
-```bash filename=".env"
+```bash title=".env"
 BRAINTRUST_API_KEY=sk-xxxxxxxxxxxxxxxx
 BRAINTRUST_PROJECT_NAME=my-project  # Optional, defaults to 'mastra-tracing'
 ```
 
 ### Basic Setup
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { BraintrustExporter } from "@mastra/braintrust";
 

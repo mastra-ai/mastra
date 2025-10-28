@@ -25,7 +25,7 @@ pnpm add @mastra/mcp @mastra/core tsup
 
 2.  Add the following code to the file. Remember to import your actual Mastra tools and name the server appropriately.
 
-    ```typescript filename="src/mastra/stdio.ts" copy
+    ```typescript title="src/mastra/stdio.ts" copy
     #!/usr/bin/env node
     import { MCPServer } from "@mastra/mcp";
     import { weatherTool } from "./tools";
@@ -44,7 +44,7 @@ pnpm add @mastra/mcp @mastra/core tsup
 
 3.  Update your `package.json` to include the `bin` entry pointing to your built server file and a script to build the server.
 
-```json filename="package.json" copy
+```json title="package.json" copy
 {
   "bin": "dist/stdio.js",
   "scripts": {

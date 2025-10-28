@@ -13,7 +13,7 @@ Mastra supports the OpenTelemetry Protocol (OTLP) for tracing and monitoring you
 
 Here's a simple example of enabling telemetry:
 
-```ts filename="mastra.config.ts" showLineNumbers copy
+```ts title="mastra.config.ts" showLineNumbers copy
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
@@ -66,14 +66,14 @@ See the [OtelConfig reference documentation](/reference/observability/otel-confi
 
 You can configure the OTLP endpoint and headers through environment variables:
 
-```env filename=".env" copy
+```env title=".env" copy
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_EXPORTER_OTLP_HEADERS=x-api-key=your-api-key
 ```
 
 Then in your config:
 
-```ts filename="mastra.config.ts" showLineNumbers copy
+```ts title="mastra.config.ts" showLineNumbers copy
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
@@ -118,7 +118,7 @@ Mastra looks for instrumentation files with these extensions:
 
 #### Example
 
-```ts filename="/mastra/instrumentation.ts" showLineNumbers copy
+```ts title="/mastra/instrumentation.ts" showLineNumbers copy
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';

@@ -33,7 +33,7 @@ npm install @mastra/langfuse
 2. **API Keys**: Create public/secret key pair in Langfuse Settings → API Keys
 3. **Environment Variables**: Set your credentials
 
-```bash filename=".env"
+```bash title=".env"
 LANGFUSE_PUBLIC_KEY=pk-lf-xxxxxxxxxxxx
 LANGFUSE_SECRET_KEY=sk-lf-xxxxxxxxxxxx
 LANGFUSE_BASE_URL=https://cloud.langfuse.com  # Or your self-hosted URL
@@ -41,7 +41,7 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com  # Or your self-hosted URL
 
 ### Basic Setup
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { LangfuseExporter } from "@mastra/langfuse";
 

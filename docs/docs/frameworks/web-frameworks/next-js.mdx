@@ -59,7 +59,7 @@ By default, `mastra init` suggests `src` as the install location. If you're usin
 
 ## Set Up API Key
 
-```bash filename=".env" copy
+```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -69,7 +69,7 @@ OPENAI_API_KEY=<your-api-key>
 
 Add to your `next.config.ts`:
 
-```typescript filename="next.config.ts" showLineNumbers copy
+```typescript title="next.config.ts" showLineNumbers copy
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -99,7 +99,7 @@ Create a new Action, and add the example code:
 touch app/test/action.ts
 ```
 
-```typescript filename="app/test/action.ts" showLineNumbers copy
+```typescript title="app/test/action.ts" showLineNumbers copy
 "use server";
 
 import { mastra } from "../../mastra";
@@ -122,7 +122,7 @@ Create a new Form component, and add the example code:
 touch app/test/form.tsx
 ```
 
-```typescript filename="app/test/form.tsx" showLineNumbers copy
+```typescript title="app/test/form.tsx" showLineNumbers copy
 "use client";
 
 import { useState } from "react";
@@ -156,7 +156,7 @@ Create a new Page, and add the example code:
 touch app/test/page.tsx
 ```
 
-```typescript filename="app/test/page.tsx" showLineNumbers copy
+```typescript title="app/test/page.tsx" showLineNumbers copy
 import { Form } from "./form";
 
 export default async function Page() {
@@ -227,7 +227,7 @@ By default, `mastra init` suggests `src` as the install location. If you're usin
 
 ## Set Up API Key
 
-```bash filename=".env" copy
+```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -237,7 +237,7 @@ OPENAI_API_KEY=<your-api-key>
 
 Add to your `next.config.ts`:
 
-```typescript filename="next.config.ts" showLineNumbers copy
+```typescript title="next.config.ts" showLineNumbers copy
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -259,7 +259,7 @@ Create a new API Route, and add the example code:
 touch pages/api/test.ts
 ```
 
-```typescript filename="pages/api/test.ts" showLineNumbers copy
+```typescript title="pages/api/test.ts" showLineNumbers copy
 import type { NextApiRequest, NextApiResponse } from "next";
 
 import { mastra } from "../../mastra";
@@ -285,7 +285,7 @@ Create a new Page, and add the example code:
 touch pages/test.tsx
 ```
 
-```typescript filename="pages/test.tsx" showLineNumbers copy
+```typescript title="pages/test.tsx" showLineNumbers copy
 import { useState } from "react";
 
 export default function Test() {

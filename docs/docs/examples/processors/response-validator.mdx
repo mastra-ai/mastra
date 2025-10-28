@@ -13,7 +13,7 @@ This example shows how to create a custom output processor that validates AI res
 
 A custom output processor in Mastra implements the `Processor` interface with the `processOutputResult` method for final result validation. This processor examines the complete response and validates it contains all specified keywords.
 
-```typescript filename="src/mastra/processors/response-validator.ts" showLineNumbers copy
+```typescript title="src/mastra/processors/response-validator.ts" showLineNumbers copy
 import type { Processor, MastraMessageV2 } from "@mastra/core/processors";
 
 export class ResponseValidator implements Processor {
@@ -54,7 +54,7 @@ export class ResponseValidator implements Processor {
 
 ### Using the processor
 
-```typescript filename="src/mastra/agents/example-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/example-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { ResponseValidator } from "../processors/response-validator";
@@ -73,7 +73,7 @@ export const validatedAgent = new Agent({
 
 This example shows a response that contains all required keywords and passes validation successfully.
 
-```typescript filename="src/example-high-response-validation.ts" showLineNumbers copy
+```typescript title="src/example-high-response-validation.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { ResponseValidator } from "./mastra/processors/response-validator";
@@ -106,7 +106,7 @@ The response passes validation because it contains both required keywords:
 
 This example shows what happens when a response is missing one or more required keywords.
 
-```typescript filename="src/example-partial-response-validation.ts" showLineNumbers copy
+```typescript title="src/example-partial-response-validation.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { ResponseValidator } from "./mastra/processors/response-validator";
@@ -147,7 +147,7 @@ Response missing required keyword: encryption
 
 This example demonstrates validation failure when none of the required keywords are present in the response.
 
-```typescript filename="src/example-low-response-validation.ts" showLineNumbers copy
+```typescript title="src/example-low-response-validation.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { ResponseValidator } from "./mastra/processors/response-validator";
@@ -188,7 +188,7 @@ Response missing required keyword: blockchain
 
 You can create more sophisticated validators with custom logic:
 
-```typescript filename="src/example-advanced-response-validation.ts" showLineNumbers copy
+```typescript title="src/example-advanced-response-validation.ts" showLineNumbers copy
 import type { Processor, MastraMessageV2 } from "@mastra/core/processors";
 
 export class AdvancedResponseValidator implements Processor {

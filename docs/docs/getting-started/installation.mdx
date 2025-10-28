@@ -136,7 +136,7 @@ Initialize a TypeScript project and install the following dependencies:
 
 Add `dev` and `build` scripts to your `package.json` file:
 
-```json filename="package.json" copy /,/ /"dev": "mastra dev",/ /"build": "mastra build"/
+```json title="package.json" copy /,/ /"dev": "mastra dev",/ /"build": "mastra build"/
 {
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -157,7 +157,7 @@ touch tsconfig.json
 Add the following configuration:
 
 
-```json filename="tsconfig.json" copy
+```json title="tsconfig.json" copy
 {
   "compilerOptions": {
     "target": "ES2022",
@@ -191,7 +191,7 @@ touch .env
 
 Add your API key:
 
-```bash filename=".env" copy
+```bash title=".env" copy
 GOOGLE_GENERATIVE_AI_API_KEY=<your-api-key>
 ```
 
@@ -211,7 +211,7 @@ mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
 
 Add the following code:
 
-```ts filename="src/mastra/tools/weather-tool.ts" showLineNumbers copy
+```ts title="src/mastra/tools/weather-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -248,7 +248,7 @@ mkdir -p src/mastra/agents && touch src/mastra/agents/weather-agent.ts
 
 Add the following code:
 
-```ts filename="src/mastra/agents/weather-agent.ts" showLineNumbers copy
+```ts title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
 
@@ -281,7 +281,7 @@ touch src/mastra/index.ts
 
 Add the following code:
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { weatherAgent } from "./agents/weather-agent";
 

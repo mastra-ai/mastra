@@ -23,7 +23,7 @@ This example demonstrates how to integrate Mastra agents with [AI SDK v5](https:
 
 First, set up your Mastra agent with memory and tools:
 
-```typescript showLineNumbers copy filename="src/mastra/index.ts"
+```typescript showLineNumbers copy title="src/mastra/index.ts"
 import { ConsoleLogger } from "@mastra/core/logger";
 import { Mastra } from "@mastra/core/mastra";
 import { weatherAgent } from "./agents";
@@ -35,7 +35,7 @@ export const mastra = new Mastra({
 });
 ```
 
-```typescript showLineNumbers copy filename="src/mastra/agents/index.ts"
+```typescript showLineNumbers copy title="src/mastra/agents/index.ts"
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { Memory } from "@mastra/memory";
@@ -79,7 +79,7 @@ export const weatherAgent = new Agent({
 
 Create a tool that fetches real-time weather data:
 
-```typescript showLineNumbers copy filename="src/mastra/tools/index.ts"
+```typescript showLineNumbers copy title="src/mastra/tools/index.ts"
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -138,7 +138,7 @@ const getWeather = async (location: string) => {
 
 Create an API route that streams responses from your Mastra agent using the `stream` method with AI SDK v5 format:
 
-```typescript showLineNumbers copy filename="app/api/chat/route.ts"
+```typescript showLineNumbers copy title="app/api/chat/route.ts"
 import { mastra } from "@/src/mastra";
 
 const myAgent = mastra.getAgent("weatherAgent");
@@ -164,7 +164,7 @@ export async function POST(req: Request) {
 
 Load conversation history from Mastra Memory:
 
-```typescript showLineNumbers copy filename="app/api/initial-chat/route.ts"
+```typescript showLineNumbers copy title="app/api/initial-chat/route.ts"
 import { mastra } from "@/src/mastra";
 import { NextResponse } from "next/server";
 import { convertMessages } from "@mastra/core/agent"
@@ -185,7 +185,7 @@ export async function GET() {
 
 Build the frontend using AI SDK v5's `useChat` hook:
 
-```typescript showLineNumbers copy filename="app/page.tsx"
+```typescript showLineNumbers copy title="app/page.tsx"
 "use client";
 
 import { Message, useChat } from "@ai-sdk/react";
@@ -244,7 +244,7 @@ Install the required dependencies:
 
 NOTE: ai-sdk v5 is still in beta, while it is in beta you'll have to install the beta ai-sdk versions and the beta mastra versions. See [here](https://github.com/mastra-ai/mastra/issues/5470) for more information
 
-```json showLineNumbers copy filename="package.json"
+```json showLineNumbers copy title="package.json"
 {
   "dependencies": {
     "@ai-sdk/openai": "2.0.0-beta.1",

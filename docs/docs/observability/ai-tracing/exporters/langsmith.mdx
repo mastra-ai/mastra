@@ -33,14 +33,14 @@ npm install @mastra/langsmith
 2. **API Key**: Generate an API key in LangSmith Settings → API Keys
 3. **Environment Variables**: Set your credentials
 
-```bash filename=".env"
+```bash title=".env"
 LANGSMITH_API_KEY=ls-xxxxxxxxxxxx
 LANGSMITH_BASE_URL=https://api.smith.langchain.com  # Optional for self-hosted
 ```
 
 ### Basic Setup
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { LangSmithExporter } from "@mastra/langsmith";
 

@@ -16,7 +16,7 @@ The `MastraAuthSupabase` class provides authentication for Mastra using Supabase
 
 This example uses Supabase Auth. Make sure to add your Supabase credentials to your `.env` file and ensure your Supabase project is properly configured.
 
-```env filename=".env" copy
+```env title=".env" copy
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 ```
@@ -33,7 +33,7 @@ npm install @mastra/auth-supabase@latest
 
 ## Usage example
 
-```typescript {2,7-9} filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,7-9} title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { MastraAuthSupabase } from '@mastra/auth-supabase';
 
@@ -60,7 +60,7 @@ When using Supabase auth, you'll need to retrieve the access token from Supabase
 
 Use the Supabase client to authenticate users and retrieve their access token:
 
-```typescript filename="lib/auth.ts" showLineNumbers copy
+```typescript title="lib/auth.ts" showLineNumbers copy
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient("<supabase-url>", "<supabase-key>");
@@ -79,7 +79,7 @@ const accessToken = authTokenResponse.data?.session?.access_token;
 
 When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Supabase access token in the `Authorization` header:
 
-```typescript {6} filename="lib/mastra/mastra-client.ts" showLineNumbers copy
+```typescript {6} title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
@@ -100,7 +100,7 @@ Once `MastraClient` is configured with the Supabase access token, you can send a
 
 <Tabs>
   <TabItem value="curl" label="cURL">
-    ```tsx filename="src/components/test-agent.tsx" showLineNumbers copy
+    ```tsx title="src/components/test-agent.tsx" showLineNumbers copy
     import { mastraClient } from "../../lib/mastra-client";
 
     export const TestAgent = () => {

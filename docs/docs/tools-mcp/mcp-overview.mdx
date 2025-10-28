@@ -31,7 +31,7 @@ npm install @mastra/mcp@latest
 
 The `MCPClient` connects Mastra primitives to external MCP servers, which can be local packages (invoked using `npx`) or remote HTTP(S) endpoints. Each server must be configured with either a `command` or a `url`, depending on how it's hosted.
 
-```typescript filename="src/mastra/mcp/test-mcp-client.ts" showLineNumbers copy
+```typescript title="src/mastra/mcp/test-mcp-client.ts" showLineNumbers copy
 import { MCPClient } from "@mastra/mcp";
 
 export const testMcpClient = new MCPClient({
@@ -54,7 +54,7 @@ export const testMcpClient = new MCPClient({
 
 To use tools from an MCP server in an agent, import your `MCPClient` and call `.getTools()` in the `tools` parameter. This loads from the defined MCP servers, making them available to the agent.
 
-```typescript {4,16} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+```typescript {4,16} title="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
@@ -79,7 +79,7 @@ export const testAgent = new Agent({
 
 To expose agents, tools, and workflows from your Mastra application to external systems over HTTP(S) use the `MCPServer` class. This makes them accessible to any system or agent that supports the protocol.
 
-```typescript filename="src/mastra/mcp/test-mcp-server.ts" showLineNumbers copy
+```typescript title="src/mastra/mcp/test-mcp-server.ts" showLineNumbers copy
 import { MCPServer } from "@mastra/mcp";
 
 import { testAgent } from "../agents/test-agent";
@@ -102,7 +102,7 @@ export const testMcpServer = new MCPServer({
 
 To make an MCP server available to other systems or agents that support the protocol, register it in the main `Mastra` instance using `mcpServers`.
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 
 import { testMcpServer } from "./mcp/test-mcp-server";
@@ -130,7 +130,7 @@ Use the `.getTools()` method to fetch tools from all configured MCP servers. Thi
 
 > See [getTools()](/reference/tools/mcp-client#gettools) for more information.
 
-```typescript {8} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+```typescript {8} title="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
@@ -224,7 +224,7 @@ MCP servers can be discovered through registries. Here's how to connect to some 
     ```
 
     > **Important:** Treat the mcp.run SSE URL like a password. Store it securely, for example, in an environment variable.
-    > ```bash filename=".env"
+    > ```bash title=".env"
     > MCP_RUN_SSE_URL=https://www.mcp.run/api/mcp/sse?nonce=...
     > ```
 

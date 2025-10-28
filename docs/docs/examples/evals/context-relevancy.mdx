@@ -23,7 +23,7 @@ npm install @mastra/evals
 
 In this example, the response uses only context that is directly relevant to the query. Every context item supports the answer, resulting in a perfect relevancy score.
 
-```typescript filename="src/example-high-context-relevancy.ts" showLineNumbers copy
+```typescript title="src/example-high-context-relevancy.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { ContextRelevancyMetric } from "@mastra/evals/llm";
 
@@ -60,7 +60,7 @@ The output receives a perfect score because all context statements directly cont
 
 In this example, the response uses one or more relevant context items but also includes unrelated or less useful information. This lowers the overall relevancy score.
 
-```typescript filename="src/example-mixed-context-relevancy.ts" showLineNumbers copy
+```typescript title="src/example-mixed-context-relevancy.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { ContextRelevancyMetric } from "@mastra/evals/llm";
 
@@ -99,7 +99,7 @@ The output receives a mid-range score because it includes relevant context about
 
 In this example, most of the context is unrelated to the query. Only one item is relevant, which results in a low relevancy score.
 
-```typescript filename="src/example-low-context-relevancy.ts" showLineNumbers copy
+```typescript title="src/example-low-context-relevancy.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { ContextRelevancyMetric } from "@mastra/evals/llm";
 

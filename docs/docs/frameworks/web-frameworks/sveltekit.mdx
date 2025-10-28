@@ -75,7 +75,7 @@ npx mastra@latest init
 
 Add the `dev` and `build` scripts to `package.json`:
 
-```json filename="package.json"
+```json title="package.json"
 {
   "scripts": {
     ...
@@ -89,7 +89,7 @@ Add the `dev` and `build` scripts to `package.json`:
 
 Modify the `tsconfig.json` file in your project root:
 
-```json filename="tsconfig.json"
+```json title="tsconfig.json"
 {
   ...
   "exclude": ["dist", ".mastra"]
@@ -101,7 +101,7 @@ Modify the `tsconfig.json` file in your project root:
 The `VITE_` prefix is required for environment variables to be accessible in the Vite environment, that SvelteKit uses.
 [Read more about Vite environment variables](https://vite.dev/guide/env-and-mode.html#env-variables).
 
-```bash filename=".env" copy
+```bash title=".env" copy
 VITE_OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -109,13 +109,13 @@ VITE_OPENAI_API_KEY=<your-api-key>
 
 Add `.mastra` to your `.gitignore` file:
 
-```bash filename=".gitignore" copy
+```bash title=".gitignore" copy
 .mastra
 ```
 
 ## Update the Mastra Agent
 
-```diff filename="src/mastra/agents/weather-agent.ts"
+```diff title="src/mastra/agents/weather-agent.ts"
 - import { openai } from "@ai-sdk/openai";
 + import { createOpenAI } from "@ai-sdk/openai";
 
@@ -166,7 +166,7 @@ Create a new Action, and add the example code:
 touch src/routes/test/+page.server.ts
 ```
 
-```typescript filename="src/routes/test/+page.server.ts" showLineNumbers copy
+```typescript title="src/routes/test/+page.server.ts" showLineNumbers copy
 import type { Actions } from './$types';
 import { mastra } from '../../mastra';
 
@@ -190,7 +190,7 @@ Create a new Page file, and add the example code:
 touch src/routes/test/+page.svelte
 ```
 
-```typescript filename="src/routes/test/+page.svelte" showLineNumbers copy
+```typescript title="src/routes/test/+page.svelte" showLineNumbers copy
 <script lang="ts">
 	import type { PageProps } from './$types';
 	let { form }: PageProps = $props();
@@ -282,7 +282,7 @@ npx mastra@latest init
 
 Add the `dev` and `build` scripts to `package.json`:
 
-```json filename="package.json"
+```json title="package.json"
 {
   "scripts": {
     ...
@@ -296,7 +296,7 @@ Add the `dev` and `build` scripts to `package.json`:
 
 Modify the `tsconfig.json` file in your project root:
 
-```json filename="tsconfig.json"
+```json title="tsconfig.json"
 {
   ...
   "exclude": ["dist", ".mastra"]
@@ -308,7 +308,7 @@ Modify the `tsconfig.json` file in your project root:
 The `VITE_` prefix is required for environment variables to be accessible in the Vite environment, that SvelteKit uses.
 [Read more about Vite environment variables](https://vite.dev/guide/env-and-mode.html#env-variables).
 
-```bash filename=".env" copy
+```bash title=".env" copy
 VITE_OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -316,13 +316,13 @@ VITE_OPENAI_API_KEY=<your-api-key>
 
 Add `.mastra` to your `.gitignore` file:
 
-```bash filename=".gitignore" copy
+```bash title=".gitignore" copy
 .mastra
 ```
 
 ## Update the Mastra Agent
 
-```diff filename="src/mastra/agents/weather-agent.ts"
+```diff title="src/mastra/agents/weather-agent.ts"
 - import { openai } from "@ai-sdk/openai";
 + import { createOpenAI } from "@ai-sdk/openai";
 
@@ -373,7 +373,7 @@ Create a new Endpoint, and add the example code:
 touch src/routes/weather-api/+server.ts
 ```
 
-```typescript filename="src/routes/weather-api/+server.ts" showLineNumbers copy
+```typescript title="src/routes/weather-api/+server.ts" showLineNumbers copy
 import { json } from '@sveltejs/kit';
 import { mastra } from '../../mastra';
 
@@ -397,7 +397,7 @@ Create a new Page, and add the example code:
 touch src/routes/weather-api-test/+page.svelte
 ```
 
-```typescript filename="src/routes/weather-api-test/+page.svelte" showLineNumbers copy
+```typescript title="src/routes/weather-api-test/+page.svelte" showLineNumbers copy
 <script lang="ts">
 	let result = $state<string | null>(null);
 	async function handleFormSubmit(event: Event) {

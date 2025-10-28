@@ -21,7 +21,7 @@ This example uses WorkOS authentication. Make sure to:
 3. Configure your redirect URIs and allowed origins
 4. Set up Organizations and configure user roles as needed
 
-```env filename=".env" copy
+```env title=".env" copy
 WORKOS_API_KEY=sk_live_...
 WORKOS_CLIENT_ID=client_...
 ```
@@ -42,7 +42,7 @@ npm install @mastra/auth-workos@latest
 
 ### Basic usage with environment variables
 
-```typescript {2,7} filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,7} title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 
@@ -56,7 +56,7 @@ export const mastra = new Mastra({
 
 ### Custom configuration
 
-```typescript {2,7-10} filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,7-10} title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 
@@ -84,7 +84,7 @@ By default, `MastraAuthWorkos` checks whether the authenticated user has an 'adm
 
 To customize user authorization, provide a custom `authorizeUser` function:
 
-```typescript filename="src/mastra/auth.ts" showLineNumbers copy
+```typescript title="src/mastra/auth.ts" showLineNumbers copy
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 
 const workosAuth = new MastraAuthWorkos({
@@ -114,7 +114,7 @@ npm install @workos-inc/node
 
 After users complete the WorkOS authentication flow and return with an authorization code, exchange it for an access token:
 
-```typescript filename="lib/auth.ts" showLineNumbers copy
+```typescript title="lib/auth.ts" showLineNumbers copy
 import { WorkOS } from '@workos-inc/node';
 
 const workos = new WorkOS(process.env.WORKOS_API_KEY);
@@ -135,7 +135,7 @@ export const authenticateWithWorkos = async (code: string, clientId: string) => 
 
 When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid WorkOS access token in the `Authorization` header:
 
-```typescript filename="lib/mastra/mastra-client.ts" showLineNumbers copy
+```typescript title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
 
 export const createMastraClient = (accessToken: string) => {
@@ -158,7 +158,7 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
 
 <Tabs>
   <TabItem value="curl" label="cURL">
-    ```typescript filename="src/api/agents.ts" showLineNumbers copy
+    ```typescript title="src/api/agents.ts" showLineNumbers copy
     import { WorkOS } from '@workos-inc/node';
     import { MastraClient } from '@mastra/client-js';
 

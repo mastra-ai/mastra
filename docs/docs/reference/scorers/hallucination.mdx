@@ -133,7 +133,7 @@ A hallucination score between 0 and 1:
 
 In this example, the response is fully aligned with the provided context. All claims are factually correct and directly supported by the source material, resulting in a low hallucination score.
 
-```typescript filename="src/example-no-hallucination.ts" showLineNumbers copy
+```typescript title="src/example-no-hallucination.ts" showLineNumbers copy
 import { createHallucinationScorer } from "@mastra/evals/scorers/llm";
 
 const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {
@@ -170,7 +170,7 @@ The response receives a score of 0 because there are no contradictions. Every st
 
 In this example, the response includes both accurate and inaccurate claims. Some details align with the context, while others directly contradict it—such as inflated numbers or incorrect locations. These contradictions increase the hallucination score.
 
-```typescript filename="src/example-mixed-hallucination.ts" showLineNumbers copy
+```typescript title="src/example-mixed-hallucination.ts" showLineNumbers copy
 import { createHallucinationScorer } from "@mastra/evals/scorers/llm";
 
 const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {
@@ -208,7 +208,7 @@ The Scorer assigns a mid-range score because parts of the response conflict with
 
 In this example, the response contradicts every key fact in the context. None of the claims can be verified, and all presented details are factually incorrect.
 
-```typescript filename="src/example-complete-hallucination.ts" showLineNumbers copy
+```typescript title="src/example-complete-hallucination.ts" showLineNumbers copy
 import { createHallucinationScorer } from "@mastra/evals/scorers/llm";
 
 const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {

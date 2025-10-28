@@ -23,7 +23,7 @@ npm install @mastra/evals
 
 In this example, the texts exhibit a similar positive sentiment. The metric measures the consistency between the tones, resulting in a high score.
 
-```typescript filename="src/example-positive-tone.ts" showLineNumbers copy
+```typescript title="src/example-positive-tone.ts" showLineNumbers copy
 import { ToneConsistencyMetric } from "@mastra/evals/nlp";
 
 const metric = new ToneConsistencyMetric();
@@ -55,7 +55,7 @@ The metric returns a high score reflecting strong sentiment alignment. The `info
 
 In this example, the text’s internal tone consistency is analyzed by passing an empty response. This signals the metric to evaluate sentiment stability within the single input text, resulting in a score reflecting how uniform the tone is throughout.
 
-```typescript filename="src/example-stable-tone.ts" showLineNumbers copy
+```typescript title="src/example-stable-tone.ts" showLineNumbers copy
 import { ToneConsistencyMetric } from "@mastra/evals/nlp";
 
 const metric = new ToneConsistencyMetric();
@@ -86,7 +86,7 @@ The metric returns a high score indicating consistent sentiment throughout the i
 
 In this example, the input and response have different emotional tones. The metric picks up on these variations and gives a lower consistency score.
 
-```typescript filename="src/example-mixed-tone.ts" showLineNumbers copy
+```typescript title="src/example-mixed-tone.ts" showLineNumbers copy
 import { ToneConsistencyMetric } from "@mastra/evals/nlp";
 
 const metric = new ToneConsistencyMetric();

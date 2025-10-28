@@ -13,7 +13,7 @@ This example demonstrates how to create a WhatsApp chat bot using Mastra agents 
 
 This example requires a WhatsApp Business API setup and uses the `anthropic` model. Add these environment variables to your `.env` file:
 
-```bash filename=".env" copy
+```bash title=".env" copy
 ANTHROPIC_API_KEY=<your-anthropic-api-key>
 WHATSAPP_VERIFY_TOKEN=<your-verify-token>
 WHATSAPP_ACCESS_TOKEN=<your-whatsapp-access-token>
@@ -25,7 +25,7 @@ WHATSAPP_API_VERSION=v22.0
 
 This client handles sending messages to users via the WhatsApp Business API.
 
-```typescript filename="src/whatsapp-client.ts" showLineNumbers copy
+```typescript title="src/whatsapp-client.ts" showLineNumbers copy
 // Simple WhatsApp Business API client for sending messages
 
 interface SendMessageParams {
@@ -90,7 +90,7 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageParams) {
 
 This agent handles the main conversation logic with a friendly, conversational personality.
 
-```typescript filename="src/mastra/agents/chat-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/chat-agent.ts" showLineNumbers copy
 import { anthropic } from "@ai-sdk/anthropic";
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
@@ -138,7 +138,7 @@ export const chatAgent = new Agent({
 
 This agent converts longer responses into natural, bite-sized text messages suitable for WhatsApp.
 
-```typescript filename="src/mastra/agents/text-message-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/text-message-agent.ts" showLineNumbers copy
 import { anthropic } from "@ai-sdk/anthropic";
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
@@ -175,7 +175,7 @@ export const textMessageAgent = new Agent({
 
 This workflow orchestrates the entire chat process: generating a response, breaking it into messages, and sending them via WhatsApp.
 
-```typescript filename="src/mastra/workflows/chat-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/chat-workflow.ts" showLineNumbers copy
 import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 import { sendWhatsAppMessage } from "../../whatsapp-client";
@@ -302,7 +302,7 @@ chatWorkflow.commit();
 
 Configure your Mastra instance with the agents, workflow, and WhatsApp webhook endpoints.
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { registerApiRoute } from "@mastra/core/server";
 import { PinoLogger } from "@mastra/loggers";
@@ -366,7 +366,7 @@ export const mastra = new Mastra({
 
 You can test the chat bot locally by simulating a WhatsApp webhook payload.
 
-```typescript filename="src/test-whatsapp-bot.ts" showLineNumbers copy
+```typescript title="src/test-whatsapp-bot.ts" showLineNumbers copy
 import "dotenv/config";
 
 import { mastra } from "./mastra";

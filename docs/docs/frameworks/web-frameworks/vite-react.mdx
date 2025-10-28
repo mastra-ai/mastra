@@ -84,7 +84,7 @@ Add the `dev` and `build` scripts to `package.json`:
 
 <Tabs>
   <TabItem value="app" label="app">
-    ```json filename="package.json"
+    ```json title="package.json"
     {
       "scripts": {
         ...
@@ -95,7 +95,7 @@ Add the `dev` and `build` scripts to `package.json`:
     ```
   </TabItem>
   <TabItem value="src-app" label="src/app">
-    ```json filename="package.json"
+    ```json title="package.json"
     {
       "scripts": {
         ...
@@ -111,7 +111,7 @@ Add the `dev` and `build` scripts to `package.json`:
 
 Modify the `tsconfig.json` file in your project root:
 
-```json filename="tsconfig.json"
+```json title="tsconfig.json"
 {
   ...
   "exclude": ["dist", ".mastra"]
@@ -120,7 +120,7 @@ Modify the `tsconfig.json` file in your project root:
 
 ## Set Up API Keys
 
-```bash filename=".env" copy
+```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -130,7 +130,7 @@ OPENAI_API_KEY=<your-api-key>
 
 Add `.mastra` to your `.gitignore` file:
 
-```bash filename=".gitignore" copy
+```bash title=".gitignore" copy
 .mastra
 ```
 
@@ -166,7 +166,7 @@ mkdir lib
 touch lib/mastra.ts
 ```
 
-```typescript filename="lib/mastra.ts" showLineNumbers copy
+```typescript title="lib/mastra.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
@@ -178,7 +178,7 @@ export const mastraClient = new MastraClient({
 
 Add new `route` to the config:
 
-```typescript filename="app/routes.ts" showLineNumbers copy
+```typescript title="app/routes.ts" showLineNumbers copy
 import { type RouteConfig, index, route } from "@react-router/dev/routes";
 
 export default [
@@ -195,7 +195,7 @@ Create a new Route, and add the example code:
 touch app/routes/test.tsx
 ```
 
-```typescript filename="app/routes/test.tsx" showLineNumbers copy
+```typescript title="app/routes/test.tsx" showLineNumbers copy
 import { useState } from "react";
 import { mastraClient } from "../../lib/mastra";
 

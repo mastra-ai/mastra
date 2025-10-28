@@ -24,7 +24,7 @@ npm install @mastra/evals
 In this example, the texts are exactly the same. The metric identifies complete similarity with a perfect score and no detected changes.
 
 
-```typescript filename="src/example-no-differences.ts" showLineNumbers copy
+```typescript title="src/example-no-differences.ts" showLineNumbers copy
 import { TextualDifferenceMetric } from "@mastra/evals/nlp";
 
 const metric = new TextualDifferenceMetric();
@@ -56,7 +56,7 @@ The metric returns a high score, indicating the texts are identical. The detaile
 
 In this example, the texts have small variations. The metric detects these minor differences and returns a moderate similarity score.
 
-```typescript filename="src/example-minor-differences.ts" showLineNumbers copy
+```typescript title="src/example-minor-differences.ts" showLineNumbers copy
 import { TextualDifferenceMetric } from "@mastra/evals/nlp";
 
 const metric = new TextualDifferenceMetric();
@@ -89,7 +89,7 @@ The metric returns a moderate score reflecting the small variations between the 
 
 In this example, the texts differ significantly. The metric detects extensive changes and returns a low similarity score.
 
-```typescript filename="src/example-major-differences.ts" showLineNumbers copy
+```typescript title="src/example-major-differences.ts" showLineNumbers copy
 import { TextualDifferenceMetric } from "@mastra/evals/nlp";
 
 const metric = new TextualDifferenceMetric();

@@ -45,7 +45,7 @@ rm -rf src/mastra/agents src/mastra/workflows src/mastra/tools/weather-tool.ts
 
 You should also change the `src/mastra/index.ts` file like so:
 
-```ts copy filename="src/mastra/index.ts"
+```ts copy title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core/mastra";
 import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";
@@ -107,7 +107,7 @@ Let's add the MCP server!
 
 In `src/mastra/mcp/server.ts`, define the MCP server instance:
 
-```typescript copy filename="src/mastra/mcp/server.ts"
+```typescript copy title="src/mastra/mcp/server.ts"
 import { MCPServer } from "@mastra/mcp";
 
 export const notes = new MCPServer({
@@ -119,7 +119,7 @@ export const notes = new MCPServer({
 
 Register this MCP server in your Mastra instance at `src/mastra/index.ts`. The key `notes` is the public identifier for your MCP server:
 
-```typescript copy filename="src/mastra/index.ts" {4, 15-17}
+```typescript copy title="src/mastra/index.ts" {4, 15-17}
 import { Mastra } from "@mastra/core";
 import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";
@@ -144,7 +144,7 @@ export const mastra = new Mastra({
 
 Resource handlers allow clients to discover and read the content your server manages. Implement handlers to work with markdown files in the `notes` directory. Add to the `src/mastra/mcp/resources.ts` file:
 
-```typescript copy filename="src/mastra/mcp/resources.ts"
+```typescript copy title="src/mastra/mcp/resources.ts"
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -200,7 +200,7 @@ export const resourceHandlers: MCPServerResources = {
 
 Register these resource handlers in `src/mastra/mcp/server.ts`:
 
-```typescript copy filename="src/mastra/mcp/server.ts" {2, 8}
+```typescript copy title="src/mastra/mcp/server.ts" {2, 8}
 import { MCPServer } from "@mastra/mcp";
 import { resourceHandlers } from "./resources";
 
@@ -217,7 +217,7 @@ export const notes = new MCPServer({
 Tools are the actions your server can perform. Let's create a `write` tool.
 First, define the tool in `src/mastra/tools/write-note.ts`:
 
-```typescript copy filename="src/mastra/tools/write-note.ts"
+```typescript copy title="src/mastra/tools/write-note.ts"
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { fileURLToPath } from "url";
@@ -258,7 +258,7 @@ export const writeNoteTool = createTool({
 
 Register this tool in `src/mastra/mcp/server.ts`:
 
-```typescript copy filename="src/mastra/mcp/server.ts"
+```typescript copy title="src/mastra/mcp/server.ts"
 import { MCPServer } from "@mastra/mcp";
 import { resourceHandlers } from "./resources";
 import { writeNoteTool } from "../tools/write-note";
@@ -289,7 +289,7 @@ npm install unified remark-parse gray-matter @types/unist
 
 Implement the prompts in `src/mastra/mcp/prompts.ts`:
 
-```typescript copy filename="src/mastra/mcp/prompts.ts"
+```typescript copy title="src/mastra/mcp/prompts.ts"
 import type { MCPServerPrompts } from "@mastra/mcp";
 import { unified } from "unified";
 import remarkParse from "remark-parse";
@@ -397,7 +397,7 @@ export const promptHandlers: MCPServerPrompts = {
 
 Register these prompt handlers in `src/mastra/mcp/server.ts`:
 
-```typescript copy filename="src/mastra/mcp/server.ts"
+```typescript copy title="src/mastra/mcp/server.ts"
 import { MCPServer } from "@mastra/mcp";
 import { resourceHandlers } from "./resources";
 import { writeNoteTool } from "../tools/write-note";

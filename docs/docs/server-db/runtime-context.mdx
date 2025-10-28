@@ -77,7 +77,7 @@ await weatherTool.execute({
 
 You can populate `runtimeContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { RuntimeContext } from "@mastra/core/runtime-context";
 import { testWeatherAgent } from "./agents/test-weather-agent";
@@ -105,7 +105,7 @@ export const mastra = new Mastra({
 
 You can access the `runtimeContext` argument from any supported configuration options in agents. These functions can be sync or `async`. Use the `.get()` method to read values from `runtimeContext`.
 
-```typescript {7-8,15,18,21} filename="src/mastra/agents/weather-agent.ts" showLineNumbers
+```typescript {7-8,15,18,21} title="src/mastra/agents/weather-agent.ts" showLineNumbers
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
@@ -140,7 +140,7 @@ You can also use `runtimeContext` with other options like `agents`, `workflows`,
 
 You can access the `runtimeContext` argument from a workflow step's `execute` function. This function can be sync or async. Use the `.get()` method to read values from `runtimeContext`.
 
-```typescript {7-8} filename="src/mastra/workflows/weather-workflow.ts" showLineNumbers copy
+```typescript {7-8} title="src/mastra/workflows/weather-workflow.ts" showLineNumbers copy
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
@@ -164,7 +164,7 @@ const stepOne = createStep({
 
 You can access the `runtimeContext` argument from a tool’s `execute` function. This function is `async`.  Use the `.get()` method to read values from `runtimeContext`.
 
-```typescript {7-8} filename="src/mastra/tools/weather-tool.ts" showLineNumbers
+```typescript {7-8} title="src/mastra/tools/weather-tool.ts" showLineNumbers
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };

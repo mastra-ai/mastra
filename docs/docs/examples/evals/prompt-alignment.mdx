@@ -23,7 +23,7 @@ npm install @mastra/evals
 
 In this example, the response follows all applicable instructions from the input. The score reflects full adherence, with no instructions missed or ignored.
 
-```typescript filename="src/example-high-perfect-alignment.ts" showLineNumbers copy
+```typescript title="src/example-high-perfect-alignment.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { PromptAlignmentMetric } from "@mastra/evals/llm";
 
@@ -66,7 +66,7 @@ The response receives a high score because it fully satisfies all applicable ins
 
 In this example, the response follows some of the instructions but omits others. The score reflects partial adherence, with a mix of followed and missed instructions.
 
-```typescript filename="src/example-high-mixed-alignment.ts" showLineNumbers copy
+```typescript title="src/example-high-mixed-alignment.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { PromptAlignmentMetric } from "@mastra/evals/llm";
 
@@ -110,7 +110,7 @@ The response receives a mixed score because it follows some of the instructions 
 In this example, the response does not address any of the instructions because they are unrelated to the query. The score reflects that the instructions were not applicable in this context.
 
 
-```typescript filename="src/example-non-applicable-alignment.ts" showLineNumbers copy
+```typescript title="src/example-non-applicable-alignment.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { PromptAlignmentMetric } from "@mastra/evals/llm";
 

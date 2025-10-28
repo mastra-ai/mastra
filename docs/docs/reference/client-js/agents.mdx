@@ -179,7 +179,7 @@ response.processDataStream({
 
 To stream AI SDK-formatted parts on the client from an `agent.stream(...)` response, wrap `response.processDataStream` into a `ReadableStream<ChunkType>` and use `toAISdkFormat`:
 
-```typescript filename="client-ai-sdk-transform.ts" copy
+```typescript title="client-ai-sdk-transform.ts" copy
 import { createUIMessageStream } from 'ai';
 import { toAISdkFormat } from '@mastra/ai-sdk';
 import type { ChunkType, MastraModelOutput } from '@mastra/core/stream';

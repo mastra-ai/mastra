@@ -34,7 +34,7 @@ export MASTRA_CLOUD_ACCESS_TOKEN=your_token_here
 
 Create your Mastra configuration with AI tracing enabled:
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core";
 import { LibSQLStorage } from "@mastra/libsql";
 
@@ -59,7 +59,7 @@ This default configuration automatically includes:
 
 ### 3. Create an Agent with Automatic Tracing
 
-```typescript filename="src/mastra/agents/example-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/example-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
 import { openai } from "@ai-sdk/openai";
@@ -87,7 +87,7 @@ export const exampleAgent = new Agent({
 
 ### 4. Execute and View Traces
 
-```typescript filename="src/example.ts" showLineNumbers copy
+```typescript title="src/example.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
 async function main() {
@@ -129,7 +129,7 @@ In the Playground or in Mastra Cloud, go to the Observability page, and click on
 
 Enhance your traces with custom metadata:
 
-```typescript filename="src/example-with-metadata.ts" showLineNumbers copy
+```typescript title="src/example-with-metadata.ts" showLineNumbers copy
 const result = await agent.generate(
   "What time is it?",
   {

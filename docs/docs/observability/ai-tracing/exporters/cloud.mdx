@@ -26,13 +26,13 @@ CloudExporter is ideal for:
 2. **Access Token**: Generate in Mastra Cloud → Settings → API Tokens
 3. **Environment Variables**: Set your credentials:
 
-```bash filename=".env"
+```bash title=".env"
 MASTRA_CLOUD_ACCESS_TOKEN=mst_xxxxxxxxxxxxxxxx
 ```
 
 ### Basic Setup
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { CloudExporter } from "@mastra/core/ai-tracing";
 

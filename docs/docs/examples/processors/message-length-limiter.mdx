@@ -13,7 +13,7 @@ This example shows how to create a custom input processor that validates and lim
 
 A custom input processor in Mastra implements the `Processor` interface with the `processInput` method. This processor validates the total character count of all text content in the message thread and blocks requests that exceed the configured limit.
 
-```typescript filename="src/mastra/processors/message-length-limiter.ts" showLineNumbers copy
+```typescript title="src/mastra/processors/message-length-limiter.ts" showLineNumbers copy
 import type { Processor } from "@mastra/core/processors";
 import type { MastraMessageV2 } from "@mastra/core/agent/message-list";
 import { TripWire } from "@mastra/core/agent";
@@ -127,7 +127,7 @@ export class MessageLengthLimiter implements Processor {
 
 Using the options object approach with explicit strategy configuration:
 
-```typescript filename="src/mastra/agents/blocking-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/blocking-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "../processors/message-length-limiter";
 
@@ -143,7 +143,7 @@ export const blockingAgent = new Agent({
 
 Using the simple number approach (defaults to 'block' strategy):
 
-```typescript filename="src/mastra/agents/simple-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/simple-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "../processors/message-length-limiter";
 
@@ -161,7 +161,7 @@ export const simpleAgent = new Agent({
 
 This example shows a message that stays within the configured character limit and processes successfully.
 
-```typescript filename="src/example-high-message-length.ts" showLineNumbers copy
+```typescript title="src/example-high-message-length.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter";
 
@@ -193,7 +193,7 @@ The message processes successfully because it's well under the 500-character lim
 
 This example shows a message that's close to but still within the character limit.
 
-```typescript filename="src/example-partial-message-length.ts" showLineNumbers copy
+```typescript title="src/example-partial-message-length.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter";
 
@@ -225,7 +225,7 @@ The message processes successfully as it's under the 300-character limit:
 
 This example shows what happens when a message exceeds the configured character limit.
 
-```typescript filename="src/example-low-message-length.ts" showLineNumbers copy
+```typescript title="src/example-low-message-length.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter";
 

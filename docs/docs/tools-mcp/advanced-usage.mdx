@@ -90,7 +90,7 @@ npm install ai
 
 Here's an example of a tool defined using the Vercel AI SDK format:
 
-```typescript filename="src/mastra/tools/vercelWeatherTool.ts" copy
+```typescript title="src/mastra/tools/vercelWeatherTool.ts" copy
 import { tool } from "ai";
 import { z } from "zod";
 
@@ -110,7 +110,7 @@ export const vercelWeatherTool = tool({
 
 You can then add this tool to your Mastra agent just like any other tool:
 
-```typescript filename="src/mastra/agents/mixedToolsAgent.ts"
+```typescript title="src/mastra/agents/mixedToolsAgent.ts"
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { vercelWeatherTool } from "../tools/vercelWeatherTool"; // Vercel AI SDK tool

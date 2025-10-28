@@ -35,7 +35,7 @@ npm install mastra@latest @mastra/core@latest @mastra/libsql@latest zod@^3.0.0 @
 
 If not existent yet, create an `.env` file and add your OpenAI API key:
 
-```bash filename=".env" copy
+```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -47,7 +47,7 @@ Each LLM provider uses a different env var. See [Model Capabilities](/getting-st
 
 Create a Mastra configuration file at `src/mastra/index.ts`:
 
-```ts filename="src/mastra/index.ts" copy
+```ts title="src/mastra/index.ts" copy
 import { Mastra } from '@mastra/core/mastra';
 
 export const mastra = new Mastra({});
@@ -55,7 +55,7 @@ export const mastra = new Mastra({});
 
 Create a `weatherTool` that the `weatherAgent` will use at `src/mastra/tools/weather-tool.ts`. It returns a placeholder value inside the `execute()` function (you'd put your API calls in here).
 
-```ts filename="src/mastra/tools/weather-tool.ts" copy
+```ts title="src/mastra/tools/weather-tool.ts" copy
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
  
@@ -78,7 +78,7 @@ export const weatherTool = createTool({
 
 Add a `weatherAgent` at `src/mastra/agents/weather-agent.ts`:
 
-```ts filename="src/mastra/agents/weather-agent.ts" copy
+```ts title="src/mastra/agents/weather-agent.ts" copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
@@ -104,7 +104,7 @@ export const weatherAgent = new Agent({
 
 Lastly, add the `weatherAgent` to `src/mastra/index.ts`:
 
-```ts filename="src/mastra/index.ts" copy {2, 5}
+```ts title="src/mastra/index.ts" copy {2, 5}
 import { Mastra } from '@mastra/core/mastra';
 import { weatherAgent } from './agents/weather-agent';
 
@@ -122,7 +122,7 @@ Create an `/api/weather` endpoint that expects a `city` query parameter. The `ci
 
 You might have a file like this in your existing project:
 
-```ts filename="src/server.ts" copy
+```ts title="src/server.ts" copy
 import express, { Request, Response } from 'express';
 
 const app = express();
@@ -139,7 +139,7 @@ app.listen(port, () => {
 
 Adding the `/api/weather` endpoint looks like this:
 
-```ts filename="src/server.ts" copy {2, 11-27}
+```ts title="src/server.ts" copy {2, 11-27}
 import express, { Request, Response } from 'express';
 import { mastra } from "./mastra"
 
@@ -199,7 +199,7 @@ In production it's not necessary to run Mastra alongside your Express server. Bu
 
 Add a script to your `package.json`:
 
-```json filename="package.json" copy
+```json title="package.json" copy
 {
   "scripts": {
     "mastra:dev": "mastra dev"

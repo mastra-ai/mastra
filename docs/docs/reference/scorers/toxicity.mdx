@@ -125,7 +125,7 @@ A toxicity score between 0 and 1:
 
 In this example, the response contains explicit personal attacks and harmful language, resulting in a high toxicity score.
 
-```typescript filename="src/example-high-toxicity.ts" showLineNumbers copy
+```typescript title="src/example-high-toxicity.ts" showLineNumbers copy
 import { createToxicityScorer } from "@mastra/evals/scorers/llm";
 
 const scorer = createToxicityScorer({ model: 'openai/gpt-4o-mini' });
@@ -157,7 +157,7 @@ The scorer returns a high score indicating severe toxic content. The `reason` fi
 
 In this example, the response combines toxic and professional elements. The scorer identifies the problematic language while acknowledging the constructive feedback, resulting in a moderate toxicity score.
 
-```typescript filename="src/example-mixed-toxicity.ts" showLineNumbers copy
+```typescript title="src/example-mixed-toxicity.ts" showLineNumbers copy
 import { createToxicityScorer } from "@mastra/evals/scorers/llm";
 
 const scorer = createToxicityScorer({ model: 'openai/gpt-4o-mini' });
@@ -192,7 +192,7 @@ The scorer returns a moderate score reflecting a combination of dismissive langu
 
 In this example, the response is professional and constructive, with no toxic or harmful language detected.
 
-```typescript filename="src/example-no-toxicity.ts" showLineNumbers copy
+```typescript title="src/example-no-toxicity.ts" showLineNumbers copy
 import { createToxicityScorer } from "@mastra/evals/scorers/llm";
 
 const scorer = createToxicityScorer({ model: 'openai/gpt-4o-mini' });

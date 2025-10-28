@@ -32,7 +32,7 @@ Before you begin, ensure you have:
 
 Specifically, ensure you've removed it from both `src/mastra/index.ts` and `src/mastra/agents/weather-agent.ts`:
 
-```typescript filename="src/mastra/index.ts" showLineNumbers
+```typescript title="src/mastra/index.ts" showLineNumbers
 export const mastra = new Mastra({
   // ...
   storage: new LibSQLStore({ // [!code --]
@@ -42,7 +42,7 @@ export const mastra = new Mastra({
 });
 ```
 
-```typescript filename="src/mastra/agents/weather-agent.ts" showLineNumbers
+```typescript title="src/mastra/agents/weather-agent.ts" showLineNumbers
 export const weatherAgent = new Agent({
  // ..
  memory: new Memory({  // [!code --]

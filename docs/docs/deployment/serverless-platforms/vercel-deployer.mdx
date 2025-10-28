@@ -18,7 +18,7 @@ npm install @mastra/deployer-vercel@latest
 
 ## Usage example
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
@@ -40,7 +40,7 @@ The Vercel deployer can write a few high‑value settings into the Vercel Output
 
 Example:
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts" showLineNumbers copy
 deployer: new VercelDeployer({
   maxDuration: 600,
   memory: 1536,

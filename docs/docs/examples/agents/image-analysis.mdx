@@ -18,7 +18,7 @@ AI agents can analyze and understand images by processing visual content alongsi
 
 This example uses the `openai` model. Add both `OPENAI_API_KEY` and `UNSPLASH_ACCESS_KEY` to your `.env` file.
 
-```bash filename=".env" copy
+```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 UNSPLASH_ACCESS_KEY=<your-unsplash-access-key>
 ```
@@ -27,7 +27,7 @@ UNSPLASH_ACCESS_KEY=<your-unsplash-access-key>
 
 Create a simple agent that analyzes images to identify objects, describe scenes, and answer questions about visual content.
 
-```typescript filename="src/mastra/agents/example-image-analysis-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/example-image-analysis-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
@@ -48,7 +48,7 @@ export const imageAnalysisAgent = new Agent({
 
 To use an agent, register it in your main Mastra instance.
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 
 import { imageAnalysisAgent } from "./agents/example-image-analysis-agent";
@@ -63,7 +63,7 @@ export const mastra = new Mastra({
 
 This function retrieves a random image from Unsplash to pass to the agent for analysis.
 
-```typescript filename="src/mastra/utils/get-random-image.ts" showLineNumbers copy
+```typescript title="src/mastra/utils/get-random-image.ts" showLineNumbers copy
 export const getRandomImage = async (): Promise<string> => {
   const queries = ["wildlife", "feathers", "flying", "birds"];
   const query = queries[Math.floor(Math.random() * queries.length)];
@@ -87,7 +87,7 @@ export const getRandomImage = async (): Promise<string> => {
 
 Use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt. Provide a `content` array that includes the image `type`, `imageUrl`, `mimeType`, and clear instructions for how the agent should respond.
 
-```typescript filename="src/test-image-analysis.ts" showLineNumbers copy
+```typescript title="src/test-image-analysis.ts" showLineNumbers copy
 import "dotenv/config";
 
 import { mastra } from "./mastra";
