@@ -380,7 +380,7 @@ export async function getMessagesHandler({
   runtimeContext,
   ...listMessagesParams
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'runtimeContext'> &
-  Omit<StorageListMessagesInput, 'threadId'>) {
+  Omit<StorageListMessagesInput, 'threadId' | 'include'>) {
   try {
     validateBody({ threadId });
 
@@ -408,33 +408,26 @@ export async function getMessagesHandler({
     }
 
     const thread = await memory.getThreadById({ threadId: threadId! });
+
     if (!thread) {
       throw new HTTPException(404, { message: 'Thread not found' });
     }
 
-    const format = listMessagesParams.format || 'v1';
+    const result = await memory.query({
+      threadId: threadId!,
+      resourceId: listMessagesParams.resourceId,
+      limit: listMessagesParams.limit,
+      offset: listMessagesParams.offset,
+      filter: listMessagesParams.filter,
+    });
 
-    const result = await (format === 'v2'
-      ? memory.storage.listMessages({
-          threadId: threadId!,
-          limit: listMessagesParams.limit,
-          offset: listMessagesParams.offset,
-          filter: listMessagesParams.filter,
-          include: listMessagesParams.include,
-          format: 'v2' as const,
-          resourceId: listMessagesParams.resourceId,
-        })
-      : memory.storage.listMessages({
-          threadId: threadId!,
-          limit: listMessagesParams.limit,
-          offset: listMessagesParams.offset,
-          filter: listMessagesParams.filter,
-          include: listMessagesParams.include,
-          format: 'v1' as const,
-          resourceId: listMessagesParams.resourceId,
-        }));
+    const uiMessages = convertMessages(result.messages).to('AIV5.UI');
 
-    return result;
+    return {
+      messages: result.messages,
+      uiMessages,
+      legacyMessages: result.uiMessages,
+    };
   } catch (error) {
     return handleError(error, 'Error listing messages');
   }

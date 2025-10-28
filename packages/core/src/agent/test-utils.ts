@@ -1,7 +1,7 @@
 import { expect } from 'vitest';
 import { MastraMemory } from '../memory';
-import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig } from '../memory';
-import { InMemoryStore } from '../storage';
+import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig, MemoryQueryResult } from '../memory';
+import { InMemoryStore, type StorageListMessagesInput } from '../storage';
 import { MessageList } from './message-list';
 
 export class MockMemory extends MastraMemory {
@@ -55,8 +55,13 @@ export class MockMemory extends MastraMemory {
       hasPreviousPage: false,
     };
   }
-  async query() {
-    return { messages: [], uiMessages: [], messagesV2: [] };
+  async query(
+    args: Omit<StorageListMessagesInput, 'format' | 'include'> & {
+      threadConfig?: MemoryConfig;
+      vectorSearchString?: string;
+    },
+  ): Promise<MemoryQueryResult> {
+    return { messages: [], uiMessages: [], total: 0, page: 0, perPage: 0, hasMore: false };
   }
   async deleteThread(threadId: string) {
     return this.storage.deleteThread({ threadId });

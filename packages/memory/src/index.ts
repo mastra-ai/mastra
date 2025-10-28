@@ -1,6 +1,7 @@
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
+import type { MastraMessageV2 } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
+import type { MemoryQueryResult } from '@mastra/core/memory';
 import type {
   MastraMessageV1,
   MemoryConfig,
@@ -8,12 +9,12 @@ import type {
   StorageThreadType,
   WorkingMemoryTemplate,
 } from '@mastra/core/memory';
-import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
+import type { ThreadSortOptions, PaginationInfo, StorageListMessagesInput } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { embedMany } from 'ai';
-import type { CoreMessage, TextPart } from 'ai';
+import type { TextPart } from 'ai';
 import { embedMany as embedManyV5 } from 'ai-v5';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
@@ -100,11 +101,15 @@ export class Memory extends MastraMemory {
   async query({
     threadId,
     resourceId,
-    selectBy,
     threadConfig,
-  }: StorageGetMessagesArg & {
+    limit,
+    offset,
+    filter,
+    vectorSearchString,
+  }: Omit<StorageListMessagesInput, 'format' | 'include'> & {
     threadConfig?: MemoryConfig;
-  }): Promise<{ messages: CoreMessage[]; uiMessages: UIMessageWithMetadata[]; messagesV2: MastraMessageV2[] }> {
+    vectorSearchString?: string;
+  }): Promise<MemoryQueryResult> {
     const config = this.getMergedThreadConfig(threadConfig || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
@@ -117,7 +122,9 @@ export class Memory extends MastraMemory {
 
     this.logger.debug(`Memory query() with:`, {
       threadId,
-      selectBy,
+      limit,
+      offset,
+      filter,
       threadConfig,
     });
 
@@ -142,15 +149,15 @@ export class Memory extends MastraMemory {
       config.semanticRecall === true;
 
     // Guard: If resource-scoped semantic recall is enabled but no resourceId is provided, throw an error
-    if (resourceScope && !resourceId && config?.semanticRecall && selectBy?.vectorSearchString) {
+    if (resourceScope && !resourceId && config?.semanticRecall && vectorSearchString) {
       throw new Error(
         `Memory error: Resource-scoped semantic recall is enabled but no resourceId was provided. ` +
           `Either provide a resourceId or explicitly set semanticRecall.scope to 'thread'.`,
       );
     }
 
-    if (config?.semanticRecall && selectBy?.vectorSearchString && this.vector) {
-      const { embeddings, dimension } = await this.embedMessageContent(selectBy.vectorSearchString!);
+    if (config?.semanticRecall && vectorSearchString && this.vector) {
+      const { embeddings, dimension } = await this.embedMessageContent(vectorSearchString!);
       const { indexName } = await this.createEmbeddingIndex(dimension, config);
 
       await Promise.all(
@@ -182,81 +189,42 @@ export class Memory extends MastraMemory {
     // Get raw messages from storage
     // Use paginated method when pagination is requested
     let rawMessages;
-    if (selectBy?.pagination) {
-      const paginatedResult = await this.storage.getMessagesPaginated({
-        threadId,
-        resourceId,
-        format: 'v2',
-        selectBy: {
-          ...selectBy,
-          ...(vectorResults?.length
-            ? {
-                include: vectorResults.map(r => ({
-                  id: r.metadata?.message_id,
-                  threadId: r.metadata?.thread_id,
-                  withNextMessages:
-                    typeof vectorConfig.messageRange === 'number'
-                      ? vectorConfig.messageRange
-                      : vectorConfig.messageRange.after,
-                  withPreviousMessages:
-                    typeof vectorConfig.messageRange === 'number'
-                      ? vectorConfig.messageRange
-                      : vectorConfig.messageRange.before,
-                })),
-              }
-            : {}),
-        },
-        threadConfig: config,
-      });
-      rawMessages = paginatedResult.messages;
-    } else {
-      const { messages } = await this.storage.listMessages({
-        threadId,
-        resourceId,
-        format: 'v2',
-        ...(vectorResults?.length
-          ? {
-              include: vectorResults.map(r => ({
-                id: r.metadata?.message_id,
-                threadId: r.metadata?.thread_id,
-                withNextMessages:
-                  typeof vectorConfig.messageRange === 'number'
-                    ? vectorConfig.messageRange
-                    : vectorConfig.messageRange.after,
-                withPreviousMessages:
-                  typeof vectorConfig.messageRange === 'number'
-                    ? vectorConfig.messageRange
-                    : vectorConfig.messageRange.before,
-              })),
-            }
-          : {}),
-      });
 
-      rawMessages = messages;
-    }
+    const result = await this.storage.listMessages({
+      threadId,
+      resourceId,
+      format: 'v2',
+      limit,
+      offset,
+      filter,
+      ...(vectorResults?.length
+        ? {
+            include: vectorResults.map(r => ({
+              id: r.metadata?.message_id,
+              threadId: r.metadata?.thread_id,
+              withNextMessages:
+                typeof vectorConfig.messageRange === 'number'
+                  ? vectorConfig.messageRange
+                  : vectorConfig.messageRange.after,
+              withPreviousMessages:
+                typeof vectorConfig.messageRange === 'number'
+                  ? vectorConfig.messageRange
+                  : vectorConfig.messageRange.before,
+            })),
+          }
+        : {}),
+    });
+
+    rawMessages = result.messages;
 
     const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
+
     return {
-      get messages() {
-        // returning v1 messages for backwards compat! v1 messages were CoreMessages stored in the db.
-        // returning .v1() takes stored messages which may be in v2 or v1 format and converts them to v1 shape, which is a CoreMessage + id + threadId + resourceId, etc
-        // Perhaps this should be called coreRecord or something ? - for now keeping v1 since it reflects that this used to be our db storage record shape
-        const v1Messages = list.get.all.v1();
-        // the conversion from V2/UIMessage -> V1/CoreMessage can sometimes split the messages up into more messages than before
-        // so slice off the earlier messages if it'll exceed the lastMessages setting
-        if (selectBy?.last && v1Messages.length > selectBy.last) {
-          // ex: 23 (v1 messages) minus 20 (selectBy.last messages)
-          // means we will start from index 3 and keep all the later newer messages from index 3 til the end of the array
-          return v1Messages.slice(v1Messages.length - selectBy.last) as CoreMessage[];
-        }
-        // TODO: this is absolutely wrong but became apparent that this is what we were doing before adding MessageList. Our public types said CoreMessage but we were returning MessageType which is equivalent to MastraMessageV1
-        // In a breaking change we should make this the type it actually is.
-        return v1Messages as CoreMessage[];
-      },
+      ...result,
       get uiMessages() {
         return list.get.all.ui();
       },
-      get messagesV2() {
+      get messages() {
         return list.get.all.v2();
       },
     };
@@ -286,15 +254,13 @@ export class Memory extends MastraMemory {
     const messagesResult = await this.query({
       resourceId,
       threadId,
-      selectBy: {
-        last: threadConfig.lastMessages,
-        vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
-      },
+      limit: threadConfig.lastMessages,
+      vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
       threadConfig: config,
-      format: 'v2',
     });
+
     // Using MessageList here just to convert mixed input messages to single type output messages
-    const list = new MessageList({ threadId, resourceId }).add(messagesResult.messagesV2, 'memory');
+    const list = new MessageList({ threadId, resourceId }).add(messagesResult.messages, 'memory');
 
     this.logger.debug(`Remembered message history includes ${messagesResult.messages.length} messages.`);
     return { messages: list.get.all.v1(), messagesV2: list.get.all.v2() };

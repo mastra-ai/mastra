@@ -5,7 +5,13 @@ import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-li
 import { MastraBase } from '../base';
 import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
-import type { MastraStorage, PaginationInfo, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
+import type {
+  MastraStorage,
+  PaginationInfo,
+  StorageGetMessagesArg,
+  StorageListMessagesInput,
+  ThreadSortOptions,
+} from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
 import { deepMerge } from '../utils';
@@ -24,6 +30,12 @@ export type MemoryProcessorOpts = {
   memorySystemMessage?: string;
   newMessages?: CoreMessage[];
 };
+
+export type MemoryQueryResult = {
+  uiMessages: UIMessageWithMetadata[];
+  messages: MastraMessageV2[];
+} & PaginationInfo;
+
 /**
  * Interface for message processors that can filter or transform messages
  * before they're sent to the LLM.
@@ -354,11 +366,12 @@ export abstract class MastraMemory extends MastraBase {
    * @param threadId - The unique identifier of the thread
    * @returns Promise resolving to array of messages, uiMessages, and messagesV2
    */
-  abstract query({ threadId, resourceId, selectBy }: StorageGetMessagesArg): Promise<{
-    messages: CoreMessage[];
-    uiMessages: UIMessageWithMetadata[];
-    messagesV2: MastraMessageV2[];
-  }>;
+  abstract query(
+    args: Omit<StorageListMessagesInput, 'format' | 'include'> & {
+      threadConfig?: MemoryConfig;
+      vectorSearchString?: string;
+    },
+  ): Promise<MemoryQueryResult>;
 
   /**
    * Helper method to create a new thread

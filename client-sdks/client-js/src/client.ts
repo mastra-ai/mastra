@@ -123,35 +123,8 @@ export class MastraClient extends BaseResource {
    * @param threadId - ID of the memory thread to retrieve
    * @returns MemoryThread instance
    */
-  public getMemoryThread(threadId: string, agentId: string) {
+  public getMemoryThread({ threadId, agentId }: { threadId: string; agentId: string }) {
     return new MemoryThread(this.options, threadId, agentId);
-  }
-
-  public getThreadMessages(
-    threadId: string,
-    opts: { agentId?: string; networkId?: string; runtimeContext?: RuntimeContext | Record<string, any> } = {},
-  ): Promise<GetMemoryThreadMessagesResponse> {
-    let url = '';
-    if (opts.agentId) {
-      url = `/api/memory/threads/${threadId}/messages?agentId=${opts.agentId}${runtimeContextQueryString(opts.runtimeContext, '&')}`;
-    } else if (opts.networkId) {
-      url = `/api/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${runtimeContextQueryString(opts.runtimeContext, '&')}`;
-    }
-    return this.request(url);
-  }
-
-  public deleteThread(
-    threadId: string,
-    opts: { agentId?: string; networkId?: string; runtimeContext?: RuntimeContext | Record<string, any> } = {},
-  ): Promise<{ success: boolean; message: string }> {
-    let url = '';
-
-    if (opts.agentId) {
-      url = `/api/memory/threads/${threadId}?agentId=${opts.agentId}${runtimeContextQueryString(opts.runtimeContext, '&')}`;
-    } else if (opts.networkId) {
-      url = `/api/memory/network/threads/${threadId}?networkId=${opts.networkId}${runtimeContextQueryString(opts.runtimeContext, '&')}`;
-    }
-    return this.request(url, { method: 'DELETE' });
   }
 
   /**

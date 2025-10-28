@@ -337,7 +337,10 @@ export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
  */
 export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'>;
 
-export type ListMemoryThreadMessagesResponse = StorageListMessagesOutput;
+export type ListMemoryThreadMessagesResponse = {
+  legacyMessages: AiMessageType[];
+  uiMessages: UIMessage[];
+} & PaginationInfo;
 
 export interface GetLogsParams {
   transportId: string;
