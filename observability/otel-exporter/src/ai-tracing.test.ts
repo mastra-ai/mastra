@@ -13,7 +13,12 @@ vi.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
 
 vi.mock('@opentelemetry/sdk-trace-base', () => ({
   SimpleSpanProcessor: vi.fn(),
-  BatchSpanProcessor: vi.fn(),
+  BatchSpanProcessor: vi.fn().mockImplementation(() => ({
+    onEnd: vi.fn(),
+    onStart: vi.fn(),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+    forceFlush: vi.fn().mockResolvedValue(undefined),
+  })),
 }));
 
 vi.mock('@opentelemetry/sdk-trace-node', () => ({
