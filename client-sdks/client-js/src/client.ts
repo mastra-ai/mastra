@@ -46,6 +46,7 @@ import type {
   GetMemoryConfigResponse,
   GetMemoryThreadMessagesResponse,
   MemorySearchResponse,
+  GetAgentsModelProvidersResponse,
 } from './types';
 import { base64RuntimeContext, parseClientRuntimeContext } from './utils';
 
@@ -72,6 +73,10 @@ export class MastraClient extends BaseResource {
 
     const queryString = searchParams.toString();
     return this.request(`/api/agents${queryString ? `?${queryString}` : ''}`);
+  }
+
+  public getAgentsModelProviders(): Promise<GetAgentsModelProvidersResponse> {
+    return this.request(`/api/agents/providers`);
   }
 
   /**

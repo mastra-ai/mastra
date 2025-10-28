@@ -771,6 +771,12 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@20.19.23)(@vitest/ui@3.2.4(vitest@3.2.4))(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))
 
+  observability/_test-utils:
+    devDependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+
   observability/arize:
     dependencies:
       '@arizeai/openinference-genai':
@@ -4104,7 +4110,7 @@ importers:
         specifier: ^1.9.0
         version: 1.9.0
       inngest:
-        specifier: ^3.44.2
+        specifier: ^3.44.3
         version: 3.44.3(encoding@0.1.13)(express@5.1.0)(hono@4.10.3)(typescript@5.9.3)(zod@3.25.76)
       zod:
         specifier: ^3.25.0 || ^4.0.0
@@ -4153,8 +4159,8 @@ importers:
         specifier: ^4.9.7
         version: 4.10.3
       inngest-cli:
-        specifier: 1.8.2
-        version: 1.8.2(encoding@0.1.13)
+        specifier: ^1.12.1
+        version: 1.12.1(encoding@0.1.13)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.53.3(@types/node@20.19.23))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
@@ -12262,8 +12268,8 @@ packages:
   inline-style-parser@0.2.4:
     resolution: {integrity: sha512-0aO8FkhNZlj/ZIbNi7Lxxr12obT7cL1moPfE4tg1LkX7LlLfC6DeX4l2ZEud1ukP9jNQyNnfzQVqwbwmAATY4Q==}
 
-  inngest-cli@1.8.2:
-    resolution: {integrity: sha512-2mKDkdqnQh7C2Hk2+CEs60Ezy/apf6/BmX0OK0XG1IeRXrtJsE8VuHTEr8sq7YqZ61Aeb3x0TgNiOPmpAbwyMA==}
+  inngest-cli@1.12.1:
+    resolution: {integrity: sha512-1Q/bQ1LDjAKFbLiZ6mycjzORyqFSkSaPIIq3FMJekxnenSOz8THn35G9/f61rCEQJXYI+LnWeXExUNUdKdb9eA==}
     hasBin: true
 
   inngest@3.44.3:
@@ -26106,7 +26112,7 @@ snapshots:
 
   inline-style-parser@0.2.4: {}
 
-  inngest-cli@1.8.2(encoding@0.1.13):
+  inngest-cli@1.12.1(encoding@0.1.13):
     dependencies:
       adm-zip: 0.5.16
       debug: 4.4.3
