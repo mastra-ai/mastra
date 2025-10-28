@@ -262,6 +262,11 @@ export const redirectList = [
     permanent: true,
   },
   {
+    source: "/:locale/examples/memory/memory-with-mongodb",
+    destination: "/:locale/docs/memory/storage/memory-with-mongodb",
+    permanent: true,
+  },
+  {
     source: "/:locale/examples/memory/short-term-working-memory",
     destination: "/:locale/docs/memory/storage/memory-with-libsql",
     permanent: true,
