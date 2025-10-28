@@ -113,9 +113,7 @@ Exclude specific tools that contain sensitive data:
 ```typescript
 const agent = new Agent({
   memory,
-  inputProcessors: [
-    new ToolCallFilter({ exclude: ['database_query', 'api_key_fetch'] }),
-  ],
+  inputProcessors: [new ToolCallFilter({ exclude: ['database_query', 'api_key_fetch'] })],
 });
 ```
 
@@ -126,9 +124,7 @@ Remove complex tool interactions to simplify the context:
 ```typescript
 const agent = new Agent({
   memory,
-  inputProcessors: [
-    new ToolCallFilter({ exclude: ['complex_calculation', 'data_processing'] }),
-  ],
+  inputProcessors: [new ToolCallFilter({ exclude: ['complex_calculation', 'data_processing'] })],
 });
 ```
 
