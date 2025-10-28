@@ -1,8 +1,6 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
-  ensureDate,
-  serializeDate,
   StoreOperations,
   TABLE_MESSAGES,
   TABLE_SCORERS,

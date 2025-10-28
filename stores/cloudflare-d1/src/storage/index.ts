@@ -14,7 +14,6 @@ import type {
   StoragePagination,
   WorkflowRuns,
   StorageDomains,
-  PaginationArgs,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';

@@ -27,7 +27,6 @@ import type {
   ThreadSortOptions,
   WorkflowRun,
   WorkflowRuns,
-  PaginationArgs,
   AISpanRecord,
   AITraceRecord,
   AITracesPaginatedArg,

@@ -15,7 +15,6 @@ import type {
   StorageColumn,
   StoragePagination,
   StorageDomains,
-  PaginationArgs,
   StorageResourceType,
   ThreadSortOptions,
 } from '@mastra/core/storage';

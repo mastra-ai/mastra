@@ -66,10 +66,6 @@ describe('StoreOperationsInMemory.batchInsert', () => {
       run_id: 'run-123',
       data: 'snapshot data',
     };
-    const evalRecord = {
-      run_id: 'run-456',
-      score: 0.95,
-    };
 
     // Act: Insert records into respective tables
     await store.batchInsert({
@@ -123,7 +119,6 @@ describe('StoreOperationsInMemory.batchInsert', () => {
     vi.spyOn(Math, 'random').mockReturnValueOnce(0.123).mockReturnValueOnce(0.456);
 
     const snapshotRecords = [{ data: 'snapshot data 1' }, { data: 'snapshot data 2' }];
-    const evalRecords = [{ score: 0.95 }, { score: 0.85 }];
 
     // Act: Insert records without ids or run_ids
     await store.batchInsert({

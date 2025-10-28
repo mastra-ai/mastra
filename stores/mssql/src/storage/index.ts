@@ -12,7 +12,6 @@ import type {
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
-  PaginationArgs,
   StoragePagination,
   ThreadSortOptions,
   StorageDomains,

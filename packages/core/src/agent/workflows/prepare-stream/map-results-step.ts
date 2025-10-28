@@ -1,5 +1,4 @@
 import type { AISpan, AISpanType, TracingContext } from '../../../ai-tracing';
-import type { SystemMessage } from '../../../llm';
 import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig } from '../../../memory/types';
@@ -24,7 +23,6 @@ interface MapResultsStepOptions<
   memoryConfig?: MemoryConfig;
   saveQueueManager: SaveQueueManager;
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  instructions: SystemMessage;
   agentId: string;
 }
 
@@ -41,7 +39,6 @@ export function createMapResultsStep<
   memoryConfig,
   saveQueueManager,
   agentAISpan,
-  instructions,
   agentId,
 }: MapResultsStepOptions<OUTPUT, FORMAT>) {
   return async ({
@@ -172,7 +169,6 @@ export function createMapResultsStep<
             await capabilities.executeOnFinish({
               result: payload,
               outputText,
-              instructions,
               thread: result.thread,
               threadId: result.threadId,
               readOnlyMemory: options.memory?.readOnly,

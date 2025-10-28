@@ -18,7 +18,6 @@ import type { InMemoryWorkflows } from './domains/workflows/inmemory';
 import type {
   AISpanRecord,
   AITraceRecord,
-  PaginationArgs,
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,

@@ -3184,7 +3184,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    */
   async #executeOnFinish({
     result,
-    instructions,
     readOnlyMemory,
     thread: threadAfter,
     threadId,
