@@ -271,7 +271,7 @@ export async function createNetworkLoop({
 
       let completionResult;
 
-      let iterationCount = inputData.iteration ? inputData.iteration + 1 : 0;
+      let iterationCount = (inputData.iteration ?? -1) + 1;
 
       await writer.write({
         type: 'routing-agent-start',
