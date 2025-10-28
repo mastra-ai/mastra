@@ -49,11 +49,12 @@ export class AgentBuilder extends BaseResource {
         stepResults: result.result.stepResults,
       };
     } else if (result.status === 'failed') {
+      const errorMessage = typeof result.error === 'string' ? result.error : result.error.message;
       return {
         success: false,
         applied: false,
-        message: `Agent builder action failed: ${result.error.message}`,
-        error: result.error.message,
+        message: `Agent builder action failed: ${errorMessage}`,
+        error: errorMessage,
       };
     } else {
       return {
