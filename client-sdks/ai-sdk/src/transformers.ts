@@ -62,6 +62,7 @@ export type NetworkDataPart = {
     name: string;
     status: 'running' | 'finished';
     steps: StepResult[];
+    usage: LanguageModelV2Usage | null;
     output: unknown | null;
   };
 };
