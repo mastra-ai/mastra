@@ -105,6 +105,16 @@ const config = {
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
     ],
+    [
+      "@docusaurus/plugin-content-docs",
+      {
+        id: "guides",
+        path: "guides",
+        routeBasePath: "guides",
+        sidebarPath: "./sidebarsGuides.js",
+        editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
+      },
+    ],
   ],
 
   presets: [

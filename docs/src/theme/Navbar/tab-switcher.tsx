@@ -18,20 +18,20 @@ const docsTabs = [
   {
     id: "Examples",
     label: "Examples",
-    href: "/docs/examples",
-    basePath: "/docs/examples",
+    href: "/examples",
+    basePath: "/examples",
   },
   {
     id: "Guides",
     label: "Guides & Migrations",
-    href: "/docs/guides",
-    basePath: "/docs/guides",
+    href: "/guides",
+    basePath: "/guides",
   },
   {
     id: "Reference",
     label: "Reference",
-    href: "/docs/reference",
-    basePath: "/docs/reference",
+    href: "/reference",
+    basePath: "/reference",
   },
   {
     id: "Showcase",
