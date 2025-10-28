@@ -2,13 +2,15 @@
  * Tests for provider-specific compatibility requirements
  */
 
-import { AISpanType } from '@mastra/core/ai-tracing';
 import type {
   ExportedAISpan,
   AgentRunAttributes,
   ModelGenerationAttributes,
   ToolCallAttributes,
 } from '@mastra/core/ai-tracing';
+import { AISpanType } from '@mastra/core/ai-tracing';
+import { Resource } from '@opentelemetry/resources';
+import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SpanConverter } from './span-converter.js';
 
@@ -35,7 +37,7 @@ vi.mock('@opentelemetry/semantic-conventions', () => ({
 
 describe('Provider Compatibility', () => {
   let converter: SpanConverter;
-  let resource: Resource;
+  let resource: any;
 
   beforeEach(() => {
     // Create resource with proper service name
