@@ -12,8 +12,8 @@ const docsTabs = [
   {
     id: "Models",
     label: "Models",
-    href: "/docs/models",
-    basePath: "/docs/models",
+    href: "/models",
+    basePath: "/models",
   },
   {
     id: "Examples",
