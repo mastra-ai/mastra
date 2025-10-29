@@ -1,5 +1,5 @@
 ---
-title: "Providers: Perplexity | Models | Mastra"
+title: "Perplexity | Models | Mastra"
 description: "Use Perplexity models with Mastra. 4 models available."
 ---
 
@@ -7,6 +7,9 @@ description: "Use Perplexity models with Mastra. 4 models available."
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
 import PropertiesTable from "@site/src/components/PropertiesTable";
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # <img src="https://models.dev/logos/perplexity.svg" alt="Perplexity logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Perplexity
 
@@ -24,7 +27,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "perplexity/sonar",
+  model: "perplexity/sonar"
 });
 
 // Generate a response
@@ -47,55 +50,55 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-    {
-      model: "perplexity/sonar",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: false,
-      reasoning: false,
-      contextWindow: 128000,
-      maxOutput: 4096,
-      inputCost: 1,
-      outputCost: 1,
-    },
-    {
-      model: "perplexity/sonar-pro",
-      imageInput: true,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: false,
-      reasoning: false,
-      contextWindow: 200000,
-      maxOutput: 8192,
-      inputCost: 3,
-      outputCost: 15,
-    },
-    {
-      model: "perplexity/sonar-reasoning",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: false,
-      reasoning: true,
-      contextWindow: 128000,
-      maxOutput: 4096,
-      inputCost: 1,
-      outputCost: 5,
-    },
-    {
-      model: "perplexity/sonar-reasoning-pro",
-      imageInput: true,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: false,
-      reasoning: true,
-      contextWindow: 128000,
-      maxOutput: 4096,
-      inputCost: 2,
-      outputCost: 8,
-    },
-  ]}
+  {
+    "model": "perplexity/sonar",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 1,
+    "outputCost": 1
+  },
+  {
+    "model": "perplexity/sonar-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "perplexity/sonar-reasoning",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
+    "model": "perplexity/sonar-reasoning-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 8
+  }
+]}
 />
 
 ## Advanced Configuration
@@ -110,9 +113,9 @@ const agent = new Agent({
     id: "perplexity/sonar",
     apiKey: process.env.PERPLEXITY_API_KEY,
     headers: {
-      "X-Custom-Header": "value",
-    },
-  },
+      "X-Custom-Header": "value"
+    }
+  }
 });
 ```
 
@@ -123,10 +126,14 @@ const agent = new Agent({
   name: "dynamic-agent",
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced ? "perplexity/sonar-reasoning-pro" : "perplexity/sonar";
-  },
+    return useAdvanced
+      ? "perplexity/sonar-reasoning-pro"
+      : "perplexity/sonar";
+  }
 });
 ```
+
+
 
 ## Direct Provider Installation
 
