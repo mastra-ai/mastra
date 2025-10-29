@@ -7,22 +7,13 @@ sidebar_position: 5
 
 # Guardrails
 
-Agents use processors to apply guardrails to inputs and outputs. They run before or after each interaction, giving you a way to review, transform, or block information as it passes between the user and the agent.
+Guardrails are processors that enforce security, validation, and moderation policies on agent inputs and outputs. They detect and block inappropriate content, prevent prompt injection attacks, redact sensitive information, and apply other safety controls.
 
-Processors can be configured as:
+Guardrails are implemented as [processors](/docs/agents/processors) configured in the agent's `inputProcessors` or `outputProcessors` arrays. Some guardrail processors can be used in either position depending on where the validation should occur.
 
-- **`inputProcessors`**: Applied before messages reach the language model.
-- **`outputProcessors`**: Applied to responses before they're returned to users.
+## Adding guardrails to an agent
 
-Some processors are _hybrid_, meaning they can be used with either `inputProcessors` or `outputProcessors`, depending on where the logic should be applied.
-
-## When to use processors
-
-Use processors for content moderation, prompt injection prevention, response sanitization, message transformation, and other security-related controls. Mastra provides several built-in input and output processors for common use cases.
-
-## Adding processors to an agent
-
-Import and instantiate the relevant processor class, and pass it to your agent’s configuration using either the `inputProcessors` or `outputProcessors` option:
+Import and instantiate the processor, then add it to the agent's `inputProcessors` or `outputProcessors` array:
 
 ```typescript {3,9-17} filename="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -35,7 +26,7 @@ export const moderatedAgent = new Agent({
   model: openai("gpt-4o-mini"),
   inputProcessors: [
     new ModerationProcessor({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       categories: ["hate", "harassment", "violence"],
       threshold: 0.7,
       strategy: "block",
@@ -45,9 +36,9 @@ export const moderatedAgent = new Agent({
 });
 ```
 
-## Input processors
+## Input guardrails
 
-Input processors are applied before user messages reach the language model. They are useful for normalization, validation, content moderation, prompt injection detection, and security checks.
+Input guardrails run before user messages reach the language model. They validate and sanitize user input, detect prompt injection and jailbreak attempts, and enforce security policies.
 
 ### Normalizing user messages
 
@@ -80,7 +71,7 @@ export const secureAgent = new Agent({
   // ...
   inputProcessors: [
     new PromptInjectionDetector({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       threshold: 0.8,
       strategy: "rewrite",
       detectionTypes: ["injection", "jailbreak", "system-override"],
@@ -102,7 +93,7 @@ export const multilingualAgent = new Agent({
   // ...
   inputProcessors: [
     new LanguageDetector({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       targetLanguages: ["English", "en"],
       strategy: "translate",
       threshold: 0.8,
@@ -113,9 +104,9 @@ export const multilingualAgent = new Agent({
 
 > See [LanguageDetector](../reference/processors/language-detector.md) for a full list of configuration options.
 
-## Output processors
+## Output guardrails
 
-Output processors are applied after the language model generates a response, but before it is returned to the user. They are useful for response optimization, moderation, transformation, and applying safety controls.
+Output guardrails run after the language model generates a response, before it's returned to users. They sanitize, redact, or transform model outputs to enforce safety and compliance policies.
 
 ### Batching streamed output
 
@@ -138,27 +129,6 @@ export const batchedAgent = new Agent({
 
 > See [BatchPartsProcessor](../reference/processors/batch-parts-processor.md) for a full list of configuration options.
 
-### Limiting token usage
-
-The `TokenLimiterProcessor` is an output processor that limits the number of tokens in model responses. It helps manage cost and performance by truncating or blocking messages when the limit is exceeded.
-
-```typescript {6-10, 13-15} filename="src/mastra/agents/limited-agent.ts" showLineNumbers copy
-import { TokenLimiterProcessor } from "@mastra/core/processors";
-
-export const limitedAgent = new Agent({
-  // ...
-  outputProcessors: [
-    new TokenLimiterProcessor({
-      limit: 1000,
-      strategy: "truncate",
-      countMode: "cumulative",
-    }),
-  ],
-});
-```
-
-> See [TokenLimiterProcessor](../reference/processors/token-limiter-processor.md) for a full list of configuration options.
-
 ### Scrubbing system prompts
 
 The `SystemPromptScrubber` is an output processor that detects and redacts system prompts or other internal instructions from model responses. It helps prevent unintended disclosure of prompt content or configuration details that could introduce security risks. It uses an LLM to identify and redact sensitive content based on configured detection types.
@@ -169,7 +139,7 @@ import { SystemPromptScrubber } from "@mastra/core/processors";
 const scrubbedAgent = new Agent({
   outputProcessors: [
     new SystemPromptScrubber({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       strategy: "redact",
       customPatterns: ["system prompt", "internal instructions"],
       includeDetections: true,
@@ -184,9 +154,9 @@ const scrubbedAgent = new Agent({
 
 > See [SystemPromptScrubber](../reference/processors/system-prompt-scrubber.md) for a full list of configuration options.
 
-## Hybrid processors
+## Hybrid guardrails
 
-Hybrid processors can be applied either before messages are sent to the language model or before responses are returned to the user. They are useful for tasks like content moderation and PII redaction.
+Hybrid guardrails can be applied either as input guardrails (before messages reach the model) or output guardrails (after the model responds). This allows the same guardrail logic to protect both user input and model output.
 
 ### Moderating input and output
 
@@ -199,7 +169,7 @@ export const moderatedAgent = new Agent({
   // ...
   inputProcessors: [
     new ModerationProcessor({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       threshold: 0.7,
       strategy: "block",
       categories: ["hate", "harassment", "violence"],
@@ -226,7 +196,7 @@ export const privateAgent = new Agent({
   // ...
   inputProcessors: [
     new PIIDetector({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       threshold: 0.6,
       strategy: "redact",
       redactionMethod: "mask",
@@ -244,17 +214,17 @@ export const privateAgent = new Agent({
 
 > See [PIIDetector](../reference/processors/pii-detector.md) for a full list of configuration options.
 
-## Applying multiple processors
+## Applying multiple guardrails
 
-You can apply multiple processors by listing them in the `inputProcessors` or `outputProcessors` array. They run in sequence, with each processor receiving the output of the one before it.
+Multiple guardrails can be applied by listing them in the `inputProcessors` or `outputProcessors` array. They run in sequence, with each processor receiving the output of the previous one.
 
-A typical order might be:
+A typical order:
 
 1. **Normalization**: Standardize input format (`UnicodeNormalizer`).
 2. **Security checks**: Detect threats or sensitive content (`PromptInjectionDetector`, `PIIDetector`).
 3. **Filtering**: Block or transform messages (`ModerationProcessor`).
 
-The order affects behavior, so arrange processors to suit your goals.
+The order affects behavior, so arrange processors based on your security requirements.
 
 ```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import {
@@ -340,12 +310,17 @@ In this case, the `tripwireReason` indicates that a credit card number was detec
 PII detected. Types: credit-card
 ```
 
-## Custom processors
+## Custom guardrails
 
-If the built-in processors don’t cover your needs, you can create your own by extending the `Processor` class.
+Custom guardrails can be created by implementing the `InputProcessor` or `OutputProcessor` interface. See [Processors](/docs/agents/processors#creating-custom-processors) for details on creating custom processors.
 
 Available examples:
 
 - [Message Length Limiter](../examples/processors/message-length-limiter)
 - [Response Length Limiter](../examples/processors/response-length-limiter)
 - [Response Validator](../examples/processors/response-validator)
+
+## Related documentation
+
+- [Processors](/docs/agents/processors) - General processor concepts and custom processor creation
+- [Memory Processors](/docs/memory/memory-processors) - Memory-specific processors

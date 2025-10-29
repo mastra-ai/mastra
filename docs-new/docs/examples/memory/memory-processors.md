@@ -1,11 +1,11 @@
 ---
-title: "Memory Processors "
-description: Example showing how to use memory processors to limit tokens, filter tool calls, and create custom filters.
+title: "Memory Processors"
+description: "Examples of customizing memory behavior with automatic memory processors and custom implementations."
 ---
 
 # Memory Processors
 
-Use memory processors to filter, transform, or limit recalled messages before they are passed to the agent. These examples demonstrates how to apply token limits, exclude tool calls, and implement a custom processor.
+Memory processors automatically handle conversation history, semantic recall, and working memory. These examples show how memory processors work and how to create custom memory processors.
 
 ## Prerequisites
 
@@ -21,143 +21,204 @@ And install the following package:
 npm install @mastra/libsql
 ```
 
-## Adding memory to an agent
+## Basic Memory Agent
 
-To add LibSQL memory to an agent, use the `Memory` class and pass a `storage` instance using `LibSQLStore`. The `url` can point to a remote location or local file.
+A simple agent with message history that remembers the last 10 messages:
 
-### Memory processor configuration
-
-Enable working memory by setting `workingMemory.enabled` to `true`. This allows the agent to remember structured information between interactions. This example also uses memory processors to limit the number of recalled tokens with `TokenLimiter` and filter out tool calls using `ToolCallFilter`.
-
-```typescript filename="src/mastra/agents/example-working-memory-agent.ts" showLineNumbers copy
+```typescript filename="src/mastra/agents/basic-memory-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
-import { TokenLimiter, ToolCallFilter } from "@mastra/memory/processors";
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { LibSQLStore } from "@mastra/libsql";
 
-export const memoryProcessorAgent = new Agent({
-  name: "memory-processor-agent",
+export const basicMemoryAgent = new Agent({
+  name: "basic-memory-agent",
   instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o"),
+    "You are a helpful assistant that remembers previous conversations.",
+  model: "openai/gpt-4.1",
   memory: new Memory({
     storage: new LibSQLStore({
-      url: "file:memory-processor.db",
+      url: "file:memory.db",
     }),
-    processors: [new TokenLimiter(127000), new ToolCallFilter()],
-    options: {
-      workingMemory: {
-        enabled: true,
-      },
-      generateTitle: true, // Explicitly enable automatic title generation
+    lastMessages: 10, // Automatically adds MessageHistory processor
+  }),
+});
+
+// Use the agent
+const response = await basicMemoryAgent.generate({
+  messages: [{ role: "user", content: "My name is Alice" }],
+  threadId: "thread-123",
+});
+```
+
+## Advanced Memory Agent with Semantic Recall
+
+An agent that uses semantic search to find relevant past conversations:
+
+```typescript filename="src/mastra/agents/semantic-memory-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
+import { PineconeVector } from "@mastra/pinecone";
+import { OpenAIEmbedder } from "@mastra/openai";
+
+export const semanticMemoryAgent = new Agent({
+  name: "semantic-memory-agent",
+  instructions:
+    "You are an AI assistant with semantic memory. You can recall relevant information from past conversations based on context.",
+  model: "openai/gpt-4.1",
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:memory.db",
+    }),
+    vector: new PineconeVector({
+      apiKey: process.env.PINECONE_API_KEY!,
+      environment: "us-east-1",
+    }),
+    embedder: new OpenAIEmbedder({
+      model: "text-embedding-3-small",
+      apiKey: process.env.OPENAI_API_KEY!,
+    }),
+    lastMessages: 5,
+    semanticRecall: {
+      enabled: true,
+      topK: 3, // Retrieve top 3 most relevant messages
     },
   }),
 });
+
+// The agent will automatically:
+// 1. Search for relevant past messages using embeddings
+// 2. Include them in the context
+// 3. Create embeddings for new messages for future retrieval
 ```
 
-### Using token limiters
+## Full-Featured Memory Agent
 
-Token limiters control how many tokens are passed to the agent by trimming recalled messages. This helps manage context size and avoid exceeding model limits.
+An agent with all memory features and custom processors:
 
-```typescript showLineNumbers
-import { Memory } from "@mastra/memory";
-import { TokenLimiter } from "@mastra/memory/processors";
+```typescript filename="src/mastra/agents/full-memory-agent.ts" showLineNumbers copy
+import { Memory, MessageHistory } from "@mastra/memory";
+import { TokenLimiter, ToolCallFilter } from "@mastra/core/processors";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
+import { PineconeVector } from "@mastra/pinecone";
+import { OpenAIEmbedder } from "@mastra/openai";
+import { z } from "zod";
 
-export const memoryProcessorAgent = new Agent({
-  // ...
-  memory: new Memory({
-    // ...
-    processors: [new TokenLimiter(127000)],
+// Define tools for the agent
+const weatherTool = {
+  name: "getWeather",
+  description: "Get the current weather for a location",
+  parameters: z.object({
+    location: z.string(),
   }),
-});
-```
+  execute: async ({ location }: { location: string }) => {
+    // Mock weather data
+    return { location, temperature: 72, condition: "sunny" };
+  },
+};
 
-### Using token encoding
-
-You can customize how tokens are counted by providing a specific encoding, such as `cl100k_base` from the `js-tiktoken` package. This ensures accurate token limits for different models.
-
-```typescript showLineNumbers
-import { Memory } from "@mastra/memory";
-import { TokenLimiter } from "@mastra/memory/processors";
-import cl100k_base from "js-tiktoken/ranks/cl100k_base";
-
-export const memoryProcessorAgent = new Agent({
-  // ...
-  memory: new Memory({
-    // ...
-    processors: [
-      new TokenLimiter({
-        limit: 16000,
-        encoding: cl100k_base,
-      }),
-    ],
+// Create memory instance
+const memory = new Memory({
+  storage: new LibSQLStore({
+    url: "file:memory.db",
   }),
-});
-```
-
-### Filtering tool calls
-
-The `ToolCallFilter` processor removes specific tool calls and their results from memory. Filtering out tools like logging or image generation helps reduce noise and keeps the agent focused.
-
-```typescript showLineNumbers
-import { Memory } from "@mastra/memory";
-import { ToolCallFilter } from "@mastra/memory/processors";
-
-export const memoryProcessorAgent = new Agent({
-  // ...
-  memory: new Memory({
-    // ...
-    processors: [
-      new ToolCallFilter({
-        exclude: ["exampleLoggerTool", "exampleImageGenTool"],
-      }),
-    ],
+  vector: new PineconeVector({
+    apiKey: process.env.PINECONE_API_KEY!,
+    environment: "us-east-1",
   }),
+  embedder: "openai/text-embedding-3-small",
+  lastMessages: 10,
+  semanticRecall: {
+    enabled: true,
+    topK: 5,
+  },
+  workingMemory: {
+    enabled: true,
+  },
 });
-```
 
-## Creating custom processors
+export const fullMemoryAgent = new Agent({
+  name: "full-memory-agent",
+  instructions:
+    "You are an AI assistant with comprehensive memory capabilities. " +
+    "You can recall previous conversations, maintain working memory, " +
+    "and use tools to help users.",
+  model: "openai/gpt-4.1",
+  tools: { weatherTool },
+  memory,
+  // No need to manually add processors for basic filtering!
+  // Memory processors run first automatically, then utility processors
+});
 
-Custom memory processors can be created by extending the `MemoryProcessor` class, allowing custom logic to be applied to the list of recalled messages before they are sent to the agent.
+// Use the agent with streaming
+const stream = await fullMemoryAgent.stream({
+  messages: [{ role: "user", content: "What's the weather in New York?" }],
+  threadId: "thread-456",
+  resourceId: "user-789", // For cross-thread message formatting
+});
 
-```typescript filename="src/mastra/processors/example-recent-messages-processor.ts" showLineNumbers copy
-import { MemoryProcessor } from "@mastra/core/memory";
-import type { CoreMessage } from "@mastra/core";
-
-export class RecentMessagesProcessor extends MemoryProcessor {
-  private limit: number;
-
-  constructor(limit: number = 10) {
-    super({ name: "RecentMessagesProcessor" });
-    this.limit = limit;
-  }
-
-  process(messages: CoreMessage[]): CoreMessage[] {
-    return messages.slice(-this.limit);
-  }
+for await (const chunk of stream) {
+  process.stdout.write(chunk.text || "");
 }
 ```
 
-### Custom processor usage
+**Note:** By default, memory processors run first for input processing, so `ToolCallFilter` and `TokenLimiter` work automatically - messages are saved to memory, then filtered for the LLM. You only need manual processor ordering if you're using guardrails and want them to run BEFORE memory (to prevent invalid content from being saved and to avoid re-validating retrieved content).
 
-This example uses the `RecentMessagesProcessor` with a limit of `5` to return only the last five messages from memory.
+## Memory with Guardrails
 
-```typescript showLineNumbers
+When using guardrails with memory, place them BEFORE memory processors:
+
+```typescript copy showLineNumbers
+import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { ToolCallFilter } from "@mastra/memory/processors";
-import { RecentMessagesProcessor } from "../processors/example-recent-messages-processor";
+import {
+  ContentModerationProcessor,
+  PiiRedactionProcessor,
+} from "./guardrails";
+import { TokenLimiter } from "@mastra/core/processors";
+import { openai } from "@ai-sdk/openai";
 
-export const memoryProcessorAgent = new Agent({
-  // ...
-  memory: new Memory({
-    // ...
-    processors: [new RecentMessagesProcessor(5)],
-  }),
+const memory = new Memory({
+  lastMessages: 10,
+  semanticRecall: {
+    limit: 5,
+    minSimilarity: 0.7,
+  },
+});
+
+export const guardedMemoryAgent = new Agent({
+  name: "guarded-memory-agent",
+  instructions:
+    "You are a helpful assistant that maintains conversation history",
+  model: openai("gpt-4o"),
+  memory,
+  inputProcessors: [
+    // 1. Guardrails first - validate new input
+    new ContentModerationProcessor(),
+    new PiiRedactionProcessor(),
+
+    // 2. Memory - retrieves past messages (bypasses guardrails)
+    memory,
+
+    // 3. Utility processors work automatically after memory
+    new TokenLimiter(4000),
+  ],
 });
 ```
 
-## Related
+Benefits of this ordering:
 
-- [Calling Agents](../agents/calling-agents#from-the-command-line)
-- [Memory Processors](/docs/memory/memory-processors)
+- New user input is validated before being saved to memory
+- Retrieved memory content skips guardrail checks (already validated)
+- More efficient - guardrails only process new content
+- Utility processors like `TokenLimiter` still work automatically
+
+## Related documentation
+
+- [Memory Processors](/docs/memory/memory-processors) - Memory processor concepts and configuration
+- [Processors](/docs/agents/processors) - General processor concepts
+- [Guardrails](/docs/agents/guardrails) - Security and validation processors
