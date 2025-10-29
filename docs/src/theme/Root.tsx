@@ -19,6 +19,7 @@ const queryClient = new QueryClient({
 });
 
 export default function Root({ children }: { children: React.ReactNode }) {
+  // We use Docusaurus as the source of truth for i18n locales
   const { siteConfig, i18n } = useDocusaurusContext();
   const locales = i18n?.locales;
   const kapaIntegrationId = siteConfig.customFields.kapaIntegrationId as string;
@@ -37,7 +38,9 @@ export default function Root({ children }: { children: React.ReactNode }) {
         }}
       >
         <KapaProvider integrationId={kapaIntegrationId || ""}>
+          {/* Adding GTProvider to the root of the app to ensure all jsx is translated */}
           <GTProvider locales={locales} loadTranslations={loadTranslations}>
+            {/* Adding LocaleSync to the root of the app to ensure the locale is synced between Docusaurus and GT */}
             <LocaleSync />
             <Toaster />
             <CookieConsent />

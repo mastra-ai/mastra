@@ -6,7 +6,7 @@ import { useLocaleSelector } from 'gt-react';
 /*
 This component is used to display a language selector in the navbar.
 It uses locales from the Docusaurus i18n configuration and the gt-react library
-to display each locale's native name.
+to display each locale's native name. Leaving simple styling so it can be easily overridden.
 */
 export default function LocaleControl() {
   const { i18n } = useDocusaurusContext();
