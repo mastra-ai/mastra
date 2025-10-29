@@ -30,7 +30,6 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   StorageListMessagesInput,
-  StorageListMessagesOutput,
 } from '@mastra/core/storage';
 import type { OutputSchema } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
@@ -309,12 +308,6 @@ export interface GetMemoryThreadMessagesParams {
 }
 
 export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg, 'threadConfig' | 'threadId'>;
-
-export interface GetMemoryThreadMessagesResponse {
-  messages: CoreMessage[];
-  legacyMessages: AiMessageType[];
-  uiMessages: UIMessage[];
-}
 
 export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
   messages: MastraMessageV1[] | MastraMessageV2[];

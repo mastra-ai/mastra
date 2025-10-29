@@ -1,6 +1,6 @@
 import type { AISpanType } from '../ai-tracing';
 import type { MetricResult, TestInfo } from '../eval';
-import type { MastraMessageV1, MastraMessageV2, MemoryConfig } from '../memory/types';
+import type { MastraMessageV2, MemoryConfig } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
 import type { LegacyWorkflowRunState } from '../workflows/legacy';
 

@@ -10,7 +10,6 @@ import type {
   EvalRow,
   PaginationInfo,
   StorageColumn,
-  StorageGetMessagesArg,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,

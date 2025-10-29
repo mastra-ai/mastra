@@ -1,7 +1,8 @@
-import { MastraMemory } from './memory';
-import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig, MemoryQueryResult } from '../memory';
-import { InMemoryStore, type StorageListMessagesInput } from '../storage';
 import { MessageList } from '../agent/message-list';
+import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig, MemoryQueryResult } from '../memory';
+import { InMemoryStore } from '../storage';
+import type { StorageListMessagesInput } from '../storage';
+import { MastraMemory } from './memory';
 
 export class MockMemory extends MastraMemory {
   constructor({ storage }: { storage?: InMemoryStore } = {}) {
@@ -46,7 +47,7 @@ export class MockMemory extends MastraMemory {
     return this.storage.getThreadsByResourceIdPaginated(args);
   }
   async query(
-    args: Omit<StorageListMessagesInput, 'format' | 'include'> & {
+    _args: Omit<StorageListMessagesInput, 'include'> & {
       threadConfig?: MemoryConfig;
       vectorSearchString?: string;
     },

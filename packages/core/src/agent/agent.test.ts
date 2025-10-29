@@ -16,6 +16,7 @@ import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
 import type { MastraMessageV2, StorageThreadType } from '../memory';
+import { MockMemory } from '../memory';
 import { RuntimeContext } from '../runtime-context';
 import { createScorer } from '../scores';
 import { runScorer } from '../scores/hooks';
@@ -25,7 +26,6 @@ import { createTool } from '../tools';
 import { delay } from '../utils';
 import { MessageList } from './message-list/index';
 import { assertNoDuplicateParts } from './test-utils';
-import { MockMemory } from '../memory';
 import { Agent } from './index';
 
 config();

@@ -11,13 +11,13 @@ import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { noopLogger } from '../../logger';
 import type { StorageThreadType } from '../../memory';
+import { MockMemory } from '../../memory';
+import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { MessageList } from '../message-list/index';
-import { MockMemory } from '../../memory';
 import { assertNoDuplicateParts } from '../test-utils';
 import { getDummyResponseModel, getEmptyResponseModel, getErrorResponseModel } from './mock-model';
-import { InMemoryStore } from '../../storage';
 
 config();
 

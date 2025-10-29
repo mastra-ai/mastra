@@ -7,10 +7,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../mastra';
 import type { StorageThreadType } from '../../memory';
+import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
 import type { MastraMessageV1 } from '../message-list';
 import { MockMemory } from '../test-utils';
-import { InMemoryStore } from '../../storage';
 
 describe('Stream ID Consistency', () => {
   /**

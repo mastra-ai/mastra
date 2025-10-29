@@ -1,12 +1,12 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { MockMemory } from '../memory';
 import { RuntimeContext } from '../runtime-context';
+import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
-import { MockMemory } from '../memory';
 import { Agent } from './index';
-import { InMemoryStore } from '../storage';
 
 describe('Agent - network', () => {
   const storage = new InMemoryStore();

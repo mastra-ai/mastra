@@ -5,7 +5,6 @@ import { MastraStorage } from '@mastra/core/storage';
 import type {
   TABLE_NAMES,
   StorageColumn,
-  StorageGetMessagesArg,
   StorageResourceType,
   EvalRow,
   WorkflowRuns,

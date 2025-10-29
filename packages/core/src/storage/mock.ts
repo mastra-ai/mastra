@@ -1,4 +1,5 @@
 import { existsSync } from 'fs';
+import { readFile, writeFile } from 'fs/promises';
 import type { MastraMessageV2 } from '../agent';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { ScoreRowData, ScoringSource } from '../scores/types';
@@ -25,7 +26,6 @@ import type {
   PaginationArgs,
   PaginationInfo,
   StorageColumn,
-  StorageGetMessagesArg,
   StoragePagination,
   StorageResourceType,
   ThreadSortOptions,
@@ -34,7 +34,6 @@ import type {
   StorageListMessagesInput,
   StorageListMessagesOutput,
 } from './types';
-import { readFile, writeFile } from 'fs/promises';
 
 export class InMemoryStore extends MastraStorage {
   stores: StorageDomains;
@@ -288,7 +287,7 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.memory.getThreadsByResourceIdPaginated(args);
   }
 
-  async listMessages(args: StorageListMessagesInput): Promise<PaginationInfo & { messages: MastraMessageV2[] }> {
+  async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     return this.stores.memory.listMessages(args);
   }
 
@@ -448,7 +447,7 @@ export class InMemoryStore extends MastraStorage {
 
     // Convert arrays back to Maps
     for (const [tableName, tableData] of Object.entries(data)) {
-      this.stores.operations.batchInsert({ tableName: tableName as TABLE_NAMES, records: tableData as any });
+      await this.stores.operations.batchInsert({ tableName: tableName as TABLE_NAMES, records: tableData as any });
     }
   }
 

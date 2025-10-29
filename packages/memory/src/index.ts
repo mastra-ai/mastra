@@ -1,8 +1,9 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2 } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
-import type { MemoryQueryResult, MessageDeleteInput } from '@mastra/core/memory';
 import type {
+  MemoryQueryResult,
+  MessageDeleteInput,
   MastraMessageV1,
   MemoryConfig,
   SharedMemoryConfig,
@@ -103,7 +104,7 @@ export class Memory extends MastraMemory {
     offset,
     filter,
     vectorSearchString,
-  }: Omit<StorageListMessagesInput, 'format' | 'include'> & {
+  }: Omit<StorageListMessagesInput, 'include'> & {
     threadConfig?: MemoryConfig;
     vectorSearchString?: string;
   }): Promise<MemoryQueryResult> {

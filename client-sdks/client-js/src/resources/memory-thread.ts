@@ -2,10 +2,8 @@ import type { RuntimeContext } from '@mastra/core/di';
 import type { StorageThreadType } from '@mastra/core/memory';
 
 import type {
-  GetMemoryThreadMessagesResponse,
   ClientOptions,
   UpdateMemoryThreadParams,
-  GetMemoryThreadMessagesParams,
   GetMemoryThreadMessagesPaginatedParams,
   GetMemoryThreadMessagesPaginatedResponse,
   ListMemoryThreadMessagesParams,

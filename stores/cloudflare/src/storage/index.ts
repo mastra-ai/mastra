@@ -14,7 +14,6 @@ import {
 import type {
   TABLE_NAMES,
   StorageColumn,
-  StorageGetMessagesArg,
   EvalRow,
   WorkflowRuns,
   WorkflowRun,

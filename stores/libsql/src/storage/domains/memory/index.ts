@@ -5,19 +5,12 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type {
   PaginationInfo,
-  StorageGetMessagesArg,
   StorageResourceType,
   ThreadSortOptions,
   StorageListMessagesInput,
   StorageListMessagesOutput,
 } from '@mastra/core/storage';
-import {
-  MemoryStorage,
-  resolveMessageLimit,
-  TABLE_MESSAGES,
-  TABLE_RESOURCES,
-  TABLE_THREADS,
-} from '@mastra/core/storage';
+import { MemoryStorage, TABLE_MESSAGES, TABLE_RESOURCES, TABLE_THREADS } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { StoreOperationsLibSQL } from '../operations';
 

@@ -364,7 +364,7 @@ export abstract class MastraMemory extends MastraBase {
    * @returns Promise resolving to array of messages, uiMessages, and messagesV2
    */
   abstract query(
-    args: Omit<StorageListMessagesInput, 'format' | 'include'> & {
+    args: Omit<StorageListMessagesInput, 'include'> & {
       threadConfig?: MemoryConfig;
       vectorSearchString?: string;
     },

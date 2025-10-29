@@ -2,7 +2,6 @@ import type { MastraMessageContentV2 } from '../../../agent';
 import { MastraBase } from '../../../base';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '../../../memory/types';
 import type {
-  StorageGetMessagesArg,
   PaginationInfo,
   StorageResourceType,
   ThreadOrderBy,

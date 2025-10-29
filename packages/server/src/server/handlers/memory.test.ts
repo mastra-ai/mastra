@@ -734,7 +734,6 @@ describe('Memory Handlers', () => {
       });
 
       const result = await getMessagesHandler({ mastra, threadId: 'test-thread', agentId: 'test-agent' });
-      console.log(result.messages, expectedResult.messages);
       expect(result.messages).toEqual(expectedResult.messages);
       expect(result.uiMessages).toMatchObject([
         {
@@ -796,16 +795,6 @@ describe('Memory Handlers', () => {
           },
         },
       ];
-
-      // Mock the memory query to return our V2 messages
-      const expectedResult = {
-        messages: messagesV2,
-        uiMessages: [],
-        total: 1,
-        page: 1,
-        perPage: 10,
-        hasMore: false,
-      };
 
       await mockMemory.createThread({
         resourceId: 'test-resource',
@@ -1066,12 +1055,12 @@ describe('Memory Handlers', () => {
 
       const result = await deleteMessagesHandler({
         mastra,
-        messageIds: 'test-message-id',
+        messageIds: ['test-message-id'],
         agentId: 'test-agent',
       });
 
       expect(result).toEqual({ success: true, message: '1 message deleted successfully' });
-      expect(deleteMessagesSpy).toHaveBeenCalledWith('test-message-id');
+      expect(deleteMessagesSpy).toHaveBeenCalledWith(['test-message-id']);
     });
 
     it('should delete multiple messages successfully', async () => {
@@ -1142,8 +1131,6 @@ describe('Memory Handlers', () => {
       });
 
       const errorMessage = 'Database error';
-      const deleteMessagesSpy = vi.spyOn(mockMemory, 'deleteMessages').mockRejectedValue(new Error(errorMessage));
-
       await expect(
         deleteMessagesHandler({
           mastra,

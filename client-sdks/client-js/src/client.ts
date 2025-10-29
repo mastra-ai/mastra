@@ -40,7 +40,6 @@ import type {
   GetAITracesResponse,
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
-  GetMemoryThreadMessagesResponse,
   MemorySearchResponse,
   GetAgentsModelProvidersResponse,
 } from './types';

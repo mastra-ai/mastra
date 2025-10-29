@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
+import { MockMemory } from '../memory';
 import { RuntimeContext } from '../runtime-context';
+import { InMemoryStore } from '../storage';
 import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
-import { MockMemory } from '../memory';
 import { Agent } from './index';
-import { InMemoryStore } from '../storage';
 
 describe('Gemini Model Compatibility Tests', () => {
   let memory: MockMemory;

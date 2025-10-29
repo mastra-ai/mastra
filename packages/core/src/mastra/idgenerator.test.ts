@@ -5,8 +5,8 @@ import { MessageList } from '../agent/message-list';
 import { MockMemory } from '../agent/test-utils';
 import { MastraError } from '../error';
 import { RuntimeContext } from '../runtime-context';
-import { Mastra } from './index';
 import { InMemoryStore } from '../storage';
+import { Mastra } from './index';
 
 // Helper function to create a Mastra instance with proper memory registration
 function createMastraWithMemory(idGenerator?: () => string) {

@@ -8,7 +8,6 @@ import type {
   PaginationInfo,
   StorageColumn,
   StorageDomains,
-  StorageGetMessagesArg,
   StoragePagination,
   StorageResourceType,
   TABLE_NAMES,
