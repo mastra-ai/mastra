@@ -2060,9 +2060,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     runId,
     entry,
     prevOutput,
-    prevStep,
     stepResults,
-    serializedStepGraph,
     resume,
     executionContext,
     emitter,
@@ -2076,10 +2074,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     runId: string;
     entry: {
       type: 'conditional';
-      steps: StepFlowEntry[];
+      steps: { type: 'step'; step: Step<string, any, any> }[];
       conditions: ExecuteFunction<any, any, any, any, any, InngestEngineType>[];
     };
-    prevStep: StepFlowEntry;
     serializedStepGraph: SerializedStepFlowEntry[];
     prevOutput: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -2205,14 +2202,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       },
     });
 
-    const results: { result: StepResult<any, any, any, any> }[] = await Promise.all(
-      stepsToRun.map((step, index) =>
-        this.executeEntry({
-          workflowId,
-          runId,
-          entry: step,
-          serializedStepGraph,
-          prevStep,
+    const results: StepResult<any, any, any, any>[] = await Promise.all(
+      stepsToRun.map(async (step, index) => {
+        const currStepResult = stepResults[step.step.id];
+        if (currStepResult && currStepResult.status === 'success') {
+          return currStepResult;
+        }
+        const result = await this.executeStep({
+          step: step.step,
+          prevOutput,
           stepResults,
           resume,
           executionContext: {
@@ -2232,22 +2230,23 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           tracingContext: {
             currentSpan: conditionalSpan,
           },
-        }),
-      ),
+        });
+
+        stepResults[step.step.id] = result;
+        return result;
+      }),
     );
-    const hasFailed = results.find(result => result.result.status === 'failed') as {
-      result: StepFailure<any, any, any>;
-    };
-    const hasSuspended = results.find(result => result.result.status === 'suspended');
+    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any>;
+    const hasSuspended = results.find(result => result.status === 'suspended');
     if (hasFailed) {
-      execResults = { status: 'failed', error: hasFailed.result.error };
+      execResults = { status: 'failed', error: hasFailed.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', suspendPayload: hasSuspended.result.suspendPayload };
+      execResults = { status: 'suspended', suspendPayload: hasSuspended.suspendPayload };
     } else {
       execResults = {
         status: 'success',
         output: results.reduce((acc: Record<string, any>, result, index) => {
-          if (result.result.status === 'success') {
+          if (result.status === 'success') {
             // @ts-ignore
             acc[stepsToRun[index]!.step.id] = result.output;
           }
