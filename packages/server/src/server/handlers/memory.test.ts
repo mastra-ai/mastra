@@ -3,7 +3,7 @@ import type { CoreMessage } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import type { MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import { MastraMemory } from '@mastra/core/memory';
-import { MockStore } from '@mastra/core/storage';
+import { InMemoryStore } from '@mastra/core/storage';
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
@@ -46,7 +46,7 @@ function createThread(args: Partial<Thread>): Thread {
 describe('Memory Handlers', () => {
   let mockMemory: Omit<MastraMemory, keyof MockedAbstractFn> & MockedAbstractFn;
   let mockAgent: Agent;
-  let storage: MockStore;
+  let storage: InMemoryStore;
 
   beforeEach(() => {
     // @ts-ignore
@@ -65,7 +65,7 @@ describe('Memory Handlers', () => {
       memory: mockMemory as unknown as MastraMemory,
     });
 
-    storage = new MockStore();
+    storage = new InMemoryStore();
   });
 
   describe('getMemoryStatusHandler', () => {
