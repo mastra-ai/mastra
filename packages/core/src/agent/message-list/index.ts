@@ -88,7 +88,7 @@ export type MessageInput =
   | AIV4Type.CoreMessage // v4 CoreMessage support
   // db messages in various formats
   | MastraMessageV1
-  | MastraDBMessage // <- this is how we currently store in the DB
+  | MastraDBMessage
   | MastraMessageV3; // <- this could be stored in the db but is not currently. we do accept this as an input though, and we use it to transform from aiv4->v5 types as an intermediary type
 
 export { convertMessages } from './utils/convert-messages';

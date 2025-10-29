@@ -249,14 +249,14 @@ export class Memory extends MastraMemory {
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }): Promise<MastraDBMessage[]> {
+  }): Promise<{ messages: MastraDBMessage[] }> {
     const { threadId, resourceId, vectorMessageSearch, config } = args;
 
     const threadConfig = this.getMergedThreadConfig(config || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, threadConfig);
 
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
-      return [];
+      return { messages: [] };
     }
 
     const messagesResult = await this.query({
@@ -269,11 +269,9 @@ export class Memory extends MastraMemory {
       threadConfig: config,
     });
 
-    // Always return mastra-db format (V2)
-    const messages = messagesResult.messages;
-
-    this.logger.debug(`Remembered message history includes ${messages.length} messages.`);
-    return messages;
+    // Always return mastra-db format (V2) in object wrapper for consistency
+    this.logger.debug(`Remembered message history includes ${messagesResult.messages.length} messages.`);
+    return messagesResult;
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {

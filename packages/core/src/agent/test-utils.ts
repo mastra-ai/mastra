@@ -99,7 +99,7 @@ export class MockMemory extends MastraMemory {
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }): Promise<MastraDBMessage[]> {
+  }): Promise<{ messages: MastraDBMessage[] }> {
     const messagesV2: MastraDBMessage[] = [];
 
     for (const [, message] of this.messages) {
@@ -110,8 +110,8 @@ export class MockMemory extends MastraMemory {
       }
     }
 
-    // Always return mastra-db format (V2)
-    return messagesV2;
+    // Always return mastra-db format (V2) in object wrapper for consistency
+    return { messages: messagesV2 };
   }
 
   async getThreadsByResourceId() {

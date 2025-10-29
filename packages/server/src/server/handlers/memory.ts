@@ -644,7 +644,7 @@ export async function searchMemoryHandler({
     const threadMap = new Map(threads.map(t => [t.id, t]));
 
     // Process each message in the results
-    for (const msg of result) {
+    for (const msg of result.messages) {
       const content =
         typeof msg.content.content === `string`
           ? msg.content.content
