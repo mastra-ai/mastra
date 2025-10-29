@@ -9691,6 +9691,7 @@ describe('MastraInngestWorkflow', () => {
       expect(agentEvents.map(event => event?.payload?.output?.type)).toEqual([
         'step-start',
         'text-delta',
+        'finish',
         'step-finish',
         'step-start',
         'text-delta',
