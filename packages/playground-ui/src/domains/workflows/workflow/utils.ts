@@ -127,15 +127,15 @@ const getStepNodeAndEdge = ({
   if (nextStepFlow?.type === 'parallel') {
     nextNodeIds =
       nextStepFlow?.steps.map(step => {
-        const stepId = (step as { type: 'step'; step: { id: string } }).step.id;
+        const stepId = step.step.id;
         const nextStepId = allPrevNodeIds?.includes(stepId) ? `${stepId}-${yIndex + 1}` : stepId;
         return nextStepId;
       }) || [];
-    nextStepIds = nextStepFlow?.steps.map(step => (step as { type: 'step'; step: { id: string } }).step.id) || [];
+    nextStepIds = nextStepFlow?.steps.map(step => step.step.id) || [];
   }
   if (nextStepFlow?.type === 'conditional') {
     nextNodeIds = nextStepFlow?.serializedConditions.map(cond => cond.id) || [];
-    nextStepIds = nextStepFlow?.steps?.map(step => (step as { type: 'step'; step: { id: string } }).step.id) || [];
+    nextStepIds = nextStepFlow?.steps?.map(step => step.step.id) || [];
   }
 
   if (stepFlow.type === 'step' || stepFlow.type === 'foreach' || stepFlow.type === 'waitForEvent') {

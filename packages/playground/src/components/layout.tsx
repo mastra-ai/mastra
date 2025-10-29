@@ -1,11 +1,12 @@
 import { AppSidebar } from './ui/app-sidebar';
 import { Toaster } from './ui/sonner';
 import { ThemeProvider } from './ui/theme-provider';
-import { MainSidebarProvider, TooltipProvider } from '@mastra/playground-ui';
+import { MainSidebarProvider, Toaster, TooltipProvider } from '@mastra/playground-ui';
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className="bg-surface1 font-sans h-screen">
+      <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="dark" attribute="class">
         <TooltipProvider delayDuration={0}>
           <div className="grid grid-cols-[auto_1fr] h-full">

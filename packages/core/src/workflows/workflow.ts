@@ -2091,11 +2091,17 @@ export class Run<
 
         self.executionResults = executionResultsPromise;
 
-        const executionResults = await executionResultsPromise;
-        self.closeStreamAction?.().catch(() => {});
+        let executionResults;
+        try {
+          executionResults = await executionResultsPromise;
+          self.closeStreamAction?.().catch(() => {});
 
-        if (self.#streamOutput) {
-          self.#streamOutput.updateResults(executionResults);
+          if (self.#streamOutput) {
+            self.#streamOutput.updateResults(executionResults);
+          }
+        } catch (err) {
+          self.#streamOutput?.rejectResults(err as unknown as Error);
+          self.closeStreamAction?.().catch(() => {});
         }
       },
     });
@@ -2249,6 +2255,10 @@ export class Run<
       throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
     }
 
+    if (snapshot.status !== 'suspended') {
+      throw new Error('This workflow run was not suspended');
+    }
+
     const snapshotResumeLabel = params.label ? snapshot?.resumeLabels?.[params.label] : undefined;
     const stepParam = snapshotResumeLabel?.stepId ?? params.step;
 
@@ -2297,10 +2307,6 @@ export class Run<
     }
 
     if (!params.runCount) {
-      if (snapshot.status !== 'suspended') {
-        throw new Error('This workflow run was not suspended');
-      }
-
       const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
 
       const isStepSuspended = suspendedStepIds.includes(steps?.[0] ?? '');
