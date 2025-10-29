@@ -1,5 +1,18 @@
 # @mastra/playground-ui
 
+## 6.8.0
+
+### Minor Changes
+
+- Toast error from workflow stream and resume stream ([#9460](https://github.com/mastra-ai/mastra/pull/9460))
+
+### Patch Changes
+
+- Updated dependencies [[`b55bbce`](https://github.com/mastra-ai/mastra/commit/b55bbce89404d35fdd967012dd503fae343d4c2d), [`d6cb18e`](https://github.com/mastra-ai/mastra/commit/d6cb18e189fd0ac95d4934cf0d6f2866876d1a2e), [`d0ecff7`](https://github.com/mastra-ai/mastra/commit/d0ecff793d5cd50408cd8d1d113f02e28d897a3d), [`e84a959`](https://github.com/mastra-ai/mastra/commit/e84a9592bfdec4f1c9fdf108c9d4ea4e2ee8f7e3), [`e742d37`](https://github.com/mastra-ai/mastra/commit/e742d371f24ef8059670cc05e9aee308eac068b9)]:
+  - @mastra/client-js@0.16.8
+  - @mastra/core@0.23.3
+  - @mastra/react@0.0.14
+
 ## 6.8.0-alpha.0
 
 ### Minor Changes

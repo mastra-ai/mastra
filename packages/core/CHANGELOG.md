@@ -1,5 +1,39 @@
 # @mastra/core
 
+## 0.23.3
+
+### Patch Changes
+
+- Allow resuming nested workflow step with chained id ([#9464](https://github.com/mastra-ai/mastra/pull/9464))
+
+  Example, you have a workflow like this
+
+  ```
+  export const supportWorkflow = mainWorkflow.then(nestedWorkflow).commit();
+  ```
+
+  And a step in `nestedWorkflow` is supsended, you can now also resume it any of these ways:
+
+  ```
+  run.resume({
+    step: "nestedWorkflow.suspendedStep", //chained nested workflow step id and suspended step id
+    //other resume params
+   })
+  ```
+
+  OR
+
+  ```
+  run.resume({
+    step: "nestedWorkflow", // just the nested workflow step/step id
+    //other resume params
+   })
+  ```
+
+- Fix creating system messages from inside processors using processInput. ([#9476](https://github.com/mastra-ai/mastra/pull/9476))
+
+- Prevent changing workflow status to suspended when some parallel steps are still running ([#9460](https://github.com/mastra-ai/mastra/pull/9460))
+
 ## 0.23.3-alpha.0
 
 ### Patch Changes
