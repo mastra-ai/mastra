@@ -308,22 +308,22 @@ export const redirectList = [
   },
   {
     source: "/:locale/docs/guide/guides/01-harry-potter",
-    destination: "/:locale/guides",
+    destination: "/:locale/examples",
     permanent: true,
   },
   {
     source: "/:locale/docs/guide/guides/02-chef-michel",
-    destination: "/:locale/guides/guide/chef-michel",
+    destination: "/:locale/examples/guide/chef-michel",
     permanent: true,
   },
   {
     source: "/:locale/docs/guides/chef-michel",
-    destination: "/:locale/guides/guide/chef-michel",
+    destination: "/:locale/examples/guide/chef-michel",
     permanent: true,
   },
   {
     source: "/:locale/docs/guide/guides/03-stock-agent",
-    destination: "/:locale/guides/guide/stock-agent",
+    destination: "/:locale/examples/guide/stock-agent",
     permanent: true,
   },
   {
@@ -428,12 +428,12 @@ export const redirectList = [
   },
   {
     source: "/:locale/docs/guide",
-    destination: "/:locale/guides",
+    destination: "/:locale/examples",
     permanent: true,
   },
   {
     source: "/:locale/docs/guide/:path*",
-    destination: "/:locale/guides/guide/:path*",
+    destination: "/:locale/examples/guide/:path*",
     permanent: true,
   },
   {
@@ -483,7 +483,7 @@ export const redirectList = [
   },
   {
     source: "/:locale/docs/guides/:path*",
-    destination: "/:locale/guides/guide/:path*",
+    destination: "/:locale/examples/guide/:path*",
     permanent: true,
   },
   {
@@ -1097,7 +1097,7 @@ export const redirectList = [
   },
   {
     source: "/:locale/reference/agents/migration-guide",
-    destination: "/:locale/guides/migrations/vnext-to-standard-apis",
+    destination: "/:locale/examples/migrations/vnext-to-standard-apis",
     permanent: true,
   },
   {
@@ -1362,5 +1362,90 @@ export const redirectList = [
     source: "/:locale/docs/tools-mcp/advanced-usage",
     destination: "/:locale/docs/tools-mcp/overview",
     permanent: true,
-  }
+  },
+  {
+    source: "/:locale/guides",
+    destination: "/:locale/examples",
+    permanent: true,
+  },
+  {
+    source: "/:locale/guides/guide/ai-recruiter",
+    destination: "/:locale/examples/guide/ai-recruiter",
+    permanent: true,
+  },
+  {
+    source: "/:locale/guides/guide/chef-michel",
+    destination: "/:locale/examples/guide/chef-michel",
+    permanent: true,
+  },
+  {
+    source: "/:locale/guides/guide/notes-mcp-server",
+    destination: "/:locale/examples/guide/notes-mcp-server",
+    permanent: true,
+  },
+  {
+    source: "/:locale/guides/guide/research-assistant",
+    destination: "/:locale/examples/guide/research-assistant",
+    permanent: true,
+  },
+  {
+    source: "/:locale/guides/guide/stock-agent",
+    destination: "/:locale/examples/guide/stock-agent",
+    permanent: true,
+  },
+  {
+    source: "/:locale/guides/guide/web-search",
+    destination: "/:locale/examples/guide/web-search",
+    permanent: true,
+  },
+  {
+    source: "/:locale/guides/migrations",
+    destination: "/:locale/examples/migrations",
+    permanent: true,
+  },
+  {
+    source: "/:locale/guides/migrations/agentnetwork",
+    destination: "/:locale/examples/migrations/agentnetwork",
+    permanent: true,
+  },
+  {
+    source: "/:locale/guides/migrations/upgrade-to-v1",
+    destination: "/:locale/examples/migrations/upgrade-to-v1",
+    permanent: true,
+  },
+  {
+    source: "/:locale/guides/migrations/vnext-to-standard-apis",
+    destination: "/:locale/examples/migrations/vnext-to-standard-apis",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/guides/guide/ai-recruiter",
+    destination: "/:locale/examples/guide/ai-recruiter",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/guides/guide/chef-michel",
+    destination: "/:locale/examples/guide/chef-michel",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/guides/guide/notes-mcp-server",
+    destination: "/:locale/examples/guide/notes-mcp-server",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/guides/guide/research-assistant",
+    destination: "/:locale/examples/guide/research-assistant",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/guides/guide/stock-agent",
+    destination: "/:locale/examples/guide/stock-agent",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/guides/guide/web-search",
+    destination: "/:locale/examples/guide/web-search",
+    permanent: true,
+  },
 ];
