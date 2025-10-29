@@ -7,7 +7,7 @@ description: Guide on creating a Chef Assistant agent in Mastra to help users co
 
 import Steps from '@site/src/components/Steps';
 import StepItem from '@site/src/components/StepItem';
-import YouTube from "@site/src/components/YouTube";
+import Youtube from "@site/src/components/YouTube-player"";
 
 # Building an AI Chef Assistant
 
@@ -179,7 +179,7 @@ async function main() {
 
   const response = await chefAgent.generate(
     [{ role: "user", content: query }],
-    { 
+    {
       structuredOutput: {
         schema
       },
