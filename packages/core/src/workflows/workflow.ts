@@ -1173,7 +1173,13 @@ export class Workflow<
       validateInputs: validateInputs ?? false,
     };
 
-    const isResume = !!(resume?.steps && resume.steps.length > 0) || !!resume?.label;
+    const isResume =
+      !!(resume?.steps && resume.steps.length > 0) ||
+      !!resume?.label ||
+      !!(resume?.steps && resume.steps.length === 0 && (!runCount || runCount === 0));
+    // this check is for cases where you suspend/resume a nested workflow.
+    // runCount helps us know the step has been run at least once, which means it's running in a loop and should not be calling resume.
+
     const run = isResume ? await this.createRunAsync({ runId: resume.runId }) : await this.createRunAsync({ runId });
     const nestedAbortCb = () => {
       abort();
@@ -1191,14 +1197,14 @@ export class Workflow<
       emitter.emit('nested-watch', { event, workflowId: this.id, runId: run.runId, isResume: !!resume?.steps?.length });
     }, 'watch');
 
-    if (runCount && runCount > 0 && resume?.steps?.length && runtimeContext) {
+    if (runCount && runCount > 0 && isResume && runtimeContext) {
       runtimeContext.set('__mastraWorflowInputData', inputData);
     }
 
     const res = isResume
       ? await run.resume({
           resumeData,
-          step: resume.steps as any,
+          step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
           runtimeContext,
           tracingContext,
           outputOptions: { includeState: true, includeResumeLabels: true },
@@ -2265,7 +2271,11 @@ export class Run<
     // Auto-detect suspended steps if no step is provided
     let steps: string[];
     if (stepParam) {
-      steps = (Array.isArray(stepParam) ? stepParam : [stepParam]).map(step =>
+      let newStepParam = stepParam;
+      if (typeof stepParam === 'string') {
+        newStepParam = stepParam.split('.');
+      }
+      steps = (Array.isArray(newStepParam) ? newStepParam : [newStepParam]).map(step =>
         typeof step === 'string' ? step : step?.id,
       );
     } else {
