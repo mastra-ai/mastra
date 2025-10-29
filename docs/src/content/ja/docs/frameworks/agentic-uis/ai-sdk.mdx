@@ -406,6 +406,62 @@ AI SDK のコアにおける破壊的変更、パッケージ更新、API 変更
 - **データ互換性**: v5 形式で保存された新しいデータは、v5 から v4 にダウングレードすると利用できません
 - **バックアップの推奨**: v5 へアップグレードする前の DB のバックアップを保持してください
 
+### Node.js でのストリーミング（Express/NestJS）
+
+Express や NestJS などの Node.js 環境では、`pipeUIMessageStreamToResponse()` を使用して、`ServerResponse` オブジェクトに Server-Sent Events 経由で UI メッセージをストリーミングします。
+
+#### Express
+
+```typescript filename="app.ts" showLineNumbers copy
+import express from 'express';
+import { mastra } from './mastra';
+
+const app = express();
+
+app.get('/api/chat', async (req, res) => {
+  const myAgent = mastra.getAgent('weatherAgent');
+  const stream = await myAgent.stream([
+    { role: 'user', content: 'What is the weather?' }
+  ], { format: 'aisdk' });
+
+  stream.pipeUIMessageStreamToResponse({
+    response: res,
+    uiOptions: {
+      sendReasoning: true,
+      sendSources: false,
+    },
+  });
+});
+```
+
+#### NestJS
+
+```typescript filename="chat.controller.ts" showLineNumbers copy
+import { Controller, Get, Res } from '@nestjs/common';
+import { Response } from 'express';
+import { MastraService } from './mastra.service';
+
+@Controller('chat')
+export class ChatController {
+  constructor(private mastraService: MastraService) {}
+
+  @Get('stream')
+  async stream(@Res() res: Response) {
+    const myAgent = this.mastraService.getAgent('weatherAgent');
+    const stream = await myAgent.stream([
+      { role: 'user', content: 'What is the weather?' }
+    ], { format: 'aisdk' });
+
+    stream.pipeUIMessageStreamToResponse({
+      response: res,
+      uiOptions: { sendReasoning: true },
+    });
+  }
+}
+```
+
+このメソッドは `toUIMessageStreamResponse()` と同じ `uiOptions` を受け取り、さらに `status`、`statusText`、`headers` などの Node.js 固有のパラメータも指定できます。
+
 ### メモリとストレージ
 
 Mastra は内部の `MessageList` クラスで AI SDK v4 のデータを自動処理し、フォーマット変換（v4 から v5 への変換を含む）を管理します。データベースの移行は不要で、既存のメッセージはその場で変換され、アップグレード後も引き続き動作します。
