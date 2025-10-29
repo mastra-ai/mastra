@@ -20,24 +20,36 @@ This guide shows two distinct integration approaches:
 2. Integrate CopilotKit in your Next.js app
 
 <Tabs>
-  <TabItem value="mastra-server" label="Mastra Server">
+<TabItem value="mastra-server" label="Mastra Server">
 
   <Steps>
 
-<StepItem>
+  <StepItem>
 
 In your React frontend, install the required CopilotKit packages:
 
 <Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy npm install @copilotkit/react-core @copilotkit/react-ui ```
-  </TabItem>
-  <TabItem value="yarn" label="yarn">
-    ```bash copy yarn add @copilotkit/react-core @copilotkit/react-ui ```
-  </TabItem>
-  <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm add @copilotkit/react-core @copilotkit/react-ui ```
-  </TabItem>
+<TabItem value="npm" label="npm">
+
+```bash copy
+npm install @copilotkit/react-core @copilotkit/react-ui
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn add @copilotkit/react-core @copilotkit/react-ui
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm add @copilotkit/react-core @copilotkit/react-ui
+```
+
+</TabItem>
 </Tabs>
 
 </StepItem>
@@ -74,15 +86,27 @@ If you have not yet set up your Mastra server, follow the [getting started guide
 In your Mastra server, install additional packages for CopilotKit integration:
 
 <Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy npm install @copilotkit/runtime @ag-ui/mastra ```
-  </TabItem>
-  <TabItem value="yarn" label="yarn">
-    ```bash copy yarn add @copilotkit/runtime @ag-ui/mastra ```
-  </TabItem>
-  <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm add @copilotkit/runtime @ag-ui/mastra ```
-  </TabItem>
+<TabItem value="npm" label="npm">
+
+```bash copy
+npm install @copilotkit/runtime @ag-ui/mastra
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn add @copilotkit/runtime @ag-ui/mastra
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm add @copilotkit/runtime @ag-ui/mastra
+```
+
+</TabItem>
 </Tabs>
 
 </StepItem>
@@ -147,7 +171,7 @@ Now start both the Mastra server and your frontend.
 </StepItem>
 
   </Steps>
-  </TabItem>
+ </TabItem>
 
   <TabItem value="nextjs" label="Next.js">
 
@@ -158,18 +182,27 @@ Now start both the Mastra server and your frontend.
 In your Next.js app, install the required packages:
 
 <Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy npm install @copilotkit/react-core @copilotkit/react-ui
-    @copilotkit/runtime @ag-ui/mastra ```
-  </TabItem>
-  <TabItem value="yarn" label="yarn">
-    ```bash copy yarn add @copilotkit/react-core @copilotkit/react-ui
-    @copilotkit/runtime @ag-ui/mastra ```
-  </TabItem>
-  <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm add @copilotkit/react-core @copilotkit/react-ui
-    @copilotkit/runtime @ag-ui/mastra ```
-  </TabItem>
+<TabItem value="npm" label="npm">
+
+```bash copy
+npm install @copilotkit/react-core @copilotkit/react-ui @copilotkit/runtime @ag-ui/mastra
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn add @copilotkit/react-core @copilotkit/react-ui @copilotkit/runtime @ag-ui/mastra
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm add @copilotkit/react-core @copilotkit/react-ui @copilotkit/runtime @ag-ui/mastra
+```
+
+</TabItem>
 </Tabs>
 
 </StepItem>
@@ -185,7 +218,7 @@ import { CopilotKit } from "@copilotkit/react-core";
 import "@copilotkit/react-ui/styles.css";
 
 export function CopilotKitComponent({ runtimeUrl }: { runtimeUrl: string}) {
-  return (                                                       y
+  return (
     <CopilotKit
       runtimeUrl={runtimeUrl}
       agent="weatherAgent"
@@ -251,15 +284,27 @@ export const POST = async (req: NextRequest) => {
 Install the Mastra Client SDK.
 
 <Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy npm install @mastra/client-js ```
-  </TabItem>
-  <TabItem value="yarn" label="yarn">
-    ```bash copy yarn add @mastra/client-js ```
-  </TabItem>
-  <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm add @mastra/client-js ```
-  </TabItem>
+<TabItem value="npm" label="npm">
+
+```bash copy
+npm install @mastra/client-js
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn add @mastra/client-js
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm add @mastra/client-js
+```
+
+</TabItem>
 </Tabs>
 
 Create an API route that connects to remote Mastra agents:
@@ -294,8 +339,8 @@ export const POST = async (req: NextRequest) => {
 };
 ```
 
-      </TabItem>
-    </Tabs>
+  </TabItem>
+</Tabs>
 
 </StepItem>
 

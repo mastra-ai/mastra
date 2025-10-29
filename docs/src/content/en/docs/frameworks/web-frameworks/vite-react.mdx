@@ -27,22 +27,34 @@ This guide assumes you're using Vite/React with React Router v7 at the root of y
 Install the required Mastra packages:
 
 <Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy npm install mastra@latest @mastra/core@latest
-    @mastra/libsql@latest @mastra/client-js@latest ```
-  </TabItem>
-  <TabItem value="yarn" label="yarn">
-    ```bash copy yarn add mastra@latest @mastra/core@latest
-    @mastra/libsql@latest @mastra/client-js@latest ```
-  </TabItem>
-  <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm add mastra@latest @mastra/core@latest
-    @mastra/libsql@latest @mastra/client-js@latest ```
-  </TabItem>
-  <TabItem value="bun" label="bun">
-    ```bash copy bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
-    @mastra/client-js@latest ```
-  </TabItem>
+<TabItem value="npm" label="npm">
+
+```bash copy
+npm install mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun add mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
+```
+
+</TabItem>
 </Tabs>
 
 ## Integrate Mastra
@@ -76,28 +88,32 @@ By default, `mastra init` suggests `src` as the install location. If you're usin
 Add the `dev` and `build` scripts to `package.json`:
 
 <Tabs>
-  <TabItem value="app" label="app">
-    ```json title="package.json"
-    {
-      "scripts": {
-        ...
-        "dev:mastra": "mastra dev --dir mastra",
-        "build:mastra": "mastra build --dir mastra"
-      }
-    }
-    ```
-  </TabItem>
-  <TabItem value="src-app" label="src/app">
-    ```json title="package.json"
-    {
-      "scripts": {
-        ...
-        "dev:mastra": "mastra dev --dir src/mastra",
-        "build:mastra": "mastra build --dir src/mastra"
-      }
-    }
-    ```
-  </TabItem>
+<TabItem value="app" label="app">
+
+```json title="package.json"
+{
+  "scripts": {
+    ...
+    "dev:mastra": "mastra dev --dir mastra",
+    "build:mastra": "mastra build --dir mastra"
+  }
+}
+```
+
+</TabItem>
+<TabItem value="src-app" label="src/app">
+
+```json title="package.json"
+{
+  "scripts": {
+    ...
+    "dev:mastra": "mastra dev --dir src/mastra",
+    "build:mastra": "mastra build --dir src/mastra"
+  }
+}
+```
+
+</TabItem>
 </Tabs>
 
 ## Configure TypeScript
@@ -132,12 +148,20 @@ Add `.mastra` to your `.gitignore` file:
 Start the Mastra Dev Server to expose your agents as REST endpoints:
 
 <Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy npm run dev:mastra ```
-  </TabItem>
-  <TabItem value="cli" label="CLI">
-    ```bash copy mastra dev:mastra ```
-  </TabItem>
+<TabItem value="npm" label="npm">
+
+```bash copy
+npm run dev:mastra
+```
+
+</TabItem>
+<TabItem value="cli" label="CLI">
+
+```bash copy
+mastra dev:mastra
+```
+
+</TabItem>
 </Tabs>
 
 > Once running, your agents are available locally. See [Local Development Environment](/docs/getting-started/studio) for more information.

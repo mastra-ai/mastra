@@ -27,18 +27,34 @@ You can run `create mastra` anywhere on your machine.
 The wizard will guide you through setup, create a new directory for your project, and generate a weather agent with example workflows and tools to get you started.
 
 <Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy npm create mastra@latest -y ```
-  </TabItem>
-  <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm create mastra@latest -y ```
-  </TabItem>
-  <TabItem value="yarn" label="yarn">
-    ```bash copy yarn create mastra@latest -y ```
-  </TabItem>
-  <TabItem value="bun" label="bun">
-    ```bash copy bun create mastra@latest -y ```
-  </TabItem>
+<TabItem value="npm" label="npm">
+
+```bash copy
+npm create mastra@latest -y
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm create mastra@latest -y
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn create mastra@latest -y
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun create mastra@latest -y
+```
+
+</TabItem>
 </Tabs>
 
 :::note
@@ -87,22 +103,42 @@ mkdir my-first-agent && cd my-first-agent
 Initialize a TypeScript project and install the following dependencies:
 
 <Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy npm init -y npm install -D typescript @types/node mastra@latest
-    npm install @mastra/core@latest zod@^4 ```
-  </TabItem>
-  <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm init -y pnpm add -D typescript @types/node mastra@latest
-    pnpm add @mastra/core@latest zod@^4 ```
-  </TabItem>
-  <TabItem value="yarn" label="yarn">
-    ```bash copy yarn init -y yarn add -D typescript @types/node mastra@latest
-    yarn add @mastra/core@latest zod@^4 ```
-  </TabItem>
-  <TabItem value="bun" label="bun">
-    ```bash copy bun init -y bun add -d typescript @types/node mastra@latest bun
-    add @mastra/core@latest zod@^4 ```
-  </TabItem>
+<TabItem value="npm" label="npm">
+
+```bash copy
+npm init -y
+npm install -D typescript @types/node mastra@latest
+npm install @mastra/core@latest zod@^4
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm init -y
+pnpm add -D typescript @types/node mastra@latest
+pnpm add @mastra/core@latest zod@^4
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn init -y
+yarn add -D typescript @types/node mastra@latest
+yarn add @mastra/core@latest zod@^4
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun init -y
+bun add -d typescript @types/node mastra@latest
+bun add @mastra/core@latest zod@^4
+```
+
+</TabItem>
 </Tabs>
 
 Add `dev` and `build` scripts to your `package.json` file:
@@ -276,18 +312,34 @@ export const mastra = new Mastra({
 You can now launch the [Playground](/docs/getting-started/studio) and test your agent.
 
 <Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy npm run dev ```
-  </TabItem>
-  <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm run dev ```
-  </TabItem>
-  <TabItem value="yarn" label="yarn">
-    ```bash copy yarn run dev ```
-  </TabItem>
-  <TabItem value="bun" label="bun">
-    ```bash copy bun run dev ```
-  </TabItem>
+<TabItem value="npm" label="npm">
+
+```bash copy
+npm run dev
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm run dev
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn run dev
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun run dev
+```
+
+</TabItem>
 </Tabs>
 
 </StepItem>
