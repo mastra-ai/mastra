@@ -5,6 +5,7 @@ import { CookieConsent } from '@site/src/components/cookie/cookie-consent';
 import { GTProvider, useLocaleSelector } from 'gt-react';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import loadTranslations from '../loadTranslations';
+import { LocaleSync } from '@site/src/components/gt/LocaleSync';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,25 +20,11 @@ export default function Root({ children }: { children: React.ReactNode }) {
   return (
     <GTProvider locales={['en', 'ja']} loadTranslations={loadTranslations}>
       <QueryClientProvider client={queryClient}>
-        <DocusaurusToGtLocaleSync />
+        <LocaleSync />
         <Toaster />
         <CookieConsent />
         {children}
       </QueryClientProvider>
     </GTProvider>
   );
-}
-
-// Sync locale when Docusaurus route locale changes
-function DocusaurusToGtLocaleSync() {
-  const { i18n } = useDocusaurusContext();
-  const { locale: gtLocale, setLocale: setGtLocale } = useLocaleSelector();
-
-  useEffect(() => {
-    if (!i18n?.currentLocale) return;
-    if (gtLocale === i18n.currentLocale) return;
-    setGtLocale(i18n.currentLocale);
-  }, [i18n?.currentLocale, gtLocale, setGtLocale]);
-
-  return null;
 }
