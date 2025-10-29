@@ -12,7 +12,6 @@ import {
   getWorkflowsHandler,
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
-  sendWorkflowRunEventHandler,
   startAsyncWorkflowHandler,
   startWorkflowRunHandler,
   streamVNextWorkflowHandler,
@@ -1098,42 +1097,6 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     cancelWorkflowRunHandler,
-  );
-
-  router.post(
-    '/:workflowId/runs/:runId/send-event',
-    describeRoute({
-      description: 'Send an event to a workflow run',
-      parameters: [
-        {
-          name: 'workflowId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: { type: 'object', properties: { event: { type: 'string' }, data: { type: 'object' } } },
-          },
-        },
-      },
-      tags: ['workflows'],
-      responses: {
-        200: {
-          description: 'workflow run event sent',
-        },
-      },
-    }),
-    sendWorkflowRunEventHandler,
   );
 
   return router;

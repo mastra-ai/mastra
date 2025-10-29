@@ -17,7 +17,6 @@ import {
   streamAgentBuilderActionHandler,
   streamVNextAgentBuilderActionHandler,
   cancelAgentBuilderActionRunHandler,
-  sendAgentBuilderActionRunEventHandler,
 } from './handlers';
 
 export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
@@ -523,42 +522,6 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     cancelAgentBuilderActionRunHandler,
-  );
-
-  router.post(
-    '/:actionId/runs/:runId/send-event',
-    describeRoute({
-      description: 'Send an event to an agent builder action run',
-      parameters: [
-        {
-          name: 'actionId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: { type: 'object', properties: { event: { type: 'string' }, data: { type: 'object' } } },
-          },
-        },
-      },
-      tags: ['agent-builder'],
-      responses: {
-        200: {
-          description: 'agent builder action run event sent',
-        },
-      },
-    }),
-    sendAgentBuilderActionRunEventHandler,
   );
 
   return router;
