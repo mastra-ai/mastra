@@ -114,7 +114,7 @@
   },
   "peerDependencies": {
     "@mastra/client-js": "workspace:^",
-    "@mastra/core": ">=0.22.3-0 <1.0.0-alpha.0",
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "@mastra/react": "workspace:*",
     "@tanstack/react-query": "^5.81.5",
     "lucide-react": "^0.474.0",
