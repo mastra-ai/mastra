@@ -39,6 +39,7 @@
     "clsx": "^2.0.0",
     "cmdk": "^1.1.1",
     "dotenv": "^17.2.3",
+    "gtx-cli": "^2.4.7",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "posthog-docusaurus": "^2.0.5",

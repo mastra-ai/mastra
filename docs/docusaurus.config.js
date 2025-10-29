@@ -28,8 +28,14 @@ const config = {
       onBrokenMarkdownLinks: "warn",
     },
   },
-  // Enable v4 features in prod
 
+  // Internationalization
+  i18n: {
+    defaultLocale: 'en',
+    locales: ['en', 'ja'],
+  },
+
+  // Enable v4 features in prod
   ...(process.env.NODE_ENV === "production" && {
     future: {
       v4: {
