@@ -246,11 +246,6 @@ export interface SaveMessageToMemoryParams {
   runtimeContext?: RuntimeContext | Record<string, any>;
 }
 
-export interface SaveNetworkMessageToMemoryParams {
-  messages: (MastraMessageV1 | MastraMessageV2)[];
-  networkId: string;
-}
-
 export type SaveMessageToMemoryResponse = (MastraMessageV1 | MastraMessageV2)[];
 
 export interface CreateMemoryThreadParams {
@@ -260,14 +255,6 @@ export interface CreateMemoryThreadParams {
   threadId?: string;
   agentId: string;
   runtimeContext?: RuntimeContext | Record<string, any>;
-}
-
-export interface CreateNetworkMemoryThreadParams {
-  title?: string;
-  metadata?: Record<string, any>;
-  resourceId: string;
-  threadId?: string;
-  networkId: string;
 }
 
 export type CreateMemoryThreadResponse = StorageThreadType;
@@ -284,11 +271,6 @@ export interface GetMemoryConfigParams {
 }
 
 export type GetMemoryConfigResponse = { config: MemoryConfig };
-
-export interface GetNetworkMemoryThreadParams {
-  resourceId: string;
-  networkId: string;
-}
 
 export type GetMemoryThreadResponse = StorageThreadType[];
 
