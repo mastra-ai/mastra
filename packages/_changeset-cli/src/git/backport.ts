@@ -72,9 +72,24 @@ async function github({ pull_number }: { pull_number: number }) {
     stdio: `inherit`,
   });
 
-  childProcess.execSync(`git cherry-pick -x ${commitSha}`, {
-    stdio: `inherit`,
-  });
+  try {
+    childProcess.execSync(`git cherry-pick -x ${commitSha}`, {
+      stdio: `inherit`,
+    });
+  } catch (err) {
+    console.error('[ERROR]: cherry-pick failed', err);
+
+    await octokit.rest.issues.createComment({
+      owner,
+      repo,
+      issue_number: pull_number,
+      body: `Failed to backport the PR. Please manually create a backport PR.
+cc @${prDetails.data.user.login}
+      `,
+    });
+
+    return;
+  }
 
   childProcess.execSync(`git push origin +${backportBranchName} --force`, {
     stdio: `inherit`,
@@ -134,6 +149,7 @@ const main = defineCommand({
       await github({ pull_number: Number(pr) });
     } catch (err) {
       console.error(err);
+      process.exit(1);
     } finally {
       console.log('Backport script completed.');
     }
