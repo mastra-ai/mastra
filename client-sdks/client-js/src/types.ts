@@ -243,6 +243,7 @@ export interface GetVectorIndexResponse {
 export interface SaveMessageToMemoryParams {
   messages: (MastraMessageV1 | MastraMessageV2)[];
   agentId: string;
+  runtimeContext?: RuntimeContext | Record<string, any>;
 }
 
 export interface SaveNetworkMessageToMemoryParams {
@@ -258,6 +259,7 @@ export interface CreateMemoryThreadParams {
   resourceId: string;
   threadId?: string;
   agentId: string;
+  runtimeContext?: RuntimeContext | Record<string, any>;
 }
 
 export interface CreateNetworkMemoryThreadParams {
@@ -273,10 +275,12 @@ export type CreateMemoryThreadResponse = StorageThreadType;
 export interface GetMemoryThreadParams {
   resourceId: string;
   agentId: string;
+  runtimeContext?: RuntimeContext | Record<string, any>;
 }
 
 export interface GetMemoryConfigParams {
   agentId: string;
+  runtimeContext?: RuntimeContext | Record<string, any>;
 }
 
 export type GetMemoryConfigResponse = { config: MemoryConfig };
@@ -292,6 +296,7 @@ export interface UpdateMemoryThreadParams {
   title: string;
   metadata: Record<string, any>;
   resourceId: string;
+  runtimeContext?: RuntimeContext | Record<string, any>;
 }
 
 export interface GetMemoryThreadMessagesParams {
@@ -518,4 +523,47 @@ export interface StreamVNextChunkType {
   payload: any;
   runId: string;
   from: 'AGENT' | 'WORKFLOW';
+}
+export interface MemorySearchResponse {
+  results: MemorySearchResult[];
+  count: number;
+  query: string;
+  searchType?: string;
+  searchScope?: 'thread' | 'resource';
+}
+
+export interface MemorySearchResult {
+  id: string;
+  role: string;
+  content: string;
+  createdAt: string;
+  threadId?: string;
+  threadTitle?: string;
+  context?: {
+    before?: Array<{
+      id: string;
+      role: string;
+      content: string;
+      createdAt: string;
+    }>;
+    after?: Array<{
+      id: string;
+      role: string;
+      content: string;
+      createdAt: string;
+    }>;
+  };
+}
+
+export interface GetAgentsModelProvidersResponse {
+  providers: Provider[];
+}
+
+export interface Provider {
+  id: string;
+  name: string;
+  envVar: string;
+  connected: boolean;
+  docUrl?: string;
+  models: string[];
 }
