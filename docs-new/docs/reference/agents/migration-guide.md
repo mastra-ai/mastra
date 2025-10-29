@@ -313,8 +313,8 @@ const result = await memory.query({ threadId, format: 'aiv5-ui' });
 const { messages } = await memory.query({ threadId });
 
 // Convert to AI SDK format when needed
-import { toAISdkMessages } from '@mastra/ai-sdk/v5';
-const uiMessages = toAISdkMessages(messages);
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+const uiMessages = toAISdkV5Messages(messages);
 ```
 
 ### Client-JS Memory API
@@ -330,13 +330,13 @@ const { messages, uiMessages, legacyMessages } = await client.memory.thread(thre
 #### After (v1.0)
 
 ```typescript
-import { toAISdkMessages } from '@mastra/ai-sdk/v5';
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 
 // Get messages in Mastra format
 const { messages } = await client.memory.thread(threadId).getMessages();
 
 // Convert to AI SDK format for frontend use
-const uiMessages = toAISdkMessages(messages);
+const uiMessages = toAISdkV5Messages(messages);
 ```
 
 ### Format Conversion Functions
@@ -345,16 +345,16 @@ The new `@mastra/ai-sdk` package provides explicit conversion functions:
 
 ```typescript
 // V5 UI messages (recommended)
-import { toAISdkMessages } from '@mastra/ai-sdk/v5';
-const v5Messages = toAISdkMessages(mastraMessages);
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+const v5Messages = toAISdkV5Messages(mastraMessages);
 
 // V4 UI messages
-import { toAISdkMessages } from '@mastra/ai-sdk/v4';
-const v4Messages = toAISdkMessages(mastraMessages);
+import { toAISdkV4Messages } from '@mastra/ai-sdk/ui';
+const v4Messages = toAISdkV4Messages(mastraMessages);
 
 // Stream conversion (V5 only)
-import { toAISdkStream } from '@mastra/ai-sdk/v5';
-const stream = toAISdkStream(mastraStream);
+import { toAISdkV5Stream } from '@mastra/ai-sdk';
+const stream = toAISdkV5Stream(mastraStream);
 ```
 
 ### Deprecated: `toAISdkFormat` for Streams
@@ -371,8 +371,8 @@ const stream = toAISdkFormat(mastraStream);
 #### After (v1.0)
 
 ```typescript
-import { toAISdkStream } from '@mastra/ai-sdk/v5';
-const stream = toAISdkStream(mastraStream);
+import { toAISdkV5Stream } from '@mastra/ai-sdk';
+const stream = toAISdkV5Stream(mastraStream);
 ```
 
 ### React SDK Changes
@@ -390,10 +390,10 @@ const messages = resolveInitialMessages(await fetchMessages());
 #### After (v1.0)
 
 ```typescript
-import { toAISdkMessages } from '@mastra/ai-sdk/v5';
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 
 const { messages } = await client.memory.thread(threadId).getMessages();
-const uiMessages = toAISdkMessages(messages);
+const uiMessages = toAISdkV5Messages(messages);
 ```
 
 ### Server Handler Changes
@@ -410,11 +410,11 @@ return { messages: result.messages };
 #### After (v1.0)
 
 ```typescript
-import { toAISdkMessages } from '@mastra/ai-sdk/v5';
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 
 const { messages } = await memory.query({ threadId });
 // Convert only if needed for client
-const uiMessages = toAISdkMessages(messages);
+const uiMessages = toAISdkV5Messages(messages);
 return { messages: uiMessages };
 ```
 
@@ -431,8 +431,8 @@ Decide whether you want to upgrade or not. If you don't, just find/replace to `s
 ### If you're using memory queries
 
 1. Update all `memory.query()` calls to destructure `{ messages }` instead of accessing multiple format fields
-2. Add `import { toAISdkMessages } from '@mastra/ai-sdk/v5'` where you need AI SDK format
-3. Replace `result.uiMessages` with `toAISdkMessages(result.messages)`
+2. Add `import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'` where you need AI SDK format
+3. Replace `result.uiMessages` with `toAISdkV5Messages(result.messages)`
 4. Remove any `format` parameters from `memory.query()` calls
 5. Update React SDK code to remove `resolveInitialMessages` usage
-6. Replace `toAISdkFormat` (for streams) with `toAISdkStream`
+6. Replace `toAISdkFormat` (for streams) with `toAISdkV5Stream` from `@mastra/ai-sdk`

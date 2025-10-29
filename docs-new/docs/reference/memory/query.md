@@ -117,7 +117,7 @@ content={[
 {
 name: "messages",
 type: "MastraMessageV2[]",
-description: "Array of messages in Mastra's internal storage format (V2). Use toAISdkMessages() from @mastra/ai-sdk to convert to AI SDK format for frontend use.",
+description: "Array of messages in Mastra's internal storage format (V2). Use @mastra/ai-sdk/ui to convert to AI SDK format for frontend use.",
 },
 ]}
 />
@@ -126,7 +126,7 @@ description: "Array of messages in Mastra's internal storage format (V2). Use to
 
 ```typescript filename="src/test-memory.ts" showLineNumbers copy
 import { mastra } from './mastra';
-import { toAISdkMessages } from '@mastra/ai-sdk/v5';
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 
 const agent = mastra.getAgent('agent');
 const memory = await agent.getMemory();
@@ -156,7 +156,7 @@ const { messages } = await memory!.query({
 console.log(messages);
 
 // Convert to AI SDK format for frontend use
-const uiMessages = toAISdkMessages(messages);
+const uiMessages = toAISdkV5Messages(messages);
 console.log(uiMessages);
 ```
 
