@@ -1,10 +1,8 @@
 ---
 title: "Custom Scorers | Scorers | Mastra Docs"
-sidebar_position: 3
-sidebar_label: "Custom Scorers"
 ---
 
-## Custom scorers
+# Custom scorers
 
 Mastra provides a unified `createScorer` factory that allows you to build custom evaluation logic using either JavaScript functions or LLM-based prompt objects for each step. This flexibility lets you choose the best approach for each part of your evaluation pipeline.
 
@@ -89,7 +87,7 @@ const glutenCheckerScorer = createScorer(...)
   // Extract and clean recipe text
   const recipeText = run.output.text.toLowerCase();
   const wordCount = recipeText.split(' ').length;
-  
+
   return {
     recipeText,
     wordCount,
@@ -111,7 +109,7 @@ const glutenCheckerScorer = createScorer(...)
   createPrompt: ({ run }) => `
     Extract all ingredients and cooking methods from this recipe:
     ${run.output.text}
-    
+
     Return JSON with ingredients and cookingMethods arrays.
   `
 })
@@ -130,13 +128,13 @@ const glutenCheckerScorer = createScorer({...})
 .preprocess(...)
 .analyze(({ run, results }) => {
   const { recipeText, hasCommonGlutenWords } = results.preprocessStepResult;
-  
+
   // Simple gluten detection algorithm
   const glutenKeywords = ['wheat', 'flour', 'barley', 'rye', 'bread'];
-  const foundGlutenWords = glutenKeywords.filter(word => 
+  const foundGlutenWords = glutenKeywords.filter(word =>
     recipeText.includes(word)
   );
-  
+
   return {
     isGlutenFree: foundGlutenWords.length === 0,
     detectedGlutenSources: foundGlutenWords,
@@ -160,7 +158,7 @@ const glutenCheckerScorer = createScorer({...})
   createPrompt: ({ run, results }) => `
     Analyze this recipe for gluten content:
     "${results.preprocessStepResult.recipeText}"
-    
+
     Look for wheat, barley, rye, and hidden sources like soy sauce.
     Return JSON with isGlutenFree, glutenSources array, and confidence (0-1).
   `
@@ -181,7 +179,7 @@ const glutenCheckerScorer = createScorer({...})
 .analyze(...)
 .generateScore(({ results }) => {
   const { isGlutenFree, confidence } = results.analyzeStepResult;
-  
+
   // Return 1 for gluten-free, 0 for contains gluten
   // Weight by confidence level
   return isGlutenFree ? confidence : 0;
@@ -205,7 +203,7 @@ const glutenCheckerScorer = createScorer({...})
 .generateScore(...)
 .generateReason(({ results, score }) => {
   const { isGlutenFree, glutenSources } = results.analyzeStepResult;
-  
+
   if (isGlutenFree) {
     return `Score: ${score}. This recipe is gluten-free with no harmful ingredients detected.`;
   } else {
@@ -226,7 +224,7 @@ const glutenCheckerScorer = createScorer({...})
   createPrompt: ({ results, score }) => `
     Explain why this recipe received a score of ${score}.
     Analysis: ${JSON.stringify(results.analyzeStepResult)}
-    
+
     Provide a clear explanation for someone with dietary restrictions.
   `
 })
@@ -414,9 +412,9 @@ console.log('Reason:', result.reason);
 ```typescript
 {
   score: 1,
-  analyzeStepResult: { 
+  analyzeStepResult: {
     isGlutenFree: true,
-    glutenSources: [] 
+    glutenSources: []
   },
   reason: 'This recipe is gluten-free because rice, beans, and vegetables are naturally gluten-free ingredients that are safe for people with celiac disease.'
 }
@@ -440,9 +438,9 @@ console.log('Reason:', result.reason);
 ```typescript
 {
   score: 0,
-  analyzeStepResult: { 
+  analyzeStepResult: {
     isGlutenFree: false,
-    glutenSources: ['flour'] 
+    glutenSources: ['flour']
   },
   reason: 'This recipe is not gluten-free because it contains flour. Regular flour is made from wheat and contains gluten, making it unsafe for people with celiac disease or gluten sensitivity.'
 }
@@ -466,9 +464,9 @@ console.log('Reason:', result.reason);
 ```typescript
 {
   score: 0,
-  analyzeStepResult: { 
+  analyzeStepResult: {
     isGlutenFree: false,
-    glutenSources: ['soy sauce', 'noodles'] 
+    glutenSources: ['soy sauce', 'noodles']
   },
   reason: 'This recipe is not gluten-free because it contains soy sauce, noodles. Regular soy sauce contains wheat and most noodles are made from wheat flour, both of which contain gluten and are unsafe for people with gluten sensitivity.'
 }

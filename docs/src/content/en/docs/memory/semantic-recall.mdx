@@ -1,7 +1,5 @@
 ---
 title: "Semantic Recall | Memory | Mastra Docs"
-sidebar_position: 5
-sidebar_label: "Semantic Recall"
 description: "Learn how to use semantic recall in Mastra to retrieve relevant messages from past conversations using vector search and embeddings."
 ---
 
@@ -188,7 +186,7 @@ const agent = new Agent({
         messageRange: 2,
         indexConfig: {
           type: 'hnsw',           // Use HNSW for better performance
-          metric: 'dotproduct',   // Best for OpenAI embeddings  
+          metric: 'dotproduct',   // Best for OpenAI embeddings
           m: 16,                  // Number of bi-directional links (default: 16)
           efConstruction: 64,    // Size of candidate list during construction (default: 64)
         },
