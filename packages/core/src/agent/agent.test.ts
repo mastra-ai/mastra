@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
@@ -27,7 +28,6 @@ import { delay } from '../utils';
 import { MessageList } from './message-list/index';
 import { assertNoDuplicateParts } from './test-utils';
 import { Agent } from './index';
-import { randomUUID } from 'crypto';
 
 config();
 
