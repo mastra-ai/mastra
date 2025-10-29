@@ -442,6 +442,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.6',
   ];
   readonly huggingface: readonly [
+    'MiniMaxAI/MiniMax-M2',
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
     'Qwen/Qwen3-Embedding-4B',
@@ -674,7 +675,6 @@ export type ProviderModelsMap = {
     'x-ai/grok-3-mini-beta',
     'x-ai/grok-4',
     'x-ai/grok-4-fast',
-    'x-ai/grok-4-fast:free',
     'x-ai/grok-code-fast-1',
     'z-ai/glm-4.5',
     'z-ai/glm-4.5-air',
@@ -682,6 +682,26 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.5v',
     'z-ai/glm-4.6',
     'z-ai/glm-4.6:exacto',
+  ];
+  readonly zenmux: readonly [
+    'anthropic/claude-haiku-4.5',
+    'anthropic/claude-opus-4.1',
+    'anthropic/claude-sonnet-4.5',
+    'deepseek/deepseek-chat',
+    'google/gemini-2.5-pro',
+    'inclusionai/lint-1t',
+    'inclusionai/ring-1t',
+    'kuaishou/kat-coder-pro-v1',
+    'moonshotai/kimi-k2-0905',
+    'openai/gpt-5',
+    'openai/gpt-5-codex',
+    'qwen/qwen3-coder-plus',
+    'x-ai/grok-4',
+    'x-ai/grok-4-fast',
+    'x-ai/grok-4-fast-non-reasoning',
+    'x-ai/grok-code-fast-1',
+    'z-ai/glm-4.5-air',
+    'z-ai/glm-4.6',
   ];
   readonly synthetic: readonly [
     'hf:MiniMaxAI/MiniMax-M2',

@@ -13,12 +13,12 @@ The `Run` class represents a workflow execution instance, providing methods to s
 const run = await workflow.createRunAsync();
 
 const result = await run.start({
-  inputData: { value: "initial data" }
+  inputData: { value: "initial data" },
 });
 
 if (result.status === "suspended") {
   const resumedResult = await run.resume({
-    resumeData: { value: "resume data" }
+    resumeData: { value: "resume data" },
   });
 }
 ```
@@ -62,7 +62,7 @@ if (result.status === "suspended") {
       type: "() => Promise<void>",
       description: "Cancels the workflow execution",
       required: true,
-    }
+    },
   ]}
 />
 
@@ -95,10 +95,7 @@ A workflow run's `status` indicates its current execution state. The possible va
 
 ## Related
 
-- [Running workflows](../../examples/workflows/running-workflows.mdx)
-- [Run.start()](./run-methods/start.mdx)
-- [Run.resume()](./run-methods/resume.mdx)
-- [Run.stream()](./run-methods/stream.mdx)
-- [Run.streamVNext()](./run-methods/streamVNext.mdx)
-- [Run.watch()](./run-methods/watch.mdx)
-- [Run.cancel()](./run-methods/cancel.mdx)
+- [Run.start()](./run-methods/start)
+- [Run.resume()](./run-methods/resume)
+- [Run.watch()](./run-methods/watch)
+- [Run.cancel()](./run-methods/cancel)
