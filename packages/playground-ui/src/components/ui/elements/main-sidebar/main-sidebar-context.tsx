@@ -21,10 +21,6 @@ export function useMainSidebar() {
 }
 
 const setLocalStorage = (value: SidebarState) => {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
   window.localStorage.setItem(SIDEBAR_COOKIE_NAME, value.toString());
 };
 
