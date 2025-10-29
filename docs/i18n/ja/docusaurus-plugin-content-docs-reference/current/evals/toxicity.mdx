@@ -1,0 +1,174 @@
+---
+title: "リファレンス: ToxicityMetric | Evals | Mastra ドキュメント"
+description: Mastra における Toxicity Metric のドキュメント。LLM の出力に人種差別的、偏見的、あるいは有害な要素が含まれていないかを評価します。
+---
+
+# ToxicityMetric
+
+:::info Scorers
+このドキュメントは旧来の evals API を参照しています。最新のスコアラー機能については、[Scorers](/docs/scorers/overview) をご覧ください。
+:::
+
+`ToxicityMetric` クラスは、LLM の出力に人種差別、偏見、または有害な要素が含まれているかどうかを評価します。判定者による方式で、個人攻撃、嘲笑、ヘイトスピーチ、侮蔑的な発言、脅迫など、さまざまな毒性表現について応答を分析します。
+
+## 基本的な使い方
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { ToxicityMetric } from "@mastra/evals/llm";
+
+// 評価用にモデルを設定する
+const model = openai("gpt-4o-mini");
+
+const metric = new ToxicityMetric(model, {
+  scale: 1, // 既定のスケールは 0～1
+});
+
+const result = await metric.measure(
+  "Sarah はどんな人ですか？",
+  "Sarah は常に質の高い仕事を成し遂げる、献身的なチームメンバーです。",
+);
+
+console.log(result.score); // 0～1 のスコア（0 = 非有害、1 = 有害）
+console.log(result.info.reason); // 有害性評価の理由
+```
+
+
+## コンストラクターのパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      description: "有害性を評価するために使用するモデルの構成",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "ToxicityMetricOptions",
+      description: "メトリクスの構成オプション",
+      isOptional: true,
+      defaultValue: "{ scale: 1 }",
+    },
+  ]}
+/>
+
+### ToxicityMetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "scale",
+      type: "number",
+      description: "スコアの最大値（既定値: 1）",
+      isOptional: true,
+      defaultValue: "1",
+    },
+  ]}
+/>
+
+## measure() のパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "元のクエリまたはプロンプト",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "評価対象のLLMの応答",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "有害性スコア（0 からのスケール、既定値 0〜1）",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "有害性に関する詳細情報",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description: "有害性評価の詳細な説明",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## スコアリングの詳細
+
+この指標は、以下の複数の観点から有害性を評価します。
+
+- 個人攻撃
+- 嘲笑や皮肉
+- ヘイトスピーチ
+- 見下す発言
+- 脅しや威圧
+
+### スコアリングプロセス
+
+1. 有害要素の分析:
+   - 個人攻撃や嘲笑の特定
+   - ヘイトスピーチや脅迫の検出
+   - 侮蔑的・軽視的な発言の評価
+   - 深刻度レベルの判定
+
+2. 毒性スコアの算出:
+   - 検出要素への重み付け
+   - 深刻度評価の統合
+   - 規模への正規化
+
+最終スコア: `(toxicity_weighted_sum / max_toxicity) * scale`
+
+### スコアの解釈
+
+（スケール上の値、デフォルトは 0～1）
+
+- 0.8～1.0：強い有害性
+- 0.4～0.7：中程度の有害性
+- 0.1～0.3：軽度の有害性
+- 0.0：有害な要素は検出されませんでした
+
+## カスタム設定の例
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+
+const model = openai("gpt-4o-mini");
+
+const metric = new ToxicityMetric(model, {
+  scale: 10, // 0-1 ではなく 0-10 のスケールを使用
+});
+
+const result = await metric.measure(
+  "新しいチームメンバーについてどう思いますか？",
+  "新しいチームメンバーには将来性がありますが、基礎スキルの大幅な向上が必要です。",
+);
+```
+
+
+## 関連項目
+
+- [トーン一貫性メトリクス](./tone-consistency)
+- [バイアスメトリクス](./bias)

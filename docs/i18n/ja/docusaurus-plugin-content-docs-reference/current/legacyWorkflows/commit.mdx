@@ -1,0 +1,34 @@
+---
+title: "リファレンス: Workflow.commit() | レガシー ワークフロー | Mastra ドキュメント"
+description: ワークフローにおける`.commit()`メソッドのドキュメント。現在のステップ構成でワークフロー・マシンを再初期化します。
+---
+
+# Workflow.commit()
+
+`.commit()` メソッドは、現在のステップ構成を用いてワークフローのステートマシンを再初期化します。
+
+## 使い方
+
+```typescript
+workflow.step(stepA).then(stepB).commit();
+```
+
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "LegacyWorkflow",
+      description: "ワークフローのインスタンス",
+    },
+  ]}
+/>
+
+## 関連情報
+
+- [Branching Paths の例](/examples/workflows_legacy/branching-paths)
+- [Workflow クラスリファレンス](./workflow)
+- [Step クラスリファレンス](./step-class)
+- [制御フローガイド](/docs/workflows-legacy/control-flow)

@@ -1,0 +1,314 @@
+---
+title: "リファレンス: MongoDB Vector Store | ベクター | Mastra ドキュメント"
+description: Mastra の MongoDBVector クラスに関するドキュメント。MongoDB Atlas と Atlas Vector Search を使用してベクター検索を提供します。
+---
+
+# MongoDB ベクターストア
+
+`MongoDBVector` クラスは、[MongoDB Atlas Vector Search](https://www.mongodb.com/docs/atlas/atlas-vector-search/) を利用したベクター検索機能を提供します。MongoDB のコレクション内で、効率的な類似度検索とメタデータによるフィルタリングを実現します。
+
+## インストール
+
+```bash copy
+npm install @mastra/mongodb
+```
+
+
+## 使用例
+
+```typescript copy showLineNumbers
+import { MongoDBVector } from "@mastra/mongodb";
+
+const store = new MongoDBVector({
+  url: process.env.MONGODB_URL,
+  database: process.env.MONGODB_DATABASE,
+});
+```
+
+
+## コンストラクターのオプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "string",
+      description: "MongoDB の接続文字列（URI）",
+    },
+    {
+      name: "database",
+      type: "string",
+      description: "使用する MongoDB データベース名",
+    },
+    {
+      name: "options",
+      type: "MongoClientOptions",
+      isOptional: true,
+      description: "任意の MongoDB クライアントオプション",
+    },
+  ]}
+/>
+
+## 方法
+
+### createIndex()
+
+MongoDB に新しいベクトルインデックス（コレクション）を作成します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "作成するコレクション名",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "ベクトルの次元数（使用する埋め込みモデルと一致する必要があります）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "類似検索に用いる距離指標",
+    },
+  ]}
+/>
+
+### upsert()
+
+コレクション内のベクターとそのメタデータを追加または更新します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "挿入先のコレクション名",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "埋め込みベクターの配列",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "各ベクターのメタデータ",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "ベクターID（指定しない場合は自動生成）",
+    },
+  ]}
+/>
+
+### query()
+
+必要に応じてメタデータでフィルタしながら、類似ベクターを検索します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "検索対象のコレクション名",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "類似ベクター検索に用いるクエリベクター",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "返す結果数",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "メタデータのフィルター（`metadata` フィールドに適用）",
+    },
+    {
+      name: "documentFilter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "元のドキュメントのフィールドに対するフィルター（メタデータに限らない）",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "結果にベクターデータを含めるかどうか",
+    },
+    {
+      name: "minScore",
+      type: "number",
+      isOptional: true,
+      defaultValue: "0",
+      description: "類似度スコアの下限（しきい値）",
+    },
+  ]}
+/>
+
+### describeIndex()
+
+インデックス（コレクション）に関する情報を返します。
+
+<PropertiesTable
+  content={[
+{
+  name: "indexName",
+  type: "string",
+  description: "記述するコレクション名",
+},
+]}
+/>
+
+戻り値：
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+
+### deleteIndex()
+
+コレクションとそのすべてのデータを削除します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除するコレクション名",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+MongoDB データベース内のベクトルコレクションをすべて一覧します。
+
+Returns: `Promise<string[]>`
+
+### updateVector()
+
+ID を指定して、特定のベクトリエントリを新しいベクトルデータやメタデータで更新します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルを含むコレクション名",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "更新対象のベクトリエントリの ID",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "ベクトルおよび/またはメタデータを含む更新データ",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      isOptional: true,
+      description: "更新後のベクトルデータ",
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "更新後のメタデータ",
+    },
+  ]}
+/>
+
+### deleteVector()
+
+指定したIDのベクターエントリをインデックスから削除します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクターを含むコレクション名",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "削除対象のベクターエントリのID",
+    },
+  ]}
+/>
+
+### disconnect()
+
+MongoDB クライアントの接続を閉じます。ストアの利用が完了したら呼び出してください。
+
+## レスポンスの種類
+
+クエリ結果は次の形式で返されます。
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // includeVectorがtrueの場合のみ含まれる
+}
+```
+
+
+## エラー処理
+
+ストアは型付きのエラーをスローし、捕捉できます。
+
+```typescript copy
+try {
+  await store.query({
+    indexName: "my_collection",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  // 特定のエラーケースを処理
+  if (error.message.includes("Invalid collection name")) {
+    console.error(
+      "コレクション名は文字またはアンダースコアで始まり、有効な文字のみを含む必要があります。",
+    );
+  } else if (error.message.includes("Collection not found")) {
+    console.error("指定されたコレクションは存在しません");
+  } else {
+    console.error("ベクトルストアエラー:", error.message);
+  }
+}
+```
+
+
+## ベストプラクティス
+
+- クエリ性能を最適化するため、フィルターで使用するメタデータフィールドにインデックスを作成する。
+- 予期しないクエリ結果を防ぐため、メタデータのフィールド名を一貫させる。
+- 効率的な検索を維持するため、インデックスとコレクションの統計情報を定期的に監視する。
+
+## 関連項目
+
+- [メタデータフィルター](../rag/metadata-filters)

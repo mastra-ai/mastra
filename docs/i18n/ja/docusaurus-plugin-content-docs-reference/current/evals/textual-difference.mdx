@@ -1,0 +1,173 @@
+---
+title: "リファレンス: TextualDifferenceMetric | Evals | Mastra ドキュメント"
+description: Mastra の Textual Difference Metric に関するドキュメント。シーケンス照合により、文字列間のテキストの差異を測定します。
+---
+
+# TextualDifferenceMetric
+
+:::info Scorers
+このドキュメントはレガシーの evals API を参照しています。最新のスコアラー機能については [Scorers](/docs/scorers/overview) をご覧ください。
+:::
+
+`TextualDifferenceMetric` クラスは、シーケンスマッチングを用いて2つの文字列間のテキスト上の差異を測定します。あるテキストを別のテキストに変換するために必要な操作数を含む、変更点に関する詳細情報を提供します。
+
+## 基本的な使い方
+
+```typescript
+import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+
+const metric = new TextualDifferenceMetric();
+
+const result = await metric.measure(
+  "素早い茶色のキツネ",
+  "速い茶色のキツネ",
+);
+
+console.log(result.score); // 0〜1 の類似度
+console.log(result.info); // 変更点の詳細な指標
+```
+
+
+## measure() のパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "比較対象となる元のテキスト",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "差分を評価するテキスト",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "類似度スコア (0〜1)。1 はテキストが同一であることを示します",
+    },
+    {
+      name: "info",
+      description: "差分に関する詳細な指標",
+      properties: [
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "confidence",
+              type: "number",
+              description:
+                "テキスト間の長さの差に基づく信頼度スコア (0〜1)",
+            },
+          ],
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "ratio",
+              type: "number",
+              description: "テキスト間の素の類似度比",
+            },
+          ],
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "changes",
+              type: "number",
+              description:
+                "変更操作の回数（挿入・削除・置換）",
+            },
+          ],
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "lengthDiff",
+              type: "number",
+              description:
+                "入力と出力の長さの正規化差 (0〜1)",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## スコアリングの詳細
+
+このメトリックは次の指標を計算します:
+
+- **類似度比**: テキスト間のシーケンス一致に基づく（0～1）
+- **変更数**: 不一致を解消するために必要な非一致操作の回数
+- **長さ差**: テキスト長の正規化差
+- **信頼度**: 長さ差に反比例
+
+### スコアリングの流れ
+
+1. テキスト差分の分析:
+   - 入力と出力のシーケンスを照合
+   - 変更に必要な操作数をカウント
+   - 長さの差を測定
+
+2. 指標の算出:
+   - 類似度比を計算
+   - 信頼度スコアを算出
+   - 重み付きスコアに統合
+
+最終スコア: `(similarity_ratio * confidence) * scale`
+
+### スコアの解釈
+
+（範囲は0、デフォルトは0〜1）
+
+- 1.0: テキストが完全一致 — 相違なし
+- 0.7〜0.9: 軽微な相違 — わずかな修正が必要
+- 0.4〜0.6: 中程度の相違 — ある程度の修正が必要
+- 0.1〜0.3: 大きな相違 — 大幅な修正が必要
+- 0.0: 完全に異なるテキスト
+
+## 分析付きの例
+
+```typescript
+import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+
+const metric = new TextualDifferenceMetric();
+
+const result = await metric.measure(
+  "こんにちは、世界！ お元気ですか？",
+  "こんにちは！ 調子はどう？",
+);
+
+// 出力例:
+// {
+//   score: 0.65,
+//   info: {
+//     confidence: 0.95,
+//     ratio: 0.65,
+//     changes: 2,
+//     lengthDiff: 0.05
+//   }
+// }
+```
+
+
+## 関連項目
+
+- [コンテンツ類似度メトリクス](./content-similarity)
+- [完全性メトリクス](./completeness)
+- [キーワード網羅率メトリクス](./keyword-coverage)

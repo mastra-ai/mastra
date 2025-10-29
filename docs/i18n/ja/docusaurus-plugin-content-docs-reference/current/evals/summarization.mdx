@@ -1,0 +1,214 @@
+---
+title: "リファレンス: SummarizationMetric | Evals | Mastra ドキュメント"
+description: Mastra の Summarization Metric に関するドキュメント。LLM が生成した要約の内容の質と事実の正確性を評価します。
+---
+
+# SummarizationMetric
+
+:::info Scorers
+このドキュメントは旧式の evals API を参照しています。最新のスコアラー機能については [Scorers](/docs/scorers/overview) をご覧ください。
+:::
+
+`SummarizationMetric` は、LLM による要約が元のテキストの内容をどれだけ適切に捉え、かつ事実関係を維持しているかを評価します。アラインメント（事実の正確性）とカバレッジ（重要情報の網羅）の2つの側面を組み合わせ、両方の品質が求められるよう最小スコアを採用しています。
+
+## 基本的な使い方
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { SummarizationMetric } from "@mastra/evals/llm";
+
+// 評価用にモデルを設定する
+const model = openai("gpt-4o-mini");
+
+const metric = new SummarizationMetric(model);
+
+const result = await metric.measure(
+  "同社は1995年にJohn Smithによって設立された。従業員は当初10人で、2020年までに500人に増えた。本社はシアトルにある。",
+  "1995年にJohn Smithが設立し、同社は従業員数を10人から2020年までに500人へ拡大した。",
+);
+
+console.log(result.score); // スコア（0〜1）
+console.log(result.info); // 要約に関する詳細な評価指標を含むオブジェクト
+```
+
+
+## コンストラクターのパラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      description: "要約を評価するために使用するモデルの設定",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "SummarizationMetricOptions",
+      description: "メトリクスの設定オプション",
+      isOptional: true,
+      defaultValue: "{ scale: 1 }",
+    },
+  ]}
+/>
+
+### SummarizationMetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "scale",
+      type: "number",
+      description: "スコアの最大値",
+      isOptional: true,
+      defaultValue: "1",
+    },
+  ]}
+/>
+
+## measure() のパラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "要約対象の原文テキスト",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "評価する生成要約",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "要約スコア（0からのスケール、既定は0〜1）",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "要約に関する詳細な指標を含むオブジェクト",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description:
+                "スコアの詳細な説明（整合性と網羅性の両面を含む）",
+            },
+          ],
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "alignmentScore",
+              type: "number",
+              description: "整合性スコア（0〜1）",
+            },
+          ],
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "coverageScore",
+              type: "number",
+              description: "網羅性スコア（0〜1）",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 採点の詳細
+
+この指標は、要約を次の2つの重要な要素で評価します:
+
+1. **Alignment Score**: 事実の正確性を測定
+   - 要約から主張を抽出
+   - 各主張を元のテキストと照合して検証
+   - 判定として「yes」「no」「unsure」を付与
+
+2. **Coverage Score**: 重要情報の網羅性を測定
+   - 元のテキストから重要な質問を生成
+   - 要約がこれらの質問に答えているかを確認
+   - 情報の含まれ方を確認し、網羅性を評価
+
+### スコアリング手順
+
+1. アラインメントスコアを算出:
+   - サマリーから主張を抽出
+   - 原文と照合して検証
+   - 次を計算: `supported_claims / total_claims`
+
+2. カバレッジスコアを算定:
+   - 原文から質問を生成
+   - サマリー内に回答があるか確認
+   - 網羅性を評価
+   - 次を計算: `answerable_questions / total_questions`
+
+最終スコア: `min(alignment_score, coverage_score) * scale`
+
+### スコアの解釈
+
+（0からのスケール、デフォルトは0～1）
+
+- 1.0: 完璧な要約 - 完全に事実に基づき、重要な情報をすべて網羅
+- 0.7～0.9: 軽微な抜けやわずかな不正確さはあるが、総じて優れた要約
+- 0.4～0.6: 重要な抜けや不正確さが目立つ中程度の品質
+- 0.1～0.3: 大きな省略や事実誤認がある低品質な要約
+- 0.0: 無効な要約 - まったくの誤り、または重要な情報が欠落
+
+## 分析付きの例
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { SummarizationMetric } from "@mastra/evals/llm";
+
+// 評価用にモデルを設定する
+const model = openai("gpt-4o-mini");
+
+const metric = new SummarizationMetric(model);
+
+const result = await metric.measure(
+  "電気自動車メーカーのTeslaは2003年にMartin EberhardとMarc Tarpenningによって設立された。Elon Muskは2004年に最大の投資家として参加し、2008年にCEOとなった。同社初の車種であるRoadsterは2008年に発売された。",
+  "Teslaは2003年にElon Muskによって設立され、2008年のRoadsterを皮切りに電気自動車業界に革命をもたらした。",
+);
+
+// 出力例:
+// {
+//   score: 0.5,
+//   info: {
+//     reason: "スコアが0.5である理由は、網羅性は良好（0.75）で、設立年・初の車種・発売時期に言及している一方、整合性スコアが低い（0.5）のは、会社の創業を本来のMartin EberhardとMarc TarpenningではなくElon Muskに誤って帰属しているためです。
+//           最初の車種と発売時期に言及している一方で、整合性スコアが低い（0.5）のは、
+//           会社の創業をElon Muskに誤って帰属しており、本来はMartin EberhardとMarc Tarpenningだからです。
+//           最終スコアは、事実の正確性と網羅性の両方を満たすことを重視し、これら2つのスコアの最小値を採用しています。"
+//           coverage are necessary for a good summary."
+//     alignmentScore: 0.5,
+//     coverageScore: 0.75,
+//   }
+// }
+```
+
+
+## 関連項目
+
+- [忠実度メトリック](./faithfulness)
+- [完全性メトリック](./completeness)
+- [文脈再現率メトリック](./contextual-recall)
+- [幻覚（ハルシネーション）メトリック](./hallucination)

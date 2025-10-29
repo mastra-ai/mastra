@@ -1,0 +1,122 @@
+---
+title: "Baseten | モデル | Mastra"
+description: "Mastra で Baseten のモデルを利用。利用可能なモデルは 3 件。"
+---
+
+{/* このファイルは generate-model-docs.ts によって自動生成されています — 手動での編集は行わないでください */}
+
+import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
+# <img src="https://models.dev/logos/baseten.svg" alt="Baseten logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Baseten
+
+Mastraのモデルルーター経由で、3つのBasetenモデルにアクセスできます。認証は、`BASETEN_API_KEY` 環境変数を用いて自動的に行われます。
+
+詳しくは[Basetenのドキュメント](https://docs.baseten.co/development/model-apis/overview)をご覧ください。
+
+```bash
+BASETEN_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "あなたは親切なアシスタントです",
+  model: "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct"
+});
+
+// レスポンスを生成
+const response = await agent.generate("Hello!");
+
+// レスポンスをストリーミング
+const stream = await agent.stream("物語を聞かせて");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra は OpenAI 互換の `/chat/completions` エンドポイントを使用します。プロバイダー固有の機能の一部は利用できない場合があります。詳細は [Baseten のドキュメント](https://docs.baseten.co/development/model-apis/overview) をご確認ください。
+
+:::
+
+
+## モデル
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "baseten/moonshotai/Kimi-K2-Instruct-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.6,
+    "outputCost": 2.5
+  },
+  {
+    "model": "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 66536,
+    "inputCost": 0.38,
+    "outputCost": 1.53
+  },
+  {
+    "model": "baseten/zai-org/GLM-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 200000,
+    "inputCost": 0.6,
+    "outputCost": 2.2
+  }
+]}
+/>
+
+## 詳細設定
+
+### カスタムヘッダー
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://inference.baseten.co/v1",
+    id: "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct",
+    apiKey: process.env.BASETEN_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+
+### 動的モデル選択
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "baseten/zai-org/GLM-4.6"
+      : "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct";
+  }
+});
+```

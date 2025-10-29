@@ -1,0 +1,271 @@
+---
+title: "Human-in-the-loop | ワークフロー | Mastra ドキュメント"
+description: suspend/resume と dountil メソッドを用いて、人間とエージェントのマルチターン対話ポイントを含むワークフローを Mastra で作成する例。
+---
+
+import GithubLink from "@site/src/components/GithubLink";
+
+
+# Human-in-the-loop
+
+Human-in-the-loop のワークフローは、人間と AI エージェントの継続的なやり取りを可能にし、複数回の入力と応答を伴う複雑な意思決定プロセスを実現します。これらのワークフローは特定のポイントで実行を一時停止し、人間からの入力を待って、受け取った応答に基づいて処理を再開できます。
+
+この例では、マルチターンのワークフローを使って「Heads Up」というゲームを作成し、suspend/resume 機能と、`dountil` による条件付きロジックを用いて、特定の条件が満たされるまでワークフローのステップを繰り返すインタラクティブなワークフローの作り方を示します。
+
+この例は主に次の 3 つのコンポーネントから構成されます:
+
+1. 有名人の名前を生成する [**Famous Person Agent**](#famous-person-agent)
+2. ゲームプレイを管理する [**Game Agent**](#game-agent)
+3. やり取りを統括する [**Multi-Turn Workflow**](#multi-turn-workflow)
+
+## 前提条件
+
+この例では `openai` モデルを使用します。`.env` ファイルに以下を追加してください:
+
+```bash title=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
+
+## 有名人エージェント
+
+`famousPersonAgent` は、ゲームをプレイするたびに固有の名前を生成し、セマンティックメモリを用いて提案の重複を防ぎます。
+
+```typescript title="src/mastra/agents/example-famous-person-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLVector } from "@mastra/libsql";
+
+export const famousPersonAgent = new Agent({
+  name: "有名人ジェネレーター",
+  instructions: `あなたは「ヘッズアップ」推測ゲーム用の有名人ジェネレーターです。
+
+以下の条件を満たす、よく知られた有名人の名前を生成してください:
+- ほとんどの人が認識できる人物
+- はい/いいえで答えられる質問で説明できる特徴的な特性を持つ
+- あらゆる年齢層に適している
+- 明確で曖昧さのない名前を持つ
+
+重要: メモリを使用して既に提案した有名人を確認し、同じ人物を絶対に繰り返さないでください。
+
+例: Albert Einstein、Beyoncé、Leonardo da Vinci、Oprah Winfrey、Michael Jordan
+
+人物の名前のみを返してください。それ以外は何も返さないでください。`,
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    vector: new LibSQLVector({
+      connectionUrl: "file:../mastra.db",
+    }),
+    embedder: openai.embedding("text-embedding-3-small"),
+    options: {
+      lastMessages: 5,
+      semanticRecall: {
+        topK: 10,
+        messageRange: 1,
+      },
+    },
+  }),
+});
+```
+
+> 構成オプションの一覧は [Agent](/reference/agents/agent) を参照してください。
+
+
+## ゲームエージェント
+
+`gameAgent` は、質問に答え、推測を検証してユーザーとのやり取りを処理します。
+
+```typescript title="src/mastra/agents/example-game-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+export const gameAgent = new Agent({
+  name: "ゲームエージェント",
+  instructions: `あなたは「ヘッズアップ」推測ゲームの親切なアシスタントです。
+
+重要:あなたは有名人の名前を知っていますが、どのような応答でも絶対に明かしてはいけません。
+
+ユーザーが有名人について質問した場合:
+- 提供された有名人の情報に基づいて正直に答えてください
+- 応答は簡潔でフレンドリーに保ってください
+- 自然に思えても、その人の名前は絶対に言及しないでください
+- 性別、国籍、その他の特徴について具体的に尋ねられない限り、明かさないでください
+- はい/いいえの質問には明確に「はい」または「いいえ」で答えてください
+- 一貫性を保ってください - 同じ質問を異なる形で尋ねられても同じ答えを返してください
+- 質問が不明確な場合は明確化を求めてください
+- 複数の質問を一度にされた場合は、一つずつ尋ねるよう依頼してください
+
+推測をした場合:
+- 正解の場合:温かく祝福してください
+- 不正解の場合:丁寧に訂正し、再挑戦するよう励ましてください
+
+プレイヤーが十分な情報を得たと思われる場合は、推測するよう促してください。
+
+次の内容を含むJSONオブジェクトを返す必要があります:
+- response: ユーザーへの応答
+- gameWon: 正しく推測した場合はtrue、そうでない場合はfalse`,
+  model: openai("gpt-4o"),
+});
+```
+
+
+## 複数ターンのワークフロー
+
+このワークフローは、`suspend`/`resume` で人間の入力を待つために一時停止し、条件が満たされるまで `dountil` でゲームループを繰り返すことで、全体のやり取りを制御します。
+
+`startStep` は `famousPersonAgent` を使って名前を生成し、`gameStep` は `gameAgent` を通じてやり取りを実行します。`gameAgent` は質問と推測の両方を処理し、`gameWon` というブール値を含む構造化出力を生成します。
+
+```typescript title="src/mastra/workflows/example-heads-up-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const startStep = createStep({
+  id: "start-step",
+  description: "有名人の名前を取得",
+  inputSchema: z.object({
+    start: z.boolean(),
+  }),
+  outputSchema: z.object({
+    famousPerson: z.string(),
+    guessCount: z.number(),
+  }),
+  execute: async ({ mastra }) => {
+    const agent = mastra.getAgent("famousPersonAgent");
+    const response = await agent.generate("有名人の名前を生成", {
+      temperature: 1.2,
+      topP: 0.9,
+      memory: {
+        resource: "heads-up-game",
+        thread: "famous-person-generator",
+      },
+    });
+    const famousPerson = response.text.trim();
+    return { famousPerson, guessCount: 0 };
+  },
+});
+
+const gameStep = createStep({
+  id: "game-step",
+  description: "質問・回答・継続のループを処理",
+  inputSchema: z.object({
+    famousPerson: z.string(),
+    guessCount: z.number(),
+  }),
+  resumeSchema: z.object({
+    userMessage: z.string(),
+  }),
+  suspendSchema: z.object({
+    suspendResponse: z.string(),
+  }),
+  outputSchema: z.object({
+    famousPerson: z.string(),
+    gameWon: z.boolean(),
+    agentResponse: z.string(),
+    guessCount: z.number(),
+  }),
+  execute: async ({ inputData, mastra, resumeData, suspend }) => {
+    let { famousPerson, guessCount } = inputData;
+    const { userMessage } = resumeData ?? {};
+
+    if (!userMessage) {
+      return await suspend({
+        suspendResponse:
+          "ある有名人を思い浮かべています。はい/いいえで答えられる質問をして、誰なのか当ててみてください！",
+      });
+    }
+
+    const agent = mastra.getAgent("gameAgent");
+    const response = await agent.generate(
+      `
+        有名人: ${famousPerson}
+        ユーザーの発言: "${userMessage}"
+        適切に応答してください。推測である場合は、正解かどうかを伝えてください。
+      `,
+      {
+        structuredOutput: {
+          schema: z.object({
+            response: z.string(),
+            gameWon: z.boolean(),
+          }),
+        },
+      },
+    );
+
+    const { response: agentResponse, gameWon } = response.object;
+
+    guessCount++;
+
+    return { famousPerson, gameWon, agentResponse, guessCount };
+  },
+});
+
+const winStep = createStep({
+  id: "win-step",
+  description: "ゲーム勝利時の処理",
+  inputSchema: z.object({
+    famousPerson: z.string(),
+    gameWon: z.boolean(),
+    agentResponse: z.string(),
+    guessCount: z.number(),
+  }),
+  outputSchema: z.object({
+    famousPerson: z.string(),
+    gameWon: z.boolean(),
+    guessCount: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    const { famousPerson, gameWon, guessCount } = inputData;
+
+    console.log("有名人: ", famousPerson);
+    console.log("ゲーム勝利: ", gameWon);
+    console.log("推測回数: ", guessCount);
+
+    return { famousPerson, gameWon, guessCount };
+  },
+});
+
+export const headsUpWorkflow = createWorkflow({
+  id: "heads-up-workflow",
+  inputSchema: z.object({
+    start: z.boolean(),
+  }),
+  outputSchema: z.object({
+    famousPerson: z.string(),
+    gameWon: z.boolean(),
+    guessCount: z.number(),
+  }),
+})
+  .then(startStep)
+  .dountil(gameStep, async ({ inputData: { gameWon } }) => gameWon)
+  .then(winStep)
+  .commit();
+```
+
+> 構成オプションの一覧については、[Workflow](/reference/workflows/workflow) を参照してください。
+
+
+## エージェントとワークフローの登録
+
+ワークフローやエージェントを使用するには、メインの Mastra インスタンスに登録してください。
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+import { headsUpWorkflow } from "./workflows/example-heads-up-workflow";
+import { famousPersonAgent } from "./agents/example-famous-person-agent";
+import { gameAgent } from "./agents/example-game-agent";
+
+export const mastra = new Mastra({
+  workflows: { headsUpWorkflow },
+  agents: { famousPersonAgent, gameAgent },
+});
+```
+
+<GithubLink marginTop="mt-16" link="https://github.com/mastra-ai/mastra/blob/main/examples/heads-up-game/" />
+
+
+## 関連項目
+
+- [ワークフローの実行](./overview#running-workflows)
+- [制御フロー](/docs/workflows/control-flow)

@@ -1,0 +1,433 @@
+---
+title: "リファレンス: Chroma Vector Store | ベクトル | Mastra ドキュメント"
+description: ChromaDB を用いたベクトル検索を提供する、Mastra の ChromaVector クラスに関するドキュメントです。
+---
+
+# Chroma ベクターストア
+
+ChromaVector クラスは、オープンソースの埋め込みデータベースである [Chroma](https://docs.trychroma.com/docs/overview/getting-started) を用いたベクター検索を提供します。
+メタデータによるフィルタリングやハイブリッド検索に対応し、高効率なベクター検索を実現します。
+
+:::info
+
+<b>Chroma Cloud</b>
+
+Chroma Cloud は、サーバーレスのベクター検索と全文検索を提供します。非常に高速で、コスト効率に優れ、スケーラブルで、運用も容易です。$5 の無料クレジットで、30 秒以内にデータベースを作成してすぐに試せます。
+
+[Chroma Cloud を始める](https://trychroma.com/signup)
+
+:::
+
+## コンストラクターのオプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "host",
+      type: "string",
+      isOptional: true,
+      description:
+        "Chroma サーバーのホストアドレス。デフォルトは 'localhost'。",
+    },
+    {
+      name: "port",
+      type: "number",
+      isOptional: true,
+      description: "Chroma サーバーのポート番号。デフォルトは 8000。",
+    },
+    {
+      name: "ssl",
+      type: "boolean",
+      isOptional: true,
+      description:
+        "接続に SSL/HTTPS を使用するか。デフォルトは false。",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      isOptional: true,
+      description: "Chroma Cloud の API キー。",
+    },
+    {
+      name: "tenant",
+      type: "string",
+      isOptional: true,
+      description:
+        "接続先の Chroma サーバーのテナント名。単一ノードの Chroma のデフォルトは 'default_tenant'。Chroma Cloud ユーザーの場合は、提供された API キーに基づいて自動解決されます。",
+    },
+    {
+      name: "database",
+      type: "string",
+      isOptional: true,
+      description:
+        "接続先のデータベース名。単一ノードの Chroma のデフォルトは 'default_database'。Chroma Cloud ユーザーの場合は、提供された API キーに基づいて自動解決されます。",
+    },
+    {
+      name: "headers",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "リクエストに付与する追加の HTTP ヘッダー。",
+    },
+    {
+      name: "fetchOptions",
+      type: "RequestInit",
+      isOptional: true,
+      description: "HTTP リクエスト用の追加の fetch オプション。",
+    },
+  ]}
+/>
+
+## Chroma サーバーの実行
+
+Chroma Cloud のユーザーであれば、`ChromaVector` コンストラクターに API キー、テナント、データベース名を指定するだけです。
+
+`@mastra/chroma` パッケージをインストールすると、[Chroma CLI](https://docs.trychroma.com/docs/cli/db) を利用でき、次のコマンドでこれらを環境変数として設定できます: `chroma db connect [DB-NAME] --env-file`。
+
+それ以外の場合、単一ノードの Chroma サーバーをセットアップする方法はいくつかあります:
+
+- Chroma CLI を使用してローカルで実行する: `chroma run`。その他の設定オプションは [Chroma ドキュメント](https://docs.trychroma.com/docs/cli/run)を参照してください。
+- 公式の Chroma イメージを使用して [Docker](https://docs.trychroma.com/guides/deploy/docker) 上で実行する。
+- お好みのプロバイダー上に独自の Chroma サーバーをデプロイする。Chroma では [AWS](https://docs.trychroma.com/guides/deploy/aws)、[Azure](https://docs.trychroma.com/guides/deploy/azure)、[GCP](https://docs.trychroma.com/guides/deploy/gcp) 向けのサンプルテンプレートを提供しています。
+
+## メソッド
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "作成するインデックス名",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "ベクトルの次元数（使用する埋め込みモデルと一致している必要があります）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "類似検索に用いる距離指標",
+    },
+  ]}
+/>
+
+### forkIndex()
+
+注意: フォークは Chroma Cloud で、または独自の OSS の**分散** Chroma をデプロイしている場合にのみサポートされます。
+
+`forkIndex` は既存の Chroma インデックスを即時にフォークできます。フォークしたインデックスでの操作は元のインデックスには影響しません。詳しくは [Chroma ドキュメント](https://docs.trychroma.com/cloud/collection-forking)をご覧ください。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "フォークするインデックス名",
+    },
+    {
+      name: "newIndexName",
+      type: "string",
+      description: "フォーク後のインデックス名",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "アップサート先のインデックス名",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "埋め込みベクトルの配列",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "各ベクトルに対応するメタデータ",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "ベクトルID（省略時は自動生成）",
+    },
+    {
+      name: "documents",
+      type: "string[]",
+      isOptional: true,
+      description:
+        "Chroma 固有: ベクトルに紐づく元のテキストドキュメント",
+    },
+  ]}
+/>
+
+### query()
+
+`queryVector` を使用してインデックスを照会します。`queryVector` からの距離が近い順に、意味的に類似したレコードの配列を返します。各レコードの構造は次のとおりです:
+
+```typescript
+{
+  id: string;
+  score: number;
+  document?: string;
+  metadata?: Record<string, string | number | boolean>;
+  embedding?: number[]
+}
+```
+
+メタデータの型を推論するために、`query` 呼び出しにその形（型）を指定することもできます: `query<T>()`。
+
+<PropertiesTable
+  content={[
+{
+  name: "indexName",
+  type: "string",
+  description: "クエリ対象のインデックス名",
+},
+{
+  name: "queryVector",
+  type: "number[]",
+  description: "類似ベクトルを検索するためのクエリベクトル",
+},
+{
+  name: "topK",
+  type: "number",
+  isOptional: true,
+  defaultValue: "10",
+  description: "返す結果の件数",
+},
+{
+  name: "filter",
+  type: "Record<string, any>",
+  isOptional: true,
+  description: "クエリに適用するメタデータフィルター",
+},
+{
+  name: "includeVector",
+  type: "boolean",
+  isOptional: true,
+  defaultValue: "false",
+  description: "結果にベクトルを含めるかどうか",
+},
+{
+  name: "documentFilter",
+  type: "Record<string, any>",
+  isOptional: true,
+  description: "Chroma 固有: ドキュメント本文に適用するフィルター",
+},
+]}
+/>
+
+
+### get()
+
+ID、メタデータ、ドキュメントフィルターを指定して Chroma のインデックスからレコードを取得します。次の形式のレコード配列を返します：
+
+```typescript
+{
+  id: string;
+  document?: string;
+  metadata?: Record<string, string | number | boolean>;
+  embedding?: number[]
+}
+```
+
+メタデータの型情報を推論するために、`get` 呼び出しにメタデータの型（シェイプ）を指定することもできます: `get<T>()`。
+
+<PropertiesTable
+  content={[
+{
+  name: "indexName",
+  type: "string",
+  description: "クエリ対象のインデックス名",
+},
+{
+  name: "ids",
+  type: "string[]",
+  isOptional: true,
+  description:
+    "返却するレコードIDのリスト。未指定の場合は、すべてのレコードが返されます。",
+},
+{
+  name: "filter",
+  type: "Record<string, any>",
+  isOptional: true,
+  description: "メタデータのフィルター。",
+},
+{
+  name: "includeVector",
+  type: "boolean",
+  isOptional: true,
+  defaultValue: "false",
+  description: "結果にベクトルを含めるかどうか",
+},
+{
+  name: "documentFilter",
+  type: "Record<string, any>",
+  isOptional: true,
+  description: "Chroma 固有: ドキュメント内容に適用するフィルター",
+},
+{
+  name: "limit",
+  type: "number",
+  isOptional: true,
+  defaultValue: 100,
+  description: "返却するレコードの最大数",
+},
+{
+  name: "offset",
+  type: "number",
+  isOptional: true,
+  defaultValue: 0,
+  description:
+    "レコード返却のオフセット。`limit` と併用してページネーションします。",
+},
+]}
+/>
+
+
+### listIndexes()
+
+インデックス名の配列（文字列）を返します。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+{
+  name: "indexName",
+  type: "string",
+  description: "説明するインデックスの名前",
+},
+]}
+/>
+
+戻り値：
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除するインデックス名",
+    },
+  ]}
+/>
+
+### updateVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "更新対象のベクターを含むインデックス名",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "更新対象のベクターのID",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "更新パラメータ",
+    },
+  ]}
+/>
+
+`update` オブジェクトには次の項目を含めることができます:
+
+<PropertiesTable
+  content={[
+    {
+      name: "vector",
+      type: "number[]",
+      isOptional: true,
+      description: "既存のベクターを置き換える新しいベクター",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "既存のメタデータを置き換える新しいメタデータ",
+    },
+  ]}
+/>
+
+### deleteVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除対象のベクターを含むインデックス名",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "削除対象のベクターのID",
+    },
+  ]}
+/>
+
+## レスポンスの種類
+
+クエリ結果は次の形式で返されます：
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  document?: string; // Chroma固有: 保存されている場合の元のドキュメント
+  vector?: number[]; // includeVectorがtrueの場合のみ含まれます
+}
+```
+
+
+## エラー処理
+
+ストアは型付きのエラーをスローし、捕捉できます：
+
+```typescript copy
+try {
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | など
+    console.log(error.details); // エラーの詳細情報
+  }
+}
+```
+
+
+## 関連項目
+
+- [メタデータフィルター](../rag/metadata-filters)

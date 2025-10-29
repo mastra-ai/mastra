@@ -1,0 +1,190 @@
+---
+title: "リファレンス: Memory.query() | Memory | Mastra Docs"
+description: "Mastra の `Memory.query()` メソッドに関するドキュメント。ページネーション、フィルター、セマンティック検索に対応し、特定のスレッドからメッセージを取得します。"
+---
+
+# Memory.query()
+
+`.query()` メソッドは、ページネーション、フィルタリング、セマンティック検索に対応し、特定のスレッドからメッセージを取得します。
+
+## 使い方の例
+
+```typescript copy
+await memory?.query({ threadId: "user-123" });
+```
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "threadId",
+      type: "string",
+      description:
+        "メッセージを取得する対象のスレッドの一意の識別子",
+      isOptional: false,
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description:
+        "スレッドを所有するリソースの任意指定のID。指定した場合、スレッドの所有権を検証します",
+      isOptional: true,
+    },
+    {
+      name: "selectBy",
+      type: "object",
+      description: "メッセージのフィルタリングと選択のためのオプション",
+      isOptional: true,
+    },
+    {
+      name: "threadConfig",
+      type: "MemoryConfig",
+      description:
+        "メッセージ取得およびセマンティック検索の設定オプション",
+      isOptional: true,
+    },
+    {
+      name: "format",
+      type: "'v1' | 'v2'",
+      description:
+        "返すメッセージ形式。現在の形式では 'v2' がデフォルトで、後方互換性には 'v1' を使用します",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### selectBy のパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "vectorSearchString",
+      type: "string",
+      description:
+        "意味的に類似したメッセージを検索するための文字列。threadConfig で semantic recall を有効にする必要があります。",
+      isOptional: true,
+    },
+    {
+      name: "last",
+      type: "number | false",
+      description:
+        "取得する直近メッセージの件数。上限を無効化するには false を指定します。注: threadConfig.lastMessages（既定: 10）がより小さい場合はそちらが優先されます。",
+      isOptional: true,
+    },
+    {
+      name: "include",
+      type: "{ id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[]",
+      description:
+        "特定のメッセージ ID と、任意の前後コンテキストを含めるための配列。各要素には `id`（必須）、任意の `threadId`（省略時はメインの threadId）、`withPreviousMessages`（前に含めるメッセージ数。ベクター検索時の既定値は 2、それ以外は 0）、`withNextMessages`（後に含めるメッセージ数。ベクター検索時の既定値は 2、それ以外は 0）を指定できます。",
+      isOptional: true,
+    },
+    {
+      name: "pagination",
+      type: "{ dateRange?: { start?: Date; end?: Date }; page?: number; perPage?: number }",
+      description:
+        "メッセージをバッチ取得するためのページネーション設定。`dateRange`（日付範囲でのフィルタ）、`page`（0 始まりのページ番号）、`perPage`（1 ページあたりのメッセージ数）を指定します。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### threadConfig のパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "lastMessages",
+      type: "number | false",
+      description:
+        "直近のメッセージの取得件数。無効にする場合は false を設定します。",
+      isOptional: true,
+      defaultValue: "10",
+    },
+    {
+      name: "semanticRecall",
+      type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
+      description:
+        "メッセージ履歴に対するセマンティック検索を有効にします。boolean か、設定オプションを含むオブジェクトを指定できます。有効化するには、ベクターストアとエンベッダーの両方の設定が必要です。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "workingMemory",
+      type: "WorkingMemory",
+      description:
+        "ワーキングメモリ機能の設定。`{ enabled: boolean; template?: string; schema?: ZodObject<any> | JSONSchema7; scope?: 'thread' | 'resource' }` または、無効化用の `{ enabled: boolean }` を指定できます。",
+      isOptional: true,
+      defaultValue:
+        "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
+    },
+    {
+      name: "threads",
+      type: "{ generateTitle?: boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> } }",
+      description:
+        "メモリスレッドの作成に関する設定。`generateTitle` は、ユーザーの最初のメッセージからスレッドタイトルを自動生成するかどうかを制御します。boolean か、カスタムのモデルと指示文を含むオブジェクトを指定できます。",
+      isOptional: true,
+      defaultValue: "{ generateTitle: false }",
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "CoreMessage[]",
+      description: "取得したメッセージをコア形式で格納した配列",
+    },
+    {
+      name: "uiMessages",
+      type: "UIMessageWithMetadata[]",
+      description:
+        "UI 表示用に整形されたメッセージの配列。ツール呼び出しとその結果の適切なスレッド化を含みます",
+    },
+  ]}
+/>
+
+## 拡張的な使用例
+
+```typescript title="src/test-memory.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+const { messages, uiMessages } = await memory!.query({
+  threadId: "thread-123",
+  selectBy: {
+    last: 50,
+    vectorSearchString: "どんなメッセージがありますか?",
+    include: [
+      {
+        id: "msg-123",
+      },
+      {
+        id: "msg-456",
+        withPreviousMessages: 3,
+        withNextMessages: 1,
+      },
+    ],
+  },
+  threadConfig: {
+    semanticRecall: true,
+  },
+});
+
+console.log(messages);
+console.log(uiMessages);
+```
+
+
+### 関連項目
+
+- [Memory クラスリファレンス](/reference/memory/memory-class)
+- [Memory の概要](/docs/memory/overview)
+- [セマンティックリコール](/docs/memory/semantic-recall)
+- [createThread](/reference/memory/createThread)

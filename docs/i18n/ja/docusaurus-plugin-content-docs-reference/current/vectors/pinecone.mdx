@@ -1,0 +1,289 @@
+---
+title: "リファレンス: Pinecone ベクターストア | ベクター | Mastra ドキュメント"
+description: Mastra の PineconeVector クラスに関するドキュメント。Pinecone のベクターデータベースへのインターフェースを提供します。
+---
+
+# Pinecone ベクトルストア
+
+PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクトルデータベースへのインターフェースを提供します。
+ハイブリッド検索、メタデータフィルタリング、名前空間の管理といった機能を備え、リアルタイムでのベクトル検索を実現します。
+
+## コンストラクターのオプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "PineconeのAPIキー",
+    },
+    {
+      name: "environment",
+      type: "string",
+      description: 'Pineconeの環境（例：「us-west1-gcp」）',
+    },
+  ]}
+/>
+
+## メソッド
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "作成するインデックスの名前",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "ベクトルの次元数（使用する埋め込みモデルと一致している必要があります）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description:
+        "類似検索に用いる距離指標。ハイブリッド検索を行う場合は 'dotproduct' を使用してください。",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Pineconeのインデックス名",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "高密度埋め込みベクトルの配列",
+    },
+    {
+      name: "sparseVectors",
+      type: "{ indices: number[], values: number[] }[]",
+      isOptional: true,
+      description:
+        "ハイブリッド検索用の疎ベクトル配列。各ベクトルの indices と values 配列は対応している必要があります。",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "各ベクトルのメタデータ",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "任意のベクトルID（未指定の場合は自動生成）",
+    },
+    {
+      name: "namespace",
+      type: "string",
+      isOptional: true,
+      description:
+        "ベクトルの保存先となる任意の名前空間。異なる名前空間のベクトル同士は互いに分離されます。",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "クエリ対象のインデックス名",
+    },
+    {
+      name: "vector",
+      type: "number[]",
+      description: "類似ベクトル検索に用いる密ベクトルのクエリ",
+    },
+    {
+      name: "sparseVector",
+      type: "{ indices: number[], values: number[] }",
+      isOptional: true,
+      description:
+        "ハイブリッド検索用の任意のスパースベクトル。indices と values の配列は対応している必要があります。",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "返却する結果数",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "クエリに適用するメタデータフィルタ",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "結果にベクトルを含めるかどうか",
+    },
+    {
+      name: "namespace",
+      type: "string",
+      isOptional: true,
+      description:
+        "クエリ対象のベクトルの任意の名前空間。指定した名前空間の結果のみを返します。",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+インデックス名を文字列の配列として返します。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+{
+  name: "indexName",
+  type: "string",
+  description: "記述するインデックス名",
+},
+]}
+/>
+
+戻り値:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除対象のインデックス名",
+    },
+  ]}
+/>
+
+### updateVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルを含むインデックス名",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "更新対象のベクトルのID",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "更新パラメータ",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      isOptional: true,
+      description: "更新後のベクトル値",
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "更新後のメタデータ",
+    },
+  ]}
+/>
+
+### deleteVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルを含むインデックス名",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "削除するベクトルのID",
+    },
+  ]}
+/>
+
+## レスポンスの種類
+
+クエリ結果は次の形式で返されます：
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // includeVectorがtrueの場合のみ含まれる
+}
+```
+
+
+## エラー処理
+
+ストアは、キャッチできる型付きエラーをスローします：
+
+```typescript copy
+try {
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | など
+    console.log(error.details); // エラーの詳細情報
+  }
+}
+```
+
+
+### 環境変数
+
+必須の環境変数:
+
+- `PINECONE_API_KEY`: Pinecone の API キー
+- `PINECONE_ENVIRONMENT`: Pinecone の環境（例: 'us-west1-gcp'）
+
+## ハイブリッド検索
+
+Pinecone は密ベクトルと疎ベクトルを組み合わせてハイブリッド検索をサポートします。ハイブリッド検索を使用するには:
+
+1. `metric: 'dotproduct'` でインデックスを作成する
+2. upsert 時に `sparseVectors` パラメータで疎ベクトルを指定する
+3. query 時に `sparseVector` パラメータで疎ベクトルを指定する
+
+## 関連情報
+
+- [メタデータフィルター](../rag/metadata-filters)

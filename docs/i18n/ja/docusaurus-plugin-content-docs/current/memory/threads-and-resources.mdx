@@ -1,0 +1,98 @@
+---
+title: "メモリのスレッドとリソース | Memory | Mastra Docs"
+description: "Mastra のメモリシステムが、作業メモリ、会話履歴、セマンティックリコールによってどのように機能するかを学びます。"
+---
+
+# メモリのスレッドとリソース
+
+Mastra はメモリをスレッドとして整理します。スレッドは関連するやり取りをまとめた記録で、次の2つの識別子を使用します。
+
+1. **`thread`**: 会話を表すグローバル一意の ID（例: `support_123`）。すべてのリソース間で一意である必要があります。
+2. **`resource`**: スレッドの所有者であるユーザーまたはエンティティ（例: `user_123`、`org_456`）。
+
+`resource` は、同一のユーザーまたはエンティティに紐づくすべてのスレッドにわたってメモリを保持できるようにする[リソーススコープのメモリ](./working-memory#resource-scoped-memory-default)において、特に重要です。
+
+```typescript {4} showLineNumbers
+const stream = await agent.stream("エージェントへのメッセージ", {
+  memory: {
+    thread: "user-123",
+    resource: "test-123",
+  },
+});
+```
+
+:::warning
+
+メモリを設定していても、`thread` と `resource` の両方が指定されない限り、エージェントは情報を保存したり参照したりしません。
+
+:::
+
+> Mastra Playground は `thread` と `resource` の ID を自動的に設定します。独自のアプリケーションでは、各 `.generate()` または `.stream()` の呼び出しごとに手動で指定する必要があります。
+
+
+### スレッドタイトルの生成
+
+Mastra は、ユーザーの最初のメッセージに基づいて、わかりやすいスレッドタイトルを自動生成できます。この機能はデフォルトで無効です。`generateTitle` を `true` に設定して有効にしてください。これにより整理しやすくなり、UI で会話を表示しやすくなります。
+
+```typescript {3-7} showLineNumbers
+export const testAgent = new Agent({
+  memory: new Memory({
+    options: {
+      generateTitle: true, // 自動タイトル生成を明示的に有効にする
+    },
+  }),
+});
+```
+
+> タイトル生成は、エージェントの応答後に非同期で実行され、応答時間には影響しません。詳細と例については、[完全な設定リファレンス](/reference/memory/memory-class)をご覧ください。
+
+
+#### タイトル生成の最適化
+
+タイトルはデフォルトでエージェントのモデルによって生成されます。コストや挙動を最適化するには、より小さな `model` とカスタムの `instructions` を指定してください。これにより、タイトル生成をメインの会話ロジックから切り離せます。
+
+```typescript {5-9} showLineNumbers
+export const testAgent = new Agent({
+  // ...
+  memory: new Memory({
+    options: {
+      threads: {
+        generateTitle: {
+          model: openai("gpt-4.1-nano"),
+          instructions:
+            "ユーザーの最初のメッセージに基づいて簡潔なタイトルを生成してください",
+        },
+      },
+    },
+  }),
+});
+```
+
+
+#### 動的なモデル選択と指示
+
+`model` と `instructions` に関数を渡すことで、スレッドタイトルの生成を動的に設定できます。これらの関数は `runtimeContext` オブジェクトを受け取り、ユーザー固有の値に応じてタイトル生成を調整できます。
+
+```typescript {7-16} showLineNumbers
+export const testAgent = new Agent({
+  // ...
+  memory: new Memory({
+    options: {
+      threads: {
+        generateTitle: {
+          model: ({ runtimeContext }) => {
+            const userTier = runtimeContext.get("userTier");
+            return userTier === "premium"
+              ? openai("gpt-4.1")
+              : openai("gpt-4.1-nano");
+          },
+          instructions: ({ runtimeContext }) => {
+            const language = runtimeContext.get("userLanguage") || "Japanese";
+            return `ユーザーの最初のメッセージに基づいて、${language}で簡潔で魅力的なタイトルを生成してください。`;
+          },
+        },
+      },
+    },
+  }),
+});
+```

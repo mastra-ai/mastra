@@ -1,0 +1,216 @@
+---
+title: "例: プロンプト整合性の評価 | Evals | Mastra Docs"
+description: 応答が指示にどれだけ従っているかを評価するために、Prompt Alignment 指標を用いる例。
+---
+
+# プロンプト整合性の評価
+
+:::note
+Scorers API は現在ベータ版です。改善に鋭意取り組んでおり、皆さまのフィードバックを歓迎します。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) でお寄せください。
+:::
+
+`PromptAlignmentMetric` を使用して、応答が与えられた一連の指示にどれだけ忠実に従っているかを評価します。このメトリクスは `query` と `response` を受け取り、スコアと、理由および指示単位の整合性の詳細を含む `info` オブジェクトを返します。
+
+## インストール
+
+```bash copy
+npm install @mastra/evals
+```
+
+
+## 完全整合の例
+
+この例では、応答が入力の該当するすべての指示に従っています。スコアは完全な遵守を反映しており、見落としや無視された指示はありません。
+
+```typescript title="src/example-high-perfect-alignment.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { PromptAlignmentMetric } from "@mastra/evals/llm";
+
+const metric = new PromptAlignmentMetric(openai("gpt-4o-mini"), {
+  instructions: [
+    "完全な文で記述する",
+    "気温を摂氏で含める",
+    "風の状況に言及する",
+    "降水確率を記載する",
+  ],
+});
+
+const query = "天気はどうですか?";
+const response =
+  "気温は摂氏22度で、北西から適度な風が吹いています。降水確率は30%です。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 完全整合の出力
+
+この応答は、適用可能な指示をすべて満たしているため、高いスコアを獲得します。`info` フィールドは、各指示が漏れなく順守されたことを示しています。
+
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'スコアが1であるのは、出力が適用可能なすべての指示に完全に従い、気温、風の状況、降水確率を含む包括的な天気予報を、すべて完結した文で提示しているためです。',
+    scoreDetails: {
+      totalInstructions: 4,
+      applicableInstructions: 4,
+      followedInstructions: 4,
+      naInstructions: 0
+    }
+  }
+}
+```
+
+
+## 混在した整合性の例
+
+この例では、応答はいくつかの指示には従っている一方で、別の指示は省かれています。スコアは部分的な遵守を反映しており、守られた指示と見落とされた指示が混在しています。
+
+```typescript title="src/example-high-mixed-alignment.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { PromptAlignmentMetric } from "@mastra/evals/llm";
+
+const metric = new PromptAlignmentMetric(openai("gpt-4o-mini"), {
+  instructions: [
+    "箇条書きを使用する",
+    "価格はUSDで表示する",
+    "在庫状況を表示する",
+    "商品説明を追加する",
+  ],
+});
+
+const query = "利用可能な商品を一覧表示";
+const response =
+  "• コーヒー - $4.99 (在庫あり)\n• 紅茶 - $3.99\n• 水 - $1.99 (在庫切れ)";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 指示遵守のばらつきがある出力
+
+この応答は、一部の指示には従っている一方で、他の指示は満たしていないため、評価は混合的（ミックス）になります。`info` フィールドには、遵守された指示と見落とされた指示の内訳に加え、そのスコアの根拠が記載されています。
+
+```typescript
+{
+  score: 0.75,
+  info: {
+    reason: 'スコアが0.75であるのは、箇条書きの使用、USDでの価格の記載、在庫状況の表示など、出力が指示の大半を満たしているためです。ただし、商品説明を提供するという指示には完全には沿っておらず、その点が全体のスコアに影響しています。',
+    scoreDetails: {
+      totalInstructions: 4,
+      applicableInstructions: 4,
+      followedInstructions: 3,
+      naInstructions: 0
+    }
+  }
+}
+```
+
+
+## 該当しないアライメントの例
+
+この例では、クエリと無関係であるため、応答はいずれの指示にも従っていません。スコアは、この文脈では指示が適用不能だったことを反映しています。
+
+```typescript title="src/example-non-applicable-alignment.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { PromptAlignmentMetric } from "@mastra/evals/llm";
+
+const metric = new PromptAlignmentMetric(openai("gpt-4o-mini"), {
+  instructions: [
+    "アカウント残高を表示",
+    "最近の取引を一覧表示",
+    "支払い履歴を表示",
+  ],
+});
+
+const query = "天気はどうですか?";
+const response = "外は晴れていて暖かいです。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 非該当のアラインメント出力
+
+レスポンスは、いずれの指示も適用できなかったことを示すスコアを受け取ります。`info` フィールドには、レスポンスとクエリが指示と無関係であるため、測定可能なアラインメントがないことが記されています。
+
+```typescript
+{
+  score: 0,
+  info: {
+    reason: 'スコアが0であるのは、出力が天気に関するクエリの文脈で適用可能な指示に一切従っておらず、提供された指示が入力と無関係だからです。',
+    scoreDetails: {
+      totalInstructions: 3,
+      applicableInstructions: 0,
+      followedInstructions: 0,
+      naInstructions: 3
+    }
+  }
+}
+```
+
+
+## メトリクスの設定
+
+期待される動作や要件を定義する `instructions` 配列を指定して、`PromptAlignmentMetric` インスタンスを作成できます。`scale` などの任意パラメータを設定することも可能です。
+
+```typescript showLineNumbers copy
+const metric = new PromptAlignmentMetric(openai("gpt-4o-mini"), {
+  instructions: [""],
+  scale: 1,
+});
+```
+
+> 設定オプションの全一覧は [PromptAlignmentMetric](/reference/evals/prompt-alignment) を参照してください。
+
+
+## 結果の理解
+
+`PromptAlignment` は次の形式の結果を返します：
+
+```typescript
+{
+  score: number,
+  info: {
+    reason: string,
+    scoreDetails: {
+      followed: string[],
+      missed: string[],
+      notApplicable: string[]
+    }
+  }
+}
+```
+
+
+### プロンプト整合度スコア
+
+プロンプト整合度スコアは 0〜1 の範囲です:
+
+- **1.0**: 完全に整合 – 該当する指示がすべて守られている。
+- **0.5–0.8**: 部分的に整合 – 一部の指示が守られていない。
+- **0.1–0.4**: 低い整合 – ほとんどの指示が守られていない。
+- **0.0**: 整合なし – 指示が適用されない、または守られていない。
+- **-1**: 該当なし – 指示がクエリに関連していない。
+
+### プロンプト整合性情報
+
+スコアの説明。詳細には次を含みます:
+
+- 各指示への遵守状況
+- クエリへの適用度
+- 守られた指示、見落とした指示、非該当の指示の分類
+- 整合性スコアの根拠
+
+<GithubLink
+  outdated={true}
+  marginTop="mt-16"
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/prompt-alignment"
+/>

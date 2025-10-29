@@ -1,0 +1,71 @@
+---
+title: "リファレンス: Agent.getModel() | Agents | Mastra ドキュメント"
+description: "Mastra のエージェントで使用される `Agent.getModel()` メソッドのドキュメント。エージェントを動かす言語モデルを取得します。"
+---
+
+# Agent.getModel()
+
+`.getModel()` メソッドは、エージェントに設定された言語モデルを取得し、それが関数である場合は実体を解決します。このメソッドは、エージェントの機能を支える基盤となるモデルへアクセスするために使用されます。
+
+## 使い方の例
+
+```typescript copy
+await agent.getModel();
+```
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "{ runtimeContext = new RuntimeContext() }",
+      type: "{ runtimeContext?: RuntimeContext }",
+      isOptional: true,
+      defaultValue: "new RuntimeContext()",
+      description: "ランタイムコンテキストを含む任意指定の設定オブジェクト。",
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraLanguageModel | Promise<MastraLanguageModel>",
+      description:
+        "エージェントに設定された言語モデル。モデルのインスタンス、またはモデルに解決される Promise のいずれかです。",
+    },
+  ]}
+/>
+
+## 応用的な使用例
+
+```typescript copy
+await agent.getModel({
+  runtimeContext: new RuntimeContext(),
+});
+```
+
+
+### オプションパラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      defaultValue: "undefined",
+      description:
+        "依存性注入およびコンテキスト情報のためのランタイムコンテキスト。",
+    },
+  ]}
+/>
+
+## 関連
+
+- [Agents 概要](/docs/agents/overview)
+- [ランタイムコンテキスト](/docs/server-db/runtime-context)

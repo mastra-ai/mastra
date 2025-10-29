@@ -1,0 +1,261 @@
+---
+title: "リファレンス: Sarvam | Voice | Mastra ドキュメント"
+description: "Sarvam クラスのドキュメント。テキスト読み上げ（text-to-speech）および音声認識（speech-to-text）機能を提供します。"
+---
+
+# Sarvam
+
+Mastra の SarvamVoice クラスは、Sarvam AI のモデルを用いて、テキスト読み上げ（TTS）と音声からテキストへの変換（STT）の機能を提供します。
+
+## 使い方の例
+
+```typescript
+import { SarvamVoice } from "@mastra/voice-sarvam";
+
+// 環境変数を用いたデフォルト設定で初期化
+const voice = new SarvamVoice();
+
+// もしくは、特定の設定で初期化
+const voiceWithConfig = new SarvamVoice({
+   speechModel: {
+    model: "bulbul:v1",
+    apiKey: process.env.SARVAM_API_KEY!,
+    language: "en-IN",
+    properties: {
+      pitch: 0,
+      pace: 1.65,
+      loudness: 1.5,
+      speech_sample_rate: 8000,
+      enable_preprocessing: false,
+      eng_interpolation_wt: 123,
+    },
+  },
+  listeningModel: {
+    model: "saarika:v2",
+    apiKey: process.env.SARVAM_API_KEY!,
+    languageCode: "en-IN",
+     filetype?: 'wav';
+  },
+  speaker: "meera", // 既定の音声
+});
+
+
+// テキストから音声へ変換
+const audioStream = await voice.speak("こんにちは。どのようにお手伝いできますか？");
+
+
+// 音声からテキストへ変換
+const text = await voice.listen(audioStream, {
+  filetype: "wav",
+});
+```
+
+
+### Sarvam API ドキュメント —
+
+https://docs.sarvam.ai/api-reference-docs/endpoints/text-to-speech
+
+## 設定
+
+### コンストラクターのオプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "SarvamVoiceConfig",
+      description: "テキスト読み上げ（TTS）用の設定。",
+      isOptional: true,
+      defaultValue: "{ model: 'bulbul:v1', language: 'en-IN' }",
+    },
+    {
+      name: "speaker",
+      type: "SarvamVoiceId",
+      description:
+        "出力音声に使用する話者。未指定の場合は既定で Meera が使用されます。利用可能なオプション: meera, pavithra, maitreyi, arvind, amol, amartya, diya, neel, misha, vian, arjun, maya",
+      isOptional: true,
+      defaultValue: "'meera'",
+    },
+    {
+      name: "listeningModel",
+      type: "SarvamListenOptions",
+      description: "音声認識（STT）の設定。",
+      isOptional: true,
+      defaultValue: "{ model: 'saarika:v2', language_code: 'unknown' }",
+    },
+  ]}
+/>
+
+### SarvamVoiceConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "Sarvam の API キー。未指定の場合は環境変数 SARVAM_API_KEY が使用されます。",
+      isOptional: true,
+    },
+    {
+      name: "model",
+      type: "SarvamTTSModel",
+      description: "テキスト読み上げ（TTS）に使用するモデルを指定します。",
+      isOptional: true,
+      defaultValue: "'bulbul:v1'",
+    },
+    {
+      name: "language",
+      type: "SarvamTTSLanguage",
+      description:
+        "音声合成の対象言語。利用可能なオプション: hi-IN, bn-IN, kn-IN, ml-IN, mr-IN, od-IN, pa-IN, ta-IN, te-IN, en-IN, gu-IN",
+      isOptional: false,
+      defaultValue: "'en-IN'",
+    },
+    {
+      name: "properties",
+      type: "object",
+      description: "カスタマイズ用の追加音声プロパティ。",
+      isOptional: true,
+    },
+    {
+      name: "properties.pitch",
+      type: "number",
+      description:
+        "音声のピッチを制御します。値が低いほど声は低く、値が高いほど鋭くなります。推奨範囲は -0.75 ～ 0.75 です。",
+      isOptional: true,
+    },
+    {
+      name: "properties.pace",
+      type: "number",
+      description:
+        "音声の速度を制御します。値が低いほど遅く、値が高いほど速くなります。推奨範囲は 0.5 ～ 2.0。既定値は 1.0。許容範囲: 0.3 <= x <= 3",
+      isOptional: true,
+    },
+    {
+      name: "properties.loudness",
+      type: "number",
+      description:
+        "音量（ラウドネス）を制御します。値が低いほど小さく、値が高いほど大きくなります。推奨範囲は 0.3 ～ 3.0。許容範囲: 0 <= x <= 3",
+      isOptional: true,
+    },
+    {
+      name: "properties.speech_sample_rate",
+      type: "8000 | 16000 | 22050",
+      description: "音声サンプルレート（Hz）。",
+      isOptional: true,
+    },
+    {
+      name: "properties.enable_preprocessing",
+      type: "boolean",
+      description:
+        "英語の単語や数値（例: 数字、日付）の正規化を行うかどうかを制御します。混在言語のテキストをより適切に処理するには true に設定します。既定値は false。",
+      isOptional: true,
+    },
+    {
+      name: "properties.eng_interpolation_wt",
+      type: "number",
+      description: "エンコーダで英語話者との補間に用いる重み。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### SarvamListenOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "Sarvam の API キー。未指定の場合は SARVAM_API_KEY 環境変数が参照されます。",
+      isOptional: true,
+    },
+    {
+      name: "model",
+      type: "SarvamSTTModel",
+      description:
+        "音声をテキストに変換する際に使用するモデルを指定します。注: 既定のモデルは saarika:v2 です。選択可能: saarika:v1, saarika:v2, saarika:flash",
+      isOptional: true,
+      defaultValue: "'saarika:v2'",
+    },
+    {
+      name: "languageCode",
+      type: "SarvamSTTLanguage",
+      description:
+        "入力音声の言語を指定します。正確な文字起こしのために必要なパラメータです。saarika:v1 モデルでは必須、saarika:v2 モデルでは任意です。unknown: 言語が不明な場合に使用します。API が自動検出します。注: saarika:v1 モデルは unknown の言語コードをサポートしません。選択可能: unknown, hi-IN, bn-IN, kn-IN, ml-IN, mr-IN, od-IN, pa-IN, ta-IN, te-IN, en-IN, gu-IN",
+      isOptional: true,
+      defaultValue: "'unknown'",
+    },
+    {
+      name: "filetype",
+      type: "'mp3' | 'wav'",
+      description: "入力ストリームの音声形式。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 方法
+
+### speak()
+
+Sarvam のテキスト読み上げ（Text-to-Speech）モデルを使って、テキストを音声に変換します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "音声に変換するテキストまたはテキストのストリーム。",
+      isOptional: false,
+    },
+    {
+      name: "options.speaker",
+      type: "SarvamVoiceId",
+      description: "音声合成に使用する音声（スピーカー）の ID。",
+      isOptional: true,
+      defaultValue: "コンストラクタの speaker の値",
+    },
+  ]}
+/>
+
+戻り値: `Promise<NodeJS.ReadableStream>`
+
+### listen()
+
+Sarvam の音声認識モデルで音声をテキスト化します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "NodeJS.ReadableStream",
+      description: "テキスト化する音声ストリーム。",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "SarvamListenOptions",
+      description: "音声認識の設定オプション。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+戻り値: `Promise<string>`
+
+### getSpeakers()
+
+利用可能な音声の選択肢の配列を返します。
+
+戻り値: `Promise<Array<{voiceId: SarvamVoiceId}>>`
+
+## 注意事項
+
+- APIキーはコンストラクターのオプション、または `SARVAM_API_KEY` 環境変数で指定できます
+- APIキーが指定されていない場合、コンストラクターはエラーをスローします
+- 本サービスは `https://api.sarvam.ai` の Sarvam AI API と通信します
+- 音声はバイナリ音声データを含むストリームとして返されます
+- 音声認識は mp3 および wav の音声形式をサポートします

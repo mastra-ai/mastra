@@ -1,0 +1,71 @@
+---
+title: "リファレンス: Agent.getDefaultGenerateOptions() | Agents | Mastra ドキュメント"
+description: "Mastra のエージェントにおける `Agent.getDefaultGenerateOptions()` メソッドのドキュメント。generate 呼び出しで使用されるデフォルトのオプションを取得します。"
+---
+
+# Agent.getDefaultGenerateOptions()
+
+エージェントは、モデルの挙動、出力のフォーマット、ツールやワークフローの呼び出しを制御するためのデフォルト生成オプションを設定できます。`.getDefaultGenerateOptions()` メソッドは、これらのデフォルトを取得し、関数であれば評価して解決します。これらのオプションは、上書きされない限りすべての `generate()` 呼び出しに適用され、エージェントの既定設定を確認するのに役立ちます。
+
+## 使い方の例
+
+```typescript copy
+await agent.getDefaultGenerateOptions();
+```
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ runtimeContext?: RuntimeContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "ランタイムコンテキストを含むオプションの設定オブジェクト。",
+    },
+  ]}
+/>
+
+## 返り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "defaultOptions",
+      type: "AgentGenerateOptions | Promise<AgentGenerateOptions>",
+      description:
+        "エージェントに設定された既定の生成オプション。オブジェクトそのもの、またはそのオプションに解決される Promise のいずれかです。",
+    },
+  ]}
+/>
+
+## 発展的な使用例
+
+```typescript copy
+await agent.getDefaultGenerateOptions({
+  runtimeContext: new RuntimeContext(),
+});
+```
+
+
+### オプションパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      defaultValue: "new RuntimeContext()",
+      description:
+        "依存性注入やコンテキスト情報のための実行時コンテキスト。",
+    },
+  ]}
+/>
+
+## 関連項目
+
+- [エージェントの応答生成](/docs/agents/overview#generating-responses)
+- [ランタイムコンテキスト](/docs/server-db/runtime-context)

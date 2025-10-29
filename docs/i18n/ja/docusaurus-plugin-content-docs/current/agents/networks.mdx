@@ -1,0 +1,249 @@
+---
+title: "エージェントネットワーク | Agents | Mastra ドキュメント"
+description: 複雑で非決定的なタスクを実行するために、エージェントネットワークを使って複数のエージェント、ワークフロー、ツールを調整する方法を学びます。
+---
+
+# エージェントネットワーク
+
+Mastra のエージェントネットワークは、複数のエージェント、ワークフロー、ツールを連携させ、事前に明確化されていないものの、ユーザーのメッセージやコンテキストから推測できるタスクを処理します。最上位の**ルーティングエージェント**（他のエージェント、ワークフロー、ツールを構成した Mastra エージェント）は、LLM を用いてリクエストを解釈し、どのプリミティブ（サブエージェント、ワークフロー、ツール）を、どの順序で、どのデータとともに呼び出すかを判断します。
+
+## ネットワークを使うべき場面
+
+複数のプリミティブ間の連携が必要な複雑なタスクには、ネットワークを使います。あらかじめ定められた手順に従うワークフローと異なり、ネットワークはリクエストを解釈し、何を実行するかを判断するために LLM の推論に依存します。
+
+## コア原則
+
+Mastra のエージェントネットワークは、次の原則に基づいて動作します。
+
+- `.network()` を使用する場合はメモリが必須で、タスク履歴の保存とタスク完了の判定に使用されます。
+- プリミティブは説明に基づいて選択されます。明確で具体的な説明ほどルーティングが向上します。ワークフローやツールでは、入力スキーマが実行時に適切な入力の特定に役立ちます。
+- 複数のプリミティブの機能が重複している場合、エージェントはより具体的なものを優先し、スキーマと説明を組み合わせてどれを実行するかを決定します。
+
+## エージェントネットワークの作成
+
+エージェントネットワークは、設定で定義されたエージェント、ワークフロー、ツールにタスクを委任するトップレベルのルーティングエージェントを中心に構築されます。メモリはルーティングエージェントで `memory` オプションを使用して設定し、`instructions` はエージェントのルーティング挙動を定義します。
+
+```typescript {22-23,26,29} title="src/mastra/agents/routing-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+
+import { researchAgent } from "./research-agent";
+import { writingAgent } from "./writing-agent";
+
+import { cityWorkflow } from "../workflows/city-workflow";
+import { weatherTool } from "../tools/weather-tool";
+
+export const routingAgent = new Agent({
+  name: "routing-agent",
+  instructions: `
+      あなたはライターと研究者のネットワークです。
+      ユーザーはトピックの調査を依頼してきます。
+      必ず完全なレポートで応答してください。箇条書きは使用しないでください。
+      ブログ記事のように、完全な段落形式で記述してください。
+      不完全または不確実な情報では回答しないでください。
+  model: openai("gpt-4o-mini"),
+  agents: {
+    researchAgent,
+    writingAgent,
+  },
+  workflows: {
+    cityWorkflow,
+  },
+  tools: {
+    weatherTool,
+  },
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:../mastra.db",
+    }),
+  }),
+});
+```
+
+
+### ネットワークプリミティブの説明文を書く
+
+Mastra のエージェントネットワークを構成する際は、各プリミティブ（エージェント、ワークフロー、ツール）に、ルーティングエージェントがどれを使うべきか判断できるよう明確な説明を付けてください。ルーティングエージェントは、各プリミティブの説明とスキーマを基に、その役割と使い方を判断します。明確な説明と適切に定義された入出力スキーマは、ルーティングの精度を高めます。
+
+#### エージェントの説明
+
+ネットワーク内の各エージェントには、その役割や機能を説明する明確な`description`を含めてください。
+
+```typescript title="src/mastra/agents/research-agent.ts" showLineNumbers
+export const researchAgent = new Agent({
+  name: "research-agent",
+  description: `このエージェントは簡潔な調査結果を箇条書き形式で収集します。
+    完全な回答や説明文を生成せず、重要な事実のみを抽出するように設計されています。`,
+    responses or narrative content.`,
+  // ...
+});
+```
+
+```typescript title="src/mastra/agents/writing-agent.ts" showLineNumbers
+export const writingAgent = new Agent({
+  name: "writing-agent",
+  description: `このエージェントは、リサーチした資料を体系的な
+    文章コンテンツに変換します。箇条書きを使わず、完全な段落形式のレポートを作成し、
+    記事、要約、ブログ投稿などに適しています。`,
+  // ...
+});
+```
+
+
+#### ワークフローの説明
+
+ネットワーク内のワークフローには、その目的を明確にするための `description` と、期待されるデータを定義するための `inputSchema` および `outputSchema` を含めることが推奨されます。
+
+```typescript title="src/mastra/workflows/city-workflow.ts" showLineNumbers
+export const cityWorkflow = createWorkflow({
+  id: "city-workflow",
+  description: `このワークフローは都市に関する調査タスクを処理します。
+    まず都市の基本情報を収集し、その後
+    調査結果を包括的なレポートにまとめます。ユーザー入力に
+    調査対象の都市が含まれている場合に使用してください。`,
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  outputSchema: z.object({
+    text: z.string(),
+  }),
+  //...
+});
+```
+
+
+#### ツールの説明
+
+ネットワーク内のツールには、目的を説明するための `description` に加え、期待されるデータを記述する `inputSchema` と `outputSchema` を含める必要があります。
+
+```typescript title="src/mastra/tools/weather-tool.ts" showLineNumbers
+export const weatherTool = createTool({
+  id: "weather-tool",
+  description: ` wttr.in APIを使用して現在の天気情報を取得します。
+    都市名または地名を入力として受け取り、簡潔な天気概要を返します。
+    最新の天気データが必要な場合は、このツールを使用してください。
+  `,
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  outputSchema: z.object({
+    weather: z.string(),
+  }),
+  // ...
+});
+```
+
+
+## エージェントネットワークの呼び出し
+
+ユーザーのメッセージを渡して `.network()` で Mastra のエージェントネットワークを呼び出します。このメソッドは、実行の進捗を追跡し、最終結果を取得するために反復処理できるイベントストリームを返します。
+
+### エージェントの例
+
+この例では、ネットワークがメッセージを解釈し、完全な回答を生成するために、リクエストを `researchAgent` と `writingAgent` の両方へルーティングします。
+
+```typescript showLineNumbers copy
+const result = await routingAgent.network(
+  "Mastraの便利な使い方を3つ教えてください",
+);
+
+for await (const chunk of result) {
+  console.log(chunk.type);
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+
+#### エージェントの出力
+
+このリクエスト中に次の `chunk.type` イベントが生成されます:
+
+```text
+routing-agent-start
+routing-agent-end
+agent-execution-start
+agent-execution-event-start
+agent-execution-event-step-start
+agent-execution-event-text-start
+agent-execution-event-text-delta
+agent-execution-event-text-end
+agent-execution-event-step-finish
+agent-execution-event-finish
+agent-execution-end
+network-execution-event-step-finish
+```
+
+
+## ワークフローの例
+
+この例では、ルーティングエージェントがメッセージ内の都市名を認識し、`cityWorkflow` を実行します。ワークフローでは、まず事実を収集するために `researchAgent` を呼び出し、続いて最終的なテキストを生成するために `writingAgent` を呼び出す手順を定義します。
+
+```typescript showLineNumbers copy
+const result = await routingAgent.network(
+  "ロンドンに関する歴史的な事実を教えてください",
+);
+
+for await (const chunk of result) {
+  console.log(chunk.type);
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+
+#### ワークフローの出力
+
+このリクエストでは、次の `chunk.type` イベントが送出されます:
+
+```text
+routing-agent-end
+workflow-execution-start
+workflow-execution-event-workflow-start
+workflow-execution-event-workflow-step-start
+workflow-execution-event-workflow-step-result
+workflow-execution-event-workflow-finish
+workflow-execution-end
+routing-agent-start
+network-execution-event-step-finish
+```
+
+
+### ツールの例
+
+この例では、ルーティングエージェントは `researchAgent`、`writingAgent`、`cityWorkflow` をスキップし、タスクを完了するために `weatherTool` を直接呼び出します。
+
+```typescript showLineNumbers copy
+const result = await routingAgent.network("ロンドンの天気は?");
+
+for await (const chunk of result) {
+  console.log(chunk.type);
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+
+#### ツール出力
+
+このリクエスト中に次の `chunk.type` イベントが送出されます:
+
+```text
+routing-agent-start
+routing-agent-end
+tool-execution-start
+tool-execution-end
+network-execution-event-step-finish
+```
+
+
+## 関連項目
+
+- [エージェントメモリ](./agent-memory)
+- [ワークフローの概要](../workflows/overview)
+- [ランタイムコンテキスト](/docs/server-db/runtime-context)

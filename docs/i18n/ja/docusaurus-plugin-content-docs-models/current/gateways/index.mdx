@@ -1,0 +1,34 @@
+---
+title: "ゲートウェイ"
+description: "キャッシュ、レート制限、分析機能を備えたゲートウェイプロバイダー経由でAIモデルにアクセス。"
+---
+
+{/* このファイルは generate-model-docs.ts によって自動生成されています — 手動で編集しないでください */}
+
+import { CardGrid, CardGridItem } from "@/components/cards/card-grid";import { NetlifyLogo } from "@/components/logos/NetlifyLogo";
+
+
+# ゲートウェイプロバイダー
+
+ゲートウェイプロバイダーは複数のモデル提供元を統合し、キャッシュ、レート制限、分析、自動フェイルオーバーなどの機能を追加します。可観測性の確保、コスト管理、または複数プロバイダーへのアクセスの簡素化が必要な場合にゲートウェイを利用してください。
+
+<CardGrid>
+    <CardGridItem
+      title="Netlify"
+      description="34モデル"
+      href="/models/gateways/netlify"
+      logo={<NetlifyLogo />}
+    />    <CardGridItem
+      title="OpenRouter"
+      description="118モデル"
+      href="/models/gateways/openrouter"
+      logo="https://models.dev/logos/openrouter.svg"
+
+    />    <CardGridItem
+      title="Vercel"
+      description="84モデル"
+      href="/models/gateways/vercel"
+      logo="https://models.dev/logos/vercel.svg"
+
+    />
+</CardGrid>

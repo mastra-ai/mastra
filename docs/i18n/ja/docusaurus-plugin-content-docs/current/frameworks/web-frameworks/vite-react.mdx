@@ -1,0 +1,261 @@
+---
+title: "Vite/React プロジェクトへの Mastra の統合 | フレームワーク | Mastra ドキュメント"
+description: Vite と React に Mastra を統合するための手順ガイド。
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+
+# Vite/React プロジェクトに Mastra を統合する
+
+Mastra は Vite と連携しており、次のことを簡単に行えます:
+
+- AI 機能を提供する柔軟な API の構築
+- フロントエンドとバックエンドを単一のコードベースでまとめ、デプロイを簡素化
+- Mastra の Client SDK の活用
+
+このガイドでは、Vite/React プロジェクトに Mastra をひな型生成して統合する方法を説明します。
+
+:::warning
+
+このガイドは、プロジェクトのルート (例: `app`) で React Router v7 を使用する Vite/React を前提としています。
+
+:::
+
+## Mastra のインストール
+
+必要な Mastra のパッケージをインストールします：
+
+<Tabs>
+<TabItem value="npm" label="npm">
+
+```bash copy
+npm install mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun add mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
+```
+
+</TabItem>
+</Tabs>
+
+## Mastra を統合する
+
+プロジェクトに Mastra を統合するには、次の2つの方法があります：
+
+### 1. ワンライナーを使う
+
+次のコマンドを実行すると、適切な既定値を備えたデフォルトの Weather エージェントを手早くスキャフォールドできます:
+
+```bash copy
+npx mastra@latest init --dir . --components agents,tools --example --llm openai
+```
+
+> 詳細は [mastra init](/reference/cli/create-mastra) を参照してください。
+
+
+### 2. インタラクティブ CLI を使う
+
+セットアップをカスタマイズする場合は、`init` コマンドを実行し、表示されるプロンプトに従ってオプションを選択してください。
+
+```bash copy
+npx mastra@latest init
+```
+
+:::warning
+
+デフォルトでは、`mastra init` はインストール先として `src` を提案します。プロジェクトのルートで Vite/React を使っている場合（例: `app`。`src/app` ではない）、プロンプトが表示されたら `.` を入力してください:
+
+:::
+
+`package.json` に `dev` と `build` スクリプトを追加します:
+
+<Tabs>
+  <TabItem value="app" label="app">
+    ```json title="package.json"
+    {
+      "scripts": {
+        ...
+        "dev:mastra": "mastra dev --dir mastra",
+        "build:mastra": "mastra build --dir mastra"
+      }
+    }
+    ```
+  </TabItem>
+
+  <TabItem value="src-app" label="src/app">
+    ```json title="package.json"
+    {
+      "scripts": {
+        ...
+        "dev:mastra": "mastra dev --dir src/mastra",
+        "build:mastra": "mastra build --dir src/mastra"
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+
+## TypeScript を設定する
+
+プロジェクトのルートにある `tsconfig.json` ファイルを編集します：
+
+```json title="tsconfig.json"
+{
+  ...
+  "exclude": ["dist", ".mastra"]
+}
+```
+
+
+## API キーの設定
+
+```bash title=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
+> 各LLMプロバイダーは異なる環境変数を使用します。詳細は[Model Capabilities](https://sdk.vercel.ai/providers)をご覧ください。
+
+
+## .gitignore を更新する
+
+`.mastra` を `.gitignore` ファイルに追加します:
+
+```bash title=".gitignore" copy
+.mastra
+```
+
+
+## Mastra Dev Server を起動する
+
+Mastra Dev Server を起動して、エージェントを REST エンドポイントとして公開します。
+
+<Tabs>
+<TabItem value="npm" label="npm">
+
+```bash copy
+npm run dev:mastra
+```
+
+</TabItem>
+<TabItem value="cli" label="CLI">
+
+```bash copy
+mastra dev:mastra
+```
+
+</TabItem>
+</Tabs>
+
+> 起動すると、エージェントはローカルで利用可能になります。詳しくは [ローカル開発環境](/docs/getting-started/studio) をご覧ください。
+
+## Vite 開発サーバーを起動する
+
+Mastra Dev Server が稼働していれば、通常どおり Vite アプリを起動できます。
+
+## Mastra クライアントを作成する
+
+新しいディレクトリとファイルを作成し、次にサンプルコードを追加します。
+
+```bash copy
+mkdir lib
+touch lib/mastra.ts
+```
+
+```typescript title="lib/mastra.ts" showLineNumbers copy
+import { MastraClient } from "@mastra/client-js";
+
+export const mastraClient = new MastraClient({
+  baseUrl: import.meta.env.VITE_MASTRA_API_URL || "http://localhost:4111",
+});
+```
+
+
+## テストルートの設定を作成する
+
+設定に新しい `route` を追加します:
+
+```typescript title="app/routes.ts" showLineNumbers copy
+import { type RouteConfig, index, route } from "@react-router/dev/routes";
+
+export default [
+  index("routes/home.tsx"),
+  route("test", "routes/test.tsx"),
+] satisfies RouteConfig;
+```
+
+
+## テスト用ルートを作成する
+
+新しいルートを作成し、サンプルコードを追加します：
+
+```bash copy
+touch app/routes/test.tsx
+```
+
+```typescript title="app/routes/test.tsx" showLineNumbers copy
+import { useState } from "react";
+import { mastraClient } from "../../lib/mastra";
+
+export default function Test() {
+  const [result, setResult] = useState<string | null>(null);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const formData = new FormData(event.currentTarget);
+    const city = formData.get("city")?.toString();
+    const agent = mastraClient.getAgent("weatherAgent");
+
+    const response = await agent.generate({
+      messages: [{ role: "user", content: `${city}の天気はどうですか?` }]
+    });
+
+    setResult(response.text);
+  }
+
+  return (
+    <>
+      <h1>テスト</h1>
+      <form onSubmit={handleSubmit}>
+        <input name="city" placeholder="都市名を入力してください" required />
+        <button type="submit">天気を取得</button>
+      </form>
+      {result && <pre>{result}</pre>}
+    </>
+  );
+}
+```
+
+> これでブラウザで `/test` にアクセスして試せます。
+
+都市に **London** を入力して送信すると、次のような結果が返ってきます。
+
+```plaintext
+ロンドンの現在の天気は晴れ時々曇りで、気温は19.3°C、体感温度は17.4°Cです。湿度は53%、風速は15.9 km/h、最大瞬間風速は38.5 km/hです。
+```
+
+
+## 次のステップ
+
+- [モノレポのデプロイ](../../deployment/monorepo)

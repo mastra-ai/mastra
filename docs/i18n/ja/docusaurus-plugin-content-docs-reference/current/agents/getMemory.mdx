@@ -1,0 +1,71 @@
+---
+title: "リファレンス: Agent.getMemory() | Agents | Mastra ドキュメント"
+description: "Mastra のエージェントにおける `Agent.getMemory()` メソッドのリファレンス。エージェントに紐づくメモリシステムを取得します。"
+---
+
+# Agent.getMemory()
+
+`.getMemory()` メソッドは、エージェントに関連付けられたメモリシステムを取得します。このメソッドは、会話をまたいで情報を保存・取得するためのエージェントのメモリ機能へアクセスする際に使用します。
+
+## 使い方の例
+
+```typescript copy
+await agent.getMemory();
+```
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ runtimeContext?: RuntimeContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "ランタイムコンテキストを含む任意の設定オプション。",
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "memory",
+      type: "Promise<MastraMemory | undefined>",
+      description:
+        "エージェントに構成されたメモリシステムを返す Promise。メモリシステムが構成されていない場合は undefined を返します。",
+    },
+  ]}
+/>
+
+## 拡張された使用例
+
+```typescript copy
+await agent.getMemory({
+  runtimeContext: new RuntimeContext(),
+});
+```
+
+
+### オプションパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      defaultValue: "new RuntimeContext()",
+      description:
+        "依存性の注入やコンテキスト情報のための実行時コンテキスト。",
+    },
+  ]}
+/>
+
+## 関連
+
+- [エージェントメモリ](/docs/agents/agent-memory)
+- [ランタイムコンテキスト](/docs/server-db/runtime-context)

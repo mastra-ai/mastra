@@ -1,0 +1,140 @@
+---
+title: "リファレンス: MDocument | RAG | Mastra ドキュメント"
+description: Mastra の MDocument クラスに関するドキュメント。ドキュメントの処理とチャンク分割を扱います。
+---
+
+# MDocument
+
+MDocument クラスは、RAG アプリケーション向けにドキュメントを処理します。主要なメソッドは `.chunk()` と `.extractMetadata()` です。
+
+## コンストラクター
+
+<PropertiesTable
+  content={[
+    {
+      name: "docs",
+      type: "Array<{ text: string, metadata?: Record<string, any> }>",
+      description:
+        "テキスト内容と任意のメタデータを含むドキュメントチャンクの配列",
+    },
+    {
+      name: "type",
+      type: "'text' | 'html' | 'markdown' | 'json' | 'latex'",
+      description: "ドキュメント内容のタイプ",
+    },
+  ]}
+/>
+
+## スタティックメソッド
+
+### fromText()
+
+プレーンテキストの内容からドキュメントを作成します。
+
+```typescript
+static fromText(text: string, metadata?: Record<string, any>): MDocument
+```
+
+
+### fromHTML()
+
+HTMLの内容からドキュメントを作成します。
+
+```typescript
+static fromHTML(html: string, metadata?: Record<string, any>): MDocument
+```
+
+
+### fromMarkdown()
+
+Markdown コンテンツからドキュメントを生成します。
+
+```typescript
+static fromMarkdown(markdown: string, metadata?: Record<string, any>): MDocument
+```
+
+
+### fromJSON()
+
+JSONの内容からドキュメントを作成します。
+
+```typescript
+static fromJSON(json: string, metadata?: Record<string, any>): MDocument
+```
+
+
+## インスタンス メソッド
+
+### chunk()
+
+ドキュメントをチャンクに分割し、必要に応じてメタデータも抽出します。
+
+```typescript
+async chunk(params?: ChunkParams): Promise<Chunk[]>
+```
+
+詳細なオプションについては、[chunk() リファレンス](./chunk)を参照してください。
+
+
+### getDocs()
+
+処理済みドキュメントチャンクの配列を返します。
+
+```typescript
+getDocs(): Chunk[]
+```
+
+
+### getText()
+
+チャンクからテキスト文字列の配列を返します。
+
+```typescript
+getText(): string[]
+```
+
+
+### getMetadata()
+
+チャンクからメタデータオブジェクトの配列を返します。
+
+```typescript
+getMetadata(): Record<string, any>[]
+```
+
+
+### extractMetadata()
+
+指定した抽出器を使ってメタデータを抽出します。詳しくは [ExtractParams リファレンス](./extract-params) を参照してください。
+
+```typescript
+async extractMetadata(params: ExtractParams): Promise<MDocument>
+```
+
+
+## 例
+
+```typescript
+import { MDocument } from "@mastra/rag";
+
+// テキストからドキュメントを作成
+const doc = MDocument.fromText("コンテンツをここに入力");
+
+// メタデータ抽出付きでチャンクに分割
+const chunks = await doc.chunk({
+  strategy: "markdown",
+  headers: [
+    ["#", "title"],
+    ["##", "section"],
+  ],
+  extract: {
+    summary: true, // デフォルト設定で要約を抽出
+    keywords: true, // デフォルト設定でキーワードを抽出
+  },
+});
+
+// 処理済みのチャンクを取得
+const docs = doc.getDocs();
+const texts = doc.getText();
+const metadata = doc.getMetadata();
+```

@@ -1,0 +1,125 @@
+---
+title: "Cloud Exporter | AI トレーシング | オブザーバビリティ | Mastra ドキュメント"
+description: "本番環境の監視のためにトレースを Mastra Cloud に送信する"
+---
+
+# Cloud Exporter
+
+`CloudExporter` は、集中監視とチームでのコラボレーションのために Mastra Cloud にトレースを送信します。有効なアクセストークン付きのデフォルトのオブザーバビリティ設定を使用している場合は、自動的に有効になります。
+
+## CloudExporter を使うべきとき
+
+CloudExporter は次の用途に最適です:
+
+- **本番監視** - トレースを一元的に可視化
+- **チームコラボレーション** - 組織全体でトレースを共有
+- **高度な分析** - インサイトとパフォーマンス指標の取得
+- **メンテナンス不要** - インフラ運用は不要
+
+## 設定
+
+### 前提条件
+
+1. **Mastra Cloud アカウント**： [cloud.mastra.ai](https://cloud.mastra.ai) でサインアップ
+2. **アクセス トークン**： Mastra Cloud → Settings → API Tokens で作成
+3. **環境変数**： 資格情報を設定
+
+```bash title=".env"
+MASTRA_CLOUD_ACCESS_TOKEN=mst_xxxxxxxxxxxxxxxx
+```
+
+
+### 基本設定
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { CloudExporter } from "@mastra/core/ai-tracing";
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      production: {
+        serviceName: "my-service",
+        exporters: [
+          new CloudExporter(), // MASTRA_CLOUD_ACCESS_TOKEN 環境変数を使用します
+        ],
+      },
+    },
+  },
+});
+```
+
+
+### 自動構成
+
+デフォルトのオブザーバビリティ構成を使用している場合、アクセス トークンが設定されていれば CloudExporter が自動的に組み込まれます。
+
+```typescript
+export const mastra = new Mastra({
+  observability: {
+    default: { enabled: true }, // トークンが存在する場合、CloudExporterが自動的に含まれます
+  },
+});
+```
+
+
+### 完全な設定
+
+```typescript
+new CloudExporter({
+  // オプション - デフォルトは環境変数
+  accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
+
+  // オプション - セルフホスト版Mastra Cloud用
+  endpoint: "https://cloud.your-domain.com",
+
+  // バッチ処理の設定
+  maxBatchSize: 1000, // バッチあたりの最大スパン数
+  maxBatchWaitMs: 5000, // バッチ送信前の最大待機時間
+
+  // 診断ログ
+  logLevel: "info", // debug | info | warn | error
+});
+```
+
+
+## トレースの確認
+
+### Mastra Cloud ダッシュボード
+
+1. [cloud.mastra.ai](https://cloud.mastra.ai) にアクセスします
+2. プロジェクトを選択します
+3. Observability → Traces に移動します
+4. フィルターを使って特定のトレースを絞り込みます:
+   - サービス名
+   - 時間範囲
+   - トレース ID
+   - エラーステータス
+
+### 機能
+
+- **Trace Timeline** - 実行フローの可視化
+- **Span Details** - 入力、出力、メタデータ
+- **Performance Metrics** - レイテンシ、トークン使用量
+- **Team Collaboration** - トレースの共有
+
+## パフォーマンス
+
+:::info
+
+CloudExporter はネットワーク使用を最適化するため、スマートなバッチ処理を用います。トレースはバッファリングされ、バッチで送信されるため、オーバーヘッドを抑えつつ、ほぼリアルタイムの可視性を維持します。
+
+:::
+
+### バッチ処理の動作
+
+- トレースは `maxBatchSize`（デフォルト: 1000）までまとめてバッチ化されます
+- バッチは満杯になるか、`maxBatchWaitMs`（デフォルト: 5秒）に達すると送信されます
+- 失敗したバッチは指数バックオフで再試行されます
+- Mastra Cloud に到達できない場合は段階的に機能を低下させます（グレースフル・デグラデーション）
+
+## 関連項目
+
+- [AI Tracingの概要](/docs/observability/ai-tracing/overview)
+- [DefaultExporter](/docs/observability/ai-tracing/exporters/default)
+- [Mastra Cloudドキュメント](https://cloud.mastra.ai/docs)

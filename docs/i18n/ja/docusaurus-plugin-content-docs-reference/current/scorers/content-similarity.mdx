@@ -1,0 +1,203 @@
+---
+title: "リファレンス: コンテンツ類似度スコアラー | スコアラー | Mastra ドキュメント"
+description: Mastra のコンテンツ類似度スコアラーに関するドキュメント。文字列間のテキスト類似度を測定し、マッチングスコアを提供します。
+---
+
+# コンテンツ類似度スコアラー
+
+`createContentSimilarityScorer()` 関数は、2つの文字列のテキスト類似度を測定し、どれだけ近いかを示すスコアを返します。大文字・小文字の区別や空白の扱いを設定できるオプションに対応しています。
+
+## パラメータ
+
+`createContentSimilarityScorer()` 関数は、以下のプロパティを持つ単一のオプションオブジェクトを受け取ります:
+
+<PropertiesTable
+  content={[
+    {
+      name: "ignoreCase",
+      type: "boolean",
+      required: false,
+      defaultValue: "true",
+      description: "文字列比較の際に大文字小文字の違いを無視するかどうか。",
+    },
+    {
+      name: "ignoreWhitespace",
+      type: "boolean",
+      required: false,
+      defaultValue: "true",
+      description: "文字列比較の際に空白を正規化するかどうか。",
+    },
+  ]}
+/>
+
+この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドとその入出力の詳細は、[MastraScorer リファレンス](./mastra-scorer)を参照してください。
+
+## .run() の戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "実行のID（任意）。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description:
+        "処理後の入力と出力を含むオブジェクト: { processedInput: string, processedOutput: string }",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description: "類似度を含むオブジェクト: { similarity: number }",
+    },
+    {
+      name: "score",
+      type: "number",
+      description:
+        "類似度スコア（0〜1）。1は完全一致を示します。",
+    },
+  ]}
+/>
+
+## スコアリングの詳細
+
+評価器は、文字単位の照合と設定可能なテキスト正規化により、テキストの類似度を評価します。
+
+### スコアリングのプロセス
+
+1. テキストを正規化します:
+   - 大文字小文字の正規化（ignoreCase: true の場合）
+   - 空白の正規化（ignoreWhitespace: true の場合）
+2. 正規化後の文字列を文字列類似度アルゴリズムで比較します:
+   - 文字列の並びを解析
+   - 単語境界を整列
+   - 相対位置を考慮
+   - 長さの差を考慮
+
+最終スコア: `similarity_value * scale`
+
+## 例
+
+### 高い類似度の例
+
+この例では、応答は構造と意味の両面でクエリと非常に近い内容になっています。時制や表現のわずかな違いは、全体的な類似度にほとんど影響しません。
+
+```typescript title="src/example-high-similarity.ts" showLineNumbers copy
+import { createContentSimilarityScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createContentSimilarityScorer();
+
+const query = "素早い茶色のキツネが怠惰な犬を飛び越える。";
+const response = "素早い茶色のキツネが怠惰な犬を飛び越えた。";
+
+const result = await scorer.run({
+  input: [{ role: "user", content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+
+#### 類似度が高い出力
+
+この出力は、クエリの意図と内容を維持しつつ、表現上の違いがごくわずかなため、高いスコアを獲得します。
+
+```typescript
+{
+  score: 0.7761194029850746,
+  analyzeStepResult: {
+    similarity: 0.7761194029850746
+  },
+}
+```
+
+
+### 中程度の類似性の例
+
+この例では、応答はクエリと概念的な共通点はあるものの、構造や表現が異なります。主要な要素は維持されつつも、言い回しによって中程度の差異が生じています。
+
+```typescript title="src/example-moderate-similarity.ts" showLineNumbers copy
+import { createContentSimilarityScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createContentSimilarityScorer();
+
+const query = "茶色のキツネが眠っている犬の上を素早く飛び越える。";
+const response = "素早い茶色のキツネが怠惰な犬を飛び越える。";
+
+const result = await scorer.run({
+  input: [{ role: "user", content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+
+#### 中程度の類似度の出力
+
+この出力は、問い合わせの趣旨は捉えているものの、表現の差異が全体の類似度を下げているため、中程度のスコアとなります。
+
+```typescript
+{
+  score: 0.40540540540540543,
+  analyzeStepResult: {
+    similarity: 0.40540540540540543
+  }
+}
+```
+
+
+### 類似度が低い例
+
+この例では、応答とクエリは文法構造は似ているものの、意味的には無関係です。共通する内容の重なりはほとんど、あるいはまったくありません。
+
+```typescript title="src/example-low-similarity.ts" showLineNumbers copy
+import { createContentSimilarityScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createContentSimilarityScorer();
+
+const query = "猫が窓辺で眠っている。";
+const response = "素早い茶色のキツネが怠惰な犬を飛び越える。";
+
+const result = await scorer.run({
+  input: [{ role: "user", content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+
+#### 類似性の低い出力
+
+この出力は、応答がクエリの内容や意図に沿っていないため、低いスコアとなります。
+
+```typescript
+{
+  score: 0.25806451612903225,
+  analyzeStepResult: {
+    similarity: 0.25806451612903225
+  },
+}
+```
+
+
+### スコアの解釈
+
+0〜1の類似度スコア:
+
+- **1.0**: 完全一致 – 内容がほぼ同一。
+- **0.7–0.9**: 高い類似度 – 語彙や構成にわずかな差異。
+- **0.4–0.6**: 中程度の類似度 – 大枠は重なるが、目立つ違いがある。
+- **0.1–0.3**: 低い類似度 – 共通要素や意味の共有が少ない。
+- **0.0**: 類似なし – まったく異なる内容。
+
+## 関連項目
+
+- [完全性スコアラー](./completeness)
+- [テキスト差分スコアラー](./textual-difference)
+- [回答関連度スコアラー](./answer-relevancy)
+- [キーワード網羅性スコアラー](./keyword-coverage)

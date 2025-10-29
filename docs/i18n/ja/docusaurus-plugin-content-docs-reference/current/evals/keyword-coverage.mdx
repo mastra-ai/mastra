@@ -1,0 +1,187 @@
+---
+title: "リファレンス：KeywordCoverageMetric | Evals | Mastra ドキュメント"
+description: Mastra の Keyword Coverage Metric に関するドキュメント。入力の重要なキーワードが LLM の出力でどの程度カバーされているかを評価します。
+---
+
+# KeywordCoverageMetric
+
+:::info Scorers
+このドキュメントはレガシーの evals API を対象としています。最新のスコアラー機能については、[Scorers](/docs/scorers/overview) を参照してください。
+:::
+
+`KeywordCoverageMetric` クラスは、LLM の出力が入力の重要なキーワードをどの程度カバーしているかを評価します。一般的な語やストップワードを無視し、キーワードの有無や一致状況を分析します。
+
+## 基本的な使い方
+
+```typescript
+import { KeywordCoverageMetric } from "@mastra/evals/nlp";
+
+const metric = new KeywordCoverageMetric();
+
+const result = await metric.measure(
+  "Python プログラミング言語の主な機能（特徴）は何ですか？",
+  "Python は、簡潔な文法と豊富なライブラリで知られる高水準プログラミング言語です。",
+);
+
+console.log(result.score); // カバレッジスコア（0〜1）
+console.log(result.info); // キーワードカバレッジに関する詳細なメトリクスを含むオブジェクト
+```
+
+
+## measure() のパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "一致させたいキーワードを含む元のテキスト",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "キーワードの網羅状況を評価するテキスト",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description:
+        "一致したキーワードの比率を表すカバレッジスコア（0〜1）",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "キーワードカバレッジに関する詳細なメトリクスを含むオブジェクト",
+      properties: [
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "matchedKeywords",
+              type: "number",
+              description: "出力内で見つかったキーワード数",
+            },
+          ],
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "totalKeywords",
+              type: "number",
+              description: "入力に含まれるキーワードの総数",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## スコアリングの詳細
+
+このメトリックは、以下の機能でキーワードを照合し、キーワードの網羅性を評価します。
+
+- 一般語やストップワードのフィルタリング（例：「the」「a」「and」）
+- 大文字小文字を区別しないマッチング
+- 語形変化への対応
+- 技術用語や複合語の特別な処理
+
+### スコアリングプロセス
+
+1. 入力と出力のキーワードを処理します:
+   - 一般的な語やストップワードを除外
+   - 大文字・小文字や語形を正規化
+   - 専門用語や複合語に対応
+
+2. キーワードのカバレッジを計算します:
+   - テキスト間でキーワードを照合
+   - 一致したものをカウント
+   - カバレッジ比を算出
+
+最終スコア: `(matched_keywords / total_keywords) * scale`
+
+### スコアの解釈
+
+（スケールは0から、デフォルトは0～1）
+
+- 1.0: キーワードの網羅が完全
+- 0.7～0.9: ほとんどのキーワードを含む良好な網羅
+- 0.4～0.6: 一部のキーワードが欠けている中程度の網羅
+- 0.1～0.3: 多くのキーワードが欠けている不十分な網羅
+- 0.0: キーワードの一致なし
+
+## 事例と解説
+
+```typescript
+import { KeywordCoverageMetric } from "@mastra/evals/nlp";
+
+const metric = new KeywordCoverageMetric();
+
+// 完全カバレッジの例
+const result1 = await metric.measure(
+  "俊敏な茶色の狐が怠け者の犬を飛び越える",
+  "俊敏な茶色の狐が怠け者の犬を飛び越えた",
+);
+// {
+//   スコア: 1.0,
+//   情報: {
+//     一致したキーワード数: 6,
+//     総キーワード数: 6
+//   }
+// }
+
+// 部分的カバレッジの例
+const result2 = await metric.measure(
+  "Python の特徴には、わかりやすい構文、動的型付け、豊富なライブラリが含まれる",
+  "Python には簡潔な構文と多くのライブラリがある",
+);
+// {
+//   スコア: 0.67,
+//   情報: {
+//     一致したキーワード数: 4,
+//     総キーワード数: 6
+//   }
+// }
+
+// 技術用語の例
+const result3 = await metric.measure(
+  "React.js のコンポーネントのライフサイクルと状態管理について述べる",
+  "React のコンポーネントにはライフサイクルメソッドがあり、状態を管理する",
+);
+// {
+//   スコア: 1.0,
+//   情報: {
+//     一致したキーワード数: 4,
+//     総キーワード数: 4
+//   }
+// }
+```
+
+
+## 特殊ケース
+
+このメトリクスはいくつかの特殊ケースを扱います:
+
+- 入力/出力が空: 両方が空ならスコアは 1.0、どちらか一方のみ空なら 0.0 を返す
+- 単語が1つ: 1つのキーワードとして扱う
+- 技術用語: 複合的な技術用語を保持（例: "React.js", "machine learning"）
+- 大文字小文字の違い: "JavaScript" は "javascript" と一致する
+- 一般的な語: 有意なキーワードに集中するため、スコアリングでは無視する
+
+## 関連
+
+- [完全性メトリクス](./completeness)
+- [内容類似度メトリクス](./content-similarity)
+- [回答の関連性メトリクス](./answer-relevancy)
+- [テキスト差分メトリクス](./textual-difference)
+- [コンテキスト関連性メトリクス](./context-relevancy)

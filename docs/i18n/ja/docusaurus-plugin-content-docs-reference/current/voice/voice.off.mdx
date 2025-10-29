@@ -1,0 +1,76 @@
+---
+title: "リファレンス: voice.off() | Voice | Mastra ドキュメント"
+description: "voice プロバイダーで利用可能な off() メソッドのドキュメント。音声イベントのリスナーを解除します。"
+---
+
+# voice.off()
+
+`off()` メソッドは、`on()` メソッドで登録したイベントリスナーを解除します。これは、リアルタイム音声機能を備えた長時間稼働のアプリケーションで、リソースのクリーンアップやメモリリークの防止に特に有用です。
+
+## 使い方の例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import chalk from "chalk";
+
+// リアルタイム音声プロバイダーを初期化する
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-4o-mini-realtime",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// リアルタイムサービスに接続する
+await voice.connect();
+
+// コールバック関数を定義する
+const writingCallback = ({ text, role }) => {
+  if (role === "user") {
+    process.stdout.write(chalk.green(text));
+  } else {
+    process.stdout.write(chalk.blue(text));
+  }
+};
+
+// イベントリスナーを登録する
+voice.on("writing", writingCallback);
+
+// 後でリスナーを削除する場合
+voice.off("writing", writingCallback);
+```
+
+
+## パラメータ
+
+<br />
+
+<PropertiesTable
+  content={[
+    {
+      name: "event",
+      type: "string",
+      description:
+        "リッスンを停止するイベント名（例: 'speaking'、'writing'、'error'）",
+      isOptional: false,
+    },
+    {
+      name: "callback",
+      type: "function",
+      description: "on() に渡したのと同一のコールバック関数",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+このメソッドは値を返しません。
+
+## 注意事項
+
+- `off()` に渡すコールバックは、`on()` に渡したものと同一の関数参照である必要があります
+- コールバックが見つからない場合、このメソッドは何も行いません
+- このメソッドは主に、イベント駆動の通信をサポートするリアルタイム音声プロバイダーで使用されます
+- イベントをサポートしていない音声プロバイダーで呼び出された場合、警告をログ出力し、何も行いません
+- 長時間稼働するアプリケーションでメモリリークを防ぐために、イベントリスナーを削除することは重要です

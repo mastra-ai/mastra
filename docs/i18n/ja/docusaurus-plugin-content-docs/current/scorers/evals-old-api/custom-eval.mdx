@@ -1,0 +1,24 @@
+---
+title: "カスタム評価の作成 | スコアラー | Mastra ドキュメント"
+description: "Mastra では独自の評価を作成できます。ここではその手順を説明します。"
+---
+
+# カスタム Eval を作成する
+
+:::info Scorers
+このドキュメントは旧式の evals API を参照しています。最新のスコアラー機能については、[Scorers](/docs/scorers/overview) をご覧ください。
+:::
+
+`Metric` クラスを拡張し、`measure` メソッドを実装することで、カスタムの eval を作成できます。これにより、スコアの算出方法や返却される情報を完全に制御できます。LLM ベースの評価の場合は、`MastraAgentJudge` クラスを拡張して、モデルの推論方法と出力の採点方法を定義します。
+
+## ネイティブ JavaScript による評価
+
+素の JavaScript/TypeScript で軽量なカスタム評価指標を作成できます。単純な文字列比較、パターンチェック、その他のルールベースのロジックに最適です。
+
+出力内で見つかった参照語の数に基づいてレスポンスにスコアを付与する、[Word Inclusion の例](/examples/evals/custom-native-javascript-eval)をご覧ください。
+
+## 判定者としての LLM による評価
+
+より複雑な評価には、LLM を用いた判定者を構築できます。これにより、事実の正確性、トーン、推論など、より繊細な基準を捉えることが可能になります。
+
+実世界の事実の正確性を評価するカスタム判定者と評価指標の作り方を一通り解説した[Real World Countries の例](/examples/evals/custom-llm-judge-eval)をご覧ください。

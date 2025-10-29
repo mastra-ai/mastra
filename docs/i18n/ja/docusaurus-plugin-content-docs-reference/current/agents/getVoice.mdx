@@ -1,0 +1,71 @@
+---
+title: "リファレンス: Agent.getVoice() | Agents | Mastra ドキュメント"
+description: "Mastra のエージェントにおける `Agent.getVoice()` メソッドのドキュメント。音声機能に使用する音声プロバイダーを取得します。"
+---
+
+# Agent.getVoice()
+
+`.getVoice()` メソッドは、エージェントに設定された音声プロバイダーを取得し、それが関数であれば実体化（解決）します。テキスト読み上げ（TTS）や音声認識（STT）などの音声機能にアクセスする際に使用されます。
+
+## 使い方の例
+
+```typescript copy
+await agent.getVoice();
+```
+
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ runtimeContext?: RuntimeContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "ランタイムコンテキストを含むオプションの設定オブジェクト。",
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "voice",
+      type: "Promise<MastraVoice>",
+      description:
+        "エージェントに設定された音声プロバイダー、または未設定の場合はデフォルトの音声プロバイダーを返す Promise。",
+    },
+  ]}
+/>
+
+## 応用的な使用例
+
+```typescript copy
+await agent.getVoice({
+  runtimeContext: new RuntimeContext(),
+});
+```
+
+
+### オプションパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      defaultValue: "new RuntimeContext()",
+      description:
+        "依存性の注入やコンテキスト情報に用いるランタイムコンテキスト。",
+    },
+  ]}
+/>
+
+## 関連項目
+
+- [エージェントに音声を追加する](/docs/agents/adding-voice)
+- [音声プロバイダー](../voice/mastra-voice)

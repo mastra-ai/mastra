@@ -1,0 +1,67 @@
+---
+title: "リファレンス: Workflow.createRunAsync() | Workflows | Mastra ドキュメント"
+description: ワークフローにおける `Workflow.createRunAsync()` メソッドのドキュメント。新規のワークフロー実行インスタンスを作成します。
+---
+
+# Workflow.createRunAsync()
+
+`.createRunAsync()` メソッドは新しいワークフロー実行インスタンスを作成し、指定した入力データでワークフローを実行できます。これは `Run` インスタンスを返す現行の API です。
+
+:::note
+
+メソッドを持つオブジェクトを返す旧式の `createRun()` メソッドについては、[Legacy Workflows](../../legacyWorkflows/createRun) セクションを参照してください。
+
+:::
+
+## 使い方の例
+
+```typescript copy
+await workflow.createRunAsync();
+```
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "ワークフロー実行のための任意のカスタム識別子",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "run",
+      type: "Run",
+      description:
+        "ワークフローを実行するために使用できる、ワークフロー実行の新しいインスタンス。",
+    },
+  ]}
+/>
+
+## 拡張的な使用例
+
+```typescript showLineNumbers copy
+const workflow = mastra.getWorkflow("workflow");
+
+const run = await workflow.createRunAsync();
+
+const result = await run.start({
+  inputData: {
+    value: 10,
+  },
+});
+```
+
+
+## 関連情報
+
+- [Run クラス](../run)
+- [ワークフローの概要](/docs/workflows/overview)

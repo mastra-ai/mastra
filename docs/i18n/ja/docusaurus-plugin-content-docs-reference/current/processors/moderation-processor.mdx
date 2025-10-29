@@ -1,0 +1,156 @@
+---
+title: "リファレンス: ModerationProcessor | Processors | Mastra ドキュメント"
+description: "Mastra の ModerationProcessor に関するドキュメント。LLM を用いて複数のカテゴリにわたる不適切なコンテンツを検出し、コンテンツのモデレーションを提供します。"
+---
+
+# ModerationProcessor
+
+`ModerationProcessor` は、LLM を用いて複数カテゴリにわたる不適切なコンテンツを検出するコンテンツモデレーションを提供し、入力処理と出力処理の双方で使用できる**ハイブリッドプロセッサ**です。このプロセッサは、設定可能なモデレーションカテゴリに基づいてメッセージを評価し、フラグ付けされたコンテンツに対する柔軟な対応戦略により、コンテンツの安全性維持を支援します。
+
+## 使い方の例
+
+```typescript copy
+import { openai } from "@ai-sdk/openai";
+import { ModerationProcessor } from "@mastra/core/processors";
+
+const processor = new ModerationProcessor({
+  model: openai("gpt-4.1-nano"),
+  threshold: 0.7,
+  strategy: "block",
+  categories: ["ヘイト", "ハラスメント", "暴力"],
+});
+```
+
+
+## コンストラクターのパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Options",
+      description: "コンテンツのモデレーション用の設定オプション",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### オプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraLanguageModel",
+      description: "モデレーションエージェントのモデル設定",
+      isOptional: false,
+    },
+    {
+      name: "categories",
+      type: "string[]",
+      description:
+        "モデレーションでチェックするカテゴリ。未指定の場合は OpenAI のデフォルトカテゴリを使用します",
+      isOptional: true,
+      default:
+        "['hate', 'hate/threatening', 'harassment', 'harassment/threatening', 'self-harm', 'self-harm/intent', 'self-harm/instructions', 'sexual', 'sexual/minors', 'violence', 'violence/graphic']",
+    },
+    {
+      name: "threshold",
+      type: "number",
+      description:
+        "フラグ付けの信頼度しきい値 (0〜1)。いずれかのカテゴリスコアがこのしきい値を超えるとフラグを立てます",
+      isOptional: true,
+      default: "0.5",
+    },
+    {
+      name: "strategy",
+      type: "'block' | 'warn' | 'filter'",
+      description:
+        "コンテンツがフラグ付けされた場合の方針: 'block' はエラーとして拒否、'warn' は警告を記録して通過させる、'filter' は該当メッセージを除去します",
+      isOptional: true,
+      default: "'block'",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      description:
+        "エージェント向けのカスタムモデレーション指示。未指定の場合は、カテゴリに基づくデフォルトの指示を使用します",
+      isOptional: true,
+      default: "undefined",
+    },
+    {
+      name: "includeScores",
+      type: "boolean",
+      description:
+        "ログに信頼度スコアを含めるかどうか。しきい値調整やデバッグに役立ちます",
+      isOptional: true,
+      default: "false",
+    },
+    {
+      name: "chunkWindow",
+      type: "number",
+      description:
+        "ストリームのチャンクをモデレートする際、文脈として含める直前チャンクの数。1 に設定すると直前の部分を含めます",
+      isOptional: true,
+      default: "0（コンテキストウィンドウなし）",
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "プロセッサ名。'moderation' に設定されます",
+      isOptional: false,
+    },
+    {
+      name: "processInput",
+      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
+      description:
+        "LLM に送信する前にコンテンツをモデレートするため、入力メッセージを処理します",
+      isOptional: false,
+    },
+    {
+      name: "processOutputStream",
+      type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>",
+      description:
+        "ストリーミング中のコンテンツをモデレートするため、ストリーミング出力の各パートを処理します",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 拡張された使用例
+
+```typescript title="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { ModerationProcessor } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "moderated-agent",
+  instructions: "あなたは役に立つアシスタントです",
+  model: openai("gpt-4o-mini"),
+  inputProcessors: [
+    new ModerationProcessor({
+      model: openai("gpt-4.1-nano"),
+      categories: ["hate", "harassment", "violence"],
+      threshold: 0.7,
+      strategy: "block",
+      instructions: "ユーザーメッセージ内の不適切なコンテンツを検出し、フラグを立てます",
+      includeScores: true,
+      chunkWindow: 1,
+    }),
+  ],
+});
+```
+
+
+## 関連
+
+- [入力プロセッサ](/docs/agents/guardrails)
+- [出力プロセッサ](/docs/agents/guardrails)

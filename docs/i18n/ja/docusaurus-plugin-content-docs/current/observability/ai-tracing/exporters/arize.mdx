@@ -1,0 +1,210 @@
+---
+title: "Arize Exporter | AI トレーシング | 可観測性 | Mastra ドキュメント"
+description: "OpenTelemetry と OpenInference を使って、AI トレースを Arize Phoenix または Arize AX に送信する"
+---
+
+# Arize エクスポーター
+
+[Arize](https://arize.com/) は、[Phoenix](https://phoenix.arize.com/)（オープンソース）および [Arize AX](https://arize.com/generative-ai/)（エンタープライズ）を通じて AI アプリケーション向けの可観測性プラットフォームを提供します。Arize エクスポーターは、OpenTelemetry と [OpenInference](https://github.com/Arize-ai/openinference/tree/main/spec) のセマンティック規約に従って AI のトレースを送信し、OpenInference をサポートする任意の OpenTelemetry プラットフォームと互換性があります。
+
+## Arize を使う場面
+
+Arize は次のような場合に最適です:
+
+- **OpenInference の標準** - AI トレースのための業界標準セマンティック規約
+- **柔軟なデプロイ** - セルフホストの Phoenix またはマネージドの Arize AX
+- **OpenTelemetry 互換性** - OTLP 互換のあらゆるプラットフォームで動作
+- **包括的な AI 可観測性** - LLM のトレース、埋め込み、リトリーバル分析
+- **オープンソースの選択肢** - Phoenix によるフル機能のローカルデプロイ
+
+## インストール
+
+```bash npm2yarn
+npm install @mastra/arize
+```
+
+
+## 設定
+
+### Phoenix のセットアップ
+
+Phoenix は、セルフホストで運用することも、Phoenix Cloud を通じて利用することもできる、オープンソースのオブザーバビリティ・プラットフォームです。
+
+#### 前提条件
+
+1. **Phoenix インスタンス**: Docker でデプロイするか、[Phoenix Cloud](https://app.phoenix.arize.com/login) に登録する
+2. **エンドポイント**: Phoenix のエンドポイント URL（末尾が `/v1/traces`）
+3. **API キー**: 認証不要のインスタンスでは任意、Phoenix Cloud では必須
+4. **環境変数**: 設定を行う
+
+```bash title=".env"
+PHOENIX_ENDPOINT=http://localhost:6006/v1/traces  # または Phoenix Cloud の URL
+PHOENIX_API_KEY=your-api-key  # ローカルインスタンスではオプション
+PHOENIX_PROJECT_NAME=mastra-service  # オプション、デフォルトは 'mastra-service'
+```
+
+
+#### 基本設定
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { ArizeExporter } from "@mastra/arize";
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      arize: {
+        serviceName: process.env.PHOENIX_PROJECT_NAME || "mastra-service",
+        exporters: [
+          new ArizeExporter({
+            endpoint: process.env.PHOENIX_ENDPOINT!,
+            apiKey: process.env.PHOENIX_API_KEY,
+            projectName: process.env.PHOENIX_PROJECT_NAME,
+          }),
+        ],
+      },
+    },
+  },
+});
+```
+
+:::info
+
+**Docker でクイックスタート**
+
+メモリ内の Phoenix インスタンスでローカルテスト：
+
+```bash
+docker run --pull=always -d --name arize-phoenix -p 6006:6006 \
+  -e PHOENIX_SQL_DATABASE_URL="sqlite:///:memory:" \
+  arizephoenix/phoenix:latest
+```
+
+`PHOENIX_ENDPOINT=http://localhost:6006/v1/traces` を設定し、Mastra エージェントを実行して [localhost:6006](http://localhost:6006) でトレースを確認してください。
+
+:::
+
+
+### Arize AX のセットアップ
+
+Arize AX は、運用中の AI システム向けに高度な機能を備えたエンタープライズ向けオブザーバビリティ・プラットフォームです。
+
+#### 前提条件
+
+1. **Arize AX アカウント**: [app.arize.com](https://app.arize.com/) で登録
+2. **スペース ID**: 組織のスペース識別子
+3. **API キー**: Arize AX の設定で生成
+4. **環境変数**: 認証情報を設定
+
+```bash title=".env"
+ARIZE_SPACE_ID=your-space-id
+ARIZE_API_KEY=your-api-key
+ARIZE_PROJECT_NAME=mastra-service  # 任意
+```
+
+
+#### 基本的なセットアップ
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { ArizeExporter } from "@mastra/arize";
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      arize: {
+        serviceName: process.env.ARIZE_PROJECT_NAME || "mastra-service",
+        exporters: [
+          new ArizeExporter({
+            apiKey: process.env.ARIZE_API_KEY!,
+            spaceId: process.env.ARIZE_SPACE_ID!,
+            projectName: process.env.ARIZE_PROJECT_NAME,
+          }),
+        ],
+      },
+    },
+  },
+});
+```
+
+
+## 設定オプション
+
+Arize エクスポーターは、OpenTelemetry の動作をきめ細かく調整するための高度な設定をサポートしています。
+
+### 完全な構成
+
+```typescript
+new ArizeExporter({
+  // Phoenix の設定
+  endpoint: "https://your-collector.example.com/v1/traces", // Phoenix に必須
+
+  // Arize AX の設定
+  spaceId: "your-space-id", // Arize AX に必須
+
+  // 共有設定
+  apiKey: "your-api-key", // 認証エンドポイントに必須
+  projectName: "mastra-service", // プロジェクト名(オプション)
+
+  // OTLP 設定(オプション)
+  headers: {
+    "x-custom-header": "value", // OTLP リクエスト用の追加ヘッダー
+  },
+
+  // デバッグとパフォーマンスチューニング
+  logLevel: "debug", // ログレベル: debug | info | warn | error
+  batchSize: 512, // スパンをエクスポートする前のバッチサイズ
+  timeout: 30000, // スパンをエクスポートする前のタイムアウト(ミリ秒)
+
+  // カスタムリソース属性
+  resourceAttributes: {
+    "deployment.environment": process.env.NODE_ENV,
+    "service.version": process.env.APP_VERSION,
+  },
+});
+```
+
+
+### バッチ処理オプション
+
+トレースのバッチ化とエクスポート方法を制御します。
+
+```typescript
+new ArizeExporter({
+  endpoint: process.env.PHOENIX_ENDPOINT!,
+  apiKey: process.env.PHOENIX_API_KEY,
+
+  // バッチ処理の設定
+  batchSize: 512, // バッチ処理するスパン数（デフォルト: 512）
+  timeout: 30000, // エクスポート前の最大待機時間（ミリ秒）（デフォルト: 30000）
+});
+```
+
+
+### リソース属性
+
+エクスポートされるすべてのスパンにカスタム属性を追加します:
+
+```typescript
+new ArizeExporter({
+  endpoint: process.env.PHOENIX_ENDPOINT!,
+  resourceAttributes: {
+    "deployment.environment": process.env.NODE_ENV,
+    "service.namespace": "production",
+    "service.instance.id": process.env.HOSTNAME,
+    "custom.attribute": "value",
+  },
+});
+```
+
+
+## OpenInference セマンティック規約
+
+このエクスポーターは、生成 AI アプリケーション向けの [OpenInference セマンティック規約](https://github.com/Arize-ai/openinference/tree/main/spec) に準拠して実装されており、さまざまなオブザーバビリティプラットフォーム間で統一されたトレース構造を提供します。
+
+## 関連情報
+
+- [AI トレースの概要](/docs/observability/ai-tracing/overview)
+- [Phoenix ドキュメント](https://docs.arize.com/phoenix)
+- [Arize AX ドキュメント](https://docs.arize.com/)
+- [OpenInference 仕様](https://github.com/Arize-ai/openinference/tree/main/spec)

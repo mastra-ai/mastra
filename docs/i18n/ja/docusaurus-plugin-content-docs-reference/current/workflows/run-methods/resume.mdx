@@ -1,0 +1,154 @@
+---
+title: "リファレンス: Run.resume() | Workflows | Mastra ドキュメント"
+description: ワークフローにおける `Run.resume()` メソッドのドキュメント。保留中のワークフローの実行を新しいデータで再開します。
+---
+
+# Run.resume()
+
+`.resume()` メソッドは、一時停止中のワークフロー実行を新しいデータで再開し、特定のステップから処理を継続できるようにします。
+
+## 使い方の例
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+const result = await run.start({ inputData: { value: "初期データ" } });
+
+if (result.status === "suspended") {
+  const resumedResults = await run.resume({
+    resumeData: { value: "再開データ" },
+  });
+}
+```
+
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "resumeData",
+      type: "z.infer<TResumeSchema>",
+      description: "一時停止されたステップを再開するためのデータ",
+      isOptional: true,
+    },
+    {
+      name: "step",
+      type: "Step<string, any, any, TResumeSchema, any, TEngineType> | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, TResumeSchema, any, TEngineType>] | string | string[]",
+      description:
+        "実行を再開するステップ。Step インスタンス、Step の配列、ステップ ID の文字列、またはステップ ID の文字列配列を指定できます。",
+      isOptional: true,
+    },
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      description: "再開時に使用するランタイムコンテキストのデータ",
+      isOptional: true,
+    },
+    {
+      name: "runCount",
+      type: "number",
+      description: "ネストされたワークフロー実行用の任意の実行回数",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description:
+        "子スパンの作成やメタデータの追加に用いる AI トレーシングコンテキスト。Mastra のトレーシングシステム使用時は自動的に注入されます。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "currentSpan",
+              type: "AISpan",
+              isOptional: true,
+              description:
+                "子スパンの作成やメタデータの追加に用いる現在の AI スパン。これを使ってカスタム子スパンを作成したり、実行中にスパン属性を更新できます。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "AI トレーシング設定のオプション。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "ルートトレーススパンに追加するメタデータ。ユーザー ID、セッション ID、フィーチャーフラグなどのカスタム属性の付与に便利です。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "outputOptions",
+      type: "OutputOptions",
+      isOptional: true,
+      description: "出力設定のオプション。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "includeState",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "結果にワークフローの実行状態を含めるかどうか。",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+      description:
+        "ステップの出力とステータスを含むワークフロー実行結果を返す Promise",
+    },
+    {
+      name: "traceId",
+      type: "string",
+      isOptional: true,
+      description:
+        "AI トレーシングが有効な場合に、この実行に関連付けられるトレース ID。ログの突き合わせや実行フローのデバッグに使用します。",
+    },
+  ]}
+/>
+
+## 拡張された使用例
+
+```typescript showLineNumbers copy
+if (result.status === "suspended") {
+  const resumedResults = await run.resume({
+    step: result.suspended[0],
+    resumeData: { value: "resume data" },
+  });
+}
+```
+
+> **注記**: サスペンドされているステップが1つだけの場合は、`step` パラメータを省略できます。ワークフローはそのステップを自動的に再開します。複数のステップがサスペンドされている場合は、再開するステップを明示的に指定する必要があります。
+
+
+## 関連情報
+
+- [Workflows の概要](/docs/workflows/overview#running-workflows)
+- [Workflow.createRunAsync()](../workflow-methods/create-run)
+- [一時停止と再開](/docs/workflows/suspend-and-resume)
+- [Human-in-the-Loop の例](/examples/workflows_legacy/human-in-the-loop)

@@ -1,0 +1,183 @@
+---
+title: "ストリーミング概要 | Streaming | Mastra ドキュメント"
+description: "Mastra のストリーミングは、エージェントとワークフローの双方からリアルタイムで逐次的に応答を返し、AI 生成コンテンツの生成過程に合わせて即時にフィードバックを提供します。"
+---
+
+# ストリーミングの概要
+
+Mastra はエージェントやワークフローからのリアルタイムかつ逐次的な応答をサポートしており、完了を待たずに生成と同時に出力を確認できます。これは、チャット、長文コンテンツ、複数ステップのワークフロー、または即時のフィードバックが重要なあらゆる場面で有用です。
+
+## はじめに
+
+Mastra のストリーミング API は、使用するモデルのバージョンに応じて動的に切り替わります:
+
+- **`.stream()`**: V2 モデル向け。**AI SDK v5**（`LanguageModelV2`）に対応。
+- **`.streamLegacy()`**: V1 モデル向け。**AI SDK v4**（`LanguageModelV1`）に対応。
+
+## エージェントでのストリーミング
+
+シンプルなプロンプトには単一の文字列を、複数のコンテキストを提供する場合は文字列の配列を、役割や会話の流れを厳密に制御したい場合は `role` と `content` を持つメッセージオブジェクトの配列を渡せます。
+
+### `Agent.stream()` の使用
+
+`textStream` は生成に合わせてレスポンスをチャンクに分割し、すべてが一度に届くのではなく段階的にストリーミング出力できるようにします。`for await` ループで `textStream` をイテレートし、各チャンクを確認します。
+
+```typescript {3,7} showLineNumbers copy
+const testAgent = mastra.getAgent("testAgent");
+
+const stream = await testAgent.stream([
+  { role: "user", content: "今日の予定を整理するのを手伝って" },
+]);
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+> 詳細は [Agent.stream()](/reference/streaming/agents/stream) をご覧ください。
+
+
+### `Agent.stream()` の出力
+
+この出力は、エージェントが生成する応答をストリーミングします。
+
+```text
+もちろんです！
+効果的に一日を整理するお手伝いをするために、もう少し情報が必要です。
+以下の質問を検討してください：
+...
+```
+
+
+### エージェントストリームのプロパティ
+
+エージェントストリームでは、さまざまなレスポンスプロパティにアクセスできます:
+
+- **`stream.textStream`**: テキストのチャンクを出力する読み取り可能なストリーム。
+- **`stream.text`**: 完全なテキストレスポンスで解決される Promise。
+- **`stream.finishReason`**: エージェントがストリーミングを終了した理由。
+- **`stream.usage`**: トークン使用量に関する情報。
+
+### AI SDK v5 の互換性
+
+AI SDK v5 では、モデルプロバイダーとして `LanguageModelV2` を使用します。AI SDK v4 のモデルを使用しているというエラーが表示される場合は、モデルのパッケージを次のメジャーバージョンにアップグレードする必要があります。
+
+AI SDK v5 と統合するには、`format` を &#39;aisdk&#39; に設定して `AISDKV5OutputStream` を取得します：
+
+```typescript {5} showLineNumbers copy
+const testAgent = mastra.getAgent("testAgent");
+
+const stream = await testAgent.stream(
+  [{ role: "user", content: "今日の予定を整理するのを手伝って" }],
+  { format: "aisdk" },
+);
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+
+### `Agent.network()` の使用
+
+`network()` メソッドは、複数のエージェントが連携して複雑なタスクを処理できるよう、ネットワークループを実行することでマルチエージェント協働を実現します。ルーティングエージェントは、会話のコンテキストに基づいて、適切なサブエージェント、ワークフロー、ツールへタスクを振り分けます。
+
+> **注**: このメソッドは実験的で、エージェント側でメモリの設定が必要です。
+
+```typescript {3,5-7} showLineNumbers copy
+const testAgent = mastra.getAgent("testAgent");
+
+const networkStream = await testAgent.network("今日の予定を整理して");
+
+for await (const chunk of networkStream) {
+  console.log(chunk);
+}
+```
+
+> 詳細は [Agent.network()](/reference/agents/network) をご覧ください。
+
+
+#### ネットワークストリームのプロパティ
+
+ネットワークストリームは実行に関する情報へアクセスできます:
+
+* **`networkStream.status`**: ワークフローの実行ステータスに解決される Promise
+* **`networkStream.result`**: 実行結果の全体に解決される Promise
+* **`networkStream.usage`**: トークン使用状況に解決される Promise
+
+```typescript {9-11} showLineNumbers copy
+const testAgent = mastra.getAgent("testAgent");
+
+const networkStream = await testAgent.network(
+  "イルカについて調査してレポートを作成",
+);
+
+for await (const chunk of networkStream) {
+  console.log(chunk);
+}
+
+console.log("最終ステータス:", await networkStream.status);
+console.log("最終結果:", await networkStream.result);
+console.log("トークン使用量:", await networkStream.usage);
+```
+
+
+## ワークフローでのストリーミング
+
+ワークフローからのストリーミングでは、増分的なテキストチャンクではなく、実行のライフサイクルを記述する構造化イベントのシーケンスが返されます。このイベントベースの形式により、`.createRunAsync()` で実行を作成すると、ワークフローの進行状況をリアルタイムに追跡し、反応できるようになります。
+
+### `Run.streamVNext()` を使う
+
+これは実験的な API です。イベントの `ReadableStream` を直接返します。
+
+```typescript {3,9} showLineNumbers copy
+const run = await testWorkflow.createRunAsync();
+
+const stream = await run.streamVNext({
+  inputData: {
+    value: "初期データ",
+  },
+});
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+> 詳細は Run.streamVNext() メソッドのドキュメントを参照してください。
+
+
+### `Run.stream()` の出力
+
+実験的な API のイベント構造ではトップレベルに `runId` と `from` が含まれており、ペイロードを掘り下げなくてもワークフローの実行を特定・追跡しやすくなります。
+
+```typescript
+// ...
+{
+  type: 'step-start',
+  runId: '1eeaf01a-d2bf-4e3f-8d1b-027795ccd3df',
+  from: 'WORKFLOW',
+  payload: {
+    stepName: 'step-1',
+    args: { value: '初期データ' },
+    stepCallId: '8e15e618-be0e-4215-a5d6-08e58c152068',
+    startedAt: 1755121710066,
+    status: '実行中'
+  }
+}
+```
+
+
+## ワークフローストリームのプロパティ
+
+ワークフローストリームでは、さまざまなレスポンスプロパティにアクセスできます:
+
+- **`stream.status`**: ワークフロー実行のステータス。
+- **`stream.result`**: ワークフロー実行の結果。
+- **`stream.usage`**: ワークフロー実行におけるトークンの総使用量。
+
+## 関連情報
+
+- [イベントのストリーミング](./events)
+- [エージェントの使用](/docs/agents/overview)
+- [ワークフローの概要](../workflows/overview)

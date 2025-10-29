@@ -1,0 +1,103 @@
+---
+title: "リファレンス: LanceDB ストレージ | Storage | Mastra ドキュメント"
+description: Mastra における LanceDB ストレージ実装のドキュメントです。
+---
+
+# LanceDB Storage
+
+LanceDB のストレージ実装は、LanceDB データベースシステムを用いて、高性能なストレージソリューションを提供します。このシステムは、従来型のデータストレージとベクトル処理の双方に優れています。
+
+## インストール
+
+```bash
+npm install @mastra/lance
+```
+
+
+## 使い方
+
+### ストレージの基本的な使い方
+
+```typescript copy showLineNumbers
+import { LanceStorage } from "@mastra/lance";
+
+// ローカルのデータベースに接続
+const storage = await LanceStorage.create("my-storage", "/path/to/db");
+
+// LanceDB のクラウドデータベースに接続
+const storage = await LanceStorage.create("my-storage", "db://host:port");
+
+// 追加のオプションを指定してクラウドデータベースに接続
+const storage = await LanceStorage.create("my-storage", "s3://bucket/db", {
+  storageOptions: { timeout: "60s" },
+});
+```
+
+
+## パラメーター
+
+### LanceStorage.create()
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "ストレージインスタンスの名前識別子",
+      isOptional: false,
+    },
+    {
+      name: "uri",
+      type: "string",
+      description:
+        "LanceDB データベースに接続するための URI。ローカルパス、クラウド DB の URL、または S3 バケットの URL を指定できます",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "ConnectionOptions",
+      description:
+        "タイムアウト設定や認証など、LanceDB の接続オプション",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 追記
+
+### スキーマ管理
+
+LanceStorage の実装は、スキーマの作成と更新を自動的に行います。Mastra のスキーマ型を Apache Arrow のデータ型にマッピングし、LanceDB の内部で使用します:
+
+- `text`, `uuid` → Utf8
+- `int`, `integer` → Int32
+- `float` → Float32
+- `jsonb`, `json` → Utf8（シリアライズされた文字列）
+- `binary` → Binary
+
+### デプロイ方法
+
+LanceDB のストレージは、さまざまなデプロイシナリオに合わせて設定できます:
+
+- **ローカル開発**: 開発・テストにはローカルのファイルパスを使用
+  ```
+  /path/to/db
+  ```
+- **クラウドデプロイ**: ホスト型の LanceDB インスタンスに接続
+  ```
+  db://host:port
+  ```
+- **S3 ストレージ**: スケーラブルなクラウドストレージとして Amazon S3 を使用
+  ```
+  s3://bucket/db
+  ```
+
+### テーブル管理
+
+LanceStorage はテーブル管理のためのメソッドを提供します:
+
+- カスタムスキーマでテーブルを作成
+- テーブルを削除
+- テーブルをクリア（全レコードを削除）
+- キーでレコードを読み込む
+- 単一レコードおよびバッチレコードを挿入

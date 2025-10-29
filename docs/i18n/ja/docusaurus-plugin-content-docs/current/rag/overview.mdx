@@ -1,0 +1,88 @@
+---
+title: "Mastra における RAG（Retrieval-Augmented Generation） | RAG | Mastra ドキュメント"
+description: Mastra における Retrieval-Augmented Generation（RAG）の概要。関連するコンテキストを用いて LLM の出力を向上させる機能について解説します。
+---
+
+# Mastra における RAG（Retrieval-Augmented Generation）
+
+Mastra の RAG は、独自のデータソースから関連するコンテキストを取り込むことで LLM の出力を強化し、精度を高め、実データに裏打ちされた回答を実現します。
+
+Mastra の RAG システムは以下を提供します:
+
+- ドキュメントの処理と埋め込みのための標準化 API
+- 複数のベクターストアに対応
+- 最適な検索を実現するチャンク分割と埋め込み戦略
+- 埋め込みおよび検索性能の可視化・トラッキング
+
+## 例
+
+RAG を実装するには、ドキュメントをチャンクに分割して処理し、埋め込みを作成してベクターデータベースに保存し、クエリ時に関連するコンテキストを取得します。
+
+```ts showLineNumbers copy
+import { embedMany } from "ai";
+import { openai } from "@ai-sdk/openai";
+import { PgVector } from "@mastra/pg";
+import { MDocument } from "@mastra/rag";
+import { z } from "zod";
+
+// 1. ドキュメントを初期化
+const doc = MDocument.fromText(`ドキュメントの本文をここに入力...`);
+
+// 2. チャンクを作成
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  size: 512,
+  overlap: 50,
+});
+
+// 3. 埋め込みを生成（各チャンクのテキストを渡す）
+const { embeddings } = await embedMany({
+  values: chunks.map((chunk) => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+});
+
+// 4. ベクターデータベースに保存
+const pgVector = new PgVector({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING,
+});
+await pgVector.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+}); // インデックス名は 'embeddings'
+
+// 5. 類似チャンクを検索
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: queryVector,
+  topK: 3,
+}); // queryVector はクエリの埋め込みベクトル
+
+console.log("類似チャンク:", results);
+```
+
+この例では、ドキュメントの初期化、チャンクの作成、埋め込みの生成と保存、そして類似コンテンツの検索という基本的な流れを示します。
+
+
+## ドキュメント処理
+
+RAG の基本的な構成要素はドキュメント処理です。ドキュメントは、さまざまな手法（再帰的分割、スライディングウィンドウ など）でチャンク化し、メタデータで拡充できます。詳しくは [チャンク化と埋め込み](./chunking-and-embedding) を参照してください。
+
+## ベクター ストレージ
+
+Mastra は、埋め込みの永続化と類似検索のために、pgvector、Pinecone、Qdrant、MongoDB など複数のベクター ストアをサポートしています。詳しくは[ベクター データベースのドキュメント](./vector-databases)をご覧ください。
+
+## 可観測性とデバッグ
+
+Mastra の RAG システムには、リトリーバル・パイプラインの最適化に役立つ可観測性機能が備わっています：
+
+- 埋め込み生成のパフォーマンスとコストを追跡
+- チャンクの品質と取得結果の関連性を監視
+- クエリの傾向とキャッシュヒット率を分析
+- メトリクスを可観測性プラットフォームにエクスポート
+
+詳細は [OTEL Tracing](/docs/observability/otel-tracing) のドキュメントをご覧ください。
+
+## 参考情報
+
+- [Chain-of-Thought RAG の例](/examples/rag/usage/cot-rag)
+- [RAG の全例](../../examples/)（多様なチャンク分割戦略、埋め込みモデル、ベクトルストアを含む）

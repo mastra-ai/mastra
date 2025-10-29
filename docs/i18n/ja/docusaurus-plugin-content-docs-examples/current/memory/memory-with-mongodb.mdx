@@ -1,0 +1,154 @@
+---
+title: "例: MongoDB を用いたメモリ | Memory | Mastra Docs"
+description: Mastra のメモリシステムを MongoDB のストレージとベクター機能で利用する方法の例。
+---
+
+# MongoDB を使ったメモリー
+
+この例では、Mastra のメモリーシステムで MongoDB をストレージのバックエンドとして使う方法を紹介します。
+
+## 前提条件
+
+この例では `openai` モデルを使用し、MongoDB データベースが必要です。`.env` ファイルに次を追加してください：
+
+```bash title=".env" copy
+OPENAI_API_KEY=<your-api-key>
+MONGODB_URI=<your-connection-string>
+MONGODB_DB_NAME=<your-db-name>
+```
+
+次のパッケージをインストールします：
+
+```bash copy
+npm install @mastra/mongodb
+```
+
+
+## エージェントにメモリを追加する
+
+エージェントに MongoDB のメモリを追加するには、`Memory` クラスを使用し、`MongoDBStore` で新しい `storage` キーを作成します。設定は、ローカルおよびリモートの MongoDB インスタンスの両方をサポートしています。
+
+```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { MongoDBStore } from "@mastra/mongodb";
+
+export const mongodbAgent = new Agent({
+  name: "mongodb-agent",
+  instructions:
+    "あなたは過去のやり取りから記憶を自動的に呼び出すことができるAIエージェントです。",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new MongoDBStore({
+      url: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    options: {
+      threads: {
+        generateTitle: true,
+      },
+    },
+  }),
+});
+```
+
+
+## MongoDB でのベクトル埋め込み
+
+Embedding は数値ベクトルで、memory の `semanticRecall` によって（キーワードではなく）意味に基づいて関連メッセージを取得するために使用されます。
+
+> 注: MongoDB Vector データベースを利用するには、MongoDB Atlas 上でホストされたデプロイメントを使用する必要があります。
+
+このセットアップでは、ローカルの埋め込みモデルである FastEmbed を使ってベクトル埋め込みを生成します。
+使用するには、`@mastra/fastembed` をインストールします:
+
+```bash copy
+npm install @mastra/fastembed
+```
+
+次の内容をエージェントに追加してください：
+
+```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
+import { fastembed } from "@mastra/fastembed";
+
+export const mongodbAgent = new Agent({
+  name: "mongodb-agent",
+  instructions:
+    "あなたは過去のやり取りから記憶を自動的に呼び出すことができるAIエージェントです。",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new MongoDBStore({
+      url: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    vector: new MongoDBVector({
+      uri: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+      threads: {
+        generateTitle: true, // スレッドタイトルを自動生成します
+      },
+    },
+  }),
+});
+```
+
+
+## 使用例
+
+このリクエストの参照対象を絞り込むには `memoryOptions` を使用します。`lastMessages: 5` を設定して直近メッセージに基づく参照を制限し、`semanticRecall` を使って、各一致の前後の文脈として `messageRange: 2` の隣接メッセージを含めながら、最も関連性の高い `topK: 3` 件のメッセージを取得します。
+
+```typescript title="src/test-mongodb-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("mongodbAgent");
+
+const message = await agent.stream("私の名前はMastraです", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("私の名前は何ですか?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+  memoryOptions: {
+    lastMessages: 5,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+
+## 関連項目
+
+- [エージェントの呼び出し](/docs/agents/overview)

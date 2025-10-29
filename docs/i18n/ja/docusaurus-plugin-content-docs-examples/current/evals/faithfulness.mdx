@@ -1,0 +1,192 @@
+---
+title: "例：Faithfulness 評価 | Evals | Mastra Docs"
+description: コンテキストに照らして、応答の事実的正確性を評価するために Faithfulness 指標を用いる例。
+---
+
+# 忠実性の評価
+
+:::note
+Scorers API は現在ベータ版です。継続的に改良を進めており、皆さまからのフィードバックをお待ちしています。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までお寄せください。
+:::
+
+`FaithfulnessMetric` を使用すると、応答が提供されたコンテキストに裏付けられているかを評価できます。メトリックは `query` と `response` を受け取り、スコアと、その理由を含む `info` オブジェクトを返します。
+
+## インストール
+
+```bash copy
+npm install @mastra/evals
+```
+
+
+## 高忠実度の例
+
+この例では、応答はコンテキストと緊密に合致しています。出力内の各記述は検証可能で、提供されたコンテキストの各エントリに裏付けられており、高いスコアにつながります。
+
+```typescript title="src/example-high-faithfulness.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { FaithfulnessMetric } from "@mastra/evals/llm";
+
+const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Tesla Model 3は2017年に発売されました。",
+    "航続距離は最大358マイルです。",
+    "ベースモデルは0-60 mphを5.8秒で加速します。",
+  ],
+});
+
+const query = "Tesla Model 3について教えてください。";
+const response =
+  "Tesla Model 3は2017年に発売されました。1回の充電で最大358マイル走行でき、ベースバージョンは0から60 mphまで5.8秒で加速します。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 高い忠実度の出力
+
+この出力は、示されているすべての情報が文脈に直接たどれるため、スコア1となります。欠落や矛盾はありません。
+
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'スコアが1であるのは、出力中のすべての主張が提供されたコンテキストによって裏付けられているためです。'
+  }
+}
+```
+
+
+## 忠実性が混在する例
+
+この例では、サポートされている主張とサポートされていない主張が混在しています。回答の一部は文脈によって裏付けられていますが、他の部分はソース資料にない新たな情報を持ち込みます。
+
+```typescript title="src/example-mixed-faithfulness.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { FaithfulnessMetric } from "@mastra/evals/llm";
+
+const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
+  context: [
+    "PythonはGuido van Rossumによって作成されました。",
+    "最初のバージョンは1991年にリリースされました。",
+    "Pythonはコードの可読性を重視しています。",
+  ],
+});
+
+const query = "Pythonについて教えてください。";
+const response =
+  "PythonはGuido van Rossumによって作成され、1991年にリリースされました。現在最も人気のあるプログラミング言語であり、世界中の数百万人の開発者に使用されています。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 忠実性が混在した出力
+
+検証可能なのが応答の一部にとどまるため、スコアは低くなります。いくつかの主張は文脈と一致する一方、他は未確認または範囲外であり、全体としての忠実性を損なっています。
+
+```typescript
+{
+  score: 0.5,
+  info: {
+    reason: "スコアが0.5であるのは、文脈で裏付けられる主張が2つ（「PythonはGuido van Rossumによって作られた」「Pythonは1991年にリリースされた」）ある一方で、Pythonの人気や利用状況に関する残りの2つの主張は文脈に記載がなく検証できないためです。"
+  }
+}
+```
+
+
+## 忠実性の低い例
+
+この例では、回答が文脈と真っ向から矛盾しています。どの主張にも根拠がなく、いくつかは提示された事実と食い違っています。
+
+```typescript title="src/example-low-faithfulness.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { FaithfulnessMetric } from "@mastra/evals/llm";
+
+const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
+  context: [
+    "火星は太陽から4番目の惑星です。",
+    "主に二酸化炭素からなる薄い大気を持っています。",
+    "火星の周りには2つの小さな衛星、フォボスとダイモスが周回しています。",
+  ],
+});
+
+const query = "火星について何がわかっていますか?";
+const response =
+  "火星は太陽から3番目の惑星です。酸素と窒素が豊富な厚い大気を持ち、3つの大きな衛星が周回しています。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 忠実度の低い出力
+
+各主張が不正確、または文脈と矛盾しているため、スコアは0になります。
+
+```typescript
+{
+  score: 0,
+  info: {
+    reason: "スコアが0なのは、出力内のすべての主張が提示されたコンテキストと矛盾しているためです。出力は火星が太陽から3番目の惑星だと述べていますが、コンテキストでは明確に4番目だとしています。さらに、火星には酸素と窒素に富む厚い大気があると主張していますが、これは主に二酸化炭素で構成された薄い大気だというコンテキストの記述と矛盾します。最後に、出力は火星が3つの大きな衛星に周回されていると述べていますが、コンテキストはフォボスとダイモスという2つの小さな衛星しかないと明記しています。以上より、裏付けられる主張はなく、スコアは0となります。"
+  }
+}
+```
+
+
+## メトリックの設定
+
+評価の事実上の根拠となる資料を定義する `context` 配列を指定して、`FaithfulnessMetric` インスタンスを作成できます。最大スコアを制御するために、`scale` などのオプションパラメータを設定することも可能です。
+
+```typescript showLineNumbers copy
+const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
+  context: [""],
+  scale: 1,
+});
+```
+
+> 設定オプションの一覧は、[FaithfulnessMetric](/reference/evals/faithfulness) を参照してください。
+
+
+## 結果の理解
+
+`FaithfulnessMetric` は次の形式で結果を返します:
+
+```typescript
+{
+  score: number,
+  info: {
+    reason: 文字列
+  }
+}
+```
+
+
+### 忠実性スコア
+
+0～1の範囲の忠実性スコア:
+
+- **1.0**: すべての記述が正確で、文脈によって直接裏付けられている。
+- **0.7–0.9**: ほとんどの記述は正しいが、軽微な付加や省略がある。
+- **0.4–0.6**: 一部の記述は裏付けられているが、他は検証できない。
+- **0.1–0.3**: 内容の大半が不正確、または裏付けがない。
+- **0.0**: すべての記述が誤り、または文脈と矛盾している。
+
+### 忠実性に関する情報
+
+スコアの説明。以下の詳細を含みます:
+
+- どの主張が検証されたか、または反証されたか
+- 事実との整合度
+- 欠落や捏造された詳細に関する所見
+- 応答全体の信頼性の要約
+
+<GithubLink
+  outdated={true}
+  marginTop="mt-16"
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/faithfulness"
+/>

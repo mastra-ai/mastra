@@ -1,0 +1,177 @@
+---
+title: "例: テキスト差分評価 | Evals | Mastra Docs"
+description: 文字列間の類似性を、テキストの差分や変更を分析する Textual Difference 指標で評価する例。
+---
+
+# テキスト差分評価
+
+:::note
+Scorers API は現在ベータ版です。改良を継続しており、皆さまのフィードバックを歓迎します。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までお寄せください。
+:::
+
+`TextualDifferenceMetric` を使用すると、シーケンス差分や編集操作を解析して、2 つのテキスト文字列の類似度を評価できます。メトリクスは `query` と `response` を受け取り、スコアと、confidence・ratio・変更数・長さ差を含む `info` オブジェクトを返します。
+
+## インストール
+
+```bash copy
+npm install @mastra/evals
+```
+
+
+## 差分なしの例
+
+この例では、テキストが完全に同一です。このメトリクスは、満点を付与し、変更がないことを示して、完全な一致を認識します。
+
+```typescript title="src/example-no-differences.ts" showLineNumbers copy
+import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+
+const metric = new TextualDifferenceMetric();
+
+const query = "素早い茶色のキツネが怠惰な犬を飛び越える。";
+const response = "素早い茶色のキツネが怠惰な犬を飛び越える。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 差分はありません
+
+このメトリクスは高いスコアを返し、テキストが同一であることを示しています。詳細情報でも変更はゼロで、長さの差もないことが確認できます。
+
+```typescript
+{
+  score: 1,
+  info: {
+    confidence: 1,
+    ratio: 1,
+    changes: 0,
+    lengthDiff: 0
+  }
+}
+```
+
+
+## 些細な差異の例
+
+この例では、テキストにわずかな違いがあります。指標はこうした小さな差異を検出し、類似度は中程度というスコアを返します。
+
+```typescript title="src/example-minor-differences.ts" showLineNumbers copy
+import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+
+const metric = new TextualDifferenceMetric();
+
+const query = "こんにちは世界!お元気ですか?";
+const response = "こんにちは!調子はどうですか?";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 軽微な差分の出力
+
+このメトリクスは、テキスト間の小さな差分を反映し、中程度のスコアを返します。詳細情報には、変更数と確認された長さの差が含まれます。
+
+```typescript
+{
+  score: 0.5925925925925926,
+  info: {
+    confidence: 0.8620689655172413,
+    ratio: 0.5925925925925926,
+    changes: 5,
+    lengthDiff: 0.13793103448275862
+  }
+}
+```
+
+
+## 大きな差異の例
+
+この例では、テキストの内容が大きく異なっています。メトリクスは大幅な変更を検出し、低い類似度スコアを返します。
+
+```typescript title="src/example-major-differences.ts" showLineNumbers copy
+import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+
+const metric = new TextualDifferenceMetric();
+
+const query = "Pythonは高水準プログラミング言語です。";
+const response = "JavaScriptはWeb開発に使用されます";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 大きな差分の出力
+
+テキスト間に大きな違いがあるため、このメトリクスは低いスコアになります。詳細情報には多数の変更点と、長さの大きな違いが示されています。
+
+```typescript
+{
+  score: 0.3170731707317073,
+  info: {
+    confidence: 0.8636363636363636,
+    ratio: 0.3170731707317073,
+    changes: 8,
+    lengthDiff: 0.13636363636363635
+  }
+}
+```
+
+
+## メトリックの設定
+
+`TextualDifferenceMetric` インスタンスはデフォルト設定で作成できます。追加の設定は不要です。
+
+```typescript
+const metric = new TextualDifferenceMetric();
+```
+
+> 設定オプションの全リストは [TextualDifferenceMetric](/reference/evals/textual-difference) を参照してください。
+
+
+## 結果の理解
+
+`TextualDifferenceMetric` は次の形式の結果を返します：
+
+```typescript
+{
+  score: 数値,
+  info: {
+    confidence: 数値,
+    ratio: 数値,
+    changes: 数値,
+    lengthDiff: 数値
+  }
+}
+```
+
+
+### テキスト差分スコア
+
+0～1 の範囲のテキスト差分スコア:
+
+- **1.0**: テキストが完全に一致 ― 差分なし。
+- **0.7–0.9**: 軽微な差分 ― わずかな修正が必要。
+- **0.4–0.6**: 中程度の差分 ― 目立つ修正が必要。
+- **0.1–0.3**: 大きな差分 ― 大幅な修正が必要。
+- **0.0**: テキストが完全に異なる。
+
+### 文字差分情報
+
+スコアの説明（以下の詳細を含む）:
+
+- テキスト長の比較に基づく信頼度
+- シーケンス照合によって得られる類似度比
+- テキストを一致させるために必要な編集操作の数
+- テキスト長の正規化済み差分
+
+<GithubLink
+  outdated={true}
+  marginTop="mt-16"
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/textual-difference"
+/>

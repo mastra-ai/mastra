@@ -1,0 +1,185 @@
+---
+title: "リファレンス: CompletenessMetric | 評価 | Mastra ドキュメント"
+description: Mastra における Completeness Metric のドキュメント。入力に含まれる主要な要素を、LLM の出力がどれだけ網羅できているかを評価します。
+---
+
+# CompletenessMetric
+
+:::info スコアラー
+このドキュメントはレガシーの evals API を参照しています。最新のスコアラー機能については [Scorers](/docs/scorers/overview) をご覧ください。
+:::
+
+`CompletenessMetric` クラスは、入力に含まれる主要要素を LLM の出力がどの程度網羅しているかを評価します。名詞、動詞、トピック、用語を分析して網羅状況を判定し、詳細な完全性スコアを提供します。
+
+## 基本的な使い方
+
+```typescript
+import { CompletenessMetric } from "@mastra/evals/nlp";
+
+const metric = new CompletenessMetric();
+
+const result = await metric.measure(
+  "太陽光、水、二酸化炭素を使って、植物の光合成がどのように働くかを説明してください。",
+  "植物は光合成によって、太陽光を利用し、水と二酸化炭素からグルコースを生成します。",
+);
+
+console.log(result.score); // 0〜1の範囲のカバレッジスコア
+console.log(result.info); // 要素のカバレッジに関する詳細な指標を含むオブジェクト
+```
+
+
+## measure() のパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "網羅すべき主要要素を含む元テキスト",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "完全性を評価する対象となる LLM の応答",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返却値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description:
+        "出力でカバーされた入力要素の比率を示す完全性スコア（0〜1）",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "要素カバレッジに関する詳細な指標を含むオブジェクト",
+      properties: [
+        {
+          type: "string[]",
+          parameters: [
+            {
+              name: "inputElements",
+              type: "string[]",
+              description: "入力から抽出された主要要素の配列",
+            },
+          ],
+        },
+        {
+          type: "string[]",
+          parameters: [
+            {
+              name: "outputElements",
+              type: "string[]",
+              description: "出力で確認された主要要素の配列",
+            },
+          ],
+        },
+        {
+          type: "string[]",
+          parameters: [
+            {
+              name: "missingElements",
+              type: "string[]",
+              description: "出力で見つからなかった入力要素の配列",
+            },
+          ],
+        },
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "elementCounts",
+              type: "object",
+              description: "入力および出力における要素数",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 要素抽出の詳細
+
+このメトリックは複数の種類の要素を抽出・分析します:
+
+- 名詞: 主要なオブジェクト、概念、エンティティ
+- 動詞: 動作および状態（不定形に変換）
+- トピック: 主題およびテーマ
+- 用語: 重要な単語
+
+抽出プロセスには以下が含まれます:
+
+- テキストの正規化（ダイアクリティクスの除去、小文字化）
+- camelCase の分割
+- 単語境界の処理
+- 短い単語（3文字以下）の特別な取り扱い
+- 要素の重複排除
+
+## スコアリングの詳細
+
+この指標は、言語要素の網羅状況の分析により、完全性を評価します。
+
+### スコアリングプロセス
+
+1. 主要要素を抽出:
+   - 名詞と固有表現
+   - 動詞（アクション動詞）
+   - トピック固有の用語
+   - 正規化された語形
+
+2. 入力要素のカバレッジを算出:
+   - 短い用語（≤3文字）は完全一致
+   - 長い用語は大幅な重なり（>60%）
+
+最終スコア: `(covered_elements / total_input_elements) * scale`
+
+### スコアの解釈
+
+（0からのスケール、既定は0～1）
+
+- 1.0: 完全に網羅 - すべての入力要素を含む
+- 0.7～0.9: 高い網羅 - 主要な要素のほとんどを含む
+- 0.4～0.6: 部分的に網羅 - 主要な要素の一部を含む
+- 0.1～0.3: 低い網羅 - 主要な要素の大半が欠けている
+- 0.0: 網羅なし - 出力に入力要素がまったく含まれていない
+
+## 例と分析
+
+```typescript
+import { CompletenessMetric } from "@mastra/evals/nlp";
+
+const metric = new CompletenessMetric();
+
+const result = await metric.measure(
+  "素早い茶色のキツネがのんびりした犬を飛び越える",
+  "茶色のキツネが犬を飛び越えた",
+);
+
+// 出力例:
+// {
+//   score: 0.75,
+//   info: {
+//     inputElements: ["quick", "brown", "fox", "jump", "lazy", "dog"],
+//     outputElements: ["brown", "fox", "jump", "dog"],
+//     missingElements: ["quick", "lazy"],
+//     elementCounts: { input: 6, output: 4 }
+//   }
+// }
+```
+
+
+## 関連項目
+
+- [回答関連性メトリクス](./answer-relevancy)
+- [コンテンツ類似度メトリクス](./content-similarity)
+- [テキスト差分メトリクス](./textual-difference)
+- [キーワード網羅率メトリクス](./keyword-coverage)

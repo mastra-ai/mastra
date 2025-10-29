@@ -1,0 +1,308 @@
+---
+title: "エージェントに音声機能を追加する | Agents | Mastra Docs"
+---
+
+# エージェントに音声機能を追加する
+
+Mastra のエージェントは音声機能を備えることで、応答を音声で話したり、ユーザーの入力を聞き取ったりできます。エージェントは単一の音声プロバイダーを使用するように設定することも、用途に応じて複数のプロバイダーを使い分けることもできます。
+
+## 基本的な使い方
+
+エージェントに音声機能を追加する最も簡単な方法は、発話と聞き取りの両方に同じプロバイダーを使用することです。
+
+```typescript
+import { createReadStream } from "fs";
+import path from "path";
+import { Agent } from "@mastra/core/agent";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { openai } from "@ai-sdk/openai";
+
+// デフォルト設定で音声プロバイダーを初期化
+const voice = new OpenAIVoice();
+
+// 音声機能を持つエージェントを作成
+export const agent = new Agent({
+  name: "Agent",
+  instructions: `あなたはSTTとTTSの両方の機能を持つ親切なアシスタントです。`,
+  model: openai("gpt-4o"),
+  voice,
+});
+
+// エージェントは音声を使用してやり取りできるようになりました
+const audioStream = await agent.voice.speak("こんにちは、私はあなたのAIアシスタントです!", {
+  filetype: "m4a",
+});
+
+playAudio(audioStream!);
+
+try {
+  const transcription = await agent.voice.listen(audioStream);
+  console.log(transcription);
+} catch (error) {
+  console.error("音声の文字起こし中にエラーが発生しました:", error);
+}
+```
+
+
+## オーディオストリームの扱い方
+
+`speak()` と `listen()` メソッドは、Node.js のストリームで動作します。音声ファイルを保存・読み込みする方法は次のとおりです：
+
+### 音声出力の保存
+
+`speak` メソッドは、ファイルやスピーカーへ出力をパイプできるストリームを返します。
+
+```typescript
+import { createWriteStream } from "fs";
+import path from "path";
+
+// 音声を生成してファイルに保存する
+const audio = await agent.voice.speak("Hello, World!");
+const filePath = path.join(process.cwd(), "agent.mp3");
+const writer = createWriteStream(filePath);
+
+audio.pipe(writer);
+
+await new Promise<void>((resolve, reject) => {
+  writer.on("finish", () => resolve());
+  writer.on("error", reject);
+});
+```
+
+
+### 音声入力の文字起こし
+
+`listen` メソッドは、マイクまたはファイルからの音声データのストリームを受け取ることを想定しています。
+
+```typescript
+import { createReadStream } from "fs";
+import path from "path";
+
+// 音声ファイルを読み込み、文字起こしする
+const audioFilePath = path.join(process.cwd(), "/agent.m4a");
+const audioStream = createReadStream(audioFilePath);
+
+try {
+  console.log("音声ファイルを文字起こし中…");
+  const transcription = await agent.voice.listen(audioStream, {
+    filetype: "m4a",
+  });
+  console.log("文字起こし:", transcription);
+} catch (error) {
+  console.error("音声の文字起こし中にエラーが発生しました:", error);
+}
+```
+
+
+## 音声対話（Speech-to-Speech）
+
+よりダイナミックでインタラクティブな音声体験のために、Speech-to-Speech 機能に対応したリアルタイム音声プロバイダーを利用できます。
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { getMicrophoneStream } from "@mastra/node-audio";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { search, calculate } from "../tools";
+
+// リアルタイム音声プロバイダーを初期化
+const voice = new OpenAIRealtimeVoice({
+  apiKey: process.env.OPENAI_API_KEY,
+  model: "gpt-4o-mini-realtime",
+  speaker: "alloy",
+});
+
+// 音声対話（スピーチ・ツー・スピーチ）機能を備えたエージェントを作成
+export const agent = new Agent({
+  name: "Agent",
+  instructions: `あなたは音声対話（スピーチ・ツー・スピーチ）機能を備えた頼れるアシスタントです。`,
+  model: openai("gpt-4o"),
+  tools: {
+    // Agent に設定したツールは音声プロバイダーへ渡されます
+    search,
+    calculate,
+  },
+  voice,
+});
+
+// WebSocket 接続を確立
+await agent.voice.connect();
+
+// 会話を開始
+agent.voice.speak("こんにちは、AIアシスタントです！");
+
+// マイク入力をストリーミング
+const microphoneStream = getMicrophoneStream();
+agent.voice.send(microphoneStream);
+
+// 会話が終了したら
+agent.voice.close();
+```
+
+
+### イベントシステム
+
+リアルタイム音声プロバイダーは、監視できる複数のイベントを発行します：
+
+```typescript
+// 音声プロバイダーから送られてくる音声データをリッスンする
+agent.voice.on("speaking", ({ audio }) => {
+  // audio には ReadableStream または Int16Array の音声データが含まれる
+});
+
+// 音声プロバイダーとユーザーの両方から送られてくる書き起こしテキストをリッスンする
+agent.voice.on("writing", ({ text, role }) => {
+  console.log(`${role} が言いました: ${text}`);
+});
+
+// エラーをリッスンする
+agent.voice.on("error", (error) => {
+  console.error("音声のエラー:", error);
+});
+```
+
+
+## 例
+
+### エンドツーエンドの音声対話
+
+この例では、2つのエージェント間の音声対話を示します。複数のプロバイダーを利用するハイブリッド音声エージェントが質問を音声で発し、その音声がファイルとして保存されます。Unified 音声エージェントがそのファイルを再生して内容を認識・処理し、応答を生成して音声で返します。両方の音声出力は `audio` ディレクトリに保存されます。
+
+作成されるファイルは次のとおりです:
+
+* **hybrid-question.mp3** – ハイブリッドエージェントが発した質問。
+* **unified-response.mp3** – Unified エージェントが発した応答。
+
+```typescript title="src/test-voice-agents.ts" showLineNumbers copy
+import "dotenv/config";
+
+import path from "path";
+import { createReadStream } from "fs";
+import { Agent } from "@mastra/core/agent";
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { Mastra } from "@mastra/core/mastra";
+import { openai } from "@ai-sdk/openai";
+
+// オーディオストリームをaudioディレクトリ内のファイルに保存します。ディレクトリが存在しない場合は作成します。
+export const saveAudioToFile = async (
+  audio: NodeJS.ReadableStream,
+  filename: string,
+): Promise<void> => {
+  const audioDir = path.join(process.cwd(), "audio");
+  const filePath = path.join(audioDir, filename);
+
+  await fs.promises.mkdir(audioDir, { recursive: true });
+
+  const writer = createWriteStream(filePath);
+  audio.pipe(writer);
+  return new Promise((resolve, reject) => {
+    writer.on("finish", resolve);
+    writer.on("error", reject);
+  });
+};
+
+// オーディオストリームをaudioディレクトリ内のファイルに保存します。ディレクトリが存在しない場合は作成します。
+export const convertToText = async (
+  input: string | NodeJS.ReadableStream,
+): Promise<string> => {
+  if (typeof input === "string") {
+    return input;
+  }
+
+  const chunks: Buffer[] = [];
+  return new Promise((resolve, reject) => {
+    input.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    input.on("error", reject);
+    input.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+  });
+};
+
+export const hybridVoiceAgent = new Agent({
+  name: "hybrid-voice-agent",
+  model: openai("gpt-4o"),
+  instructions: "異なるプロバイダーを使用して音声の入出力ができます。",
+  voice: new CompositeVoice({
+    input: new OpenAIVoice(),
+    output: new OpenAIVoice(),
+  }),
+});
+
+export const unifiedVoiceAgent = new Agent({
+  name: "unified-voice-agent",
+  instructions: "音声認識と音声合成の両方の機能を持つエージェントです。",
+  model: openai("gpt-4o"),
+  voice: new OpenAIVoice(),
+});
+
+export const mastra = new Mastra({
+  // ...
+  agents: { hybridVoiceAgent, unifiedVoiceAgent },
+});
+
+const hybridVoiceAgent = mastra.getAgent("hybridVoiceAgent");
+const unifiedVoiceAgent = mastra.getAgent("unifiedVoiceAgent");
+
+const question = "人生の意味を一文で教えてください。";
+
+const hybridSpoken = await hybridVoiceAgent.voice.speak(question);
+
+await saveAudioToFile(hybridSpoken!, "hybrid-question.mp3");
+
+const audioStream = createReadStream(
+  path.join(process.cwd(), "audio", "hybrid-question.mp3"),
+);
+const unifiedHeard = await unifiedVoiceAgent.voice.listen(audioStream);
+
+const inputText = await convertToText(unifiedHeard!);
+
+const unifiedResponse = await unifiedVoiceAgent.generate(inputText);
+const unifiedSpoken = await unifiedVoiceAgent.voice.speak(unifiedResponse.text);
+
+await saveAudioToFile(unifiedSpoken!, "unified-response.mp3");
+```
+
+
+### 複数のプロバイダーを使用する
+
+柔軟性を高めるために、CompositeVoice クラスを使うと、発話と聴取で別々のプロバイダーを利用できます。
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+import { openai } from "@ai-sdk/openai";
+
+export const agent = new Agent({
+  name: "Agent",
+  instructions: `あなたはSTTとTTSの両方の機能を持つ便利なアシスタントです。`,
+  model: openai("gpt-4o"),
+
+  // 音声入力にOpenAI、音声出力にPlayAIを使用した複合音声を作成
+  voice: new CompositeVoice({
+    input: new OpenAIVoice(),
+    output: new PlayAIVoice(),
+  }),
+});
+```
+
+
+## 対応音声プロバイダー
+
+Mastra は、テキスト読み上げ（TTS）および音声認識（STT）機能に対応する複数の音声プロバイダーをサポートしています:
+
+| Provider        | Package                         | Features                  | Reference                                         |
+| --------------- | ------------------------------- | ------------------------- | ------------------------------------------------- |
+| OpenAI          | `@mastra/voice-openai`          | TTS, STT                  | [Documentation](/reference/voice/openai)          |
+| OpenAI Realtime | `@mastra/voice-openai-realtime` | リアルタイム音声対話       | [Documentation](/reference/voice/openai-realtime) |
+| ElevenLabs      | `@mastra/voice-elevenlabs`      | 高品質な TTS               | [Documentation](/reference/voice/elevenlabs)      |
+| PlayAI          | `@mastra/voice-playai`          | TTS                       | [Documentation](/reference/voice/playai)          |
+| Google          | `@mastra/voice-google`          | TTS, STT                  | [Documentation](/reference/voice/google)          |
+| Deepgram        | `@mastra/voice-deepgram`        | STT                       | [Documentation](/reference/voice/deepgram)        |
+| Murf            | `@mastra/voice-murf`            | TTS                       | [Documentation](/reference/voice/murf)            |
+| Speechify       | `@mastra/voice-speechify`       | TTS                       | [Documentation](/reference/voice/speechify)       |
+| Sarvam          | `@mastra/voice-sarvam`          | TTS, STT                  | [Documentation](/reference/voice/sarvam)          |
+| Azure           | `@mastra/voice-azure`           | TTS, STT                  | [Documentation](/reference/voice/mastra-voice)    |
+| Cloudflare      | `@mastra/voice-cloudflare`      | TTS                       | [Documentation](/reference/voice/mastra-voice)    |
+
+音声機能の詳細は、[Voice API リファレンス](/reference/voice/mastra-voice)をご参照ください。

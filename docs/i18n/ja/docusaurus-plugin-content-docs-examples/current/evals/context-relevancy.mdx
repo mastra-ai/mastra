@@ -1,0 +1,193 @@
+---
+title: "例：コンテキスト関連性評価 | Evals | Mastra Docs"
+description: クエリに対してコンテキスト情報がどの程度関連しているかを評価するために、Context Relevancy 指標を用いる例。
+---
+
+# コンテキスト関連性の評価
+
+:::note
+Scorers API は現在ベータ版です。改善に鋭意取り組んでおり、皆さまのフィードバックをお待ちしています。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までお寄せください。
+:::
+
+`ContextRelevancyMetric` を使用すると、取得したコンテキストが元のクエリにどれほど適合しているかを評価できます。このメトリクスは `query` と `response` を受け取り、理由を含む `info` オブジェクトとスコアを返します。
+
+## インストール
+
+```bash copy
+npm install @mastra/evals
+```
+
+
+## 関連性が高い例
+
+この例では、回答はクエリに直接関係するコンテキストだけを使用しています。すべてのコンテキスト項目が回答を支えており、結果として関連性スコアは満点となります。
+
+```typescript title="src/example-high-context-relevancy.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextRelevancyMetric } from "@mastra/evals/llm";
+
+const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
+  context: [
+    "アインシュタインは光電効果の発見でノーベル賞を受賞した。",
+    "彼は1905年に相対性理論を発表した。",
+    "彼の業績は現代物理学に革命をもたらした。",
+  ],
+});
+
+const query = "アインシュタインの業績には何がありますか?";
+const response =
+  "アインシュタインは光電効果の発見でノーベル賞を受賞し、画期的な相対性理論を発表した。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 関連性の高い出力
+
+すべてのコンテキスト文が無関係な情報を含めずにクエリへの回答に直接寄与しているため、この出力は満点となります。
+
+```typescript
+{
+  score: 1,
+  info: {
+    reason: "スコアが1なのは、検索で得られたコンテキストがアインシュタインの重要な業績を強調し、入力に直接対応していて、完全に関連しているためです。"
+  }
+}
+```
+
+
+## 関連性が混在する例
+
+この例では、応答が一部では関連するコンテキスト項目を用いているものの、無関係または有用性の低い情報も含まれています。その結果、全体の関連性スコアが低下します。
+
+```typescript title="src/example-mixed-context-relevancy.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextRelevancyMetric } from "@mastra/evals/llm";
+
+const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
+  context: [
+    "日食は月が太陽を遮ることで起こります。",
+    "日食の際、月は地球と太陽の間に入ります。",
+    "月は夜に見えます。",
+    "月には大気がありません。",
+  ],
+});
+
+const query = "日食の原因は何ですか?";
+const response =
+  "日食は月が地球と太陽の間に入り、太陽光を遮ることで起こります。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 関連性が混在した出力
+
+この出力は、日食の仕組みに関する関連情報を含んでいる一方で、全体的な関連性を損なう無関係な事実も含まれているため、評価は中程度にとどまります。
+
+```typescript
+{
+  score: 0.5,
+  info: {
+    reason: "スコアが0.5であるのは、取得コンテキストに「月は夜に見える」や「月には大気がない」といった入力に無関係な記述が含まれており、日食の原因の説明になっていないためです。関連性のある情報が不足していることから、コンテキストの関連性スコアが大きく低下しています。"
+  }
+}
+```
+
+
+## 関連性が低い例
+
+この例では、文脈の大半がクエリと無関係です。関連する項目は1つだけのため、関連性スコアは低くなります。
+
+```typescript title="src/example-low-context-relevancy.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextRelevancyMetric } from "@mastra/evals/llm";
+
+const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
+  context: [
+    "グレートバリアリーフはオーストラリアにあります。",
+    "サンゴ礁は生存するために温かい水を必要とします。",
+    "海洋生物はサンゴ礁に依存しています。",
+    "オーストラリアの首都はキャンベラです。",
+  ],
+});
+
+const query = "オーストラリアの首都は何ですか?";
+const response = "オーストラリアの首都はキャンベラです。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 関連性の低い出力
+
+クエリに関連するコンテキスト項目が1つしかないため、出力は低評価となります。残りの項目は無関係な情報を含み、回答の裏付けには役立ちません。
+
+```typescript
+{
+  score: 0.25,
+  info: {
+    reason: "スコアが0.25であるのは、検索コンテキストにオーストラリアの首都に関する入力質問とまったく無関係な記述が含まれているためです。たとえば「The Great Barrier Reef is in Australia」や「Coral reefs need warm water to survive」といった文は、首都に関する地理的・政治的情報を提供しておらず、結果として質問に答えていません。"
+  }
+}
+```
+
+
+## メトリックの設定
+
+クエリに関連する背景情報を表す `context` 配列を指定して、`ContextRelevancyMetric` インスタンスを作成できます。スコアの範囲を定義するために、`scale` などのオプションパラメータを設定することもできます。
+
+```typescript showLineNumbers copy
+const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
+  context: [""],
+  scale: 1,
+});
+```
+
+> すべての設定オプションの一覧は、[ContextRelevancyMetric](/reference/evals/context-relevancy) を参照してください。
+
+
+## 結果の理解
+
+`ContextRelevancyMetric` は、次の形式の結果を返します:
+
+```typescript
+{
+  score: 数値,
+  info: {
+    reason: 文字列
+  }
+}
+```
+
+
+### 関連度スコア
+
+0〜1の範囲の関連度スコア:
+
+- **1.0**: 完全に関連 – すべての文脈がクエリに直接関連。
+- **0.7–0.9**: 高い関連 – 文脈の大部分がクエリに関連。
+- **0.4–0.6**: ばらつきあり – 一部の文脈のみがクエリに関連。
+- **0.1–0.3**: 低い関連 – わずかな文脈のみがクエリに関連。
+- **0.0**: 無関連 – クエリに関連する文脈がない。
+
+### 関連性に関する情報
+
+スコアの説明。詳細は以下を含みます:
+
+- 入力クエリとの関連性
+- コンテキストからの記述の抽出
+- 応答への有用性
+- コンテキスト全体の質
+
+<GithubLink
+  outdated={true}
+  marginTop="mt-16"
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-relevancy"
+/>

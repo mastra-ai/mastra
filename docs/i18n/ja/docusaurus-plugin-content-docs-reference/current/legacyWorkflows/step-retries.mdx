@@ -1,0 +1,201 @@
+---
+title: "リファレンス: ステップ再試行 | レガシー ワークフロー | Mastra ドキュメント"
+description: "Mastra のワークフローで、失敗したステップを再試行ポリシーを設定して自動的に再実行します。"
+---
+
+# ステップの再試行
+
+Mastra には、ワークフローのステップで発生する一時的な失敗に対応するための再試行機構が組み込まれています。これにより、一時的な問題が起きても手動での対応を必要とせず、ワークフローが自動的かつスムーズに復旧できます。
+
+## 概要
+
+ワークフロー内のステップが失敗（例外をスロー）した場合、Mastra は設定可能なリトライポリシーに基づいてそのステップの実行を自動的に再実行できます。これは次のような事象の対処に役立ちます:
+
+- ネットワーク接続の問題
+- サービスの一時的な停止・利用不可
+- レート制限
+- 一時的なリソース不足
+- その他の一時的な障害
+
+## デフォルトの動作
+
+デフォルトでは、ステップは失敗しても再試行しません。つまり次のとおりです。
+
+- ステップは一度だけ実行されます
+- 失敗した場合は直ちにそのステップが失敗としてマークされます
+- ワークフローは、失敗したステップに依存しない後続のステップを引き続き実行します
+
+## 設定オプション
+
+再試行は次の2つのレベルで設定できます：
+
+### 1. ワークフロー単位の設定
+
+ワークフロー内のすべてのステップに適用されるデフォルトのリトライ設定を指定できます。
+
+```typescript
+const workflow = new LegacyWorkflow({
+  name: "my-workflow",
+  retryConfig: {
+    attempts: 3, // 再試行回数（初回の実行を含めない）
+    delay: 1000, // 各再試行の間隔（ミリ秒）
+  },
+});
+```
+
+
+### 2. ステップレベルの設定
+
+個別のステップごとにリトライを設定することもでき、そのステップについてはワークフローレベルの設定が上書きされます。
+
+```typescript
+const fetchDataStep = new LegacyStep({
+  id: "fetchData",
+  execute: async () => {
+    // 外部APIからデータを取得する
+  },
+  retryConfig: {
+    attempts: 5, // このステップは最大5回まで再試行します
+    delay: 2000, // 再試行間隔は2秒です
+  },
+});
+```
+
+
+## リトライパラメータ
+
+`retryConfig` オブジェクトは次のパラメータをサポートします:
+
+| パラメータ | 型     | 既定値 | 説明                                                     |
+| ---------- | ------ | ------ | -------------------------------------------------------- |
+| `attempts` | number | 0      | リトライ回数（初回の試行とは別に行われる再試行の回数）   |
+| `delay`    | number | 1000   | リトライ間の待機時間（ミリ秒）                           |
+
+## リトライの仕組み
+
+ステップが失敗した場合、Mastra のリトライ機構は次のように動作します:
+
+1. ステップに残りのリトライ回数があるかを確認する
+2. 回数が残っている場合:
+   - 試行回数カウンターを減らす
+   - ステップを「待機」状態に遷移させる
+   - 設定された遅延時間だけ待つ
+   - ステップの実行を再試行する
+3. 回数が残っていない、またはすべての試行が尽きた場合:
+   - ステップを「失敗」としてマークする
+   - （失敗したステップに依存していないステップについては）ワークフローの実行を継続する
+
+リトライ中、ワークフローの実行はアクティブなままですが、再試行対象の特定のステップは一時停止されます。
+
+## 例
+
+### リトライの基本例
+
+```typescript
+import { LegacyWorkflow, LegacyStep } from "@mastra/core/workflows/legacy";
+
+// 失敗する可能性があるステップを定義
+const unreliableApiStep = new LegacyStep({
+  id: "callUnreliableApi",
+  execute: async () => {
+    // 失敗しうる API 呼び出しを模擬
+    const random = Math.random();
+    if (random < 0.7) {
+      throw new Error("API 呼び出しに失敗しました");
+    }
+    return { data: "API レスポンスデータ" };
+  },
+  retryConfig: {
+    attempts: 3, // 最大3回までリトライ
+    delay: 2000, // 各試行の間に2秒待機
+  },
+});
+
+// 信頼性の低いステップを使ってワークフローを作成
+const workflow = new LegacyWorkflow({
+  name: "retry-demo-workflow",
+});
+
+workflow.step(unreliableApiStep).then(processResultStep).commit();
+```
+
+
+### ワークフロー全体のリトライ（ステップごとの上書き設定）
+
+```typescript
+import { LegacyWorkflow, LegacyStep } from "@mastra/core/workflows/legacy";
+
+// 既定のリトライ設定でワークフローを作成
+const workflow = new LegacyWorkflow({
+  name: "multi-retry-workflow",
+  retryConfig: {
+    attempts: 2, // すべてのステップは既定で2回リトライ
+    delay: 1000, // 1秒の待機時間
+  },
+});
+
+// このステップはワークフローの既定のリトライ設定を使用
+const standardStep = new LegacyStep({
+  id: "standardStep",
+  execute: async () => {
+    // 失敗する可能性がある処理
+  },
+});
+
+// このステップはワークフローのリトライ設定を上書き
+const criticalStep = new LegacyStep({
+  id: "criticalStep",
+  execute: async () => {
+    // より多くのリトライが必要な重要処理
+  },
+  retryConfig: {
+    attempts: 5, // リトライ回数を5回に上書き
+    delay: 5000, // より長い5秒の待機時間
+  },
+});
+
+// このステップはリトライを無効化
+const noRetryStep = new LegacyStep({
+  id: "noRetryStep",
+  execute: async () => {
+    // リトライしない処理
+  },
+  retryConfig: {
+    attempts: 0, // リトライを明示的に無効化
+  },
+});
+
+workflow.step(standardStep).then(criticalStep).then(noRetryStep).commit();
+```
+
+
+## リトライの監視
+
+ログでリトライ試行を監視できます。Mastra はリトライ関連のイベントを `debug` レベルで記録します。
+
+```
+[DEBUG] ステップ fetchData が失敗しました（runId: abc-123）
+[DEBUG] ステップ fetchData の試行回数: 残り 2 回（runId: abc-123）
+[DEBUG] ステップ fetchData は待機中（runId: abc-123）
+[DEBUG] ステップ fetchData の待機が完了しました（runId: abc-123）
+[DEBUG] ステップ fetchData は保留中（runId: abc-123）
+```
+
+
+## ベストプラクティス
+
+1. **一時的な失敗にはリトライを使う**: 一時的な失敗が起こり得る操作にのみリトライを設定してください。バリデーション失敗のような決定的なエラーには、リトライは効果がありません。
+
+2. **適切な待機時間を設定する**: 外部 API 呼び出しでは、サービスが復旧する時間を確保できるよう、より長めの待機時間を検討してください。
+
+3. **リトライ回数を制限する**: 極端に高いリトライ回数は避けてください。障害時にワークフローが過度に長時間実行される原因になります。
+
+4. **冪等な操作を実装する**: ステップの `execute` 関数はリトライされる可能性があるため、副作用なく複数回呼び出せる冪等性を確保してください。
+
+5. **バックオフ戦略を検討する**: より高度なシナリオでは、レート制限を受ける可能性がある操作に対して、ステップのロジックに指数バックオフを実装することを検討してください。
+
+## 関連情報
+
+- [Step クラスリファレンス](./step-class)
+- [ワークフローの設定](./workflow)
+- [ワークフローのエラー処理](/docs/workflows-legacy/error-handling)

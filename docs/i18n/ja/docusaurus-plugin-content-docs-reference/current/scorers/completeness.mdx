@@ -1,0 +1,221 @@
+---
+title: "リファレンス: Completeness Scorer | Scorers | Mastra ドキュメント"
+description: Mastra の Completeness Scorer に関するドキュメント。入力に含まれる主要な要素を、LLM の出力がどの程度カバーしているかを評価します。
+---
+
+# 完全性スコアラー
+
+`createCompletenessScorer()` 関数は、入力に含まれる主要要素がLLMの出力でどれだけ適切に取り上げられているかを評価します。名詞・動詞・トピック・用語を解析して網羅状況を判定し、詳細な完全性スコアを返します。
+
+## パラメーター
+
+`createCompletenessScorer()` 関数はオプションを受け取りません。
+
+この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドとその入出力の詳細は [MastraScorer リファレンス](./mastra-scorer)を参照してください。
+
+## .run() の戻り値
+
+<PropertiesTable
+  content={[
+{
+  name: "runId",
+  type: "string",
+  description: "実行のID（任意）。",
+},
+{
+  name: "preprocessStepResult",
+  type: "object",
+  description:
+    "抽出された要素とカバレッジの詳細を含むオブジェクト：{ inputElements: string[], outputElements: string[], missingElements: string[], elementCounts: { input: number, output: number } }",
+},
+{
+  name: "score",
+  type: "number",
+  description:
+    "出力でカバーされた入力要素の割合を表す完全性スコア（0〜1）。",
+},
+]}
+/>
+
+`.run()` メソッドは次の形式の結果を返します：
+
+```typescript
+{
+  runId: string,
+  extractStepResult: {
+    inputElements: string[],
+    outputElements: string[],
+    missingElements: string[],
+    elementCounts: { input: number, output: number }
+  },
+  score: number
+}
+```
+
+
+## 要素抽出の詳細
+
+スコアラーは次の種類の要素を抽出・分析します:
+
+- 名詞: 主要な対象、概念、エンティティ
+- 動詞: 動作や状態（原形に正規化）
+- トピック: 主題やテーマ
+- 用語: 個々の重要語
+
+抽出プロセスには以下が含まれます:
+
+- テキストの正規化（ダイアクリティクスの除去、小文字化）
+- camelCase の単語の分割
+- 単語境界の処理
+- 短い語（3文字以下）の特別な扱い
+- 要素の重複排除
+
+### extractStepResult
+
+`.run()` メソッドから、以下のプロパティを持つ `extractStepResult` オブジェクトを取得できます:
+
+- **inputElements**: 入力内で見つかった主要な要素（例：名詞、動詞、トピック、用語）。
+- **outputElements**: 出力内で見つかった主要な要素。
+- **missingElements**: 出力内で見つからなかった入力要素。
+- **elementCounts**: 入力と出力に含まれる要素数。
+
+## 採点の詳細
+
+採点者は、言語要素のカバレッジ分析に基づいて完全性を評価します。
+
+### スコアリング手順
+
+1. 主要要素を抽出:
+   - 名詞と固有表現
+   - 動詞（アクション）
+   - トピック固有の用語
+   - 正規化された語形
+2. 入力要素の網羅率を算出:
+   - 短い語（≤3文字）は完全一致
+   - 長い語は大きな重なり（>60%）
+
+最終スコア: `(covered_elements / total_input_elements) * scale`
+
+### スコアの解釈
+
+完全性スコアは 0 から 1 の範囲です:
+
+- **1.0**: 問い合わせのあらゆる側面を、網羅的かつ詳細に扱っている。
+- **0.7–0.9**: 重要な側面の大半を十分な詳細でカバーしており、軽微な抜けがある。
+- **0.4–0.6**: いくつかの重要なポイントには触れているが、重要な側面が欠けている、または詳細が不足している。
+- **0.1–0.3**: 問い合わせの一部にしか対応しておらず、重大な抜けがある。
+- **0.0**: 問い合わせに対応できていない、または無関係な情報を提供している。
+
+## 例
+
+### 完成度の高い例
+
+この例では、複数の観点からの詳細な情報を盛り込み、問いのあらゆる側面に包括的に対応しています。
+
+```typescript title="src/example-high-completeness.ts" showLineNumbers copy
+import { createCompletenessScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createCompletenessScorer({ model: "openai/gpt-4o-mini" });
+
+const query =
+  "光合成のプロセスについて、入力、出力、および関与する段階を含めて説明してください。";
+const response =
+  "光合成は、植物が太陽光を化学エネルギーに変換するプロセスです。入力:空気中の二酸化炭素(CO2)が気孔から入り、水(H2O)が根から吸収され、太陽光がクロロフィルによって捕捉されエネルギーを提供します。このプロセスは2つの主要な段階で起こります:1)チラコイドでの光依存反応では、光エネルギーがATPとNADPHに変換され、水が分解されて酸素が放出されます。2)ストロマでの光非依存反応(カルビン回路)では、ATP、NADPH、CO2を使ってグルコースが生成されます。出力:グルコース(C6H12O6)は植物の栄養源となり、酸素(O2)が副産物として放出されます。全体の化学式は次のとおりです:6CO2 + 6H2O + 光エネルギー → C6H12O6 + 6O2。";
+
+const result = await scorer.run({
+  input: [{ role: "user", content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+
+#### 完成度の高い出力
+
+この出力は、要求された項目（入力、出力、段階）をすべて網羅し、さらに補足的な文脈も提供しているため、高い評価を受けます。
+
+```typescript
+{
+  score: 1,
+  reason: "スコアが1である理由は、回答がクエリのすべての側面を包括的に扱っているためです。光合成とは何かを説明し、すべての入力要素(CO2、H2O、日光)を列挙し、両方の段階(光依存反応と光非依存反応)を詳細に説明し、すべての出力(グルコースと酸素)を明示し、さらに化学式も提供しています。重要な側面で欠けているものはありません。"
+}
+```
+
+
+### 網羅性が一部にとどまる例
+
+この例では、回答はいくつかの要点には触れているものの、重要な側面が抜け落ちていたり、十分な詳細が不足しています。
+
+```typescript title="src/example-partial-completeness.ts" showLineNumbers copy
+import { createCompletenessScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createCompletenessScorer({ model: "openai/gpt-4o-mini" });
+
+const query =
+  "従業員と雇用主の両方にとって、リモートワークのメリットとデメリットは何ですか?";
+const response =
+  "リモートワークは、柔軟なスケジュール、通勤時間の削減、ワークライフバランスの向上など、従業員に多くのメリットをもたらします。また、雇用主にとっては、オフィススペースや光熱費のコスト削減につながります。しかし、リモートワークは従業員の孤立感やコミュニケーション上の課題を引き起こす可能性があります。";
+
+const result = await scorer.run({
+  input: [{ role: "user", content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+
+#### 部分的な網羅性の出力
+
+この出力は、従業員向けの福利厚生と一部の欠点には触れているものの、雇用主側の欠点を十分に網羅していないため、評価は中程度にとどまります。
+
+```typescript
+{
+  score: 0.6,
+  reason: "スコアが0.6である理由は、回答が従業員側のメリット(柔軟性、通勤不要、ワークライフバランス)と雇用主側のメリットの1つ(コスト削減)、さらに従業員側のデメリット(孤立感、コミュニケーション上の課題)をカバーしているためです。しかし、監督機能の低下、チームの一体感の維持における課題、生産性管理の難しさなど、雇用主側の潜在的なデメリットについては触れられていません。"
+}
+```
+
+
+### 完成度が低い例
+
+この例では、回答がクエリに一部しか対応しておらず、いくつかの重要な点を見落としています。
+
+```typescript title="src/example-low-completeness.ts" showLineNumbers copy
+import { createCompletenessScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createCompletenessScorer({ model: "openai/gpt-4o-mini" });
+
+const query =
+  "再生可能エネルギーと非再生可能エネルギー源を、コスト、環境への影響、持続可能性の観点から比較してください。";
+const response =
+  "太陽光や風力などの再生可能エネルギー源は、コストが下がってきています。化石燃料よりも環境に優しいです。";
+
+const result = await scorer.run({
+  input: [{ role: "user", content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+
+#### 完全性が低い出力
+
+この出力は、コストと環境への影響に軽く触れているだけで、持続可能性にはまったく言及がなく、詳細な比較も欠けているため、スコアが低くなっています。
+
+```typescript
+{
+  score: 0.2,
+  reason: "スコアが0.2である理由は、回答がコスト(再生可能エネルギーのコスト低下)と環境への影響(再生可能エネルギーが化石燃料より優れている点)について表面的に触れているのみで、詳細な比較がなく、持続可能性の観点が欠如しており、特定の非再生可能エネルギー源についての言及もなく、すべての項目において深い考察が不足しているためです。"
+}
+```
+
+
+## 関連項目
+
+- [回答関連性スコアラー](./answer-relevancy)
+- [コンテンツ類似度スコアラー](./content-similarity)
+- [テキスト差分スコアラー](./textual-difference)
+- [キーワード網羅度スコアラー](./keyword-coverage)

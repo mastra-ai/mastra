@@ -1,0 +1,185 @@
+---
+title: "埋め込みモデル"
+sidebar_position: 2
+sidebar_label: "埋め込み"
+description: "Mastra のモデルルーター経由で埋め込みモデルを利用し、セマンティック検索や RAG に活用します。"
+---
+
+# 埋め込みモデル
+
+Mastra のモデルルーターは、言語モデルと同様に `provider/model` という文字列形式で埋め込みモデルを利用できます。これにより、TypeScript のオートコンプリートに対応した、チャットモデルと埋め込みモデルの両方に共通のインターフェースが提供されます。
+
+## クイックスタートガイド
+
+```typescript
+import { ModelRouterEmbeddingModel } from "@mastra/core";
+import { embedMany } from "ai";
+
+// 埋め込みモデルを作成
+const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
+
+// 埋め込みを生成
+const { embeddings } = await embedMany({
+  model: embedder,
+  values: ["Hello world", "Semantic search is powerful"],
+});
+```
+
+
+## 対応しているモデル
+
+### OpenAI
+
+* `text-embedding-3-small` - 1536次元、最大トークン数8191
+* `text-embedding-3-large` - 3072次元、最大トークン数8191
+* `text-embedding-ada-002` - 1536次元、最大トークン数8191
+
+```typescript
+const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
+```
+
+
+### Google
+
+* `gemini-embedding-001` - 768 次元（推奨）、最大 2048 トークン
+* `text-embedding-004` - 768 次元、最大 3072 トークン
+
+```typescript
+const embedder = new ModelRouterEmbeddingModel("google/gemini-embedding-001");
+```
+
+
+## 認証
+
+モデルルーターは環境変数から API キーを自動検出します：
+
+* **OpenAI**: `OPENAI_API_KEY`
+* **Google**: `GOOGLE_GENERATIVE_AI_API_KEY`
+
+```bash
+# .env
+OPENAI_API_KEY=sk-...
+GOOGLE_GENERATIVE_AI_API_KEY=...
+```
+
+
+## カスタムプロバイダー
+
+カスタムのURLを使って、OpenAI互換の埋め込みエンドポイントを利用できます。
+
+```typescript
+import { ModelRouterEmbeddingModel } from "@mastra/core";
+
+const embedder = new ModelRouterEmbeddingModel({
+  providerId: "ollama",
+  modelId: "nomic-embed-text",
+  url: "http://localhost:11434/v1",
+  apiKey: "not-needed", // 一部のプロバイダーではAPIキーは不要です
+});
+```
+
+
+## メモリとの併用
+
+埋め込みモデルルーターは、Mastraのメモリシステムとスムーズに統合されます。
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "あなたは親切なアシスタントです",
+  model: "openai/gpt-4o",
+  memory: new Memory({
+    embedder: "openai/text-embedding-3-small", // オートコンプリート機能付きの文字列
+  }),
+});
+```
+
+:::info
+
+`embedder` フィールドでは次が使用できます:
+
+* `EmbeddingModelId`（オートコンプリート対応の文字列）
+* `EmbeddingModel<string>`（AI SDK v1）
+* `EmbeddingModelV2<string>`（AI SDK v2）
+
+:::
+
+
+## RAG での利用
+
+ドキュメントの分割と検索には埋め込みモデルを使用します。
+
+```typescript
+import { ModelRouterEmbeddingModel } from "@mastra/core";
+import { embedMany } from "ai";
+
+const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
+
+// ドキュメントチャンクを埋め込む
+const { embeddings } = await embedMany({
+  model: embedder,
+  values: chunks.map((chunk) => chunk.text),
+});
+
+// ベクトルデータベースに埋め込みを保存する
+await vectorStore.upsert(
+  chunks.map((chunk, i) => ({
+    id: chunk.id,
+    vector: embeddings[i],
+    metadata: chunk.metadata,
+  })),
+);
+```
+
+
+## TypeScript サポート
+
+モデルルーターは、埋め込みモデル ID に対して完全な TypeScript のオートコンプリートを提供します。
+
+```typescript
+import type { EmbeddingModelId } from "@mastra/core";
+
+// 型安全な埋め込みモデルの選択
+const modelId: EmbeddingModelId = "openai/text-embedding-3-small";
+//                                  ^ オートコンプリートでサポートされている全モデルが表示されます
+
+const embedder = new ModelRouterEmbeddingModel(modelId);
+```
+
+
+## エラー処理
+
+モデルルーターは作成時に、プロバイダー ID とモデル ID を検証します。
+
+```typescript
+try {
+  const embedder = new ModelRouterEmbeddingModel("invalid/model");
+} catch (error) {
+  console.error(error.message);
+  // "不明なプロバイダー: invalid。利用可能なプロバイダー: openai, google"
+}
+```
+
+API キーの未設定も早期に検出されます：
+
+```typescript
+try {
+  const embedder = new ModelRouterEmbeddingModel(
+    "openai/text-embedding-3-small",
+  );
+  // OPENAI_API_KEYが設定されていない場合は例外をスローします
+} catch (error) {
+  console.error(error.message);
+  // "API key not found for provider openai. Set OPENAI_API_KEY environment variable."
+}
+```
+
+
+## 次のステップ
+
+- [Memory & Semantic Recall](/docs/memory/semantic-recall) - 埋め込みでエージェントの記憶機能を実装
+- [RAG & Chunking](/docs/rag/chunking-and-embedding) - 検索拡張生成（RAG）システムを構築
+- [Vector Databases](/docs/rag/vector-databases) - 埋め込みを保存・検索

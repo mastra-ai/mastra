@@ -1,0 +1,277 @@
+---
+title: "制御フロー | Workflows | Mastra ドキュメント"
+description: "Mastra のワークフローにおける制御フローを使うと、分岐・結合・条件分岐を管理し、要件に合ったロジックのワークフローを構築できます。"
+---
+
+# 制御フロー
+
+ワークフローを構築する際は、通常、処理を小さなタスクに分割し、それらを連結して再利用します。**ステップ**は、入力・出力・実行ロジックを定義し、これらのタスクを体系的に管理するための手段です。
+
+- スキーマが一致する場合、各ステップの `outputSchema` は自動的に次のステップの `inputSchema` に渡されます。
+- スキーマが一致しない場合は、[入力データマッピング](./input-data-mapping) を使用して、`outputSchema` を期待される `inputSchema` に変換します。
+
+## `.then()` を使ったステップのチェーン
+
+`.then()` を使って、ステップを順番に実行するようにチェーンします。
+
+![Chaining steps with .then()](/img/workflows/workflows-control-flow-then.jpg)
+
+```typescript {8-9,4-5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .then(step2)
+  .commit();
+```
+
+これは期待どおりに動作します。まず `step1` を実行し、続いて `step2` を実行します。
+
+
+## `.parallel()` での同時実行ステップ
+
+`.parallel()` を使ってステップを同時に実行します。
+
+![.parallel() による並列ステップ](/img/workflows/workflows-control-flow-parallel.jpg)
+
+```typescript {9,4-5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+const step3 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .parallel([step1, step2])
+  .then(step3)
+  .commit();
+```
+
+これは `step1` と `step2` を同時に実行し、両方の完了後に `step3` へ進みます。
+
+> 詳しくは [Parallel Execution with Steps](/examples/workflows_legacy/parallel-steps) をご参照ください。
+
+> 📹 視聴: ステップを並列実行して Mastra のワークフローを最適化する方法 → [YouTube（3分）](https://youtu.be/GQJxve5Hki4)
+
+
+## `.branch()` を使った条件分岐
+
+`.branch()` を使って、条件に応じてステップを実行します:
+
+![.branch() による条件分岐](/img/workflows/workflows-control-flow-branch.jpg)
+
+```typescript {8-11,4-5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const lessThanStep = createStep({...});
+const greaterThanStep = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .branch([
+    [async ({ inputData: { value } }) => value <= 10, lessThanStep],
+    [async ({ inputData: { value } }) => value > 10, greaterThanStep]
+  ])
+  .commit();
+```
+
+分岐条件は順に評価されますが、条件に一致したステップは並行して実行されます。
+
+> 詳細は [Workflow with Conditional Branching](/examples/workflows_legacy/conditional-branching) を参照してください。
+
+
+## ステップのループ処理
+
+Workflows は 2 種類のループをサポートします。ステップや、ネストされた workflow のようなステップ互換の構成要素をループさせる場合、初期の `inputData` は前のステップの出力から供給されます。
+
+互換性を保つために、ループの初期入力は前のステップの出力の形に一致しているか、`map` 関数で明示的に変換されている必要があります。
+
+- 前のステップの出力の形に一致させる、または
+- `map` 関数で明示的に変換する。
+
+### `.dowhile()` を使った繰り返し
+
+条件が true のあいだ、ステップを繰り返し実行します。
+
+![.dowhile() を使った繰り返し](/img/workflows/workflows-control-flow-dowhile.jpg)
+
+```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const counterStep = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .dowhile(counterStep, async ({ inputData: { number } }) => number < 10)
+  .commit();
+```
+
+
+### `.dountil()` による繰り返し
+
+条件が真になるまでステップを繰り返し実行します。
+
+![.dountil() による繰り返し](/img/workflows/workflows-control-flow-dountil.jpg)
+
+```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const counterStep = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .dountil(counterStep, async ({ inputData: { number } }) => number > 10)
+  .commit();
+```
+
+
+### ループ管理
+
+ループの終了方法に応じて、ループ条件はさまざまに実装できます。一般的なパターンとしては、`inputData` で返される値のチェック、反復回数の上限設定、上限に達した際の実行中止などがあります。
+
+#### 条件付きループ
+
+ループステップの `inputData` は前のステップの出力です。`inputData` の値に基づいて、ループを継続するか停止するかを判断します。
+
+```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const counterStep = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+.dountil(nestedWorkflowStep, async ({ inputData: { userResponse } }) => userResponse === "yes")
+.commit();
+```
+
+
+#### ループの制限
+
+`iterationCount` は、ループステップが実行された回数を追跡します。これを使って反復回数を制限し、無限ループを防げます。`inputData` の値と組み合わせることで、設定した試行回数に達したらループを停止できます。
+
+```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const counterStep = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+.dountil(nestedWorkflowStep, async ({ inputData: { userResponse, iterationCount } }) => userResponse === "yes" || iterationCount >= 10)
+.commit();
+```
+
+
+#### ループの中断
+
+`iterationCount` を使ってループの実行回数を制限します。回数がしきい値を超えたら、エラーをスローしてステップを失敗させ、ワークフローを停止します。
+
+```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const counterStep = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+.dountil(nestedWorkflowStep, async ({ inputData: { userResponse, iterationCount } }) => {
+  if (iterationCount >= 10) {
+    throw new Error("最大繰り返し回数に達しました");
+  }
+  return userResponse === "yes";
+})
+.commit();
+```
+
+
+### `.foreach()` での反復処理
+
+`inputSchema` の各アイテムに対して、同一のステップを順次実行します。
+
+![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
+
+```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const mapStep = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .foreach(mapStep)
+  .commit();
+```
+
+
+#### 同時実行数の制限を設定する
+
+`concurrency` を使うと、同時実行数の上限を設けたうえでステップを並列実行できます。
+
+```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const mapStep = createStep({...})
+
+export const testWorkflow = createWorkflow({...})
+  .foreach(mapStep, { concurrency: 2 })
+  .commit();
+```
+
+
+## ネストされたワークフローの使用
+
+ネストされたワークフローは、`.then()` に渡してステップとして使用します。これにより、その各ステップが親ワークフローの一部として順に実行されます。
+
+```typescript {4,7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+export const nestedWorkflow = createWorkflow({...})
+
+export const testWorkflow = createWorkflow({...})
+  .then(nestedWorkflow)
+  .commit();
+```
+
+
+## ワークフローのクローン作成
+
+既存のワークフローを複製するには `cloneWorkflow` を使用します。これにより、`id` などのパラメータを上書きしながら、構造を再利用できます。
+
+```typescript {6,10} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep, cloneWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+const parentWorkflow = createWorkflow({...})
+const clonedWorkflow = cloneWorkflow(parentWorkflow, { id: "cloned-workflow" });
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .then(clonedWorkflow)
+  .commit();
+```
+
+
+## 実行インスタンスの例
+
+次の例では、複数の入力を用いて実行を開始する方法を示します。各入力は `mapStep` を順番に通過します。
+
+```typescript {6} title="src/test-workflow.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+
+const result = await run.start({
+  inputData: [{ number: 10 }, { number: 100 }, { number: 200 }],
+});
+```
+
+ターミナルで次を実行してください：
+
+```bash copy
+npx tsx src/test-workflow.ts
+```

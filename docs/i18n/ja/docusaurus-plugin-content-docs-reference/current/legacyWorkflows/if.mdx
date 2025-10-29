@@ -1,0 +1,112 @@
+---
+title: "リファレンス: Workflow.if() | 旧式ワークフロー | Mastra ドキュメント"
+description: "Mastra のワークフローにおける `.if()` メソッドのドキュメント。指定した条件に基づいて条件分岐を作成します。"
+---
+
+# Workflow.if()
+
+> 実験的
+
+`.if()` メソッドはワークフロー内に条件分岐を作成し、指定した条件が真のときにのみステップを実行します。これにより、前のステップの結果に基づいてワークフローの経路を動的に切り替えられます。
+
+## 使い方
+
+```typescript copy showLineNumbers
+workflow
+  .step(startStep)
+  .if(async ({ context }) => {
+    const value = context.getStepResult<{ value: number }>("start")?.value;
+    return value < 10; // true の場合は if ブランチを実行
+  })
+  .then(ifBranchStep)
+  .else()
+  .then(elseBranchStep)
+  .commit();
+```
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "condition",
+      type: "Function | ReferenceCondition",
+      description:
+        "「if」分岐を実行するかどうかを判定する関数または参照条件",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 条件タイプ
+
+### 関数の条件
+
+真偽値を返す関数を使用できます:
+
+```typescript
+workflow
+  .step(startStep)
+  .if(async ({ context }) => {
+    const result = context.getStepResult<{ status: string }>("start");
+    return result?.status === "success"; // ステータスが "success" の場合に if ブロックを実行
+  })
+  .then(successStep)
+  .else()
+  .then(failureStep);
+```
+
+
+### 参照条件
+
+比較演算子を使って参照ベースの条件を利用できます。
+
+```typescript
+workflow
+  .step(startStep)
+  .if({
+    ref: { step: startStep, path: "value" },
+    query: { $lt: 10 }, // 値が10未満の場合に「if」分岐を実行
+  })
+  .then(ifBranchStep)
+  .else()
+  .then(elseBranchStep);
+```
+
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "LegacyWorkflow",
+      description: "メソッドチェーン用のワークフロー インスタンス",
+    },
+  ]}
+/>
+
+## エラー処理
+
+`if` メソッドは、直前のステップが定義されている必要があります。前段のステップなしに使用すると、エラーが発生します:
+
+```typescript
+try {
+  // これはエラーをスローします
+  workflow
+    .if(async ({ context }) => true)
+    .then(someStep)
+    .commit();
+} catch (error) {
+  console.error(error); // 「条件には後続のステップの実行が必要です」
+}
+```
+
+
+## 関連
+
+- [else リファレンス](./else)
+- [then リファレンス](./then)
+- [制御フローガイド](/docs/workflows-legacy/control-flow)
+- [ステップ条件リファレンス](./step-condition)

@@ -1,0 +1,150 @@
+---
+title: "エージェントとツール | ワークフロー | Mastra ドキュメント"
+description: "ワークフローのステップからエージェントとツールを呼び出し、execute 関数の実行とステップの合成のどちらを使うべきかを学びます。"
+---
+
+# エージェントとツール
+
+ワークフローのステップでは、LLM の推論を活用するためにエージェントを呼び出したり、型安全なロジックのためにツールを呼び出したりできます。これらはステップの `execute` 関数内から呼び出すことも、`createStep()` を使って直接ステップとして構成することもできます。
+
+## ワークフローでのエージェントの利用
+
+推論、生成、その他の LLM ベースのタスクが必要な場合は、ワークフローのステップでエージェントを使用します。エージェント呼び出しをより細かく制御したいときは、ステップの `execute` 関数から呼び出してください（例：会話履歴の管理や構造化出力の返却）。エージェントの呼び出し方法を変更する必要がない場合は、エージェントをステップとして組み込みます。
+
+### エージェントの呼び出し
+
+ステップの `execute` 関数内で `.generate()` または `.stream()` を使ってエージェントを呼び出します。これにより、次のステップに渡す前にエージェント呼び出しを調整し、レスポンスを処理できます。
+
+```typescript {7-12} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  // ...
+  execute: async ({ inputData, mastra }) => {
+    const { message } = inputData;
+
+    const testAgent = mastra.getAgent("testAgent");
+    const response = await testAgent.generate(
+      `このメッセージを箇条書きに変換: ${message}`,
+      {
+        memory: {
+          thread: "user-123",
+          resource: "test-123",
+        },
+      },
+    );
+
+    return {
+      list: response.text,
+    };
+  },
+});
+```
+
+> さらに詳しい例は [Calling Agents](/examples/agents/calling-agents) をご覧ください。
+
+
+### ステップとしてのエージェント
+
+エージェント呼び出しを変更する必要がない場合は、`createStep()` を使ってエージェントをステップとして構成します。`.map()` を使って、前のステップの出力をエージェントが利用できる `prompt` に変換します。
+
+![ステップとしてのエージェント](/img/workflows/workflows-agent-tools-agent-step.jpg)
+
+```typescript {1,3,8-13} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { testAgent } from "../agents/test-agent";
+
+const step1 = createStep(testAgent);
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .map(async ({ inputData }) => {
+    const { message } = inputData;
+    return {
+      prompt: `このメッセージを箇条書きに変換: ${message}`,
+    };
+  })
+  .then(step1)
+  .then(step2)
+  .commit();
+```
+
+> 詳細は [Input Data Mapping](./input-data-mapping) を参照してください。
+
+Mastra エージェントは、入力に `prompt` 文字列、出力に `text` 文字列を想定するデフォルトのスキーマを使用します:
+
+```json
+{
+  inputSchema: {
+    prompt: string
+  },
+  outputSchema: {
+    text: string
+  }
+}
+```
+
+
+## ワークフローでのツールの使用
+
+ワークフローのステップでツールを使い、既存のツールロジックを活用します。コンテキストの準備やレスポンスの処理が必要な場合は、ステップの `execute` 関数から呼び出します。ツールの使用方法を変更する必要がないときは、ツールをステップとして組み込みます。
+
+### ツールの呼び出し
+
+ステップの `execute` 関数内で `.execute()` を使ってツールを呼び出します。これにより、ツールの入力コンテキストを柔軟に制御したり、次のステップへ渡す前にレスポンスを処理したりできます。
+
+```typescript {8-13,16} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { testTool } from "../tools/test-tool";
+
+const step2 = createStep({
+  // ...
+  execute: async ({ inputData, runtimeContext }) => {
+    const { formatted } = inputData;
+
+    const response = await testTool.execute({
+      context: {
+        text: formatted,
+      },
+      runtimeContext,
+    });
+
+    return {
+      emphasized: response.emphasized,
+    };
+  },
+});
+```
+
+> さらに詳しくは、[Calling Tools](/examples/workflows_legacy/using-a-tool-as-a-step) をご覧ください。
+
+
+### ステップとしてのツール
+
+前のステップの出力がツールの入力コンテキストに合致する場合は、`createStep()` を使ってツールをステップとして作成します。合致しない場合は、`.map()` を使って前のステップの出力を変換できます。
+
+![ステップとしてのツール](/img/workflows/workflows-agent-tools-tool-step.jpg)
+
+```typescript {1,3,9-14} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { testTool } from "../tools/test-tool";
+
+const step2 = createStep(testTool);
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .map(async ({ inputData }) => {
+    const { formatted } = inputData;
+    return {
+      text: formatted,
+    };
+  })
+  .then(step2)
+  .commit();
+```
+
+> 詳細は [Input Data Mapping](./input-data-mapping) を参照してください。
+
+
+## 関連情報
+
+- [エージェントの使い方](/docs/agents/overview)
+- [ツールの使い方](../tools-mcp/overview)

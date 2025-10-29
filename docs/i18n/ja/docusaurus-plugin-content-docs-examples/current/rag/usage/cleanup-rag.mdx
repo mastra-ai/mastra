@@ -1,0 +1,240 @@
+---
+title: "例: 情報密度の最適化 | RAG | Mastra ドキュメント"
+description: Mastra で RAG システムを実装し、LLM による処理で情報密度を最適化し、データの重複を除去する例。
+---
+
+import GithubLink from "@site/src/components/GithubLink";
+
+
+# 情報密度の最適化
+
+この例では、Mastra、OpenAI の埋め込み、そしてベクトル保存に PGVector を用いて、Retrieval-Augmented Generation（RAG）システムを実装する方法を示します。
+このシステムでは、エージェントが初期チャンクを整形して情報密度を高め、重複データを除去します。
+
+## 概要
+
+このシステムは Mastra と OpenAI を用いて RAG を実装し、LLM ベースの処理で情報密度を最適化します。主な処理は次のとおりです:
+
+1. クエリ処理とドキュメントのクレンジングの両方に対応する gpt-4o-mini 搭載の Mastra エージェントをセットアップ
+2. エージェントが利用するベクター検索およびドキュメント分割ツールを作成
+3. 初期ドキュメントを処理:
+   - テキストドキュメントを小さなチャンクに分割
+   - 各チャンクの埋め込みを作成
+   - PostgreSQL のベクターデータベースに保存
+4. 初回クエリを実行し、ベースラインの応答品質を確認
+5. データを最適化:
+   - エージェントでチャンクをクレンジングし、重複を除去
+   - クレンジング後のチャンクに対して新たに埋め込みを作成
+   - 最適化済みデータでベクターストアを更新
+6. 同じクエリを再実行し、応答品質の向上を検証
+
+## セットアップ
+
+### 環境設定
+
+環境変数を設定していることを確認してください：
+
+```bash title=".env"
+OPENAI_API_KEY=your_openai_api_key_here
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+
+### 依存関係
+
+次に、必要な依存関係をインポートします。
+
+```typescript copy showLineNumbers title="index.ts"
+import { openai } from "@ai-sdk/openai";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { PgVector } from "@mastra/pg";
+import {
+  MDocument,
+  createVectorQueryTool,
+  createDocumentChunkerTool,
+} from "@mastra/rag";
+import { embedMany } from "ai";
+```
+
+
+## ツールの作成
+
+### ベクタークエリツール
+
+@mastra/rag からインポートした createVectorQueryTool を使うと、ベクターデータベースを照会するツールを作成できます。
+
+```typescript copy showLineNumbers{8} title="index.ts"
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
+});
+```
+
+
+### ドキュメントチャンク化ツール
+
+@mastra/rag からインポートした createDocumentChunkerTool を使用すると、ドキュメントをチャンクに分割し、そのチャンクをエージェントに送信するツールを作成できます。
+
+```typescript copy showLineNumbers{14} title="index.ts"
+const doc = MDocument.fromText(yourText);
+
+const documentChunkerTool = createDocumentChunkerTool({
+  doc,
+  params: {
+    strategy: "recursive",
+    size: 512,
+    overlap: 25,
+    separator: "\n",
+  },
+});
+```
+
+
+## エージェントの設定
+
+問い合わせとクレンジングの両方に対応できる単一の Mastra エージェントを設定します:
+
+```typescript copy showLineNumbers{26} title="index.ts"
+const ragAgent = new Agent({
+  name: "RAG Agent",
+  instructions: `あなたはドキュメントの検索とクリーニングの両方を処理する有用なアシスタントです。
+    クリーニング時:データを処理、クリーニング、ラベル付けし、不要な情報を削除し、重要な事実を保持しながら重複コンテンツを排除します。
+    検索時:利用可能なコンテキストに基づいて回答を提供します。回答は簡潔で関連性の高いものにしてください。
+    
+    重要:質問への回答を求められた場合は、ツールで提供されたコンテキストのみに基づいて回答してください。コンテキストに質問へ完全に答えるための十分な情報が含まれていない場合は、その旨を明示的に述べてください。
+    `,
+  model: openai("gpt-4o-mini"),
+  tools: {
+    vectorQueryTool,
+    documentChunkerTool,
+  },
+});
+```
+
+
+## PgVector と Mastra のインスタンス化
+
+以下のコンポーネントを用いて、PgVector と Mastra をインスタンス化します:
+
+```typescript copy showLineNumbers{41} title="index.ts"
+const pgVector = new PgVector({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+});
+
+export const mastra = new Mastra({
+  agents: { ragAgent },
+  vectors: { pgVector },
+});
+const agent = mastra.getAgent("ragAgent");
+```
+
+
+## 文書処理
+
+最初のドキュメントを分割し、埋め込みを作成します：
+
+```typescript copy showLineNumbers{49} title="index.ts"
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  size: 256,
+  overlap: 50,
+  separator: "\n",
+});
+
+const { embeddings } = await embedMany({
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
+});
+
+const vectorStore = mastra.getVector("pgVector");
+await vectorStore.createIndex({
+  indexName: "embeddings",
+  dimension: 1536,
+});
+
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
+```
+
+
+## 初期クエリ
+
+まずは生データに対してクエリを実行して、ベースラインを確認しましょう:
+
+```typescript copy showLineNumbers{73} title="index.ts"
+// 元の埋め込みを使用してレスポンスを生成
+const query = "宇宙探査に関して言及されているすべての技術は何ですか?";
+const originalResponse = await agent.generate(query);
+console.log("\nクエリ:", query);
+console.log("レスポンス:", originalResponse.text);
+```
+
+
+## データ最適化
+
+初期結果を確認したうえで、品質向上のためにデータをクレンジングできます。
+
+```typescript copy showLineNumbers{79} title="index.ts"
+const chunkPrompt = `提供されたツールを使用してチャンクをクリーンアップしてください。宇宙に関連しない無関係な情報を除外し、重複を削除してください。`;
+
+const newChunks = await agent.generate(chunkPrompt);
+const updatedDoc = MDocument.fromText(newChunks.text);
+
+const updatedChunks = await updatedDoc.chunk({
+  strategy: "recursive",
+  size: 256,
+  overlap: 50,
+  separator: "\n",
+});
+
+const { embeddings: cleanedEmbeddings } = await embedMany({
+  model: openai.embedding("text-embedding-3-small"),
+  values: updatedChunks.map((chunk) => chunk.text),
+});
+
+// クリーンアップされた埋め込みでベクトルストアを更新
+await vectorStore.deleteIndex({ indexName: "embeddings" });
+await vectorStore.createIndex({
+  indexName: "embeddings",
+  dimension: 1536,
+});
+
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: cleanedEmbeddings,
+  metadata: updatedChunks?.map((chunk: any) => ({ text: chunk.text })),
+});
+```
+
+
+## 最適化済みクエリ
+
+クリーンアップ後にデータを再度クエリし、応答に違いがあるか確認します。
+
+```typescript copy showLineNumbers{109} title="index.ts"
+// クリーニング済みの埋め込みで再度クエリを実行
+const cleanedResponse = await agent.generate(query);
+console.log("\nクエリ:", query);
+console.log("レスポンス:", cleanedResponse.text);
+```
+
+<br />
+
+<br />
+
+<hr className="dark:border-[#404040] border-gray-300" />
+
+<br />
+
+<br />
+
+<GithubLink
+  link={
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cleanup-rag"
+}
+/>

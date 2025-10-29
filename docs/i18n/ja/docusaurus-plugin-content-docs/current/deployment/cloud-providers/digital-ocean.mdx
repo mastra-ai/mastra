@@ -1,0 +1,209 @@
+---
+title: "DigitalOcean | デプロイ | Mastra ドキュメント"
+description: "Mastra アプリケーションを DigitalOcean にデプロイする。"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+
+# Digital Ocean
+
+Mastra アプリケーションを DigitalOcean の App Platform と Droplet へデプロイします。
+
+:::note
+このガイドでは、Mastra アプリケーションがデフォルトの
+`npx create-mastra@latest` コマンドで作成されていることを前提としています。
+新しい Mastra アプリケーションの作成方法については、
+[はじめに](./../../getting-started/installation) を参照してください。
+:::
+
+<Tabs>
+  <TabItem value="アプリプラットフォーム" label="アプリプラットフォーム">
+    ## App Platform
+
+    ### 前提条件
+
+    * Mastra アプリケーションを含む Git リポジトリ。これは [GitHub](https://github.com/) リポジトリ、[GitLab](https://gitlab.com/) リポジトリ、またはその他の互換性のあるソースプロバイダーでも構いません。
+    * [DigitalOcean アカウント](https://www.digitalocean.com/)
+
+    ### デプロイ手順
+
+    <Steps>
+      <StepItem>
+        新しいアプリを作成
+
+        * [DigitalOcean ダッシュボード](https://cloud.digitalocean.com/)にログインします。
+        * [App Platform](https://docs.digitalocean.com/products/app-platform/) サービスに移動します。
+        * ソースプロバイダーを選択し、新しいアプリを作成します。
+      </StepItem>
+
+      <StepItem>
+        デプロイ元の設定
+
+        * リポジトリを接続して選択します。コンテナイメージやサンプルアプリを選ぶこともできます。
+        * デプロイ元のブランチを選択します。
+        * 必要に応じてソースディレクトリを設定します。Mastra アプリがデフォルトのディレクトリ構成を使用している場合は、ここでの操作は不要です。
+        * 次のステップに進みます。
+      </StepItem>
+
+      <StepItem>
+        リソース設定と環境変数の構成
+
+        * Node.js のビルドは自動的に検出されるはずです。
+        * **ビルドコマンドの設定**: App Platform が Mastra プロジェクトを正しくビルドできるよう、カスタムのビルドコマンドを追加する必要があります。使用するパッケージマネージャに応じて設定してください:
+
+        <Tabs>
+          <TabItem value="npm" label="npm">
+            `npm run build`
+          </TabItem>
+
+          <TabItem value="pnpm" label="pnpm">
+            `pnpm build`
+          </TabItem>
+
+          <TabItem value="yarn" label="yarn">
+            `yarn build`
+          </TabItem>
+
+          <TabItem value="bun" label="bun">
+            `bun run build`
+          </TabItem>
+        </Tabs>
+
+        * Mastra アプリに必要な環境変数を追加します。API キー、データベース URL、その他の設定値などが含まれます。
+        * ここでリソースのサイズを設定できます。
+        * 任意で設定できる項目として、リソースのリージョン、一意のアプリ名、リソースが属するプロジェクトなどがあります。
+        * 作業が完了したら、構成と料金見積もりを確認のうえでアプリを作成します。
+      </StepItem>
+
+      <StepItem>
+        デプロイ
+
+        * アプリは自動的にビルドおよびデプロイされます。
+        * DigitalOcean から、デプロイ済みアプリケーションにアクセスするための URL が提供されます。
+      </StepItem>
+    </Steps>
+
+    これで、DigitalOcean が提供する URL からデプロイ済みアプリケーションにアクセスできます。
+
+    :::note
+    DigitalOcean App Platform はエフェメラル（揮発性）のファイルシステムを使用しており、
+    ファイルシステムに書き込まれたファイルは短命で失われる可能性があります。
+    `LibSQLStore` の file URL のように、ファイルシステムを使用する Mastra のストレージプロバイダーの利用は避けてください。
+    :::
+  </TabItem>
+
+  <TabItem value="滴" label="Droplets">
+    ## Droplets
+
+    DigitalOcean の Droplets に Mastra アプリケーションをデプロイします。
+
+    ### 前提条件
+
+    * [DigitalOcean アカウント](https://www.digitalocean.com/)
+    * Ubuntu 24 以上を実行している [Droplet](https://docs.digitalocean.com/products/droplets/)
+    * Droplet を指す A レコードを持つドメイン名
+    * リバースプロキシの設定（例: [nginx](https://nginx.org/)）
+    * SSL 証明書の設定（例: [Let’s Encrypt](https://letsencrypt.org/)）
+    * Droplet に Node.js 18 以上がインストール済み
+
+    ### デプロイ手順
+
+    <Steps>
+      <StepItem>
+        Mastra アプリケーションをクローン
+
+        Droplet に接続し、リポジトリをクローンします:
+
+        <Tabs>
+          <TabItem value="public" label="Public Repository">
+            ```bash copy
+            git clone https://github.com/<your-username>/<your-repository>.git
+            ```
+          </TabItem>
+
+          <TabItem value="private" label="Private Repository">
+            ```bash copy
+            git clone https://<your-username>:<your-personal-access-token>@github.com/<your-username>/<your-repository>.git
+            ```
+          </TabItem>
+        </Tabs>
+
+        リポジトリのディレクトリに移動します:
+
+        ```bash copy
+        cd "<your-repository>"
+        ```
+      </StepItem>
+
+      <StepItem>
+        依存関係をインストール
+
+        ```bash copy
+        npm install
+        ```
+      </StepItem>
+
+      <StepItem>
+        環境変数を設定
+
+        `.env` ファイルを作成し、環境変数を追加します:
+
+        ```bash copy
+        touch .env
+        ```
+
+        `.env` ファイルを編集し、環境変数を追加します:
+
+        ```bash copy
+        OPENAI_API_KEY=<your-openai-api-key>
+        # 必要なその他の環境変数を追加
+        ```
+      </StepItem>
+
+      <StepItem>
+        アプリケーションをビルド
+
+        ```bash copy
+        npm run build
+        ```
+      </StepItem>
+
+      <StepItem>
+        アプリケーションを実行
+
+        ```bash copy
+        node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/output/index.mjs
+        ```
+
+        :::note
+        Mastra アプリケーションはデフォルトでポート 4111 で動作します。リバースプロキシがこのポートへリクエストを転送するように設定されていることを確認してください。
+        :::
+      </StepItem>
+    </Steps>
+  </TabItem>
+</Tabs>
+
+## Mastra サーバーに接続する
+
+`@mastra/client-js` パッケージの `MastraClient` を使うと、クライアントアプリケーションから Mastra サーバーに接続できます。
+
+詳しくは、[`MastraClient` のドキュメント](/docs/server-db/mastra-client)をご覧ください。
+
+```typescript copy showLineNumbers
+import { MastraClient } from "@mastra/client-js";
+
+const mastraClient = new MastraClient({
+  baseUrl: "https://<あなたのドメイン>",
+});
+```
+
+
+## 次のステップ
+
+- [Mastra Client SDK](/reference/client-js/mastra-client)
+- [DigitalOcean App Platform のドキュメント](https://docs.digitalocean.com/products/app-platform/)
+- [DigitalOcean Droplets のドキュメント](https://docs.digitalocean.com/products/droplets/)

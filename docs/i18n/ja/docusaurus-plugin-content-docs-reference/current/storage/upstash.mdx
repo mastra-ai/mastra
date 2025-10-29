@@ -1,0 +1,94 @@
+---
+title: "リファレンス: Upstash Storage | Storage | Mastra ドキュメント"
+description: Mastra における Upstash Storage 実装のドキュメントです。
+---
+
+# Upstash Storage
+
+Upstash のストレージ実装は、Upstash の Redis 互換キー値ストアを用いた、サーバーレスに適したストレージソリューションを提供します。
+
+:::warning
+
+**重要:** Mastra を Upstash と併用する場合、エージェントの会話で大量の Redis コマンドが発生するため、従量課金モデルでは想定外の高額な費用になるおそれがあります。コストを予測可能にするため、**固定料金プラン**の利用を強く推奨します。詳細は [Upstash pricing](https://upstash.com/pricing/redis)、背景は [GitHub issue #5850](https://github.com/mastra-ai/mastra/issues/5850) をご覧ください。
+
+:::
+
+## インストール
+
+```bash copy
+npm install @mastra/upstash@latest
+```
+
+
+## 使い方
+
+```typescript copy showLineNumbers
+import { UpstashStore } from "@mastra/upstash";
+
+const storage = new UpstashStore({
+  url: process.env.UPSTASH_URL,
+  token: process.env.UPSTASH_TOKEN,
+});
+```
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "string",
+      description: "Upstash RedisのURL",
+      isOptional: false,
+    },
+    {
+      name: "token",
+      type: "string",
+      description: "Upstash Redisの認証トークン",
+      isOptional: false,
+    },
+    {
+      name: "prefix",
+      type: "string",
+      description: "保存されるすべての項目に付与するキーのプレフィックス",
+      isOptional: true,
+      defaultValue: "mastra:",
+    },
+  ]}
+/>
+
+## 追記
+
+### キー構造
+
+Upstash のストレージ実装はキー値型の構造を採用しています:
+
+- スレッド用キー: `{prefix}thread:{threadId}`
+- メッセージ用キー: `{prefix}message:{messageId}`
+- メタデータ用キー: `{prefix}metadata:{entityId}`
+
+### サーバーレスの利点
+
+Upstash Storage はサーバーレス環境でのデプロイに特に適しています：
+
+- 接続管理が不要
+- リクエスト単位の従量課金
+- グローバルレプリケーションに対応
+- エッジ対応
+
+### データ永続化
+
+Upstash は次を提供します:
+
+- 自動データ永続化
+- 時点復旧（Point-in-Time Recovery）
+- リージョン間レプリケーションのオプション
+
+### パフォーマンスに関する考慮事項
+
+最適なパフォーマンスのために：
+
+- データの整理に適したキーのプレフィックスを使用する
+- Redisのメモリ使用量を監視する
+- 必要に応じてデータの有効期限ポリシーを設定・検討する

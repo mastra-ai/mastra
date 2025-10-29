@@ -1,0 +1,179 @@
+---
+title: "ミドルウェア | サーバーとDB | Mastraドキュメント"
+description: "リクエストを横取りするカスタムミドルウェア関数を適用します。"
+---
+
+# ミドルウェア
+
+Mastra サーバーでは、API のルートハンドラーが呼び出される前後にカスタムミドルウェア関数を実行できます。これは、認証、ログ、リクエスト固有のコンテキストの注入、CORS ヘッダーの付与などに役立ちます。
+
+ミドルウェアは [Hono](https://hono.dev) の `Context`（`c`）と `next` 関数を受け取ります。`Response` を返すと、リクエストの処理はそこで打ち切られます。`next()` を呼ぶと、次のミドルウェアまたはルートハンドラーの処理に進みます。
+
+```typescript copy showLineNumbers
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    middleware: [
+      {
+        handler: async (c, next) => {
+          // 例: 認証チェックを追加する
+          const authHeader = c.req.header("Authorization");
+          if (!authHeader) {
+            return new Response("未認証です", { status: 401 });
+          }
+
+          await next();
+        },
+        path: "/api/*",
+      },
+      // グローバルなリクエストのロギングを追加
+      async (c, next) => {
+        console.log(`${c.req.method} ${c.req.url}`);
+        await next();
+      },
+    ],
+  },
+});
+```
+
+単一のルートにミドルウェアを適用するには、`middleware` オプションを
+`registerApiRoute` に渡します。
+
+```typescript copy showLineNumbers
+registerApiRoute("/my-custom-route", {
+  method: "GET",
+  middleware: [
+    async (c, next) => {
+      console.log(`${c.req.method} ${c.req.url}`);
+      await next();
+    },
+  ],
+  handler: async (c) => {
+    const mastra = c.get("mastra");
+    return c.json({ message: "やあ、世界！" });
+  },
+});
+```
+
+***
+
+
+## よくある例
+
+### 認証
+
+```typescript copy
+{
+  handler: async (c, next) => {
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return new Response('未認証', { status: 401 });
+    }
+
+    // ここでトークンを検証する
+    await next();
+  },
+  path: '/api/*',
+}
+```
+
+
+### CORS 対応
+
+```typescript copy
+{
+  handler: async (c, next) => {
+    c.header('Access-Control-Allow-Origin', '*');
+    c.header(
+      'Access-Control-Allow-Methods',
+      'GET, POST, PUT, DELETE, OPTIONS',
+    );
+    c.header(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization',
+    );
+
+    if (c.req.method === 'OPTIONS') {
+      return new Response(null, { status: 204 });
+    }
+
+    await next();
+  },
+}
+```
+
+
+### リクエストの記録
+
+```typescript copy
+{
+  handler: async (c, next) => {
+    const start = Date.now();
+    await next();
+    const duration = Date.now() - start;
+    console.log(`${c.req.method} ${c.req.url} - ${duration}ms`);
+  },
+}
+```
+
+
+### 特殊な Mastra ヘッダー
+
+Mastra Cloud やカスタムクライアントと統合する際、以下のヘッダーは
+ミドルウェアで参照して動作を調整できます:
+
+```typescript copy
+{
+  handler: async (c, next) => {
+    const isFromMastraCloud = c.req.header('x-mastra-cloud') === 'true';
+    const clientType = c.req.header('x-mastra-client-type');
+    const isDevPlayground =
+      c.req.header('x-mastra-dev-playground') === 'true';
+
+    if (isFromMastraCloud) {
+      // Special handling
+      // 特別なハンドリング
+    await next();
+  },
+}
+```
+
+* `x-mastra-cloud`: リクエストが Mastra Cloud から送信された
+* `x-mastra-client-type`: クライアント SDK を識別する（例: `js` または `python`）
+* `x-mastra-dev-playground`: ローカルのプレイグラウンドから発生したリクエスト
+
+
+### `runtimeContext` の設定
+
+サーバーミドルウェアでリクエストから情報を抽出し、`runtimeContext` を動的に設定できます。次の例では、Cloudflare の `CF-IPCountry` ヘッダーに基づいて `temperature-unit` を設定し、レスポンスがユーザーのロケールに合うようにしています。
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { testWeatherAgent } from "./agents/test-weather-agent";
+
+export const mastra = new Mastra({
+  agents: { testWeatherAgent },
+  server: {
+    middleware: [
+      async (context, next) => {
+        const country = context.req.header("CF-IPCountry");
+        const runtimeContext = context.get("runtimeContext");
+
+        runtimeContext.set(
+          "temperature-unit",
+          country === "US" ? "fahrenheit" : "celsius",
+        );
+
+        await next();
+      },
+    ],
+  },
+});
+```
+
+
+# 関連情報
+
+- [Runtime Context](./runtime-context)

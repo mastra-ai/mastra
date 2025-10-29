@@ -1,0 +1,201 @@
+---
+title: "リファレンス: FaithfulnessMetric 参照 | Evals | Mastra ドキュメント"
+description: Mastra における Faithfulness Metric のドキュメント。提供されたコンテキストに照らして、LLM の出力がどれだけ事実に即しているかを評価します。
+---
+
+# FaithfulnessMetric リファレンス
+
+:::info Scorers
+このドキュメントは旧式の evals API を参照しています。最新のスコアラー機能については [Scorers](/docs/scorers/overview) をご覧ください。
+:::
+
+Mastra の `FaithfulnessMetric` は、提供されたコンテキストに照らして LLM の出力がどれだけ事実に基づいているかを評価します。出力から主張を抽出し、それらをコンテキストと突き合わせて検証することで、RAG パイプラインの応答の信頼性を測るうえで不可欠な指標です。
+
+## 基本的な使い方
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { FaithfulnessMetric } from "@mastra/evals/llm";
+
+// 評価用にモデルを設定する
+const model = openai("gpt-4o-mini");
+
+const metric = new FaithfulnessMetric(model, {
+  context: [
+    "その会社は1995年に設立されました。",
+    "現在は約450〜550人を雇用しています。",
+  ],
+});
+
+const result = await metric.measure(
+  "その会社について教えてください。",
+  "その会社は1995年に設立され、従業員数は500人です。",
+);
+
+console.log(result.score); // 1.0
+console.log(result.info.reason); // "すべての記述はコンテキストによって裏付けられています。"
+```
+
+
+## コンストラクターのパラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      description: "忠実性評価に使用するモデルの設定。",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "FaithfulnessMetricOptions",
+      description: "このメトリクスの構成用の追加オプション。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### FaithfulnessMetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "scale",
+      type: "number",
+      description:
+        "スコアの最大値。最終的なスコアはこの尺度に正規化されます。",
+      isOptional: false,
+      defaultValue: "1",
+    },
+    {
+      name: "context",
+      type: "string[]",
+      description:
+        "出力の主張を検証するために照合されるコンテキストチャンクの配列。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## measure() のパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "LLM に与えられた元のクエリまたはプロンプト。",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "忠実性を評価する対象となる LLM の応答。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description:
+        "0 から設定済みスケールまでの数値で、コンテキストによって裏付けられた主張の割合を表します。",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "スコアの根拠を含むオブジェクト",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description:
+                "どの主張が支持・矛盾・不確かと判断されたかを含む、スコアの詳細な説明。",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## スコアリングの詳細
+
+この指標は、与えられたコンテキストに照らして主張を検証し、その結果に基づいて忠実性を評価します。
+
+### 採点プロセス
+
+1. 主張とコンテキストを分析:
+   - すべての主張（事実・推測）を抽出
+   - 各主張をコンテキストと照合して検証
+   - 次の3つの判定のいずれかを付与:
+     - "yes" - 主張はコンテキストにより裏付けられている
+     - "no" - 主張はコンテキストと矛盾している
+     - "unsure" - 主張は検証不能
+
+2. 忠実度スコアを算出:
+   - 裏付けられた主張数をカウント
+   - 総主張数で割る
+   - 設定範囲にスケーリング
+
+最終スコア: `(supported_claims / total_claims) * scale`
+
+### スコアの解釈
+
+（スケールは0から。デフォルトは0〜1）
+
+- 1.0: すべての主張が文脈で裏付けられている
+- 0.7〜0.9: ほとんどの主張が裏付けられており、検証不能なものは少数
+- 0.4〜0.6: 一部に矛盾が見られるなど、裏付けはまちまち
+- 0.1〜0.3: 裏付けは限定的で、矛盾が多い
+- 0.0: 裏付けられた主張はない
+
+## 応用例
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { FaithfulnessMetric } from "@mastra/evals/llm";
+
+// 評価用にモデルを設定
+const model = openai("gpt-4o-mini");
+
+const metric = new FaithfulnessMetric(model, {
+  context: [
+    "その会社の従業員数は2020年に100人だった。",
+    "現在の従業員数は約500人である。",
+  ],
+});
+
+// 異なる種類の主張を含む例
+const result = await metric.measure(
+  "その会社の成長はどのような状況ですか？",
+  "その会社は2020年の100人から現在は500人へと増加しており、来年までに1000人へ拡大する可能性がある。",
+);
+
+// 出力例:
+// {
+//   score: 0.67,
+//   info: {
+//     reason: "スコアが0.67であるのは、2つの主張（2020年の従業員数100人と現在の従業員数500人）がコンテキストで裏付けられる一方で、
+//           将来の拡大に関する主張はコンテキストで検証できないため不確実と判断されたためである。"
+//           while the future expansion claim is marked as unsure as it cannot
+//           be verified against the context."
+//   }
+// }
+```
+
+
+### 関連項目
+
+- [回答関連性メトリック](./answer-relevancy)
+- [幻覚（ハルシネーション）メトリック](./hallucination)
+- [コンテキスト関連性メトリック](./context-relevancy)

@@ -1,0 +1,198 @@
+---
+title: "リファレンス: ContextualRecallMetric | Evals | Mastra ドキュメント"
+description: 関連コンテキストの反映度に基づき、LLM の応答がどれだけ完全に情報を取り込めているかを評価する Contextual Recall Metric のドキュメント。
+---
+
+# ContextualRecallMetric
+
+:::info Scorers
+このドキュメントは旧来の evals API を参照しています。最新のスコアラー機能については [Scorers](/docs/scorers/overview) を参照してください。
+:::
+
+`ContextualRecallMetric` クラスは、LLM の応答が与えられたコンテキストから関連情報をどれだけ効果的に取り込めているかを評価します。参照ドキュメントの重要な情報が応答に適切に含まれているかを測定し、精度よりも網羅性に重点を置きます。
+
+## 基本的な使い方
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { ContextualRecallMetric } from "@mastra/evals/llm";
+
+// 評価用にモデルを構成する
+const model = openai("gpt-4o-mini");
+
+const metric = new ContextualRecallMetric(model, {
+  context: [
+    "製品の特長: クラウド同期機能",
+    "全ユーザーが利用できるオフラインモード",
+    "複数デバイスの同時利用に対応",
+    "全データのエンドツーエンド暗号化",
+  ],
+});
+
+const result = await metric.measure(
+  "製品の主な機能は何ですか？",
+  "この製品にはクラウド同期、オフラインモード、マルチデバイス対応が含まれます。",
+);
+
+console.log(result.score); // スコア（0〜1）
+```
+
+
+## コンストラクターのパラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      description:
+        "コンテキスト想起率を評価するために使用するモデルの構成",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "ContextualRecallMetricOptions",
+      description: "この指標の構成オプション",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### ContextualRecallMetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "scale",
+      type: "number",
+      description: "最大スコア値",
+      isOptional: true,
+      defaultValue: "1",
+    },
+    {
+      name: "context",
+      type: "string[]",
+      description:
+        "照合対象となる参照ドキュメントや情報の配列",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## measure() のパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "元のクエリまたはプロンプト",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "評価対象のLLMの出力",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "リコールスコア（0〜スケール上限、既定は0〜1）",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "スコアの根拠を含むオブジェクト",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description: "スコアに関する詳細な説明",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## スコアリングの詳細
+
+この指標は、関連するコンテキスト項目と応答内容を比較し、再現率（リコール）を評価します。
+
+### スコアリング手順
+
+1. 想起の評価:
+   - 文脈内の関連項目を特定
+   - 正しく想起された情報を記録
+   - 想起の網羅性を測定
+
+2. 想起スコアの算出:
+   - 正しく想起された項目数を集計
+   - 総関連項目数と比較
+   - カバレッジ率を計算
+
+最終スコア: `(correctly_recalled_items / total_relevant_items) * scale`
+
+### スコアの解釈
+
+（スケールは0から、デフォルトは0〜1）
+
+- 1.0: 完全な再現率 - すべての関連情報を含む
+- 0.7〜0.9: 高い再現率 - ほとんどの関連情報を含む
+- 0.4〜0.6: 中程度の再現率 - 一部の関連情報を見落としている
+- 0.1〜0.3: 低い再現率 - 重要な情報の見落としが多い
+- 0.0: 再現率なし - 関連情報を一切含まない
+
+## カスタム設定の例
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { ContextualRecallMetric } from "@mastra/evals/llm";
+
+// 評価用にモデルを設定する
+const model = openai("gpt-4o-mini");
+
+const metric = new ContextualRecallMetric(model, {
+  scale: 100, // 0〜1 ではなく 0〜100 のスケールを使用
+  context: [
+    "すべてのデータは保存時および転送中に暗号化されています",
+    "二要素認証（2FA）は必須です",
+    "定期的なセキュリティ監査が実施されています",
+    "インシデント対応チームが年中無休で待機しています",
+  ],
+});
+
+const result = await metric.measure(
+  "当社のセキュリティ対策を要約してください",
+  "同社はデータ保護のため暗号化を実施し、すべてのユーザーに 2FA を求めています。",
+);
+
+// 出力例:
+// {
+//   score: 50, // セキュリティ対策の半分しか言及されていない
+//   info: {
+//     reason: "スコアが50なのは、応答でセキュリティ対策の半分しか
+//           言及されていないためです。応答では定期的なセキュリティ監査と
+//           インシデント対応チームに関する情報が抜けていました。"
+//   }
+// }
+```
+
+
+## 関連項目
+
+- [コンテキスト関連性メトリクス](./context-relevancy)
+- [完全性メトリクス](./completeness)
+- [要約メトリクス](./summarization)

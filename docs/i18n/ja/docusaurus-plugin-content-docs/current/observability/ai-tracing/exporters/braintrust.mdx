@@ -1,0 +1,84 @@
+---
+title: "Braintrust Exporter | AI トレーシング | 可観測性 | Mastra ドキュメント"
+description: "評価と監視のために AI トレースを Braintrust に送信する"
+---
+
+# Braintrust エクスポーター
+
+[Braintrust](https://www.braintrust.dev/) は、LLM アプリケーションの品質を測定・改善するための評価・監視プラットフォームです。Braintrust エクスポーターは AI のトレースを Braintrust に送信し、体系的な評価、スコアリング、実験を可能にします。
+
+## Braintrust を使う場面
+
+Braintrust が特に得意なこと:
+
+- **評価ワークフロー** - 品質を体系的に測定
+- **実験トラッキング** - モデルのバージョンやプロンプトを比較
+- **データセット管理** - テストケースやゴールデンデータセットを整備
+- **回帰テスト** - 改善で既存機能が壊れないことを確認
+- **チームコラボレーション** - 実験や知見を共有
+
+## インストール
+
+```bash npm2yarn
+npm install @mastra/braintrust
+```
+
+
+## 設定
+
+### 前提条件
+
+1. **Braintrust アカウント**: [braintrust.dev](https://www.braintrust.dev/) で登録
+2. **プロジェクト**: トレース用のプロジェクトを作成または選択
+3. **API キー**: Braintrust の「Settings」→「API Keys」で作成
+4. **環境変数**: 資格情報を設定する:
+
+```bash title=".env"
+BRAINTRUST_API_KEY=sk-xxxxxxxxxxxxxxxx
+BRAINTRUST_PROJECT_NAME=my-project  # オプション。デフォルトは 'mastra-tracing'
+```
+
+
+### 基本設定
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { BraintrustExporter } from "@mastra/braintrust";
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      braintrust: {
+        serviceName: "my-service",
+        exporters: [
+          new BraintrustExporter({
+            apiKey: process.env.BRAINTRUST_API_KEY,
+            projectName: process.env.BRAINTRUST_PROJECT_NAME,
+          }),
+        ],
+      },
+    },
+  },
+});
+```
+
+
+### 完全な設定
+
+```typescript
+new BraintrustExporter({
+  // 必須
+  apiKey: process.env.BRAINTRUST_API_KEY!,
+
+  // オプション設定
+  projectName: "my-project", // デフォルト: 'mastra-tracing'
+  endpoint: "https://api.braintrust.dev", // 必要に応じてカスタムエンドポイントを指定
+  logLevel: "info", // 診断ログレベル: debug | info | warn | error
+});
+```
+
+
+## 関連情報
+
+- [AI トレーシングの概要](/docs/observability/ai-tracing/overview)
+- [Braintrust ドキュメント](https://www.braintrust.dev/docs)

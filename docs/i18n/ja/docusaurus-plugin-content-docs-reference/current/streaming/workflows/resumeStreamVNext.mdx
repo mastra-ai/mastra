@@ -1,0 +1,123 @@
+---
+title: "リファレンス: Run.resumeStreamVNext()（実験的） | ストリーミング | Mastra ドキュメント"
+description: ワークフローにおける `Run.resumeStreamVNext()` メソッドのドキュメント。中断されたワークフロー実行の再開と、その進行のリアルタイムストリーミングを可能にします。
+---
+
+# Run.resumeStreamVNext()（実験的）
+
+:::caution 実験的機能
+これは将来のバージョンで変更される可能性のある実験的な API です。`resumeStreamVNext()` メソッドは、最終的に現在のストリーミング手法を置き換える強化版ストリーミングシステムの一部です。本番環境での使用は慎重に検討してください。
+:::
+
+`.resumeStreamVNext()` メソッドは、新しいデータを用いて一時停止中のワークフロー実行を再開し、特定のステップから続行すると同時に、イベントのストリームを監視できるようにします。
+
+## 使い方の例
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+const stream = run.streamVNext({
+  inputData: {
+    value: "初期データ",
+  },
+});
+
+const result = await stream.result;
+
+if (result!.status === "suspended") {
+  const resumedStream = await run.resumeStreamVNext({
+    resumeData: {
+      value: "再開データ",
+    },
+  });
+}
+```
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "resumeData",
+      type: "z.infer<TInput>",
+      description: "ワークフローの入力スキーマに適合する入力データ",
+      isOptional: true,
+    },
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      description: "ワークフロー実行時に使用するランタイムコンテキストデータ",
+      isOptional: true,
+    },
+    {
+      name: "step",
+      type: "Step<string, any, any, any, any, TEngineType>",
+      description: "実行を再開する起点となるステップ",
+      isOptional: true,
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "AI トレーシング設定のオプション。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "ルートトレーススパンに追加するメタデータ。ユーザーID、セッションID、フィーチャーフラッグなどのカスタム属性を付与するのに有用です。",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "stream",
+      type: "MastraWorkflowStream<ChunkType>",
+      description:
+        "ReadableStream<ChunkType> を拡張し、ワークフロー固有のプロパティを追加したカスタムストリーム",
+    },
+    {
+      name: "stream.status",
+      type: "Promise<RunStatus>",
+      description: "現在のワークフロー実行ステータスを返す Promise",
+    },
+    {
+      name: "stream.result",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+      description: "最終的なワークフロー結果を返す Promise",
+    },
+    {
+      name: "stream.usage",
+      type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cacheInputTokens?: number }>",
+      description: "トークン使用状況（統計）を返す Promise",
+    },
+  ]}
+/>
+
+## ストリームイベント
+
+ストリームはワークフローの実行中にさまざまなイベントを送出します。各イベントには `type` フィールドと、関連するデータを含む `payload` が含まれます:
+
+- **`workflow-start`**: ワークフローの実行が開始される
+- **`workflow-step-start`**: ステップの実行が開始される
+- **`workflow-step-output`**: ステップからのカスタム出力
+- **`workflow-step-result`**: ステップが結果とともに完了する
+- **`workflow-finish`**: 使用状況の統計とともにワークフローの実行が完了する
+
+## 関連項目
+
+- [Workflows の概要](/docs/workflows/overview#running-workflows)
+- [Workflow.createRunAsync()](/reference/workflows/workflow-methods/create-run)
+- [Run.streamVNext()](./streamVNext)

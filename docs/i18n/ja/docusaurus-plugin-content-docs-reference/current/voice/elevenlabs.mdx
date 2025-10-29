@@ -1,0 +1,219 @@
+---
+title: "リファレンス: ElevenLabs | Voice | Mastra ドキュメント"
+description: "ElevenLabs の音声実装に関するドキュメント。複数の音声モデルと自然な音声合成により、高品質なテキスト読み上げ機能を提供します。"
+---
+
+# ElevenLabs
+
+Mastra における ElevenLabs の音声機能実装は、ElevenLabs API を用いて、高品質なテキスト読み上げ（TTS）および音声→テキスト変換（STT）を提供します。
+
+## 使い方の例
+
+```typescript
+import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+
+// 既定の設定で初期化（ELEVENLABS_API_KEY 環境変数を使用）
+const voice = new ElevenLabsVoice();
+
+// カスタム設定で初期化
+const voice = new ElevenLabsVoice({
+  speechModel: {
+    name: "eleven_multilingual_v2",
+    apiKey: "API キー",
+  },
+  speaker: "カスタムスピーカー ID",
+});
+
+// テキスト読み上げ（Text-to-Speech）
+const audioStream = await voice.speak("こんにちは、世界！");
+
+// 利用可能なスピーカー一覧を取得
+const speakers = await voice.getSpeakers();
+```
+
+
+## コンストラクターパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "ElevenLabsVoiceConfig",
+      description: "音声合成（TTS）の設定。",
+      isOptional: true,
+      defaultValue: "{ name: 'eleven_multilingual_v2' }",
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "音声合成に使用する話者のID。",
+      isOptional: true,
+      defaultValue: "'9BWtsMINqrJLrRacOk9x'（Ariaの声）",
+    },
+  ]}
+/>
+
+### ElevenLabsVoiceConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "ElevenLabsModel",
+      description: "使用する ElevenLabs のモデル",
+      isOptional: true,
+      defaultValue: "'eleven_multilingual_v2'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "ElevenLabs の API キー。未設定の場合は環境変数 ELEVENLABS_API_KEY が使用されます",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 方法
+
+### speak()
+
+設定された音声モデルと声を使って、テキストを音声に変換します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description:
+        "音声に変換するテキスト。ストリームが与えられた場合は、先にテキストへ変換されます。",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "音声合成の追加オプション",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "このリクエストにおけるデフォルトの話者IDを上書きします",
+      isOptional: true,
+    },
+  ]}
+/>
+
+Returns: `Promise<NodeJS.ReadableStream>`
+
+### getSpeakers()
+
+利用可能な音声オプションの配列を返します。各項目には以下が含まれます:
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "音声のユニークな識別子",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "音声の表示名",
+      isOptional: false,
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "音声の言語コード",
+      isOptional: false,
+    },
+    {
+      name: "gender",
+      type: "string",
+      description: "音声の性別",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### listen()
+
+ElevenLabs Speech-to-Text API を使用して、音声入力をテキストに変換します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "NodeJS.ReadableStream",
+      description: "文字起こし対象の音声データを含む読み取り可能なストリーム",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "文字起こしのための設定オプション",
+      isOptional: true,
+    },
+  ]}
+/>
+
+options オブジェクトは次のプロパティをサポートします:
+
+<PropertiesTable
+  content={[
+    {
+      name: "language_code",
+      type: "string",
+      description: "ISO 言語コード（例: 'en'、'fr'、'es'）",
+      isOptional: true,
+    },
+    {
+      name: "tag_audio_events",
+      type: "boolean",
+      description: "[MUSIC]、[LAUGHTER] などの音声イベントにタグを付与するかどうか",
+      isOptional: true,
+    },
+    {
+      name: "num_speakers",
+      type: "number",
+      description: "音声内で検出する話者数",
+      isOptional: true,
+    },
+    {
+      name: "filetype",
+      type: "string",
+      description: "音声ファイル形式（例: 'mp3'、'wav'、'ogg'）",
+      isOptional: true,
+    },
+    {
+      name: "timeoutInSeconds",
+      type: "number",
+      description: "リクエストのタイムアウト（秒）",
+      isOptional: true,
+    },
+    {
+      name: "maxRetries",
+      type: "number",
+      description: "最大再試行回数",
+      isOptional: true,
+    },
+    {
+      name: "abortSignal",
+      type: "AbortSignal",
+      description: "リクエストを中止するためのシグナル",
+      isOptional: true,
+    },
+  ]}
+/>
+
+Returns: `Promise<string>` - 文字起こし結果のテキストを返す Promise
+
+## 重要な注意事項
+
+1. ElevenLabs の API キーが必要です。`ELEVENLABS_API_KEY` 環境変数に設定するか、コンストラクタに渡してください。
+2. 既定の話者は Aria（ID: '9BWtsMINqrJLrRacOk9x'）です。
+3. ElevenLabs は音声認識（Speech-to-Text）機能をサポートしていません。
+4. 利用可能な話者は `getSpeakers()` メソッドで取得できます。各ボイスの言語や性別を含む詳細情報が返されます。

@@ -1,0 +1,117 @@
+---
+title: "リファレンス: UnicodeNormalizer | プロセッサ | Mastra ドキュメント"
+description: "Mastra の UnicodeNormalizer に関するドキュメント。Unicode テキストを正規化し、表記を一貫させ、問題の原因となり得る文字を除去します。"
+---
+
+# UnicodeNormalizer
+
+`UnicodeNormalizer` は、Unicode テキストを正規化し、メッセージを言語モデルに送信する前に書式の一貫性を保ち、問題になり得る文字を除去するための**入力プロセッサ**です。このプロセッサは、さまざまな Unicode 表現の統一、制御文字の削除、空白の整形の標準化を行うことで、テキスト品質の維持に貢献します。
+
+## 使い方の例
+
+```typescript copy
+import { UnicodeNormalizer } from "@mastra/core/processors";
+
+const processor = new UnicodeNormalizer({
+  stripControlChars: true,
+  collapseWhitespace: true,
+});
+```
+
+
+## コンストラクターの引数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Options",
+      description: "Unicode テキスト正規化用の設定オプション",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### オプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "stripControlChars",
+      type: "boolean",
+      description:
+        "制御文字を除去するかどうか。有効にすると、\t、\n、\r を除く制御文字を削除します",
+      isOptional: true,
+      default: "false",
+    },
+    {
+      name: "preserveEmojis",
+      type: "boolean",
+      description:
+        "絵文字を保持するかどうか。無効にすると、制御文字を含む絵文字は削除される場合があります",
+      isOptional: true,
+      default: "true",
+    },
+    {
+      name: "collapseWhitespace",
+      type: "boolean",
+      description:
+        "連続する空白をまとめるかどうか。有効にすると、複数のスペース/タブ/改行を単一のものにまとめます",
+      isOptional: true,
+      default: "true",
+    },
+    {
+      name: "trim",
+      type: "boolean",
+      description: "先頭と末尾の空白をトリミングするかどうか",
+      isOptional: true,
+      default: "true",
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "プロセッサ名は「unicode-normalizer」に設定されています",
+      isOptional: false,
+    },
+    {
+      name: "processInput",
+      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }) => MastraMessageV2[]",
+      description: "入力メッセージを処理して、Unicode テキストを正規化します",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 応用例
+
+```typescript title="src/mastra/agents/normalized-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { UnicodeNormalizer } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "normalized-agent",
+  instructions: "あなたは親切なアシスタントです",
+  model: openai("gpt-4o-mini"),
+  inputProcessors: [
+    new UnicodeNormalizer({
+      stripControlChars: true,
+      preserveEmojis: true,
+      collapseWhitespace: true,
+      trim: true,
+    }),
+  ],
+});
+```
+
+
+## 関連情報
+
+- [入力プロセッサ](/docs/agents/guardrails)

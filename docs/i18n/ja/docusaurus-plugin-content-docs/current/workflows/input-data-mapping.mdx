@@ -1,0 +1,113 @@
+---
+title: "入力データのマッピング | ワークフロー | Mastra ドキュメント"
+description: "Mastra のワークフローで、入力マッピングを使用してより動的なデータフローを構築する方法を学びます。"
+---
+
+# 入力データのマッピング
+
+入力データのマッピングでは、次のステップの入力に値を明示的にマッピングできます。これらの値は、次のいずれかのソースから取得されます:
+
+- 前のステップの出力
+- ランタイムコンテキスト
+- 定数
+- ワークフローの初期入力
+
+## `.map()` を使ったマッピング
+
+この例では、`step1` の `output` を変換して、`step2` に必要な `inputSchema` に適合させます。`step1` の値は、`.map` 関数の `inputData` パラメーターから参照できます。
+
+![.map() を使ったマッピング](/img/workflows/workflows-data-mapping-map.jpg)
+
+```typescript {9} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .map(async ({ inputData }) => {
+    const { value } = inputData;
+    return {
+      output: `new ${value}`
+    };
+  })
+  .then(step2)
+  .commit();
+```
+
+
+## `inputData` の使用
+
+前のステップの出力全体にアクセスするには、`inputData` を使用します。
+
+```typescript {3} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map(({ inputData }) => {
+    console.log(inputData);
+  })
+```
+
+
+## `getStepResult()` の使用
+
+ステップのインスタンスを参照して、特定のステップの完全な出力にアクセスするには、`getStepResult` を使用します。
+
+```typescript {3} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map(async ({ getStepResult }) => {
+    console.log(getStepResult(step1));
+  })
+```
+
+
+## `getInitData()` を使用する
+
+`getInitData` を使って、ワークフローに渡された初期入力データにアクセスします。
+
+```typescript {3} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map(async ({ getInitData }) => {
+      console.log(getInitData());
+  })
+```
+
+
+## `mapVariable()` を使う
+
+`mapVariable` を使うには、workflows モジュールから該当の関数をインポートします:
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { mapVariable } from "@mastra/core/workflows";
+```
+
+
+### `mapVariable()` を使ったステップ出力のリネーム
+
+`.map()` のオブジェクト構文を使うと、ステップの出力をリネームできます。次の例では、`step1` の出力 `value` を `details` にリネームしています:
+
+```typescript {3-6} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map({
+    details: mapVariable({
+      step: step,
+      path: "value"
+    })
+  })
+```
+
+
+### `mapVariable()` を使ってワークフローの出力名を変更する
+
+**参照合成**を用いると、ワークフローの出力をリネームできます。これは、ワークフローインスタンスを `initData` として渡すことで行います。
+
+```typescript {6-9} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+export const testWorkflow = createWorkflow({...});
+
+testWorkflow
+  .then(step1)
+  .map({
+    details: mapVariable({
+      initData: testWorkflow,
+      path: "value"
+    })
+  })
+```

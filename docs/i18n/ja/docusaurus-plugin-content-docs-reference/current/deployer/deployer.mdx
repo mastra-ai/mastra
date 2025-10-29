@@ -1,0 +1,168 @@
+---
+title: "リファレンス: Deployer | Deployer | Mastra ドキュメント"
+description: Mastra アプリケーションのパッケージングとデプロイを扱う抽象クラス「Deployer」のドキュメント。
+asIndexPage: true
+---
+
+# Deployer
+
+Deployer は、コードのパッケージング、環境ファイルの管理、Hono フレームワークによるアプリケーションの提供を通じて、スタンドアロンの Mastra アプリケーションのデプロイを担います。具体的な実装では、対象となるデプロイ先ごとに deploy メソッドを定義する必要があります。
+
+## 使い方の例
+
+```typescript
+import { Deployer } from "@mastra/deployer";
+
+// 抽象クラス Deployer を継承してカスタムデプロイアを作成する
+class CustomDeployer extends Deployer {
+  constructor() {
+    super({ name: "custom-deployer" });
+  }
+
+// 抽象メソッド deploy を実装する
+  async deploy(outputDirectory: string): Promise<void> {
+// 出力ディレクトリを準備する
+    await this.prepare(outputDirectory);
+
+// アプリケーションをバンドルする
+    await this._bundle("server.ts", "mastra.ts", outputDirectory);
+
+// デプロイのカスタム処理
+    // ...
+  }
+}
+```
+
+
+## パラメーター
+
+### コンストラクターのパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "args",
+      type: "object",
+      description: "Deployer の構成オプション。",
+      isOptional: false,
+    },
+    {
+      name: "args.name",
+      type: "string",
+      description: "Deployer インスタンスの一意な名前。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### deploy のパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "outputDirectory",
+      type: "string",
+      description:
+        "バンドル済みでデプロイ可能なアプリケーションが出力されるディレクトリ。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## メソッド
+
+<PropertiesTable
+  content={[
+    {
+      name: "getEnvFiles",
+      type: "() => Promise<string[]>",
+      description:
+        "デプロイ時に使用する環境ファイルの一覧を返します。既定では、'.env.production' と '.env' のファイルを探します。",
+    },
+    {
+      name: "deploy",
+      type: "(outputDirectory: string) => Promise<void>",
+      description:
+        "サブクラスで実装必須の抽象メソッドです。指定された出力ディレクトリへのデプロイ処理を行います。",
+    },
+  ]}
+/>
+
+## Bundler から継承されたメソッド
+
+Deployer クラスは、Bundler クラスから次の主要なメソッドを継承します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "prepare",
+      type: "(outputDirectory: string) => Promise<void>",
+      description:
+        "出力ディレクトリをクリーンアップし、必要なサブディレクトリを作成して準備します。",
+    },
+    {
+      name: "writeInstrumentationFile",
+      type: "(outputDirectory: string) => Promise<void>",
+      description:
+        "テレメトリー目的のための計測ファイルを出力ディレクトリに書き込みます。",
+    },
+    {
+      name: "writePackageJson",
+      type: "(outputDirectory: string, dependencies: Map<string, string>) => Promise<void>",
+      description:
+        "指定された依存関係を含む package.json を出力ディレクトリに生成します。",
+    },
+    {
+      name: "_bundle",
+      type: "(serverFile: string, mastraEntryFile: string, outputDirectory: string, bundleLocation?: string) => Promise<void>",
+      description:
+        "指定されたサーバーおよび Mastra のエントリファイルを使用してアプリケーションをバンドルします。",
+    },
+  ]}
+/>
+
+## 重要な概念
+
+### デプロイライフサイクル
+
+Deployer 抽象クラスは、体系的なデプロイライフサイクルを実装します。
+
+1. **初期化**: デプロイヤーは名前で初期化され、依存関係管理のために Deps インスタンスを作成します。
+2. **環境設定**: `getEnvFiles` メソッドは、デプロイ時に使用する環境ファイル（.env.production、.env）を特定します。
+3. **準備**: `prepare` メソッド（Bundler からの継承）は出力ディレクトリをクリーンアップし、必要なサブディレクトリを作成します。
+4. **バンドル**: `_bundle` メソッド（Bundler からの継承）はアプリケーションコードとその依存関係をパッケージ化します。
+5. **デプロイ**: 抽象メソッド `deploy` は、実際のデプロイ処理を行うためにサブクラスで実装されます。
+
+### 環境ファイル管理
+
+Deployer クラスには、`getEnvFiles` メソッドによる環境ファイル管理の組み込みサポートがあります。このメソッドは次の処理を行います:
+
+* 事前定義された順序（.env.production、.env）で環境ファイルを検索する
+* FileService を使用して最初に存在するファイルを特定する
+* 見つかった環境ファイルの配列を返す
+* 環境ファイルが見つからない場合は空配列を返す
+
+```typescript
+getEnvFiles(): Promise<string[]> {
+  const possibleFiles = ['.env.production', '.env.local', '.env'];
+
+  try {
+    const fileService = new FileService();
+    const envFile = fileService.getFirstExistingFile(possibleFiles);
+
+    return Promise.resolve([envFile]);
+  } catch {}
+
+  return Promise.resolve([]);
+}
+```
+
+
+### バンドルとデプロイの関係
+
+Deployer クラスは Bundler クラスを継承し、バンドルとデプロイの関係を明確に示します:
+
+1. **前提としてのバンドル**: バンドルはデプロイの前提となるステップであり、アプリケーションコードをデプロイ可能な形式にまとめます。
+2. **共通の基盤**: バンドルとデプロイは、依存関係管理やファイルシステム操作などの共通基盤を共有します。
+3. **デプロイ固有のロジック**: バンドルがコードのパッケージングに注力するのに対し、デプロイではバンドル済みコードを展開するための環境特有のロジックが加わります。
+4. **拡張性**: 抽象メソッド `deploy` により、さまざまなターゲット環境向けの専用デプロイヤーを作成できます。

@@ -1,0 +1,81 @@
+---
+title: "リファレンス: Observability API | Client SDK | Mastra ドキュメント"
+description: client-js SDK を使って、AI のトレースを取得し、アプリケーションのパフォーマンスを監視し、トレースにスコアを付ける方法を学びます。
+---
+
+# Observability API
+
+Observability API は、AI のトレースの取得、アプリケーションのパフォーマンス監視、評価のためのトレースのスコアリングを行うためのメソッドを提供します。これにより、AI エージェントやワークフローのパフォーマンスを把握できます。
+
+## 特定の AI トレースを取得する
+
+ID を指定して該当の AI トレースを取得します。すべてのスパンと詳細が含まれます。
+
+```typescript
+const trace = await mastraClient.getAITrace("trace-id-123");
+```
+
+
+## フィルタで AI トレースを取得する
+
+オプションのフィルタを指定して、AI トレースのルートスパンのページネーション対応一覧を取得します。
+
+```typescript
+const traces = await mastraClient.getAITraces({
+  pagination: {
+    page: 1,
+    perPage: 20,
+    dateRange: {
+      start: new Date("2024-01-01"),
+      end: new Date("2024-01-31"),
+    },
+  },
+  filters: {
+    name: "weather-agent", // トレース名でフィルター
+    spanType: "agent", // スパンタイプでフィルター
+    entityId: "weather-agent-id", // エンティティIDでフィルター
+    entityType: "agent", // エンティティタイプでフィルター
+  },
+});
+
+console.log(`${traces.spans.length}個のルートスパンが見つかりました`);
+console.log(`総ページ数: ${traces.pagination.totalPages}`);
+
+// すべてのスパンを含む完全なトレースを取得するには、getAITraceを使用
+const completeTrace = await mastraClient.getAITrace(traces.spans[0].traceId);
+```
+
+
+## トレースのスコアリング
+
+評価に登録したスコアラーを使って、特定のトレースにスコアを付与します。
+
+```typescript
+const result = await mastraClient.score({
+  scorerName: "answer-relevancy",
+  targets: [
+    { traceId: "trace-1", spanId: "span-1" }, // 特定のスパンをスコアリング
+    { traceId: "trace-2" }, // 特定のスパンをスコアリング(デフォルトは親スパン)
+  ],
+});
+```
+
+
+## スパン単位でスコアを取得
+
+トレース内の特定のスパンのスコアを取得します：
+
+```typescript
+const scores = await mastraClient.getScoresBySpan({
+  traceId: "trace-123",
+  spanId: "span-456",
+  page: 1,
+  perPage: 20,
+});
+```
+
+
+## 関連
+
+- [Agents API](./agents) - トレースを生成するエージェントのやり取りについて学ぶ
+- [Workflows API](./workflows) - ワークフロー実行の監視について理解する

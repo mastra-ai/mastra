@@ -1,0 +1,124 @@
+---
+title: "Cedar-OS を Mastra と統合する | Frameworks | Mastra ドキュメント"
+description: "Cedar-OS で Mastra エージェント向けの AI ネイティブなフロントエンドを構築する"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+
+# Mastra と Cedar-OS を統合する
+
+Cedar-OS は、最先端の AI ネイティブアプリケーションの構築に特化して設計された、オープンソースのエージェント指向 UI フレームワークです。Cedar は Mastra を念頭に置いて構築されています。
+
+## Cedar を使うべき？
+
+Cedar には特に重視している核心的なポイントがいくつかあります。詳しくは[こちら](https://docs.cedarcopilot.com/introduction/philosophy)をご覧ください。
+
+#### 1. 開発者体験
+
+- **各コンポーネントを shadcn 方式で個別に取得** – コードはすべてあなたのもの。自由にスタイルを変更できます
+- **セットアップ不要ですぐ動く** – チャットコンポーネントを挿入するだけで動作します
+- **完全に拡張可能** - 完全にカスタマイズ可能な [Zustand ストアアーキテクチャ](https://docs.cedarcopilot.com/introduction/architecture) 上に構築されており、内部のあらゆる関数を1行で上書きできます。
+
+#### 2. 真にAIネイティブなアプリケーションの実現
+
+歴史上初めて、プロダクトが「生きる」ようになりました。Cedarは、生命感のあるプロダクトづくりを支援します。
+
+- **[Spells](https://docs.cedarcopilot.com/spells/spells#what-are-spells)** - ユーザーはキーボードショートカット、マウスイベント、テキスト選択などからAIを呼び出せます
+- **[State Diff Management](https://docs.cedarcopilot.com/state-diff/using-state-diff)** - エージェントの出力を受け入れるか却下するかをユーザーが選択できます
+- **[Voice Integration](https://docs.cedarcopilot.com/voice/voice-integration)** - ユーザーが音声でアプリを操作できるようにします
+
+## クイックスタート
+
+<Steps>
+
+<StepItem>
+
+Cedar の CLI コマンドを実行します：
+
+```bash
+npx cedar-os-cli plant-seed
+```
+
+最初から始める場合は、モノレポ構成でフロントエンドとバックエンドを含む完全なセットアップができる **Mastra starter** テンプレートを選択してください。
+
+すでに Mastra のバックエンドがある場合は、代わりに **blank frontend cedar repo** オプションを使用してください。これにより、Cedar のコンポーネントおよび依存関係一式をダウンロードするオプションが提供されます。まずはチャットコンポーネントのいずれかを少なくとも 1 つダウンロードすることをおすすめします。
+
+</StepItem>
+
+<StepItem>
+
+CedarCopilot プロバイダーでアプリケーションをラップして、Mastra バックエンドに接続します：
+
+```tsx
+import { CedarCopilot } from "cedar-os";
+
+function App() {
+  return (
+    <CedarCopilot
+      llmProvider={{
+        provider: "mastra",
+        baseURL: "http://localhost:4111", // Mastra のデフォルト開発ポート
+        apiKey: process.env.NEXT_PUBLIC_MASTRA_API_KEY, // 任意 — バックエンド認証用
+      }}
+    >
+      <YourApp />
+    </CedarCopilot>
+  );
+}
+```
+
+</StepItem>
+
+<StepItem>
+
+[Mastra Configuration Options](https://docs.cedarcopilot.com/agent-backend-connection/agent-backend-connection#mastra-configuration-options) に従って、Mastra バックエンドを Cedar と連携するように設定します。
+
+Mastra サーバー（モノレポの場合は Next.js のサーバーレスルート）で [API ルートを登録](https://mastra.ai/en/examples/deployment/custom-api-route) します：
+
+```ts mastra/src/index.ts
+import { registerApiRoute } from "@mastra/core/server";
+
+// POST /chat
+// チャットの非ストリーミング用デフォルトエンドポイント
+registerApiRoute("/chat", {
+  method: "POST",
+  // …zod で入力を検証
+  handler: async (c) => {
+    /* agent.generate() のロジック */
+  },
+});
+
+// POST /chat/stream (SSE)
+// チャットのストリーミング用デフォルトエンドポイント
+registerApiRoute("/chat/stream", {
+  method: "POST",
+  handler: async (c) => {
+    /* エージェントの出力を SSE 形式でストリーム */
+  },
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+Cedar のコンポーネントをフロントエンドに追加します。詳しくは [Chat Overview](https://docs.cedarcopilot.com/chat/chat-overview) を参照してください。
+
+これでバックエンドとフロントエンドが接続できました。Mastra エージェントで AI ネイティブな体験の構築を始められます。
+
+</StepItem>
+
+</Steps>
+
+## 詳細情報
+
+- 追加の設定オプション（問題が発生した場合の手動インストール手順を含む）については、[Mastra 連携の詳細ガイド](https://docs.cedarcopilot.com/agent-backend-connection/mastra#extending-mastra)をご覧ください
+- Cedar が提供する Mastra 向けの最適化と機能をご確認ください
+  - **シームレスなイベントストリーミング** - [Mastra のストリーミングイベント](https://docs.cedarcopilot.com/chat/custom-message-rendering#mastra-event-renderer)を自動レンダリング
+  - **音声エンドポイント対応** - 組み込みの[音声バックエンド統合](https://docs.cedarcopilot.com/voice/agentic-backend#endpoint-configuration)
+  - **エンドツーエンドの型安全性** - アプリと Mastra バックエンド間の通信を対象とした[型定義](https://docs.cedarcopilot.com/type-safety/typing-agent-requests)
+- [Discord に参加しよう！](https://discord.gg/4AWawRjNdZ) Cedar チームは皆さんにお会いできるのを楽しみにしています :)

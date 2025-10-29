@@ -1,0 +1,194 @@
+---
+title: "例: カスタムのネイティブ JavaScript 評価 | Evals | Mastra Docs"
+description: カスタムのネイティブ JavaScript 評価指標を作成する例。
+---
+
+# カスタムネイティブ JavaScript 評価
+
+:::note
+Scorers API は現在ベータ版です。改善に鋭意取り組んでおり、皆さまのフィードバックを歓迎します。ご質問や機能リクエストがありましたら、[Discord](https://discord.gg/mastra) までご連絡ください。
+:::
+
+この例では、JavaScript のロジックを用いてカスタム評価指標を作成する方法を示します。この指標は `query` と `response` を受け取り、スコアと、総単語数および一致した単語数を含む `info` オブジェクトを返します。
+
+## インストール
+
+```bash
+npm install @mastra/evals
+```
+
+
+## カスタム eval を作成する
+
+Mastra のカスタム eval では、条件の評価にネイティブの JavaScript メソッドを使用できます。
+
+```typescript title="src/mastra/evals/example-word-inclusion.ts" showLineNumbers copy
+import { Metric, type MetricResult } from "@mastra/core";
+
+export class WordInclusionMetric extends Metric {
+  constructor() {
+    super();
+  }
+
+  async measure(input: string, output: string): Promise<MetricResult> {
+    const tokenize = (text: string) =>
+      text.toLowerCase().match(/\b\w+\b/g) || [];
+
+    const referenceWords = [...new Set(tokenize(input))];
+    const outputText = output.toLowerCase();
+
+    const matchedWords = referenceWords.filter((word) =>
+      outputText.includes(word),
+    );
+
+    const totalWords = referenceWords.length;
+    const score = totalWords > 0 ? matchedWords.length / totalWords : 0;
+
+    return {
+      score,
+      info: {
+        totalWords,
+        matchedWords: matchedWords.length,
+      },
+    };
+  }
+}
+```
+
+
+## 高スコアのカスタム例
+
+この例では、応答に入力クエリで列挙されたすべての語が含まれています。メトリクスは、語が完全に含まれていることを示す高いスコアを返します。
+
+```typescript title="src/example-high-word-inclusion.ts" showLineNumbers copy
+import { WordInclusionMetric } from "./mastra/evals/example-word-inclusion";
+
+const metric = new WordInclusionMetric();
+
+const query = "りんご、バナナ、オレンジ";
+const response = "私の好きな果物は: りんご、バナナ、オレンジです。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 高品質なカスタム出力
+
+この出力は、入力に含まれる固有の語がすべて応答に含まれており、網羅性が高いことを示しているため、高いスコアを獲得します。
+
+```typescript
+{
+  score: 1,
+  info: {
+    totalWords: 3,
+    matchedWords: 3
+  }
+}
+```
+
+
+## 部分的なカスタム例
+
+この例では、応答には入力クエリに含まれる語の一部しか含まれていません。評価指標は、この不完全な語のカバレッジを反映した部分的なスコアを返します。
+
+```typescript title="src/example-partial-word-inclusion.ts" showLineNumbers copy
+import { WordInclusionMetric } from "./mastra/evals/example-word-inclusion";
+
+const metric = new WordInclusionMetric();
+
+const query = "猫、犬、ウサギ";
+const response = "犬とウサギが好きです";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 部分的なカスタム出力
+
+このスコアは、応答に入力内のユニークな単語が一部しか含まれておらず、単語の網羅が不完全であることを示しているため、部分的な成功を反映しています。
+
+```typescript
+{
+  score: 0.6666666666666666,
+  info: {
+    totalWords: 3,
+    matchedWords: 2
+  }
+}
+```
+
+
+## 低包含率の例
+
+この例では、レスポンスに入力クエリの単語がまったく含まれていません。指標は、単語の包含がないことを示す低いスコアを返します。
+
+```typescript title="src/example-low-word-inclusion.ts" showLineNumbers copy
+import { WordInclusionMetric } from "./mastra/evals/example-word-inclusion";
+
+const metric = new WordInclusionMetric();
+
+const query = "コロンビア、ブラジル、パナマ";
+const response = "メキシコに行きましょう";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### カスタム出力が低い
+
+スコアが0なのは、入力に含まれる固有の語が応答内にまったく現れず、両テキスト間に重なりがないことを示しているためです。
+
+```typescript
+{
+  score: 0,
+  info: {
+    totalWords: 3,
+    matchedWords: 0
+  }
+}
+```
+
+
+## 結果の理解
+
+`WordInclusionMetric` は次の形式の結果を返します:
+
+```typescript
+{
+  score: 数値,
+  info: {
+    totalWords: 数値,
+    matchedWords: 数値
+  }
+}
+```
+
+
+### カスタムスコア
+
+0 から 1 の範囲のスコア:
+
+- **1.0**: 応答に入力のすべての単語が含まれる。
+- **0.5–0.9**: 応答に一部の単語は含まれるが、すべては含まれない。
+- **0.0**: 入力の単語が応答にまったく含まれない。
+
+### カスタム情報
+
+スコアの説明。詳細は以下のとおりです。
+
+- `totalWords` は、入力内で見つかったユニークな単語数です。
+- `matchedWords` は、応答にも含まれているそれらの単語数です。
+- スコアは `matchedWords / totalWords` で計算されます。
+- 入力に有効な単語が見つからない場合、スコアは既定で `0` になります。
+
+<GithubLink
+  outdated={true}
+  marginTop="mt-16"
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/word-inclusion"
+/>

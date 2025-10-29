@@ -1,0 +1,173 @@
+---
+title: "例: Answer Relevancy の評価 | Evals | Mastra Docs"
+description: クエリに対する応答の妥当性を Answer Relevancy 指標で評価する例。
+---
+
+# 回答の関連性評価
+
+:::note
+Scorers APIは現在ベータ版です。改良を進めており、皆さまからのフィードバックをお待ちしています。ご質問や機能リクエストは[Discord](https://discord.gg/mastra)でご連絡ください。
+:::
+
+`AnswerRelevancyMetric` を使用して、回答が元のクエリにどれだけ関連しているかを評価します。このメトリックは `query` と `response` を受け取り、スコアと理由を含む `info` オブジェクトを返します。
+
+## インストール
+
+```bash copy
+npm install @mastra/evals
+```
+
+
+## 関連性が高い例
+
+この例では、回答が入力クエリに対して、具体的で関連性の高い情報を用いて的確に応えています。
+
+```typescript title="src/example-high-answer-relevancy.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { AnswerRelevancyMetric } from "@mastra/evals/llm";
+
+const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"));
+
+const query = "定期的な運動の健康効果は何ですか?";
+const response =
+  "定期的な運動は心血管の健康を改善し、筋肉を強化し、代謝を高め、エンドルフィンの放出により精神的な健康を向上させます。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 関連性の高い出力
+
+この出力は、無関係な情報を含めずに問いに正確に答えているため、高いスコアを獲得します。
+
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'スコアが1なのは、定期的な運動の具体的な健康効果を複数挙げて質問に直接答えているためです。これには、心血管の健康、筋力、代謝、そしてメンタルヘルスの向上が含まれます。いずれの点も関連性が高く、健康効果への包括的な理解に貢献しています。'
+  }
+}
+```
+
+
+## 関連性が部分的な例
+
+この例では、応答はクエリの一部には答えているものの、直接は関係のない情報も含まれています。
+
+```typescript title="src/example-partial-answer-relevancy.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { AnswerRelevancyMetric } from "@mastra/evals/llm";
+
+const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"));
+
+const query = "健康的な朝食には何を含めるべきですか?";
+const response =
+  "栄養価の高い朝食には全粒穀物とタンパク質を含めるべきです。しかし、朝食のタイミングも同様に重要です。研究によると、起床後2時間以内に食事をすることで、一日を通じて代謝とエネルギーレベルが最適化されることが示されています。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 部分的に関連する出力
+
+この出力はクエリに一部しか答えていないため、スコアが低くなります。関連情報は含まれているものの、無関係な詳細が全体の関連性を損ねています。
+
+```typescript
+{
+  score: 0.25,
+  info: {
+    reason: 'スコアが0.25であるのは、出力が健康的な朝食の構成要素として全粒穀物とタンパク質に言及し、直接的な回答を示していて一定の関連性があるためです。ただし、朝食のタイミングやそれが代謝・エネルギーレベルに及ぼす影響に関する追加情報は質問に直接関係せず、全体としての関連性スコアを下げています。'
+  }
+}
+```
+
+
+## 関連性が低い例
+
+この例では、応答が問い合わせに対応しておらず、まったく無関係な情報が含まれています。
+
+```typescript title="src/example-low-answer-relevancy.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { AnswerRelevancyMetric } from "@mastra/evals/llm";
+
+const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"));
+
+const query = "瞑想の効果は何ですか?";
+const response =
+  "万里の長城は13,000マイル以上の長さがあり、明王朝時代に侵略から守るために建設されました。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 関連性の低い出力
+
+この出力は、クエリに回答しておらず、関連する情報も提供していないため、スコアは0となります。
+
+```typescript
+{
+  score: 0,
+  info: {
+    reason: 'スコアが0なのは、出力が瞑想の利点とは無関係な万里の長城についての内容であり、入力された質問に答えるための関連情報や文脈を一切提供していないためです。'
+  }
+}
+```
+
+
+## メトリクスの設定
+
+オプションのパラメーターを調整することで、`AnswerRelevancyMetric` がスコアをどのように計算するかをカスタマイズできます。たとえば、`uncertaintyWeight` は不確実な応答にどれだけ重み付けするかを制御し、`scale` は到達可能な最大スコアを設定します。
+
+```typescript showLineNumbers copy
+const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"), {
+  uncertaintyWeight: 0.3,
+  scale: 1,
+});
+```
+
+> 構成オプションの一覧については、[AnswerRelevancyMetric](/reference/evals/answer-relevancy) を参照してください。
+
+
+## 結果の理解
+
+`AnswerRelevancyMetric` は次の形式の結果を返します:
+
+```typescript
+{
+  score: 数値,
+  info: {
+    reason: 文字列
+  }
+}
+```
+
+
+### 関連性スコア
+
+0 から 1 の間の関連性スコア:
+
+- **1.0**: 回答は関連性が高く、焦点の定まった情報でクエリに完全に答えている。
+- **0.7–0.9**: 回答はおおむねクエリに答えているが、軽微な無関係な内容を含む場合がある。
+- **0.4–0.6**: 回答は部分的にクエリに答えているが、関連情報と無関係な情報が混在している。
+- **0.1–0.3**: 回答は関連する内容が最小限で、クエリの意図を大きく外している。
+- **0.0**: 回答は完全に無関係で、クエリに答えていない。
+
+### 関連性に関する情報
+
+スコアの説明（以下の詳細を含む）:
+
+- クエリと応答の整合性
+- コンテンツの焦点と関連性
+- 応答を改善するための提案
+
+<GithubLink
+  outdated={true}
+  marginTop="mt-16"
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/answer-relevancy"
+/>

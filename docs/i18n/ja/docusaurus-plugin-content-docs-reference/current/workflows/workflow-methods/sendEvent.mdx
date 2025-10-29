@@ -1,0 +1,72 @@
+---
+title: "リファレンス: Workflow.sendEvent() | Workflows | Mastra ドキュメント"
+description: ワークフローの `Workflow.sendEvent()` メソッドに関するドキュメント。イベントが送信されると、実行が再開されます。
+---
+
+# Workflow.sendEvent()
+
+`.sendEvent()` は、イベントの送信によって処理が再開されます。
+
+## 使い方の例
+
+```typescript copy
+run.sendEvent("event-name", { value: "data" });
+```
+
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "eventName",
+      type: "string",
+      description: "送信するイベント名",
+      isOptional: false,
+    },
+    {
+      name: "step",
+      type: "Step",
+      description: "イベント送信後に再開するステップ",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "メソッドチェーン用のワークフローインスタンス",
+    },
+  ]}
+/>
+
+## 発展的な使用例
+
+```typescript showLineNumbers copy
+import { mastra } from "./mastra";
+
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+
+const result = run.start({
+  inputData: {
+    value: "こんにちは",
+  },
+});
+
+setTimeout(() => {
+  run.sendEvent("event-name", { value: "イベントから" });
+}, 3000);
+```
+
+> この例では、`await run.start()` を直接使用しないでください。ワークフローが待機状態に入るまでイベントの送信がブロックされてしまいます。
+
+
+## 関連
+
+- [.waitForEvent()](./waitForEvent)
+- [一時停止と再開](/docs/workflows/suspend-and-resume#sleep--events)

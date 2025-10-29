@@ -1,0 +1,196 @@
+---
+title: "RuntimeContext | サーバーとDB | Mastraドキュメント"
+description: MastraのRuntimeContextを使って、エージェントに動的でリクエスト固有の設定を提供する方法を学びます。
+---
+
+# ランタイムコンテキスト
+
+エージェント、ツール、ワークフローはいずれも `RuntimeContext` をパラメータとして受け取り、リクエスト固有の値を基盤となるプリミティブで利用できるようにします。
+
+## `RuntimeContext` を使うタイミング
+
+プリミティブの挙動を実行時の条件に応じて変える必要がある場合に `RuntimeContext` を使用します。たとえば、ユーザー属性に基づいてモデルやストレージのバックエンドを切り替えたり、言語に応じて指示やツールの選択を調整したりできます。
+
+:::note
+
+**注:** `RuntimeContext` は主に特定のリクエストにデータを渡すために使われます。複数回の呼び出しにわたる会話履歴や状態の永続化を扱うエージェントのメモリとは区別されます。
+
+:::
+
+## 値の設定
+
+実行時に基盤となるすべてのプリミティブで値を利用できるようにするには、`runtimeContext` をエージェント、ネットワーク、ワークフロー、またはツールの呼び出しに渡します。呼び出し前に `.set()` を使って値を定義します。
+
+`.set()` メソッドは 2 つの引数を取ります:
+
+1. **key**: 値を識別するための名前。
+2. **value**: そのキーに関連付けるデータ。
+
+```typescript showLineNumbers
+import { RuntimeContext } from "@mastra/core/runtime-context";
+
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const runtimeContext = new RuntimeContext<UserTier>();
+runtimeContext.set("user-tier", "enterprise");
+
+const agent = mastra.getAgent("weatherAgent");
+await agent.generate("ロンドンの天気はどうですか?", {
+  runtimeContext,
+});
+
+const routingAgent = mastra.getAgent("routingAgent");
+routingAgent.network("ロンドンの天気はどうですか?", {
+  runtimeContext,
+});
+
+const run = await mastra.getWorkflow("weatherWorkflow").createRunAsync();
+await run.start({
+  inputData: {
+    location: "ロンドン",
+  },
+  runtimeContext,
+});
+await run.resume({
+  resumeData: {
+    city: "ニューヨーク",
+  },
+  runtimeContext,
+});
+
+await weatherTool.execute({
+  context: {
+    location: "ロンドン",
+  },
+  runtimeContext,
+});
+```
+
+
+### リクエストヘッダーに基づく値の設定
+
+`runtimeContext` は、リクエストから情報を抽出してサーバーミドルウェア内で動的に設定できます。この例では、ユーザーのロケールに合わせたレスポンスとなるよう、Cloudflare の `CF-IPCountry` ヘッダーに基づいて `temperature-unit` を設定します。
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { testWeatherAgent } from "./agents/test-weather-agent";
+
+export const mastra = new Mastra({
+  agents: { testWeatherAgent },
+  server: {
+    middleware: [
+      async (context, next) => {
+        const country = context.req.header("CF-IPCountry");
+        const runtimeContext = context.get("runtimeContext");
+
+        runtimeContext.set(
+          "temperature-unit",
+          country === "US" ? "fahrenheit" : "celsius",
+        );
+
+        await next();
+      },
+    ],
+  },
+});
+```
+
+> サーバーミドルウェアの使い方は、[Middleware](/docs/server-db/middleware) をご覧ください。
+
+
+## エージェントで値にアクセスする
+
+エージェントのサポートされている各種設定オプションから `runtimeContext` 引数にアクセスできます。これらの関数は同期または `async` のどちらでも構いません。`runtimeContext` から値を読み取るには `.get()` メソッドを使用します。
+
+```typescript {7-8,15,18,21} title="src/mastra/agents/weather-agent.ts" showLineNumbers
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+export const weatherAgent = new Agent({
+  name: "weather-agent",
+  instructions: async ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+
+    if (userTier === "enterprise") {
+      // ...
+    }
+    // ...
+  },
+  model: ({ runtimeContext }) => {
+    // ...
+  },
+  tools: ({ runtimeContext }) => {
+    // ...
+  },
+  memory: ({ runtimeContext }) => {
+    // ...
+  },
+});
+```
+
+`runtimeContext` は、`agents`、`workflows`、`scorers`、`inputProcessors`、`outputProcessors` といった他のオプションと併用できます。
+
+> 設定オプションの一覧は [Agent](/reference/agents/agent) を参照してください。
+
+
+## ワークフローステップから値にアクセスする
+
+ワークフローステップの `execute` 関数内で `runtimeContext` 引数にアクセスできます。この関数は同期・非同期のどちらでもかまいません。`runtimeContext` から値を読み取るには `.get()` メソッドを使用します。
+
+```typescript {7-8} title="src/mastra/workflows/weather-workflow.ts" showLineNumbers copy
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const stepOne = createStep({
+  id: "step-one",
+  execute: async ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+
+    if (userTier === "enterprise") {
+      // ...
+    }
+    // ...
+  },
+});
+```
+
+> 設定オプションの一覧は [createStep()](/reference/workflows/step) を参照してください。
+
+
+## ツールで値にアクセスする
+
+ツールの `execute` 関数から `runtimeContext` 引数にアクセスできます。この関数は `async` です。`runtimeContext` から値を読み取るには `.get()` メソッドを使用します。
+
+```typescript {7-8} title="src/mastra/tools/weather-tool.ts" showLineNumbers
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+
+    if (userTier === "enterprise") {
+      // ...
+    }
+    // ...
+  },
+});
+```
+
+> すべての設定オプションについては、[createTool()](/reference/tools/create-tool) を参照してください。
+
+
+## 関連項目
+
+- [ランタイムコンテキストの例](/examples/agents/runtime-context)
+- [エージェントのランタイムコンテキスト](/docs/agents/overview#using-runtimecontext)
+- [ワークフローのランタイムコンテキスト](../workflows/overview#using-runtimecontext)
+- [ツールのランタイムコンテキスト](../tools-mcp/overview#using-runtimecontext)
+- [サーバーのミドルウェアにおけるランタイムコンテキスト](/docs/server-db/middleware)

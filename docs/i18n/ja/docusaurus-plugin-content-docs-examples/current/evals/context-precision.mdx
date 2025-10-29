@@ -1,0 +1,194 @@
+---
+title: "例: コンテキスト精度の評価 | Evals | Mastra Docs"
+description: コンテキスト情報の活用精度を評価するために「Context Precision」指標を用いる例。
+---
+
+# コンテキスト精度の評価
+
+:::note
+Scorers API は現在ベータ版です。改善に鋭意取り組んでおり、皆さまのフィードバックをお待ちしています。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までご連絡ください。
+:::
+
+`ContextPrecisionMetric` を使用して、レスポンスが提供されたコンテキストのうち最も関連性の高い部分に依拠しているかを評価します。メトリクスは `query` と `response` を受け取り、スコアと、その理由を含む `info` オブジェクトを返します。
+
+## インストール
+
+```bash copy
+npm install @mastra/evals
+```
+
+
+## 高精度の例
+
+この例では、応答はクエリに直接関係するコンテキストのみに基づいています。すべてのコンテキストが回答を支持しており、高い精度スコアにつながります。
+
+```typescript title="src/example-high-precision.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextPrecisionMetric } from "@mastra/evals/llm";
+
+const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
+  context: [
+    "光合成は太陽光をエネルギーに変換する。",
+    "植物は光合成に葉緑素を使う。",
+    "光合成は副産物として酸素を生成する。",
+    "このプロセスには太陽光と葉緑素が必要である。",
+  ],
+});
+
+const query = "光合成とは何か、どのように機能するのか?";
+const response =
+  "光合成は、植物が葉緑素を使って太陽光をエネルギーに変換し、副産物として酸素を生成するプロセスである。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 高精度な出力
+
+無関係な情報を一切含まず、すべてのコンテキスト記述がクエリの回答に直接寄与しているため、この出力は満点と評価されます。
+
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'スコアが1なのは、すべてのコンテキストノードが関連しており、光合成の明確な定義、説明、そして不可欠な要素を直接示しているためです。最初のノードがこのプロセスを定義し、続いてクロロフィルや酸素生成に関する補足的な詳細が並び、いずれも最適な順序で配置されています。'
+  }
+}
+```
+
+
+## 混合精度の例
+
+この例では、応答は1つ以上の関連するコンテキスト項目を利用していますが、無関係または注意をそらす情報も含んでいます。結果として、全体的な精度スコアが下がります。
+
+```typescript title="src/example-mixed-precision.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextPrecisionMetric } from "@mastra/evals/llm";
+
+const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
+  context: [
+    "火山は地球の地殻にある開口部です。",
+    "火山は活火山、休火山、死火山に分類されます。",
+    "ハワイには多くの活火山があります。",
+    "環太平洋火山帯には多くの火山があります。",
+  ],
+});
+
+const query = "火山にはどのような種類がありますか?";
+const response =
+  "火山は活動状態に基づいて、活火山、休火山、死火山に分類できます。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 混合精度の出力
+
+関連する文脈は用いられているものの、無関係または不要な情報が混在して全体の精度を下げているため、この出力のスコアは中程度となります。
+
+```typescript
+{
+  score: 0.58,
+  info: {
+    reason: 'スコアが0.58となったのは、2番目と3番目のノードが火山の種類について直接的な定義と例を示していた一方、1番目と4番目のノードは無関係で精度を下げたためです。また、最も有用なコンテキストが先頭に来ておらず、関連ノードの並び順が最適でなかったことも、全体的な有効性に影響しました。'
+  }
+}
+```
+
+
+## 精度が低い例
+
+この例では、応答は提供されたコンテキストのごく一部しか利用していません。コンテキストの大半はクエリに無関係で、その結果、適合率（precision）スコアが低くなります。
+
+```typescript title="src/example-low-precision.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextPrecisionMetric } from "@mastra/evals/llm";
+
+const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
+  context: [
+    "ナイル川はアフリカにあります。",
+    "ナイル川は世界で最も長い川です。",
+    "古代エジプト人はナイル川を利用していました。",
+    "ナイル川は北に流れます。",
+  ],
+});
+
+const query = "ナイル川はどの方向に流れますか?";
+const response = "ナイル川は北に向かって流れます。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+### 低精度の出力
+
+この出力は、クエリに関連するコンテキストが1つしかないため、評価が低くなっています。残りのコンテキストは無関係で、回答に寄与していません。
+
+```typescript
+{
+  score: 0.25,
+  info: {
+    reason: "スコアが0.25なのは、ナイル川の流れの向きに関する質問に直接答えているのが第4のコンテキストノードだけで、最初の3つのノードは無関係で有用な情報を含んでいないためです。これは、取得されたコンテキスト全体の関連性に大きな問題があることを示しており、その大半が期待する出力に寄与しなかったことを意味します。"
+  }
+}
+```
+
+
+## メトリックの設定
+
+関連する背景情報を表す `context` 配列を指定して、`ContextPrecisionMetric` インスタンスを作成できます。また、`scale` などの任意パラメータを設定して、取り得る最大スコアを指定することもできます。
+
+```typescript showLineNumbers copy
+const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
+  context: [""],
+  scale: 1,
+});
+```
+
+> すべての設定オプションの一覧は、[ContextPrecisionMetric](/reference/evals/context-precision)を参照してください。
+
+
+## 結果の理解
+
+`ContextPrecisionMetric` は次の形式の結果を返します:
+
+```typescript
+{
+  スコア: number,
+  info: {
+    理由: string
+  }
+}
+```
+
+
+### 精度スコア
+
+0〜1の範囲の精度スコア:
+
+- **1.0**: 完全な精度 — すべてのコンテキスト項目が関連しており、使用されている。
+- **0.7〜0.9**: 高精度 — ほとんどのコンテキスト項目が関連している。
+- **0.4〜0.6**: ばらつきあり — 一部のコンテキスト項目のみが関連している。
+- **0.1〜0.3**: 低精度 — 関連するコンテキスト項目が少ない。
+- **0.0**: 精度なし — 関連するコンテキスト項目がない。
+
+### 精度に関する情報
+
+スコアの説明（以下の詳細を含む）:
+
+- 各コンテキスト項目がクエリおよびレスポンスにどの程度関連しているか
+- 関連する項目がレスポンスに含まれていたかどうか
+- 無関係なコンテキストが誤って含まれていなかったか
+- 提供されたコンテキストに対して、レスポンスがどれだけ有用で焦点が定まっているかの総合評価
+
+<GithubLink
+  outdated={true}
+  marginTop="mt-16"
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-precision"
+/>

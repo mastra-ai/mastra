@@ -1,0 +1,112 @@
+---
+title: "リファレンス: Workflow.execute() | 旧ワークフロー | Mastra ドキュメント"
+description: "Mastra のワークフローにおける `.execute()` メソッドのドキュメント。ワークフローの各ステップを実行し、結果を返します。"
+---
+
+# Workflow.execute()
+
+指定されたトリガー データを使用してワークフローを実行し、結果を返します。実行前にワークフローをコミットしておく必要があります。
+
+## 使い方の例
+
+```typescript
+const workflow = new LegacyWorkflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+
+workflow.step(stepOne).then(stepTwo).commit();
+
+const result = await workflow.execute({
+  triggerData: { inputValue: 42 },
+});
+```
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "ExecuteOptions",
+      description: "ワークフロー実行のオプション",
+      isOptional: true,
+      properties: [
+        {
+          name: "triggerData",
+          type: "TriggerSchema",
+          description: "ワークフローのトリガースキーマに適合する入力データ",
+          isOptional: false,
+        },
+        {
+          name: "runId",
+          type: "string",
+          description: "この実行を追跡するための任意の ID",
+          isOptional: true,
+        },
+      ],
+    },
+  ]}
+/>
+
+## 返り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "WorkflowResult",
+      type: "object",
+      description: "ワークフロー実行の結果",
+      properties: [
+        {
+          name: "runId",
+          type: "string",
+          description: "この実行の一意の識別子",
+        },
+        {
+          name: "results",
+          type: "Record<string, StepResult>",
+          description: "完了した各ステップの結果",
+        },
+        {
+          name: "status",
+          type: "WorkflowStatus",
+          description: "ワークフロー実行の最終的なステータス",
+        },
+      ],
+    },
+  ]}
+/>
+
+## 追加の例
+
+実行するラン ID:
+
+```typescript
+const result = await workflow.execute({
+  runId: "カスタム run ID",
+  triggerData: { inputValue: 42 },
+});
+```
+
+実行結果の処理:
+
+```typescript
+const { runId, results, status } = await workflow.execute({
+  triggerData: { inputValue: 42 },
+});
+
+if (status === "COMPLETED") {
+  console.log("ステップ結果:", results);
+}
+```
+
+
+### 関連情報
+
+- [Workflow.createRun()](./createRun)
+- [Workflow.commit()](./commit)
+- [Workflow.start()](./start)

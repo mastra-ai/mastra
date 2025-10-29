@@ -1,0 +1,324 @@
+---
+title: "移行: Mastra v1 へのアップグレード | 移行ガイド"
+description: "Mastra の v1 未満のバージョンにおける破壊的変更への対応を含むアップグレード方法を解説します。"
+---
+
+# Mastra v1 へのアップグレード
+
+このガイドでは、Mastra の v1 以前のバージョンにおける破壊的変更への対応方法と、Mastra v1 へのアップグレード手順を学べます。
+
+パッケージマネージャーを使ってプロジェクトの依存関係を更新してください。Mastra のパッケージは必ずすべて同時に更新してください。
+
+:::info
+
+見出しで示しているバージョンは `@mastra/core` パッケージを指します。必要に応じて、他の Mastra パッケージのバージョンは詳細説明の中で個別に言及します。
+
+すべての Mastra パッケージは `@mastra/core` に対する peer dependency を持っているため、パッケージマネージャーで互換性の有無を確認できます。
+
+:::
+
+## v0.23 への移行（未リリース）
+
+:::note
+
+このバージョンはまだリリースされていませんが、変更があれば随時ここに反映しています。
+
+:::
+
+### 変更点: スレッドタイトルの生成場所とデフォルト
+
+**破壊的変更:**
+
+1. `generateTitle` は `threads.generateTitle` からメモリオプションのトップレベルに移動しました
+2. デフォルト値は `true` から `false` に変更されました
+3. `threads.generateTitle` を使用するとエラーが発生します
+
+**なぜこの変更なのか？**
+
+* `generateTitle` を論理的に属するトップレベルへ移すことで API を簡素化するため
+* 想定外の LLM API 呼び出しとそれに伴うコストを回避するため
+* タイトル生成の実行タイミングを開発者が明示的に制御できるようにするため
+* メモリの動作の予測可能性を高めるため
+
+**移行方法:**
+
+アプリケーションで `threads.generateTitle` を使用している場合は、トップレベルの `generateTitle` オプションを使用するように更新してください:
+
+```typescript
+// 変更前 (v0.22 以前)
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      threads: {
+        generateTitle: true, // ❌ これはエラーになります
+      },
+    },
+  }),
+});
+
+// 変更後 (v0.23+)
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      generateTitle: true, // ✅ トップレベルに配置されます
+    },
+  }),
+});
+```
+
+アプリケーションが旧来のデフォルト動作（タイトルの自動生成）に依存している場合は、明示的に有効にしてください。
+
+```typescript
+// 以前 (v0.22では暗黙的にtrue)
+const agent = new Agent({
+  memory: new Memory({
+    // generateTitleはデフォルトでtrueでした
+  }),
+});
+
+// 以降 (v0.23+では明示的にtrue)
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      generateTitle: true, // タイトル生成を明示的に有効化
+    },
+  }),
+});
+```
+
+タイトル生成に使うモデルや指示もカスタマイズできます。
+
+```typescript
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      generateTitle: {
+        model: openai("gpt-4o-mini"),
+        instructions:
+          "会話を要約する簡潔なタイトル(最大5語)を生成してください",
+      },
+    },
+  }),
+});
+```
+
+
+### 変更: メモリのデフォルト設定
+
+RAG の研究に基づき、semantic recall のデフォルト設定を最適化しました:
+
+* **`topK`** を `2` から `4` に増加 — 最も関連性の高いメッセージを 2 件ではなく 4 件取得
+* **`messageRange`** を `{before: 2, after: 2}` から `{before: 1, after: 1}` に変更 — 取得した各メッセージの前後に含めるメッセージを 2 件ではなく 1 件に
+
+**影響:**
+
+semantic recall が有効な場合、これまでの 10 件（2 × 5）ではなく、最大で合計 12 件（4 × 3）のメッセージを取得します。メッセージ数の増加は 20% に抑えつつ、約 8% の精度向上が得られます。
+
+**対応が必要です:**
+
+以前のデフォルトに依存しており、従来の動作を維持したい場合は、これらの値を明示的に設定してください:
+
+```typescript
+const agent = new Agent({
+  memory: {
+    semanticRecall: {
+      topK: 2,
+      messageRange: { before: 2, after: 2 },
+    },
+  },
+});
+```
+
+セマンティックリコールを使用していない場合（デフォルトで無効）、変更は必要ありません。
+
+
+### Agent クラス
+
+- `generateVNext()` メソッドは削除されました。代わりに `generate()` を使用してください。
+- `streamVNext()` メソッドは削除されました。代わりに `stream()` を使用してください。
+- `agent.llm` → `agent.getLLM()`
+- `agent.tools` → `agent.getTools()`
+- `agent.instructions` → `agent.getInstructions()`
+- `agent.speak()` → `agent.voice.speak()`
+- `agent.getSpeakers()` → `agent.voice.getSpeakers()`
+- `agent.listen` → `agent.voice.listen()`
+- `agent.fetchMemory` → `(await agent.getMemory()).query()`
+- `agent.toStep` → エージェントをステップに直接追加します。変換はワークフローが処理します。
+- `getDefaultGenerateOptions()` → `getDefaultGenerateOptionsLegacy()`
+- `getDefaultStreamOptions()` → `getDefaultStreamOptionsLegacy()`
+- `getDefaultVNextStreamOptions()` → `getDefaultStreamOptions()`
+
+#### 出力オプション
+
+* `generate()` と `stream()` のオプションから、非推奨の `output` フィールドを削除しました。代わりに `structuredOutput.schema` を使用してください:
+
+```typescript
+// Before
+const result = await agent.generate(messages, {
+  output: z.object({
+    answer: z.string(),
+  }),
+});
+
+// After
+const result = await agent.generate(messages, {
+  structuredOutput: {
+    schema: z.object({
+      answer: z.string(),
+    }),
+  },
+});
+```
+
+
+#### Abort Signal
+
+* `modelSettings.abortSignal` は削除されました。代わりにトップレベルの `abortSignal` オプションを使用してください：
+
+```typescript
+// 変更前
+const result = await agent.stream(messages, {
+  modelSettings: {
+    abortSignal: controller.signal,
+    temperature: 0.7,
+  },
+});
+
+// 変更後
+const result = await agent.stream(messages, {
+  abortSignal: controller.signal,
+  modelSettings: {
+    temperature: 0.7,
+  },
+});
+```
+
+
+#### MCP ツール
+
+* トップレベルの引数から `elicitation` と `extra` を削除しました。代わりに `mcp` プロパティを使用してください。
+
+```typescript
+export const accountBalance = createTool({
+  id: "account-balance",
+  description: "指定されたアカウントの現在の残高を取得します",
+  inputSchema: z.object({
+    accountId: z.string(),
+  }),
+  outputSchema: z.object({
+    balance: z.number(),
+  }),
+  execute: async ({ context, mcp }) => {
+    if (mcp) {
+      await checkAuth(mcp.extra.authInfo);
+
+      const result = await mcp.elicitation.sendRequest({
+        message: `アカウント ${context.accountId} の残高を取得してもよろしいですか？`,
+        requestedSchema: {
+          type: "object",
+          properties: {
+            confirm: { type: "boolean" },
+          },
+          required: ["confirm"],
+        },
+      });
+
+      if (result.action === "accept") {
+        return {
+          balance: getAccountBalance(context.accountId),
+        };
+      }
+    }
+  },
+});
+```
+
+
+#### 入力プロセッサ
+
+- `@mastra/core/agent/input-processors` のエクスポートは削除されました。現在は `@mastra/core/processors` から利用できます。
+- `InputProcessor` 型は廃止され、`processInput` 関数を実装する `Processor` に置き換えられました。
+
+## v0.22 へのアップグレード
+
+### 変更点: メモリスコープのデフォルト
+
+`@mastra/memory` - `0.16.0`
+`@mastra/core` - `0.22.0`
+
+**working memory** と **semantic recall** のデフォルトのメモリスコープが `'thread'` から `'resource'` に変更されました。
+
+**変更前:**
+
+* Working memory のデフォルトは `scope: 'thread'`（会話ごとに分離）
+* Semantic recall のデフォルトは `scope: 'thread'`（現在の会話内のみ検索）
+
+**変更後:**
+
+* Working memory のデフォルトは `scope: 'resource'`（すべてのユーザーとの会話をまたいで保持）
+* Semantic recall のデフォルトは `scope: 'resource'`（すべてのユーザーとの会話をまたいで検索）
+
+**なぜこの変更を行ったのか？**
+
+1. **より良いユーザー体験**: 多くのアプリケーションは単一のスレッド内だけでなく、会話をまたいでユーザー情報を記憶したい
+2. **より直感的なデフォルト**: ユーザーは AI エージェントが自分を「覚えている」ことを期待しており、そのためには resource スコープのメモリが必要
+3. **一般的なユースケースとの整合**: 多くの本番環境のアプリケーションは resource スコープのメモリを使用している
+
+**移行:**
+
+メモリを会話スレッドごとに分離する従来の動作を維持したい場合は、メモリ設定で明示的に `scope: 'thread'` を設定してください。
+
+```typescript showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+
+const memory = new Memory({
+  storage: new LibSQLStore({ url: "file:local.db" }),
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: "thread", // スレッドスコープに明示的に設定
+      template: `# ユーザープロフィール
+- **名前**:
+- **関心事**:
+`,
+    },
+    semanticRecall: {
+      topK: 3,
+      scope: "thread", // スレッドスコープに明示的に設定
+    },
+  },
+});
+```
+
+新しいデフォルトの動作を採用する場合、`scope: 'resource'` の明示的な宣言は不要になったため、任意で削除できます。
+
+
+### 非推奨: `format: "aisdk"`
+
+`stream()`／`generate()` メソッドの `format: "aisdk"` オプションは非推奨です。代わりに `@mastra/ai-sdk` パッケージを使用してください。詳細は [Vercel AI SDK の使用方法ドキュメント](/docs/frameworks/agentic-uis/ai-sdk)をご覧ください。
+
+### 削除: MCP クラス
+
+`@mastra/mcp` - `0.14.0`
+
+- `MastraMCPClient` クラスを削除しました。代わりに [`MCPClient`](/reference/tools/mcp-client) クラスを使用してください。
+- `MCPConfigurationOptions` 型を削除しました。代わりに [`MCPClientOptions`](/reference/tools/mcp-client#mcpclientoptions) 型を使用してください。API は同一です。
+- `MCPConfiguration` クラスを削除しました。代わりに [`MCPClient`](/reference/tools/mcp-client) クラスを使用してください。
+
+### 変更点: CLI フラグおよびコマンドの削除
+
+`mastra` - `0.17.0`
+
+- `mastra deploy` CLI コマンドを削除しました。各プラットフォームのデプロイ手順に従ってください。
+- `mastra build` コマンドから `--env` フラグを削除しました。ビルド成果物をカスタム環境で起動する場合は、代わりに `mastra start --env <env>` を使用してください。
+- `mastra dev` から `--port` フラグを削除しました。代わりに `new Mastra()` クラスで `server.port` を設定してください。
+
+## v0.21 への移行
+
+変更は不要です。
+
+## v0.20 への移行
+
+- [VNext から Standard APIs へ](./vnext-to-standard-apis)
+- [AgentNetwork から .network() へ](./agentnetwork)

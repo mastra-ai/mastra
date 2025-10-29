@@ -1,0 +1,55 @@
+---
+title: "サーバーレスへのデプロイ | デプロイ | Mastra ドキュメント"
+description: "プラットフォーム固有のデプロイヤーまたは標準の HTTP サーバーを使って Mastra アプリケーションをビルドし、デプロイする"
+---
+
+# サーバーレスへのデプロイ
+
+スタンドアロンの Mastra アプリケーションは、次のデプロイヤーパッケージのいずれかを使用して、主要なサーバーレスプラットフォームにデプロイできます：
+
+- [Cloudflare](/docs/deployment/serverless-platforms/cloudflare-deployer)
+- [Netlify](/docs/deployment/serverless-platforms/netlify-deployer)
+- [Vercel](/docs/deployment/serverless-platforms/vercel-deployer)
+
+フレームワークに Mastra を統合する場合は、デプロイヤーは不要です。詳しくは、[Web Framework Integration](/docs/deployment/web-framework) を参照してください。
+
+自己ホストの Node.js サーバーにデプロイする場合は、[Creating A Mastra Server](/docs/deployment/server-deployment) ガイドをご覧ください。
+
+## 前提条件
+
+始める前に、次のものを用意してください:
+
+- Node.js `v20.0` 以上
+- プラットフォーム固有のデプロイヤーを使用する場合:
+  - 選択したプラットフォームのアカウント
+  - 必要な API キーまたは認証情報
+
+## LibSQLStore
+
+`LibSQLStore` はローカルファイルシステムに書き込みますが、サーバーレス環境は性質上エフェメラルであるため対応していません。Vercel、Netlify、Cloudflare などのプラットフォームにデプロイする場合は、`LibSQLStore` の使用を必ずすべて削除してください。
+
+具体的には、`src/mastra/index.ts` と `src/mastra/agents/weather-agent.ts` の両方から削除していることを確認してください。
+
+```typescript title="src/mastra/index.ts" showLineNumbers
+export const mastra = new Mastra({
+  // ...
+  storage: new LibSQLStore({
+    // [!code --]
+    // テレメトリ、評価などをメモリストレージに保存します。永続化する場合は file:../mastra.db に変更してください // [!code --]
+    url: ":memory:", // [!code --]
+  }), //[!code --]
+});
+```
+
+```typescript title="src/mastra/agents/weather-agent.ts" showLineNumbers
+export const weatherAgent = new Agent({
+  // ..
+  memory: new Memory({
+    // [!code --]
+    storage: new LibSQLStore({
+      // [!code --]
+      url: "file:../mastra.db", // パスは .mastra/output ディレクトリを基準とした相対パスです // [!code --]
+    }), // [!code --]
+  }), //  [!code --]
+});
+```

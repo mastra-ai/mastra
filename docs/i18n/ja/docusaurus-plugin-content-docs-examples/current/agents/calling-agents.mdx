@@ -1,0 +1,119 @@
+---
+title: "例: エージェントの呼び出し | Agents | Mastra ドキュメント"
+description: エージェントの呼び出し方法の例。
+---
+
+# エージェントの呼び出し
+
+Mastra で作成したエージェントとやり取りする方法はいくつかあります。以下では、ワークフローのステップ、ツール、[Mastra Client SDK](/docs/server-db/mastra-client)、そしてローカルで素早くテストするためのコマンドラインを使ってエージェントを呼び出す例を紹介します。
+
+このページでは、[システムプロンプトの変更](./system-prompt)の例で説明した `harryPotterAgent` の呼び出し方法を示します。
+
+## ワークフローステップから
+
+`mastra` インスタンスは、ワークフローステップの `execute` 関数に引数として渡されます。`getAgent()` を使って登録済みのエージェントにアクセスできます。このメソッドでエージェントを取得し、プロンプトを渡して `generate()` を呼び出してください。
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  // ...
+  execute: async ({ mastra }) => {
+    const agent = mastra.getAgent("harryPotterAgent");
+    const response = await agent.generate(
+      "ホグワーツで一番好きな部屋はどこですか?",
+    );
+
+    console.log(response.text);
+  },
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .commit();
+```
+
+
+## ツールから
+
+`mastra` インスタンスは、ツールの `execute` 関数内で使用できます。`getAgent()` を使って登録済みのエージェントを取得し、プロンプトを渡して `generate()` を呼び出します。
+
+```typescript title="src/mastra/tools/test-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const testTool = createTool({
+  // ...
+  execute: async ({ mastra }) => {
+    const agent = mastra.getAgent("harryPotterAgent");
+    const response = await agent.generate(
+      "ホグワーツで一番好きな部屋は何ですか?",
+    );
+
+    console.log(response!.text);
+  },
+});
+```
+
+
+## Mastra クライアントから
+
+`mastraClient` インスタンスは、登録済みのエージェントにアクセスできます。`getAgent()` でエージェントを取得し、role と content のペアからなる `messages` 配列を含むオブジェクトを渡して `generate()` を呼び出します。
+
+```typescript showLineNumbers copy
+import { mastraClient } from "../lib/mastra-client";
+
+const agent = mastraClient.getAgent("harryPotterAgent");
+const response = await agent.generate({
+  messages: [
+    {
+      role: "user",
+      content: "ホグワーツで一番好きな部屋はどこですか?",
+    },
+  ],
+});
+
+console.log(response.text);
+```
+
+> 詳細は [Mastra Client SDK](/docs/server-db/mastra-client) をご覧ください。
+
+
+### スクリプトを実行する
+
+このスクリプトは次のコマンドでコマンドラインから実行します:
+
+```bash
+npx tsx src/test-agent.ts
+```
+
+
+## HTTP または curl を使う
+
+登録済みのエージェントとは、Mastra アプリケーションの `/generate` エンドポイントに `POST` リクエストを送信してやり取りできます。`messages` 配列には role/content のペアを含めてください。
+
+```bash
+curl -X POST http://localhost:4111/api/agents/harryPotterAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {
+        "role": "user",
+        "content": "ホグワーツで一番好きな部屋はどこですか?"
+      }
+    ]
+  }'| jq -r '.text'
+```
+
+
+## 実行例
+
+```text
+まあ、選ばなきゃならないなら、グリフィンドールの談話室かな。
+ロンとハーマイオニーと過ごした最高の時間の多くを、そこで過ごしたから。
+暖炉のあたたかな火、居心地のいい肘掛け椅子、それに仲間との一体感があって、まるで我が家みたいに感じられるんだ。
+それに、僕たちの冒険の計画はいつもここで立てるからね！
+```

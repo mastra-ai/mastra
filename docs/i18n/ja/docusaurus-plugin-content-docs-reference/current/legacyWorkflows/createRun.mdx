@@ -1,0 +1,78 @@
+---
+title: "リファレンス: Workflow.createRun() | レガシー ワークフロー | Mastra ドキュメント"
+description: "レガシー ワークフローにおける`.createRun()`メソッドのドキュメント。新しいワークフロー実行のランインスタンスを初期化します。"
+---
+
+# Workflow.createRun()
+
+`.createRun()` メソッドは、新しいワークフロー実行インスタンスを初期化します。追跡用の一意の実行 ID を生成し、呼び出すとワークフローの実行を開始する start 関数を返します。
+
+`.createRun()` を `.execute()` の代わりに使用する理由のひとつは、`.watch()` による監視や、追跡・ログ記録のために一意の実行 ID を取得できる点です。
+
+## 使い方
+
+```typescript
+const { runId, start, watch } = workflow.createRun();
+
+const result = await start();
+```
+
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "このワークフロー実行を追跡するための固有の識別子",
+    },
+    {
+      name: "start",
+      type: "() => Promise<LegacyWorkflowResult>",
+      description: "呼び出すとワークフローの実行を開始する関数",
+    },
+    {
+      name: "watch",
+      type: "(callback: (record: LegacyWorkflowResult) => void) => () => void",
+      description:
+        "ワークフロー実行の各遷移時にコールバックを呼び出すためのコールバック関数を受け取る関数",
+    },
+    {
+      name: "resume",
+      type: "({stepId: string, context: Record<string, any>}) => Promise<LegacyWorkflowResult>",
+      description:
+        "指定したステップIDとコンテキストからワークフロー実行を再開する関数",
+    },
+    {
+      name: "resumeWithEvent",
+      type: "(eventName: string, data: any) => Promise<LegacyWorkflowResult>",
+      description:
+        "指定したイベント名とデータからワークフロー実行を再開する関数",
+    },
+  ]}
+/>
+
+## エラー処理
+
+ワークフローの設定が無効な場合、start 関数は検証エラーを送出することがあります:
+
+```typescript
+try {
+  const { runId, start, watch, resume, resumeWithEvent } = workflow.createRun();
+  await start({ triggerData: data });
+} catch (error) {
+  if (error instanceof ValidationError) {
+    // バリデーションエラーを処理する
+    console.log(error.type); // '循環依存' | '終端パスなし' | '到達不能なステップ'
+    console.log(error.details);
+  }
+}
+```
+
+
+## 関連
+
+- [Workflow クラス リファレンス](./workflow)
+- [Step クラス リファレンス](./step-class)
+- 詳細な使用例については、[Creating a Workflow](/examples/workflows_legacy/creating-a-workflow) を参照してください

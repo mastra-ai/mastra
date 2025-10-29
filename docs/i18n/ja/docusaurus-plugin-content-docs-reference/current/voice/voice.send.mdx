@@ -1,0 +1,83 @@
+---
+title: "リファレンス：voice.send() | Voice | Mastra ドキュメント"
+description: "リアルタイム音声プロバイダーで利用可能な send() メソッドのドキュメント。音声データをストリーミングして連続処理を行います。"
+---
+
+# voice.send()
+
+`send()` メソッドは、音声データをリアルタイムに音声プロバイダーへストリーミングし、継続的に処理します。音声同士のリアルタイム会話に不可欠で、マイク入力をAIサービスに直接送信できます。
+
+## 使い方の例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import Speaker from "@mastra/node-speaker";
+import { getMicrophoneStream } from "@mastra/node-audio";
+
+const speaker = new Speaker({
+  sampleRate: 24100, // オーディオのサンプリング周波数（Hz）— MacBook Proでの高音質の標準値
+  channels: 1, // モノラル出力（ステレオだと2）
+  bitDepth: 16, // 音質のためのビット深度 — CD品質の標準（16ビット）
+});
+
+// リアルタイム音声プロバイダーを初期化
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-4o-mini-realtime",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// リアルタイムサービスに接続
+await voice.connect();
+
+// 応答用のイベントリスナーを設定
+voice.on("writing", ({ text, role }) => {
+  console.log(`${role}: ${text}`);
+});
+
+voice.on("speaker", (stream) => {
+  stream.pipe(speaker);
+});
+
+// マイク入力ストリームを取得（実装は環境によって異なります）
+const microphoneStream = getMicrophoneStream();
+
+// 音声データを音声プロバイダーに送信
+await voice.send(microphoneStream);
+
+// 音声データは Int16Array として送ることも可能
+const audioBuffer = getAudioBuffer(); // これは Int16Array を返す想定
+await voice.send(audioBuffer);
+```
+
+
+## パラメータ
+
+<br />
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioData",
+      type: "NodeJS.ReadableStream | Int16Array",
+      description:
+        "音声プロバイダーに送信する音声データ。マイク入力などの読み取り可能なストリーム、または音声サンプルの Int16Array を指定できます。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+音声データが音声プロバイダーに受け入れられると解決される `Promise<void>` を返します。
+
+## 注意
+
+- このメソッドは、音声同士のやり取り（speech-to-speech）に対応したリアルタイム音声プロバイダーでのみ実装されています
+- この機能に非対応の音声プロバイダーで呼び出すと、警告をログ出力して即座に処理を完了します
+- WebSocket 接続を確立するために、`send()` を使う前に必ず `connect()` を呼び出してください
+- 音声フォーマットの要件は、利用する音声プロバイダーによって異なります
+- 連続的な会話では、通常はユーザーの音声を送信するために `send()` を呼び出し、その後 AI の応答を開始するために `answer()` を呼び出します
+- プロバイダーは、音声を処理しながら文字起こしテキストを含む「writing」イベントを発行するのが一般的です
+- AI が応答する際、プロバイダーは音声応答を含む「speaking」イベントを発行します

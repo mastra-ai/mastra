@@ -1,0 +1,144 @@
+---
+title: "LibSQL を用いたメモリ | Memory | Mastra ドキュメント"
+description: LibSQL ストレージとベクター データベースのバックエンドを使って Mastra のメモリシステムを利用する方法の例。
+---
+
+# LibSQL を用いたメモリ
+
+この例では、Mastra のメモリシステムで LibSQL をストレージのバックエンドとして使用する方法を示します。
+
+## 前提条件
+
+この例では `openai` モデルを使用します。`.env` ファイルに `OPENAI_API_KEY` を追加してください。
+
+```bash title=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
+次のパッケージをインストールします：
+
+```bash copy
+npm install @mastra/libsql
+```
+
+
+## エージェントにメモリを追加する
+
+エージェントに LibSQL のメモリを追加するには、`Memory` クラスを使用し、`LibSQLStore` で新しい `storage` キーを作成します。`url` にはリモートのロケーション、またはローカルのファイルシステム上のリソースを指定できます。
+
+```typescript title="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const libsqlAgent = new Agent({
+  name: "libsql-agent",
+  instructions:
+    "あなたは過去のやり取りから記憶を自動的に呼び出すことができるAIエージェントです。",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:libsql-agent.db",
+    }),
+    options: {
+      generateTitle: true, // 自動タイトル生成を明示的に有効にする
+    },
+  }),
+});
+```
+
+
+## fastembed を使ったローカル埋め込み
+
+埋め込みは、キーワードではなく意味に基づいて関連メッセージを検索するために、memory の `semanticRecall` が利用する数値ベクトルです。このセットアップでは、ベクトル埋め込みを生成するために `@mastra/fastembed` を使用します。
+
+まずは `fastembed` をインストールします:
+
+```bash copy
+npm install @mastra/fastembed
+```
+
+エージェントに次の内容を追加してください：
+
+```typescript title="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+import { fastembed } from "@mastra/fastembed";
+
+export const libsqlAgent = new Agent({
+  name: "libsql-agent",
+  instructions:
+    "あなたは過去のやり取りから記憶を自動的に呼び出すことができるAIエージェントです。",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:libsql-agent.db",
+    }),
+    vector: new LibSQLVector({
+      connectionUrl: "file:libsql-agent.db",
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+      threads: {
+        generateTitle: true, // 自動タイトル生成を明示的に有効にする
+      },
+    },
+  }),
+});
+```
+
+
+## 使用例
+
+このリクエストでのリコール対象範囲を制御するには `memoryOptions` を使用します。`lastMessages: 5` を設定して直近メッセージに基づくリコールを絞り込み、`semanticRecall` を使って最も関連性の高い `topK: 3` 件のメッセージを取得し、各ヒットの前後コンテキストとして `messageRange: 2` 件の隣接メッセージを含めます。
+
+```typescript title="src/test-libsql-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("libsqlAgent");
+
+const message = await agent.stream("私の名前はMastraです", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("私の名前は何ですか?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+  memoryOptions: {
+    lastMessages: 5,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+
+## 関連項目
+
+- [Calling Agents](/examples/agents/calling-agents)

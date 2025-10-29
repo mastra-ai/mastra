@@ -1,0 +1,37 @@
+---
+title: "例: チャンクサイズを調整する | RAG | Mastra ドキュメント"
+description: コンテンツやメモリ要件により適した形にするため、Mastra でチャンクサイズを調整します。
+---
+
+import GithubLink from "@site/src/components/GithubLink";
+
+
+# チャンクサイズを調整する
+
+大規模なドキュメントを処理する際は、各チャンクに含めるテキスト量を調整する必要が生じることがあります。既定ではチャンクは1024文字ですが、コンテンツやメモリ要件に合わせてこのサイズをカスタマイズできます。次の例では、ドキュメントを分割する際にカスタムのチャンクサイズを設定する方法を示します。
+
+```tsx copy
+import { MDocument } from "@mastra/rag";
+
+const doc = MDocument.fromText("プレーンテキストの内容...");
+
+const chunks = await doc.chunk({
+  size: 512,
+});
+```
+
+<br />
+
+<br />
+
+<hr className="dark:border-[#404040] border-gray-300" />
+
+<br />
+
+<br />
+
+<GithubLink
+  link={
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/adjust-chunk-size"
+}
+/>

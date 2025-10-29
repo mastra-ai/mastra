@@ -1,0 +1,372 @@
+---
+title: "Anthropic | モデル | Mastra"
+description: "Mastra で Anthropic モデルを利用できます。モデルは全19種。"
+---
+
+{/* このファイルは generate-model-docs.ts によって自動生成されています — 手動で編集しないでください */}
+
+import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+import { Tabs, Tab } from "@/components/tabs";
+
+
+# <img src="https://models.dev/logos/anthropic.svg" alt="Anthropic logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Anthropic
+
+Mastra のモデルルーター経由で 19 種類の Anthropic モデルにアクセスできます。認証は `ANTHROPIC_API_KEY` 環境変数を使用して自動的に行われます。
+
+詳しくは [Anthropic のドキュメント](https://docs.anthropic.com/en/docs/about-claude/models)をご覧ください。
+
+```bash
+ANTHROPIC_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "あなたは親切なアシスタントです",
+  model: "anthropic/claude-3-5-haiku-20241022"
+});
+
+// レスポンスを生成
+const response = await agent.generate("こんにちは!");
+
+// レスポンスをストリーミング
+const stream = await agent.stream("物語を聞かせてください");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+
+## モデル
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "anthropic/claude-3-5-haiku-20241022",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 0.8,
+    "outputCost": 4
+  },
+  {
+    "model": "anthropic/claude-3-5-haiku-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 0.8,
+    "outputCost": 4
+  },
+  {
+    "model": "anthropic/claude-3-5-sonnet-20240620",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "anthropic/claude-3-5-sonnet-20241022",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "anthropic/claude-3-7-sonnet-20250219",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "anthropic/claude-3-7-sonnet-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "anthropic/claude-3-haiku-20240307",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 4096,
+    "inputCost": 0.25,
+    "outputCost": 1.25
+  },
+  {
+    "model": "anthropic/claude-3-opus-20240229",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 4096,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
+    "model": "anthropic/claude-3-sonnet-20240229",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 4096,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "anthropic/claude-haiku-4-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
+    "model": "anthropic/claude-haiku-4-5-20251001",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
+    "model": "anthropic/claude-opus-4-0",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
+    "model": "anthropic/claude-opus-4-1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
+    "model": "anthropic/claude-opus-4-1-20250805",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
+    "model": "anthropic/claude-opus-4-20250514",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
+    "model": "anthropic/claude-sonnet-4-0",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "anthropic/claude-sonnet-4-20250514",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "anthropic/claude-sonnet-4-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "anthropic/claude-sonnet-4-5-20250929",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  }
+]}
+/>
+
+## 詳細設定
+
+### カスタムヘッダー
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    id: "anthropic/claude-3-5-haiku-20241022",
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+
+### 動的モデル選択
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "anthropic/claude-sonnet-4-5-20250929"
+      : "anthropic/claude-3-5-haiku-20241022";
+  }
+});
+```
+
+
+## プロバイダーオプション
+
+Anthropic は、`providerOptions` パラメーターを通じて、以下のプロバイダー固有のオプションをサポートしています。
+
+```typescript
+const response = await agent.generate("Hello!", {
+  providerOptions: {
+    anthropic: {
+      // 利用可能なオプションは下記の表を参照
+    }
+  }
+});
+```
+
+
+### 利用可能なオプション
+
+<PropertiesTable
+  content={[
+    {
+        "name": "sendReasoning",
+        "type": "boolean | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "thinking",
+        "type": "{ type: \"enabled\" | \"disabled\"; budgetTokens?: number | undefined; } | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "disableParallelToolUse",
+        "type": "boolean | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "cacheControl",
+        "type": "{ type: \"ephemeral\"; ttl?: \"5m\" | \"1h\" | undefined; } | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "container",
+        "type": "{ id?: string | undefined; skills?: { type: \"anthropic\" | \"custom\"; skillId: string; version?: string | undefined; }[] | undefined; } | undefined",
+        "description": "",
+        "isOptional": true
+    }
+]}
+/>
+
+## プロバイダーを直接インストール
+
+このプロバイダーはスタンドアロンのパッケージとして直接インストールすることも可能で、Mastra のモデルルーター用の文字列の代わりに使用できます。詳しくは[パッケージのドキュメント](https://www.npmjs.com/package/@ai-sdk/anthropic)をご覧ください。
+
+```bash npm2yarn copy
+npm install @ai-sdk/anthropic
+```
+
+プロバイダーごとの詳細なドキュメントは、[AI SDK の Anthropic プロバイダーに関するドキュメント](https://ai-sdk.dev/providers/ai-sdk-providers/anthropic)をご覧ください。

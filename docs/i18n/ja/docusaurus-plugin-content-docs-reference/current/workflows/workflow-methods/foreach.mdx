@@ -1,0 +1,61 @@
+---
+title: "リファレンス: Workflow.foreach() | Workflows | Mastra ドキュメント"
+description: ワークフローで使用する `Workflow.foreach()` メソッドのドキュメント。配列の各要素に対してステップを実行するループを作成します。
+---
+
+# Workflow.foreach()
+
+`.foreach()` メソッドは、配列内の各要素ごとにステップを実行するループを作成します。
+
+## 使い方の例
+
+```typescript copy
+workflow.foreach(step1, { concurrency: 2 });
+```
+
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "step",
+      type: "Step",
+      description:
+        "ループ内で実行するステップインスタンス。直前のステップは配列型を返す必要があります。",
+      isOptional: false,
+    },
+    {
+      name: "opts",
+      type: "object",
+      description:
+        "ループ用の任意設定。concurrency オプションは並列実行できる反復数を制御します（既定値: 1）。",
+      isOptional: true,
+      properties: [
+        {
+          name: "concurrency",
+          type: "number",
+          description:
+            "許可される同時実行の反復数（既定値: 1）",
+          isOptional: true,
+        },
+      ],
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "メソッドチェーン用の Workflow インスタンス。",
+    },
+  ]}
+/>
+
+## 関連項目
+
+- [foreach による繰り返し](/docs/workflows/control-flow#repeating-with-foreach)

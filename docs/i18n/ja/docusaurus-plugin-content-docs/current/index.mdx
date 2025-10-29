@@ -1,0 +1,59 @@
+---
+title: "Mastra について | Mastra ドキュメント"
+sidebar_position: 2
+sidebar_label: "はじめに"
+description: "Mastra は、モダンな TypeScript スタックで AI 搭載アプリケーションやエージェントを構築するためのオールインワンのフレームワークです。"
+---
+
+import Youtube from "@site/src/components/YouTube-player";
+
+
+# Mastra について
+
+Gatsby を手がけたチームによる Mastra は、モダンな TypeScript スタックで AI 搭載のアプリケーションやエージェントを構築するためのフレームワークです。
+
+試作段階から本番運用レベルのアプリケーションまでに必要なものがすべて揃っています。Mastra は React、Next.js、Node などのフロントエンド／バックエンドフレームワークと統合でき、単体のサーバーとしてどこにでもデプロイすることも可能です。信頼性の高い AI プロダクトを構築・チューニング・スケールする最も簡単な方法です。
+
+<YouTube id="8o_Ejbcw5s8" />
+
+## なぜ Mastra なのか？
+
+TypeScript に特化し、確立された AI パターンに基づいて設計された Mastra は、優れた AI アプリケーションをすぐに構築するために必要なすべてを提供します。
+
+主な特長は次のとおりです:
+
+- [**モデルルーティング**](/models) - 1 つの標準インターフェースで 40 以上のプロバイダーに接続。OpenAI、Anthropic、Gemini などのモデルを利用できます。
+
+- [**Agents**](/docs/agents/overview) - LLM とツールを用いてオープンエンドなタスクを解決する自律エージェントを構築。エージェントは目標を推論し、使用するツールを決定し、モデルが最終回答を出力するか、任意の停止条件が満たされるまで内部で反復します。
+
+- [**Workflows**](/docs/workflows/overview) - 実行を明示的に制御したい場合は、Mastra のグラフベースのワークフローエンジンで複雑なマルチステップ処理をオーケストレーション。Mastra のワークフローは制御フロー（`.then()`, `.branch()`, `.parallel()`）の直感的な構文を採用しています。
+
+- [**Human-in-the-loop**](/docs/workflows/suspend-and-resume) - エージェントまたはワークフローを一時停止し、再開前にユーザーの入力や承認を待機。Mastra は実行状態を保持するために [storage](/docs/server-db/storage) を利用するので、無期限に一時停止し、途中から再開できます。
+
+- **コンテキスト管理** - 適切なタイミングで適切なコンテキストをエージェントに付与。[conversation history](/docs/memory/conversation-history) を提供し、ソース（API、データベース、ファイル）からデータを [retrieve](/docs/rag/overview) し、人間に近い [working](/docs/memory/working-memory) と [semantic](/docs/memory/semantic-recall) メモリを加えて、エージェントの一貫した振る舞いを実現します。
+
+- **統合** - 既存の React、Next.js、または Node.js アプリにエージェントやワークフローを組み込む、あるいはスタンドアロンのエンドポイントとして提供。UI 構築の際は、Vercel の AI SDK UI や CopilotKit といったエージェント系ライブラリと統合して、Web 上で AI アシスタントを実現できます。
+
+- **プロダクションの基本** - 信頼性の高いエージェントの提供には継続的な洞察、評価、反復が不可欠です。組み込みの [scorers](/docs/scorers/overview) と [observability](/docs/observability/overview) により、Mastra は観察・測定・改善を継続的に行うためのツールを提供します。
+
+## 何が作れますか？
+
+- 言語理解・推論・アクションを組み合わせ、実世界の課題を解決するAI搭載アプリケーション。
+
+- カスタマーサポート、オンボーディング、社内問い合わせに対応する会話型エージェント。
+
+- コーディング、法務、財務、リサーチ、クリエイティブワークに特化したドメイン別コパイロット。
+
+- マルチステップのプロセスをトリガーし、振り分け、完了まで実行するワークフロー自動化。
+
+- データを分析し、実行可能な推奨事項を提示する意思決定支援ツール。
+
+実例は[コミュニティショーケース](/showcase)でご覧ください。
+
+## はじめに
+
+CLI または手動でのインストールによる段階的なセットアップについては、[インストールガイド](/docs/getting-started/installation)をご覧ください。
+
+AI エージェントが初めての方は、今日から Mastra で開発を始められるよう、[テンプレート](/docs/getting-started/templates)、[コース](https://mastra.ai/book)、[YouTube 動画](https://youtube.com/@mastra-ai)をチェックしてみてください。
+
+皆さんがどんなものを作るのか、楽しみにしています ✌️

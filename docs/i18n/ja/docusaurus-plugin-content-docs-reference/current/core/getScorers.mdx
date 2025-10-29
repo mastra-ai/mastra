@@ -1,0 +1,44 @@
+---
+title: "リファレンス: getScorers() | Core | Mastra ドキュメント"
+description: "Mastra における `getScorers()` メソッドのドキュメント。AI 出力の評価に使用する、登録済みのすべてのスコアラーを返します。"
+---
+
+# getScorers()
+
+`getScorers()` メソッドは、Mastra インスタンスに登録されているすべてのスコアラーを返します。スコアラーは AI の出力を評価するために使用され、エージェントの生成やワークフローの実行において既定のスコアラーを差し替えることができます。
+
+## 使い方の例
+
+```typescript
+import { mastra } from "./mastra";
+
+// 登録されているすべてのスコアラーを取得
+const allScorers = mastra.getScorers();
+
+// 特定のスコアラーにアクセス
+const myScorer = allScorers.relevancyScorer;
+```
+
+
+## パラメータ
+
+このメソッドにはパラメータはありません。
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "scorers",
+      type: "Record<string, MastraScorer> | undefined",
+      description:
+        "登録されているすべてのスコアラーを含むオブジェクト。キーはスコアラー名、値は MastraScorer インスタンスです。スコアラーが1つも登録されていない場合は undefined を返します。",
+    },
+  ]}
+/>
+
+## 関連
+
+- [getScorer()](../../reference/core/getScorer) - キーで特定のスコアラーを取得する
+- [getScorerByName()](../../reference/core/getScorerByName) - name プロパティでスコアラーを取得する
+- [Scorers Overview](../../docs/scorers/overview) - スコアラーの作成と利用について学ぶ

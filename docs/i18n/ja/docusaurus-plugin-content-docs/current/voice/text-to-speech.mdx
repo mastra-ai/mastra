@@ -1,0 +1,92 @@
+---
+title: "Text-to-Speech (TTS) | Voice | Mastra ドキュメント"
+description: Mastra における Text-to-Speech 機能の概要。設定、利用方法、音声プロバイダーとの連携について解説します。
+---
+
+# Text-to-Speech (TTS)
+
+Mastra の Text-to-Speech (TTS) は、複数のプロバイダーに対応した、テキストから音声を合成するための統一 API を提供します。
+アプリケーションに TTS を組み込むことで、自然な音声でのやり取りによるユーザー体験の向上、視覚障害のあるユーザーへのアクセシビリティ強化、そしてより魅力的なマルチモーダル・インターフェースの実現が可能になります。
+
+TTS はあらゆる音声アプリケーションの中核となるコンポーネントです。STT（Speech-to-Text）と組み合わせることで、音声インタラクション・システムの基盤を形成します。より新しいモデルは STS（[Speech-to-Speech](./speech-to-speech)）をサポートしており、リアルタイムなインタラクションに利用できますが、コスト（$）が高くなります。
+
+## 設定
+
+Mastra で TTS を使用するには、ボイスプロバイダを初期化する際に `speechModel` を指定する必要があります。これには次のようなパラメータが含まれます。
+
+* **`name`**: 使用する TTS モデル名。
+* **`apiKey`**: 認証用の API キー。
+* **プロバイダ固有のオプション**: 利用するボイスプロバイダで必要またはサポートされる追加オプション。
+
+**`speaker`** オプションを使うと、音声合成に用いる声を選択できます。各プロバイダは、**音声の多様性**、**品質**、**声の個性**、**多言語対応**といった特性が異なる多彩なボイスを提供しています。
+
+**注**: これらのパラメータはすべて任意です。使用するプロバイダによっては、プロバイダが用意するデフォルト設定をそのまま利用できます。
+
+```typescript
+const voice = new OpenAIVoice({
+  speechModel: {
+    name: "tts-1-hd",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+  speaker: "alloy",
+});
+
+// 既定の設定を使用する場合、設定は次のように簡略化できます:
+const voice = new OpenAIVoice();
+```
+
+
+## 利用可能なプロバイダー
+
+Mastra は幅広いテキスト読み上げ（Text-to-Speech）プロバイダーをサポートしており、それぞれ独自の機能や声のバリエーションを提供します。用途に最も適したプロバイダーをお選びください：
+
+* [**OpenAI**](/reference/voice/openai/) - 自然なイントネーションと表現の高品質な音声
+* [**Azure**](/reference/voice/azure/) - 多彩な音声と言語に対応する Microsoft の音声サービス
+* [**ElevenLabs**](/reference/voice/elevenlabs/) - 感情表現と緻密な制御が可能な超リアルな音声
+* [**PlayAI**](/reference/voice/playai/) - 多様なスタイルの自然な音声に特化
+* [**Google**](/reference/voice/google/) - 多言語対応の Google の音声合成
+* [**Cloudflare**](/reference/voice/cloudflare/) - 低レイテンシー用途向けのエッジ最適化音声合成
+* [**Deepgram**](/reference/voice/deepgram/) - 高精度な AI 駆動の音声技術
+* [**Speechify**](/reference/voice/speechify/) - 読み上げの可読性とアクセシビリティに最適化されたテキスト読み上げ
+* [**Sarvam**](/reference/voice/sarvam/) - インド系言語とアクセントに特化
+* [**Murf**](/reference/voice/murf/) - パラメーターをカスタマイズ可能なスタジオ品質のボイスオーバー
+
+各プロバイダーは、必要に応じてインストールできる個別のパッケージとして提供されています：
+
+```bash
+pnpm add @mastra/voice-openai  # OpenAI の例
+```
+
+
+## speak メソッドの使用
+
+TTS の主要なメソッドは `speak()` で、テキストを音声に変換します。このメソッドでは、話者やその他のプロバイダー固有の設定などのオプションを指定できます。使い方は次のとおりです。
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { OpenAIVoice } from "@mastra/voice-openai";
+
+const voice = new OpenAIVoice();
+
+const agent = new Agent({
+  name: "音声エージェント",
+  instructions:
+    "あなたはユーザーのタスクをサポートする音声アシスタントです。",
+  model: openai("gpt-4o"),
+  voice,
+});
+
+const { text } = await agent.generate("空は何色ですか?");
+
+// テキストを音声に変換してオーディオストリームに出力
+const readableStream = await voice.speak(text, {
+  speaker: "default", // オプション:スピーカーを指定
+  properties: {
+    speed: 1.0, // オプション:音声速度を調整
+    pitch: "default", // オプション:サポートされている場合はピッチを指定
+  },
+});
+```
+
+エージェントでTTSを利用する方法は、[Adding Voice to Agents](/docs/agents/adding-voice) のドキュメントをご覧ください。

@@ -1,0 +1,67 @@
+---
+title: "Mastra Cloud | Mastra Cloud | Mastra ドキュメント"
+description: Mastra アプリケーション向けのデプロイと監視サービス
+---
+
+import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
+
+
+# Mastra Cloud
+
+[Mastra Cloud](https://mastra.ai/cloud) は、Mastra アプリケーションのデプロイ、管理、監視、デバッグを行うためのプラットフォームです。アプリケーションを[デプロイ](/docs/mastra-cloud/setting-up)すると、Mastra Cloud はエージェント、ツール、ワークフローを REST API のエンドポイントとして公開します。
+
+<MastraCloudCallout />
+
+## プラットフォームの機能
+
+自動ビルドや整理されたプロジェクト、追加設定不要の仕組みにより、アプリケーションをデプロイして管理できます。
+
+![Platform features](/img/mastra-cloud/mastra-cloud-platform-features.jpg)
+
+主な機能:
+
+Mastra Cloud はゼロコンフィグのデプロイ、GitHub との継続的インテグレーション、エージェント・ツール・ワークフローをひとまとめにパッケージ化するアトミックデプロイに対応しています。
+
+## プロジェクト ダッシュボード
+
+詳細な出力ログ、デプロイ状況、インタラクティブなツールでアプリケーションを監視・デバッグできます。
+
+![Project dashboard](/img/mastra-cloud/mastra-cloud-project-dashboard.jpg)
+
+主な機能:
+
+Project Dashboard では、ログへのアクセスやエージェント／ワークフローを試せる組み込みのプレイグラウンドとともに、アプリケーションのステータスとデプロイの状況を俯瞰できます。
+
+## プロジェクト構成
+
+適切に検出・デプロイできるよう、標準的な Mastra のプロジェクト構成を使用してください。
+
+```shell
+src
+└── mastra
+    ├── agents
+    │   └── agent-name.ts
+    ├── tools
+    │   └── tool-name.ts
+    ├── workflows
+    │   └── workflow-name.ts
+    └── index.ts
+package.json
+```
+
+Mastra Cloud はリポジトリを以下の項目についてスキャンします:
+
+* **Agents**: `new Agent({...})` を用いて定義
+* **Tools**: `createTool({...})` を用いて定義
+* **Workflows**: `createWorkflow({...})` を用いて定義
+* **Steps**: `createStep({...})` を用いて定義
+* **Environment Variables**: API キーや設定用の変数
+
+
+## 技術実装
+
+Mastra Cloud は、Mastra のエージェント、ツール、ワークフロー向けに特化して設計されています。長時間実行のリクエストを処理し、各実行の詳細なトレースを記録し、評価（eval）を標準でサポートします。
+
+## 次の手順
+
+- [セットアップとデプロイ](/docs/mastra-cloud/setting-up)

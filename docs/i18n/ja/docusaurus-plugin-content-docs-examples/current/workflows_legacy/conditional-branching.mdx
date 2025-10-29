@@ -1,0 +1,178 @@
+---
+title: "例: 条件分岐（実験的）を用いたワークフロー（レガシー） | Workflows（レガシー） | Mastra Docs"
+description: if/else 文を使ってレガシーなワークフローに条件分岐を実装するための Mastra の例。
+---
+
+import GithubLink from "@site/src/components/GithubLink";
+
+
+# ワークフロー（レガシー）の条件分岐（実験的）
+
+ワークフローは、条件に応じて異なる処理経路をたどる必要がある場合がよくあります。次の例では、レガシー版のワークフローで `if` と `else` を使って条件分岐を作成する方法を示します。
+
+## 基本的な If/Else の例
+
+この例では、数値に応じて異なる処理経路をたどる、シンプルなレガシーのワークフローを示します。
+
+```ts showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
+
+// 初期値を渡すステップ
+const startStep = new LegacyStep({
+  id: "start",
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ context }) => {
+    // トリガーデータから値を取得する
+    const value = context.triggerData.inputValue;
+    return { value };
+  },
+});
+
+// 高値を処理するステップ
+const highValueStep = new LegacyStep({
+  id: "highValue",
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const value = context.getStepResult<{ value: number }>("start")?.value;
+    return { result: `高値を処理しました: ${value}` };
+  },
+});
+
+// 低値を処理するステップ
+const lowValueStep = new LegacyStep({
+  id: "lowValue",
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const value = context.getStepResult<{ value: number }>("start")?.value;
+    return { result: `低値を処理しました: ${value}` };
+  },
+});
+
+// 結果を要約する最終ステップ
+const finalStep = new LegacyStep({
+  id: "final",
+  outputSchema: z.object({
+    summary: z.string(),
+  }),
+  execute: async ({ context }) => {
+    // 実行された分岐のいずれかから結果を取得する
+    const highResult = context.getStepResult<{ result: string }>(
+      "highValue",
+    )?.result;
+    const lowResult = context.getStepResult<{ result: string }>(
+      "lowValue",
+    )?.result;
+
+    const result = highResult || lowResult;
+    return { summary: `処理が完了しました: ${result}` };
+  },
+});
+
+// 条件分岐付きでワークフローを構築する
+const conditionalWorkflow = new LegacyWorkflow({
+  name: "conditional-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+
+conditionalWorkflow
+  .step(startStep)
+  .if(async ({ context }) => {
+    const value = context.getStepResult<{ value: number }>("start")?.value ?? 0;
+    return value >= 10; // 条件: 値が10以上
+  })
+  .then(highValueStep)
+  .then(finalStep)
+  .else()
+  .then(lowValueStep)
+  .then(finalStep) // 両方の分岐は最終ステップで合流する
+  .commit();
+
+// ワークフローを登録する
+const mastra = new Mastra({
+  legacy_workflows: { conditionalWorkflow },
+});
+
+// 使用例
+async function runWorkflow(inputValue: number) {
+  const workflow = mastra.legacy_getWorkflow("conditionalWorkflow");
+  const { start } = workflow.createRun();
+
+  const result = await start({
+    triggerData: { inputValue },
+  });
+
+  console.log("ワークフローの結果:", result.results);
+  return result;
+}
+
+// 高値で実行（"if" 分岐をたどる）
+const result1 = await runWorkflow(15);
+// 低値で実行（"else" 分岐をたどる）
+const result2 = await runWorkflow(5);
+
+console.log("結果1:", result1);
+console.log("結果2:", result2);
+```
+
+
+## 参照に基づく条件の利用
+
+比較演算子を使って、参照に基づく条件も使用できます。
+
+```ts showLineNumbers copy
+// 関数ではなく参照に基づく条件を使用する
+conditionalWorkflow
+  .step(startStep)
+  .if({
+    ref: { step: startStep, path: "value" },
+    query: { $gte: 10 }, // 条件: 値が10以上
+  })
+  .then(highValueStep)
+  .then(finalStep)
+  .else()
+  .then(lowValueStep)
+  .then(finalStep)
+  .commit();
+```
+
+<br />
+
+<br />
+
+<hr className="dark:border-[#404040] border-gray-300" />
+
+<br />
+
+<br />
+
+<GithubLink
+  link={
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/conditional-branching"
+}
+/>
+
+
+## ワークフロー（レガシー）
+
+以下のリンクは、レガシー版ワークフローのドキュメント例です:
+
+- [シンプルなワークフローの作成（レガシー）](/examples/workflows_legacy/creating-a-workflow)
+- [順次ステップのワークフロー（レガシー）](/examples/workflows_legacy/sequential-steps)
+- [ステップによる並列実行（レガシー）](/examples/workflows_legacy/parallel-steps)
+- [分岐パス（レガシー）](/examples/workflows_legacy/branching-paths)
+- [ワークフロー（レガシー）からのエージェント呼び出し](/examples/workflows_legacy/calling-agent)
+- [ツールをワークフローのステップとして使用（レガシー）](/examples/workflows_legacy/using-a-tool-as-a-step)
+- [循環依存を含むワークフロー（レガシー）](/examples/workflows_legacy/cyclical-dependencies)
+- [ワークフロー変数によるデータマッピング（レガシー）](/examples/workflows_legacy/workflow-variables)
+- [Human-in-the-Loop ワークフロー（レガシー）](/examples/workflows_legacy/human-in-the-loop)
+- [一時停止と再開に対応したワークフロー（レガシー）](/examples/workflows_legacy/suspend-and-resume)

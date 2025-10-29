@@ -1,0 +1,88 @@
+---
+title: "リファレンス: start() | レガシー ワークフロー | Mastra ドキュメント"
+description: "ワークフローの `start()` メソッドに関するドキュメント。ワークフロー実行を開始するメソッドです。"
+---
+
+# start()
+
+start 関数はワークフローの実行を開始します。定義された順序に従ってすべてのステップを処理し、並列実行、分岐ロジック、ステップ間の依存関係を適切に扱います。
+
+## 使い方
+
+```typescript copy showLineNumbers
+const { runId, start } = workflow.createRun();
+const result = await start({
+  triggerData: { inputValue: 42 },
+});
+```
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "config",
+      type: "object",
+      description: "ワークフロー実行を開始するための設定",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### config
+
+<PropertiesTable
+  content={[
+    {
+      name: "triggerData",
+      type: "Record<string, any>",
+      description: "ワークフローの triggerSchema に適合する初期データ",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "results",
+      type: "Record<string, any>",
+      description: "完了したすべてのワークフロー手順の統合出力",
+    },
+    {
+      name: "status",
+      type: "'completed' | 'error' | 'suspended'",
+      description: "ワークフロー実行の最終的な状態",
+    },
+  ]}
+/>
+
+## エラー処理
+
+start 関数は、複数の種類の検証エラーをスローすることがあります：
+
+```typescript copy showLineNumbers
+try {
+  const result = await start({ triggerData: data });
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.log(error.type); // '循環依存' | '終端経路なし' | '到達不能なステップ'
+    console.log(error.details);
+  }
+}
+```
+
+
+## 関連項目
+
+* [例：ワークフローの作成](/examples/workflows_legacy/creating-a-workflow)
+* [例：一時停止と再開](/examples/workflows_legacy/suspend-and-resume)
+* [createRun リファレンス](./createRun)
+* [Workflow クラスリファレンス](./workflow)
+* [Step クラスリファレンス](./step-class)
+
+```
+```

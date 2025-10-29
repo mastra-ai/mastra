@@ -1,0 +1,149 @@
+---
+title: "リファレンス: MongoDB ストレージ | ストレージ | Mastra ドキュメント"
+description: Mastra における MongoDB ストレージ実装のドキュメント。
+---
+
+# MongoDB ストレージ
+
+MongoDB ストレージ実装は、MongoDB データベースを用いて、ドキュメント保存とベクトル操作の両方をサポートするスケーラブルなストレージソリューションを提供します。
+
+## インストール
+
+```bash copy
+npm install @mastra/mongodb@latest
+```
+
+
+## 使い方
+
+Docker での MongoDB Atlas Local か、Atlas Search を有効にした MongoDB Atlas Cloud インスタンスを用意してください。MongoDB 7.0 以上を推奨します。
+
+```typescript copy showLineNumbers
+import { MongoDBStore } from "@mastra/mongodb";
+
+const storage = new MongoDBStore({
+  url: process.env.MONGODB_URL,
+  dbName: process.env.MONGODB_DATABASE,
+});
+```
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "string",
+      description:
+        "MongoDB の接続文字列（例：mongodb+srv://user:password@cluster.mongodb.net）",
+      isOptional: false,
+    },
+    {
+      name: "dbName",
+      type: "string",
+      description: "ストレージが使用するデータベース名。",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "MongoClientOptions",
+      description:
+        "高度な構成（SSL、接続プーリングなど）のための MongoDB クライアントオプション。詳細は[こちら](https://www.mongodb.com/docs/drivers/node/current/connect/connection-options/)をご覧ください。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## コンストラクターの例
+
+`MongoDBStore` は次の方法でインスタンス化できます：
+
+```ts
+import { MongoDBStore } from "@mastra/mongodb";
+
+// カスタムオプションなしの基本接続
+const store1 = new MongoDBStore({
+  url: "mongodb+srv://user:password@cluster.mongodb.net",
+  dbName: "mastra_storage",
+});
+
+// オプション付き接続文字列の使用
+const store2 = new MongoDBStore({
+  url: "mongodb+srv://user:password@cluster.mongodb.net",
+  dbName: "mastra_storage",
+  options: {
+    retryWrites: true,
+    maxPoolSize: 10,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+  },
+});
+```
+
+
+## 追記事項
+
+### コレクション管理
+
+ストレージの実装は、コレクションの作成と管理を自動的に行います。以下のコレクションが作成されます:
+
+- `mastra_workflow_snapshot`: ワークフローの状態と実行データを保存
+- `mastra_evals`: 評価結果とメタデータを保存
+- `mastra_threads`: 会話スレッドを保存
+- `mastra_messages`: 個々のメッセージを保存
+- `mastra_traces`: テレメトリおよびトレーシングデータを保存
+- `mastra_scorers`: スコアリングおよび評価データを保存
+- `mastra_resources`: リソースのワーキングメモリーデータを保存
+
+## ベクター検索機能
+
+MongoDB のストレージには、AI アプリケーション向けの組み込みのベクター検索機能が備わっています。
+
+### ベクトル索引の作成
+
+```typescript copy
+import { MongoDBVector } from "@mastra/mongodb";
+
+const vectorStore = new MongoDBVector({
+  url: process.env.MONGODB_URL,
+  dbName: process.env.MONGODB_DATABASE,
+});
+
+// 埋め込み用のベクトルインデックスを作成
+await vectorStore.createIndex({
+  indexName: "document_embeddings",
+  dimension: 1536,
+});
+```
+
+
+### ベクトルの演算
+
+```typescript copy
+// メタデータ付きでベクトルを保存
+await vectorStore.upsert({
+  indexName: "document_embeddings",
+  vectors: [
+    {
+      id: "doc-1",
+      values: [0.1, 0.2, 0.3, ...], // 1536次元ベクトル
+      metadata: {
+        title: "ドキュメントタイトル",
+        category: "technical",
+        source: "api-docs",
+      },
+    },
+  ],
+});
+
+// 類似度検索
+const results = await vectorStore.query({
+  indexName: "document_embeddings",
+  vector: queryEmbedding,
+  topK: 5,
+  filter: {
+    category: "technical",
+  },
+});
+```

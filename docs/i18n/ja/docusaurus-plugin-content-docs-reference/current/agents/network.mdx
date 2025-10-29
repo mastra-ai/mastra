@@ -1,0 +1,346 @@
+---
+title: "リファレンス: Agent.network() | Agents | Mastra ドキュメント"
+description: "Mastra のエージェントにおける `Agent.network()` メソッドのドキュメント。マルチエージェント間の協調とルーティングを実現します。"
+---
+
+# Agent.network()
+
+:::caution 実験的機能
+これは将来のバージョンで変更される可能性がある実験的な API です。`network()` メソッドはマルチエージェント協調とワークフローのオーケストレーションを可能にします。本番環境での使用は十分にご注意ください。
+:::
+
+`.network()` メソッドは、マルチエージェント間の協調とルーティングを可能にします。このメソッドはメッセージと、任意の実行オプションを受け取ります。
+
+## 使用例
+
+```typescript copy
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { agent1, agent2 } from "./agents";
+import { workflow1 } from "./workflows";
+import { tool1, tool2 } from "./tools";
+
+const agent = new Agent({
+  name: "network-agent",
+  instructions:
+    "あなたは様々なタスクでユーザーをサポートできるネットワークエージェントです。",
+  model: openai("gpt-4o"),
+  agents: {
+    agent1,
+    agent2,
+  },
+  workflows: {
+    workflow1,
+  },
+  tools: {
+    tool1,
+    tool2,
+  },
+});
+
+await agent.network(`
+  東京の天気を調べてください。
+  天気に基づいて、アクティビティを提案してください。
+`);
+```
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
+      description:
+        "エージェントに送信するメッセージ。単一の文字列、文字列配列、または構造化メッセージオブジェクトを指定できます。",
+    },
+    {
+      name: "options",
+      type: "MultiPrimitiveExecutionOptions",
+      isOptional: true,
+      description: "ネットワーク処理に関する任意の設定。",
+    },
+  ]}
+/>
+
+### オプション
+
+<PropertiesTable
+  content={[
+  {
+    name: "maxSteps",
+    type: "number",
+    isOptional: true,
+    description: "実行時に実行する最大ステップ数。"
+  },
+  {
+    name: "memory",
+    type: "object",
+    isOptional: true,
+    description:
+      "メモリの設定。メモリを管理する際の推奨方法です。",
+    properties: [
+      {
+        parameters: [
+          {
+            name: "thread",
+            type: "string | { id: string; metadata?: Record<string, any>, title?: string }",
+            isOptional: false,
+            description:
+              "会話スレッド。文字列IDまたは`id`とオプションの`metadata`を含むオブジェクトとして指定します。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "resource",
+            type: "string",
+            isOptional: false,
+            description:
+              "スレッドに関連付けられたユーザーまたはリソースの識別子。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "options",
+            type: "MemoryConfig",
+            isOptional: true,
+            description:
+              "メッセージ履歴やセマンティックリコールなど、メモリの動作に関する設定。"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    name: "tracingContext",
+    type: "TracingContext",
+    isOptional: true,
+    description:
+      "子スパンの作成とメタデータの追加のためのAIトレーシングコンテキスト。Mastraのトレーシングシステムを使用する際に自動的に注入されます。",
+    properties: [
+      {
+        parameters: [
+          {
+            name: "currentSpan",
+            type: "AISpan",
+            isOptional: true,
+            description:
+              "子スパンの作成とメタデータの追加のための現在のAIスパン。カスタム子スパンの作成や実行中のスパン属性の更新に使用します。"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    name: "tracingOptions",
+    type: "TracingOptions",
+    isOptional: true,
+    description: "AIトレーシング設定のオプション。",
+    properties: [
+      {
+        parameters: [
+          {
+            name: "metadata",
+            type: "Record<string, any>",
+            isOptional: true,
+            description:
+              "ルートトレーススパンに追加するメタデータ。ユーザーID、セッションID、機能フラグなどのカスタム属性を追加する際に便利です。"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    name: "telemetry",
+    type: "TelemetrySettings",
+    isOptional: true,
+    description:
+      "ストリーミング中のOTLPテレメトリ収集の設定(AIトレーシングではありません)。",
+    properties: [
+      {
+        parameters: [
+          {
+            name: "isEnabled",
+            type: "boolean",
+            isOptional: true,
+            description:
+              "テレメトリを有効または無効にします。実験的機能のため、デフォルトでは無効になっています。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "recordInputs",
+            type: "boolean",
+            isOptional: true,
+            description:
+              "入力記録を有効または無効にします。デフォルトでは有効です。機密情報の記録を避けるために入力記録を無効にすることもできます。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "recordOutputs",
+            type: "boolean",
+            isOptional: true,
+            description:
+              "出力記録を有効または無効にします。デフォルトでは有効です。機密情報の記録を避けるために出力記録を無効にすることもできます。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "functionId",
+            type: "string",
+            isOptional: true,
+            description:
+              "この関数の識別子。関数ごとにテレメトリデータをグループ化するために使用されます。"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    name: "modelSettings",
+    type: "CallSettings",
+    isOptional: true,
+    description:
+      "temperature、maxTokens、topPなどのモデル固有の設定。これらは基盤となる言語モデルに渡されます。",
+    properties: [
+      {
+        parameters: [
+          {
+            name: "temperature",
+            type: "number",
+            isOptional: true,
+            description:
+              "モデルの出力におけるランダム性を制御します。高い値(例:0.8)は出力をよりランダムにし、低い値(例:0.2)はより集中的で決定論的にします。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "maxRetries",
+            type: "number",
+            isOptional: true,
+            description: "失敗したリクエストの最大再試行回数。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "topP",
+            type: "number",
+            isOptional: true,
+            description:
+              "ニュークリアスサンプリング。0から1の間の数値です。temperatureまたはtopPのいずれかを設定することを推奨しますが、両方は設定しないでください。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "topK",
+            type: "number",
+            isOptional: true,
+            description:
+              "後続の各トークンについて、上位Kオプションからのみサンプリングします。低確率の「ロングテール」応答を除去するために使用されます。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "presencePenalty",
+            type: "number",
+            isOptional: true,
+            description:
+              "プレゼンスペナルティ設定。プロンプトに既に存在する情報をモデルが繰り返す可能性に影響します。-1(繰り返しを増加)から1(最大ペナルティ、繰り返しを減少)の間の数値です。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "frequencyPenalty",
+            type: "number",
+            isOptional: true,
+            description:
+              "頻度ペナルティ設定。モデルが同じ単語やフレーズを繰り返し使用する可能性に影響します。-1(繰り返しを増加)から1(最大ペナルティ、繰り返しを減少)の間の数値です。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "stopSequences",
+            type: "string[]",
+            isOptional: true,
+            description:
+              "停止シーケンス。設定されている場合、停止シーケンスのいずれかが生成されるとモデルはテキストの生成を停止します。"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    name: "runId",
+    type: "string",
+    isOptional: true,
+    description:
+      "この生成実行の一意のID。追跡とデバッグの目的に役立ちます。"
+  },
+  {
+    name: "runtimeContext",
+    type: "RuntimeContext",
+    isOptional: true,
+    description:
+      "依存性注入とコンテキスト情報のためのランタイムコンテキスト。"
+  },
+  {
+    name: "traceId",
+    type: "string",
+    isOptional: true,
+    description:
+      "AIトレーシングが有効な場合にこの実行に関連付けられたトレースID。ログの相関付けと実行フローのデバッグに使用します。"
+  }
+]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "stream",
+      type: "MastraAgentNetworkStream<NetworkChunkType>",
+      description:
+        "ReadableStream<NetworkChunkType> を拡張し、ネットワーク固有の追加プロパティを備えたカスタムストリーム",
+    },
+    {
+      name: "status",
+      type: "Promise<RunStatus>",
+      description: "現在のワークフローの実行ステータスで解決される Promise",
+    },
+    {
+      name: "result",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+      description: "ワークフローの最終結果で解決される Promise",
+    },
+    {
+      name: "usage",
+      type: "Promise<{ promptTokens: number; completionTokens: number; totalTokens: number }>",
+      description: "トークン使用統計で解決される Promise",
+    },
+  ]}
+/>

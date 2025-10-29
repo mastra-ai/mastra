@@ -1,0 +1,144 @@
+---
+title: "ツールストリーミング | ストリーミング | Mastra ドキュメント"
+description: "Mastra におけるツールストリーミングの使い方を学びます。ストリーミング中のツール呼び出し、ツールの結果、ツール実行イベントの扱いについて解説します。"
+---
+
+# ツールのストリーミング
+
+Mastra のツール・ストリーミングを使うと、実行完了を待たずに、ツールが動作中の段階的な結果を送信できます。これにより、部分的な進捗や中間状態、進行中のデータを、ユーザーや上流のエージェント／ワークフローに直接提示できます。
+
+ストリームに書き込む方法は主に次の2つです:
+
+- **ツール内から**: すべてのツールは `writer` 引数を受け取ります。これは実行に伴って更新をプッシュできる書き込み可能なストリームです。
+- **エージェントのストリームから**: エージェントの `stream` 出力をツールの `writer` に直接パイプできるため、余計なグルーコードなしでエージェントの応答をツールの結果へ簡単に連結できます。
+
+書き込み可能なツール・ストリームとエージェントのストリーミングを組み合わせることで、中間結果がシステム内を経由してユーザー体験へ届くまでの流れをきめ細かく制御できます。
+
+## ツールを使用するエージェント
+
+エージェントのストリーミングはツール呼び出しと組み合わせられ、ツールの出力をエージェントのストリーミング応答に直接書き込めます。これにより、全体的なやり取りの中でツールの動作を可視化できます。
+
+```typescript {4,10} showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+import { testTool } from "../tools/test-tool";
+
+export const testAgent = new Agent({
+  name: "test-agent",
+  instructions: "あなたは天気情報を提供するエージェントです。",
+  model: openai("gpt-4o-mini"),
+  tools: { testTool },
+});
+```
+
+
+### `writer` 引数の使用
+
+`writer` 引数はツールの `execute` 関数に渡され、アクティブなストリームにカスタムイベント、データ、または値を出力するために使用できます。これにより、実行中でもツールが中間結果や進捗状況の更新を提供できるようになります。
+
+:::warning
+
+`writer.write(...)` の呼び出しは必ず `await` してください。そうしないとストリームがロックされ、`WritableStream is locked` エラーが発生します。
+
+:::
+
+```typescript {5,8,15} showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+
+export const testTool = createTool({
+  // ...
+  execute: async ({ context, writer }) => {
+    const { value } = context;
+
+   await writer?.write({
+      type: "custom-event",
+      status: "pending"
+    });
+
+    const response = await fetch(...);
+
+   await writer?.write({
+      type: "custom-event",
+      status: "success"
+    });
+
+    return {
+      value: ""
+    };
+  }
+});
+```
+
+トップレベルのストリームチャンクを出力したい場合は、`writer.custom` も使用できます。これは、UI フレームワークと統合する際に有用で関連性があります。
+
+```typescript {5,8,15} showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+
+export const testTool = createTool({
+  // ...
+  execute: async ({ context, writer }) => {
+    const { value } = context;
+
+   await writer?.custom({
+      type: "data-tool-progress",
+      status: "pending"
+    });
+
+    const response = await fetch(...);
+
+   await writer?.custom({
+      type: "data-tool-progress",
+      status: "success"
+    });
+
+    return {
+      value: ""
+    };
+  }
+});
+```
+
+
+### ストリームのペイロードを検査する
+
+ストリームに書き込まれたイベントは、出力されるチャンクに含まれます。これらのチャンクを検査することで、イベントタイプ、中間値、ツール固有のデータなどのカスタムフィールドにアクセスできます。
+
+```typescript showLineNumbers copy
+const stream = await testAgent.stream([
+  "ロンドンの天気は?",
+  "testToolを使って",
+]);
+
+for await (const chunk of stream) {
+  if (chunk.payload.output?.type === "custom-event") {
+    console.log(JSON.stringify(chunk, null, 2));
+  }
+}
+```
+
+
+## エージェントを使うツール
+
+エージェントの`textStream`をツールの`writer`にパイプします。これにより部分的な出力がストリーミングされ、Mastraはエージェントの使用量を自動的にツールの実行に集約します。
+
+```typescript showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const testTool = createTool({
+  // ...
+  execute: async ({ context, mastra, writer }) => {
+    const { city } = context;
+
+    const testAgent = mastra?.getAgent("testAgent");
+    const stream = await testAgent?.stream(`${city}の天気はどうですか?`);
+
+    await stream!.textStream.pipeTo(writer!);
+
+    return {
+      value: await stream!.text,
+    };
+  },
+});
+```

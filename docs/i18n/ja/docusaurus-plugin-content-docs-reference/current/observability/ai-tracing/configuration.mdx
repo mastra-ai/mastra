@@ -1,0 +1,255 @@
+---
+title: "リファレンス: Configuration | Observability | Mastra ドキュメント"
+description: AI トレーシングの設定タイプとレジストリ関数
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
+# 設定
+
+## ObservabilityRegistryConfig
+
+```typescript
+interface ObservabilityRegistryConfig {
+  default?: { enabled?: boolean };
+  configs?: Record<string, TracingConfig | AITracing>;
+  configSelector?: ConfigSelector;
+}
+```
+
+<PropertiesTable
+  props={[
+{
+  name: "default",
+  type: "{ enabled?: boolean }",
+  description: "デフォルト設定を有効化",
+  required: false,
+},
+{
+  name: "configs",
+  type: "Record<string, TracingConfig | AITracing>",
+  description: "名前付きトレーシング設定",
+  required: false,
+},
+{
+  name: "configSelector",
+  type: "ConfigSelector",
+  description: "実行時設定セレクター",
+  required: false,
+},
+]}
+/>
+
+
+## TracingConfig（トレース設定）
+
+```typescript
+interface TracingConfig {
+  name: string;
+  serviceName: string;
+  sampling?: SamplingStrategy;
+  exporters?: AITracingExporter[];
+  processors?: AISpanProcessor[];
+}
+```
+
+<PropertiesTable
+  props={[
+{
+  name: "name",
+  type: "string",
+  description: "設定識別子",
+  required: true,
+},
+{
+  name: "serviceName",
+  type: "string",
+  description: "トレース上のサービス名",
+  required: true,
+},
+{
+  name: "sampling",
+  type: "SamplingStrategy",
+  description: "サンプリング設定",
+  required: false,
+},
+{
+  name: "exporters",
+  type: "AITracingExporter[]",
+  description: "トレースデータのエクスポータ",
+  required: false,
+},
+{
+  name: "processors",
+  type: "AISpanProcessor[]",
+  description: "スパン処理器",
+  required: false,
+},
+]}
+/>
+
+
+## サンプリング戦略
+
+```typescript
+type SamplingStrategy =
+  | { type: "always" }
+  | { type: "never" }
+  | { type: "ratio"; probability: number }
+  | { type: "custom"; sampler: (options?: TracingOptions) => boolean };
+```
+
+
+## ConfigSelector
+
+```typescript
+type ConfigSelector = (
+  options: ConfigSelectorOptions,
+  availableConfigs: Map<string, AITracing>,
+) => string | undefined;
+```
+
+
+## ConfigSelectorOptions
+
+```typescript
+interface ConfigSelectorOptions {
+  metadata?: Record<string, any>;
+  runtimeContext?: Map<string, any>;
+}
+```
+
+
+# レジストリの関数
+
+## setupAITracing
+
+```typescript
+function setupAITracing(config: ObservabilityRegistryConfig): void;
+```
+
+設定に基づいて AI トレースを初期化します。Mastra のコンストラクターによって自動的に呼び出されます。
+
+
+## registerAITracing
+
+```typescript
+function registerAITracing(
+  name: string,
+  instance: AITracing,
+  isDefault?: boolean,
+): void;
+```
+
+グローバルレジストリにトレーシング構成を登録します。
+
+
+## getAITracing
+
+```typescript
+function getAITracing(name: string): AITracing | undefined;
+```
+
+名前を指定してトレース設定を取得します。
+
+
+## getDefaultAITracing
+
+```typescript
+function getDefaultAITracing(): AITracing | undefined;
+```
+
+デフォルトのトレース設定を返します。
+
+
+## getSelectedAITracing
+
+```typescript
+function getSelectedAITracing(
+  options: ConfigSelectorOptions,
+): AITracing | undefined;
+```
+
+config セレクターで選択されたトレーシング設定、またはデフォルトの設定を返します。
+
+
+## setSelector
+
+```typescript
+function setSelector(selector: ConfigSelector): void;
+```
+
+グローバルな config セレクター関数を設定する。
+
+
+## unregisterAITracing
+
+```typescript
+function unregisterAITracing(name: string): boolean;
+```
+
+レジストリからトレース設定を削除します。
+
+
+## shutdownAITracingRegistry
+
+```typescript
+async function shutdownAITracingRegistry(): Promise<void>;
+```
+
+すべてのトレース設定を停止し、レジストリをクリアします。
+
+
+## clearAITracingRegistry
+
+```typescript
+function clearAITracingRegistry(): void;
+```
+
+シャットダウンせずにすべての設定を消去します。
+
+
+## getAllAITracing
+
+```typescript
+function getAllAITracing(): ReadonlyMap<string, AITracing>;
+```
+
+登録されているすべてのトレーシング設定を返します。
+
+
+## hasAITracing
+
+```typescript
+function hasAITracing(name: string): boolean;
+```
+
+トレーシングインスタンスが存在し、有効になっているかを確認します。
+
+
+## 参照
+
+### ドキュメント
+
+- [AI Tracing の概要](/docs/observability/ai-tracing/overview) - 概念と使用ガイド
+- [サンプリング戦略](/docs/observability/ai-tracing/overview#sampling-strategies) - サンプリング設定の詳細
+- [複数設定のセットアップ](/docs/observability/ai-tracing/overview#multi-config-setup) - 複数の設定の使い方
+
+### 参考
+
+- [AITracing クラス](/reference/observability/ai-tracing/) - 主要なトレーシングクラス
+- [インターフェイス](/reference/observability/ai-tracing/interfaces) - 型定義
+- [スパン リファレンス](/reference/observability/ai-tracing/span) - スパンのライフサイクル
+
+### 例
+
+- [Basic AI Tracing](/examples/observability/basic-ai-tracing) - 入門
+
+### エクスポーター
+
+- [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - ストレージの設定
+- [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - クラウドの設定
+- [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust との連携
+- [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse との連携
+- [LangSmith](/reference/observability/ai-tracing/exporters/langsmith) - LangSmith との連携

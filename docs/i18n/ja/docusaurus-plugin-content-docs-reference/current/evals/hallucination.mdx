@@ -1,0 +1,227 @@
+---
+title: "リファレンス: HallucinationMetric | Evals | Mastra ドキュメント"
+description: Mastra の Hallucination Metric に関するドキュメント。提供されたコンテキストとの矛盾を検出することで、LLM の出力が事実に即しているかを評価します。
+---
+
+# HallucinationMetric
+
+:::info Scorers
+このドキュメントはレガシーの evals API を参照しています。最新のスコアラー機能については、[Scorers](/docs/scorers/overview) をご覧ください。
+:::
+
+`HallucinationMetric` は、提供されたコンテキストとモデル出力を比較し、LLM が事実に基づく正確な情報を生成しているかを評価します。この指標は、コンテキストと出力の間に存在する明確な矛盾を特定することで、ハルシネーションを測定します。
+
+## 基本的な使い方
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { HallucinationMetric } from "@mastra/evals/llm";
+
+// 評価用にモデルを構成する
+const model = openai("gpt-4o-mini");
+
+const metric = new HallucinationMetric(model, {
+  context: [
+    "Tesla は 2003 年、カリフォルニア州サンカルロスで Martin Eberhard と Marc Tarpenning によって設立されました。",
+  ],
+});
+
+const result = await metric.measure(
+  "Tesla の創業について教えてください。",
+  "Tesla は 2004 年に Elon Musk によってカリフォルニアで設立されました。",
+);
+
+console.log(result.score); // スコア（0〜1）
+console.log(result.info.reason); // スコアの根拠
+
+// 出力例:
+// {
+//   score: 0.67,
+//   info: {
+//     reason: "このスコアが 0.67 なのは、文脈中の 3 つの記述のうち 2 つ
+//           （創業年と創業者）が出力によって矛盾し、一方で
+//           場所に関する記述は矛盾しなかったためです。"
+//   }
+// }
+```
+
+
+## コンストラクターのパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      description: "ハルシネーション評価に使用するモデルの設定",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "HallucinationMetricOptions",
+      description: "この指標の設定オプション",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### HallucinationMetricOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "scale",
+      type: "number",
+      description: "スコアの最大値",
+      isOptional: true,
+      defaultValue: "1",
+    },
+    {
+      name: "context",
+      type: "string[]",
+      description: "正解（ソース・オブ・トゥルース）として用いるコンテキスト要素の配列",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## measure() のパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "元のクエリまたはプロンプト",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "評価する LLM の応答",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "ハルシネーションスコア（0からのスケール、既定は0～1）",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "スコアの理由を含むオブジェクト",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description:
+                "スコアの詳細な説明および特定された矛盾点",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## スコアリングの詳細
+
+このメトリクスは、矛盾の検出と根拠のない主張の分析を通じて、ハルシネーションを評価します。
+
+### スコアリングプロセス
+
+1. 事実内容を分析:
+   - 文脈から記述（ステートメント）を抽出
+   - 数値や日付を特定
+   - 記述同士の関係をマッピング
+
+2. 出力のハルシネーションを分析:
+   - 文脈中の記述と照合
+   - 直接の矛盾をハルシネーションとしてマーク
+   - 根拠のない主張をハルシネーションとして特定
+   - 数値の正確性を評価
+   - 近似の前提・状況を考慮
+
+3. ハルシネーションスコアを算出:
+   - ハルシネーションと判断された記述（矛盾と根拠のない主張）をカウント
+   - 総記述数で割る
+   - 設定された範囲にスケーリング
+
+最終スコア: `(hallucinated_statements / total_statements) * scale`
+
+### 重要な留意事項
+
+- 文脈に存在しない主張はハルシネーションとして扱う
+- 主観的な主張は、明示的な裏付けがない限りハルシネーションとみなす
+- 文脈内の事実についての推測的な表現（"might"、"possibly"）は許容される
+- 文脈外の事実についての推測的な表現はハルシネーションとして扱う
+- 空の出力はハルシネーション数ゼロとなる
+- 数値評価では以下を考慮する：
+  - スケールに見合った精度
+  - 文脈に基づく近似
+  - 明示的な精度の指示
+
+### スコアの解釈
+
+（0 からのスケール、既定は 0〜1）
+
+- 1.0: 完全なハルシネーション — すべてのコンテキスト記述と矛盾
+- 0.75: 大きなハルシネーション — コンテキスト記述の 75% と矛盾
+- 0.5: 中程度のハルシネーション — コンテキスト記述の半分と矛盾
+- 0.25: 小さなハルシネーション — コンテキスト記述の 25% と矛盾
+- 0.0: ハルシネーションなし — 出力がすべてのコンテキスト記述と整合
+
+**注:** スコアはハルシネーションの度合いを表します。スコアが低いほど、提示されたコンテキストとの事実整合性が高いことを示します
+
+## 分析付きのサンプル
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { HallucinationMetric } from "@mastra/evals/llm";
+
+// 評価用にモデルを設定する
+const model = openai("gpt-4o-mini");
+
+const metric = new HallucinationMetric(model, {
+  context: [
+    "OpenAI は 2015 年 12 月に Sam Altman、Greg Brockman らによって設立されました。",
+    "同社は 10 億ドルの投資コミットメントで発足しました。",
+    "Elon Musk は初期の支援者でしたが、2018 年に取締役を退任しました。",
+  ],
+});
+
+const result = await metric.measure({
+  input: "OpenAI についての主なポイントは何ですか？",
+  output:
+    "OpenAI は 2015 年に Elon Musk と Sam Altman によって、20 億ドルの投資で設立されました。",
+});
+
+// 出力例:
+// {
+//   score: 0.33,
+//   info: {
+//     reason: "スコアが 0.33 なのは、コンテキストの 3 つの記述のうち 1 つが矛盾していたためです
+//           （投資額が 10 億ドルではなく 20 億ドルと記載されていたため）。設立年は正しく、
+//           創業者の説明は不完全ではあったものの、厳密には矛盾していませんでした。"
+//           description of founders was incomplete, it wasn't strictly contradictory."
+//   }
+// }
+```
+
+
+## 関連
+
+- [忠実度メトリクス](./faithfulness)
+- [回答関連性メトリクス](./answer-relevancy)
+- [コンテキスト精度メトリクス](./context-precision)
+- [コンテキスト関連性メトリクス](./context-relevancy)

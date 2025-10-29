@@ -1,0 +1,85 @@
+---
+title: "リファレンス: voice.addTools() | Voice | Mastra ドキュメント"
+description: "音声プロバイダーで利用可能な addTools() メソッドのドキュメント。音声モデルに関数呼び出し機能を付与します。"
+---
+
+# voice.addTools()
+
+`addTools()` メソッドは、モデルがリアルタイムの対話中に呼び出せるツール（関数）を音声プロバイダーに追加します。これにより、音声アシスタントは情報検索、計算、外部システムとの連携といった処理を実行できるようになります。
+
+## 使い方の例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+// ツールを定義する
+const weatherTool = createTool({
+  id: "getWeather",
+  description: "指定した場所の現在の天気を取得します",
+  inputSchema: z.object({
+    location: z.string().describe("市と州（例: San Francisco, CA）"),
+  }),
+  outputSchema: z.object({
+    message: z.string(),
+  }),
+  execute: async ({ context }) => {
+    // API から天気データを取得する
+    const response = await fetch(
+      `https://api.weather.com?location=${encodeURIComponent(context.location)}`,
+    );
+    const data = await response.json();
+    return {
+      message: `現在、${context.location}の気温は${data.temperature}°F、天候は${data.conditions}です。`,
+    };
+  },
+});
+
+// リアルタイム音声プロバイダーを初期化する
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-4o-mini-realtime",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// ツールを音声プロバイダーに追加する
+voice.addTools({
+  getWeather: weatherTool,
+});
+
+// リアルタイムサービスに接続する
+await voice.connect();
+```
+
+
+## パラメータ
+
+<br />
+
+<PropertiesTable
+  content={[
+    {
+      name: "tools",
+      type: "ToolsInput",
+      description:
+        "音声モデルが呼び出せるツール定義を含むオブジェクト",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+このメソッドは値を返さない。
+
+## 注意事項
+
+- ツールは、name、description、input schema、execute function を備えた Mastra のツール形式に従う必要があります
+- このメソッドは主に、function calling をサポートするリアルタイム音声プロバイダーで使用されます
+- ツールをサポートしていない音声プロバイダーで呼び出された場合は、警告をログに記録し、何も行いません
+- このメソッドで追加したツールは、通常、関連する Agent が提供するツールと組み合わせて使用されます
+- 最良の結果を得るには、会話を開始する前（`connect()` を呼び出す前）にツールを追加してください
+- モデルがツールの使用を選択した場合、音声プロバイダーがツールハンドラーの呼び出しを自動的に処理します
+- `addTools()` を複数回呼び出した場合、プロバイダーの実装によっては既存のツールを置き換えるか、統合されることがあります

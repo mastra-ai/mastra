@@ -1,0 +1,437 @@
+---
+title: "SvelteKit プロジェクトへの Mastra の統合 | Frameworks | Mastra ドキュメント"
+description: Mastra を SvelteKit に統合するためのステップバイステップガイド。
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+
+# SvelteKit プロジェクトに Mastra を統合する
+
+Mastra は SvelteKit と統合されており、次のことが簡単に行えます:
+
+- 柔軟な API を構築して、AI 搭載機能を提供する
+- フロントエンドとバックエンドを単一のコードベースにまとめ、デプロイを簡素化する
+- 効率的なサーバー・クライアント間のワークフローのために、SvelteKit の組み込みの [Actions](https://kit.svelte.dev/docs/form-actions) や [Server Endpoints](https://svelte.dev/docs/kit/routing#server) を活用する
+
+このガイドでは、SvelteKit プロジェクトに Mastra の足場を用意し、統合する方法を説明します。
+
+<Tabs>
+  <TabItem value="操作" label="操作">
+    <Steps>
+      <StepItem>
+        Mastra のインストール
+
+        必要な Mastra パッケージをインストールします:
+
+        <Tabs>
+          <TabItem value="npm" label="npm">
+            ````bash copy npm install mastra@latest @mastra/core@latest
+            @mastra/libsql@latest ```
+            </TabItem>
+            <TabItem value="yarn" label="yarn">
+            ```bash copy yarn add mastra@latest @mastra/core@latest
+            @mastra/libsql@latest ```
+            </TabItem>
+            <TabItem value="pnpm" label="pnpm">
+            ```bash copy pnpm add mastra@latest @mastra/core@latest
+            @mastra/libsql@latest ```
+            </TabItem>
+            <TabItem value="bun" label="bun">
+            ```bash copy bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
+            ````
+          </TabItem>
+        </Tabs>
+      </StepItem>
+
+      <StepItem>
+        プロジェクトに Mastra を統合するには、次の2つの方法があります:
+
+        * ワンライナーを使う
+
+          既定の Weather エージェントを妥当な初期設定で素早く作成するには、次のコマンドを実行します:
+
+          ```bash copy
+          npx mastra@latest init --default
+          ```
+
+          > 詳細は [mastra init](/reference/cli/create-mastra) を参照してください。
+
+        * 対話型 CLI を使う
+
+          セットアップをカスタマイズしたい場合は、`init` コマンドを実行し、プロンプトで表示されるオプションから選択してください:
+
+          ```bash copy
+          npx mastra@latest init
+          ```
+
+        `package.json` に `dev` と `build` のスクリプトを追加します:
+
+        ```json title="package.json"
+        {
+          "scripts": {
+            ...
+            "dev:mastra": "mastra dev",
+            "build:mastra": "mastra build"
+          }
+        }
+        ```
+      </StepItem>
+
+      <StepItem>
+        プロジェクトのルートにある `tsconfig.json` を編集します:
+
+        ```json title="tsconfig.json"
+        {
+          ...
+          "exclude": ["dist", ".mastra"]
+        }
+        ```
+      </StepItem>
+
+      <StepItem>
+        `VITE_` プレフィックスは、SvelteKit が使用する Vite 環境で環境変数にアクセス可能にするために必要です。
+        [Vite の環境変数について詳しく読む](https://vite.dev/guide/env-and-mode.html#env-variables)。
+
+        ```bash title=".env" copy
+        VITE_OPENAI_API_KEY=<your-api-key>
+        ```
+      </StepItem>
+
+      <StepItem>
+        `.mastra` を `.gitignore` ファイルに追加してください：
+
+        ```bash title=".gitignore" copy
+        .mastra
+        ```
+      </StepItem>
+
+      <StepItem>
+        Mastra エージェントをアップデートする
+
+        ```diff title="src/mastra/agents/weather-agent.ts"
+        - import { openai } from "@ai-sdk/openai";
+        + import { createOpenAI } from "@ai-sdk/openai";
+
+        + const openai = createOpenAI({
+        +   apiKey: import.meta.env?.VITE_OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY,
+        +   compatibility: "strict"
+        + });
+        ```
+
+        `import.meta.env` と `process.env` の両方から環境変数を読み込むことで、API キーが SvelteKit の開発サーバーと Mastra Dev Server の双方で利用できるようにしています。
+
+        > さらに詳しい設定内容は AI SDK のドキュメントをご覧ください。詳細は [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) を参照してください。
+      </StepItem>
+
+      <StepItem>
+        Mastra Dev Server を起動して、エージェントを REST エンドポイントとして公開します。
+
+        <Tabs>
+          <TabItem value="npm" label="npm">
+            `bash copy npm run dev:mastra `
+          </TabItem>
+
+          <TabItem value="cli" label="CLI">
+            `bash copy mastra dev:mastra `
+          </TabItem>
+        </Tabs>
+
+        > 起動後、エージェントはローカルで利用可能になります。詳しくは、[ローカル開発環境](/docs/getting-started/studio)を参照してください。
+      </StepItem>
+
+      <StepItem>
+        Mastra Dev Server が起動していれば、SvelteKit サイトを通常どおり起動できます。
+      </StepItem>
+
+      <StepItem>
+        ```bash copy
+        mkdir src/routes/test
+        ```
+      </StepItem>
+
+      <StepItem>
+        新しいアクションを作成し、例のコードを追加します:
+
+        ```bash copy
+        touch src/routes/test/+page.server.ts
+        ```
+
+        ```typescript title="src/routes/test/+page.server.ts" showLineNumbers copy
+        import type { Actions } from "./$types";
+        import { mastra } from "../../mastra";
+
+        export const actions = {
+          default: async (event) => {
+            const city = (await event.request.formData()).get("city")!.toString();
+            const agent = mastra.getAgent("weatherAgent");
+
+            const result = await agent.generate(`${city}の天気はどうですか？`);
+            return { result: result.text };
+          },
+        } satisfies Actions;
+        ```
+      </StepItem>
+
+      <StepItem>
+        新しい Page ファイルを作成し、次のサンプルコードを追加します:
+
+        ```bash copy
+        touch src/routes/test/+page.svelte
+        ```
+
+        ```typescript title="src/routes/test/+page.svelte" showLineNumbers copy
+        <script lang="ts">
+        	import type { PageProps} from './$types';
+        	let { form }: PageProps = $props();
+        </script>
+
+        <h1>テスト</h1>
+
+        <form method="POST">
+        	<input name="city" placeholder="都市名を入力してください" required />
+        	<button type="submit">天気を取得</button>
+        </form>
+
+        {#if form?.result}
+        	<pre>{form.result}</pre>
+        {/if}
+
+        ```
+
+        > これで、ブラウザで `/test` にアクセスして試せます。
+
+        都市に **London** を指定して送信すると、次のような結果が返ってきます：
+
+        ```plaintext
+        ロンドンの現在の天気は以下の通りです:
+
+        - **気温:** 16°C (体感温度 13.8°C)
+        - **湿度:** 62%
+        - **風速:** 12.6 km/h
+        - **突風:** 32.4 km/h
+        - **天候:** 曇り
+
+        詳細情報や他の地域の情報が必要な場合は、お気軽にお尋ねください!
+        ```
+      </StepItem>
+    </Steps>
+  </TabItem>
+
+  <TabItem value="サーバー・エンドポイント" label="サーバーエンドポイント">
+    <Steps>
+      <StepItem>
+        必要な Mastra パッケージをインストールします：
+
+        <Tabs>
+          <TabItem value="npm" label="npm">
+            ````bash copy npm install mastra@latest @mastra/core@latest
+            @mastra/libsql@latest ```
+            </TabItem>
+            <TabItem value="yarn" label="yarn">
+            ```bash copy yarn add mastra@latest @mastra/core@latest
+            @mastra/libsql@latest ```
+            </TabItem>
+            <TabItem value="pnpm" label="pnpm">
+            ```bash copy pnpm add mastra@latest @mastra/core@latest
+            @mastra/libsql@latest ```
+            </TabItem>
+            <TabItem value="bun" label="bun">
+            ```bash copy bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
+            ````
+          </TabItem>
+        </Tabs>
+      </StepItem>
+
+      <StepItem>
+        プロジェクトに Mastra を組み込むには、次の2つの方法があります。
+
+        * ワンライナーを使う
+
+          既定の Weather エージェントを、適切な初期設定で素早くスキャフォールドするには、次のコマンドを実行します：
+
+          ```bash copy
+          npx mastra@latest init --default
+          ```
+
+          > 詳細は [mastra init](/reference/cli/create-mastra) を参照してください。
+
+        * 対話型 CLI を使う
+
+          セットアップをカスタマイズしたい場合は、`init` コマンドを実行し、プロンプトで表示されるオプションから選択します：
+
+          ```bash copy
+          npx mastra@latest init
+          ```
+
+        `package.json` に `dev` と `build` のスクリプトを追加します：
+
+        ```json title="package.json"
+        {
+          "scripts": {
+            ...
+            "dev:mastra": "mastra dev",
+            "build:mastra": "mastra build"
+          }
+        }
+        ```
+      </StepItem>
+
+      <StepItem>
+        プロジェクトのルートにある `tsconfig.json` ファイルを編集します：
+
+        ```json title="tsconfig.json"
+        {
+          ...
+          "exclude": ["dist", ".mastra"]
+        }
+        ```
+      </StepItem>
+
+      <StepItem>
+        `VITE_` プレフィックスは、SvelteKit が利用する Vite の環境で環境変数を参照できるようにするために必要です。
+        [Vite の環境変数について詳しく読む](https://vite.dev/guide/env-and-mode.html#env-variables)。
+
+        ```bash title=".env" copy
+        VITE_OPENAI_API_KEY=<your-api-key>
+        ```
+      </StepItem>
+
+      <StepItem>
+        `.gitignore` ファイルに `.mastra` を追加します：
+
+        ```bash title=".gitignore" copy
+        .mastra
+        ```
+      </StepItem>
+
+      <StepItem>
+        Mastra Agent をアップデートする
+
+        ```diff title="src/mastra/agents/weather-agent.ts"
+        - import { openai } from "@ai-sdk/openai";
+        + import { createOpenAI } from "@ai-sdk/openai";
+
+        + const openai = createOpenAI({
+        +   apiKey: import.meta.env?.VITE_OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY,
+        +   compatibility: "strict"
+        + });
+        ```
+
+        `import.meta.env` と `process.env` の両方から環境変数を読み込むことで、API キーが SvelteKit の開発サーバーと Mastra Dev Server の双方で利用できるようにしています。
+
+        > 設定の詳細は AI SDK のドキュメントをご覧ください。詳しくは [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) を参照してください。
+      </StepItem>
+
+      <StepItem>
+        Mastra Dev Server を起動して、エージェントを REST エンドポイントとして公開します：
+
+        <Tabs>
+          <TabItem value="npm" label="npm">
+            `bash copy npm run dev:mastra `
+          </TabItem>
+
+          <TabItem value="cli" label="CLI">
+            `bash copy mastra dev:mastra `
+          </TabItem>
+        </Tabs>
+
+        > 起動後、エージェントはローカルで利用できます。詳しくは [ローカル開発環境](/docs/getting-started/studio) をご覧ください。
+      </StepItem>
+
+      <StepItem>
+        Mastra Dev Server が起動していれば、SvelteKit サイトを通常どおりに起動できます。
+      </StepItem>
+
+      <StepItem>
+        ```bash copy
+        mkdir src/routes/weather-api
+        ```
+      </StepItem>
+
+      <StepItem>
+        新しいエンドポイントを作成し、サンプルコードを追加します：
+
+        ```bash copy
+        touch src/routes/weather-api/+server.ts
+        ```
+
+        ```typescript title="src/routes/weather-api/+server.ts" showLineNumbers copy
+        import { json } from "@sveltejs/kit";
+        import { mastra } from "../../mastra";
+
+        export async function POST({ request }) {
+          const { city } = await request.json();
+
+          const response = await mastra
+            .getAgent("weatherAgent")
+            .generate(`${city}の天気はどうですか?`);
+
+          return json({ result: response.text });
+        }
+        ```
+      </StepItem>
+
+      <StepItem>
+        新しいページを作成し、次のサンプルコードを追加します:
+
+        ```bash copy
+        touch src/routes/weather-api-test/+page.svelte
+        ```
+
+        ```typescript title="src/routes/weather-api-test/+page.svelte" showLineNumbers copy
+        <script lang="ts">
+        	let result = $state<string | null>(null);
+        	async function handleFormSubmit(event: Event) {
+        		event.preventDefault();
+        		const formData = new FormData(event.currentTarget);
+        		const city = formData.get('city')?.toString();
+        		if (city) {
+        			const response = await fetch('/weather-api', {
+        				method: 'POST',
+        				headers: {
+        					'Content-Type': 'application/json'
+        				},
+        				body: JSON.stringify({ city })
+        			});
+        			const data = await response.json();
+        			result = data.result;
+        		}
+        	}
+        </script>
+
+        <h1>テスト</h1>
+        <form method="POST" onsubmit={handleFormSubmit}>
+        	<input name="city" placeholder="都市名を入力してください" required />
+        	<button type="submit">天気を取得</button>
+        </form>
+
+        {#if result}
+        	<pre>{result}</pre>
+        {/if}
+        ```
+
+        > これで、ブラウザで `/weather-api-test` にアクセスして試せます。
+
+        都市に **London** を指定して送信すると、次のような結果が返されます。
+
+        ```plaintext
+        ロンドンの現在の天気は以下の通りです:
+
+        - **気温:** 16.1°C (体感温度 14.2°C)
+        - **湿度:** 64%
+        - **風速:** 11.9 km/h
+        - **突風:** 30.6 km/h
+        - **天候:** 曇り
+
+        詳細情報や他の地域の情報が必要な場合は、お気軽にお尋ねください!
+        ```
+      </StepItem>
+    </Steps>
+  </TabItem>
+</Tabs>
+
+- [Monorepo のデプロイ](../../deployment/monorepo)

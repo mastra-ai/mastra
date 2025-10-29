@@ -1,0 +1,107 @@
+---
+title: "VercelDeployer | デプロイ | Mastra ドキュメント"
+description: "Mastra VercelDeployer を使って Mastra アプリを Vercel にデプロイする方法を学びましょう"
+---
+
+# VercelDeployer
+
+`VercelDeployer` クラスは、スタンドアロンの Mastra アプリケーションを Vercel にデプロイする役割を担います。設定やデプロイの管理を行い、Vercel 固有の機能でベースとなる [Deployer](/reference/deployer/) クラスを拡張します。
+
+## インストール
+
+```bash copy
+npm install @mastra/deployer-vercel@latest
+```
+
+
+## 使い方の例
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { VercelDeployer } from "@mastra/deployer-vercel";
+
+export const mastra = new Mastra({
+  // ...
+  deployer: new VercelDeployer(),
+});
+```
+
+> 利用可能なすべての設定オプションについては、[VercelDeployer](/reference/deployer/vercel) の API リファレンスを参照してください。
+
+
+### 任意の上書き
+
+Vercel のデプロイヤーは、価値の高い設定をいくつか Vercel Output API の関数設定（`.vc-config.json`）に書き込むことができます：
+
+* `maxDuration?: number` — 関数の実行タイムアウト（秒）
+* `memory?: number` — 関数のメモリ割り当て（MB）
+* `regions?: string[]` — リージョン（例：`['sfo1','iad1']`）
+
+例：
+
+```ts title="src/mastra/index.ts" showLineNumbers copy
+deployer: new VercelDeployer({
+  maxDuration: 600,
+  memory: 1536,
+  regions: ["sfo1", "iad1"],
+});
+```
+
+
+## 継続的インテグレーション
+
+Mastra プロジェクトの Git リポジトリを Vercel に接続したら、プロジェクト設定を更新します。Vercel ダッシュボードで **Settings** > **Build and Deployment** に進み、**Framework settings** の項目で次のように設定します:
+
+- **Build command**: `npm run build`（任意）
+
+### 環境変数
+
+初回のデプロイ前に、アプリケーションで使用する環境変数を追加してください。たとえば、LLM に OpenAI を使用している場合は、Vercel のプロジェクト設定で `OPENAI_API_KEY` を設定する必要があります。
+
+> 詳細は [Environment variables](https://vercel.com/docs/environment-variables) をご覧ください。
+
+これで、GitHub リポジトリの指定ブランチにプッシュするたびに自動デプロイが実行されるようにプロジェクトが設定されました。
+
+## 手動デプロイ
+
+[Vercel CLI](https://vercel.com/docs/cli) を使用して手動でデプロイすることもできます。Vercel CLI をインストールしたら、プロジェクトのルートで次を実行してアプリケーションをデプロイしてください。
+
+```bash copy
+npm run build && vercel --prod --prebuilt --archive=tgz
+```
+
+> プロジェクトのルートで `vercel dev` を実行すると、Mastra アプリをローカルでテストできます。
+
+
+## ビルド出力
+
+`VercelDeployer` を使用する Mastra アプリケーションのビルド出力には、プロジェクト内のすべてのエージェント、ツール、ワークフローに加え、Vercel 上でアプリケーションを実行するために必要な Mastra 固有のファイルが含まれます。
+
+```
+.vercel/
+├── output/
+│   ├── functions/
+│   │   └── index.func/
+│   │       └── index.mjs
+│   └── config.json
+└── package.json
+```
+
+`VercelDeployer` は、以下の設定を含む `config.json` 構成ファイルを `.vercel/output` に自動生成します:
+
+```json
+{
+  "version": 3,
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/"
+    }
+  ]
+}
+```
+
+
+## 次のステップ
+
+- [Mastra クライアント SDK](/reference/client-js/mastra-client)

@@ -1,0 +1,87 @@
+---
+title: "CIでEvalsを実行する | スコアラー | Mastraドキュメント"
+description: "CI/CDパイプラインでMastraのEvalsを実行し、時間の経過とともにエージェントの品質を監視する方法を学びます。"
+---
+
+# CI で Evals を実行する
+
+:::info Scorers
+このドキュメントはレガシーの Evals API を参照しています。最新の Scorer 機能については、[Scorers](/docs/scorers/overview) をご覧ください。
+:::
+
+CI パイプラインで Evals を実行することで、時間の経過に伴うエージェントの品質を測定するための定量的な指標を提供し、このギャップの解消に役立ちます。
+
+## CI 連携のセットアップ
+
+ESM モジュールに対応した任意のテストフレームワークを利用できます。たとえば、CI/CD パイプラインで eval を実行する際に、[Vitest](https://vitest.dev/)、[Jest](https://jestjs.io/)、または [Mocha](https://mochajs.org/) を使用できます。
+
+```typescript copy showLineNumbers title="src/mastra/agents/index.test.ts"
+import { describe, it, expect } from "vitest";
+import { evaluate } from "@mastra/evals";
+import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+import { myAgent } from "./index";
+
+describe("My Agent", () => {
+  it("トーンの一貫性を検証すること", async () => {
+    const metric = new ToneConsistencyMetric();
+    const result = await evaluate(myAgent, "Hello, world!", metric);
+
+    expect(result.score).toBe(1);
+  });
+});
+```
+
+`eval` の結果を取得するには、テストフレームワークで `testSetup` と `globalSetup` のスクリプトを設定する必要があります。これにより、これらの結果を mastra のダッシュボードに表示できるようになります。
+
+
+## フレームワーク構成
+
+### Vitest のセットアップ
+
+CI/CD パイプラインで eval を実行するには、次のファイルをプロジェクトに追加してください。
+
+```typescript copy showLineNumbers title="globalSetup.ts"
+import { globalSetup } from "@mastra/evals";
+
+export default function setup() {
+  globalSetup();
+}
+```
+
+```typescript copy showLineNumbers title="testSetup.ts"
+import { beforeAll } from "vitest";
+import { attachListeners } from "@mastra/evals";
+
+beforeAll(async () => {
+  await attachListeners();
+});
+```
+
+```typescript copy showLineNumbers title="vitest.config.ts"
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  test: {
+    globalSetup: "./globalSetup.ts",
+    setupFiles: ["./testSetup.ts"],
+  },
+});
+```
+
+
+## ストレージ設定
+
+Mastra Storage に評価結果を保存し、Mastra ダッシュボードで結果を確認するには:
+
+```typescript copy showLineNumbers title="testSetup.ts"
+import { beforeAll } from "vitest";
+import { attachListeners } from "@mastra/evals";
+import { mastra } from "./your-mastra-setup";
+
+beforeAll(async () => {
+  // Mastra Storageに評価を保存(ストレージの有効化が必要)
+  await attachListeners(mastra);
+});
+```
+
+ファイルストレージでは、eval は永続化され、後で参照できます。メモリストレージでは、eval はテストプロセス内に限定されます。

@@ -1,0 +1,189 @@
+---
+title: "リファレンス: CloudExporter | オブザーバビリティ | Mastra ドキュメント"
+description: CloudExporter のAPIリファレンス
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
+# CloudExporter
+
+トレースを Mastra Cloud に送信し、オンラインでの可視化と監視を可能にします。
+
+## コンストラクタ
+
+```typescript
+new CloudExporter(config?: CloudExporterConfig)
+```
+
+<PropertiesTable
+  props={[
+{
+  name: "config",
+  type: "CloudExporterConfig",
+  description: "設定オプション",
+  required: false,
+},
+]}
+/>
+
+
+## CloudExporterConfig
+
+```typescript
+interface CloudExporterConfig {
+  /** バッチあたりの最大スパン数。デフォルト: 1000 */
+  maxBatchSize?: number;
+
+  /** フラッシュ前の最大待機時間(ミリ秒)。デフォルト: 5000 */
+  maxBatchWaitMs?: number;
+
+  /** 最大再試行回数。デフォルト: 3 */
+  maxRetries?: number;
+
+  /** クラウドアクセストークン(環境変数または設定ファイルから取得) */
+  accessToken?: string;
+
+  /** クラウドAIトレーシングエンドポイント */
+  endpoint?: string;
+
+  /** オプションのロガー */
+  logger?: IMastraLogger;
+}
+```
+
+
+## 環境変数
+
+エクスポーターは、設定で指定されていない場合、次の環境変数を読み込みます:
+
+- `MASTRA_CLOUD_ACCESS_TOKEN` - 認証用アクセストークン
+- `MASTRA_CLOUD_AI_TRACES_ENDPOINT` - カスタムエンドポイント（既定: `https://api.mastra.ai/ai/spans/publish`）
+
+## プロパティ
+
+```typescript
+readonly name = 'mastra-cloud-ai-tracing-exporter';
+```
+
+
+## 方法
+
+### exportEvent
+
+```typescript
+async exportEvent(event: AITracingEvent): Promise<void>
+```
+
+トレーシングイベントを処理します。Cloud には SPAN&#95;ENDED イベントのみをエクスポートします。
+
+<PropertiesTable
+  props={[
+{
+  name: "event",
+  type: "AITracingEvent",
+  description: "エクスポートするトレーシングイベント",
+  required: true,
+},
+]}
+/>
+
+
+### シャットダウン
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+残りのイベントをフラッシュして、クリーンアップを実行します。
+
+
+## 挙動
+
+### 認証
+
+設定または環境変数でアクセストークンが提供されない場合、エクスポーターは次の動作を行います:
+
+- サインアップ方法に関する情報付きの警告をログに記録する
+- no-op として動作する（すべてのイベントを破棄する）
+
+### バッチ処理
+
+エクスポーターはネットワークを効率的に利用するため、スパンをバッチ化します:
+
+- バッチサイズが `maxBatchSize` に達するとフラッシュします
+- バッチ内の最初のスパンから `maxBatchWaitMs` が経過するとフラッシュします
+- `shutdown()` 時にフラッシュします
+
+### エラー処理
+
+- `maxRetries` 回の試行まで指数バックオフでリトライ
+- すべてのリトライに失敗した場合、バッチを破棄
+- エラーを記録しつつ、新規イベントの処理は継続
+
+### イベント処理
+
+- `SPAN_ENDED` イベントのみを処理
+- `SPAN_STARTED` および `SPAN_UPDATED` イベントは無視
+- スパンを MastraCloudSpanRecord 形式に整形
+
+## MastraCloudSpanRecord
+
+クラウドスパンの内部フォーマット:
+
+```typescript
+interface MastraCloudSpanRecord {
+  traceId: string;
+  spanId: string;
+  parentSpanId: string | null;
+  name: string;
+  spanType: string;
+  attributes: Record<string, any> | null;
+  metadata: Record<string, any> | null;
+  startedAt: Date;
+  endedAt: Date | null;
+  input: any;
+  output: any;
+  error: any;
+  isEvent: boolean;
+  createdAt: Date;
+  updatedAt: Date | null;
+}
+```
+
+
+## 使い方
+
+```typescript
+import { CloudExporter } from "@mastra/core/ai-tracing";
+
+// トークンには環境変数を使用
+const exporter = new CloudExporter();
+
+// 明示的な構成
+const customExporter = new CloudExporter({
+  accessToken: "your-token",
+  maxBatchSize: 500,
+  maxBatchWaitMs: 2000,
+});
+```
+
+
+## 関連情報
+
+### ドキュメント
+
+- [AI Tracing 概要](/docs/observability/ai-tracing/overview) - 総合ガイド
+- [エクスポーター](/docs/observability/ai-tracing/overview#exporters) - エクスポーターの概念
+
+### その他のエクスポーター
+
+- [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - ストレージへの永続化
+- [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter) - デバッグ出力
+- [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse との連携
+- [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust との連携
+
+### 参考資料
+
+- [Configuration](/reference/observability/ai-tracing/configuration) - 設定項目
+- [Interfaces](/reference/observability/ai-tracing/interfaces) - インターフェース定義

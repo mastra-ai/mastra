@@ -1,0 +1,242 @@
+---
+title: "Requesty | モデル | Mastra"
+description: "Mastra で Requesty のモデルを利用。利用可能なモデルは全13件。"
+---
+
+{/* このファイルは generate-model-docs.ts によって自動生成されています — 手動で編集しないでください */}
+
+import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
+# <img src="https://models.dev/logos/requesty.svg" alt="Requesty logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Requesty
+
+Mastra のモデルルーター経由で、Requesty の13モデルにアクセスできます。認証は `REQUESTY_API_KEY` 環境変数によって自動的に処理されます。
+
+詳しくは [Requesty のドキュメント](https://requesty.ai/solution/llm-routing/models)をご覧ください。
+
+```bash
+REQUESTY_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "あなたは役立つアシスタントです",
+  model: "requesty/anthropic/claude-3-7-sonnet"
+});
+
+// レスポンスを生成
+const response = await agent.generate("Hello!");
+
+// レスポンスをストリーミング
+const stream = await agent.stream("物語を聞かせて");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra は OpenAI 互換の `/chat/completions` エンドポイントを使用します。プロバイダー固有の一部機能は利用できない場合があります。詳細は [Requesty のドキュメント](https://requesty.ai/solution/llm-routing/models) をご確認ください。
+
+:::
+
+
+## モデル
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "requesty/anthropic/claude-3-7-sonnet",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "requesty/anthropic/claude-4-sonnet-20250522",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "requesty/anthropic/claude-opus-4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
+    "model": "requesty/anthropic/claude-opus-4-1-20250805",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
+    "model": "requesty/google/gemini-2.5-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.3,
+    "outputCost": 2.5
+  },
+  {
+    "model": "requesty/google/gemini-2.5-pro",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "requesty/openai/gpt-4.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1047576,
+    "maxOutput": 32768,
+    "inputCost": 2,
+    "outputCost": 8
+  },
+  {
+    "model": "requesty/openai/gpt-4.1-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1047576,
+    "maxOutput": 32768,
+    "inputCost": 0.4,
+    "outputCost": 1.6
+  },
+  {
+    "model": "requesty/openai/gpt-4o-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "requesty/openai/gpt-5",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "requesty/openai/gpt-5-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": 0.25,
+    "outputCost": 2
+  },
+  {
+    "model": "requesty/openai/gpt-5-nano",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 16000,
+    "maxOutput": 4000,
+    "inputCost": 0.05,
+    "outputCost": 0.4
+  },
+  {
+    "model": "requesty/openai/o4-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 1.1,
+    "outputCost": 4.4
+  }
+]}
+/>
+
+## 詳細設定
+
+### カスタムヘッダ
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://router.requesty.ai/v1",
+    id: "requesty/anthropic/claude-3-7-sonnet",
+    apiKey: process.env.REQUESTY_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+
+### ダイナミックモデル選択
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "requesty/openai/o4-mini"
+      : "requesty/anthropic/claude-3-7-sonnet";
+  }
+});
+```

@@ -1,0 +1,382 @@
+---
+title: "リファレンス: OtelExporter | Observability | Mastra ドキュメント"
+description: AI トレース用の OpenTelemetry エクスポーター
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
+# OtelExporter
+
+:::warning
+
+OtelExporter は現在**実験的**です。API や設定オプションは今後のリリースで変更される可能性があります。
+
+:::
+
+標準化された GenAI のセマンティック規約に基づき、OpenTelemetry 互換のオブザーバビリティプラットフォームへ AI のトレーシングデータを送信します。
+
+## コンストラクタ
+
+```typescript
+new OtelExporter(config: OtelExporterConfig)
+```
+
+
+## OtelExporterConfig
+
+```typescript
+interface OtelExporterConfig {
+  provider?: ProviderConfig;
+  timeout?: number;
+  batchSize?: number;
+  logLevel?: "debug" | "info" | "warn" | "error";
+}
+```
+
+<PropertiesTable
+  props={[
+{
+  name: "provider",
+  type: "ProviderConfig",
+  description: "プロバイダ固有の設定（下記参照）",
+  required: true,
+},
+{
+  name: "timeout",
+  type: "number",
+  description: "エクスポートのタイムアウト（ミリ秒）（既定値: 30000）",
+  required: false,
+},
+{
+  name: "batchSize",
+  type: "number",
+  description: "バッチごとのスパン数（既定値: 100）",
+  required: false,
+},
+{
+  name: "logLevel",
+  type: "'debug' | 'info' | 'warn' | 'error'",
+  description: "ログレベル（既定値: 'warn'）",
+  required: false,
+},
+{
+  name: "resourceAttributes",
+  type: "DetectedResourceAttributes",
+  description:
+    "任意の OpenTelemetry リソース属性（ここで指定した値はデフォルトを上書きします）",
+  required: false,
+},
+]}
+/>
+
+
+## プロバイダーの設定
+
+### Dash0設定
+
+```typescript
+interface Dash0Config {
+  apiKey: string;
+  endpoint: string;
+  dataset?: string;
+}
+```
+
+<PropertiesTable
+  props={[
+{
+  name: "apiKey",
+  type: "string",
+  description: "Dash0 の API キー",
+  required: true,
+},
+{
+  name: "endpoint",
+  type: "string",
+  description:
+    "Dash0 の受け入れエンドポイント（例：ingress.us-west-2.aws.dash0.com:4317）",
+  required: true,
+},
+{
+  name: "dataset",
+  type: "string",
+  description: "データ整理用の任意のデータセット名",
+  required: false,
+},
+]}
+/>
+
+
+### SignozConfig
+
+```typescript
+interface SignozConfig {
+  apiKey: string;
+  region?: "us" | "eu" | "in";
+  endpoint?: string;
+}
+```
+
+<PropertiesTable
+  props={[
+{
+  name: "apiKey",
+  type: "string",
+  description: "SigNoz 取り込みキー",
+  required: true,
+},
+{
+  name: "region",
+  type: "'us' | 'eu' | 'in'",
+  description: "SigNoz クラウドのリージョン（既定: 'us'）",
+  required: false,
+},
+{
+  name: "endpoint",
+  type: "string",
+  description: "セルフホスト版 SigNoz 用のカスタムエンドポイント",
+  required: false,
+},
+]}
+/>
+
+
+### New Relic 設定
+
+```typescript
+interface NewRelicConfig {
+  apiKey: string;
+  endpoint?: string;
+}
+```
+
+<PropertiesTable
+  props={[
+{
+  name: "apiKey",
+  type: "string",
+  description: "New Relic ライセンスキー",
+  required: true,
+},
+{
+  name: "endpoint",
+  type: "string",
+  description:
+    "カスタムエンドポイント（既定値: https://otlp.nr-data.net:443/v1/traces）",
+  required: false,
+},
+]}
+/>
+
+
+### Traceloop の設定
+
+```typescript
+interface TraceloopConfig {
+  apiKey: string;
+  destinationId?: string;
+  endpoint?: string;
+}
+```
+
+<PropertiesTable
+  props={[
+{
+  name: "apiKey",
+  type: "string",
+  description: "Traceloop の API キー",
+  required: true,
+},
+{
+  name: "destinationId",
+  type: "string",
+  description: "任意の送信先識別子",
+  required: false,
+},
+{
+  name: "endpoint",
+  type: "string",
+  description:
+    "カスタムエンドポイント（既定: https://api.traceloop.com/v1/traces）",
+  required: false,
+},
+]}
+/>
+
+
+### LaminarConfig
+
+```typescript
+interface LaminarConfig {
+  apiKey: string;
+  teamId?: string;
+  endpoint?: string;
+}
+```
+
+<PropertiesTable
+  props={[
+{
+  name: "apiKey",
+  type: "string",
+  description: "Laminar プロジェクトの API キー",
+  required: true,
+},
+{
+  name: "teamId",
+  type: "string",
+  description: "任意のチーム ID（後方互換性のため）",
+  required: false,
+},
+{
+  name: "endpoint",
+  type: "string",
+  description: "カスタムエンドポイント（既定値: https://api.lmnr.ai/v1/traces）",
+  required: false,
+},
+]}
+/>
+
+
+### CustomConfig
+
+```typescript
+interface CustomConfig {
+  endpoint: string;
+  protocol?: "http/json" | "http/protobuf" | "grpc" | "zipkin";
+  headers?: Record<string, string>;
+}
+```
+
+<PropertiesTable
+  props={[
+{
+  name: "endpoint",
+  type: "string",
+  description: "OTel コレクターのエンドポイント URL",
+  required: true,
+},
+{
+  name: "protocol",
+  type: "'http/json' | 'http/protobuf' | 'grpc' | 'zipkin'",
+  description: "エクスポート用プロトコル（既定: 'http/json'）",
+  required: false,
+},
+{
+  name: "headers",
+  type: "Record<string, string>",
+  description: "認証用のカスタムヘッダー",
+  required: false,
+},
+]}
+/>
+
+
+## 方法
+
+### exportEvent
+
+```typescript
+async exportEvent(event: AITracingEvent): Promise<void>
+```
+
+設定された OTEL バックエンドにトレースイベントをエクスポートします。
+
+
+### シャットダウン
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+未送信のトレースをフラッシュし、エクスポーターをシャットダウンします。
+
+
+## 使い方の例
+
+### 基本的な使用方法
+
+```typescript
+import { OtelExporter } from "@mastra/otel-exporter";
+
+const exporter = new OtelExporter({
+  provider: {
+    signoz: {
+      apiKey: process.env.SIGNOZ_API_KEY,
+      region: "us",
+    },
+  },
+});
+```
+
+
+### カスタムエンドポイントの使用
+
+```typescript
+const exporter = new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: "https://my-collector.example.com/v1/traces",
+      protocol: "http/protobuf",
+      headers: {
+        "x-api-key": process.env.API_KEY,
+      },
+    },
+  },
+  timeout: 60000,
+  logLevel: "debug",
+});
+```
+
+
+## スパンのマッピング
+
+エクスポーターは、GenAI のセマンティック規約に従って、Mastra AI のスパンを OpenTelemetry のスパンへマッピングします。
+
+### スパン名
+
+- `MODEL_GENERATION` → `chat {model}` または `tool_selection {model}`
+- `TOOL_CALL` → `tool.execute {tool_name}`
+- `AGENT_RUN` → `agent.{agent_id}`
+- `WORKFLOW_RUN` → `workflow.{workflow_id}`
+
+### Span の種類
+
+- ルートエージェント/ワークフローのスパン → `SERVER`
+- LLM 呼び出し → `CLIENT`
+- ツール呼び出し → `INTERNAL` または `CLIENT`
+- ワークフローのステップ → `INTERNAL`
+
+### 属性
+
+エクスポーターは標準の OTEL GenAI 属性にマッピングされます：
+
+| Mastra Attribute                    | OTEL Attribute                   |
+| ----------------------------------- | -------------------------------- |
+| `model`                             | `gen_ai.request.model`           |
+| `provider`                          | `gen_ai.system`                  |
+| `inputTokens` / `promptTokens`      | `gen_ai.usage.input_tokens`      |
+| `outputTokens` / `completionTokens` | `gen_ai.usage.output_tokens`     |
+| `temperature`                       | `gen_ai.request.temperature`     |
+| `maxOutputTokens`                   | `gen_ai.request.max_tokens`      |
+| `finishReason`                      | `gen_ai.response.finish_reasons` |
+
+## プロトコル要件
+
+プロバイダーによって必要な OTEL エクスポーターのパッケージが異なります：
+
+| プロトコル      | 必要なパッケージ                           | プロバイダー                |
+| ------------- | ------------------------------------------ | -------------------------- |
+| gRPC          | `@opentelemetry/exporter-trace-otlp-grpc`  | Dash0                      |
+| HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` | SigNoz, New Relic, Laminar |
+| HTTP/JSON     | `@opentelemetry/exporter-trace-otlp-http`  | Traceloop, Custom          |
+| Zipkin        | `@opentelemetry/exporter-zipkin`           | Zipkin コレクター          |
+
+## 親子関係
+
+エクスポーターは Mastra の AI トレーシングにおけるスパン階層を保持します:
+
+- Mastra のスパンから `parentSpanId` をそのまま使用
+- エージェント、ワークフロー、LLM 呼び出し、ツールの正しいネスト構造を維持
+- すべての関係を保った完全なトレースをエクスポート

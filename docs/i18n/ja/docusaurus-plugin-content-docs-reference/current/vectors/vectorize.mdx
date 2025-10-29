@@ -1,0 +1,301 @@
+---
+title: "リファレンス: Cloudflare Vector Store | Vectors | Mastra ドキュメント"
+description: Mastra の CloudflareVector クラスに関するドキュメント。Cloudflare Vectorize を使用したベクトル検索を提供します。
+---
+
+# Cloudflare ベクターストア
+
+CloudflareVector クラスは、Cloudflare のエッジネットワークに統合されたベクターデータベースサービスである [Cloudflare Vectorize](https://developers.cloudflare.com/vectorize/) を使って、ベクトル検索機能を提供します。
+
+## コンストラクターのオプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "accountId",
+      type: "string",
+      description: "Cloudflare のアカウント ID",
+    },
+    {
+      name: "apiToken",
+      type: "string",
+      description: "Vectorize の権限を持つ Cloudflare の API トークン",
+    },
+  ]}
+/>
+
+## メソッド
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "作成するインデックス名",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "ベクトルの次元数（使用する埋め込みモデルと一致している必要があります）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description:
+        "類似検索に用いる距離指標（dotproduct は dot-product に対応）",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "アップサート対象のインデックス名",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "埋め込みベクトルの配列",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "各ベクトルのメタデータ",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "ベクトルID（未指定の場合は自動生成）",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "クエリ対象のインデックス名",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "類似ベクトルを検索するためのクエリベクトル",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "返す結果数",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "クエリ用のメタデータフィルター",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "結果にベクトルを含めるかどうか",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+インデックス名の文字列配列を返します。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+{
+  name: "indexName",
+  type: "string",
+  description: "説明するインデックス名",
+},
+]}
+/>
+
+返却値:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除対象のインデックス名",
+    },
+  ]}
+/>
+
+### createMetadataIndex()
+
+フィルタリングを可能にするために、メタデータフィールドにインデックスを作成します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "メタデータフィールドを含むインデックス名",
+    },
+    {
+      name: "propertyName",
+      type: "string",
+      description: "インデックス対象のメタデータフィールド名",
+    },
+    {
+      name: "indexType",
+      type: "'string' | 'number' | 'boolean'",
+      description: "メタデータフィールドの型",
+    },
+  ]}
+/>
+
+### deleteMetadataIndex()
+
+メタデータフィールドのインデックスを削除します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "メタデータフィールドを含むインデックスの名前",
+    },
+    {
+      name: "propertyName",
+      type: "string",
+      description: "インデックス付けを解除するメタデータフィールド名",
+    },
+  ]}
+/>
+
+### listMetadataIndexes()
+
+インデックスに定義されたすべてのメタデータフィールド索引を一覧します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "メタデータ索引を一覧する対象のインデックス名",
+    },
+  ]}
+/>
+
+### updateVector()
+
+インデックス内の特定のIDに対して、ベクトルまたはメタデータを更新します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "更新対象のIDを含むインデックスの名前",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "更新対象のベクトルまたはメタデータの一意の識別子",
+    },
+    {
+      name: "update",
+      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+      description: "更新するベクトルおよび/またはメタデータを含むオブジェクト",
+    },
+  ]}
+/>
+
+### deleteVector()
+
+インデックス内の特定のIDに対応するベクターとその関連メタデータを削除します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除対象のIDを含むインデックス名",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "削除するベクターおよびメタデータの一意の識別子",
+    },
+  ]}
+/>
+
+## レスポンスの種類
+
+クエリ結果は次の形式で返されます：
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[];
+}
+```
+
+
+## エラー処理
+
+ストアは型付きエラーをスローし、キャッチできます：
+
+```typescript copy
+try {
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | など
+    console.log(error.details); // エラーの詳細情報
+  }
+}
+```
+
+
+## 環境変数
+
+必須の環境変数:
+
+- `CLOUDFLARE_ACCOUNT_ID`: Cloudflare アカウント ID
+- `CLOUDFLARE_API_TOKEN`: Vectorize 権限を持つ Cloudflare の API トークン
+
+## 関連項目
+
+- [メタデータフィルター](../rag/metadata-filters)
