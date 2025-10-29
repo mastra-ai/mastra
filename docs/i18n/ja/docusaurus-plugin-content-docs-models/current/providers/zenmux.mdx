@@ -1,0 +1,302 @@
+---
+title: "ZenMux | モデル | Mastra"
+description: "Mastra で ZenMux モデルを利用。18 種類のモデルが利用可能。"
+---
+
+{/* このファイルは generate-model-docs.ts によって自動生成されています — 手動で編集しないでください */}
+
+import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
+# <img src="https://models.dev/logos/zenmux.svg" alt="ZenMux logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />ZenMux
+
+Mastraのモデルルーター経由で、18種類のZenMuxモデルにアクセスできます。認証は `ZENMUX_API_KEY` 環境変数を用いて自動的に行われます。
+
+詳しくは[ZenMuxのドキュメント](https://docs.zenmux.ai)をご覧ください。
+
+```bash
+ZENMUX_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "あなたは親切なアシスタントです",
+  model: "zenmux/anthropic/claude-haiku-4.5"
+});
+
+// レスポンスを生成
+const response = await agent.generate("Hello!");
+
+// レスポンスをストリーミング
+const stream = await agent.stream("物語を聞かせて");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra は OpenAI 互換の `/chat/completions` エンドポイントを使用します。プロバイダー固有の機能の一部は利用できない場合があります。詳細は [ZenMux のドキュメント](https://docs.zenmux.ai)をご確認ください。
+
+:::
+
+
+## モデル
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "zenmux/anthropic/claude-haiku-4.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
+    "model": "zenmux/anthropic/claude-opus-4.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
+    "model": "zenmux/anthropic/claude-sonnet-4.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "zenmux/deepseek/deepseek-chat",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 8000,
+    "inputCost": 0.56,
+    "outputCost": 1.68
+  },
+  {
+    "model": "zenmux/google/gemini-2.5-pro",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "zenmux/inclusionai/lint-1t",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": 0.56,
+    "outputCost": 2.24
+  },
+  {
+    "model": "zenmux/inclusionai/ring-1t",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": 0.56,
+    "outputCost": 2.24
+  },
+  {
+    "model": "zenmux/kuaishou/kat-coder-pro-v1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 32000,
+    "inputCost": 0.6,
+    "outputCost": 2.4
+  },
+  {
+    "model": "zenmux/moonshotai/kimi-k2-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": 0.6,
+    "outputCost": 2.5
+  },
+  {
+    "model": "zenmux/openai/gpt-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "zenmux/openai/gpt-5-codex",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "zenmux/qwen/qwen3-coder-plus",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 66540,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
+    "model": "zenmux/x-ai/grok-4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 256000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "zenmux/x-ai/grok-4-fast",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 2000000,
+    "maxOutput": 30000,
+    "inputCost": 0.2,
+    "outputCost": 0.5
+  },
+  {
+    "model": "zenmux/x-ai/grok-4-fast-non-reasoning",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 2000000,
+    "maxOutput": 30000,
+    "inputCost": 0.2,
+    "outputCost": 0.5
+  },
+  {
+    "model": "zenmux/x-ai/grok-code-fast-1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 10000,
+    "inputCost": 0.2,
+    "outputCost": 1.5
+  },
+  {
+    "model": "zenmux/z-ai/glm-4.5-air",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 96000,
+    "inputCost": 0.11,
+    "outputCost": 0.56
+  },
+  {
+    "model": "zenmux/z-ai/glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 128000,
+    "inputCost": 0.35,
+    "outputCost": 1.54
+  }
+]}
+/>
+
+## 詳細設定
+
+### カスタムヘッダー
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://zenmux.ai/api/v1",
+    id: "zenmux/anthropic/claude-haiku-4.5",
+    apiKey: process.env.ZENMUX_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+
+### 動的モデル選択
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "zenmux/z-ai/glm-4.6"
+      : "zenmux/anthropic/claude-haiku-4.5";
+  }
+});
+```

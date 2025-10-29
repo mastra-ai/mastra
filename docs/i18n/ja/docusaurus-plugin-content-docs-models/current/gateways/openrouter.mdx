@@ -3,9 +3,7 @@ title: "OpenRouter | モデル | Mastra"
 description: "OpenRouter 経由で AI モデルを利用できます。"
 ---
 
-{/* このファイルは generate-model-docs.ts によって自動生成されています — 手動で編集しないでください */}
-
-import { Callout } from "nextra/components";
+{/* このファイルは generate-model-docs.ts によって自動生成されています。手動での編集は行わないでください */}
 
 
 # <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
@@ -26,9 +24,11 @@ const agent = new Agent({
 });
 ```
 
-<Callout type="info">
-  Mastra は OpenAI 互換の `/chat/completions` エンドポイントを使用しています。プロバイダー特有の機能の一部は利用できない場合があります。詳細は [OpenRouter のドキュメント](https://openrouter.ai/models) をご確認ください。
-</Callout>
+:::info
+
+Mastra は OpenAI 互換の `/chat/completions` エンドポイントを使用します。プロバイダー固有の機能の一部は利用できない場合があります。詳細は [OpenRouter のドキュメント](https://openrouter.ai/models) をご確認ください。
+
+:::
 
 
 ## 設定

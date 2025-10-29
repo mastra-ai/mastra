@@ -30,13 +30,13 @@ npm install @mastra/inngest @mastra/core @mastra/deployer
 
 ### Inngest の初期化
 
-Inngest のインテグレーションを初期化して、Mastra 互換のワークフロー用ヘルパーを取得します。createWorkflow と createStep は、Mastra と Inngest に対応したワークフローおよびステップのオブジェクトを作成するために使用します。
+Mastra 互換のワークフロー用ヘルパーを取得するために、Inngest との統合を初期化します。createWorkflow と createStep 関数は、Mastra および Inngest と互換性のあるワークフローおよびステップのオブジェクトを作成するために使用します。
 
 開発中
 
 ```ts showLineNumbers copy title="src/mastra/inngest/index.ts"
 import { Inngest } from "inngest";
-import { realtimeMiddleware } from "@inngest/realtime";
+import { realtimeMiddleware } from "@inngest/realtime/middleware";
 
 export const inngest = new Inngest({
   id: "mastra",
@@ -50,7 +50,7 @@ export const inngest = new Inngest({
 
 ```ts showLineNumbers copy title="src/mastra/inngest/index.ts"
 import { Inngest } from "inngest";
-import { realtimeMiddleware } from "@inngest/realtime";
+import { realtimeMiddleware } from "@inngest/realtime/middleware";
 
 export const inngest = new Inngest({
   id: "mastra",

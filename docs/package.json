@@ -14,7 +14,7 @@
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",
     "serve": "docusaurus serve",
-    "write-translations": "docusaurus write-translations"
+    "write-translations": "docusaurus write-translations && gtx-cli translate"
   },
   "dependencies": {
     "@copilotkit/react-ui": "1.8.10",

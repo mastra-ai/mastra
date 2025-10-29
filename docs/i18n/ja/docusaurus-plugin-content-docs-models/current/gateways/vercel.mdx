@@ -1,11 +1,9 @@
 ---
 title: "Vercel | モデル | Mastra"
-description: "Vercel 経由で AI モデルを利用する。"
+description: "Vercel を通じて AI モデルを利用する。"
 ---
 
-{/* このファイルは generate-model-docs.ts によって自動生成されています — 手動での編集は行わないでください */}
-
-import { Callout } from "nextra/components";
+{/* このファイルは generate-model-docs.ts によって自動生成されています — 手動で編集しないでください */}
 
 
 # <img src="https://models.dev/logos/vercel.svg" alt="Vercel logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Vercel
@@ -26,9 +24,11 @@ const agent = new Agent({
 });
 ```
 
-<Callout type="info">
-  Mastra は OpenAI 互換の `/chat/completions` エンドポイントを使用しています。プロバイダー固有の機能の一部は利用できない場合があります。詳細は [Vercel のドキュメント](https://ai-sdk.dev/providers/ai-sdk-providers)をご確認ください。
-</Callout>
+:::info
+
+Mastra は OpenAI 互換の `/chat/completions` エンドポイントを使用します。プロバイダー固有の機能の一部は利用できない場合があります。詳しくは [Vercel のドキュメント](https://ai-sdk.dev/providers/ai-sdk-providers)をご確認ください。
+
+:::
 
 
 ## 設定

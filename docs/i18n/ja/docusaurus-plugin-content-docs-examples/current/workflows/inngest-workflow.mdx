@@ -320,9 +320,9 @@ export { activityPlanningWorkflow };
 ```
 
 
-## Mastra クラスにエージェントとワークフローのインスタンスを登録する
+## Mastra クラスに Agent と Workflow のインスタンスを登録する
 
-エージェントとワークフローを Mastra インスタンスに登録します。これにより、ワークフロー内からエージェントにアクセスできるようになります。
+`mastra` インスタンスに Agent と Workflow を登録します。これにより、Workflow 内から Agent にアクセスできるようになります。
 
 ```ts showLineNumbers copy title="index.ts"
 import { Mastra } from "@mastra/core/mastra";
@@ -331,7 +331,7 @@ import { PinoLogger } from "@mastra/loggers";
 import { Inngest } from "inngest";
 import { activityPlanningWorkflow } from "./workflows/inngest-workflow";
 import { planningAgent } from "./agents/planning-agent";
-import { realtimeMiddleware } from "@inngest/realtime";
+import { realtimeMiddleware } from "@inngest/realtime/middleware";
 
 // ワークフローのオーケストレーションとイベント処理用のInngestインスタンスを作成
 const inngest = new Inngest({
@@ -353,7 +353,7 @@ export const mastra = new Mastra({
     host: "0.0.0.0",
     apiRoutes: [
       {
-        path: "/api/inngest", // InngestがイベントをポストするAPIエンドポイント
+        path: "/api/inngest", // InngestがイベントをPOSTするAPIエンドポイント
         method: "ALL",
         createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
       },

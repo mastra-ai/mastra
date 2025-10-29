@@ -1,12 +1,11 @@
 ---
 title: "Netlify | モデル | Mastra"
-description: "Netlify 経由で AI モデルを利用します。"
+description: "Netlify 経由で AI モデルを利用する。"
 ---
 
-{/* このファイルは generate-model-docs.ts によって自動生成されています — 手動での編集は行わないでください */}
+{/* このファイルは generate-model-docs.ts によって自動生成されています。手動で編集しないでください */}
 
-import { NetlifyLogo } from '@/components/logos/NetlifyLogo';
-import { Callout } from "nextra/components";
+import { NetlifyLogo } from '@site/src/components/logos/NetlifyLogo';
 
 
 # <NetlifyLogo className="inline w-8 h-8 mr-2 align-middle" />Netlify
@@ -27,9 +26,11 @@ const agent = new Agent({
 });
 ```
 
-<Callout type="info">
-  Mastra は OpenAI 互換の `/chat/completions` エンドポイントを利用しています。プロバイダー固有の機能の一部はご利用いただけない場合があります。詳しくは [Netlify のドキュメント](https://docs.netlify.com/build/ai-gateway/overview/) をご確認ください。
-</Callout>
+:::info
+
+Mastra は OpenAI 互換の `/chat/completions` エンドポイントを使用します。プロバイダー固有の機能の一部は利用できない場合があります。詳細は [Netlify のドキュメント](https://docs.netlify.com/build/ai-gateway/overview/)をご確認ください。
+
+:::
 
 
 ## 設定

@@ -1,19 +1,19 @@
 ---
 title: "モデル"
-description: "Mastra のモデルルーター経由で、47以上のAIプロバイダーと816以上のモデルにアクセスできます。"
+description: "Mastra のモデルルーター経由で、48社以上のAIプロバイダーと834以上のモデルにアクセスできます。"
 ---
 
 {/* このファイルは generate-model-docs.ts によって自動生成されています — 手動で編集しないでください */}
 
-import { CardGrid, CardGridItem } from "@/components/cards/card-grid";
-import { Tab, Tabs } from "@/components/tabs";
-import { Callout } from "nextra/components";
-import { NetlifyLogo } from "@/components/logos/NetlifyLogo";
+import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 
 
 # モデルプロバイダー
 
-Mastra は、複数のプロバイダーに対応した LLM 用の統一インターフェースを提供し、単一の API で 47 のプロバイダーが提供する 816 のモデルにアクセスできます。
+Mastra は、複数のプロバイダーに対応した LLM を扱うための統一インターフェースを提供し、単一の API から 48 のプロバイダーに属する 834 のモデルへアクセスできます。
 
 ## 機能
 
@@ -27,12 +27,12 @@ Mastra は、複数のプロバイダーに対応した LLM 用の統一イン�
 
 ## 基本的な使い方
 
-OpenAI、Anthropic、Google、あるいは OpenRouter のようなゲートウェイを使う場合は、モデルを `"provider/model-name"` の形式で指定すれば、あとは Mastra が処理します。
+OpenAI、Anthropic、Google、あるいは OpenRouter のようなゲートウェイを使う場合は、モデルを「provider/model-name」の形式で指定すれば、あとは Mastra が処理します。
 
-Mastra は該当する環境変数（例：`ANTHROPIC_API_KEY`）を読み取り、リクエストをプロバイダーへルーティングします。API キーが設定されていない場合は、どの変数を設定すべきかを明示した実行時エラーが表示されます。
+Mastra は対応する環境変数（例: `ANTHROPIC_API_KEY`）を読み取り、プロバイダへリクエストをルーティングします。API キーが未設定の場合は、どの変数を設定すべきかを明確に示すランタイムエラーが表示されます。
 
-<Tabs items={["OpenAI", "Anthropic", "Google Gemini", "xAI", "OpenRouter"]}>
-  <Tab>
+<Tabs>
+  <TabItem value="OpenAI" label="OpenAI">
     ```typescript copy showLineNumbers
     import { Agent } from "@mastra/core";
 
@@ -42,8 +42,8 @@ Mastra は該当する環境変数（例：`ANTHROPIC_API_KEY`）を読み取り
       model: "openai/gpt-5"
     })
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="Anthropic" label="Anthropic">
     ```typescript copy showLineNumbers
     import { Agent } from "@mastra/core";
 
@@ -53,8 +53,8 @@ Mastra は該当する環境変数（例：`ANTHROPIC_API_KEY`）を読み取り
       model: "anthropic/claude-4-5-sonnet"
     })
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="Google Gemini" label="Google Gemini">
     ```typescript copy showLineNumbers
     import { Agent } from "@mastra/core";
 
@@ -64,8 +64,8 @@ Mastra は該当する環境変数（例：`ANTHROPIC_API_KEY`）を読み取り
       model: "google/gemini-2.5-flash"
     })
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="xAI" label="xAI">
     ```typescript copy showLineNumbers
     import { Agent } from "@mastra/core";
 
@@ -75,8 +75,8 @@ Mastra は該当する環境変数（例：`ANTHROPIC_API_KEY`）を読み取り
       model: "xai/grok-4"
     })
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="OpenRouter" label="OpenRouter">
     ```typescript copy showLineNumbers
     import { Agent } from "@mastra/core";
 
@@ -86,17 +86,17 @@ Mastra は該当する環境変数（例：`ANTHROPIC_API_KEY`）を読み取り
       model: "openrouter/anthropic/claude-haiku-4-5"
     })
     ```
-  </Tab>
+  </TabItem>
 </Tabs>
 
 ## モデルディレクトリ
 
-左側のナビゲーションから利用可能なモデルのディレクトリを閲覧するか、以下をご覧ください。
+左側のナビゲーションから利用可能なモデルの一覧を閲覧するか、以下をお試しください。
 
 <CardGrid>
     <CardGridItem
       title="Gateways"
-      href="./models/gateways"
+      href="/models/gateways"
     >
       <div className="space-y-3">
         <div className="flex flex-col gap-2">
@@ -118,7 +118,7 @@ Mastra は該当する環境変数（例：`ANTHROPIC_API_KEY`）を読み取り
     </CardGridItem>
     <CardGridItem
       title="Providers"
-      href="./models/providers"
+      href="/models/providers"
     >
       <div className="space-y-3">
         <div className="flex flex-col gap-2">
@@ -135,18 +135,20 @@ Mastra は該当する環境変数（例：`ANTHROPIC_API_KEY`）を読み取り
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 41 件以上</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ さらに 42 件</div>
       </div>
     </CardGridItem>
 </CardGrid>
 
-エディタ内から直接モデルを見つけることもできます。Mastra は `model` フィールドのオートコンプリートを完全にサポートしています。入力を始めるだけで、IDE に利用可能な選択肢が表示されます。
+エディタ内からモデルを直接見つけることもできます。Mastra は `model` フィールドのオートコンプリートを完全にサポートしています。入力し始めると、IDE に利用可能なオプションが表示されます。
 
-または、[Playground](/docs/server-db/local-dev-playground) の UI でモデルを閲覧・テストできます。
+または、[Playground](/docs/getting-started/studio) の UI でモデルを参照・テストできます。
 
-<Callout type="info">
-開発環境では、最新のモデルに合わせて TypeScript のオートコンプリートと Playground が常に最新の状態になるよう、ローカルのモデルリストを毎時自動更新します。無効化するには `MASTRA_AUTO_REFRESH_PROVIDERS=false` を設定してください。本番環境では自動更新はデフォルトで無効です。
-</Callout>
+:::info
+
+開発環境では、ローカルのモデル一覧を毎時自動更新し、TypeScript のオートコンプリートと Playground が最新のモデルに追従するようにします。無効化するには `MASTRA_AUTO_REFRESH_PROVIDERS=false` を設定してください。本番環境では自動更新はデフォルトで無効です。
+
+:::
 
 ## モデルを組み合わせて活用する
 
@@ -228,7 +230,7 @@ const highEffort = await planner.generate([
 
 ## カスタムヘッダー
 
-組織 ID やその他のプロバイダー固有のフィールドなど、カスタムヘッダーを指定する必要がある場合は、次の構文を使用します。
+組織IDやその他のプロバイダー固有のフィールドなど、カスタムヘッダーを指定する必要がある場合は、この構文を使用してください。
 
 ```typescript showLineNumbers
 const agent = new Agent({
@@ -243,9 +245,11 @@ const agent = new Agent({
 });
 ```
 
-<Callout type="info">
-  設定はプロバイダーによって異なります。カスタムヘッダーの詳細は、左側のナビゲーションにあるプロバイダー各ページを参照してください。
-</Callout>
+:::info
+
+プロバイダーごとに設定が異なります。カスタムヘッダーの詳細は、左側のナビゲーションにある各プロバイダーのページをご覧ください。
+
+:::
 
 
 ## モデルのフォールバック
