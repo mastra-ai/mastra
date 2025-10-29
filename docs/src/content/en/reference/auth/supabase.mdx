@@ -1,5 +1,5 @@
 ---
-title: "MastraAuthSupabase Class"
+title: "Reference: MastraAuthSupabase Class | Auth | Mastra Docs"
 description: "API reference for the MastraAuthSupabase class, which authenticates Mastra applications using Supabase Auth."
 ---
 
@@ -9,16 +9,16 @@ The `MastraAuthSupabase` class provides authentication for Mastra using Supabase
 
 ## Usage example
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
-import { MastraAuthSupabase } from '@mastra/auth-supabase';
+import { MastraAuthSupabase } from "@mastra/auth-supabase";
 
 export const mastra = new Mastra({
   // ..
   server: {
     experimental_auth: new MastraAuthSupabase({
       url: process.env.SUPABASE_URL,
-      anonKey: process.env.SUPABASE_ANON_KEY
+      anonKey: process.env.SUPABASE_ANON_KEY,
     }),
   },
 });
@@ -31,16 +31,18 @@ export const mastra = new Mastra({
     {
       name: "url",
       type: "string",
-      description: "The URL of your Supabase project. Can be found in your Supabase project settings.",
+      description:
+        "The URL of your Supabase project. Can be found in your Supabase project settings.",
       isOptional: true,
-      defaultValue: "process.env.SUPABASE_URL"
+      defaultValue: "process.env.SUPABASE_URL",
     },
     {
       name: "anonKey",
       type: "string",
-      description: "The anonymous/public key for your Supabase project. Used for client-side authentication.",
+      description:
+        "The anonymous/public key for your Supabase project. Used for client-side authentication.",
       isOptional: true,
-      defaultValue: "process.env.SUPABASE_ANON_KEY"
+      defaultValue: "process.env.SUPABASE_ANON_KEY",
     },
     {
       name: "name",
@@ -51,7 +53,8 @@ export const mastra = new Mastra({
     {
       name: "authorizeUser",
       type: "(user: User, request: HoneRequest) => Promise<boolean> | boolean",
-      description: "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, checks the 'isAdmin' column in the 'users' table.",
+      description:
+        "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, checks the 'isAdmin' column in the 'users' table.",
       isOptional: true,
     },
   ]}
@@ -59,4 +62,4 @@ export const mastra = new Mastra({
 
 ## Related
 
-[MastraAuthSupabase](/docs/auth/supabase.mdx)
+[MastraAuthSupabase](/docs/auth/supabase)
