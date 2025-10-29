@@ -35,7 +35,7 @@ name: "region",
 type: "string",
 isOptional: true,
 defaultValue: "us-west1",
-description: 'Pinecone cloud region to use for new indexes ((e.g. "us-west1")',
+description: 'Pinecone cloud region to use for new indexes (e.g. "us-west1")',
 },
 ]}
 />
