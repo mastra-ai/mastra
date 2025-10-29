@@ -1358,4 +1358,9 @@ export const redirectList = [
     destination: "/:locale/docs/getting-started/studio",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/tools-mcp/advanced-usage",
+    destination: "/:locale/docs/tools-mcp/overview",
+    permanent: true,
+  }
 ];
