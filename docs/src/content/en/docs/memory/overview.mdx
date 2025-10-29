@@ -61,7 +61,7 @@ Mastra combines all memory types into a single context window. If the total exce
 
 ## Scoping memory with threads and resources
 
-All memory types are [resource-scoped](./working-memory#resource-scoped-memory-default) by default, meaning they persist across all conversations for the same user or entity. [Thread-scoped](./working-memory#thread-scoped-memory) configuration isolates memory to a single conversation thread.
+All memory types are [Thread-scoped](./working-memory#thread-scoped-memory-default) by default, meaning they apply only to a single conversation. [resource-scoped](./working-memory#resource-scoped-memory) configuration allows working memory and semantic recall to persist across all threads that use the same user or entity.
 
 ## Memory Storage Adapters
 

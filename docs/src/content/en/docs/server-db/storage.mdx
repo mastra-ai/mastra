@@ -246,6 +246,8 @@ Stores user-specific data for resource-scoped working memory. Each resource repr
   ]}
 />
 
+**Note**: This table is only created and used by storage adapters that support resource-scoped working memory (LibSQL, PostgreSQL, Upstash). Other storage adapters will provide helpful error messages if resource-scoped memory is attempted.
+
 </TabItem>
   <TabItem value="workflows" label="Workflows">
 When `suspend` is called on a workflow, its state is saved in the following format. When `resume` is called, that state is rehydrated.
