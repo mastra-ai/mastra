@@ -112,7 +112,6 @@ describe('MessageList', () => {
       expect(list.get.all.aiV5.ui()).toHaveLength(0);
       expect(list.get.all.v1()).toHaveLength(0);
       expect(list.get.all.v2()).toHaveLength(0);
-      expect(list.get.all.v2()).toHaveLength(0);
 
       list.add(
         {
@@ -131,7 +130,6 @@ describe('MessageList', () => {
       expect(list.get.all.aiV5.model()).toHaveLength(1);
       expect(list.get.all.aiV5.ui()).toHaveLength(1);
       expect(list.get.all.v1()).toHaveLength(1);
-      expect(list.get.all.v2()).toHaveLength(1);
       expect(list.get.all.v2()).toHaveLength(1);
 
       expect(list.getSystemMessages(`memory`)).toHaveLength(1);
