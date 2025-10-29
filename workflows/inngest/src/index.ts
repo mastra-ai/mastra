@@ -408,7 +408,7 @@ export class InngestRun<
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
       try {
-        writer.write({
+        await writer.write({
           // @ts-ignore
           type: 'start',
           // @ts-ignore
