@@ -4,15 +4,17 @@ import { RuntimeContext } from '../runtime-context';
 import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
-import { MockMemory } from './test-utils';
+import { MockMemory } from '../memory';
 import { Agent } from './index';
+import { InMemoryStore } from '../storage';
 
 describe('Gemini Model Compatibility Tests', () => {
   let memory: MockMemory;
   let runtimeContext: RuntimeContext;
 
   beforeEach(() => {
-    memory = new MockMemory();
+    const storage = new InMemoryStore();
+    memory = new MockMemory({ storage });
     runtimeContext = new RuntimeContext();
   });
 

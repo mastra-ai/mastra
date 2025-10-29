@@ -19,6 +19,9 @@ import type {
   WorkingMemoryTemplate,
 } from './types';
 
+// Type for flexible message deletion input
+export type MessageDeleteInput = string[] | { id: string }[];
+
 export type MemoryProcessorOpts = {
   systemMessage?: string;
   memorySystemMessage?: string;
@@ -524,8 +527,8 @@ export abstract class MastraMemory extends MastraBase {
 
   /**
    * Deletes multiple messages by their IDs
-   * @param messageIds - Array of message IDs to delete
+   * @param messageIds - Can be a single ID, array of IDs, or objects with ID property
    * @returns Promise that resolves when all messages are deleted
    */
-  abstract deleteMessages(messageIds: string[]): Promise<void>;
+  abstract deleteMessages(messageIds: MessageDeleteInput): Promise<void>;
 }

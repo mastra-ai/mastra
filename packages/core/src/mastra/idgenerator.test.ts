@@ -293,7 +293,8 @@ describe('Mastra ID Generator', () => {
     });
 
     it('should use custom ID generator across multiple agents', async () => {
-      const memory1 = new MockMemory();
+      const storage = new InMemoryStore();
+      const memory1 = new MockMemory({ storage });
       const agent1 = new Agent({
         name: 'agent1',
         instructions: 'You are agent 1',
@@ -308,7 +309,8 @@ describe('Mastra ID Generator', () => {
         memory: memory1,
       });
 
-      const memory2 = new MockMemory();
+      const storage2 = new InMemoryStore();
+      const memory2 = new MockMemory({ storage: storage2 });
       const agent2 = new Agent({
         name: 'agent2',
         instructions: 'You are agent 2',

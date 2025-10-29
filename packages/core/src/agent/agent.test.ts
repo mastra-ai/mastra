@@ -24,7 +24,8 @@ import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import { delay } from '../utils';
 import { MessageList } from './message-list/index';
-import { assertNoDuplicateParts, MockMemory } from './test-utils';
+import { assertNoDuplicateParts } from './test-utils';
+import { MockMemory } from '../memory';
 import { Agent } from './index';
 
 config();
@@ -1136,7 +1137,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       // Create memory with generateTitle config using custom model
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       // Override getMergedThreadConfig to return our test config
       mockMemory.getMergedThreadConfig = () => {
@@ -1318,7 +1320,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       }
 
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       // Override getMergedThreadConfig to return dynamic model selection
       mockMemory.getMergedThreadConfig = () => {
@@ -1560,7 +1563,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let titleGenerationCallCount = 0;
       let agentCallCount = 0;
 
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       // Test with generateTitle: true
       mockMemory.getMergedThreadConfig = () => {
@@ -1767,7 +1771,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should handle errors in title generation gracefully', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       // Pre-create the thread with the expected title
       const originalTitle = 'New Thread 2024-01-01T00:00:00.000Z';
@@ -1851,7 +1856,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should not generate title when config is undefined or null', async () => {
       let titleGenerationCallCount = 0;
       let agentCallCount = 0;
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       // Test with undefined config
       mockMemory.getMergedThreadConfig = () => {
@@ -2025,7 +2031,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let capturedPrompt = '';
       let usedLanguage = '';
 
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
 
@@ -2264,7 +2271,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let capturedPrompt = '';
       const customInstructions = 'Generate a creative and engaging title based on the conversation';
 
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
 
@@ -2407,7 +2415,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should use default instructions when instructions config is undefined', async () => {
       let capturedPrompt = '';
 
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
 
@@ -2542,7 +2551,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should handle errors in dynamic instructions gracefully', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       // Pre-create the thread with the expected title
       const originalTitle = 'New Thread 2024-01-01T00:00:00.000Z';
@@ -2669,7 +2679,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should handle empty or null instructions appropriately', async () => {
       let capturedPrompt = '';
 
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       let titleModel1: MockLanguageModelV1 | MockLanguageModelV2;
       let titleModel2: MockLanguageModelV1 | MockLanguageModelV2;
@@ -5321,7 +5332,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     }
 
     it('should support static memory configuration', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const agent = new Agent({
         name: 'static-memory-agent',
         instructions: 'test agent',
@@ -5334,8 +5346,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should support dynamic memory configuration with runtimeContext', async () => {
-      const premiumMemory = new MockMemory();
-      const standardMemory = new MockMemory();
+      const premiumMemory = new MockMemory({ storage: new InMemoryStore() });
+      const standardMemory = new MockMemory({ storage: new InMemoryStore() });
 
       const agent = new Agent({
         name: 'dynamic-memory-agent',
@@ -5361,7 +5373,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should support async dynamic memory configuration', async () => {
-      const mockMemory = new MockMemory();
+      const mockMemory = new MockMemory({ storage: new InMemoryStore() });
 
       const agent = new Agent({
         name: 'async-memory-agent',
@@ -5401,7 +5413,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should work with memory in generate method with dynamic configuration', async () => {
-      const mockMemory = new MockMemory();
+      const mockMemory = new MockMemory({ storage: new InMemoryStore() });
 
       const agent = new Agent({
         name: 'generate-memory-agent',
@@ -5413,7 +5425,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             return mockMemory;
           }
           // Return a default mock memory instead of undefined
-          return new MockMemory();
+          return new MockMemory({ storage: new InMemoryStore() });
         },
       });
 
@@ -5452,7 +5464,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should work with memory in stream method with dynamic configuration', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       let model;
       if (version === 'v1') {
@@ -5511,7 +5524,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         model,
         memory: ({ runtimeContext }) => {
           const enableMemory = runtimeContext.get('enableMemory');
-          return enableMemory ? mockMemory : new MockMemory();
+          return enableMemory ? mockMemory : new MockMemory({ storage: new InMemoryStore() });
         },
       });
 
@@ -5556,7 +5569,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should preserve system messages from user input when memory is enabled', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       // Mock the LLM to capture what messages it receives
       let capturedMessages: any[] = [];
@@ -5661,7 +5675,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should preserve system messages from user input when memory is enabled (stream)', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       let capturedMessages: any[] = [];
       let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
 

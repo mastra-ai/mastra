@@ -4,11 +4,13 @@ import { z } from 'zod';
 import { RuntimeContext } from '../runtime-context';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
-import { MockMemory } from './test-utils';
+import { MockMemory } from '../memory';
 import { Agent } from './index';
+import { InMemoryStore } from '../storage';
 
 describe('Agent - network', () => {
-  const memory = new MockMemory();
+  const storage = new InMemoryStore();
+  const memory = new MockMemory({ storage });
 
   const agent1 = new Agent({
     name: 'agent1',
@@ -228,8 +230,9 @@ describe('Agent - network', () => {
     let titleGenerated = false;
     let generatedTitle = '';
 
+    const storage = new InMemoryStore();
     // Create a custom memory with generateTitle enabled
-    const memoryWithTitleGen = new MockMemory();
+    const memoryWithTitleGen = new MockMemory({ storage });
     memoryWithTitleGen.getMergedThreadConfig = () => {
       return {
         generateTitle: true,
@@ -287,8 +290,9 @@ describe('Agent - network', () => {
     let titleGenerated = false;
     let generatedTitle = '';
 
+    const storage = new InMemoryStore();
     // Create a custom memory with generateTitle enabled
-    const memoryWithTitleGen = new MockMemory();
+    const memoryWithTitleGen = new MockMemory({ storage });
 
     // Override createThread to capture the title
     const originalCreateThread = memoryWithTitleGen.createThread.bind(memoryWithTitleGen);
@@ -347,7 +351,8 @@ describe('Agent - network', () => {
   it('Should not generate title when generateTitle is false', async () => {
     let titleGenerationAttempted = false;
 
-    const memoryWithoutTitleGen = new MockMemory();
+    const storage = new InMemoryStore();
+    const memoryWithoutTitleGen = new MockMemory({ storage });
     memoryWithoutTitleGen.getMergedThreadConfig = () => {
       return {
         threads: {
@@ -394,7 +399,8 @@ describe('Agent - network', () => {
   it('Should not generate title when generateTitle:false is passed in netwwork options', async () => {
     let titleGenerationAttempted = false;
 
-    const memoryWithoutTitleGen = new MockMemory();
+    const storage = new InMemoryStore();
+    const memoryWithoutTitleGen = new MockMemory({ storage });
 
     // Override createThread to check if title generation was attempted
     const originalCreateThread = memoryWithoutTitleGen.createThread.bind(memoryWithoutTitleGen);

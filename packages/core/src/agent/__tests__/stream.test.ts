@@ -14,7 +14,8 @@ import type { StorageThreadType } from '../../memory';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { MessageList } from '../message-list/index';
-import { assertNoDuplicateParts, MockMemory } from '../test-utils';
+import { MockMemory } from '../../memory';
+import { assertNoDuplicateParts } from '../test-utils';
 import { getDummyResponseModel, getEmptyResponseModel, getErrorResponseModel } from './mock-model';
 import { InMemoryStore } from '../../storage';
 
@@ -805,7 +806,8 @@ function runStreamTest(version: 'v1' | 'v2') {
     });
 
     it(`should order tool calls/results and response text properly`, async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       const weatherTool = createTool({
         id: 'get_weather',

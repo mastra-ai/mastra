@@ -1,7 +1,7 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2 } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
-import type { MemoryQueryResult } from '@mastra/core/memory';
+import type { MemoryQueryResult, MessageDeleteInput } from '@mastra/core/memory';
 import type {
   MastraMessageV1,
   MemoryConfig,
@@ -22,9 +22,6 @@ import xxhash from 'xxhash-wasm';
 import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
 import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
-
-// Type for flexible message deletion input
-export type MessageDeleteInput = string[] | { id: string }[];
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;

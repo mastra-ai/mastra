@@ -1,6 +1,6 @@
 import { convertMessages } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/di';
-import type { MastraMemory } from '@mastra/core/memory';
+import type { MastraMemory, MessageDeleteInput } from '@mastra/core/memory';
 import type {
   MastraMessageFormat,
   StorageGetMessagesArg,
@@ -513,7 +513,7 @@ export async function deleteMessagesHandler({
   messageIds,
   runtimeContext,
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'runtimeContext'> & {
-  messageIds: string | string[] | { id: string } | { id: string }[];
+  messageIds: MessageDeleteInput;
 }) {
   try {
     if (messageIds === undefined || messageIds === null) {
@@ -526,7 +526,7 @@ export async function deleteMessagesHandler({
     }
 
     // Delete the messages - let the memory method handle validation
-    await memory.deleteMessages(messageIds as any);
+    await memory.deleteMessages(messageIds);
 
     // Count messages for response
     let count = 1;
