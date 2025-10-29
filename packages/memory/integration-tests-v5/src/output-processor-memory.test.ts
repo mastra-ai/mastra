@@ -538,7 +538,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Simulate page refresh - retrieve messages from storage
-    const messagesAfterRefresh = await storage.listMessages({
+    const { messages: messagesAfterRefresh } = await storage.listMessages({
       threadId,
     });
 
