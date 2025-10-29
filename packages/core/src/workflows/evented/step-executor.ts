@@ -2,6 +2,7 @@ import EventEmitter from 'events';
 import type { Emitter, LoopConditionFunction, Mastra, Step, StepFlowEntry, StepResult } from '../..';
 import { MastraBase } from '../../base';
 import type { RuntimeContext } from '../../di';
+import { getErrorFromUnknown } from '../../error/utils.js';
 import type { PubSub } from '../../events';
 import { RegisteredLogger } from '../../logger';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
@@ -147,11 +148,16 @@ export class StepExecutor extends MastraBase {
     } catch (error: any) {
       const endedAt = Date.now();
 
+      const errorInstance = getErrorFromUnknown(error, {
+        includeStack: false,
+        fallbackMessage: 'Unknown step execution error',
+      });
+
       return {
         ...stepInfo,
         status: 'failed',
         endedAt,
-        error: error instanceof Error ? (error?.stack ?? error.message) : error,
+        error: `Error: ${errorInstance.message}`,
       };
     }
   }

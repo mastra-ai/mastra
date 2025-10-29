@@ -1,5 +1,5 @@
 ---
-title: "Reference: Run.stream() | Workflows | Mastra Docs"
+title: "Reference: Run.stream() | Streaming | Mastra Docs"
 description: Documentation for the `Run.stream()` method in workflows, which allows you to monitor the execution of a workflow run as a stream.
 ---
 
@@ -39,17 +39,21 @@ const { stream } = await run.stream({
       name: "tracingContext",
       type: "TracingContext",
       isOptional: true,
-      description: "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+      description:
+        "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
       properties: [
         {
-          parameters: [{
-            name: "currentSpan",
-            type: "AISpan",
-            isOptional: true,
-            description: "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "currentSpan",
+              type: "AISpan",
+              isOptional: true,
+              description:
+                "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
+            },
+          ],
+        },
+      ],
     },
     {
       name: "tracingOptions",
@@ -58,14 +62,17 @@ const { stream } = await run.stream({
       description: "Options for AI tracing configuration.",
       properties: [
         {
-          parameters: [{
-            name: "metadata",
-            type: "Record<string, any>",
-            isOptional: true,
-            description: "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+      ],
     },
   ]}
 />
@@ -77,18 +84,21 @@ const { stream } = await run.stream({
     {
       name: "stream",
       type: "ReadableStream<StreamEvent>",
-      description: "A readable stream that emits workflow execution events in real-time",
+      description:
+        "A readable stream that emits workflow execution events in real-time",
     },
     {
       name: "getWorkflowState",
       type: "() => Promise<WorkflowResult<TState, TOutput, TSteps>>",
-      description: "A function that returns a promise resolving to the final workflow result",
+      description:
+        "A function that returns a promise resolving to the final workflow result",
     },
     {
       name: "traceId",
       type: "string",
       isOptional: true,
-      description: "The trace ID associated with this execution when AI tracing is enabled. Use this to correlate logs and debug execution flow.",
+      description:
+        "The trace ID associated with this execution when AI tracing is enabled. Use this to correlate logs and debug execution flow.",
     },
   ]}
 />
@@ -98,8 +108,8 @@ const { stream } = await run.stream({
 ```typescript showLineNumbers copy
 const { getWorkflowState } = await run.stream({
   inputData: {
-    value: "initial data"
-  }
+    value: "initial data",
+  },
 });
 
 const result = await getWorkflowState();
@@ -118,8 +128,7 @@ The stream emits various event types during workflow execution. Each event has a
 - **`step-finish`**: A step finishes execution
 - **`finish`**: Workflow execution completes
 
-
 ## Related
 
-- [Workflows overview](../../../docs/workflows/overview.mdx#run-workflow)
-- [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run.mdx)
+- [Workflows overview](/docs/workflows/overview#running-workflows)
+- [Workflow.createRunAsync()](/reference/workflows/workflow-methods/create-run)

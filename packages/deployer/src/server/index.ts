@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { readFile } from 'fs/promises';
 import * as https from 'node:https';
 import { join } from 'path/posix';
@@ -7,7 +6,6 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core/mastra';
 import { RuntimeContext } from '@mastra/core/runtime-context';
-import { Telemetry } from '@mastra/core/telemetry';
 import { Tool } from '@mastra/core/tools';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { Context, MiddlewareHandler } from 'hono';
@@ -30,7 +28,6 @@ import { mcpRouter } from './handlers/routes/mcp/router';
 import { memoryRoutes } from './handlers/routes/memory/router';
 import { observabilityRouter } from './handlers/routes/observability/router';
 import { scoresRouter } from './handlers/routes/scores/router';
-import { telemetryRouter } from './handlers/routes/telemetry/router';
 import { toolsRouter } from './handlers/routes/tools/router';
 import { vectorRouter } from './handlers/routes/vector/router';
 import { workflowsRouter } from './handlers/routes/workflows/router';
@@ -94,29 +91,6 @@ export async function createHonoServer(
       customRouteAuthConfig.set(routeKey, requiresAuth);
     }
   }
-
-  // Middleware
-  app.use('*', async function setTelemetryInfo(c, next) {
-    const requestId = c.req.header('x-request-id') ?? randomUUID();
-    const span = Telemetry.getActiveSpan();
-    if (span) {
-      span.setAttribute('http.request_id', requestId);
-      span.updateName(`${c.req.method} ${c.req.path}`);
-
-      const newCtx = Telemetry.setBaggage({
-        'http.request_id': { value: requestId },
-      });
-
-      await new Promise(resolve => {
-        Telemetry.withContext(newCtx, async () => {
-          await next();
-          resolve(true);
-        });
-      });
-    } else {
-      await next();
-    }
-  });
 
   app.onError((err, c) => errorHandler(err, c, options.isDev));
 
@@ -465,8 +439,6 @@ export async function createHonoServer(
   app.route('/api/mcp', mcpRouter(bodyLimitOptions));
   // Network Memory routes
   app.route('/api/memory', memoryRoutes(bodyLimitOptions));
-  // Telemetry routes
-  app.route('/api/telemetry', telemetryRouter());
   // Observability routes
   app.route('/api/observability', observabilityRouter());
   // Legacy Workflow routes
@@ -577,10 +549,6 @@ export async function createHonoServer(
     if (options?.playground) {
       // For HTML routes, serve index.html with dynamic replacements
       let indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
-      indexHtml = indexHtml.replace(
-        `'%%MASTRA_TELEMETRY_DISABLED%%'`,
-        `${Boolean(process.env.MASTRA_TELEMETRY_DISABLED)}`,
-      );
 
       // Inject the server port information
       const serverOptions = mastra.getServer();

@@ -57,7 +57,7 @@ describe('SchemaCompatLayer', () => {
   describe('mergeParameterDescription', () => {
     it('should return original description when no constraints', () => {
       const description = 'Original description';
-      const constraints = {};
+      const constraints = [];
 
       const result = compatibility.mergeParameterDescription(description, constraints);
 
@@ -66,24 +66,24 @@ describe('SchemaCompatLayer', () => {
 
     it('should append constraints to description', () => {
       const description = 'Original description';
-      const constraints = { minLength: 5, maxLength: 10 };
+      const constraints = ['minimum length 5', 'maximum length 10'];
 
       const result = compatibility.mergeParameterDescription(description, constraints);
 
-      expect(result).toBe('Original description\n{"minLength":5,"maxLength":10}');
+      expect(result).toBe(`Original description\nconstraints: minimum length 5, maximum length 10`);
     });
 
     it('should handle undefined description with constraints', () => {
-      const constraints = { email: true };
+      const constraints = ['a valid email'];
 
       const result = compatibility.mergeParameterDescription(undefined, constraints);
 
-      expect(result).toBe('{"email":true}');
+      expect(result).toBe(`constraints: a valid email`);
     });
 
     it('should handle empty constraints', () => {
       const description = 'Test description';
-      const constraints = {};
+      const constraints = [];
 
       const result = compatibility.mergeParameterDescription(description, constraints);
 
@@ -159,8 +159,7 @@ describe('SchemaCompatLayer', () => {
     it('should handle array with constraints and convert to description', () => {
       const arraySchema = z.array(z.string()).min(2).max(10);
       const result = compatibility.defaultZodArrayHandler(arraySchema);
-      expect(result.description).toContain('minLength');
-      expect(result.description).toContain('maxLength');
+      expect(result.description).toContain('constraints: minimum length 2, maximum length 10');
     });
 
     it('should preserve constraints not in handleChecks', () => {
@@ -168,22 +167,22 @@ describe('SchemaCompatLayer', () => {
       // Only handle 'min', so 'max' should be preserved as a validator
       const result = compatibility.defaultZodArrayHandler(arraySchema, ['min']);
 
-      expect(result.description).toContain('minLength');
-      expect(result.description).not.toContain('maxLength');
+      expect(result.description).toContain('constraints: minimum length 2');
+      expect(result.description).not.toContain('constraints: maximum length 10');
       expect(result._def.maxLength?.value).toBe(10); // Preserved
     });
 
     it('should handle exact length constraint', () => {
       const arraySchema = z.array(z.string()).length(5);
       const result = compatibility.defaultZodArrayHandler(arraySchema);
-      expect(result.description).toContain('exactLength');
+      expect(result.description).toContain('constraints: exact length 5');
     });
 
     it('should preserve original description', () => {
       const arraySchema = z.array(z.string()).describe('String array').min(1);
       const result = compatibility.defaultZodArrayHandler(arraySchema);
       expect(result.description).toContain('String array');
-      expect(result.description).toContain('minLength');
+      expect(result.description).toContain('constraints: minimum length 1');
     });
   });
 
@@ -222,8 +221,7 @@ describe('SchemaCompatLayer', () => {
       const result = compatibility.defaultZodStringHandler(stringSchema);
 
       expect(result).toBeInstanceOf(z.ZodString);
-      expect(result.description).toContain('minLength');
-      expect(result.description).toContain('maxLength');
+      expect(result.description).toContain('constraints: minimum length 5, maximum length 10');
     });
 
     it('should handle email constraint', () => {
@@ -268,7 +266,7 @@ describe('SchemaCompatLayer', () => {
       const result = compatibility.defaultZodStringHandler(stringSchema, ['min']);
 
       expect(result).toBeInstanceOf(z.ZodString);
-      expect(result.description).toContain('minLength');
+      expect(result.description).toContain('constraints: minimum length 5');
     });
   });
 
@@ -279,8 +277,7 @@ describe('SchemaCompatLayer', () => {
       const result = compatibility.defaultZodNumberHandler(numberSchema);
 
       expect(result).toBeInstanceOf(z.ZodNumber);
-      expect(result.description).toContain('gte');
-      expect(result.description).toContain('lte');
+      expect(result.description).toContain('constraints: greater than or equal to 0, lower than or equal to 100');
     });
 
     it('should handle exclusive min/max', () => {
@@ -289,8 +286,7 @@ describe('SchemaCompatLayer', () => {
       const result = compatibility.defaultZodNumberHandler(numberSchema);
 
       expect(result).toBeInstanceOf(z.ZodNumber);
-      expect(result.description).toContain('gt');
-      expect(result.description).toContain('lt');
+      expect(result.description).toContain('constraints: greater than 0, lower than 100');
     });
 
     it('should handle multipleOf constraint', () => {
@@ -299,7 +295,7 @@ describe('SchemaCompatLayer', () => {
       const result = compatibility.defaultZodNumberHandler(numberSchema);
 
       expect(result).toBeInstanceOf(z.ZodNumber);
-      expect(result.description).toContain('multipleOf');
+      expect(result.description).toContain('constraints: multiple of 5');
     });
 
     it('should preserve int and finite checks', () => {
@@ -319,8 +315,7 @@ describe('SchemaCompatLayer', () => {
       const result = compatibility.defaultZodDateHandler(dateSchema);
 
       expect(result).toBeInstanceOf(z.ZodString);
-      expect(result.description).toContain('date-time');
-      expect(result.description).toContain('dateFormat');
+      expect(result.description).toContain('constraints: Date format is date-time');
     });
 
     it('should handle date with min/max constraints', () => {
@@ -331,8 +326,8 @@ describe('SchemaCompatLayer', () => {
       const result = compatibility.defaultZodDateHandler(dateSchema);
 
       expect(result).toBeInstanceOf(z.ZodString);
-      expect(result.description).toContain('minDate');
-      expect(result.description).toContain('maxDate');
+      expect(result.description).toContain('Date must be newer than');
+      expect(result.description).toContain('Date must be older than');
       expect(result.description).toContain('2023-01-01');
       expect(result.description).toContain('2023-12-31');
     });
@@ -381,7 +376,7 @@ describe('SchemaCompatLayer', () => {
       const result = compatibility.processToAISDKSchema(arraySchema);
 
       expect(result.jsonSchema.type).toBe('array');
-      expect(result.jsonSchema.description).toContain('minLength');
+      expect(result.jsonSchema.description).toContain('minimum length 1');
       // The validator itself should be gone
       expect(
         result.validate?.([
