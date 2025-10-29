@@ -11,7 +11,7 @@ const meta = {
     display: "hidden",
   },
   streaming: { title: "Streaming" },
-  "tools-mcp": { title: "Tools & MCP" },
+  "tools-mcp": { title: "MCP" },
   memory: { title: "Memory" },
   rag: { title: "RAG" },
   "server-db": {

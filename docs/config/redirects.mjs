@@ -1463,4 +1463,9 @@ export const redirectList = [
     destination: "/:locale/docs/tools-mcp/deploying-mcp-server",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/tools-mcp/overview",
+    destination: "/:locale/docs/agents/using-tools",
+    permanent: true,
+  },
 ];

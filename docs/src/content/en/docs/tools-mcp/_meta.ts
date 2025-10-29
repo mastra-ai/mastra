@@ -1,6 +1,5 @@
 const meta = {
-  overview: "Overview",
-  "mcp-overview": "MCP Overview",
+  "mcp-overview": "Overview",
   "deploying-mcp-server": "Deploying an MCP Server",
 };
 
