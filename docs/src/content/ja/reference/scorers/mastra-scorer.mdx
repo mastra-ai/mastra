@@ -41,7 +41,7 @@ const result = await scorer.run({
   input: "What is machine learning?",
   output: "Machine learning is a subset of artificial intelligence...",
   runId: "optional-run-id",
-  runtimeContext: { /* optional context */ }
+  requestContext: { /* optional context */ }
 });
 ```
 
@@ -70,7 +70,7 @@ const result = await scorer.run({
       description: "このスコアリング実行の一意識別子（オプション）。",
     },
     {
-      name: "runtimeContext",
+      name: "requestContext",
       type: "any",
       required: false,
       description: "評価対象のエージェントまたはワークフローステップからのランタイムコンテキスト（オプション）。",

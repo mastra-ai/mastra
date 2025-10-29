@@ -244,10 +244,10 @@ const lanceQueryTool = createVectorQueryTool({
 これらの設定は、ランタイムコンテキストを用いて実行時に上書きすることもできます。
 
 ```ts showLineNumbers copy
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 
-const runtimeContext = new RuntimeContext();
-runtimeContext.set('databaseConfig', {
+const requestContext = new RequestContext();
+requestContext.set('databaseConfig', {
   pinecone: {
     namespace: 'runtime-namespace'
   }
@@ -256,7 +256,7 @@ runtimeContext.set('databaseConfig', {
 await pineconeQueryTool.execute({
   context: { queryText: 'search query' },
   mastra,
-  runtimeContext
+  requestContext
 });
 ```
 

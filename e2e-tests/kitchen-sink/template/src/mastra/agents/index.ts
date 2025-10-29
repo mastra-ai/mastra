@@ -39,8 +39,8 @@ export const weatherAgent = new Agent({
       - Include relevant details like humidity, wind conditions, and precipitation
       - Keep responses concise but informative
 `,
-  model: ({ runtimeContext }) => {
-    const fixture = runtimeContext.get('fixture') as Fixtures;
+  model: ({ requestContext }) => {
+    const fixture = requestContext.get('fixture') as Fixtures;
     const fixtureData = fixtures[fixture];
 
     return new aiTest.MockLanguageModelV2({

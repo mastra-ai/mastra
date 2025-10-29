@@ -11,7 +11,7 @@ Mastraはランタイムコンテキストを提供します。これは依存�
 
 依存性注入システムにより、以下のことが可能になります：
 
-1. 型安全なruntimeContextを通じて、実行時の設定変数をエージェントに渡す
+1. 型安全なrequestContextを通じて、実行時の設定変数をエージェントに渡す
 2. ツール実行コンテキスト内でこれらの変数にアクセスする
 3. 基盤となるコードを変更せずにエージェントの動作を修正する
 4. 同じエージェント内の複数のツール間で設定を共有する
@@ -21,16 +21,16 @@ Mastraはランタイムコンテキストを提供します。これは依存�
 ```typescript
 const agent = mastra.getAgent("weatherAgent");
 
-// Define your runtimeContext's type structure
-type WeatherRuntimeContext = {
+// Define your requestContext's type structure
+type WeatherRequestContext = {
   "temperature-scale": "celsius" | "fahrenheit";
 };
 
-const runtimeContext = new RuntimeContext<WeatherRuntimeContext>();
-runtimeContext.set("temperature-scale", "celsius");
+const requestContext = new RequestContext<WeatherRequestContext>();
+requestContext.set("temperature-scale", "celsius");
 
 const response = await agent.generate("What's the weather like today?", {
-  runtimeContext,
+  requestContext,
 });
 
 console.log(response.text);
@@ -42,11 +42,11 @@ console.log(response.text);
 
 ```typescript filename="src/index.ts"
 import { Mastra } from "@mastra/core";
-import { RuntimeContext } from "@mastra/core/di";
+import { RequestContext } from "@mastra/core/di";
 import { agent as weatherAgent } from "./agents/weather";
 
-// Define RuntimeContext type with clear, descriptive types
-type WeatherRuntimeContext = {
+// Define RequestContext type with clear, descriptive types
+type WeatherRequestContext = {
   "temperature-scale": "celsius" | "fahrenheit";
 };
 
@@ -58,10 +58,10 @@ export const mastra = new Mastra({
     middleware: [
       async (c, next) => {
         const country = c.req.header("CF-IPCountry");
-        const runtimeContext = c.get<WeatherRuntimeContext>("runtimeContext");
+        const requestContext = c.get<WeatherRequestContext>("requestContext");
 
         // Set temperature scale based on country
-        runtimeContext.set(
+        requestContext.set(
           "temperature-scale",
           country === "US" ? "fahrenheit" : "celsius",
         );
@@ -75,7 +75,7 @@ export const mastra = new Mastra({
 
 ## 変数を使用したツールの作成
 
-ツールはruntimeContext変数にアクセスでき、エージェントのruntimeContextタイプに準拠する必要があります：
+ツールはrequestContext変数にアクセスでき、エージェントのrequestContextタイプに準拠する必要があります：
 
 ```typescript
 import { createTool } from "@mastra/core/tools";
@@ -87,9 +87,9 @@ export const weatherTool = createTool({
   inputSchema: z.object({
     location: z.string().describe("The location to get weather for"),
   }),
-  execute: async ({ context, runtimeContext }) => {
-    // Type-safe access to runtimeContext variables
-    const temperatureUnit = runtimeContext.get("temperature-scale");
+  execute: async ({ context, requestContext }) => {
+    // Type-safe access to requestContext variables
+    const temperatureUnit = requestContext.get("temperature-scale");
 
     const weather = await fetchWeather(context.location, {
       temperatureUnit,

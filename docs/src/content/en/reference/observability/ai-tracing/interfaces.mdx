@@ -605,7 +605,7 @@ Options passed when using a custom sampler strategy.
 
 ```typescript
 interface CustomSamplerOptions {
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   metadata?: Record<string, any>;
 }
 ```
@@ -630,7 +630,7 @@ Options passed when using a custom tracing config selector.
 ```typescript
 interface ConfigSelectorOptions {
   /** Runtime context */
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
 }
 ```
 

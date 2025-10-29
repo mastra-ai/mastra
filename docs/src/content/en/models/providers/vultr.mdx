@@ -133,8 +133,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced 
       ? "vultr/qwen2.5-coder-32b-instruct"
       : "vultr/deepseek-r1-distill-llama-70b";

@@ -27,7 +27,7 @@ const queryTool = createVectorQueryTool({
 
 <Callout>
   **Parameter Requirements:** Most fields can be set at creation as defaults.
-  Some fields can be overridden at runtime via the runtime context or input. If
+  Some fields can be overridden at runtime via the request context or input. If
   a required field is missing from both creation and runtime, an error will be
   thrown. Note that `model`, `id`, and `description` can only be set at creation
   time.
@@ -74,7 +74,7 @@ const queryTool = createVectorQueryTool({
       name: "enableFilter",
       type: "boolean",
       description:
-        "Enable filtering of results based on metadata. (Set at creation only, but will be automatically enabled if a filter is provided in the runtime context.)",
+        "Enable filtering of results based on metadata. (Set at creation only, but will be automatically enabled if a filter is provided in the request context.)",
       isOptional: true,
       defaultValue: "false",
     },
@@ -487,7 +487,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
 You can override database configurations at runtime to adapt to different scenarios:
 
 ```typescript
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
@@ -501,8 +501,8 @@ const queryTool = createVectorQueryTool({
 });
 
 // Override at runtime
-const runtimeContext = new RuntimeContext();
-runtimeContext.set('databaseConfig', {
+const requestContext = new RequestContext();
+requestContext.set('databaseConfig', {
   pinecone: {
     namespace: 'production'  // Switch to production namespace
   }
@@ -510,7 +510,7 @@ runtimeContext.set('databaseConfig', {
 
 const response = await agent.generate(
   "Find information about deployment",
-  { runtimeContext }
+  { requestContext }
 );
 ```
 
@@ -519,7 +519,7 @@ This approach allows you to:
 - Adjust performance parameters based on load
 - Apply different filtering strategies per request
 
-## Example: Using Runtime Context
+## Example: Using Request Context
 
 ```typescript
 const queryTool = createVectorQueryTool({
@@ -529,44 +529,44 @@ const queryTool = createVectorQueryTool({
 });
 ```
 
-When using runtime context, provide required parameters at execution time via the runtime context:
+When using request context, provide required parameters at execution time via the request context:
 
 ```typescript
-const runtimeContext = new RuntimeContext<{
+const requestContext = new RequestContext<{
   vectorStoreName: string;
   indexName: string;
   topK: number;
   filter: VectorFilter;
   databaseConfig: DatabaseConfig;
 }>();
-runtimeContext.set("vectorStoreName", "my-store");
-runtimeContext.set("indexName", "my-index");
-runtimeContext.set("topK", 5);
-runtimeContext.set("filter", { category: "docs" });
-runtimeContext.set("databaseConfig", {
+requestContext.set("vectorStoreName", "my-store");
+requestContext.set("indexName", "my-index");
+requestContext.set("topK", 5);
+requestContext.set("filter", { category: "docs" });
+requestContext.set("databaseConfig", {
   pinecone: { namespace: "runtime-namespace" }
 });
-runtimeContext.set("model", openai.embedding("text-embedding-3-small"));
+requestContext.set("model", openai.embedding("text-embedding-3-small"));
 
 const response = await agent.generate(
   "Find documentation from the knowledge base.",
   {
-    runtimeContext,
+    requestContext,
   },
 );
 ```
 
-For more information on runtime context, please see:
+For more information on request context, please see:
 
-- [Agent Runtime Context](../../docs/server-db/runtime-context.mdx)
-- [Tool Runtime Context](../../docs/tools-mcp/overview.mdx#using-runtimecontext)
+- [Agent Request Context](../../docs/server-db/runtime-context.mdx)
+- [Tool Request Context](../../docs/tools-mcp/overview.mdx#using-runtimecontext)
 
 ## Usage Without a Mastra Server
 
 The tool can be used by itself to retrieve documents matching a query:
 ```typescript copy showLineNumbers filename="src/index.ts"
 import { openai } from "@ai-sdk/openai";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/runtime-context";
 import { createVectorQueryTool } from "@mastra/rag";
 import { PgVector } from "@mastra/pg";
 
@@ -581,10 +581,10 @@ const vectorQueryTool = createVectorQueryTool({
   model: openai.embedding("text-embedding-3-small"),
 });
 
-const runtimeContext = new RuntimeContext();
+const requestContext = new RequestContext();
 const queryResult = await vectorQueryTool.execute({
   context: { queryText: "foo", topK: 1 },
-  runtimeContext,
+  requestContext,
 });
 
 console.log(queryResult.sources);

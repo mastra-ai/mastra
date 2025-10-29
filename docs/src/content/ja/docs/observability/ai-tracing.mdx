@@ -385,7 +385,7 @@ export const mastra = new Mastra({
     },
     configSelector: (context, availableTracers) => {
       // デバッグセッションでは development トレーサーを使用
-      if (context.runtimeContext?.get('debug') === 'true') {
+      if (context.requestContext?.get('debug') === 'true') {
         return 'development';
       }
       return 'production';
@@ -408,7 +408,7 @@ export const mastra = new Mastra({
     },
     configSelector: (context, availableTracers) => {
       // 特定のリクエストは langfuse に、その他は default にルーティング
-      if (context.runtimeContext?.get('useExternalTracing')) {
+      if (context.requestContext?.get('useExternalTracing')) {
         return 'langfuse';
       }
       return 'default';

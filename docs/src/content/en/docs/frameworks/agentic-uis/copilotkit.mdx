@@ -102,7 +102,7 @@ import { Mastra } from "@mastra/core/mastra";
 import { registerCopilotKit } from "@ag-ui/mastra/copilotkit";
 import { weatherAgent } from "./agents/weather-agent";
 
-type WeatherRuntimeContext = {
+type WeatherRequestContext = {
   "user-id": string;
   "temperature-scale": "celsius" | "fahrenheit";
 };
@@ -116,12 +116,12 @@ export const mastra = new Mastra({
       allowHeaders: ["*"]
     },
     apiRoutes: [
-      registerCopilotKit<WeatherRuntimeContext>({
+      registerCopilotKit<WeatherRequestContext>({
         path: "/copilotkit",
         resourceId: "weatherAgent",
-        setContext: (c, runtimeContext) => {
-          runtimeContext.set("user-id", c.req.header("X-User-ID") || "anonymous");
-          runtimeContext.set("temperature-scale", "celsius");
+        setContext: (c, requestContext) => {
+          requestContext.set("user-id", c.req.header("X-User-ID") || "anonymous");
+          requestContext.set("temperature-scale", "celsius");
         }
       })
     ]

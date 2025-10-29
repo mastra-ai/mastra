@@ -23,7 +23,7 @@ OPENAI_API_KEY=<your-api-key>
 
 ## エージェントの作成
 
-`runtimeContext` で提供される動的な値を使って、Mastra Cloud のテクニカルサポートを返すエージェントを作成します。
+`requestContext` で提供される動的な値を使って、Mastra Cloud のテクニカルサポートを返すエージェントを作成します。
 
 ```typescript filename="src/mastra/agents/example-support-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -31,10 +31,10 @@ import { Agent } from "@mastra/core/agent";
 
 export const supportAgent = new Agent({
   name: "support-agent",
-  description: "Returns technical support for mastra cloud based on runtime context",
-  instructions: async ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier");
-    const language = runtimeContext.get("language");
+  description: "Returns technical support for mastra cloud based on request context",
+  instructions: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier");
+    const language = requestContext.get("language");
 
     return `You are a customer support agent for [Mastra Cloud](https://mastra.ai/en/docs/mastra-cloud/overview).
     The current user is on the ${userTier} tier.
@@ -73,27 +73,27 @@ export const mastra = new Mastra({
 
 ## 使用例
 
-`set()` で `RuntimeContext` を設定し、続いて `getAgent()` でエージェント参照を取得し、最後にプロンプトとともに `runtimeContext` を渡して `generate()` を呼び出します。
+`set()` で `RequestContext` を設定し、続いて `getAgent()` でエージェント参照を取得し、最後にプロンプトとともに `requestContext` を渡して `generate()` を呼び出します。
 
 ```typescript filename="src/test-support-agent.ts" showLineNumbers copy
 import "dotenv/config";
 
 import { mastra } from "./mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/runtime-context";
 
-type SupportRuntimeContext = {
+type SupportRequestContext = {
   "user-tier": "free" | "pro" | "enterprise";
   language: "en" | "es" | "ja";
 };
 
-const runtimeContext = new RuntimeContext<SupportRuntimeContext>();
-runtimeContext.set("user-tier", "free");
-runtimeContext.set("language", "ja");
+const requestContext = new RequestContext<SupportRequestContext>();
+requestContext.set("user-tier", "free");
+requestContext.set("language", "ja");
 
 const agent = mastra.getAgent("supportAgent");
 
 const response = await agent.generate("Can Mastra Cloud handle long-running requests?", {
-  runtimeContext
+  requestContext
 });
 
 console.log(response.text);

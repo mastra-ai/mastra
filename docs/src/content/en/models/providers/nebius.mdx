@@ -253,8 +253,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced 
       ? "nebius/zai-org/glm-4.5-air"
       : "nebius/NousResearch/hermes-4-405b";

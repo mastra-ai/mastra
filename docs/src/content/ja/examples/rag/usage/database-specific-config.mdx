@@ -22,7 +22,7 @@ import { Tabs } from "nextra/components";
     ```typescript
     import { openai } from "@ai-sdk/openai";
     import { createVectorQueryTool } from "@mastra/rag";
-    import { RuntimeContext } from "@mastra/core/runtime-context";
+    import { RequestContext } from "@mastra/core/runtime-context";
 
     // Base configuration
     const createSearchTool = (environment: 'dev' | 'staging' | 'prod') => {
@@ -51,8 +51,8 @@ import { Tabs } from "nextra/components";
 
     // Switch environment at runtime
     const switchEnvironment = async (environment: string, query: string) => {
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('databaseConfig', {
+      const requestContext = new RequestContext();
+      requestContext.set('databaseConfig', {
         pinecone: {
           namespace: environment
         }
@@ -61,7 +61,7 @@ import { Tabs } from "nextra/components";
       return await dynamicSearchTool.execute({
         context: { queryText: query },
         mastra,
-        runtimeContext
+        requestContext
       });
     };
     ```
@@ -70,7 +70,7 @@ import { Tabs } from "nextra/components";
     ```javascript
     import { openai } from "@ai-sdk/openai";
     import { createVectorQueryTool } from "@mastra/rag";
-    import { RuntimeContext } from "@mastra/core/runtime-context";
+    import { RequestContext } from "@mastra/core/runtime-context";
 
     // Base configuration
     const createSearchTool = (environment) => {
@@ -99,8 +99,8 @@ import { Tabs } from "nextra/components";
 
     // Switch environment at runtime
     const switchEnvironment = async (environment, query) => {
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('databaseConfig', {
+      const requestContext = new RequestContext();
+      requestContext.set('databaseConfig', {
         pinecone: {
           namespace: environment
         }
@@ -109,7 +109,7 @@ import { Tabs } from "nextra/components";
       return await dynamicSearchTool.execute({
         context: { queryText: query },
         mastra,
-        runtimeContext
+        requestContext
       });
     };
     ```
@@ -197,11 +197,11 @@ import { Tabs } from "nextra/components";
 
     // 負荷に基づいてパラメータを調整
     const adaptiveSearch = async (query: string, isHighLoad: boolean) => {
-      const runtimeContext = new RuntimeContext();
+      const requestContext = new RequestContext();
       
       if (isHighLoad) {
         // 高負荷時は速度のため品質を下げる
-        runtimeContext.set('databaseConfig', {
+        requestContext.set('databaseConfig', {
           pgvector: {
             ef: 75,
             probes: 5,
@@ -213,7 +213,7 @@ import { Tabs } from "nextra/components";
       return await balancedTool.execute({
         context: { queryText: query },
         mastra,
-        runtimeContext
+        requestContext
       });
     };
     ```
@@ -245,10 +245,10 @@ class MultiTenantSearchService {
   }
 
   async searchForTenant(tenant: Tenant, query: string) {
-    const runtimeContext = new RuntimeContext();
+    const requestContext = new RequestContext();
     
     // Isolate search to tenant's namespace
-    runtimeContext.set('databaseConfig', {
+    requestContext.set('databaseConfig', {
       pinecone: {
         namespace: tenant.namespace
       }
@@ -260,7 +260,7 @@ class MultiTenantSearchService {
         topK: 10
       },
       mastra,
-      runtimeContext
+      requestContext
     });
 
     // Add tenant context to results
@@ -339,11 +339,11 @@ const generateSparseVector = (keywords: string[]) => {
 };
 
 const hybridSearch = async (query: string, keywords: string[]) => {
-  const runtimeContext = new RuntimeContext();
+  const requestContext = new RequestContext();
   
   if (keywords.length > 0) {
     const sparseVector = generateSparseVector(keywords);
-    runtimeContext.set('databaseConfig', {
+    requestContext.set('databaseConfig', {
       pinecone: {
         namespace: "production",
         sparseVector
@@ -354,7 +354,7 @@ const hybridSearch = async (query: string, keywords: string[]) => {
   return await hybridSearchTool.execute({
     context: { queryText: query },
     mastra,
-    runtimeContext
+    requestContext
   });
 };
 

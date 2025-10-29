@@ -3,7 +3,7 @@ import type { z } from 'zod';
 import type { IExecutionContext, MastraUnion } from '../../action';
 import type { BaseLogMessage, RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
-import type { RuntimeContext } from '../../runtime-context';
+import type { RequestContext } from '../../runtime-context';
 import type { ZodLikeSchema, InferZodLikeSchema } from '../../types/zod-compat';
 import type { LegacyStep as Step } from './step';
 import type { LegacyWorkflow } from './workflow';
@@ -38,7 +38,7 @@ export interface StepExecutionContext<
   runId: string;
   emit: (event: string, data: any) => void;
   mastra?: MastraUnion;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
 }
 
 export interface StepAction<

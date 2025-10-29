@@ -9,7 +9,7 @@ export function runScorer({
   scorerObject,
   input,
   output,
-  runtimeContext,
+  requestContext,
   entity,
   structuredOutput,
   source,
@@ -23,7 +23,7 @@ export function runScorer({
   runId: string;
   input: any;
   output: any;
-  runtimeContext: Record<string, any>;
+  requestContext: Record<string, any>;
   entity: Record<string, any>;
   structuredOutput: boolean;
   source: ScoringSource;
@@ -60,7 +60,7 @@ export function runScorer({
     },
     input,
     output,
-    runtimeContext: Object.fromEntries(runtimeContext.entries()),
+    requestContext: Object.fromEntries(requestContext.entries()),
     runId,
     source,
     entity,

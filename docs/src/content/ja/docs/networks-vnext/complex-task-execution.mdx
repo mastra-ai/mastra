@@ -25,7 +25,7 @@ import { Memory } from '@mastra/memory';
 import { openai } from '@ai-sdk/openai';
 import { LibSQLStore } from '@mastra/libsql';
 import { z } from 'zod';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 
 const memory = new Memory({
   storage: new LibSQLStore({
@@ -123,13 +123,13 @@ const network = new NewAgentNetwork({
   memory: memory,
 });
 
-const runtimeContext = new RuntimeContext();
+const requestContext = new RequestContext();
 
 console.log(
   // タスクの指定。ここで合成にエージェントを使うことに言及しているのは、ルーティングエージェント自体も結果をある程度統合できるためで、agent2 の使用を強制する意図があります
   await network.loop(
     'フランスで最も大きな都市はどこですか？3つ教えてください。それぞれはどのような都市ですか？都市を特定し、各都市を徹底的に調査し、そのすべての情報を統合した最終的な完全レポートを提示してください。統合には必ずエージェントを使用してください。',
-    { runtimeContext },
+    { requestContext },
   ),
 );
 ```

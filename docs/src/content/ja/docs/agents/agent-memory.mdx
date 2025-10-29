@@ -82,8 +82,8 @@ const agent = new Agent({
   name: "TieredMemoryAgent",
   instructions: "あなたは階層化されたメモリ機能を持つ有用なアシスタントです。",
   model: openai("gpt-4o"),
-  memory: ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("userTier");
+  memory: ({ requestContext }) => {
+    const userTier = requestContext.get("userTier");
     return userTier === "premium" ? premiumMemory : standardMemory;
   },
 });
@@ -96,8 +96,8 @@ const agent = new Agent({
   name: "EnvironmentAwareAgent",
   instructions: "あなたは有用なアシスタントです。",
   model: openai("gpt-4o"),
-  memory: ({ runtimeContext }) => {
-    const environment = runtimeContext.get("environment");
+  memory: ({ requestContext }) => {
+    const environment = requestContext.get("environment");
     
     if (environment === "test") {
       // テスト用にローカルストレージを使用
@@ -132,8 +132,8 @@ const agent = new Agent({
   name: "AsyncMemoryAgent",
   instructions: "あなたは有用なアシスタントです。",
   model: openai("gpt-4o"),
-  memory: async ({ runtimeContext }) => {
-    const userId = runtimeContext.get("userId");
+  memory: async ({ requestContext }) => {
+    const userId = requestContext.get("userId");
     
     // 非同期メモリセットアップをシミュレート（例：データベース検索）
     await new Promise(resolve => setTimeout(resolve, 10));
@@ -152,12 +152,12 @@ const agent = new Agent({
 動的メモリを使用する際は、エージェント呼び出しにランタイムコンテキストを渡します：
 
 ```typescript
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/runtime-context";
 
 // ユーザー情報を含むランタイムコンテキストを作成
-const runtimeContext = new RuntimeContext();
-runtimeContext.set("userTier", "premium");
-runtimeContext.set("environment", "production");
+const requestContext = new RequestContext();
+requestContext.set("userTier", "premium");
+requestContext.set("environment", "production");
 
 // ランタイムコンテキストでエージェントを使用
 const response = await agent.generate("私の好きな色は青だということを覚えておいてください。", {
@@ -165,7 +165,7 @@ const response = await agent.generate("私の好きな色は青だというこ�
     resource: "user_alice",
     thread: { id: "preferences_thread" },
   },
-  runtimeContext, // ランタイムコンテキストを渡す
+  requestContext, // ランタイムコンテキストを渡す
 });
 ```
 

@@ -390,9 +390,9 @@ export const testAgent = new Agent({
 
 > See [Using Tools](./using-tools.mdx) for more information.
 
-## Using `RuntimeContext`
+## Using `RequestContext`
 
-Use `RuntimeContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use `RequestContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers
 export type UserTier = {
@@ -401,8 +401,8 @@ export type UserTier = {
 
 export const testAgent = new Agent({
   // ...
-  model: ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+  model: ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     return userTier === "enterprise"
       ? openai("gpt-4o-mini")
@@ -411,7 +411,7 @@ export const testAgent = new Agent({
 });
 ```
 
-> See [Runtime Context](../server-db/runtime-context.mdx) for more information.
+> See [Request Context](../server-db/runtime-context.mdx) for more information.
 
 ## Testing with Mastra Playground
 
@@ -421,5 +421,5 @@ Use the Mastra [Playground](../server-db/local-dev-playground.mdx) to test agent
 
 - [Using Tools](./using-tools.mdx)
 - [Agent Memory](./agent-memory.mdx)
-- [Runtime Context](../../examples/agents/runtime-context.mdx)
+- [Request Context](../../examples/agents/runtime-context.mdx)
 - [Calling Agents](../../examples/agents/calling-agents.mdx)

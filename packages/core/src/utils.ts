@@ -10,7 +10,7 @@ import type { MastraLanguageModel } from './llm/model/shared.types';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
-import type { RuntimeContext } from './runtime-context';
+import type { RequestContext } from './runtime-context';
 import type { ChunkType } from './stream/types';
 import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
 import { CoreToolBuilder } from './tools/tool-builder/builder';
@@ -224,8 +224,8 @@ export interface ToolOptions {
   logger?: IMastraLogger;
   description?: string;
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
-  runtimeContext: RuntimeContext;
-  /** Build-time tracing context (fallback for Legacy methods that can't pass runtime context) */
+  requestContext: RequestContext;
+  /** Build-time tracing context (fallback for Legacy methods that can't pass request context) */
   tracingContext?: TracingContext;
   tracingPolicy?: TracingPolicy;
   memory?: MastraMemory;

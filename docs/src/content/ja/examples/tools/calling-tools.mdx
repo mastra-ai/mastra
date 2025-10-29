@@ -13,7 +13,7 @@ Mastraで作成したツールを操作する方法は複数あります。以�
 
 ## ワークフローステップから
 
-ツールをインポートし、必要な`context`と`runtimeContext`パラメータを指定して`execute()`を呼び出します。`runtimeContext`は、ステップの`execute`関数の引数として使用できます。
+ツールをインポートし、必要な`context`と`requestContext`パラメータを指定して`execute()`を呼び出します。`requestContext`は、ステップの`execute`関数の引数として使用できます。
 
 ```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -23,14 +23,14 @@ import { testTool } from "../tools/test-tool";
 
 const step1 = createStep({
   // ...
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     const { value } = inputData
 
     const response = await testTool.execute({
       context: {
         value
       },
-      runtimeContext
+      requestContext
     })
   }
 });
@@ -66,19 +66,19 @@ export const testAgent = new Agent({
 
 ## コマンドラインから
 
-ツールをローカルでテストするためのシンプルなスクリプトを作成できます。ツールを直接インポートして、ランタイムコンテキストを作成します。ツールの機能をテストするために、必要な`context`と`runtimeContext`を指定して`execute()`を呼び出します。
+ツールをローカルでテストするためのシンプルなスクリプトを作成できます。ツールを直接インポートして、ランタイムコンテキストを作成します。ツールの機能をテストするために、必要な`context`と`requestContext`を指定して`execute()`を呼び出します。
 
 ```typescript filename="src/test-tool.ts" showLineNumbers copy
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/runtime-context";
 import { testTool } from "../src/mastra/tools/test-tool";
 
-const runtimeContext = new RuntimeContext();
+const requestContext = new RequestContext();
 
 const result = await testTool.execute({
   context: {
     value: 'foo'
   },
-  runtimeContext
+  requestContext
 });
 
 console.log(result);

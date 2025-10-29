@@ -182,7 +182,7 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
                   description: 'Runtime context for the agent builder action execution',
                 },
@@ -227,7 +227,7 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
                   description: 'Runtime context for the agent builder action execution',
                 },
@@ -267,7 +267,7 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
                   description: 'Runtime context for the agent builder action execution',
                 },
@@ -315,7 +315,7 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
                   description: 'Runtime context for the agent builder action execution',
                 },
@@ -394,7 +394,7 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
                   description: 'Runtime context for the agent builder action execution',
                 },
@@ -442,7 +442,7 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
                   description: 'Runtime context for the agent builder action execution',
                 },

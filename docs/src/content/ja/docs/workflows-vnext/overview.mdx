@@ -56,12 +56,12 @@ const myStep = createStep({
     mastra,
     getStepResult,
     getInitData,
-    runtimeContext,
+    requestContext,
   }) => {
     const otherStepOutput = getStepResult(step2);
     const initData = getInitData<typeof workflow>(); // typed as the workflow input schema
     return {
-      outputValue: `Processed: ${inputData.inputValue}, ${initData.startValue} (runtimeContextValue: ${runtimeContext.get("runtimeContextValue")})`,
+      outputValue: `Processed: ${inputData.inputValue}, ${initData.startValue} (requestContextValue: ${requestContext.get("requestContextValue")})`,
     };
   },
 });

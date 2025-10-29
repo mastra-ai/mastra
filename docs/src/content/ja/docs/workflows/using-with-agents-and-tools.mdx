@@ -175,11 +175,11 @@ export const testWorkflow = createWorkflow({...})
 結果はステップから構造化された出力として返されます。ステップは`.then()`を使用してワークフローに組み込まれ、ワークフローの入力を処理し、型付きの出力を生成できます。ワークフローは`.commit()`で完了します。
 
 ```typescript {3,20,32} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { RuntimeContext } from "@mastra/core/di";
+import { RequestContext } from "@mastra/core/di";
 
 import { testTool } from "../tools/test-tool";
 
-const runtimeContext = new RuntimeContext();
+const requestContext = new RequestContext();
 
 const step1 = createStep({
   id: "step-1",
@@ -196,7 +196,7 @@ const step1 = createStep({
 
     const { country_name } = await testTool.execute({
       context: { input },
-      runtimeContext
+      requestContext
     });
 
     return {

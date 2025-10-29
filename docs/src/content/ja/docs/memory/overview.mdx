@@ -173,7 +173,7 @@ export const testAgent = new Agent({
 
 #### 動的なモデル選択と指示文
 
-`model` と `instructions` に関数を渡すことで、スレッドタイトルの生成を動的に設定できます。これらの関数は `runtimeContext` オブジェクトを受け取り、ユーザー固有の値に応じてタイトル生成を調整できます。
+`model` と `instructions` に関数を渡すことで、スレッドタイトルの生成を動的に設定できます。これらの関数は `requestContext` オブジェクトを受け取り、ユーザー固有の値に応じてタイトル生成を調整できます。
 
 ```typescript {7-16} showLineNumbers
 export const testAgent = new Agent({
@@ -182,12 +182,12 @@ export const testAgent = new Agent({
     options: {
       threads: {
         generateTitle: {
-          model: ({ runtimeContext }) => {
-            const userTier = runtimeContext.get("userTier");
+          model: ({ requestContext }) => {
+            const userTier = requestContext.get("userTier");
             return userTier === "premium" ? openai("gpt-4.1") : openai("gpt-4.1-nano");
           },
-          instructions: ({ runtimeContext }) => {
-            const language = runtimeContext.get("userLanguage") || "English";
+          instructions: ({ requestContext }) => {
+            const language = requestContext.get("userLanguage") || "English";
             return `ユーザーの最初のメッセージに基づき、${language} で簡潔かつ魅力的なタイトルを生成してください。`;
           }
         }

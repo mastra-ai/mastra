@@ -35,7 +35,7 @@ export interface AgentBuilderConfig {
  */
 export interface GenerateAgentOptions {
   /** Runtime context for the generation */
-  runtimeContext?: any;
+  requestContext?: any;
   /** Output format preference */
   outputFormat?: 'code' | 'explanation' | 'both';
 }

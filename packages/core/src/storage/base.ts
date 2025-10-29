@@ -415,7 +415,7 @@ export abstract class MastraStorage extends MastraBase {
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>>;
 
   abstract updateWorkflowState({

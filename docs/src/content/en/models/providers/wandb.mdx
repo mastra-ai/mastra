@@ -193,8 +193,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced 
       ? "wandb/moonshotai/Kimi-K2-Instruct"
       : "wandb/Qwen/Qwen3-235B-A22B-Instruct-2507";

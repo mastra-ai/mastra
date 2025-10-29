@@ -181,8 +181,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced 
       ? "submodel/zai-org/GLM-4.5-FP8"
       : "submodel/Qwen/Qwen3-235B-A22B-Instruct-2507";

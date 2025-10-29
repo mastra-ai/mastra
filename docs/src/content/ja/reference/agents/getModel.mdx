@@ -18,10 +18,10 @@ await agent.getModel();
 <PropertiesTable
   content={[
     {
-      name: "{ runtimeContext = new RuntimeContext() }",
-      type: "{ runtimeContext?: RuntimeContext }",
+      name: "{ requestContext = new RequestContext() }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
+      defaultValue: "new RequestContext()",
       description: "ランタイムコンテキストを含むオプションの設定オブジェクト。",
     },
   ]}
@@ -43,7 +43,7 @@ await agent.getModel();
 
 ```typescript copy
 await agent.getModel({
-  runtimeContext: new RuntimeContext()
+  requestContext: new RequestContext()
 });
 ```
 
@@ -52,8 +52,8 @@ await agent.getModel({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       defaultValue: "undefined",
       description: "依存性注入とコンテキスト情報のためのランタイムコンテキスト。",

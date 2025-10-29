@@ -11,7 +11,7 @@ Mastraは、ランタイム変数を使用してワークフローとステッ�
 
 依存性注入システムにより、以下のことが可能になります：
 
-1. 型安全なruntimeContextを通じてランタイム設定変数をワークフローに渡す
+1. 型安全なrequestContextを通じてランタイム設定変数をワークフローに渡す
 2. ステップ実行コンテキスト内でこれらの変数にアクセスする
 3. 基盤となるコードを変更せずにワークフローの動作を変更する
 4. 同じワークフロー内の複数のステップ間で設定を共有する
@@ -22,18 +22,18 @@ Mastraは、ランタイム変数を使用してワークフローとステッ�
 const myWorkflow = mastra.getWorkflow("myWorkflow");
 const { runId, start, resume } = myWorkflow.createRun();
 
-// Define your runtimeContext's type structure
-type WorkflowRuntimeContext = {
+// Define your requestContext's type structure
+type WorkflowRequestContext = {
   multiplier: number;
 };
 
-const runtimeContext = new RuntimeContext<WorkflowRuntimeContext>();
-runtimeContext.set("multiplier", 5);
+const requestContext = new RequestContext<WorkflowRequestContext>();
+requestContext.set("multiplier", 5);
 
-// Start the workflow execution with runtimeContext
+// Start the workflow execution with requestContext
 await start({
   triggerData: { inputValue: 45 },
-  runtimeContext,
+  requestContext,
 });
 ```
 
@@ -43,11 +43,11 @@ HTTPヘッダーから乗数値を動的に設定する方法は次のとおり�
 
 ```typescript filename="src/index.ts"
 import { Mastra } from "@mastra/core";
-import { RuntimeContext } from "@mastra/core/di";
+import { RequestContext } from "@mastra/core/di";
 import { workflow as myWorkflow } from "./workflows";
 
-// Define runtimeContext type with clear, descriptive types
-type WorkflowRuntimeContext = {
+// Define requestContext type with clear, descriptive types
+type WorkflowRequestContext = {
   multiplier: number;
 };
 
@@ -59,7 +59,7 @@ export const mastra = new Mastra({
     middleware: [
       async (c, next) => {
         const multiplier = c.req.header("x-multiplier");
-        const runtimeContext = c.get<WorkflowRuntimeContext>("runtimeContext");
+        const requestContext = c.get<WorkflowRequestContext>("requestContext");
 
         // Parse and validate the multiplier value
         const multiplierValue = parseInt(multiplier || "1", 10);
@@ -67,7 +67,7 @@ export const mastra = new Mastra({
           throw new Error("Invalid multiplier value");
         }
 
-        runtimeContext.set("multiplier", multiplierValue);
+        requestContext.set("multiplier", multiplierValue);
 
         await next(); // Don't forget to call next()
       },
@@ -78,7 +78,7 @@ export const mastra = new Mastra({
 
 ## 変数を使用したステップの作成
 
-ステップはruntimeContext変数にアクセスでき、ワークフローのruntimeContextタイプに準拠する必要があります：
+ステップはrequestContext変数にアクセスでき、ワークフローのrequestContextタイプに準拠する必要があります：
 
 ```typescript
 import { Step } from "@mastra/core/workflow";
@@ -96,12 +96,12 @@ interface StepOutput {
 const stepOne = new Step({
   id: "stepOne",
   description: "Multiply the input value by the configured multiplier",
-  execute: async ({ context, runtimeContext }) => {
+  execute: async ({ context, requestContext }) => {
     try {
-      // Type-safe access to runtimeContext variables
-      const multiplier = runtimeContext.get("multiplier");
+      // Type-safe access to requestContext variables
+      const multiplier = requestContext.get("multiplier");
       if (multiplier === undefined) {
-        throw new Error("Multiplier not configured in runtimeContext");
+        throw new Error("Multiplier not configured in requestContext");
       }
 
       // Get and validate input
@@ -128,15 +128,15 @@ const stepOne = new Step({
 
 ワークフローでランタイム変数を使用する際には、潜在的なエラーを処理することが重要です：
 
-1. **変数の欠落**: runtimeContextに必要な変数が存在するかを常に確認する
+1. **変数の欠落**: requestContextに必要な変数が存在するかを常に確認する
 2. **型の不一致**: TypeScriptの型システムを使用してコンパイル時に型エラーを捕捉する
 3. **無効な値**: ステップで使用する前に変数の値を検証する
 
 ```typescript
-// runtimeContext変数を使用した防御的プログラミングの例
-const multiplier = runtimeContext.get("multiplier");
+// requestContext変数を使用した防御的プログラミングの例
+const multiplier = requestContext.get("multiplier");
 if (multiplier === undefined) {
-  throw new Error("Multiplier not configured in runtimeContext");
+  throw new Error("Multiplier not configured in requestContext");
 }
 
 // 型と値の検証
@@ -147,8 +147,8 @@ if (typeof multiplier !== "number" || multiplier <= 0) {
 
 ## ベストプラクティス
 
-1. **型安全性**: runtimeContextとステップの入力/出力に対して常に適切な型を定義する
-2. **検証**: 使用する前にすべての入力とruntimeContext変数を検証する
+1. **型安全性**: requestContextとステップの入力/出力に対して常に適切な型を定義する
+2. **検証**: 使用する前にすべての入力とrequestContext変数を検証する
 3. **エラー処理**: ステップ内で適切なエラー処理を実装する
-4. **ドキュメント化**: 各ワークフローに必要なruntimeContext変数を文書化する
+4. **ドキュメント化**: 各ワークフローに必要なrequestContext変数を文書化する
 5. **デフォルト値**: 可能な限り適切なデフォルト値を提供する

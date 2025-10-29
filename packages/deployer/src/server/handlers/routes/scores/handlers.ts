@@ -15,7 +15,7 @@ export async function getScorersHandler(c: Context) {
   try {
     const scorers = await getOriginalScorersHandler({
       mastra: c.get('mastra'),
-      runtimeContext: c.get('runtimeContext'),
+      requestContext: c.get('requestContext'),
     });
     return c.json(scorers);
   } catch (error) {
@@ -26,12 +26,12 @@ export async function getScorersHandler(c: Context) {
 export async function getScorerHandler(c: Context) {
   const mastra = c.get('mastra');
   const scorerId = c.req.param('scorerId');
-  const runtimeContext = c.get('runtimeContext');
+  const requestContext = c.get('requestContext');
 
   const scorer = await getOriginalScorerHandler({
     mastra,
     scorerId,
-    runtimeContext,
+    requestContext,
   });
 
   return c.json(scorer);

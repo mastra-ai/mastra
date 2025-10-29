@@ -260,28 +260,28 @@ if (result.status === "suspended") {
 }
 ```
 
-## suspend/resume における `RuntimeContext` の使用
+## suspend/resume における `RequestContext` の使用
 
-`suspend/resume` と `RuntimeContext` を併用する場合は、インスタンスを自分で作成し、それを `start` と `resume` 関数に渡せます。
-`RuntimeContext` はワークフローの実行間で自動的には共有されません。
+`suspend/resume` と `RequestContext` を併用する場合は、インスタンスを自分で作成し、それを `start` と `resume` 関数に渡せます。
+`RequestContext` はワークフローの実行間で自動的には共有されません。
 
 ```typescript {1,4,9,16} filename="src/mastra/workflows/test-workflow.tss" showLineNumbers copy
-import { RuntimeContext } from "@mastra/core/di";
+import { RequestContext } from "@mastra/core/di";
 import { mastra } from "./mastra";
 
-const runtimeContext = new RuntimeContext();
+const requestContext = new RequestContext();
 const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
 const result = await run.start({
   inputData: { suggestions: ["London", "Paris", "New York"] },
-  runtimeContext
+  requestContext
 });
 
 if (result.status === "suspended") {
   const resumedResult = await run.resume({
     step: 'step-1',
     resumeData: { city: "New York" },
-    runtimeContext
+    requestContext
   });
 }
 ```

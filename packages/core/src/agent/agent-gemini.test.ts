@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
-import { RuntimeContext } from '../runtime-context';
+import { RequestContext } from '../runtime-context';
 import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
@@ -9,11 +9,11 @@ import { Agent } from './index';
 
 describe('Gemini Model Compatibility Tests', () => {
   let memory: MockMemory;
-  let runtimeContext: RuntimeContext;
+  let requestContext: RequestContext;
 
   beforeEach(() => {
     memory = new MockMemory();
-    runtimeContext = new RuntimeContext();
+    requestContext = new RequestContext();
   });
 
   const MODEL = 'google/gemini-2.0-flash-lite';
@@ -221,7 +221,7 @@ describe('Gemini Model Compatibility Tests', () => {
       });
 
       const stream = await agent.network('What is the capital of France?', {
-        runtimeContext,
+        requestContext,
         maxSteps: 2,
       });
 
@@ -257,7 +257,7 @@ describe('Gemini Model Compatibility Tests', () => {
       });
 
       const stream = await agent.network('', {
-        runtimeContext,
+        requestContext,
         maxSteps: 1,
       });
 
@@ -292,7 +292,7 @@ describe('Gemini Model Compatibility Tests', () => {
           { role: 'assistant', content: 'Let me calculate that for you.' },
         ],
         {
-          runtimeContext,
+          requestContext,
           maxSteps: 1,
         },
       );
@@ -352,7 +352,7 @@ describe('Gemini Model Compatibility Tests', () => {
           { role: 'user', content: 'Is that good weather for a picnic?' },
         ],
         {
-          runtimeContext,
+          requestContext,
           maxSteps: 1,
         },
       );
@@ -411,7 +411,7 @@ describe('Gemini Model Compatibility Tests', () => {
           },
         ],
         {
-          runtimeContext,
+          requestContext,
           maxSteps: 1,
         },
       );
@@ -470,7 +470,7 @@ describe('Gemini Model Compatibility Tests', () => {
           { role: 'user', content: 'Explain what this result means.' },
         ],
         {
-          runtimeContext,
+          requestContext,
           maxSteps: 1,
         },
       );
@@ -526,7 +526,7 @@ describe('Gemini Model Compatibility Tests', () => {
       });
 
       const stream = await agent.network('Execute research-workflow on machine learning', {
-        runtimeContext,
+        requestContext,
         maxSteps: 2,
       });
 
@@ -554,7 +554,7 @@ describe('Gemini Model Compatibility Tests', () => {
           { role: 'assistant', content: 'I am doing well, thank you!' },
         ],
         {
-          runtimeContext,
+          requestContext,
           maxSteps: 1,
         },
       );
@@ -585,7 +585,7 @@ describe('Gemini Model Compatibility Tests', () => {
       });
 
       const stream = await agent.network([{ role: 'assistant', content: 'This is a system message' }], {
-        runtimeContext,
+        requestContext,
         maxSteps: 1,
       });
 

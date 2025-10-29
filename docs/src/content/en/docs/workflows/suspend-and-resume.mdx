@@ -215,19 +215,19 @@ const resumedResult = await run.resume({
 });
 ```
 
-You can pass `runtimeContext` as an argument to both the `start` and `resume` commands.
+You can pass `requestContext` as an argument to both the `start` and `resume` commands.
 
 ```typescript filename="src/mastra/workflows/test-workflow.ts"
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/runtime-context";
 
-const runtimeContext = new RuntimeContext();
+const requestContext = new RequestContext();
 
 const result = await run.start({
   step: 'step-1',
   inputData: {
     city: "London"
   },
-  runtimeContext
+  requestContext
 });
 
 const resumedResult = await run.resume({
@@ -235,11 +235,11 @@ const resumedResult = await run.resume({
   resumeData: {
     city: "New York"
   },
-  runtimeContext
+  requestContext
 });
 ```
 
-> See [Runtime Context](../server-db/runtime-context.mdx) for more information.
+> See [Request Context](../server-db/runtime-context.mdx) for more information.
 
 ### Resuming nested workflows
 

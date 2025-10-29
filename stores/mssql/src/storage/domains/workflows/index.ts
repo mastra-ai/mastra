@@ -49,13 +49,13 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
     const transaction = this.pool.transaction();
@@ -86,7 +86,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           waitingPaths: {},
           status: 'pending',
           runId: runId,
-          runtimeContext: {},
+          requestContext: {},
         } as WorkflowRunState;
       } else {
         // Parse existing snapshot
@@ -94,9 +94,9 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
       }
 
-      // Merge the new step result and runtime context
+      // Merge the new step result and request context
       snapshot.context[stepId] = result;
-      snapshot.runtimeContext = { ...snapshot.runtimeContext, ...runtimeContext };
+      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
       // Upsert within the same transaction to handle both insert and update
       const upsertReq = new sql.Request(transaction);

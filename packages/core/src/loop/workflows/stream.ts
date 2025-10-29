@@ -1,6 +1,6 @@
 import { ReadableStream } from 'stream/web';
 import type { ToolSet } from 'ai-v5';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../runtime-context';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
@@ -106,10 +106,10 @@ export function workflowLoopStream<
         runId,
       });
 
-      const runtimeContext = new RuntimeContext();
+      const requestContext = new RequestContext();
 
       if (requireToolApproval) {
-        runtimeContext.set('__mastra_requireToolApproval', true);
+        requestContext.set('__mastra_requireToolApproval', true);
       }
 
       const executionResult = resumeContext
@@ -121,7 +121,7 @@ export function workflowLoopStream<
         : await run.start({
             inputData: initialData,
             tracingContext: rest.modelSpanTracker?.getTracingContext(),
-            runtimeContext,
+            requestContext,
           });
 
       if (executionResult.status !== 'success') {

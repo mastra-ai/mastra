@@ -54,7 +54,7 @@ if (!network) {
   throw new Error('Network not found');
 }
 
-console.log(await network.generate('What are the biggest cities in France?', { runtimeContext }));
+console.log(await network.generate('What are the biggest cities in France?', { requestContext }));
 ```
 
 
@@ -70,13 +70,13 @@ const client = new MastraClient();
 
 const network = client.getVNextNetwork('test-network');
 
-console.log(await network.generate('What are the biggest cities in France?', { runtimeContext }));
+console.log(await network.generate('What are the biggest cities in France?', { requestContext }));
 ```
 
 レスポンスをストリーミングすることもできます
 
 ```typescript
-const stream = await network.stream('What are the biggest cities in France?', { runtimeContext });
+const stream = await network.stream('What are the biggest cities in France?', { requestContext });
 
 for await (const chunk of stream) {
   console.log(chunk);
@@ -90,7 +90,7 @@ console.log(
   // タスクを指定します。ここで合成にエージェントを使用することについて言及していることに注意してください。これは、ルーティングエージェントが実際に結果に対して独自に合成を行うことができるため、代わりにagent2を使用するよう強制するためです
   await network.loop(
     'What are the biggest cities in France? Give me 3. How are they like? Find cities, then do thorough research on each city, and give me a final full report synthesizing all that information. Make sure to use an agent for synthesis.',
-    { runtimeContext },
+    { requestContext },
   ),
 );
 ```

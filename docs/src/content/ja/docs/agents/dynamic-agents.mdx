@@ -19,9 +19,9 @@ description: 実行時コンテキストを用いて、エージェントの指�
 const supportAgent = new Agent({
   name: "Dynamic Support Agent",
 
-  instructions: async ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier");
-    const language = runtimeContext.get("language");
+  instructions: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier");
+    const language = requestContext.get("language");
 
     return `You are a customer support agent for our SaaS platform.
     The current user is on the ${userTier} tier and prefers ${language} language.
@@ -34,15 +34,15 @@ const supportAgent = new Agent({
     Always respond in ${language} language.`;
   },
 
-  model: ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier");
+  model: ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier");
     return userTier === "enterprise"
       ? openai("gpt-4")
       : openai("gpt-3.5-turbo");
   },
 
-  tools: ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier");
+  tools: ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier");
     const baseTools = [knowledgeBase, ticketSystem];
 
     if (userTier === "pro" || userTier === "enterprise") {
@@ -56,8 +56,8 @@ const supportAgent = new Agent({
     return baseTools;
   },
 
-  memory: ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier");
+  memory: ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier");
 
     if (userTier === "enterprise") {
       return new Memory({

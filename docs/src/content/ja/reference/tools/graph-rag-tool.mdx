@@ -230,31 +230,31 @@ const graphTool = createGraphRAGTool({
 ランタイムコンテキストを使う場合は、実行時にランタイムコンテキスト経由で必要なパラメータを指定します。
 
 ```typescript
-const runtimeContext = new RuntimeContext<{
+const requestContext = new RequestContext<{
   vectorStoreName: string;
   indexName: string;
   topK: number;
   filter: any;
 }>();
-runtimeContext.set("vectorStoreName", "my-store");
-runtimeContext.set("indexName", "my-index");
-runtimeContext.set("topK", 5);
-runtimeContext.set("filter", { category: "docs" });
-runtimeContext.set("randomWalkSteps", 100);
-runtimeContext.set("restartProb", 0.15);
+requestContext.set("vectorStoreName", "my-store");
+requestContext.set("indexName", "my-index");
+requestContext.set("topK", 5);
+requestContext.set("filter", { category: "docs" });
+requestContext.set("randomWalkSteps", 100);
+requestContext.set("restartProb", 0.15);
 
 const response = await agent.generate(
   "Find documentation from the knowledge base.",
   {
-    runtimeContext,
+    requestContext,
   },
 );
 ```
 
 ランタイムコンテキストの詳細は、次をご覧ください。
 
-- [Agent Runtime Context](../../docs/agents/runtime-context.mdx)
-- [Tool Runtime Context](../../docs/tools-mcp/runtime-context.mdx)
+- [Agent Request Context](../../docs/agents/runtime-context.mdx)
+- [Tool Request Context](../../docs/tools-mcp/runtime-context.mdx)
 
 ## 関連項目
 

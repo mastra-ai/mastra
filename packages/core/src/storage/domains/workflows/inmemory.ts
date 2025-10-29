@@ -21,13 +21,13 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     this.logger.debug(`MockStore: updateWorkflowResults called for ${workflowName} ${runId} ${stepId}`, result);
     const run = this.collection.get(`${workflowName}-${runId}`);
@@ -64,7 +64,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     }
 
     snapshot.context[stepId] = result;
-    snapshot.runtimeContext = { ...snapshot.runtimeContext, ...runtimeContext };
+    snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
     this.collection.set(`${workflowName}-${runId}`, {
       ...run,

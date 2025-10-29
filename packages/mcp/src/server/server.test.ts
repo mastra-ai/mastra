@@ -1290,7 +1290,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
       expect(generateSpy).toHaveBeenCalledWith(
         queryInput.message,
         expect.objectContaining({
-          runtimeContext: expect.any(Object),
+          requestContext: expect.any(Object),
           tracingContext: expect.any(Object),
         }),
       );

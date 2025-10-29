@@ -341,15 +341,15 @@ export class LibSQLStore extends MastraStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
+    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
   }
 
   async updateWorkflowState({

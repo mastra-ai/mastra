@@ -192,7 +192,7 @@ export async function POST(req: Request) {
 
 ### `sendExtraMessageFields` で追加データを渡す
 
-`sendExtraMessageFields` オプションを使うと、フロントエンドから Mastra に追加データを渡せます。このデータはサーバー側で `RuntimeContext` として利用できます。
+`sendExtraMessageFields` オプションを使うと、フロントエンドから Mastra に追加データを渡せます。このデータはサーバー側で `RequestContext` として利用できます。
 
 ```typescript {8,14-20} filename="app/test/chat-extra.tsx" showLineNumbers copy
 "use client";
@@ -229,32 +229,32 @@ export function ChatExtra() {
 }
 ```
 
-`sendExtraMessageFields` を使って送信されたリクエストは、標準的なサーバールートで処理されます。次の例では、カスタムデータを取り出して `RuntimeContext` インスタンスに設定する方法を示します。
+`sendExtraMessageFields` を使って送信されたリクエストは、標準的なサーバールートで処理されます。次の例では、カスタムデータを取り出して `RequestContext` インスタンスに設定する方法を示します。
 
 ```typescript {8,12} filename="app/api/chat-extra/route.ts" showLineNumbers copy
 import { mastra } from "../../../mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/runtime-context";
 
 export async function POST(req: Request) {
   const { messages, data } = await req.json();
   const myAgent = mastra.getAgent("weatherAgent");
 
-  const runtimeContext = new RuntimeContext();
+  const requestContext = new RequestContext();
 
   if (data) {
     for (const [key, value] of Object.entries(data)) {
-      runtimeContext.set(key, value);
+      requestContext.set(key, value);
     }
   }
 
-  const stream = await myAgent.stream(messages, { runtimeContext });
+  const stream = await myAgent.stream(messages, { requestContext });
   return stream.toDataStreamResponse();
 }
 ```
 
-### `server.middleware` での `runtimeContext` の扱い
+### `server.middleware` での `requestContext` の扱い
 
-サーバーのミドルウェアでカスタムデータを読み込み、`RuntimeContext` を設定することもできます。
+サーバーのミドルウェアでカスタムデータを読み込み、`RequestContext` を設定することもできます。
 
 ```typescript {6} filename="mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
@@ -264,7 +264,7 @@ export const mastra = new Mastra({
   server: {
     middleware: [
       async (c, next) => {
-        const runtimeContext = c.get("runtimeContext");
+        const requestContext = c.get("requestContext");
 
         if (c.req.method === "POST") {
           try {
@@ -273,7 +273,7 @@ export const mastra = new Mastra({
 
             if (body?.data) {
               for (const [key, value] of Object.entries(body.data)) {
-                runtimeContext.set(key, value);
+                requestContext.set(key, value);
               }
             }
           } catch {
@@ -286,7 +286,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> その後、ツール内から `runtimeContext` パラメータ経由でこのデータにアクセスできます。詳しくは [Agent Runtime Context のドキュメント](/docs/agents/runtime-context) を参照してください。
+> その後、ツール内から `requestContext` パラメータ経由でこのデータにアクセスできます。詳しくは [Agent Request Context のドキュメント](/docs/agents/runtime-context) を参照してください。
 
 ## ストリーミングデータ
 

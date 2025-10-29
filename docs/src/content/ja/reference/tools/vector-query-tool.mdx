@@ -486,7 +486,7 @@ const queryTool = createVectorQueryTool({
 さまざまなシナリオに対応するため、実行時にデータベース設定を上書きできます:
 
 ```typescript
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
@@ -500,8 +500,8 @@ const queryTool = createVectorQueryTool({
 });
 
 // 実行時にオーバーライド
-const runtimeContext = new RuntimeContext();
-runtimeContext.set('databaseConfig', {
+const requestContext = new RequestContext();
+requestContext.set('databaseConfig', {
   pinecone: {
     namespace: 'production'  // 本番用のネームスペースに切り替え
   }
@@ -509,7 +509,7 @@ runtimeContext.set('databaseConfig', {
 
 const response = await agent.generate(
   "Find information about deployment",
-  { runtimeContext }
+  { requestContext }
 );
 ```
 
@@ -532,34 +532,34 @@ const queryTool = createVectorQueryTool({
 ランタイムコンテキストを使う場合は、実行時にランタイムコンテキスト経由で必要なパラメータを指定します:
 
 ```typescript
-const runtimeContext = new RuntimeContext<{
+const requestContext = new RequestContext<{
   vectorStoreName: string;
   indexName: string;
   topK: number;
   filter: VectorFilter;
   databaseConfig: DatabaseConfig;
 }>();
-runtimeContext.set("vectorStoreName", "my-store");
-runtimeContext.set("indexName", "my-index");
-runtimeContext.set("topK", 5);
-runtimeContext.set("filter", { category: "docs" });
-runtimeContext.set("databaseConfig", {
+requestContext.set("vectorStoreName", "my-store");
+requestContext.set("indexName", "my-index");
+requestContext.set("topK", 5);
+requestContext.set("filter", { category: "docs" });
+requestContext.set("databaseConfig", {
   pinecone: { namespace: "runtime-namespace" }
 });
-runtimeContext.set("model", openai.embedding("text-embedding-3-small"));
+requestContext.set("model", openai.embedding("text-embedding-3-small"));
 
 const response = await agent.generate(
   "Find documentation from the knowledge base.",
   {
-    runtimeContext,
+    requestContext,
   },
 );
 ```
 
 ランタイムコンテキストの詳細は以下を参照してください:
 
-- [Agent Runtime Context](../../docs/agents/runtime-context.mdx)
-- [Tool Runtime Context](../../docs/tools-mcp/runtime-context.mdx)
+- [Agent Request Context](../../docs/agents/runtime-context.mdx)
+- [Tool Request Context](../../docs/tools-mcp/runtime-context.mdx)
 
 ## Mastra Server なしでの使用
 
@@ -567,7 +567,7 @@ const response = await agent.generate(
 
 ```typescript copy showLineNumbers filename="src/index.ts"
 import { openai } from "@ai-sdk/openai";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/runtime-context";
 import { createVectorQueryTool } from "@mastra/rag";
 import { PgVector } from "@mastra/pg";
 
@@ -582,10 +582,10 @@ const vectorQueryTool = createVectorQueryTool({
   model: openai.embedding("text-embedding-3-small"),
 });
 
-const runtimeContext = new RuntimeContext();
+const requestContext = new RequestContext();
 const queryResult = await vectorQueryTool.execute({
   context: { queryText: "foo", topK: 1 },
-  runtimeContext,
+  requestContext,
 });
 
 console.log(queryResult.sources);

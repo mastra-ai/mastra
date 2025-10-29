@@ -234,9 +234,9 @@ The workflow output includes the full execution lifecycle, showing the input and
 }
 ```
 
-## Using `RuntimeContext`
+## Using `RequestContext`
 
-Use [RuntimeContext](../server-db/runtime-context.mdx) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RequestContext](../server-db/runtime-context.mdx) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers
 export type UserTier = {
@@ -245,8 +245,8 @@ export type UserTier = {
 
 const step1 = createStep({
   // ...
-  execute: async ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+  execute: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     const maxResults = userTier === "enterprise"
       ? 1000
@@ -257,7 +257,7 @@ const step1 = createStep({
 });
 ```
 
-> See [Runtime Context](../server-db/runtime-context.mdx) for more information.
+> See [Request Context](../server-db/runtime-context.mdx) for more information.
 
 ## Testing with Mastra Playground
 

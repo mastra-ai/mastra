@@ -109,7 +109,7 @@ CopilotKitの概念、コンポーネント、高度な使用パターンにつ�
       import { registerCopilotKit } from "@ag-ui/mastra";
       import { weatherAgent } from "./agents/weather-agent";
 
-      type WeatherRuntimeContext = {
+      type WeatherRequestContext = {
         "user-id": string;
         "temperature-scale": "celsius" | "fahrenheit";
       };
@@ -123,12 +123,12 @@ CopilotKitの概念、コンポーネント、高度な使用パターンにつ�
             allowHeaders: ["*"]
           },
           apiRoutes: [
-            registerCopilotKit<WeatherRuntimeContext>({
+            registerCopilotKit<WeatherRequestContext>({
               path: "/copilotkit",
               resourceId: "weatherAgent",
-              setContext: (c, runtimeContext) => {
-                runtimeContext.set("user-id", c.req.header("X-User-ID") || "anonymous");
-                runtimeContext.set("temperature-scale", "celsius");
+              setContext: (c, requestContext) => {
+                requestContext.set("user-id", c.req.header("X-User-ID") || "anonymous");
+                requestContext.set("temperature-scale", "celsius");
               }
             })
           ]

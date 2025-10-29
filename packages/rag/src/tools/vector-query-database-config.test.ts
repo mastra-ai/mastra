@@ -1,4 +1,4 @@
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { vectorQuerySearch } from '../utils';
 import type { DatabaseConfig } from './types';
@@ -47,12 +47,12 @@ describe('createVectorQueryTool with database-specific configurations', () => {
       databaseConfig,
     });
 
-    const runtimeContext = new RuntimeContext();
+    const requestContext = new RequestContext();
 
     await tool.execute({
       context: { queryText: 'test query', topK: 5 },
       mastra: mockMastra as any,
-      runtimeContext,
+      requestContext,
     });
 
     expect(vectorQuerySearch).toHaveBeenCalledWith(
@@ -78,12 +78,12 @@ describe('createVectorQueryTool with database-specific configurations', () => {
       databaseConfig,
     });
 
-    const runtimeContext = new RuntimeContext();
+    const requestContext = new RequestContext();
 
     await tool.execute({
       context: { queryText: 'test query', topK: 5 },
       mastra: mockMastra as any,
-      runtimeContext,
+      requestContext,
     });
 
     expect(vectorQuerySearch).toHaveBeenCalledWith(
@@ -93,7 +93,7 @@ describe('createVectorQueryTool with database-specific configurations', () => {
     );
   });
 
-  it('should allow runtime context to override database configuration', async () => {
+  it('should allow request context to override database configuration', async () => {
     const initialConfig: DatabaseConfig = {
       pinecone: {
         namespace: 'initial-namespace',
@@ -113,13 +113,13 @@ describe('createVectorQueryTool with database-specific configurations', () => {
       databaseConfig: initialConfig,
     });
 
-    const runtimeContext = new RuntimeContext();
-    runtimeContext.set('databaseConfig', runtimeConfig);
+    const requestContext = new RequestContext();
+    requestContext.set('databaseConfig', runtimeConfig);
 
     await tool.execute({
       context: { queryText: 'test query', topK: 5 },
       mastra: mockMastra as any,
-      runtimeContext,
+      requestContext,
     });
 
     expect(vectorQuerySearch).toHaveBeenCalledWith(
@@ -137,12 +137,12 @@ describe('createVectorQueryTool with database-specific configurations', () => {
       // No databaseConfig provided
     });
 
-    const runtimeContext = new RuntimeContext();
+    const requestContext = new RequestContext();
 
     await tool.execute({
       context: { queryText: 'test query', topK: 5 },
       mastra: mockMastra as any,
-      runtimeContext,
+      requestContext,
     });
 
     expect(vectorQuerySearch).toHaveBeenCalledWith(
@@ -173,12 +173,12 @@ describe('createVectorQueryTool with database-specific configurations', () => {
       databaseConfig,
     });
 
-    const runtimeContext = new RuntimeContext();
+    const requestContext = new RequestContext();
 
     await tool.execute({
       context: { queryText: 'test query', topK: 5 },
       mastra: mockMastra as any,
-      runtimeContext,
+      requestContext,
     });
 
     expect(vectorQuerySearch).toHaveBeenCalledWith(

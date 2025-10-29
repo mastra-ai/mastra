@@ -6,7 +6,7 @@ import type { MastraMessageV2 } from '../agent/types';
 import { MastraError } from '../error';
 import type { StorageThreadType, MemoryConfig, MastraMessageV1 } from '../memory';
 import { MastraMemory } from '../memory/memory';
-import { RuntimeContext } from '../runtime-context';
+import { RequestContext } from '../runtime-context';
 import type { StorageGetMessagesArg, PaginationInfo, ThreadSortOptions } from '../storage';
 import { Mastra } from './index';
 
@@ -513,9 +513,9 @@ describe('Mastra ID Generator', () => {
   });
 
   describe('Dynamic Memory Creation', () => {
-    it('should pass Mastra instance and runtime context to dynamic memory function', async () => {
+    it('should pass Mastra instance and request context to dynamic memory function', async () => {
       let receivedMastraInstance: Mastra | undefined;
-      let receivedRuntimeContext: RuntimeContext | undefined;
+      let receivedRequestContext: RequestContext | undefined;
 
       const agent = new Agent({
         name: 'testAgent',
@@ -528,9 +528,9 @@ describe('Mastra ID Generator', () => {
             text: 'Test response',
           }),
         }),
-        memory: ({ runtimeContext, mastra: mastraInstance }) => {
+        memory: ({ requestContext, mastra: mastraInstance }) => {
           receivedMastraInstance = mastraInstance;
-          receivedRuntimeContext = runtimeContext;
+          receivedRequestContext = requestContext;
 
           // Verify the Mastra instance has the custom ID generator
           if (mastraInstance) {
@@ -551,16 +551,16 @@ describe('Mastra ID Generator', () => {
       if (!agentMemory) throw new Error('Memory not found');
 
       expect(receivedMastraInstance).toBe(mastra);
-      expect(receivedRuntimeContext).toBeDefined();
-      expect(typeof receivedRuntimeContext?.get).toBe('function');
-      expect(typeof receivedRuntimeContext?.set).toBe('function');
+      expect(receivedRequestContext).toBeDefined();
+      expect(typeof receivedRequestContext?.get).toBe('function');
+      expect(typeof receivedRequestContext?.set).toBe('function');
 
       const memoryId = agentMemory.generateId();
       expect(customIdGenerator).toHaveBeenCalled();
       expect(memoryId).toMatch(/^custom-id-\d+$/);
     });
 
-    it('should handle dynamic memory creation with runtime context data', async () => {
+    it('should handle dynamic memory creation with request context data', async () => {
       let contextUserId: string | undefined;
       let contextSessionId: string | undefined;
 
@@ -575,9 +575,9 @@ describe('Mastra ID Generator', () => {
             text: 'Context-aware response',
           }),
         }),
-        memory: ({ runtimeContext, mastra: mastraInstance }) => {
-          contextUserId = runtimeContext.get('userId');
-          contextSessionId = runtimeContext.get('sessionId');
+        memory: ({ requestContext, mastra: mastraInstance }) => {
+          contextUserId = requestContext.get('userId');
+          contextSessionId = requestContext.get('sessionId');
 
           // Verify access to custom ID generator
           expect(mastraInstance?.getIdGenerator()).toBe(customIdGenerator);
@@ -597,12 +597,12 @@ describe('Mastra ID Generator', () => {
         agents: { testAgent: agent },
       });
 
-      // Create runtime context with user data
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('userId', 'user-123');
-      runtimeContext.set('sessionId', 'session-456');
+      // Create request context with user data
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      requestContext.set('sessionId', 'session-456');
 
-      const agentMemory = await agent.getMemory({ runtimeContext });
+      const agentMemory = await agent.getMemory({ requestContext });
       if (!agentMemory) throw new Error('Memory not found');
 
       expect(contextUserId).toBe('user-123');
@@ -614,7 +614,7 @@ describe('Mastra ID Generator', () => {
       expect(memoryId).toMatch(/^custom-id-\d+$/);
     });
 
-    it('should create different memory instances for different runtime contexts', async () => {
+    it('should create different memory instances for different request contexts', async () => {
       const memoryInstances: MockMemory[] = [];
 
       const agent = new Agent({
@@ -628,8 +628,8 @@ describe('Mastra ID Generator', () => {
             text: 'Multi-context response',
           }),
         }),
-        memory: ({ runtimeContext, mastra: mastraInstance }) => {
-          const userId = runtimeContext.get('userId');
+        memory: ({ requestContext, mastra: mastraInstance }) => {
+          const userId = requestContext.get('userId');
           expect(mastraInstance?.getIdGenerator()).toBe(customIdGenerator);
 
           const memory = new MockMemory();
@@ -645,15 +645,15 @@ describe('Mastra ID Generator', () => {
         agents: { testAgent: agent },
       });
 
-      // Create different runtime contexts
-      const context1 = new RuntimeContext();
+      // Create different request contexts
+      const context1 = new RequestContext();
       context1.set('userId', 'user-1');
 
-      const context2 = new RuntimeContext();
+      const context2 = new RequestContext();
       context2.set('userId', 'user-2');
 
-      const memory1 = await agent.getMemory({ runtimeContext: context1 });
-      const memory2 = await agent.getMemory({ runtimeContext: context2 });
+      const memory1 = await agent.getMemory({ requestContext: context1 });
+      const memory2 = await agent.getMemory({ requestContext: context2 });
 
       expect(memory1).not.toBe(memory2);
       expect(memory1?.name).toBe('memory-user-1');
@@ -680,11 +680,11 @@ describe('Mastra ID Generator', () => {
             text: 'Test response',
           }),
         }),
-        memory: ({ runtimeContext, mastra: mastraInstance }) => {
+        memory: ({ requestContext, mastra: mastraInstance }) => {
           // Verify the ID generator is available even when memory creation might fail
           expect(mastraInstance?.getIdGenerator()).toBe(customIdGenerator);
 
-          const shouldFail = runtimeContext.get('shouldFail');
+          const shouldFail = requestContext.get('shouldFail');
           if (shouldFail) {
             throw new Error('Memory creation failed');
           }
@@ -699,15 +699,15 @@ describe('Mastra ID Generator', () => {
       });
 
       // Test successful memory creation
-      const successContext = new RuntimeContext();
+      const successContext = new RequestContext();
       successContext.set('shouldFail', false);
-      const successMemory = await agent.getMemory({ runtimeContext: successContext });
+      const successMemory = await agent.getMemory({ requestContext: successContext });
       expect(successMemory).toBeDefined();
 
       // Test failed memory creation
-      const failContext = new RuntimeContext();
+      const failContext = new RequestContext();
       failContext.set('shouldFail', true);
-      await expect(agent.getMemory({ runtimeContext: failContext })).rejects.toThrow('Memory creation failed');
+      await expect(agent.getMemory({ requestContext: failContext })).rejects.toThrow('Memory creation failed');
     });
   });
 

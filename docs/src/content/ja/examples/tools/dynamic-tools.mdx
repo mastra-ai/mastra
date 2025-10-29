@@ -13,7 +13,7 @@ description: Mastraでランタイムコンテキストを使用して動的ツ�
 
 ## ツールの作成
 
-`runtimeContext`を通じて提供される動的な値を使用して、為替レートデータを取得するツールを作成します。
+`requestContext`を通じて提供される動的な値を使用して、為替レートデータを取得するツールを作成します。
 
 ```typescript filename="src/mastra/tools/example-exchange-rates-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
@@ -28,8 +28,8 @@ export const getExchangeRatesTool = createTool({
     date: z.string(),
     rates: z.record(z.number())
   }),
-  execute: async ({ runtimeContext }) => {
-    const currency = runtimeContext.get("currency");
+  execute: async ({ requestContext }) => {
+    const currency = requestContext.get("currency");
 
     const response = await fetch(`https://api.frankfurter.dev/v1/latest?base=${currency}`);
 
@@ -46,19 +46,19 @@ export const getExchangeRatesTool = createTool({
 
 ## 使用例
 
-`set()`を使って`RuntimeContext`を設定し、`runtimeContext`を渡して`execute()`を呼び出します。
+`set()`を使って`RequestContext`を設定し、`requestContext`を渡して`execute()`を呼び出します。
 
 ```typescript filename="src/test-exchange-rate.ts" showLineNumbers copy
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/runtime-context";
 import { getExchangeRatesTool } from "../src/mastra/tools/example-exchange-rates-tool";
 
-const runtimeContext = new RuntimeContext();
+const requestContext = new RequestContext();
 
-runtimeContext.set("currency", "USD");
+requestContext.set("currency", "USD");
 
 const result = await getExchangeRatesTool.execute({
   context: null,
-  runtimeContext
+  requestContext
 });
 
 console.log(result);

@@ -5,7 +5,7 @@ import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import type { UIMessageWithMetadata } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 import { MockStore } from '@mastra/core/storage';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
@@ -514,7 +514,7 @@ describe('Agent Memory Tests', () => {
     const agentWithDynamicModelTitle = new Agent({
       name: 'title-on',
       instructions: 'Test agent with generateTitle on.',
-      model: ({ runtimeContext }) => openai(runtimeContext.get('model') as string),
+      model: ({ requestContext }) => openai(requestContext.get('model') as string),
       memory: memoryWithTitle,
       tools: { get_weather: weatherTool },
     });
@@ -560,7 +560,7 @@ describe('Agent Memory Tests', () => {
       expect(existingThread?.metadata).toMatchObject(metadata);
     });
 
-    it('should use generateTitle with runtime context', async () => {
+    it('should use generateTitle with request context', async () => {
       const threadId = randomUUID();
       const resourceId = 'gen-title-metadata';
       const metadata = { foo: 'bar', custom: 123 };
@@ -574,12 +574,12 @@ describe('Agent Memory Tests', () => {
       expect(thread).toBeDefined();
       expect(thread?.metadata).toMatchObject(metadata);
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('model', 'gpt-4o-mini');
+      const requestContext = new RequestContext();
+      requestContext.set('model', 'gpt-4o-mini');
       await agentWithDynamicModelTitle.generate([{ role: 'user', content: 'Hello, world!' }], {
         threadId,
         resourceId,
-        runtimeContext,
+        requestContext,
       });
 
       const existingThread = await memoryWithTitle.getThreadById({ threadId });

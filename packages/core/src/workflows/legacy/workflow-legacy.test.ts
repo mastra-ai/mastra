@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { Agent } from '../../agent';
 import { createLogger } from '../../logger';
 import { Mastra } from '../../mastra';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../runtime-context';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../storage';
 import { MockStore } from '../../storage/mock';
 import { createTool } from '../../tools';
@@ -4829,13 +4829,13 @@ describe('LegacyWorkflow', async () => {
   });
 
   describe('Dependency Injection', () => {
-    it('should inject runtimeContext dependencies into steps during run', async () => {
-      const runtimeContext = new RuntimeContext();
+    it('should inject requestContext dependencies into steps during run', async () => {
+      const requestContext = new RequestContext();
       const testValue = 'test-dependency';
-      runtimeContext.set('testKey', testValue);
+      requestContext.set('testKey', testValue);
 
-      const execute = vi.fn(({ runtimeContext }) => {
-        const value = runtimeContext.get('testKey');
+      const execute = vi.fn(({ requestContext }) => {
+        const value = requestContext.get('testKey');
         return { injectedValue: value };
       });
 
@@ -4845,28 +4845,28 @@ describe('LegacyWorkflow', async () => {
       workflow.step(step).commit();
 
       const run = workflow.createRun();
-      const result = await run.start({ runtimeContext });
+      const result = await run.start({ requestContext });
 
       // @ts-ignore
       expect(result.results.step1.output.injectedValue).toBe(testValue);
     });
 
-    it('should inject runtimeContext dependencies into steps during resume', async () => {
-      const runtimeContext = new RuntimeContext();
+    it('should inject requestContext dependencies into steps during resume', async () => {
+      const requestContext = new RequestContext();
       const testValue = 'test-dependency';
-      runtimeContext.set('testKey', testValue);
+      requestContext.set('testKey', testValue);
 
       const mastra = new Mastra({
         logger: false,
         storage,
       });
 
-      const execute = vi.fn(async ({ runtimeContext, suspend, context }) => {
+      const execute = vi.fn(async ({ requestContext, suspend, context }) => {
         if (!context.inputData.human) {
           await suspend();
         }
 
-        const value = runtimeContext.get('testKey');
+        const value = requestContext.get('testKey');
         return { injectedValue: value };
       });
 
@@ -4875,17 +4875,17 @@ describe('LegacyWorkflow', async () => {
       workflow.step(step).commit();
 
       const run = workflow.createRun();
-      await run.start({ runtimeContext });
+      await run.start({ requestContext });
 
-      const resumeRuntimeContext = new RuntimeContext();
-      resumeRuntimeContext.set('testKey', testValue + '2');
+      const resumeRequestContext = new RequestContext();
+      resumeRequestContext.set('testKey', testValue + '2');
 
       const result = await run.resume({
         stepId: 'step1',
         context: {
           human: true,
         },
-        runtimeContext: resumeRuntimeContext,
+        requestContext: resumeRequestContext,
       });
 
       // @ts-ignore

@@ -3,7 +3,7 @@
  * used in AI tracing and observability.
  */
 
-import type { RuntimeContext } from '../runtime-context';
+import type { RequestContext } from '../runtime-context';
 import { getSelectedAITracing } from './registry';
 import type {
   AISpan,
@@ -117,9 +117,9 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
   tracingPolicy?: TracingPolicy;
   tracingOptions?: TracingOptions;
   tracingContext?: TracingContext;
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
 }): AISpan<T> | undefined {
-  const { type, attributes, tracingContext, runtimeContext, tracingOptions, ...rest } = options;
+  const { type, attributes, tracingContext, requestContext, tracingOptions, ...rest } = options;
 
   const metadata = {
     ...(rest.metadata ?? {}),
@@ -138,7 +138,7 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
 
   // Otherwise, try to create a new root span
   const aiTracing = getSelectedAITracing({
-    runtimeContext: runtimeContext,
+    requestContext: requestContext,
   });
 
   return aiTracing?.startSpan<T>({
@@ -146,12 +146,12 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
     attributes,
     ...rest,
     metadata,
-    runtimeContext,
+    requestContext,
     tracingOptions,
     traceId: tracingOptions?.traceId,
     parentSpanId: tracingOptions?.parentSpanId,
     customSamplerOptions: {
-      runtimeContext,
+      requestContext,
       metadata,
     },
   });

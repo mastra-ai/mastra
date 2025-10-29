@@ -19,7 +19,7 @@ await agent.getDefaultStreamOptions();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
       defaultValue: "{}",
       description: "ランタイムコンテキストを含む任意の設定オブジェクト（省略可）。",
@@ -43,7 +43,7 @@ await agent.getDefaultStreamOptions();
 
 ```typescript copy
 await agent.getDefaultStreamOptions({
-  runtimeContext: new RuntimeContext()
+  requestContext: new RequestContext()
 });
 ```
 
@@ -52,10 +52,10 @@ await agent.getDefaultStreamOptions({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
+      defaultValue: "new RequestContext()",
       description: "依存性注入やコンテキスト情報のためのランタイムコンテキスト。",
     },
   ]}

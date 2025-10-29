@@ -19,7 +19,7 @@ await agent.getLLM();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext; model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel> }",
+      type: "{ requestContext?: RequestContext; model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel> }",
       isOptional: true,
       defaultValue: "{}",
       description: "ランタイムコンテキストと、モデルの上書き設定（任意）を含むオプションの設定オブジェクト。",
@@ -43,7 +43,7 @@ await agent.getLLM();
 
 ```typescript copy
 await agent.getLLM({
-  runtimeContext: new RuntimeContext(),
+  requestContext: new RequestContext(),
   model: openai('gpt-4')
 });
 ```
@@ -53,10 +53,10 @@ await agent.getLLM({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
+      defaultValue: "new RequestContext()",
       description: "依存性注入とコンテキスト情報のためのランタイムコンテキスト。",
     },
     {

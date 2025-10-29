@@ -144,7 +144,7 @@ const cloneRepositoryStep = createStep({
     mastra,
     getStepResult,
     getInitData,
-    runtimeContext,
+    requestContext,
   }) => {
     const git = simpleGit();
     // Skip cloning if repo already exists

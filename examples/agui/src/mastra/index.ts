@@ -2,11 +2,11 @@ import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { registerCopilotKit } from '@ag-ui/mastra';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 import { weatherAgent } from './agents';
 import { myNetwork } from './network';
 
-type WeatherRuntimeContext = {
+type WeatherRequestContext = {
   'user-id': string;
   'temperature-scale': 'celsius' | 'fahrenheit';
   location: string;
@@ -32,13 +32,13 @@ export const mastra = new Mastra({
       allowHeaders: ['*'],
     },
     apiRoutes: [
-      registerCopilotKit<WeatherRuntimeContext>({
+      registerCopilotKit<WeatherRequestContext>({
         path: '/copilotkit',
         resourceId: 'weatherAgent',
-        setContext: (c, runtimeContext) => {
-          runtimeContext.set('user-id', c.req.header('X-User-ID') || 'anonymous');
-          runtimeContext.set('temperature-scale', 'celsius');
-          runtimeContext.set('location', c.req.header('X-User-Location') || 'unknown');
+        setContext: (c, requestContext) => {
+          requestContext.set('user-id', c.req.header('X-User-ID') || 'anonymous');
+          requestContext.set('temperature-scale', 'celsius');
+          requestContext.set('location', c.req.header('X-User-Location') || 'unknown');
         },
       }),
     ],

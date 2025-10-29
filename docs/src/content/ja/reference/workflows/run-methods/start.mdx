@@ -36,8 +36,8 @@ const result = await run.start({
       isOptional: true,
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       description: "ワークフロー実行時に使用するランタイムコンテキストデータ",
       isOptional: true,
     },
@@ -69,18 +69,18 @@ const result = await run.start({
 ## 応用例
 
 ```typescript showLineNumbers copy
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/runtime-context";
 
 const run = await workflow.createRunAsync();
 
-const runtimeContext = new RuntimeContext();
-runtimeContext.set("variable", false);
+const requestContext = new RequestContext();
+requestContext.set("variable", false);
 
 const result = await run.start({
   inputData: {
     value: "initial data"
   },
-  runtimeContext
+  requestContext
 });
 ```
 

@@ -12,7 +12,7 @@ import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/type
 import type { IAction, IExecutionContext, MastraUnion } from '../action';
 import type { TracingContext } from '../ai-tracing';
 import type { Mastra } from '../mastra';
-import type { RuntimeContext } from '../runtime-context';
+import type { RequestContext } from '../runtime-context';
 import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
 import type { ToolStream } from './stream';
 
@@ -118,7 +118,7 @@ export interface ToolExecutionContext<
   TResumeSchema extends ZodLikeSchema = any,
 > extends IExecutionContext<TSchemaIn> {
   mastra?: MastraUnion;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   writer?: ToolStream<any>;
   tracingContext?: TracingContext;
   suspend?: (suspendPayload: InferZodLikeSchema<TSuspendSchema>) => Promise<any>;

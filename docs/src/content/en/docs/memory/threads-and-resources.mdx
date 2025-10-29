@@ -67,7 +67,7 @@ export const testAgent = new Agent({
 
 #### Dynamic model selection and instructions
 
-You can configure thread title generation dynamically by passing functions to `model` and `instructions`. These functions receive the `runtimeContext` object, allowing you to adapt title generation based on user-specific values.
+You can configure thread title generation dynamically by passing functions to `model` and `instructions`. These functions receive the `requestContext` object, allowing you to adapt title generation based on user-specific values.
 
 ```typescript {7-16} showLineNumbers
 export const testAgent = new Agent({
@@ -76,12 +76,12 @@ export const testAgent = new Agent({
     options: {
       threads: {
         generateTitle: {
-          model: ({ runtimeContext }) => {
-            const userTier = runtimeContext.get("userTier");
+          model: ({ requestContext }) => {
+            const userTier = requestContext.get("userTier");
             return userTier === "premium" ? openai("gpt-4.1") : openai("gpt-4.1-nano");
           },
-          instructions: ({ runtimeContext }) => {
-            const language = runtimeContext.get("userLanguage") || "English";
+          instructions: ({ requestContext }) => {
+            const language = requestContext.get("userLanguage") || "English";
             return `Generate a concise, engaging title in ${language} based on the user's first message.`;
           }
         }

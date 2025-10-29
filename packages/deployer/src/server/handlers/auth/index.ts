@@ -56,7 +56,7 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
     }
 
     // Store user in context
-    c.get('runtimeContext').set('user', user);
+    c.get('requestContext').set('user', user);
 
     return next();
   } catch (err) {
@@ -92,7 +92,7 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
     return next();
   }
 
-  const user = c.get('runtimeContext').get('user');
+  const user = c.get('requestContext').get('user');
 
   if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
     try {

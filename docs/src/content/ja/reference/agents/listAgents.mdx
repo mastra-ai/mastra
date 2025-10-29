@@ -19,7 +19,7 @@ await agent.listAgents();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
       defaultValue: "{}",
       description: "ランタイムコンテキストを含むオプションの設定オブジェクト。",
@@ -42,10 +42,10 @@ await agent.listAgents();
 ## さらに進んだ使用例
 
 ```typescript copy
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/runtime-context";
 
 await agent.listAgents({
-  runtimeContext: new RuntimeContext()
+  requestContext: new RequestContext()
 });
 ```
 
@@ -54,10 +54,10 @@ await agent.listAgents({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
+      defaultValue: "new RequestContext()",
       description: "依存性注入やコンテキスト情報のためのランタイムコンテキスト。",
     },
   ]}

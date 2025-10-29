@@ -23,7 +23,7 @@ import { Memory } from '@mastra/memory';
 import { openai } from '@ai-sdk/openai';
 import { LibSQLStore } from '@mastra/libsql';
 import { z } from 'zod';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 
 const memory = new Memory({
   storage: new LibSQLStore({
@@ -119,12 +119,12 @@ const network = new NewAgentNetwork({
   memory: memory,
 });
 
-const runtimeContext = new RuntimeContext();
+const requestContext = new RequestContext();
 
 // これは agent1 を呼び出します。ワークフローは個別の都市向けに設計されているため、ルーティングエージェントによる最適なプリミティブは汎用リサーチの agent1 になります。
-console.log(await network.generate('What are the biggest cities in France? How are they like?', { runtimeContext }));
+console.log(await network.generate('What are the biggest cities in France? How are they like?', { requestContext }));
 // これは workflow1 を呼び出します。個別の都市を調査する場合、ルーティングエージェントによれば最も適したプリミティブだからです。
-console.log(await network.generate('Tell me more about Paris', { runtimeContext }));
+console.log(await network.generate('Tell me more about Paris', { requestContext }));
 ```
 
 

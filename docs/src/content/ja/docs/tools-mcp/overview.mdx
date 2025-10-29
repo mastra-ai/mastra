@@ -95,16 +95,16 @@ Mastra Dev Server を起動している状態で、ブラウザから [http://lo
 `.execute()` を使ってツールを呼び出します。
 
 ```typescript filename="src/test-tool.ts" showLineNumbers copy
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/runtime-context";
 import { testTool } from "./mastra/tools/test-tool";
 
-const runtimeContext = new RuntimeContext();
+const requestContext = new RequestContext();
 
 const result = await testTool.execute({
   context: {
     value: "foo"
   },
-  runtimeContext
+  requestContext
 });
 
 console.log(result);

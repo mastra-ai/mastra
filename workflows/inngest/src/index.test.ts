@@ -5,7 +5,7 @@ import { serve } from '@hono/node-server';
 import { realtimeMiddleware } from '@inngest/realtime/middleware';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 import type { MastraScorer } from '@mastra/core/scores';
 import { createScorer, runExperiment } from '@mastra/core/scores';
 import { createTool } from '@mastra/core/tools';
@@ -7085,7 +7085,7 @@ describe('MastraInngestWorkflow', () => {
 
   // TODO: can we support this on inngest?
   describe.skip('Dependency Injection', () => {
-    it('should inject runtimeContext dependencies into steps during run', async ctx => {
+    it('should inject requestContext dependencies into steps during run', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -7093,14 +7093,14 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const runtimeContext = new RuntimeContext();
+      const requestContext = new RequestContext();
       const testValue = 'test-dependency';
-      runtimeContext.set('testKey', testValue);
+      requestContext.set('testKey', testValue);
 
       const step = createStep({
         id: 'step1',
-        execute: async ({ runtimeContext }) => {
-          const value = runtimeContext.get('testKey');
+        execute: async ({ requestContext }) => {
+          const value = requestContext.get('testKey');
           return { injectedValue: value };
         },
         inputSchema: z.object({}),
@@ -7136,7 +7136,7 @@ describe('MastraInngestWorkflow', () => {
       await resetInngest();
 
       const run = await workflow.createRunAsync();
-      const result = await run.start({ runtimeContext });
+      const result = await run.start({ requestContext });
 
       srv.close();
 
@@ -7144,7 +7144,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps.step1.output.injectedValue).toBe(testValue);
     });
 
-    it.skip('should inject runtimeContext dependencies into steps during resume', async ctx => {
+    it.skip('should inject requestContext dependencies into steps during resume', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -7156,21 +7156,21 @@ describe('MastraInngestWorkflow', () => {
         url: 'file::memory:',
       });
 
-      const runtimeContext = new RuntimeContext();
+      const requestContext = new RequestContext();
       const testValue = 'test-dependency';
-      runtimeContext.set('testKey', testValue);
+      requestContext.set('testKey', testValue);
 
       const mastra = new Mastra({
         logger: false,
         storage: initialStorage,
       });
 
-      const execute = vi.fn(async ({ runtimeContext, suspend, resumeData }) => {
+      const execute = vi.fn(async ({ requestContext, suspend, resumeData }) => {
         if (!resumeData?.human) {
           await suspend();
         }
 
-        const value = runtimeContext.get('testKey');
+        const value = requestContext.get('testKey');
         return { injectedValue: value };
       });
 
@@ -7189,24 +7189,24 @@ describe('MastraInngestWorkflow', () => {
       workflow.then(step).commit();
 
       const run = await workflow.createRunAsync();
-      await run.start({ runtimeContext });
+      await run.start({ requestContext });
 
-      const resumeruntimeContext = new RuntimeContext();
-      resumeruntimeContext.set('testKey', testValue + '2');
+      const resumerequestContext = new RequestContext();
+      resumerequestContext.set('testKey', testValue + '2');
 
       const result = await run.resume({
         step: step,
         resumeData: {
           human: true,
         },
-        runtimeContext: resumeruntimeContext,
+        requestContext: resumerequestContext,
       });
 
       // @ts-ignore
       expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
     });
 
-    it('should have access to runtimeContext from before suspension during workflow resume', async ctx => {
+    it('should have access to requestContext from before suspension during workflow resume', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -7242,8 +7242,8 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({
           value: z.number(),
         }),
-        execute: async ({ inputData, runtimeContext }) => {
-          runtimeContext.set('testKey', testValue);
+        execute: async ({ inputData, requestContext }) => {
+          requestContext.set('testKey', testValue);
           return {
             value: inputData.value + 1,
           };
@@ -7262,8 +7262,8 @@ describe('MastraInngestWorkflow', () => {
             id: 'final',
             inputSchema: z.object({ value: z.number() }),
             outputSchema: z.object({ value: z.number() }),
-            execute: async ({ inputData, runtimeContext }) => {
-              const testKey = runtimeContext.get('testKey');
+            execute: async ({ inputData, requestContext }) => {
+              const testKey = requestContext.get('testKey');
               expect(testKey).toBe(testValue);
               return { value: inputData.value };
             },
@@ -7289,7 +7289,7 @@ describe('MastraInngestWorkflow', () => {
       expect(resumeResult.status).toBe('success');
     });
 
-    it('should not show removed runtimeContext values in subsequent steps', async ctx => {
+    it('should not show removed requestContext values in subsequent steps', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -7303,7 +7303,7 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({ value: z.number() }),
         resumeSchema: z.object({ value: z.number() }),
         suspendSchema: z.object({ message: z.string() }),
-        execute: async ({ inputData, resumeData, suspend, runtimeContext }) => {
+        execute: async ({ inputData, resumeData, suspend, requestContext }) => {
           const finalValue = (resumeData?.value ?? 0) + inputData.value;
 
           if (!resumeData?.value || finalValue < 10) {
@@ -7312,10 +7312,10 @@ describe('MastraInngestWorkflow', () => {
             });
           }
 
-          const testKey = runtimeContext.get('testKey');
+          const testKey = requestContext.get('testKey');
           expect(testKey).toBe(testValue);
 
-          runtimeContext.delete('testKey');
+          requestContext.delete('testKey');
 
           return { value: finalValue };
         },
@@ -7329,8 +7329,8 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({
           value: z.number(),
         }),
-        execute: async ({ inputData, runtimeContext }) => {
-          runtimeContext.set('testKey', testValue);
+        execute: async ({ inputData, requestContext }) => {
+          requestContext.set('testKey', testValue);
           return {
             value: inputData.value + 1,
           };
@@ -7349,8 +7349,8 @@ describe('MastraInngestWorkflow', () => {
             id: 'final',
             inputSchema: z.object({ value: z.number() }),
             outputSchema: z.object({ value: z.number() }),
-            execute: async ({ inputData, runtimeContext }) => {
-              const testKey = runtimeContext.get('testKey');
+            execute: async ({ inputData, requestContext }) => {
+              const testKey = requestContext.get('testKey');
               expect(testKey).toBeUndefined();
               return { value: inputData.value };
             },

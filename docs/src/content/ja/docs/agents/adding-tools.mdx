@@ -104,7 +104,7 @@ const result = await agent.generate("What is the weather in San Francisco?", {
 
 ## リクエスト/ユーザー固有の変数の注入
 
-ツールとワークフローの依存性注入をサポートしています。`generate`または`stream`関数呼び出しに直接runtimeContextを渡すか、[サーバーミドルウェア](/docs/deployment/server#Middleware)を使用して注入することができます。
+ツールとワークフローの依存性注入をサポートしています。`generate`または`stream`関数呼び出しに直接requestContextを渡すか、[サーバーミドルウェア](/docs/deployment/server#Middleware)を使用して注入することができます。
 
 以下は、温度スケールを華氏と摂氏の間で変更する例です：
 
@@ -120,8 +120,8 @@ export const agent = new Agent({
       id: "Get Weather Information",
       description: "Get the weather in a location",
       inputSchema: z.object({ location: z.string() }),
-      execute: async ({ context: { location }, runtimeContext }) => {
-        const scale = runtimeContext.get("temperature-scale");
+      execute: async ({ context: { location }, requestContext }) => {
+        const scale = requestContext.get("temperature-scale");
 
         const result = await fetch(
           `https://api.weatherapi.com/v1/current.json?q=${location}`,
@@ -141,13 +141,13 @@ export const agent = new Agent({
 ```typescript
 import { agent } from "./agents/weather";
 
-type MyRuntimeContext = {"temperature-scale": "celsius" | "fahrenheit"}
+type MyRequestContext = {"temperature-scale": "celsius" | "fahrenheit"}
 
-const runtimeContext = new RuntimeContext<MyRuntimeContext>();
-runtimeContext.set("temperature-scale", "celsius");
+const requestContext = new RequestContext<MyRequestContext>();
+requestContext.set("temperature-scale", "celsius");
 
 const result = await agent.generate("What is the weather in San Francisco?", {
-  runtimeContext,
+  requestContext,
 });
 ```
 

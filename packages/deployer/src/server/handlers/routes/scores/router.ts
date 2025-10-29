@@ -183,7 +183,7 @@ export function scoresRouter(bodyLimitOptions: BodyLimitOptions) {
                 entity: { type: 'object' },
                 metadata: { type: 'object' },
                 additionalLLMContext: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                requestContext: { type: 'object' },
                 resourceId: { type: 'string' },
                 threadId: { type: 'string' },
                 traceId: { type: 'string' },

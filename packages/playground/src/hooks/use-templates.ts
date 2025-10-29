@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { TemplateInstallationRequest } from '@mastra/client-js';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 import { useMastraClient } from '@mastra/react';
 import { useState } from 'react';
 
@@ -618,9 +618,9 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           const template = client.getAgentBuilderAction('merge-template');
-          const runtimeContext = new RuntimeContext();
-          runtimeContext.set('selectedModel', selectedModel);
-          const stream = await template.stream({ inputData, runtimeContext }, runId);
+          const requestContext = new RequestContext();
+          requestContext.set('selectedModel', selectedModel);
+          const stream = await template.stream({ inputData, requestContext }, runId);
           await processStream(stream, runId);
 
           // If we get here, the stream completed successfully

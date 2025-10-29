@@ -1,15 +1,15 @@
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 import { describe, expect, it } from 'vitest';
-import { parseClientRuntimeContext, base64RuntimeContext } from './index';
+import { parseClientRequestContext, base64RequestContext } from './index';
 
-describe('Runtime Context Utils', () => {
-  describe('parseClientRuntimeContext', () => {
-    it('should parse RuntimeContext instance to plain object', () => {
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('userId', '123');
-      runtimeContext.set('sessionId', 'abc');
+describe('Request Context Utils', () => {
+  describe('parseClientRequestContext', () => {
+    it('should parse RequestContext instance to plain object', () => {
+      const requestContext = new RequestContext();
+      requestContext.set('userId', '123');
+      requestContext.set('sessionId', 'abc');
 
-      const result = parseClientRuntimeContext(runtimeContext);
+      const result = parseClientRequestContext(requestContext);
 
       expect(result).toEqual({
         userId: '123',
@@ -18,79 +18,79 @@ describe('Runtime Context Utils', () => {
     });
 
     it('should return plain object unchanged', () => {
-      const runtimeContext = { userId: '123', sessionId: 'abc' };
+      const requestContext = { userId: '123', sessionId: 'abc' };
 
-      const result = parseClientRuntimeContext(runtimeContext);
+      const result = parseClientRequestContext(requestContext);
 
-      expect(result).toEqual(runtimeContext);
+      expect(result).toEqual(requestContext);
     });
 
     it('should return undefined for undefined input', () => {
-      const result = parseClientRuntimeContext(undefined);
+      const result = parseClientRequestContext(undefined);
 
       expect(result).toBeUndefined();
     });
 
     it('should return undefined for null input', () => {
-      const result = parseClientRuntimeContext(null as any);
+      const result = parseClientRequestContext(null as any);
 
       expect(result).toBeUndefined();
     });
   });
 
-  describe('base64RuntimeContext', () => {
+  describe('base64RequestContext', () => {
     it('should encode object to base64', () => {
-      const runtimeContext = { userId: '123', sessionId: 'abc' };
-      const expected = btoa(JSON.stringify(runtimeContext));
+      const requestContext = { userId: '123', sessionId: 'abc' };
+      const expected = btoa(JSON.stringify(requestContext));
 
-      const result = base64RuntimeContext(runtimeContext);
+      const result = base64RequestContext(requestContext);
 
       expect(result).toBe(expected);
     });
 
     it('should handle complex objects', () => {
-      const runtimeContext = {
+      const requestContext = {
         user: { id: '123', name: 'John' },
         session: { id: 'abc', expires: '2024-12-31' },
         metadata: { source: 'web', version: '1.0' },
       };
-      const expected = btoa(JSON.stringify(runtimeContext));
+      const expected = btoa(JSON.stringify(requestContext));
 
-      const result = base64RuntimeContext(runtimeContext);
+      const result = base64RequestContext(requestContext);
 
       expect(result).toBe(expected);
     });
 
     it('should return undefined for undefined input', () => {
-      const result = base64RuntimeContext(undefined);
+      const result = base64RequestContext(undefined);
 
       expect(result).toBeUndefined();
     });
 
     it('should return undefined for null input', () => {
-      const result = base64RuntimeContext(null as any);
+      const result = base64RequestContext(null as any);
 
       expect(result).toBeUndefined();
     });
 
     it('should handle empty object', () => {
-      const runtimeContext = {};
-      const expected = btoa(JSON.stringify(runtimeContext));
+      const requestContext = {};
+      const expected = btoa(JSON.stringify(requestContext));
 
-      const result = base64RuntimeContext(runtimeContext);
+      const result = base64RequestContext(requestContext);
 
       expect(result).toBe(expected);
     });
   });
 
   describe('Integration tests', () => {
-    it('should work together with RuntimeContext instance', () => {
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('tenantId', 'tenant-456');
-      runtimeContext.set('orgId', 'org-789');
+    it('should work together with RequestContext instance', () => {
+      const requestContext = new RequestContext();
+      requestContext.set('tenantId', 'tenant-456');
+      requestContext.set('orgId', 'org-789');
 
-      const parsed = parseClientRuntimeContext(runtimeContext);
-      const encoded = base64RuntimeContext(parsed);
+      const parsed = parseClientRequestContext(requestContext);
+      const encoded = base64RequestContext(parsed);
 
       expect(parsed).toEqual({
         tenantId: 'tenant-456',
@@ -107,13 +107,13 @@ describe('Runtime Context Utils', () => {
     });
 
     it('should work together with plain object', () => {
-      const runtimeContext = { userId: '123', role: 'admin' };
+      const requestContext = { userId: '123', role: 'admin' };
 
-      const parsed = parseClientRuntimeContext(runtimeContext);
-      const encoded = base64RuntimeContext(parsed);
+      const parsed = parseClientRequestContext(requestContext);
+      const encoded = base64RequestContext(parsed);
 
-      expect(parsed).toEqual(runtimeContext);
-      expect(encoded).toBe(btoa(JSON.stringify(runtimeContext)));
+      expect(parsed).toEqual(requestContext);
+      expect(encoded).toBe(btoa(JSON.stringify(requestContext)));
     });
   });
 });

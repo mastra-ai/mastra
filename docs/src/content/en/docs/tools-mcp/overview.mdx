@@ -56,9 +56,9 @@ When creating tools, keep tool descriptions simple and focused on **what** the t
 
 To make tools available to an agent, you configure them in the agent's definition. Mentioning available tools and their general purpose in the agent's system prompt can also improve tool usage. For detailed steps and examples, see the guide on [Using Tools and MCP with Agents](/docs/agents/using-tools-and-mcp#add-tools-to-an-agent).
 
-## Using `RuntimeContext`
+## Using `RequestContext`
 
-Use [RuntimeContext](../server-db/runtime-context.mdx) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RequestContext](../server-db/runtime-context.mdx) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers
 export type UserTier = {
@@ -75,8 +75,8 @@ const baseTools =  () => {
 
 export const testTool = createTool({
   // ...
-  execute: async ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+  execute: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     return userTier === "enterprise"
       ? advancedTools
@@ -85,7 +85,7 @@ export const testTool = createTool({
 });
 ```
 
-> See [Runtime Context](../server-db/runtime-context.mdx) for more information.
+> See [Request Context](../server-db/runtime-context.mdx) for more information.
 
 ## Testing with Mastra Playground
 

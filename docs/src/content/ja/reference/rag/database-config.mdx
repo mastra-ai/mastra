@@ -183,7 +183,7 @@ whereDocument: { "$contains": "API documentation" }
     ### ランタイム設定のオーバーライド
 
     ```typescript
-    import { RuntimeContext } from '@mastra/core/runtime-context';
+    import { RequestContext } from '@mastra/core/runtime-context';
     
     // 初期設定
     const vectorTool = createVectorQueryTool({
@@ -198,8 +198,8 @@ whereDocument: { "$contains": "API documentation" }
     });
     
     // ランタイムでオーバーライド
-    const runtimeContext = new RuntimeContext();
-    runtimeContext.set('databaseConfig', {
+    const requestContext = new RequestContext();
+    requestContext.set('databaseConfig', {
       pinecone: {
         namespace: 'production'
       }
@@ -208,7 +208,7 @@ whereDocument: { "$contains": "API documentation" }
     await vectorTool.execute({
       context: { queryText: 'search query' },
       mastra,
-      runtimeContext
+      requestContext
     });
     ```
   </Tabs.Tab>
