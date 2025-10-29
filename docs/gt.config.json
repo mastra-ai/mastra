@@ -12,6 +12,9 @@
     }
   },
   "locales": ["ja"],
+  "options": {
+    "experimentalClearLocaleDirs": true
+  },
   "projectId": "48751091-773e-4a3e-8c83-5c3906117b30",
   "_versionId": "371f5f879726a6c6776922866652d36615e3fa18982cd0b7b61181cc29643cbe"
 }
