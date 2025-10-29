@@ -1,13 +1,13 @@
 ---
-title: "Reference: Keyword Coverage | Metrics | Evals | Mastra Docs"
+title: "Reference: KeywordCoverageMetric | Evals | Mastra Docs"
 description: Documentation for the Keyword Coverage Metric in Mastra, which evaluates how well LLM outputs cover important keywords from the input.
 ---
 
-import { ScorerCallout } from '@/components/scorer-callout'
-
 # KeywordCoverageMetric
 
-<ScorerCallout />
+:::info Scorers
+This documentation refers to the legacy evals API. For the latest scorer features, see [Scorers](/docs/scorers/overview).
+:::
 
 The `KeywordCoverageMetric` class evaluates how well an LLM's output covers the important keywords from the input. It analyzes keyword presence and matches while ignoring common words and stop words.
 
@@ -98,7 +98,6 @@ The metric evaluates keyword coverage by matching keywords with the following fe
 ### Scoring Process
 
 1. Processes keywords from input and output:
-
    - Filters out common words and stop words
    - Normalizes case and word forms
    - Handles special terms and compounds

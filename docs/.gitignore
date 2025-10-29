@@ -1,55 +1,21 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
+# Dependencies
 /node_modules
-/.pnp
-.pnp.js
-.yarn/install-state.gz
 
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
+# Production
 /build
 
-# misc
-.DS_Store
-*.pem
+# Generated files
+.docusaurus
+.cache-loader
 
-# debug
+# Misc
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# star count
-githubStarCount.json
-
-# local env files
-.env*.local
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-public/githubStarCount.json
-#pagefind
-_pagefind/
-
-robots.txt
-
-# llms.txt
-llms.txt
-llms-full.txt
-
-#Sitemap
-sitemap.xml
-
-# eval-context
-context
+static/llms.txt

@@ -7,9 +7,14 @@ import {
   startAgentBuilderActionRunHandler as getOriginalStartAgentBuilderActionRunHandler,
   watchAgentBuilderActionHandler as getOriginalWatchAgentBuilderActionHandler,
   streamAgentBuilderActionHandler as getOriginalStreamAgentBuilderActionHandler,
+  streamLegacyAgentBuilderActionHandler as getOriginalStreamLegacyAgentBuilderActionHandler,
   streamVNextAgentBuilderActionHandler as getOriginalStreamVNextAgentBuilderActionHandler,
+  observeStreamLegacyAgentBuilderActionHandler as getOriginalObserveStreamLegacyAgentBuilderActionHandler,
+  observeStreamAgentBuilderActionHandler as getOriginalObserveStreamAgentBuilderActionHandler,
+  observeStreamVNextAgentBuilderActionHandler as getOriginalObserveStreamVNextAgentBuilderActionHandler,
   resumeAsyncAgentBuilderActionHandler as getOriginalResumeAsyncAgentBuilderActionHandler,
   resumeAgentBuilderActionHandler as getOriginalResumeAgentBuilderActionHandler,
+  resumeStreamAgentBuilderActionHandler as getOriginalResumeStreamAgentBuilderActionHandler,
   getAgentBuilderActionRunsHandler as getOriginalGetAgentBuilderActionRunsHandler,
   getAgentBuilderActionRunByIdHandler as getOriginalGetAgentBuilderActionRunByIdHandler,
   getAgentBuilderActionRunExecutionResultHandler as getOriginalGetAgentBuilderActionRunExecutionResultHandler,
@@ -76,7 +81,7 @@ export async function startAsyncAgentBuilderActionHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const runtimeContext = c.get('runtimeContext');
     const actionId = c.req.param('actionId');
-    const { inputData } = await c.req.json();
+    const { inputData, tracingOptions } = await c.req.json();
     const runId = c.req.query('runId');
 
     disableHotReload();
@@ -86,6 +91,7 @@ export async function startAsyncAgentBuilderActionHandler(c: Context) {
       actionId,
       runId,
       inputData,
+      tracingOptions,
     });
 
     enableHotReload();
@@ -101,7 +107,7 @@ export async function startAgentBuilderActionRunHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const runtimeContext = c.get('runtimeContext');
     const actionId = c.req.param('actionId');
-    const { inputData } = await c.req.json();
+    const { inputData, tracingOptions } = await c.req.json();
     const runId = c.req.query('runId');
 
     await getOriginalStartAgentBuilderActionRunHandler({
@@ -110,6 +116,7 @@ export async function startAgentBuilderActionRunHandler(c: Context) {
       actionId,
       runId,
       inputData,
+      tracingOptions,
     });
 
     return c.json({ message: 'Agent builder action run started' });
@@ -170,7 +177,7 @@ export async function streamAgentBuilderActionHandler(c: Context) {
     const runtimeContext = c.get('runtimeContext');
     const logger = mastra.getLogger();
     const actionId = c.req.param('actionId');
-    const { inputData } = await c.req.json();
+    const { inputData, tracingOptions } = await c.req.json();
     const runId = c.req.query('runId');
 
     c.header('Transfer-Encoding', 'chunked');
@@ -185,9 +192,10 @@ export async function streamAgentBuilderActionHandler(c: Context) {
             runId,
             inputData,
             runtimeContext,
+            tracingOptions,
           });
 
-          const reader = result.stream.getReader();
+          const reader = result.getReader();
 
           stream.onAbort(() => {
             void reader.cancel('request aborted');
@@ -219,7 +227,7 @@ export async function streamVNextAgentBuilderActionHandler(c: Context) {
     const runtimeContext = c.get('runtimeContext');
     const logger = mastra.getLogger();
     const actionId = c.req.param('actionId');
-    const { inputData } = await c.req.json();
+    const { inputData, closeOnSuspend, tracingOptions } = await c.req.json();
     const runId = c.req.query('runId');
 
     c.header('Transfer-Encoding', 'chunked');
@@ -235,6 +243,8 @@ export async function streamVNextAgentBuilderActionHandler(c: Context) {
             runId,
             inputData,
             runtimeContext,
+            closeOnSuspend,
+            tracingOptions,
           });
 
           const reader = result.getReader();
@@ -268,7 +278,7 @@ export async function resumeAsyncAgentBuilderActionHandler(c: Context) {
     const runtimeContext = c.get('runtimeContext');
     const actionId = c.req.param('actionId');
     const runId = c.req.query('runId');
-    const { step, resumeData } = await c.req.json();
+    const { step, resumeData, tracingOptions } = await c.req.json();
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume action' });
@@ -281,6 +291,7 @@ export async function resumeAsyncAgentBuilderActionHandler(c: Context) {
       actionId,
       runId,
       body: { step, resumeData },
+      tracingOptions,
     });
 
     enableHotReload();
@@ -297,7 +308,7 @@ export async function resumeAgentBuilderActionHandler(c: Context) {
     const runtimeContext = c.get('runtimeContext');
     const actionId = c.req.param('actionId');
     const runId = c.req.query('runId');
-    const { step, resumeData } = await c.req.json();
+    const { step, resumeData, tracingOptions } = await c.req.json();
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume action' });
@@ -310,6 +321,7 @@ export async function resumeAgentBuilderActionHandler(c: Context) {
       actionId,
       runId,
       body: { step, resumeData },
+      tracingOptions,
     });
 
     enableHotReload();
@@ -414,5 +426,257 @@ export async function sendAgentBuilderActionRunEventHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error sending agent builder action run event');
+  }
+}
+
+export async function streamLegacyAgentBuilderActionHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const runtimeContext = c.get('runtimeContext');
+    const logger = mastra.getLogger();
+    const actionId = c.req.param('actionId');
+    const { inputData, tracingOptions } = await c.req.json();
+    const runId = c.req.query('runId');
+
+    c.header('Transfer-Encoding', 'chunked');
+    return stream(
+      c,
+      async stream => {
+        try {
+          disableHotReload();
+          const result = await getOriginalStreamLegacyAgentBuilderActionHandler({
+            mastra,
+            actionId,
+            runId,
+            inputData,
+            runtimeContext,
+            tracingOptions,
+          });
+
+          const reader = result?.stream?.getReader();
+
+          if (!reader) {
+            throw new Error('No reader available from legacy stream');
+          }
+
+          stream.onAbort(() => {
+            void reader.cancel('request aborted');
+          });
+
+          let chunkResult;
+          while ((chunkResult = await reader.read()) && !chunkResult.done) {
+            await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
+          }
+        } catch (err) {
+          logger.error('Error in action legacy stream: ' + ((err as Error)?.message ?? 'Unknown error'));
+        }
+        await stream.close();
+        enableHotReload();
+      },
+      async err => {
+        logger.error('Error in action legacy stream: ' + err?.message);
+      },
+    );
+  } catch (error) {
+    enableHotReload();
+    return handleError(error, 'Error streaming legacy agent builder action');
+  }
+}
+
+export async function observeStreamLegacyAgentBuilderActionHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const logger = mastra.getLogger();
+    const actionId = c.req.param('actionId');
+    const runId = c.req.query('runId');
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to observe stream' });
+    }
+
+    c.header('Transfer-Encoding', 'chunked');
+
+    return stream(c, async stream => {
+      try {
+        disableHotReload();
+        const result = await getOriginalObserveStreamLegacyAgentBuilderActionHandler({
+          mastra,
+          actionId,
+          runId,
+        });
+
+        const reader = result?.getReader();
+
+        if (!reader) {
+          throw new Error('No reader available from observe stream');
+        }
+
+        stream.onAbort(() => {
+          void reader.cancel('request aborted');
+        });
+
+        let chunkResult;
+        while ((chunkResult = await reader.read()) && !chunkResult.done) {
+          await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
+        }
+        enableHotReload();
+      } catch (err) {
+        enableHotReload();
+        logger.error('Error in observe legacy stream: ' + ((err as Error)?.message ?? 'Unknown error'));
+      }
+    });
+  } catch (error) {
+    enableHotReload();
+    return handleError(error, 'Error observing legacy stream for agent builder action');
+  }
+}
+
+export async function observeStreamAgentBuilderActionHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const logger = mastra.getLogger();
+    const actionId = c.req.param('actionId');
+    const runId = c.req.query('runId');
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to observe stream' });
+    }
+
+    c.header('Transfer-Encoding', 'chunked');
+
+    return stream(c, async stream => {
+      try {
+        disableHotReload();
+        const result = await getOriginalObserveStreamAgentBuilderActionHandler({
+          mastra,
+          actionId,
+          runId,
+        });
+
+        const reader = result?.getReader();
+
+        if (!reader) {
+          throw new Error('No reader available from observe stream');
+        }
+
+        stream.onAbort(() => {
+          void reader.cancel('request aborted');
+        });
+
+        let chunkResult;
+        while ((chunkResult = await reader.read()) && !chunkResult.done) {
+          await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
+        }
+        enableHotReload();
+      } catch (err) {
+        enableHotReload();
+        logger.error('Error in observe stream: ' + ((err as Error)?.message ?? 'Unknown error'));
+      }
+    });
+  } catch (error) {
+    enableHotReload();
+    return handleError(error, 'Error observing stream for agent builder action');
+  }
+}
+
+export async function observeStreamVNextAgentBuilderActionHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const logger = mastra.getLogger();
+    const actionId = c.req.param('actionId');
+    const runId = c.req.query('runId');
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to observe stream' });
+    }
+
+    c.header('Transfer-Encoding', 'chunked');
+
+    return stream(c, async stream => {
+      try {
+        disableHotReload();
+        const result = await getOriginalObserveStreamVNextAgentBuilderActionHandler({
+          mastra,
+          actionId,
+          runId,
+        });
+
+        const reader = result?.getReader();
+
+        if (!reader) {
+          throw new Error('No reader available from observe stream VNext');
+        }
+
+        stream.onAbort(() => {
+          void reader.cancel('request aborted');
+        });
+
+        let chunkResult;
+        while ((chunkResult = await reader.read()) && !chunkResult.done) {
+          await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
+        }
+        enableHotReload();
+      } catch (err) {
+        enableHotReload();
+        logger.error('Error in observe VNext stream: ' + ((err as Error)?.message ?? 'Unknown error'));
+      }
+    });
+  } catch (error) {
+    enableHotReload();
+    return handleError(error, 'Error observing VNext stream for agent builder action');
+  }
+}
+
+export async function resumeStreamAgentBuilderActionHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const runtimeContext = c.get('runtimeContext');
+    const logger = mastra.getLogger();
+    const actionId = c.req.param('actionId');
+    const runId = c.req.query('runId');
+    const { step, resumeData, tracingOptions } = await c.req.json();
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to resume stream' });
+    }
+
+    c.header('Transfer-Encoding', 'chunked');
+
+    return stream(
+      c,
+      async stream => {
+        try {
+          disableHotReload();
+          const result = await getOriginalResumeStreamAgentBuilderActionHandler({
+            mastra,
+            actionId,
+            runId,
+            runtimeContext,
+            body: { step, resumeData },
+            tracingOptions,
+          });
+
+          const reader = result.getReader();
+
+          stream.onAbort(() => {
+            void reader.cancel('request aborted');
+          });
+
+          let chunkResult;
+          while ((chunkResult = await reader.read()) && !chunkResult.done) {
+            await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
+          }
+        } catch (err) {
+          logger.error('Error in resume stream: ' + ((err as Error)?.message ?? 'Unknown error'));
+        }
+        enableHotReload();
+      },
+      async err => {
+        logger.error('Error in resume stream: ' + err?.message);
+      },
+    );
+  } catch (error) {
+    enableHotReload();
+    return handleError(error, 'Error resuming stream for agent builder action');
   }
 }

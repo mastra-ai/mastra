@@ -1,9 +1,7 @@
 ---
-title: "OTEL Tracing | Mastra Observability Documentation"
+title: "OTEL Tracing | Observability | Mastra Docs"
 description: "Set up OpenTelemetry tracing for Mastra applications"
 ---
-
-import Image from "next/image";
 
 # OTEL Tracing
 
@@ -13,7 +11,7 @@ Mastra supports the OpenTelemetry Protocol (OTLP) for tracing and monitoring you
 
 Here's a simple example of enabling telemetry:
 
-```ts filename="mastra.config.ts" showLineNumbers copy
+```ts title="mastra.config.ts" showLineNumbers copy
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
@@ -60,20 +58,20 @@ type OtelConfig = {
 };
 ```
 
-See the [OtelConfig reference documentation](../../reference/observability/otel-config.mdx) for more details.
+See the inline type definition above for more details.
 
 ### Environment Variables
 
 You can configure the OTLP endpoint and headers through environment variables:
 
-```env filename=".env" copy
+```env title=".env" copy
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_EXPORTER_OTLP_HEADERS=x-api-key=your-api-key
 ```
 
 Then in your config:
 
-```ts filename="mastra.config.ts" showLineNumbers copy
+```ts title="mastra.config.ts" showLineNumbers copy
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
@@ -92,7 +90,7 @@ export const mastra = new Mastra({
 Here's what a traced agent interaction looks like in [SigNoz](https://signoz.io):
 
 <img
-  src="/image/signoz-telemetry-demo.png"
+  src="/img/signoz-telemetry-demo.png"
   alt="Agent interaction trace showing spans, LLM calls, and tool executions"
   style={{ maxWidth: "800px", width: "100%", margin: "8px 0" }}
   className="nextra-image rounded-md"
@@ -103,7 +101,7 @@ Here's what a traced agent interaction looks like in [SigNoz](https://signoz.io)
 
 ### Other Supported Providers
 
-For a complete list of supported observability providers and their configuration details, see the [Observability Providers reference](../../reference/observability/providers/).
+Mastra supports any OTLP-compatible observability platform including Datadog, New Relic, Jaeger, and others. Configure them using the same OTLP endpoint pattern shown above.
 
 ### Custom Instrumentation files
 
@@ -112,20 +110,21 @@ You can define custom instrumentation files in your Mastra project by placing th
 #### Supported File Types
 
 Mastra looks for instrumentation files with these extensions:
+
 - `instrumentation.js`
-- `instrumentation.ts` 
+- `instrumentation.ts`
 - `instrumentation.mjs`
 
 #### Example
 
-```ts filename="/mastra/instrumentation.ts" showLineNumbers copy
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+```ts title="/mastra/instrumentation.ts" showLineNumbers copy
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 
 const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter({
-    url: 'http://localhost:4318/v1/traces',
+    url: "http://localhost:4318/v1/traces",
   }),
   instrumentations: [getNodeAutoInstrumentations()],
 });
@@ -154,9 +153,9 @@ export const mastra = new Mastra({
 2. Create an instrumentation file in your project (e.g., `instrumentation.mjs`):
 
 ```typescript
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 
 const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter(),
