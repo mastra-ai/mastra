@@ -280,6 +280,17 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   type: 'object',
                   description: 'Runtime context for the agent builder action execution',
                 },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the action execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
               required: ['step'],
             },
@@ -508,6 +519,21 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                 runtimeContext: {
                   type: 'object',
                   description: 'Runtime context for the agent builder action execution',
+                },
+                closeOnSuspend: {
+                  type: 'boolean',
+                  description: 'Close the stream on suspend',
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the action execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
                 },
               },
             },

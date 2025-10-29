@@ -224,7 +224,7 @@ export async function streamVNextAgentBuilderActionHandler(c: Context) {
     const runtimeContext = c.get('runtimeContext');
     const logger = mastra.getLogger();
     const actionId = c.req.param('actionId');
-    const { inputData } = await c.req.json();
+    const { inputData, closeOnSuspend, tracingOptions } = await c.req.json();
     const runId = c.req.query('runId');
 
     c.header('Transfer-Encoding', 'chunked');
@@ -240,6 +240,8 @@ export async function streamVNextAgentBuilderActionHandler(c: Context) {
             runId,
             inputData,
             runtimeContext,
+            closeOnSuspend,
+            tracingOptions,
           });
 
           const reader = result.getReader();
@@ -626,7 +628,7 @@ export async function resumeStreamAgentBuilderActionHandler(c: Context) {
     const logger = mastra.getLogger();
     const actionId = c.req.param('actionId');
     const runId = c.req.query('runId');
-    const { step, resumeData } = await c.req.json();
+    const { step, resumeData, tracingOptions } = await c.req.json();
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume stream' });
@@ -645,6 +647,7 @@ export async function resumeStreamAgentBuilderActionHandler(c: Context) {
             runId,
             runtimeContext,
             body: { step, resumeData },
+            tracingOptions,
           });
 
           const reader = result.getReader();
