@@ -223,24 +223,19 @@
 
 ---
 
-### 12. Remove Unused File
+### 12. Remove Unused File ✅ REVIEWED
 **Issue:** `packages/core/src/types/message-format.ts` seems unnecessary
 
 **File:** `packages/core/src/types/message-format.ts`
 
-**Content:** Defines `MessageFormat` type with values like `'mastra-db'`, `'aiv4-ui'`, etc.
-
-**Questions:**
-- [ ] Is this file actually used anywhere?
-- [ ] Should MessageList handle format conversions instead?
-- [ ] If unused, remove it entirely
-- [ ] If used, ensure it's properly integrated and documented
-- [ ] Did we add this for convertMessages() util since we now use it inside of toAISdkXMessages() util? Should we just call MessageList directly in our new util? And skip convertMessages()
-
-**Action:**
-- [ ] Search for imports of this file
-- [ ] If unused, delete it
-- [ ] If used, verify it's necessary and not duplicating MessageList functionality
+**Status:** ✅ **KEEP - Part of Public API**
+- [x] Searched for imports - file is actively used
+- [x] `MessageFormat` type is used in `convert-messages.ts` to define `OutputFormat`
+- [x] `OutputFormat` is exported from `packages/core/src/agent/message-list/index.ts` and `packages/core/src/agent/index.ts`
+- [x] `MessageFormat` is exported from `packages/core/src/types/index.ts` (public API)
+- [x] This is part of the public API for message format conversion
+- [x] Not duplicating MessageList functionality - it's a type definition for format keys
+- [x] Conclusion: Keep this file, it's necessary for the public API
 
 ---
 
