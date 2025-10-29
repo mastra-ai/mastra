@@ -3,9 +3,10 @@ title: "Agent Memory | Agents | Mastra Docs"
 description: Learn how to add memory to agents to store conversation history and maintain context across interactions.
 ---
 
-import { Steps } from "nextra/components";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
 
-## Agent memory
+# Agent memory
 
 Agents use memory to maintain context across interactions. LLMs are stateless and don't retain information between calls, so agents need memory to track conversation history and recall relevant information.
 
@@ -25,17 +26,16 @@ npm install @mastra/memory@latest @mastra/libsql@latest
 
 ## Storage providers
 
-Memory requires a storage provider to persist conversation history, including user messages and agent responses. For more details on available providers and how storage works in Mastra, see the [Storage](../server-db/storage.mdx) documentation.
+Memory requires a storage provider to persist conversation history, including user messages and agent responses. For more details on available providers and how storage works in Mastra, see the [Storage](/docs/server-db/storage) documentation.
 
 ## Configuring memory
 
 <Steps>
-
-### Agent memory
+  <StepItem>
 
 Enable memory by creating a `Memory` instance and passing it to the agent’s `memory` option.
 
-```typescript {6-9} filename="src/mastra/agents/memory-agent.ts" showLineNumbers copy
+```typescript {6-9} title="src/mastra/agents/memory-agent.ts" copy
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 
@@ -43,37 +43,48 @@ export const memoryAgent = new Agent({
   // ...
   memory: new Memory({
     options: {
-      lastMessages: 20
-    }
-  })
+      lastMessages: 20,
+    },
+  }),
 });
 ```
 
-> See the [Memory Class](../../reference/memory/Memory.mdx) for a full list of configuration options.
+:::note
 
-### Mastra storage
+See the [Memory Class](/reference/memory/memory-class) docs for a full list of configuration options.
+
+:::
+
+  </StepItem>
+
+  <StepItem>
 
 Add a storage provider to your main Mastra instance to enable memory across all configured agents.
 
-```typescript {6-8} filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {6-8} title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core/mastra";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   // ..
   storage: new LibSQLStore({
-    url: ":memory:"
+    url: ":memory:",
   }),
 });
 ```
 
-> See the [LibSQL Storage](../../reference/storage/libsql.mdx) for a full list of configuration options.
+:::note
 
+See the [LibSQL Storage](/reference/storage/libsql) docs for a full list of configuration options.
+
+:::
+
+  </StepItem>
 </Steps>
 
 Alternatively, add storage directly to an agent’s memory to keep data separate or use different providers per agent.
 
-```typescript {7-10} filename="src/mastra/agents/memory-agent.ts" showLineNumbers copy
+```typescript {7-10} title="src/mastra/agents/memory-agent.ts" copy
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
@@ -82,9 +93,9 @@ export const memoryAgent = new Agent({
   // ...
   memory: new Memory({
     storage: new LibSQLStore({
-      url: ":memory:"
-    })
-  })
+      url: ":memory:",
+    }),
+  }),
 });
 ```
 
@@ -98,12 +109,15 @@ Include a `memory` object with both `resource` and `thread` to track conversatio
 These fields tell the agent where to store and retrieve context, enabling persistent, thread-aware memory across a conversation.
 
 ```typescript {3-4}
-const response = await memoryAgent.generate("Remember my favorite color is blue.", {
-  memory: {
-    thread: "user-123",
-    resource: "test-123"
-  }
-});
+const response = await memoryAgent.generate(
+  "Remember my favorite color is blue.",
+  {
+    memory: {
+      thread: "user-123",
+      resource: "test-123",
+    },
+  },
+);
 ```
 
 To recall information stored in memory, call the agent with the same `resource` and `thread` values used in the original conversation.
@@ -112,24 +126,24 @@ To recall information stored in memory, call the agent with the same `resource` 
 const response = await memoryAgent.generate("What's my favorite color?", {
   memory: {
     thread: "user-123",
-    resource: "test-123"
-  }
+    resource: "test-123",
+  },
 });
 ```
 
-To learn more about memory see the [Memory](../memory/overview.mdx) documentation.
+To learn more about memory see the [Memory](../memory/overview) documentation.
 
 ## Using `RuntimeContext`
 
-Use [RuntimeContext](../server-db/runtime-context.mdx) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
+Use [RuntimeContext](/docs/server-db/runtime-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
 
-```typescript filename="src/mastra/agents/memory-agent.ts" showLineNumbers
+```typescript title="src/mastra/agents/memory-agent.ts" showLineNumbers
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
 
 const premiumMemory = new Memory({
- // ...
+  // ...
 });
 
 const standardMemory = new Memory({
@@ -141,18 +155,20 @@ export const memoryAgent = new Agent({
   memory: ({ runtimeContext }) => {
     const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
 
-    return userTier === "enterprise"
-      ? premiumMemory
-      : standardMemory;
-  }
+    return userTier === "enterprise" ? premiumMemory : standardMemory;
+  },
 });
 ```
 
-> See [Runtime Context](../server-db/runtime-context.mdx) for more information.
+:::note
+
+See [Runtime Context](/docs/server-db/runtime-context) docs for more information.
+
+:::
 
 ## Related
 
-- [Working Memory](../memory/working-memory.mdx)
-- [Semantic Recall](../memory/semantic-recall.mdx)
-- [Threads and Resources](../memory/threads-and-resources.mdx)
-- [Runtime Context](../server-db/runtime-context.mdx)
+- [Working Memory](../memory/working-memory)
+- [Semantic Recall](../memory/semantic-recall)
+- [Threads and Resources](../memory/threads-and-resources)
+- [Runtime Context](/docs/server-db/runtime-context)

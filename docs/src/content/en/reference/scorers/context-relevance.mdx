@@ -3,7 +3,7 @@ title: "Reference: Context Relevance Scorer | Scorers | Mastra Docs"
 description: Documentation for the Context Relevance Scorer in Mastra. Evaluates the relevance and utility of provided context for generating agent responses using weighted relevance scoring.
 ---
 
-import { PropertiesTable } from "@/components/properties-table";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Context Relevance Scorer
 
@@ -14,6 +14,7 @@ It is especially useful for these use cases:
 **Content Generation Evaluation**
 
 Best for evaluating context quality in:
+
 - Chat systems where context usage matters
 - RAG pipelines needing nuanced relevance assessment
 - Systems where missing context affects quality
@@ -21,6 +22,7 @@ Best for evaluating context quality in:
 **Context Selection Optimization**
 
 Use when optimizing for:
+
 - Comprehensive context coverage
 - Effective context utilization
 - Identifying context gaps
@@ -50,7 +52,8 @@ Use when optimizing for:
         {
           name: "contextExtractor",
           type: "(input, output) => string[]",
-          description: "Function to dynamically extract context from the run input and output",
+          description:
+            "Function to dynamically extract context from the run input and output",
           required: false,
         },
         {
@@ -68,7 +71,8 @@ Use when optimizing for:
             {
               name: "unusedHighRelevanceContext",
               type: "number",
-              description: "Penalty per unused high-relevance context (default: 0.1)",
+              description:
+                "Penalty per unused high-relevance context (default: 0.1)",
               required: false,
             },
             {
@@ -80,7 +84,8 @@ Use when optimizing for:
             {
               name: "maxMissingContextPenalty",
               type: "number",
-              description: "Maximum total missing context penalty (default: 0.5)",
+              description:
+                "Maximum total missing context penalty (default: 0.5)",
               required: false,
             },
           ],
@@ -104,7 +109,8 @@ Note: Either `context` or `contextExtractor` must be provided. If both are provi
     {
       name: "reason",
       type: "string",
-      description: "Human-readable explanation of the context relevance evaluation",
+      description:
+        "Human-readable explanation of the context relevance evaluation",
     },
   ]}
 />
@@ -138,6 +144,7 @@ Final Score = max(0, Base Score - Usage Penalty - Missing Penalty) × scale
 ```
 
 **Default Values**:
+
 - `unusedHighRelevanceContext` = 0.1 (10% penalty per unused high-relevance context)
 - `missingContextPerItem` = 0.15 (15% penalty per missing context item)
 - `maxMissingContextPenalty` = 0.5 (maximum 50% penalty for missing context)
@@ -154,6 +161,7 @@ Final Score = max(0, Base Score - Usage Penalty - Missing Penalty) × scale
 ### Reason analysis
 
 The reason field provides insights on:
+
 - Relevance level of each context piece (high/medium/low/none)
 - Which context was actually used in the response
 - Penalties applied for unused high-relevance context (configurable via `unusedHighRelevanceContext`)
@@ -162,6 +170,7 @@ The reason field provides insights on:
 ### Optimization strategies
 
 Use results to improve your system:
+
 - **Filter irrelevant context**: Remove low/none relevance pieces before processing
 - **Ensure context usage**: Make sure high-relevance context is incorporated
 - **Fill context gaps**: Add missing information identified by the scorer
@@ -170,13 +179,13 @@ Use results to improve your system:
 
 ### Difference from Context Precision
 
-| Aspect | Context Relevance | Context Precision |
-|--------|-------------------|-------------------|
-| **Algorithm** | Weighted levels with penalties | Mean Average Precision (MAP) |
-| **Relevance** | Multiple levels (high/medium/low/none) | Binary (yes/no) |
-| **Position** | Not considered | Critical (rewards early placement) |
-| **Usage** | Tracks and penalizes unused context | Not considered |
-| **Missing** | Identifies and penalizes gaps | Not evaluated |
+| Aspect        | Context Relevance                      | Context Precision                  |
+| ------------- | -------------------------------------- | ---------------------------------- |
+| **Algorithm** | Weighted levels with penalties         | Mean Average Precision (MAP)       |
+| **Relevance** | Multiple levels (high/medium/low/none) | Binary (yes/no)                    |
+| **Position**  | Not considered                         | Critical (rewards early placement) |
+| **Usage**     | Tracks and penalizes unused context    | Not considered                     |
+| **Missing**   | Identifies and penalizes gaps          | Not evaluated                      |
 
 ## Scorer configuration
 
@@ -185,16 +194,16 @@ Use results to improve your system:
 Control how penalties are applied for unused and missing context:
 
 ```typescript
-import { createContextRelevanceScorerLLM } from '@mastra/evals';
+import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 // Stricter penalty configuration
 const strictScorer = createContextRelevanceScorerLLM({
-  model: 'openai/gpt-4o-mini',
+  model: "openai/gpt-4o-mini",
   options: {
     context: [
-      'Einstein won the Nobel Prize for photoelectric effect',
-      'He developed the theory of relativity',
-      'Einstein was born in Germany',
+      "Einstein won the Nobel Prize for photoelectric effect",
+      "He developed the theory of relativity",
+      "Einstein was born in Germany",
     ],
     penalties: {
       unusedHighRelevanceContext: 0.2, // 20% penalty per unused high-relevance context
@@ -207,12 +216,12 @@ const strictScorer = createContextRelevanceScorerLLM({
 
 // Lenient penalty configuration
 const lenientScorer = createContextRelevanceScorerLLM({
-  model: 'openai/gpt-4o-mini',
+  model: "openai/gpt-4o-mini",
   options: {
     context: [
-      'Einstein won the Nobel Prize for photoelectric effect',
-      'He developed the theory of relativity',
-      'Einstein was born in Germany',
+      "Einstein won the Nobel Prize for photoelectric effect",
+      "He developed the theory of relativity",
+      "Einstein was born in Germany",
     ],
     penalties: {
       unusedHighRelevanceContext: 0.05, // 5% penalty per unused high-relevance context
@@ -227,17 +236,18 @@ const testRun = {
   input: {
     inputMessages: [
       {
-        id: '1',
-        role: 'user',
-        content: 'What did Einstein achieve in physics?',
+        id: "1",
+        role: "user",
+        content: "What did Einstein achieve in physics?",
       },
     ],
   },
   output: [
     {
-      id: '2',
-      role: 'assistant',
-      content: 'Einstein won the Nobel Prize for his work on the photoelectric effect.',
+      id: "2",
+      role: "assistant",
+      content:
+        "Einstein won the Nobel Prize for his work on the photoelectric effect.",
     },
   ],
 };
@@ -245,26 +255,26 @@ const testRun = {
 const strictResult = await strictScorer.run(testRun);
 const lenientResult = await lenientScorer.run(testRun);
 
-console.log('Strict penalties:', strictResult.score); // Lower score due to unused context
-console.log('Lenient penalties:', lenientResult.score); // Higher score, less penalty
+console.log("Strict penalties:", strictResult.score); // Lower score due to unused context
+console.log("Lenient penalties:", lenientResult.score); // Higher score, less penalty
 ```
 
 ### Dynamic Context Extraction
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: 'openai/gpt-4o',
+  model: "openai/gpt-4o",
   options: {
     contextExtractor: (input, output) => {
       // Extract context based on the query
-      const userQuery = input?.inputMessages?.[0]?.content || '';
-      if (userQuery.includes('Einstein')) {
+      const userQuery = input?.inputMessages?.[0]?.content || "";
+      if (userQuery.includes("Einstein")) {
         return [
-          'Einstein won the Nobel Prize for the photoelectric effect',
-          'He developed the theory of relativity'
+          "Einstein won the Nobel Prize for the photoelectric effect",
+          "He developed the theory of relativity",
         ];
       }
-      return ['General physics information'];
+      return ["General physics information"];
     },
     penalties: {
       unusedHighRelevanceContext: 0.15,
@@ -277,12 +287,9 @@ const scorer = createContextRelevanceScorerLLM({
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: 'openai/gpt-4o-mini',
+  model: "openai/gpt-4o-mini",
   options: {
-    context: [
-      'Relevant information...',
-      'Supporting details...',
-    ],
+    context: ["Relevant information...", "Supporting details..."],
     scale: 100, // Scale scores from 0-100 instead of 0-1
   },
 });
@@ -294,21 +301,17 @@ const scorer = createContextRelevanceScorerLLM({
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: 'openai/gpt-4o-mini',
+  model: "openai/gpt-4o-mini",
   options: {
     contextExtractor: (input, output) => {
-      const query = input?.inputMessages?.[0]?.content || '';
-      
+      const query = input?.inputMessages?.[0]?.content || "";
+
       // Combine from multiple sources
       const kbContext = knowledgeBase.search(query);
       const docContext = documentStore.retrieve(query);
       const cacheContext = contextCache.get(query);
-      
-      return [
-        ...kbContext,
-        ...docContext,
-        ...cacheContext,
-      ];
+
+      return [...kbContext, ...docContext, ...cacheContext];
     },
     scale: 1,
   },
@@ -322,15 +325,15 @@ const scorer = createContextRelevanceScorerLLM({
 This example shows excellent context relevance where all context directly supports the response:
 
 ```typescript
-import { createContextRelevanceScorerLLM } from '@mastra/evals';
+import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: 'openai/gpt-4o-mini',
+  model: "openai/gpt-4o-mini",
   options: {
     context: [
-      'Einstein won the Nobel Prize for his discovery of the photoelectric effect in 1921.',
-      'He published his theory of special relativity in 1905.',
-      'His general relativity theory, published in 1915, revolutionized our understanding of gravity.',
+      "Einstein won the Nobel Prize for his discovery of the photoelectric effect in 1921.",
+      "He published his theory of special relativity in 1905.",
+      "His general relativity theory, published in 1915, revolutionized our understanding of gravity.",
     ],
     scale: 1,
   },
@@ -340,17 +343,18 @@ const result = await scorer.run({
   input: {
     inputMessages: [
       {
-        id: '1',
-        role: 'user',
-        content: 'What were Einstein\'s major scientific achievements?',
+        id: "1",
+        role: "user",
+        content: "What were Einstein's major scientific achievements?",
       },
     ],
   },
   output: [
     {
-      id: '2',
-      role: 'assistant',
-      content: 'Einstein\'s major achievements include the Nobel Prize for the photoelectric effect, special relativity in 1905, and general relativity in 1915.',
+      id: "2",
+      role: "assistant",
+      content:
+        "Einstein's major achievements include the Nobel Prize for the photoelectric effect, special relativity in 1905, and general relativity in 1915.",
     },
   ],
 });
@@ -368,17 +372,17 @@ console.log(result);
 This example shows moderate relevance with some context being irrelevant or unused:
 
 ```typescript
-import { createContextRelevanceScorerLLM } from '@mastra/evals';
+import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: 'openai/gpt-4o-mini',
+  model: "openai/gpt-4o-mini",
   options: {
     context: [
-      'Solar eclipses occur when the Moon blocks the Sun.',
-      'The Moon moves between the Earth and Sun during eclipses.',
-      'The Moon is visible at night.',
-      'Stars twinkle due to atmospheric interference.',
-      'Total eclipses can last up to 7.5 minutes.',
+      "Solar eclipses occur when the Moon blocks the Sun.",
+      "The Moon moves between the Earth and Sun during eclipses.",
+      "The Moon is visible at night.",
+      "Stars twinkle due to atmospheric interference.",
+      "Total eclipses can last up to 7.5 minutes.",
     ],
     scale: 1,
   },
@@ -388,17 +392,18 @@ const result = await scorer.run({
   input: {
     inputMessages: [
       {
-        id: '1',
-        role: 'user',
-        content: 'What causes solar eclipses?',
+        id: "1",
+        role: "user",
+        content: "What causes solar eclipses?",
       },
     ],
   },
   output: [
     {
-      id: '2',
-      role: 'assistant',
-      content: 'Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.',
+      id: "2",
+      role: "assistant",
+      content:
+        "Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.",
     },
   ],
 });
@@ -412,14 +417,14 @@ console.log(result);
 
 // With custom penalty configuration
 const customScorer = createContextRelevanceScorerLLM({
-  model: 'openai/gpt-4o-mini',
+  model: "openai/gpt-4o-mini",
   options: {
     context: [
-      'Solar eclipses occur when the Moon blocks the Sun.',
-      'The Moon moves between the Earth and Sun during eclipses.',
-      'The Moon is visible at night.',
-      'Stars twinkle due to atmospheric interference.',
-      'Total eclipses can last up to 7.5 minutes.',
+      "Solar eclipses occur when the Moon blocks the Sun.",
+      "The Moon moves between the Earth and Sun during eclipses.",
+      "The Moon is visible at night.",
+      "Stars twinkle due to atmospheric interference.",
+      "Total eclipses can last up to 7.5 minutes.",
     ],
     penalties: {
       unusedHighRelevanceContext: 0.05, // Lower penalty for unused context
@@ -430,8 +435,19 @@ const customScorer = createContextRelevanceScorerLLM({
 });
 
 const customResult = await customScorer.run({
-  input: { inputMessages: [{ id: '1', role: 'user', content: 'What causes solar eclipses?' }] },
-  output: [{ id: '2', role: 'assistant', content: 'Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.' }],
+  input: {
+    inputMessages: [
+      { id: "1", role: "user", content: "What causes solar eclipses?" },
+    ],
+  },
+  output: [
+    {
+      id: "2",
+      role: "assistant",
+      content:
+        "Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.",
+    },
+  ],
 });
 
 console.log(customResult);
@@ -447,17 +463,17 @@ console.log(customResult);
 This example shows poor context relevance with mostly irrelevant information:
 
 ```typescript
-import { createContextRelevanceScorerLLM } from '@mastra/evals';
+import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: 'openai/gpt-4o-mini',
+  model: "openai/gpt-4o-mini",
   options: {
     context: [
-      'The Great Barrier Reef is located in Australia.',
-      'Coral reefs need warm water to survive.',
-      'Many fish species live in coral reefs.',
-      'Australia has six states and two territories.',
-      'The capital of Australia is Canberra.',
+      "The Great Barrier Reef is located in Australia.",
+      "Coral reefs need warm water to survive.",
+      "Many fish species live in coral reefs.",
+      "Australia has six states and two territories.",
+      "The capital of Australia is Canberra.",
     ],
     scale: 1,
   },
@@ -467,17 +483,17 @@ const result = await scorer.run({
   input: {
     inputMessages: [
       {
-        id: '1',
-        role: 'user',
-        content: 'What is the capital of Australia?',
+        id: "1",
+        role: "user",
+        content: "What is the capital of Australia?",
       },
     ],
   },
   output: [
     {
-      id: '2',
-      role: 'assistant',
-      content: 'The capital of Australia is Canberra.',
+      id: "2",
+      role: "assistant",
+      content: "The capital of Australia is Canberra.",
     },
   ],
 });
@@ -495,33 +511,33 @@ console.log(result);
 Extract context dynamically based on the run input:
 
 ```typescript
-import { createContextRelevanceScorerLLM } from '@mastra/evals';
+import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: 'openai/gpt-4o-mini',
+  model: "openai/gpt-4o-mini",
   options: {
     contextExtractor: (input, output) => {
       // Extract query from input
-      const query = input?.inputMessages?.[0]?.content || '';
-      
+      const query = input?.inputMessages?.[0]?.content || "";
+
       // Dynamically retrieve context based on query
-      if (query.toLowerCase().includes('einstein')) {
+      if (query.toLowerCase().includes("einstein")) {
         return [
-          'Einstein developed E=mc²',
-          'He won the Nobel Prize in 1921',
-          'His theories revolutionized physics',
+          "Einstein developed E=mc²",
+          "He won the Nobel Prize in 1921",
+          "His theories revolutionized physics",
         ];
       }
-      
-      if (query.toLowerCase().includes('climate')) {
+
+      if (query.toLowerCase().includes("climate")) {
         return [
-          'Global temperatures are rising',
-          'CO2 levels affect climate',
-          'Renewable energy reduces emissions',
+          "Global temperatures are rising",
+          "CO2 levels affect climate",
+          "Renewable energy reduces emissions",
         ];
       }
-      
-      return ['General knowledge base entry'];
+
+      return ["General knowledge base entry"];
     },
     penalties: {
       unusedHighRelevanceContext: 0.15, // 15% penalty for unused relevant context
@@ -538,19 +554,19 @@ const scorer = createContextRelevanceScorerLLM({
 Integrate with RAG pipelines to evaluate retrieved context:
 
 ```typescript
-import { createContextRelevanceScorerLLM } from '@mastra/evals';
+import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: 'openai/gpt-4o-mini',
+  model: "openai/gpt-4o-mini",
   options: {
     contextExtractor: (input, output) => {
       // Extract from RAG retrieval results
       const ragResults = input.metadata?.ragResults || [];
-      
+
       // Return the text content of retrieved documents
       return ragResults
-        .filter(doc => doc.relevanceScore > 0.5)
-        .map(doc => doc.content);
+        .filter((doc) => doc.relevanceScore > 0.5)
+        .map((doc) => doc.content);
     },
     penalties: {
       unusedHighRelevanceContext: 0.12, // Moderate penalty for unused RAG context
@@ -564,18 +580,18 @@ const scorer = createContextRelevanceScorerLLM({
 // Evaluate RAG system performance
 const evaluateRAG = async (testCases) => {
   const results = [];
-  
+
   for (const testCase of testCases) {
     const score = await scorer.run(testCase);
     results.push({
       query: testCase.input.inputMessages[0].content,
       relevanceScore: score.score,
       feedback: score.reason,
-      unusedContext: score.reason.includes('unused'),
-      missingContext: score.reason.includes('missing'),
+      unusedContext: score.reason.includes("unused"),
+      missingContext: score.reason.includes("missing"),
     });
   }
-  
+
   return results;
 };
 ```
@@ -584,13 +600,13 @@ const evaluateRAG = async (testCases) => {
 
 Choose the right scorer for your needs:
 
-| Use Case | Context Relevance | Context Precision |
-|----------|-------------------|-------------------|
-| **RAG evaluation** | When usage matters | When ranking matters |
-| **Context quality** | Nuanced levels | Binary relevance |
-| **Missing detection** | ✓ Identifies gaps | ✗ Not evaluated |
-| **Usage tracking** | ✓ Tracks utilization | ✗ Not considered |
-| **Position sensitivity** | ✗ Position agnostic | ✓ Rewards early placement |
+| Use Case                 | Context Relevance    | Context Precision         |
+| ------------------------ | -------------------- | ------------------------- |
+| **RAG evaluation**       | When usage matters   | When ranking matters      |
+| **Context quality**      | Nuanced levels       | Binary relevance          |
+| **Missing detection**    | ✓ Identifies gaps    | ✗ Not evaluated           |
+| **Usage tracking**       | ✓ Tracks utilization | ✗ Not considered          |
+| **Position sensitivity** | ✗ Position agnostic  | ✓ Rewards early placement |
 
 ## Related
 

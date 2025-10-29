@@ -1,9 +1,10 @@
 ---
-title: "Building a Research Paper Assistant | Mastra RAG Guides"
+title: "Guide: Building a Research Paper Assistant with RAG | Mastra RAG Guides"
 description: Guide on creating an AI research assistant that can analyze and answer questions about academic papers using RAG.
 ---
 
-import { Steps, Callout } from "nextra/components";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
 
 # Building a Research Paper Assistant with RAG
 
@@ -52,7 +53,9 @@ Let's define the agent's behavior, connect it to your Mastra project, and create
 
 <Steps>
 
-### Install additional dependencies
+<StepItem title="Install additional dependencies">
+
+Install additional dependencies
 
 After running the [installation guide](/docs/getting-started/installation) you'll need to install additional dependencies:
 
@@ -60,13 +63,17 @@ After running the [installation guide](/docs/getting-started/installation) you'l
 npm install @mastra/rag@latest ai@^4.0.0
 ```
 
-<Callout type="info">
-  Mastra currently does not support v5 of the AI SDK (see [support
-  thread](https://github.com/mastra-ai/mastra/issues/5470)). For this guide
-  you'll need to use v4.
-</Callout>
+:::info
 
-### Define the Agent
+Mastra currently does not support v5 of the AI SDK (see [support
+thread](https://github.com/mastra-ai/mastra/issues/5470)). For this guide
+you'll need to use v4.
+
+:::
+
+</StepItem>
+
+<StepItem title="Define the Agent">
 
 Now you'll create your RAG-enabled research assistant. The agent uses:
 
@@ -76,7 +83,7 @@ Now you'll create your RAG-enabled research assistant. The agent uses:
 
 Create a new file `src/mastra/agents/researchAgent.ts` and define your agent:
 
-```ts copy filename="src/mastra/agents/researchAgent.ts"
+```ts copy title="src/mastra/agents/researchAgent.ts"
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { createVectorQueryTool } from "@mastra/rag";
@@ -91,7 +98,7 @@ const vectorQueryTool = createVectorQueryTool({
 export const researchAgent = new Agent({
   name: "Research Assistant",
   instructions: `You are a helpful research assistant that analyzes academic papers and technical documents.
-    Use the provided vector query tool to find relevant information from your knowledge base, 
+    Use the provided vector query tool to find relevant information from your knowledge base,
     and provide accurate, well-supported answers based on the retrieved content.
     Focus on the specific content available in the tool and acknowledge if you cannot find sufficient information to answer a question.
     Base your responses only on the content provided, not on general knowledge.`,
@@ -102,7 +109,9 @@ export const researchAgent = new Agent({
 });
 ```
 
-### Create the Vector Store
+</StepItem>
+
+<StepItem title="Create the Vector Store">
 
 In the root of your project, grab the absolute path with the `pwd` command. The path might be similar to this:
 
@@ -113,7 +122,7 @@ In the root of your project, grab the absolute path with the `pwd` command. The 
 
 In your `src/mastra/index.ts` file, add the following to your existing file and configuration:
 
-```ts copy filename="src/mastra/index.ts" {2, 4-6, 9}
+```ts copy title="src/mastra/index.ts" {2, 4-6, 9}
 import { Mastra } from "@mastra/core/mastra";
 import { LibSQLVector } from "@mastra/libsql";
 
@@ -128,17 +137,21 @@ export const mastra = new Mastra({
 
 For the `connectionUrl` use the absolute path you got from the `pwd` command. This way the `vector.db` file is created at the root of your project.
 
-<Callout>
-  For the purpose of this guide you are using a hardcoded absolute path to your
-  local LibSQL file, however for production usage this won't work. You should
-  use a remote persistent database then.
-</Callout>
+:::note
 
-### Register the Agent with Mastra
+For the purpose of this guide you are using a hardcoded absolute path to your
+local LibSQL file, however for production usage this won't work. You should
+use a remote persistent database then.
+
+:::
+
+</StepItem>
+
+<StepItem title="Register the Agent with Mastra">
 
 In the `src/mastra/index.ts` file, add the agent to Mastra:
 
-```ts copy filename="src/mastra/index.ts" {3, 10}
+```ts copy title="src/mastra/index.ts" {3, 10}
 import { Mastra } from "@mastra/core/mastra";
 import { LibSQLVector } from "@mastra/libsql";
 import { researchAgent } from "./agents/researchAgent";
@@ -153,6 +166,8 @@ export const mastra = new Mastra({
 });
 ```
 
+</StepItem>
+
 </Steps>
 
 ## Processing documents
@@ -161,13 +176,13 @@ In the following steps you'll fetch the research paper, split it into smaller ch
 
 <Steps>
 
-### Load and Process the Paper
+<StepItem title="Load and Process the Paper">
 
 In this step the research paper is retrieved by providing an URL, then converted to a document object, and split into smaller, manageable chunks. By splitting into chunks the processing is faster and more efficient.
 
 Create a new file `src/store.ts` and add the following:
 
-```ts copy filename="src/store.ts"
+```ts copy title="src/store.ts"
 import { MDocument } from "@mastra/rag";
 
 // Load the paper
@@ -199,7 +214,9 @@ You should get back this response:
 Number of chunks: 892
 ```
 
-### Create and Store Embeddings
+</StepItem>
+
+<StepItem title="Create and Store Embeddings">
 
 Finally, you'll prepare the content for RAG by:
 
@@ -207,16 +224,18 @@ Finally, you'll prepare the content for RAG by:
 2. Creating a vector store index to hold the embeddings
 3. Storing both the embeddings and metadata (original text and source information) in the vector database
 
-<Callout>
-  This metadata is crucial as it allows for returning the actual content when
-  the vector store finds relevant matches.
-</Callout>
+:::note
+
+This metadata is crucial as it allows for returning the actual content when
+the vector store finds relevant matches.
+
+:::
 
 This allows the agent to efficiently search and retrieve relevant information.
 
 Open the `src/store.ts` file and add the following:
 
-```ts copy filename="src/store.ts" {2-4, 20-99}
+```ts copy title="src/store.ts" {2-4, 20-99}
 import { MDocument } from "@mastra/rag";
 import { openai } from "@ai-sdk/openai";
 import { embedMany } from "ai";
@@ -270,6 +289,8 @@ npx bun src/store.ts
 
 If the operation was successful you should see no output/errors in your terminal.
 
+</StepItem>
+
 </Steps>
 
 ## Test the Assistant
@@ -278,7 +299,7 @@ Now that the vector database has all embeddings, you can test the research assis
 
 Create a new file `src/ask-agent.ts` and add different types of queries:
 
-```ts filename="src/ask-agent.ts" copy
+```ts title="src/ask-agent.ts" copy
 import { mastra } from "./mastra";
 const agent = mastra.getAgent("researchAgent");
 
@@ -309,7 +330,7 @@ Response: Sequence modeling with neural networks faces several key challenges:
 
 Try another question:
 
-```ts filename="src/ask-agent.ts" copy
+```ts title="src/ask-agent.ts" copy
 import { mastra } from "./mastra";
 const agent = mastra.getAgent("researchAgent");
 
@@ -362,4 +383,4 @@ Explore these examples for more advanced RAG techniques:
 - [Filter RAG](/examples/rag/usage/filter-rag) for filtering results using metadata
 - [Cleanup RAG](/examples/rag/usage/cleanup-rag) for optimizing information density
 - [Chain of Thought RAG](/examples/rag/usage/cot-rag) for complex reasoning queries using workflows
-- [Rerank RAG](/examples/rag/usage/rerank-rag) for improved result relevance
+- [Rerank RAG](/examples/rag/usage/cleanup-rag) for improved result relevance
