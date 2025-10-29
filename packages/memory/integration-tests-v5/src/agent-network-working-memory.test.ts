@@ -13,6 +13,14 @@ import { z } from 'zod';
 
 const resourceId = 'test-resource';
 
+// Helper function at the top of the file (outside the test)
+function getErrorDetails(error: any): string | undefined {
+  if (!error) return undefined;
+  if (error.message) return error.message;
+  if (typeof error === 'string') return error;
+  return JSON.stringify(error);
+}
+
 /**
  * Shared test suite for agent network with working memory.
  * Can be run with any memory configuration (thread/resource scope, standard/vnext).
@@ -30,27 +38,22 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
 
     const threadId = randomUUID();
 
-    let errorOccurred = false;
-    let errorMessage = '';
     const chunks: any[] = [];
 
-    try {
-      const result = await networkAgent.network('Please remember my email is test@example.com', {
-        memory: { thread: threadId, resource: resourceId },
-        maxSteps: 3, // Limit iterations to avoid infinite loops
-      });
+    const result = await networkAgent.network('Please remember my email is test@example.com', {
+      memory: { thread: threadId, resource: resourceId },
+      maxSteps: 3, // Limit iterations to avoid infinite loops
+    });
 
-      for await (const chunk of result) {
-        chunks.push(chunk);
-        if (chunk.type?.includes('error')) {
-          console.log('Error chunk:', chunk);
-        }
-      }
-    } catch (error: any) {
-      errorOccurred = true;
-      errorMessage = error.message;
-      console.error('Test error:', errorMessage);
+    for await (const chunk of result) {
+      chunks.push(chunk);
     }
+
+    // After stream completes, check the workflow execution status
+    const executionResult = await result.result;
+    const errorDetails = executionResult?.status === 'failed' ? getErrorDetails(executionResult.error) : undefined;
+    expect(errorDetails).toBeUndefined();
+    expect(executionResult?.status).not.toBe('failed');
 
     // Verify:
     // 1. Working memory was updated
@@ -63,7 +66,6 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
     expect(stepTypes).not.toContain('tool-call'); // No tool execution step
 
     // 3. No errors occurred
-    expect(errorOccurred).toBe(false);
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
@@ -88,30 +90,25 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
 
     const threadId = randomUUID();
 
-    let errorOccurred = false;
-    let errorMessage = '';
     const chunks: any[] = [];
 
-    try {
-      const result = await networkAgent.network(
-        'Remember that my favorite number is 42, then calculate what 42 multiplied by 3 is',
-        {
-          memory: { thread: threadId, resource: resourceId },
-          maxSteps: 5, // Allow multiple steps for memory + agent
-        },
-      );
+    const result = await networkAgent.network(
+      'Remember that my favorite number is 42, then calculate what 42 multiplied by 3 is',
+      {
+        memory: { thread: threadId, resource: resourceId },
+        maxSteps: 5, // Allow multiple steps for memory + agent
+      },
+    );
 
-      for await (const chunk of result) {
-        chunks.push(chunk);
-        if (chunk.type?.includes('error')) {
-          console.log('Error chunk:', chunk);
-        }
-      }
-    } catch (error: any) {
-      errorOccurred = true;
-      errorMessage = error.message;
-      console.error('Test error:', errorMessage);
+    for await (const chunk of result) {
+      chunks.push(chunk);
     }
+
+    // After stream completes, check the workflow execution status
+    const executionResult = await result.result;
+    const errorDetails = executionResult?.status === 'failed' ? getErrorDetails(executionResult.error) : undefined;
+    expect(errorDetails).toBeUndefined();
+    expect(executionResult?.status).not.toBe('failed');
 
     // Verify:
     // 1. Working memory was updated with favorite number
@@ -129,7 +126,6 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
     expect(fullText).toContain('126');
 
     // 4. No errors occurred
-    expect(errorOccurred).toBe(false);
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
@@ -157,30 +153,25 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
 
     const threadId = randomUUID();
 
-    let errorOccurred = false;
-    let errorMessage = '';
     const chunks: any[] = [];
 
-    try {
-      const result = await networkAgent.network(
-        'Remember that I live in San Francisco, then get me the weather for my city',
-        {
-          memory: { thread: threadId, resource: resourceId },
-          maxSteps: 5, // Allow multiple steps for memory + tool
-        },
-      );
+    const result = await networkAgent.network(
+      'Remember that I live in San Francisco, then get me the weather for my city',
+      {
+        memory: { thread: threadId, resource: resourceId },
+        maxSteps: 5, // Allow multiple steps for memory + tool
+      },
+    );
 
-      for await (const chunk of result) {
-        chunks.push(chunk);
-        if (chunk.type?.includes('error')) {
-          console.log('Error chunk:', chunk);
-        }
-      }
-    } catch (error: any) {
-      errorOccurred = true;
-      errorMessage = error.message;
-      console.error('Test error:', errorMessage);
+    for await (const chunk of result) {
+      chunks.push(chunk);
     }
+
+    // After stream completes, check the workflow execution status
+    const executionResult = await result.result;
+    const errorDetails = executionResult?.status === 'failed' ? getErrorDetails(executionResult.error) : undefined;
+    expect(errorDetails).toBeUndefined();
+    expect(executionResult?.status).not.toBe('failed');
 
     // Verify:
     // 1. Working memory was updated with location
@@ -198,7 +189,6 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
     expect(fullText.toLowerCase()).toMatch(/weather|sunny|72/);
 
     // 4. No errors occurred
-    expect(errorOccurred).toBe(false);
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
@@ -215,43 +205,41 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
 
     const threadId = randomUUID();
 
-    let errorOccurred = false;
-
-    try {
-      // First request: remember name
-      const result1 = await networkAgent.network('My name is Alice', {
-        memory: { thread: threadId, resource: resourceId },
-        maxSteps: 3,
-      });
-      for await (const chunk of result1) {
-        if (chunk.type?.includes('error')) {
-          console.log('Error chunk (request 1):', chunk);
-        }
-      }
-
-      // Second request: remember occupation
-      const result2 = await networkAgent.network('I work as a software engineer', {
-        memory: { thread: threadId, resource: resourceId },
-        maxSteps: 3,
-      });
-      for await (const chunk of result2) {
-        if (chunk.type?.includes('error')) {
-          console.log('Error chunk (request 2):', chunk);
-        }
-      }
-    } catch (error: any) {
-      errorOccurred = true;
-      console.error('Test error:', error.message);
+    // First request: remember name
+    const result1 = await networkAgent.network('My name is Alice', {
+      memory: { thread: threadId, resource: resourceId },
+      maxSteps: 3,
+    });
+    for await (const _chunk of result1) {
     }
+
+    // After stream completes, check the workflow execution status
+    const executionResult = await result1.result;
+    const errorDetails = executionResult?.status === 'failed' ? getErrorDetails(executionResult.error) : undefined;
+    expect(errorDetails).toBeUndefined();
+    expect(executionResult?.status).not.toBe('failed');
+
+    // Second request: remember occupation
+    const result2 = await networkAgent.network('I work as a software engineer', {
+      memory: { thread: threadId, resource: resourceId },
+      maxSteps: 3,
+    });
+    for await (const _chunk of result2) {
+    }
+
+    // After stream completes, check the workflow execution status
+    const executionResult2 = await result2.result;
+    const errorDetails2 = executionResult2?.status === 'failed' ? getErrorDetails(executionResult2.error) : undefined;
+    expect(errorDetails2).toBeUndefined();
+    expect(executionResult2?.status).not.toBe('failed');
 
     // Verify both pieces of information are in working memory
     const workingMemory = await memory.getWorkingMemory({ threadId, resourceId });
     expect(workingMemory).toContain('Alice');
     expect(workingMemory?.toLowerCase()).toContain('software engineer');
-    expect(errorOccurred).toBe(false);
   });
 
-  it.only('should work when routing to a sub-agent with memory capabilities', async () => {
+  it('should work when routing to a sub-agent with memory capabilities', async () => {
     const memory = getMemory();
 
     // Create a sub-agent that has memory capabilities
@@ -277,27 +265,22 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
 
     const threadId = randomUUID();
 
-    let errorOccurred = false;
-    let errorMessage = '';
     const chunks: any[] = [];
 
-    try {
-      const result = await networkAgent.network('Please remember that my favorite color is purple', {
-        memory: { thread: threadId, resource: resourceId },
-        maxSteps: 5, // Allow routing to sub-agent
-      });
+    const result = await networkAgent.network('Please remember that my favorite color is purple', {
+      memory: { thread: threadId, resource: resourceId },
+      maxSteps: 5, // Allow routing to sub-agent
+    });
 
-      for await (const chunk of result) {
-        chunks.push(chunk);
-        if (chunk.type?.includes('error')) {
-          console.log('Error chunk:', chunk);
-        }
-      }
-    } catch (error: any) {
-      errorOccurred = true;
-      errorMessage = error.message;
-      console.error('Test error:', errorMessage);
+    for await (const chunk of result) {
+      chunks.push(chunk);
     }
+
+    // After stream completes, check the workflow execution status
+    const executionResult = await result.result;
+    const errorDetails = executionResult?.status === 'failed' ? getErrorDetails(executionResult.error) : undefined;
+    expect(errorDetails).toBeUndefined();
+    expect(executionResult?.status).not.toBe('failed');
 
     // Verify working memory was updated
     const workingMemory = await memory.getWorkingMemory({ threadId, resourceId });
@@ -305,7 +288,6 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
     expect(workingMemory?.toLowerCase()).toContain('purple');
 
     // No errors occurred
-    expect(errorOccurred).toBe(false);
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 }
