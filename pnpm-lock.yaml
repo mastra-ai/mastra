@@ -1342,8 +1342,8 @@ importers:
         specifier: ^1.1.1
         version: 1.1.1
       posthog-node:
-        specifier: 4.18.0
-        version: 4.18.0
+        specifier: 5.10.3
+        version: 5.10.3
       prettier:
         specifier: ^3.6.2
         version: 3.6.2
@@ -1608,8 +1608,8 @@ importers:
         specifier: ^13.0.0
         version: 13.1.2
       posthog-node:
-        specifier: ^4.18.0
-        version: 4.18.0
+        specifier: ^5.10.3
+        version: 5.10.3
       prettier:
         specifier: ^3.6.2
         version: 3.6.2
@@ -7957,6 +7957,9 @@ packages:
   '@posthog/core@1.3.0':
     resolution: {integrity: sha512-hxLL8kZNHH098geedcxCz8y6xojkNYbmJEW+1vFXsmPcExyCXIUUJ/34X6xa9GcprKxd0Wsx3vfJQLQX4iVPhw==}
 
+  '@posthog/core@1.3.1':
+    resolution: {integrity: sha512-sGKVHituJ8L/bJxVV4KamMFp+IBWAZyCiYunFawJZ4cc59PCtLnKFIMEV6kn7A4eZQcQ6EKV5Via4sF3Z7qMLQ==}
+
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
 
@@ -14063,9 +14066,9 @@ packages:
   posthog-js@1.279.0:
     resolution: {integrity: sha512-k1Efjlr3+/u0RZ681HJCuCNji4ejac/JVf9lb/dnYpdzwfqGjltrui7pqni9IMUQb+mOYtb1+IVQo12YvU5Afw==}
 
-  posthog-node@4.18.0:
-    resolution: {integrity: sha512-XROs1h+DNatgKh/AlIlCtDxWzwrKdYDb2mOs58n4yN8BkGN9ewqeQwG5ApS4/IzwCb7HPttUkOVulkYatd2PIw==}
-    engines: {node: '>=15.0.0'}
+  posthog-node@5.10.3:
+    resolution: {integrity: sha512-pe0P/4MfTSBgM4PWRTeg2iKDSSX6nxnlxAyW+v2+acpCSU50KM2YE5UFJ1Vkq/PtwcJgrt2Ydj66IzuRn2uwFQ==}
+    engines: {node: '>=20'}
 
   preact@10.27.2:
     resolution: {integrity: sha512-5SYSgFKSyhCbk6SrXyMpqjb5+MQBgfvEKE/OC+PujcY34sOpqtr+0AZQtPYx5IA6VxynQ7rUPCtKzyovpj9Bpg==}
@@ -20850,6 +20853,8 @@ snapshots:
   '@poppinss/exception@1.2.2': {}
 
   '@posthog/core@1.3.0': {}
+
+  '@posthog/core@1.3.1': {}
 
   '@protobufjs/aspromise@1.1.2': {}
 
@@ -27961,11 +27966,9 @@ snapshots:
       preact: 10.27.2
       web-vitals: 4.2.4
 
-  posthog-node@4.18.0:
+  posthog-node@5.10.3:
     dependencies:
-      axios: 1.12.2(debug@4.4.3)
-    transitivePeerDependencies:
-      - debug
+      '@posthog/core': 1.3.1
 
   preact@10.27.2: {}
 
