@@ -996,7 +996,7 @@ export class Agent<
   __resetToOriginalModel() {
     // Restore from snapshot; clone to avoid aliasing future mutations
     this.model = Array.isArray(this.#originalModel)
-      ? this.#originalModel.map(mdl => ({ ...mdl }))
+      ? [...this.#originalModel]
       : this.#originalModel;
     this.logger.debug(`[Agents:${this.name}] Model reset to original.`, { model: this.model, name: this.name });
   }
