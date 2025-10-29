@@ -1,7 +1,5 @@
 ---
 title: "MastraAuthClerk Class | Auth | Mastra Docs"
-sidebar_position: 3
-sidebar_label: "Clerk"
 description: "Documentation for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication."
 ---
 
@@ -67,12 +65,12 @@ import { useAuth } from "@clerk/nextjs";
 
 export const useClerkAuth = () => {
   const { getToken } = useAuth();
-  
+
   const getAccessToken = async () => {
     const token = await getToken();
     return token;
   };
-  
+
   return { getAccessToken };
 };
 ```

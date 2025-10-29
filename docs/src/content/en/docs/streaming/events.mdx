@@ -1,7 +1,5 @@
 ---
 title: "Streaming Events | Streaming | Mastra Docs"
-sidebar_position: 2
-sidebar_label: "Events"
 description: "Learn about the different types of streaming events in Mastra, including text deltas, tool calls, step events, and how to handle them in your applications."
 ---
 
@@ -211,12 +209,12 @@ for await (const chunk of networkStream) {
     console.log('Selected:', chunk.payload.resourceType, chunk.payload.resourceId);
     console.log('Reason:', chunk.payload.selectionReason);
   }
-  
+
   // Track agent delegations
   if (chunk.type === 'agent-execution-start') {
     console.log('Delegating to agent:', chunk.payload.agentId);
   }
-  
+
   // Track workflow delegations
   if (chunk.type === 'workflow-execution-start') {
     console.log('Executing workflow:', chunk.payload.name);

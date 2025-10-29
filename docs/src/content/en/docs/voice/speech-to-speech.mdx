@@ -1,7 +1,5 @@
 ---
 title: "Speech-to-Speech Capabilities in Mastra | Voice | Mastra Docs"
-sidebar_position: 4
-sidebar_label: "Speech to Speech"
 description: Overview of speech-to-speech capabilities in Mastra, including real-time interactions and event-driven architecture.
 ---
 
@@ -9,7 +7,7 @@ description: Overview of speech-to-speech capabilities in Mastra, including real
 
 ## Introduction
 
-Speech-to-Speech (STS) in Mastra provides a standardized interface for real-time interactions across multiple providers.  
+Speech-to-Speech (STS) in Mastra provides a standardized interface for real-time interactions across multiple providers.
 STS enables continuous bidirectional audio communication through listening to events from Realtime models. Unlike separate TTS and STT operations, STS maintains an open connection that processes speech continuously in both directions.
 
 ## Configuration
@@ -79,8 +77,8 @@ const agent = new Agent({
     speaker: 'Puck',
     debug: true,
     // Vertex AI option:
-    // vertexAI: true, 
-    // project: 'your-gcp-project', 
+    // vertexAI: true,
+    // project: 'your-gcp-project',
     // location: 'us-central1',
     // serviceAccountKeyFile: '/path/to/service-account.json',
   }),
