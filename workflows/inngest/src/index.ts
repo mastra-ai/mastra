@@ -3,7 +3,7 @@ import { ReadableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
 import { AISpanType, wrapMastra } from '@mastra/core/ai-tracing';
-import type { TracingContext, AnyAISpan } from '@mastra/core/ai-tracing';
+import type { TracingContext, TracingOptions } from '@mastra/core/ai-tracing';
 import { RuntimeContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
@@ -31,6 +31,7 @@ import type {
   StepWithComponent,
   SuspendOptions,
   WorkflowStreamEvent,
+  AgentStepOptions,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
@@ -207,13 +208,35 @@ export class InngestRun<
     }
   }
 
-  async start({
+  async start(params: {
+    inputData?: z.infer<TInput>;
+    runtimeContext?: RuntimeContext;
+    initialState?: z.infer<TState>;
+    tracingOptions?: TracingOptions;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
+  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    return this._start(params);
+  }
+
+  async _start({
     inputData,
     initialState,
+    outputOptions,
+    tracingOptions,
+    format,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     initialState?: z.infer<TState>;
+    tracingOptions?: TracingOptions;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
+    format?: 'legacy' | 'vnext' | undefined;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     await this.#mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -243,6 +266,9 @@ export class InngestRun<
         initialState: initialStateToUse,
         runId: this.runId,
         resourceId: this.resourceId,
+        outputOptions,
+        tracingOptions,
+        format,
       },
     });
 
@@ -375,16 +401,33 @@ export class InngestRun<
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
       try {
+        await writer.write({
+          // @ts-ignore
+          type: 'start',
+          // @ts-ignore
+          payload: { runId: this.runId },
+        });
+
         const e: any = {
           ...event,
           type: event.type.replace('workflow-', ''),
         };
+
+        if (e.type === 'step-output') {
+          e.type = e.payload.output.type;
+          e.payload = e.payload.output.payload;
+        }
         // watch-v2 events are data stream events, so we need to cast them to the correct type
         await writer.write(e as any);
       } catch {}
     }, 'watch-v2');
 
     this.closeStreamAction = async () => {
+      await writer.write({
+        type: 'finish',
+        // @ts-ignore
+        payload: { runId: this.runId },
+      });
       unwatch();
 
       try {
@@ -396,7 +439,7 @@ export class InngestRun<
       }
     };
 
-    this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
+    this.executionResults = this._start({ inputData, runtimeContext, format: 'legacy' }).then(result => {
       if (result.status !== 'suspended') {
         this.closeStreamAction?.().catch(() => {});
       }
@@ -413,12 +456,29 @@ export class InngestRun<
   stream({
     inputData,
     runtimeContext,
+    tracingOptions,
     closeOnSuspend = true,
-  }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext; closeOnSuspend?: boolean } = {}): ReturnType<
-    Run<InngestEngineType, TSteps, TState, TInput, TOutput>['stream']
-  > {
+    initialState,
+    outputOptions,
+  }: {
+    inputData?: z.input<TInput>;
+    runtimeContext?: RuntimeContext;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+    closeOnSuspend?: boolean;
+    initialState?: z.input<TState>;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
+  } = {}): ReturnType<Run<InngestEngineType, TSteps, TState, TInput, TOutput>['stream']> {
+    if (this.closeStreamAction && this.streamOutput) {
+      return this.streamOutput;
+    }
+
+    this.closeStreamAction = async () => {};
+
     const self = this;
-    let streamOutput: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> | undefined;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
         // TODO: fix this, watch-v2 doesn't have a type
@@ -429,7 +489,7 @@ export class InngestRun<
             runId: self.runId,
             from,
             payload: {
-              stepName: (payload as unknown as { id: string }).id,
+              stepName: (payload as unknown as { id: string })?.id,
               ...payload,
             },
           } as WorkflowStreamEvent);
@@ -445,33 +505,62 @@ export class InngestRun<
           }
         };
 
-        const executionResultsPromise = self.start({
+        const executionResultsPromise = self._start({
           inputData,
           runtimeContext,
+          // tracingContext, // We are not able to pass a reference to a span here, what to do?
+          initialState,
+          tracingOptions,
+          outputOptions,
+          format: 'vnext',
         });
+        let executionResults;
+        try {
+          executionResults = await executionResultsPromise;
 
-        const executionResults = await executionResultsPromise;
-
-        if (closeOnSuspend) {
-          // always close stream, even if the workflow is suspended
-          // this will trigger a finish event with workflow status set to suspended
+          if (closeOnSuspend) {
+            // always close stream, even if the workflow is suspended
+            // this will trigger a finish event with workflow status set to suspended
+            self.closeStreamAction?.().catch(() => {});
+          } else if (executionResults.status !== 'suspended') {
+            self.closeStreamAction?.().catch(() => {});
+          }
+          if (self.streamOutput) {
+            self.streamOutput.updateResults(
+              executionResults as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>,
+            );
+          }
+        } catch (err) {
+          self.streamOutput?.rejectResults(err as unknown as Error);
           self.closeStreamAction?.().catch(() => {});
-        } else if (executionResults.status !== 'suspended') {
-          self.closeStreamAction?.().catch(() => {});
-        }
-        if (streamOutput) {
-          streamOutput.updateResults(executionResults as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>);
         }
       },
     });
 
-    streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
       runId: this.runId,
       workflowId: this.workflowId,
       stream,
     });
 
-    return streamOutput;
+    return this.streamOutput;
+  }
+
+  streamVNext(
+    args: {
+      inputData?: z.input<TInput>;
+      runtimeContext?: RuntimeContext;
+      tracingContext?: TracingContext;
+      tracingOptions?: TracingOptions;
+      closeOnSuspend?: boolean;
+      initialState?: z.input<TState>;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
+    } = {},
+  ): ReturnType<Run<InngestEngineType, TSteps, TState, TInput, TOutput>['stream']> {
+    return this.stream(args);
   }
 }
 
@@ -651,7 +740,7 @@ export class InngestWorkflow<
       },
       { event: `workflow.${this.id}` },
       async ({ event, step, attempt, publish }) => {
-        let { inputData, initialState, runId, resourceId, resume, outputOptions } = event.data;
+        let { inputData, initialState, runId, resourceId, resume, outputOptions, format } = event.data;
 
         if (!runId) {
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
@@ -703,9 +792,15 @@ export class InngestWorkflow<
           retryConfig: this.retryConfig,
           runtimeContext: new RuntimeContext(), // TODO
           resume,
+          format,
           abortController: new AbortController(),
-          currentSpan: undefined, // TODO: Pass actual parent AI span from workflow execution context
+          // currentSpan: undefined, // TODO: Pass actual parent AI span from workflow execution context
           outputOptions,
+          writableStream: new WritableStream<WorkflowStreamEvent>({
+            write(chunk) {
+              void emitter.emit('watch-v2', chunk).catch(() => {});
+            },
+          }),
         });
 
         // Final step to check workflow status and throw NonRetriableError if failed
@@ -786,6 +881,7 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
 >(
   agent: Agent<TStepId, any, any>,
+  agentOptions?: AgentStepOptions,
 ): Step<TStepId, any, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
 
 export function createStep<
@@ -832,6 +928,7 @@ export function createStep<
         outputSchema: TStepOutput;
         execute: (context: ToolExecutionContext<TStepInput>) => Promise<any>;
       }),
+  agentOptions?: AgentStepOptions,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType> {
   if (isAgent(params)) {
     return {
@@ -840,12 +937,23 @@ export function createStep<
       // @ts-ignore
       inputSchema: z.object({
         prompt: z.string(),
+        // resourceId: z.string().optional(),
+        // threadId: z.string().optional(),
       }),
       // @ts-ignore
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort, tracingContext }) => {
+      execute: async ({
+        inputData,
+        [EMITTER_SYMBOL]: emitter,
+        [STREAM_FORMAT_SYMBOL]: streamFormat,
+        runtimeContext,
+        tracingContext,
+        abortSignal,
+        abort,
+        writer,
+      }) => {
         let streamPromise = {} as {
           promise: Promise<string>;
           resolve: (value: string) => void;
@@ -861,54 +969,43 @@ export function createStep<
           args: inputData,
         };
 
-        if ((await params.getLLM()).getModel().specificationVersion === `v2`) {
-          const { fullStream } = await params.stream(inputData.prompt, {
-            runtimeContext,
-            tracingContext,
-            onFinish: result => {
-              streamPromise.resolve(result.text);
-            },
-            abortSignal,
-          });
+        let stream: ReadableStream<any>;
 
-          if (abortSignal.aborted) {
-            return abort();
-          }
-
-          await emitter.emit('watch-v2', {
-            type: 'tool-call-streaming-start',
-            ...(toolData ?? {}),
-          });
-
-          for await (const chunk of fullStream) {
-            if (chunk.type === 'text-delta') {
-              await emitter.emit('watch-v2', {
-                type: 'tool-call-delta',
-                ...(toolData ?? {}),
-                argsTextDelta: chunk.payload.text,
-              });
-            }
-          }
-        } else {
+        if ((await params.getModel()).specificationVersion === 'v1') {
           const { fullStream } = await params.streamLegacy(inputData.prompt, {
+            ...(agentOptions ?? {}),
+            // resourceId: inputData.resourceId,
+            // threadId: inputData.threadId,
             runtimeContext,
             tracingContext,
             onFinish: result => {
               streamPromise.resolve(result.text);
+              void agentOptions?.onFinish?.(result);
+            },
+            abortSignal,
+          });
+          stream = fullStream as any;
+        } else {
+          const modelOutput = await params.stream(inputData.prompt, {
+            ...(agentOptions ?? {}),
+            runtimeContext,
+            tracingContext,
+            onFinish: result => {
+              streamPromise.resolve(result.text);
+              void agentOptions?.onFinish?.(result);
             },
             abortSignal,
           });
 
-          if (abortSignal.aborted) {
-            return abort();
-          }
+          stream = modelOutput.fullStream;
+        }
 
+        if (streamFormat === 'legacy') {
           await emitter.emit('watch-v2', {
             type: 'tool-call-streaming-start',
             ...(toolData ?? {}),
           });
-
-          for await (const chunk of fullStream) {
+          for await (const chunk of stream) {
             if (chunk.type === 'text-delta') {
               await emitter.emit('watch-v2', {
                 type: 'tool-call-delta',
@@ -917,12 +1014,19 @@ export function createStep<
               });
             }
           }
+          await emitter.emit('watch-v2', {
+            type: 'tool-call-streaming-finish',
+            ...(toolData ?? {}),
+          });
+        } else {
+          for await (const chunk of stream) {
+            await writer.write(chunk as any);
+          }
         }
 
-        await emitter.emit('watch-v2', {
-          type: 'tool-call-streaming-finish',
-          ...(toolData ?? {}),
-        });
+        if (abortSignal.aborted) {
+          return abort();
+        }
 
         return {
           text: await streamPromise.promise,
@@ -1055,48 +1159,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     super({ mastra, options });
     this.inngestStep = inngestStep;
     this.inngestAttempts = inngestAttempts;
-  }
-
-  async execute<TState, TInput, TOutput>(params: {
-    workflowId: string;
-    runId: string;
-    resourceId?: string;
-    graph: ExecutionGraph;
-    serializedStepGraph: SerializedStepFlowEntry[];
-    input?: TInput;
-    initialState?: TState;
-    resume?: {
-      // TODO: add execute path
-      steps: string[];
-      stepResults: Record<string, StepResult<any, any, any, any>>;
-      resumePayload: any;
-      resumePath: number[];
-    };
-    emitter: Emitter;
-    retryConfig?: {
-      attempts?: number;
-      delay?: number;
-    };
-    runtimeContext: RuntimeContext;
-    abortController: AbortController;
-    currentSpan?: AnyAISpan;
-    outputOptions?: {
-      includeState?: boolean;
-    };
-  }): Promise<TOutput> {
-    await params.emitter.emit('watch-v2', {
-      type: 'workflow-start',
-      payload: { runId: params.runId },
-    });
-
-    const result = await super.execute<TState, TInput, TOutput>(params);
-
-    await params.emitter.emit('watch-v2', {
-      type: 'workflow-finish',
-      payload: { runId: params.runId },
-    });
-
-    return result;
   }
 
   protected async fmtReturnValue<TOutput>(
@@ -1263,6 +1325,45 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               callId: stepCallId,
               name: 'sleep',
               runId,
+              workflowId,
+              mastra: this.mastra!,
+              runtimeContext,
+              inputData: prevOutput,
+              state: executionContext.state,
+              setState: (state: any) => {
+                executionContext.state = state;
+              },
+              runCount: -1,
+              retryCount: -1,
+              tracingContext: {
+                currentSpan: sleepSpan,
+              },
+              getInitData: () => stepResults?.input as any,
+              getStepResult: getStepResult.bind(this, stepResults),
+              // TODO: this function shouldn't have suspend probably?
+              suspend: async (_suspendPayload: any): Promise<any> => {},
+              bail: () => {},
+              abort: () => {
+                abortController?.abort();
+              },
+              [EMITTER_SYMBOL]: emitter,
+              [STREAM_FORMAT_SYMBOL]: executionContext.format,
+              engine: { step: this.inngestStep },
+              abortSignal: abortController?.signal,
+              writer: new ToolStream(
+                {
+                  prefix: 'workflow-step',
+                  callId: stepCallId,
+                  name: 'sleep',
+                  runId,
+                },
+                writableStream,
+              ),
+            },
+            {
+              paramName: 'runCount',
+              deprecationMessage: runCountDeprecationMessage,
+              logger: this.logger,
             },
             writableStream,
           ),
@@ -1372,6 +1473,45 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               callId: stepCallId,
               name: 'sleep',
               runId,
+              workflowId,
+              mastra: this.mastra!,
+              runtimeContext,
+              inputData: prevOutput,
+              state: executionContext.state,
+              setState: (state: any) => {
+                executionContext.state = state;
+              },
+              runCount: -1,
+              retryCount: -1,
+              tracingContext: {
+                currentSpan: sleepUntilSpan,
+              },
+              getInitData: () => stepResults?.input as any,
+              getStepResult: getStepResult.bind(this, stepResults),
+              // TODO: this function shouldn't have suspend probably?
+              suspend: async (_suspendPayload: any): Promise<any> => {},
+              bail: () => {},
+              abort: () => {
+                abortController?.abort();
+              },
+              [EMITTER_SYMBOL]: emitter,
+              [STREAM_FORMAT_SYMBOL]: executionContext.format,
+              engine: { step: this.inngestStep },
+              abortSignal: abortController?.signal,
+              writer: new ToolStream(
+                {
+                  prefix: 'workflow-step',
+                  callId: stepCallId,
+                  name: 'sleep',
+                  runId,
+                },
+                writableStream,
+              ),
+            },
+            {
+              paramName: 'runCount',
+              deprecationMessage: runCountDeprecationMessage,
+              logger: this.logger,
             },
             writableStream,
           ),
@@ -1739,6 +1879,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       } as StepResult<any, any, any, any>;
     }
 
+    const stepCallId = randomUUID();
     let stepRes: {
       result: {
         status: 'success' | 'failed' | 'suspended' | 'bailed';
@@ -1787,7 +1928,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             runId: executionContext.runId,
             mastra: this.mastra!,
             runtimeContext,
-            writableStream,
+            writer: new ToolStream(
+              {
+                prefix: 'workflow-step',
+                callId: stepCallId,
+                name: step.id,
+                runId: executionContext.runId,
+              },
+              writableStream,
+            ),
             state: executionContext?.state ?? {},
             setState: (state: any) => {
               executionContext.state = state;
@@ -1824,6 +1973,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
             },
             [EMITTER_SYMBOL]: emitter,
+            [STREAM_FORMAT_SYMBOL]: executionContext.format,
             engine: {
               step: this.inngestStep,
             },
@@ -2131,6 +2281,47 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                     callId: randomUUID(),
                     name: 'conditional',
                     runId,
+                    workflowId,
+                    mastra: this.mastra!,
+                    runtimeContext,
+                    runCount: -1,
+                    retryCount: -1,
+                    inputData: prevOutput,
+                    state: executionContext.state,
+                    setState: (state: any) => {
+                      executionContext.state = state;
+                    },
+                    tracingContext: {
+                      currentSpan: evalSpan,
+                    },
+                    getInitData: () => stepResults?.input as any,
+                    getStepResult: getStepResult.bind(this, stepResults),
+                    // TODO: this function shouldn't have suspend probably?
+                    suspend: async (_suspendPayload: any) => {},
+                    bail: () => {},
+                    abort: () => {
+                      abortController.abort();
+                    },
+                    [EMITTER_SYMBOL]: emitter,
+                    [STREAM_FORMAT_SYMBOL]: executionContext.format,
+                    engine: {
+                      step: this.inngestStep,
+                    },
+                    abortSignal: abortController.signal,
+                    writer: new ToolStream(
+                      {
+                        prefix: 'workflow-step',
+                        callId: randomUUID(),
+                        name: 'conditional',
+                        runId,
+                      },
+                      writableStream,
+                    ),
+                  },
+                  {
+                    paramName: 'runCount',
+                    deprecationMessage: runCountDeprecationMessage,
+                    logger: this.logger,
                   },
                   writableStream,
                 ),
