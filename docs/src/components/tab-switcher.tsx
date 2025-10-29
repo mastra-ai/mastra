@@ -16,14 +16,9 @@ const docsTabs = [
     href: "models",
   },
   {
-    id: "Examples",
-    label: "Examples",
+    id: "GuidesAndExamples",
+    label: "Guides & Examples",
     href: "examples",
-  },
-  {
-    id: "Guides",
-    label: "Guides & Migrations",
-    href: "guides",
   },
   {
     id: "Reference",

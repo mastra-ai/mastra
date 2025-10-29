@@ -1,7 +1,6 @@
 const meta = {
   docs: { title: "Docs", type: "page" },
-  examples: { title: "Examples", type: "page" },
-  guides: { title: "Guides & Migrations", type: "page" },
+  examples: { title: "Guides and Examples", type: "page" },
   reference: { title: "Reference", type: "page" },
   models: { title: "Models", type: "page" },
   showcase: {

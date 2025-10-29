@@ -1,8 +1,8 @@
 const meta = {
   overview: "Overview",
-  "off-the-shelf-scorers": "Off the Shelf Scorers",
+  "off-the-shelf-scorers": "Built-in Scorers",
   "custom-scorers": "Custom Scorers",
-  "evals-old-api": "Evals (old API)",
+  "evals-old-api": "Evals (legacy API)",
 };
 
 export default meta;

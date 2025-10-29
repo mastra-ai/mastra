@@ -2,6 +2,14 @@ const meta = {
   index: {
     title: "Overview",
   },
+  guide: {
+    title: "Guides",
+    theme: { collapsed: true },
+  },
+  migrations: {
+    title: "Migrations",
+    theme: { collapsed: true },
+  },
   agents: {
     title: "Agents",
     theme: { collapsed: true },
