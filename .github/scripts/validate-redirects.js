@@ -7,7 +7,7 @@ const baseUrl = process.env.MASTRA_DEPLOYMENT_URL || 'https://mastra.ai'; //'loc
 const loadRedirects = async () => {
   process.chdir('docs');
 
-  const configPath = path.resolve('next.config.mjs');
+  const configPath = path.resolve('vercel.json');
   const configUrl = pathToFileURL(configPath).href;
   const configModule = await import(configUrl);
 
