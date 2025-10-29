@@ -8395,10 +8395,10 @@ describe('MastraInngestWorkflow', () => {
       // Updated to new vNext streaming format
       const expectedValues = [
         {
-          payload: {},
-          type: 'workflow-start',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
+          payload: {
+            runId: 'test-run-id',
+          },
+          type: 'start',
         },
         {
           payload: {
@@ -8410,9 +8410,7 @@ describe('MastraInngestWorkflow', () => {
             startedAt: expect.any(Number),
             status: 'running',
           },
-          type: 'workflow-step-start',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
+          type: 'step-start',
         },
         {
           payload: {
@@ -8424,49 +8422,43 @@ describe('MastraInngestWorkflow', () => {
             },
             status: 'success',
           },
-          type: 'workflow-step-result',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
+          type: 'step-result',
         },
         {
           payload: {
-            id: expect.any(String),
-            payload: {
-              prompt1: 'Capital of France, just the name',
-              prompt2: 'Capital of UK, just the name',
-            },
-            startedAt: expect.any(Number),
-            status: 'running',
+            id: 'start',
+            metadata: {},
           },
-          type: 'workflow-step-start',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
+          type: 'step-finish',
         },
         {
           payload: {
             id: expect.any(String),
-            endedAt: expect.any(Number),
+          },
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: expect.any(String),
             output: {
               prompt: 'Capital of France, just the name',
             },
             status: 'success',
           },
-          type: 'workflow-step-result',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: expect.any(String),
+            metadata: {},
+          },
+          type: 'step-finish',
         },
         {
           payload: {
             id: 'test-agent-1',
-            payload: {
-              prompt: 'Capital of France, just the name',
-            },
-            startedAt: expect.any(Number),
-            status: 'running',
           },
-          type: 'workflow-step-start',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
+          type: 'step-start',
         },
         {
           args: {
@@ -8496,51 +8488,45 @@ describe('MastraInngestWorkflow', () => {
             output: {
               text: 'Paris',
             },
-            endedAt: expect.any(Number),
             status: 'success',
           },
-          type: 'workflow-step-result',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
+          type: 'step-result',
         },
         {
           payload: {
             id: expect.any(String),
-            payload: {
-              text: 'Paris',
-            },
-            startedAt: expect.any(Number),
-            status: 'running',
+            metadata: {},
           },
-          type: 'workflow-step-start',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
+          type: 'step-finish',
         },
         {
           payload: {
             id: expect.any(String),
-            endedAt: expect.any(Number),
+          },
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: expect.any(String),
             output: {
               prompt: 'Capital of UK, just the name',
             },
             status: 'success',
           },
-          type: 'workflow-step-result',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
+          type: 'step-result',
         },
         {
           payload: {
             id: expect.any(String),
-            payload: {
-              prompt: 'Capital of UK, just the name',
-            },
-            startedAt: expect.any(Number),
-            status: 'running',
+            metadata: {},
           },
-          type: 'workflow-step-start',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: expect.any(String),
+          },
+          type: 'step-start',
         },
         {
           args: {
@@ -8570,27 +8556,22 @@ describe('MastraInngestWorkflow', () => {
             output: {
               text: 'London',
             },
-            endedAt: expect.any(Number),
             status: 'success',
           },
-          type: 'workflow-step-result',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
+          type: 'step-result',
         },
         {
           payload: {
+            id: expect.any(String),
             metadata: {},
-            output: {
-              usage: {
-                inputTokens: 0,
-                outputTokens: 0,
-                totalTokens: 0,
-              },
-            },
           },
-          type: 'workflow-finish',
-          from: 'WORKFLOW',
-          runId: 'test-run-id',
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            runId: 'test-run-id',
+          },
+          type: 'finish',
         },
       ];
       values.forEach((value, i) => {
@@ -9144,7 +9125,6 @@ describe('MastraInngestWorkflow', () => {
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
       for await (const data of streamOutput.fullStream) {
-        console.log('got data', JSON.stringify(data, null, 2));
         collectedStreamData.push(JSON.parse(JSON.stringify(data)));
       }
       watchData = collectedStreamData;
@@ -9585,6 +9565,9 @@ describe('MastraInngestWorkflow', () => {
 
       // @ts-ignore
       expect(agentEvents.map(event => event?.payload?.output?.type)).toEqual([
+        'step-start',
+        'text-delta',
+        'step-finish',
         'step-start',
         'text-delta',
         'step-finish',

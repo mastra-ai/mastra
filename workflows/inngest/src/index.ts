@@ -215,11 +215,25 @@ export class InngestRun<
     }
   }
 
-  async start({
+  async start(params: {
+    inputData?: z.infer<TInput>;
+    runtimeContext?: RuntimeContext;
+    initialState?: z.infer<TState>;
+    tracingOptions?: TracingOptions;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
+  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    return this._start(params);
+  }
+
+  async _start({
     inputData,
     initialState,
     outputOptions,
     tracingOptions,
+    format,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
@@ -229,6 +243,7 @@ export class InngestRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    format?: 'legacy' | 'vnext' | undefined;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     await this.#mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -260,6 +275,7 @@ export class InngestRun<
         resourceId: this.resourceId,
         outputOptions,
         tracingOptions,
+        format,
       },
     });
 
@@ -391,7 +407,8 @@ export class InngestRun<
 
     const writer = writable.getWriter();
     writer.write({
-      type: 'workflow-start',
+      // @ts-ignore
+      type: 'start',
       // @ts-ignore
       payload: { runId: this.runId },
     });
@@ -401,6 +418,11 @@ export class InngestRun<
           ...event,
           type: event.type.replace('workflow-', ''),
         };
+
+        if (e.type === 'step-output') {
+          e.type = e.payload.output.type;
+          e.payload = e.payload.output.payload;
+        }
         // watch-v2 events are data stream events, so we need to cast them to the correct type
         await writer.write(e as any);
       } catch {}
@@ -408,7 +430,7 @@ export class InngestRun<
 
     this.closeStreamAction = async () => {
       writer.write({
-        type: 'workflow-finish',
+        type: 'finish',
         // @ts-ignore
         payload: { runId: this.runId },
       });
@@ -423,7 +445,7 @@ export class InngestRun<
       }
     };
 
-    this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
+    this.executionResults = this._start({ inputData, runtimeContext, format: 'legacy' }).then(result => {
       if (result.status !== 'suspended') {
         this.closeStreamAction?.().catch(() => {});
       }
@@ -489,13 +511,14 @@ export class InngestRun<
           }
         };
 
-        const executionResultsPromise = self.start({
+        const executionResultsPromise = self._start({
           inputData,
           runtimeContext,
           // tracingContext, // We are not able to pass a reference to a span here, what to do?
           initialState,
           tracingOptions,
           outputOptions,
+          format: 'vnext',
         });
         let executionResults;
         try {
@@ -723,7 +746,7 @@ export class InngestWorkflow<
       },
       { event: `workflow.${this.id}` },
       async ({ event, step, attempt, publish }) => {
-        let { inputData, initialState, runId, resourceId, resume, outputOptions } = event.data;
+        let { inputData, initialState, runId, resourceId, resume, outputOptions, format } = event.data;
 
         if (!runId) {
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
@@ -775,6 +798,7 @@ export class InngestWorkflow<
           retryConfig: this.retryConfig,
           runtimeContext: new RuntimeContext(), // TODO
           resume,
+          format,
           abortController: new AbortController(),
           // currentSpan: undefined, // TODO: Pass actual parent AI span from workflow execution context
           outputOptions,
@@ -1298,7 +1322,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 abortController?.abort();
               },
               [EMITTER_SYMBOL]: emitter,
-              // TODO: add streamVNext support
               [STREAM_FORMAT_SYMBOL]: executionContext.format,
               engine: { step: this.inngestStep },
               abortSignal: abortController?.signal,
@@ -1418,7 +1441,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 abortController?.abort();
               },
               [EMITTER_SYMBOL]: emitter,
-              [STREAM_FORMAT_SYMBOL]: executionContext.format, // TODO: add streamVNext support
+              [STREAM_FORMAT_SYMBOL]: executionContext.format,
               engine: { step: this.inngestStep },
               abortSignal: abortController?.signal,
               writer: new ToolStream(
@@ -1893,6 +1916,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
             },
             [EMITTER_SYMBOL]: emitter,
+            [STREAM_FORMAT_SYMBOL]: executionContext.format,
             engine: {
               step: this.inngestStep,
             },
@@ -2195,7 +2219,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                       abortController.abort();
                     },
                     [EMITTER_SYMBOL]: emitter,
-                    [STREAM_FORMAT_SYMBOL]: executionContext.format, // TODO: add streamVNext support
+                    [STREAM_FORMAT_SYMBOL]: executionContext.format,
                     engine: {
                       step: this.inngestStep,
                     },
