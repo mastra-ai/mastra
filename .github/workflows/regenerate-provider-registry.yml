@@ -57,7 +57,7 @@ jobs:
         run: pnpx tsx packages/core/scripts/generate-model-docs.ts
 
       - name: Generate llms.txt files
-        run: pnpx tsx docs/scripts/build-llms-text-files.ts
+        run: pnpx tsx docs/scripts/build-llms-text-files.ts docs
 
       - name: Format generated files with Prettier
         run: |
