@@ -25,8 +25,11 @@ export const translationScorer = createScorer({
   },
 })
   .preprocess(({ run }) => {
-    const userText = (run.input?.inputMessages?.[0]?.content as string) || '';
-    const assistantText = (run.output?.[0]?.content as string) || '';
+    const messages = run.input?.inputMessages || [];
+    const outputs = run.output || [];
+    // Select last user and assistant messages to evaluate the most recent turn
+    const userText = (messages[messages.length - 1]?.content as string) || '';
+    const assistantText = (outputs[outputs.length - 1]?.content as string) || '';
     return { userText, assistantText };
   })
   .analyze({
@@ -61,14 +64,22 @@ export const translationScorer = createScorer({
         `,
   })
   .generateScore(({ results }) => {
-    const r = (results as any)?.analyzeStepResult || {};
-    if (!r.nonEnglish) return 1; // If not applicable, full credit
-    if (r.translated) return Math.max(0, Math.min(1, 0.7 + 0.3 * (r.confidence ?? 1)));
+    const r = (results as any)?.analyzeStepResult;
+    // Fail closed on judge/parse failure
+    if (!r || typeof r.nonEnglish !== 'boolean' || typeof r.translated !== 'boolean') {
+      return 0;
+    }
+    if (!r.nonEnglish) return 1; // Not applicable
+    if (r.translated) {
+      const score = 0.7 + 0.3 * (typeof r.confidence === 'number' ? r.confidence : 1);
+      return Math.min(1, Math.max(0, score));
+    }
     return 0; // Non-English but not translated
   })
   .generateReason(({ results, score }) => {
-    const r = (results as any)?.analyzeStepResult || {};
-    return `Translation scoring: nonEnglish=${r.nonEnglish ?? false}, translated=${r.translated ?? false}, confidence=${r.confidence ?? 0}. Score=${score}. ${r.explanation ?? ''}`;
+    const r = (results as any)?.analyzeStepResult;
+    if (!r) return `Translation scoring: judge output missing; assigned score=${score}.`;
+    return `Translation scoring: nonEnglish=${r.nonEnglish}, translated=${r.translated}, confidence=${r.confidence ?? 0}. Score=${score}. ${r.explanation ?? ''}`;
   });
 
 export const scorers = {
