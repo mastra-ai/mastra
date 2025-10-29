@@ -45,7 +45,7 @@ async function concatenateMDXDocs(sourceDir: string) {
     process.exit(1);
   }
 
-  const outputDir = path.join(process.cwd(), "public");
+  const outputDir = path.join(sourceDir, "public");
   // Ensure output directory exists
   try {
     await fs.mkdir(outputDir, { recursive: true });
