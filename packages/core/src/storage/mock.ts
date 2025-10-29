@@ -461,7 +461,7 @@ export class InMemoryStore extends MastraStorage {
 
     // Convert Maps to arrays for JSON serialization
     for (const [tableName, tableData] of Object.entries(operationsDatabase)) {
-      data[tableName] = Array.from(tableData.entries());
+      data[tableName] = Array.from(tableData.values());
     }
 
     await writeFile(filePath, JSON.stringify(data, null, 2));
