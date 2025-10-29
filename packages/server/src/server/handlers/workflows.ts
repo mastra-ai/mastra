@@ -637,10 +637,6 @@ export async function resumeAsyncWorkflowHandler({
       throw new HTTPException(400, { message: 'runId required to resume workflow' });
     }
 
-    if (!body.step) {
-      throw new HTTPException(400, { message: 'step required to resume workflow' });
-    }
-
     const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
 
     if (!workflow) {
@@ -686,10 +682,6 @@ export async function resumeWorkflowHandler({
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume workflow' });
-    }
-
-    if (!body.step) {
-      throw new HTTPException(400, { message: 'step required to resume workflow' });
     }
 
     const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
