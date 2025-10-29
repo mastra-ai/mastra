@@ -60,9 +60,35 @@ registerApiRoute("/my-custom-route", {
 });
 ```
 
----
-
 ## Common examples
+
+### Setting user or request context via `runtimeContext`
+
+You can populate `runtimeContext` dynamically in server middleware by extracting information from the request. Use `runtimeContext` when you need to set user or request context that you need to pass to agents, tools, or workflows.
+
+In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { testWeatherAgent } from "./agents/test-weather-agent";
+
+export const mastra = new Mastra({
+  agents: { testWeatherAgent },
+  server: {
+    middleware: [
+      async (context, next) => {
+        const country = context.req.header("CF-IPCountry");
+        const runtimeContext = context.get("runtimeContext");
+
+        runtimeContext.set("temperature-unit", country === "US" ? "fahrenheit" : "celsius");
+
+        await next();
+      }
+    ]
+  }
+});
+```
 
 ### Authentication
 
@@ -142,32 +168,6 @@ be inspected by middleware to tailor behaviour:
 - `x-mastra-client-type`: identifies the client SDK, e.g. `js` or `python`
 - `x-mastra-dev-playground`: request triggered from a local playground
 
-### Setting `runtimeContext`
-
-You can populate `runtimeContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
-
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
-import { testWeatherAgent } from "./agents/test-weather-agent";
-
-export const mastra = new Mastra({
-  agents: { testWeatherAgent },
-  server: {
-    middleware: [
-      async (context, next) => {
-        const country = context.req.header("CF-IPCountry");
-        const runtimeContext = context.get("runtimeContext");
-
-        runtimeContext.set("temperature-unit", country === "US" ? "fahrenheit" : "celsius");
-
-        await next();
-      }
-    ]
-  }
-});
-```
-
-# Related
+## Related
 
 - [Runtime Context](./runtime-context.mdx)
