@@ -11,7 +11,7 @@ import type {
   DeleteVectorParams,
   UpdateVectorParams,
 } from '@mastra/core/vector';
-import { Pinecone } from '@pinecone-database/pinecone';
+import { Pinecone, ServerlessSpecCloudEnum } from '@pinecone-database/pinecone';
 import type {
   IndexStatsDescription,
   QueryOptions,
@@ -47,18 +47,26 @@ interface PineconeDeleteVectorParams extends DeleteVectorParams {
 export class PineconeVector extends MastraVector<PineconeVectorFilter> {
   private client: Pinecone;
 
+  private cloud: ServerlessSpecCloudEnum;
+
+  private region: string;
+
   /**
    * Creates a new PineconeVector client.
    * @param apiKey - The API key for Pinecone.
    * @param environment - The environment for Pinecone.
+   * @param cloud - The cloud to use for Pinecone index.
+   * @param region - The cloud to use for Pinecone index.
    */
-  constructor({ apiKey, environment }: { apiKey: string; environment?: string }) {
+  constructor({ apiKey, environment, cloud, region }: { apiKey: string; environment?: string, cloud?: ServerlessSpecCloudEnum; region?: string }) {
     super();
     const opts: { apiKey: string; controllerHostUrl?: string } = { apiKey };
     if (environment) {
       opts['controllerHostUrl'] = environment;
     }
     this.client = new Pinecone(opts);
+    this.cloud = cloud || 'aws';
+    this.region = region || 'us-east-1';
   }
 
   get indexSeparator(): string {
@@ -92,8 +100,8 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
         metric: metric,
         spec: {
           serverless: {
-            cloud: 'aws',
-            region: 'us-east-1',
+            cloud: this.cloud,
+            region: this.region,
           },
         },
       });
