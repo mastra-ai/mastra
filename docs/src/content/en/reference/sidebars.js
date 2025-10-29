@@ -693,69 +693,6 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Evals",
-      collapsed: true,
-      items: [
-        { type: "doc", id: "evals/bias", label: "Bias" },
-        { type: "doc", id: "evals/completeness", label: "Completeness" },
-        { type: "doc", id: "evals/faithfulness", label: "Faithfulness" },
-        { type: "doc", id: "evals/hallucination", label: "Hallucination" },
-        { type: "doc", id: "evals/summarization", label: "Summarization" },
-        { type: "doc", id: "evals/toxicity", label: "Toxicity" },
-        {
-          type: "doc",
-          id: "evals/keyword-coverage",
-          label: "KeywordCoverageMetric",
-        },
-        {
-          type: "doc",
-          id: "evals/tone-consistency",
-          label: "ToneConsistencyMetric",
-        },
-        {
-          type: "doc",
-          id: "evals/content-similarity",
-          label: "ContentSimilarityMetric",
-        },
-        {
-          type: "doc",
-          id: "evals/context-relevancy",
-          label: "ContextRelevancyMetric",
-        },
-        {
-          type: "doc",
-          id: "evals/answer-relevancy",
-          label: "AnswerRelevancyMetric",
-        },
-        {
-          type: "doc",
-          id: "evals/context-precision",
-          label: "ContextPrecisionMetric",
-        },
-        {
-          type: "doc",
-          id: "evals/contextual-recall",
-          label: "ContextualRecallMetric",
-        },
-        {
-          type: "doc",
-          id: "evals/context-position",
-          label: "ContextPositionMetric",
-        },
-        {
-          type: "doc",
-          id: "evals/textual-difference",
-          label: "TextualDifferenceMetric",
-        },
-        {
-          type: "doc",
-          id: "evals/prompt-alignment",
-          label: "PromptAlignmentMetric",
-        },
-      ],
-    },
-    {
-      type: "category",
       label: "Scorers",
       collapsed: true,
       items: [
