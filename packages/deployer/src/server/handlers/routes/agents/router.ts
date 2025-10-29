@@ -1341,7 +1341,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 data: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                requestContext: { type: 'object' },
               },
               required: ['data'],
             },
@@ -1383,7 +1383,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
               properties: {
                 runId: { type: 'string', description: 'The run ID for the execution' },
                 toolCallId: { type: 'string', description: 'The tool call ID for the execution' },
-                runtimeContext: { type: 'object', description: 'Runtime context for the execution' },
+                requestContext: { type: 'object', description: 'Runtime context for the execution' },
                 format: { type: 'string', enum: ['aisdk', 'mastra'], description: 'Output format' },
               },
               required: ['runId', 'toolCallId'],
@@ -1426,7 +1426,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
               properties: {
                 runId: { type: 'string', description: 'The run ID for the execution' },
                 toolCallId: { type: 'string', description: 'The tool call ID for the execution' },
-                runtimeContext: { type: 'object', description: 'Runtime context for the execution' },
+                requestContext: { type: 'object', description: 'Runtime context for the execution' },
                 format: { type: 'string', enum: ['aisdk', 'mastra'], description: 'Output format' },
               },
               required: ['runId', 'toolCallId'],

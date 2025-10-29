@@ -74,7 +74,7 @@ export async function createAgentBuilderActionRunHandler(c: Context) {
 export async function startAsyncAgentBuilderActionHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const actionId = c.req.param('actionId');
     const { inputData } = await c.req.json();
     const runId = c.req.query('runId');
@@ -82,7 +82,7 @@ export async function startAsyncAgentBuilderActionHandler(c: Context) {
     disableHotReload();
     const result = await getOriginalStartAsyncAgentBuilderActionHandler({
       mastra,
-      runtimeContext,
+      requestContext,
       actionId,
       runId,
       inputData,
@@ -99,14 +99,14 @@ export async function startAsyncAgentBuilderActionHandler(c: Context) {
 export async function startAgentBuilderActionRunHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const actionId = c.req.param('actionId');
     const { inputData } = await c.req.json();
     const runId = c.req.query('runId');
 
     await getOriginalStartAgentBuilderActionRunHandler({
       mastra,
-      runtimeContext,
+      requestContext,
       actionId,
       runId,
       inputData,
@@ -167,7 +167,7 @@ export async function watchAgentBuilderActionHandler(c: Context) {
 export async function streamAgentBuilderActionHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const logger = mastra.getLogger();
     const actionId = c.req.param('actionId');
     const { inputData } = await c.req.json();
@@ -184,7 +184,7 @@ export async function streamAgentBuilderActionHandler(c: Context) {
             actionId,
             runId,
             inputData,
-            runtimeContext,
+            requestContext,
           });
 
           const reader = result.stream.getReader();
@@ -216,7 +216,7 @@ export async function streamAgentBuilderActionHandler(c: Context) {
 export async function streamVNextAgentBuilderActionHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const logger = mastra.getLogger();
     const actionId = c.req.param('actionId');
     const { inputData } = await c.req.json();
@@ -234,7 +234,7 @@ export async function streamVNextAgentBuilderActionHandler(c: Context) {
             actionId,
             runId,
             inputData,
-            runtimeContext,
+            requestContext,
           });
 
           const reader = result.getReader();
@@ -265,7 +265,7 @@ export async function streamVNextAgentBuilderActionHandler(c: Context) {
 export async function resumeAsyncAgentBuilderActionHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const actionId = c.req.param('actionId');
     const runId = c.req.query('runId');
     const { step, resumeData } = await c.req.json();
@@ -277,7 +277,7 @@ export async function resumeAsyncAgentBuilderActionHandler(c: Context) {
     disableHotReload();
     const result = await getOriginalResumeAsyncAgentBuilderActionHandler({
       mastra,
-      runtimeContext,
+      requestContext,
       actionId,
       runId,
       body: { step, resumeData },
@@ -294,7 +294,7 @@ export async function resumeAsyncAgentBuilderActionHandler(c: Context) {
 export async function resumeAgentBuilderActionHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const actionId = c.req.param('actionId');
     const runId = c.req.query('runId');
     const { step, resumeData } = await c.req.json();
@@ -306,7 +306,7 @@ export async function resumeAgentBuilderActionHandler(c: Context) {
     disableHotReload();
     await getOriginalResumeAgentBuilderActionHandler({
       mastra,
-      runtimeContext,
+      requestContext,
       actionId,
       runId,
       body: { step, resumeData },

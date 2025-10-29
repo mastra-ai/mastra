@@ -1,6 +1,6 @@
 import type { AITraceRecord, AITracesPaginatedArg, WorkflowInfo } from '@mastra/core';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/runtime-context';
 import {
   Agent,
   MemoryThread,
@@ -48,7 +48,7 @@ import type {
   GetMemoryConfigResponse,
   GetMemoryThreadMessagesResponse,
 } from './types';
-import { base64RuntimeContext, parseClientRuntimeContext } from './utils';
+import { base64RequestContext, parseClientRequestContext } from './utils';
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
@@ -59,16 +59,16 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available agents
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing map of agent IDs to agent details
    */
-  public getAgents(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetAgentResponse>> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
+  public getAgents(requestContext?: RequestContext | Record<string, any>): Promise<Record<string, GetAgentResponse>> {
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
 
     const searchParams = new URLSearchParams();
 
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
     }
 
     const queryString = searchParams.toString();
@@ -216,16 +216,16 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available tools
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing map of tool IDs to tool details
    */
-  public getTools(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetToolResponse>> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
+  public getTools(requestContext?: RequestContext | Record<string, any>): Promise<Record<string, GetToolResponse>> {
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
 
     const searchParams = new URLSearchParams();
 
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
     }
 
     const queryString = searchParams.toString();
@@ -243,18 +243,18 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available workflows
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing map of workflow IDs to workflow details
    */
   public getWorkflows(
-    runtimeContext?: RuntimeContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, any>,
   ): Promise<Record<string, GetWorkflowResponse>> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
 
     const searchParams = new URLSearchParams();
 
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
     }
 
     const queryString = searchParams.toString();

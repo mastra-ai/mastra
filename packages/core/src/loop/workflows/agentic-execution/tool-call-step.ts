@@ -25,7 +25,7 @@ export function createToolCallStep<
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
-    execute: async ({ inputData, suspend, resumeData, runtimeContext }) => {
+    execute: async ({ inputData, suspend, resumeData, requestContext }) => {
       // If the tool was already executed by the provider, skip execution
       if (inputData.providerExecuted) {
         // Still emit telemetry for provider-executed tools
@@ -101,7 +101,7 @@ export function createToolCallStep<
       });
 
       try {
-        const requireToolApproval = runtimeContext.get('__mastra_requireToolApproval');
+        const requireToolApproval = requestContext.get('__mastra_requireToolApproval');
         if (requireToolApproval || (tool as any).requireApproval) {
           if (!resumeData) {
             controller.enqueue({

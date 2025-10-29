@@ -1,1 +1,1 @@
-export { RuntimeContext } from '../runtime-context';
+export { RequestContext } from '../runtime-context';

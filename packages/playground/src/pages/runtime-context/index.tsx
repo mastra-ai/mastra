@@ -4,12 +4,12 @@ import {
   Icon,
   MainContentContent,
   MainContentLayout,
-  RuntimeContext,
-  RuntimeContextWrapper,
+  RequestContext,
+  RequestContextWrapper,
 } from '@mastra/playground-ui';
 import { Globe } from 'lucide-react';
 
-export default function RuntimeContextPage() {
+export default function RequestContextPage() {
   return (
     <MainContentLayout>
       <Header>
@@ -17,14 +17,14 @@ export default function RuntimeContextPage() {
           <Icon>
             <Globe />
           </Icon>
-          Runtime Context
+          Request Context
         </HeaderTitle>
       </Header>
 
       <MainContentContent>
-        <RuntimeContextWrapper>
-          <RuntimeContext />
-        </RuntimeContextWrapper>
+        <RequestContextWrapper>
+          <RequestContext />
+        </RequestContextWrapper>
       </MainContentContent>
     </MainContentLayout>
   );

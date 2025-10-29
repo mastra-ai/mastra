@@ -1,5 +1,5 @@
 import type { Mastra } from '@mastra/core';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/runtime-context';
 import {
   getLegacyWorkflowsHandler as getOriginalLegacyWorkflowsHandler,
   getLegacyWorkflowByIdHandler as getOriginalLegacyWorkflowByIdHandler,
@@ -50,14 +50,14 @@ export async function getLegacyWorkflowByIdHandler(c: Context) {
 export async function startAsyncLegacyWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const requestContext: RequestContext = c.get('requestContext');
     const workflowId = c.req.param('workflowId');
     const triggerData = await c.req.json();
     const runId = c.req.query('runId');
 
     const result = await getOriginalStartAsyncLegacyWorkflowHandler({
       mastra,
-      runtimeContext,
+      requestContext,
       workflowId,
       runId,
       triggerData,
@@ -90,14 +90,14 @@ export async function createLegacyWorkflowRunHandler(c: Context) {
 export async function startLegacyWorkflowRunHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const requestContext: RequestContext = c.get('requestContext');
     const workflowId = c.req.param('workflowId');
     const triggerData = await c.req.json();
     const runId = c.req.query('runId');
 
     await getOriginalStartLegacyWorkflowRunHandler({
       mastra,
-      runtimeContext,
+      requestContext,
       workflowId,
       runId,
       triggerData,
@@ -154,7 +154,7 @@ export function watchLegacyWorkflowHandler(c: Context) {
 export async function resumeAsyncLegacyWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const requestContext: RequestContext = c.get('requestContext');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
     const { stepId, context } = await c.req.json();
@@ -165,7 +165,7 @@ export async function resumeAsyncLegacyWorkflowHandler(c: Context) {
 
     const result = await getOriginalResumeAsyncLegacyWorkflowHandler({
       mastra,
-      runtimeContext,
+      requestContext,
       workflowId,
       runId,
       body: { stepId, context },
@@ -180,7 +180,7 @@ export async function resumeAsyncLegacyWorkflowHandler(c: Context) {
 export async function resumeLegacyWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const requestContext: RequestContext = c.get('requestContext');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
     const { stepId, context } = await c.req.json();
@@ -191,7 +191,7 @@ export async function resumeLegacyWorkflowHandler(c: Context) {
 
     await getOriginalResumeLegacyWorkflowHandler({
       mastra,
-      runtimeContext,
+      requestContext,
       workflowId,
       runId,
       body: { stepId, context },

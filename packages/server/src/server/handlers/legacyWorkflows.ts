@@ -1,5 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/runtime-context';
 import type { LegacyWorkflowRuns } from '@mastra/core/storage';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import type { LegacyWorkflow } from '@mastra/core/workflows/legacy';
@@ -83,13 +83,13 @@ export async function getLegacyWorkflowByIdHandler({ mastra, workflowId }: Workf
 
 export async function startAsyncLegacyWorkflowHandler({
   mastra,
-  runtimeContext,
+  requestContext,
   workflowId,
   runId,
   triggerData,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   triggerData?: unknown;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
 }) {
   try {
     if (!workflowId) {
@@ -106,7 +106,7 @@ export async function startAsyncLegacyWorkflowHandler({
       const newRun = workflow.createRun();
       const result = await newRun.start({
         triggerData,
-        runtimeContext,
+        requestContext,
       });
       return result;
     }
@@ -121,7 +121,7 @@ export async function startAsyncLegacyWorkflowHandler({
 
     const result = await run.start({
       triggerData,
-      runtimeContext,
+      requestContext,
     });
     return result;
   } catch (error) {
@@ -187,13 +187,13 @@ export async function createLegacyWorkflowRunHandler({
 
 export async function startLegacyWorkflowRunHandler({
   mastra,
-  runtimeContext,
+  requestContext,
   workflowId,
   runId,
   triggerData,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   triggerData?: unknown;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
 }) {
   try {
     if (!workflowId) {
@@ -213,7 +213,7 @@ export async function startLegacyWorkflowRunHandler({
 
     void run.start({
       triggerData,
-      runtimeContext,
+      requestContext,
     });
 
     return { message: 'Workflow run started' };
@@ -282,8 +282,8 @@ export async function resumeAsyncLegacyWorkflowHandler({
   workflowId,
   runId,
   body,
-  runtimeContext,
-}: WorkflowContext & { body: { stepId: string; context: any }; runtimeContext: RuntimeContext }) {
+  requestContext,
+}: WorkflowContext & { body: { stepId: string; context: any }; requestContext: RequestContext }) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -305,7 +305,7 @@ export async function resumeAsyncLegacyWorkflowHandler({
     const result = await run.resume({
       stepId: body.stepId,
       context: body.context,
-      runtimeContext,
+      requestContext,
     });
 
     return result;
@@ -319,8 +319,8 @@ export async function resumeLegacyWorkflowHandler({
   workflowId,
   runId,
   body,
-  runtimeContext,
-}: WorkflowContext & { body: { stepId: string; context: any }; runtimeContext: RuntimeContext }) {
+  requestContext,
+}: WorkflowContext & { body: { stepId: string; context: any }; requestContext: RequestContext }) {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -340,7 +340,7 @@ export async function resumeLegacyWorkflowHandler({
     void run.resume({
       stepId: body.stepId,
       context: body.context,
-      runtimeContext,
+      requestContext,
     });
 
     return { message: 'Workflow run resumed' };

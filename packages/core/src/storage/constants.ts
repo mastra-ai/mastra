@@ -43,7 +43,7 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   input: { type: 'jsonb' },
   output: { type: 'jsonb' }, // MESSAGE OUTPUT
   additionalContext: { type: 'jsonb', nullable: true }, // DATA FROM THE CONTEXT PARAM ON AN AGENT
-  runtimeContext: { type: 'jsonb', nullable: true }, // THE EVALUATE RUNTIME CONTEXT FOR THE RUN
+  requestContext: { type: 'jsonb', nullable: true }, // THE EVALUATE RUNTIME CONTEXT FOR THE RUN
   /**
    * Things you can evaluate
    */

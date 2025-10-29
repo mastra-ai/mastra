@@ -2,7 +2,7 @@ import type { CoreMessage } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../runtime-context';
 import { MockProvider } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { makeCoreTool } from '../../utils';
@@ -16,7 +16,7 @@ describe('MastraLLM', () => {
     } as any,
   };
 
-  const runtimeContext = new RuntimeContext();
+  const requestContext = new RequestContext();
   const tracingContext = {};
 
   const mockTools = {
@@ -33,7 +33,7 @@ describe('MastraLLM', () => {
         name: 'test',
         logger: mockMastra.logger,
         mastra: mockMastra as any,
-        runtimeContext,
+        requestContext,
         tracingContext,
       },
     ),
@@ -86,7 +86,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -105,7 +105,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         output: schema,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -118,7 +118,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -131,7 +131,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -146,7 +146,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -162,7 +162,7 @@ describe('MastraLLM', () => {
         onStepFinish,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -178,7 +178,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -190,7 +190,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -202,7 +202,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -220,7 +220,7 @@ describe('MastraLLM', () => {
         output: schema,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -242,7 +242,7 @@ describe('MastraLLM', () => {
         output: jsonSchema,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -260,7 +260,7 @@ describe('MastraLLM', () => {
         onFinish,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -282,7 +282,7 @@ describe('MastraLLM', () => {
         onFinish,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -299,7 +299,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -316,7 +316,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -331,7 +331,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -347,7 +347,7 @@ describe('MastraLLM', () => {
         onStepFinish,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -370,7 +370,7 @@ describe('MastraLLM', () => {
         onStepFinish,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -386,7 +386,7 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -409,7 +409,7 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -426,7 +426,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -441,7 +441,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -456,7 +456,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -474,7 +474,7 @@ describe('MastraLLM', () => {
         onFinish,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -490,7 +490,7 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -522,7 +522,7 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -540,7 +540,7 @@ describe('MastraLLM', () => {
 
       const result = await aisdkObject.__textObject({
         messages,
-        runtimeContext,
+        requestContext,
         structuredOutput: schema,
         temperature: 0.7,
         tracingContext,
@@ -558,7 +558,7 @@ describe('MastraLLM', () => {
         messages,
         structuredOutput: arraySchema,
         temperature: 0.7,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -580,7 +580,7 @@ describe('MastraLLM', () => {
         messages,
         structuredOutput: jsonSchema,
         temperature: 0.7,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -599,7 +599,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         structuredOutput: schema,
         temperature: 0.7,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
     });
@@ -618,7 +618,7 @@ describe('MastraLLM', () => {
         structuredOutput: schema,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -634,7 +634,7 @@ describe('MastraLLM', () => {
         structuredOutput: arraySchema,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -656,7 +656,7 @@ describe('MastraLLM', () => {
         structuredOutput: jsonSchema,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -678,7 +678,7 @@ describe('MastraLLM', () => {
         onFinish,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -698,7 +698,7 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -717,7 +717,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -738,7 +738,7 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 

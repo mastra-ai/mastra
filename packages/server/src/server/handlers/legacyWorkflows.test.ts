@@ -1,5 +1,5 @@
 import { Mastra } from '@mastra/core';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 import { MockStore } from '@mastra/core/storage';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { LegacyStep as Step, LegacyWorkflow as Workflow } from '@mastra/core/workflows/legacy';
@@ -136,7 +136,7 @@ describe('Workflow Handlers', () => {
         startAsyncLegacyWorkflowHandler({
           mastra: mockMastra,
           runId: 'test-run',
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
     });
@@ -153,7 +153,7 @@ describe('Workflow Handlers', () => {
       const result = await startAsyncLegacyWorkflowHandler({
         mastra: mockMastra,
         workflowId: 'test-workflow',
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
 
       expect(result.runId).toEqual('test-run');
@@ -300,7 +300,7 @@ describe('Workflow Handlers', () => {
         startLegacyWorkflowRunHandler({
           mastra: mockMastra,
           runId: 'test-run',
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
     });
@@ -310,7 +310,7 @@ describe('Workflow Handlers', () => {
         startLegacyWorkflowRunHandler({
           mastra: mockMastra,
           workflowId: 'test-workflow',
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'runId required to start run' }));
     });
@@ -321,7 +321,7 @@ describe('Workflow Handlers', () => {
           mastra: mockMastra,
           workflowId: 'test-workflow',
           runId: 'non-existent',
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
     });
@@ -337,7 +337,7 @@ describe('Workflow Handlers', () => {
         mastra: mockMastra,
         workflowId: 'test-workflow',
         runId: 'test-run',
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
 
       expect(result).toEqual({ message: 'Workflow run started' });
@@ -351,7 +351,7 @@ describe('Workflow Handlers', () => {
           mastra: mockMastra,
           runId: 'test-run',
           body: { stepId: 'test-step', context: {} },
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
     });
@@ -362,7 +362,7 @@ describe('Workflow Handlers', () => {
           mastra: mockMastra,
           workflowId: 'test-workflow',
           body: { stepId: 'test-step', context: {} },
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'runId required to resume workflow' }));
     });
@@ -374,7 +374,7 @@ describe('Workflow Handlers', () => {
           workflowId: 'test-workflow',
           runId: 'non-existent',
           body: { stepId: 'test-step', context: {} },
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
     });
@@ -396,7 +396,7 @@ describe('Workflow Handlers', () => {
         workflowId: reusableWorkflow.name,
         runId: 'test2-run',
         body: { stepId: 'test-step', context: { test: 'data' } },
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
       expect(result).toEqual(mockResult);
     });
@@ -409,7 +409,7 @@ describe('Workflow Handlers', () => {
           mastra: mockMastra,
           runId: 'test-run',
           body: { stepId: 'test-step', context: {} },
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
     });
@@ -420,7 +420,7 @@ describe('Workflow Handlers', () => {
           mastra: mockMastra,
           workflowId: 'test-workflow',
           body: { stepId: 'test-step', context: {} },
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'runId required to resume workflow' }));
     });
@@ -432,7 +432,7 @@ describe('Workflow Handlers', () => {
           workflowId: 'test-workflow',
           runId: 'non-existent',
           body: { stepId: 'test-step', context: {} },
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
     });
@@ -450,7 +450,7 @@ describe('Workflow Handlers', () => {
         workflowId: reusableWorkflow.name,
         runId: 'test-run',
         body: { stepId: 'test-step', context: { test: 'data' } },
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
 
       expect(result).toEqual({ message: 'Workflow run resumed' });

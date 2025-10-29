@@ -4,7 +4,7 @@ import { MastraA2AError } from '@mastra/core/a2a';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 import type { MastraStorage } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryTaskStore } from '../a2a/store';
@@ -75,7 +75,7 @@ describe('A2A Handler', () => {
     it('should return the agent card', async () => {
       const agentCard = await getAgentCardByIdHandler({
         mastra: mockMastra,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         agentId: 'test-agent',
       });
       expect(agentCard).toMatchInlineSnapshot(`
@@ -108,7 +108,7 @@ describe('A2A Handler', () => {
       const customUrl = '/custom/execution/url';
       const agentCard = await getAgentCardByIdHandler({
         mastra: mockMastra,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         agentId: 'test-agent',
         executionUrl: customUrl,
       });
@@ -122,7 +122,7 @@ describe('A2A Handler', () => {
       };
       const agentCard = await getAgentCardByIdHandler({
         mastra: mockMastra,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         agentId: 'test-agent',
         provider: customProvider,
       });
@@ -133,7 +133,7 @@ describe('A2A Handler', () => {
       const customVersion = '2.0';
       const agentCard = await getAgentCardByIdHandler({
         mastra: mockMastra,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         agentId: 'test-agent',
         version: customVersion,
       });
@@ -180,14 +180,14 @@ describe('A2A Handler', () => {
       mockAgent.generate.mockResolvedValue({ text: agentResponseText });
 
       vi.setSystemTime(new Date('2025-05-08T11:47:38.458Z'));
-      const runtimeContext = new RuntimeContext();
+      const requestContext = new RequestContext();
       const result = await handleMessageSend({
         requestId,
         params,
         taskStore: mockTaskStore,
         agent: mockAgent,
         agentId,
-        runtimeContext,
+        requestContext,
       });
 
       expect(result).toEqual({
@@ -253,7 +253,7 @@ describe('A2A Handler', () => {
         taskStore: mockTaskStore,
         agent: mockAgent,
         agentId,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
 
       // Because the a2a spec requires the server to create the the taskId, we don't know the id
@@ -338,7 +338,7 @@ describe('A2A Handler', () => {
         taskStore: mockTaskStore,
         agentId,
         agent: mockAgent,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
 
       const task = await mockTaskStore.load({ agentId, taskId });
@@ -428,7 +428,7 @@ describe('A2A Handler', () => {
         taskStore: mockTaskStore,
         agentId,
         agent: mockAgent,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
 
       const first = await gen.next();
@@ -516,7 +516,7 @@ describe('A2A Handler', () => {
         taskStore: mockTaskStore,
         agentId,
         agent: mockAgent,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
 
       const first = await gen.next();

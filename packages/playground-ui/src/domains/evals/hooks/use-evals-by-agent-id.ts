@@ -18,15 +18,15 @@ export type Evals = {
 };
 
 export const useEvalsByAgentId = (agentId: string, type: 'ci' | 'live') => {
-  const { runtimeContext } = usePlaygroundStore();
+  const { requestContext } = usePlaygroundStore();
   const client = useMastraClient();
   return useQuery({
     staleTime: 0,
     gcTime: 0,
-    queryKey: ['evals', agentId, type, JSON.stringify(runtimeContext)],
+    queryKey: ['evals', agentId, type, JSON.stringify(requestContext)],
     queryFn: () =>
       type === 'live'
-        ? client.getAgent(agentId).liveEvals(runtimeContext)
-        : client.getAgent(agentId).evals(runtimeContext),
+        ? client.getAgent(agentId).liveEvals(requestContext)
+        : client.getAgent(agentId).evals(requestContext),
   });
 };

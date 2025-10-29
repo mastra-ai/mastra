@@ -204,7 +204,7 @@ export interface WorkflowRunState {
   status: WorkflowRunStatus;
   result?: Record<string, any>;
   error?: string | Error;
-  runtimeContext?: Record<string, any>;
+  requestContext?: Record<string, any>;
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];

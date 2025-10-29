@@ -9,12 +9,12 @@ export function usePromptVersions(agentId: string, instructions?: string) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [versionToDelete, setVersionToDelete] = useState<number | null>(null);
   const client = useMastraClient();
-  const { runtimeContext } = usePlaygroundStore();
+  const { requestContext } = usePlaygroundStore();
 
   // Fetch eval results for a version
   const fetchEvalResults = async (): Promise<any[]> => {
     try {
-      const response = await client.getAgent(agentId).liveEvals(runtimeContext);
+      const response = await client.getAgent(agentId).liveEvals(requestContext);
       return response?.evals;
     } catch (error) {
       console.error('Failed to fetch eval results:', error);

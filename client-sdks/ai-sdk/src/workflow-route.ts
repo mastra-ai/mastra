@@ -1,12 +1,12 @@
 import type { TracingOptions } from '@mastra/core/ai-tracing';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/runtime-context';
 import { registerApiRoute } from '@mastra/core/server';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 import { toAISdkFormat } from './to-ai-sdk-format';
 
 type WorkflowRouteBody = {
   inputData?: Record<string, any>;
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
 };
 
@@ -45,7 +45,7 @@ export function workflowRoute({
               type: 'object',
               properties: {
                 inputData: { type: 'object', additionalProperties: true },
-                runtimeContext: { type: 'object', additionalProperties: true },
+                requestContext: { type: 'object', additionalProperties: true },
                 tracingOptions: { type: 'object', additionalProperties: true },
               },
             },

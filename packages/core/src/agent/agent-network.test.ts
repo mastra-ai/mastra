@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { RuntimeContext } from '../runtime-context';
+import { RequestContext } from '../runtime-context';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
 import { MockMemory } from './test-utils';
@@ -123,11 +123,11 @@ describe('Agent - network', () => {
     memory,
   });
 
-  const runtimeContext = new RuntimeContext();
+  const requestContext = new RequestContext();
 
   it('LOOP - execute a single tool', async () => {
     const anStream = await network.network('Execute tool1', {
-      runtimeContext,
+      requestContext,
     });
 
     for await (const _chunk of anStream) {
@@ -137,7 +137,7 @@ describe('Agent - network', () => {
 
   it('LOOP - execute a single workflow', async () => {
     const anStream = await network.network('Execute workflow1 on Paris', {
-      runtimeContext,
+      requestContext,
     });
 
     for await (const _chunk of anStream) {
@@ -147,7 +147,7 @@ describe('Agent - network', () => {
 
   it('LOOP - execute a single agent', async () => {
     const anStream = await network.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
     });
 
     for await (const _chunk of anStream) {
@@ -159,7 +159,7 @@ describe('Agent - network', () => {
     const anStream = await network.network(
       'Research dolphins then execute workflow1 based on the location where dolphins live',
       {
-        runtimeContext,
+        requestContext,
         maxSteps: 3,
       },
     );
@@ -171,7 +171,7 @@ describe('Agent - network', () => {
 
   it('LOOP - should track usage data from agent.network()', async () => {
     const anStream = await network.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
     });
 
     // Consume the stream to trigger usage collection
@@ -265,7 +265,7 @@ describe('Agent - network', () => {
     });
 
     const anStream = await networkWithTitle.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
     });
 
     // Consume the stream
@@ -319,7 +319,7 @@ describe('Agent - network', () => {
     });
 
     const anStream = await networkWithTitle.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
       memory: {
         thread: 'test-network-with-title',
         resource: 'test-network-with-title',
@@ -377,7 +377,7 @@ describe('Agent - network', () => {
     });
 
     const anStream = await networkNoTitle.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
     });
 
     // Consume the stream
@@ -417,7 +417,7 @@ describe('Agent - network', () => {
     });
 
     const anStream = await networkNoTitle.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
       memory: {
         thread: 'test-network-no-title',
         resource: 'test-network-no-title',

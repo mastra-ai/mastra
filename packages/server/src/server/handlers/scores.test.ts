@@ -1,7 +1,7 @@
 import { createSampleScore } from '@internal/storage-test-utils';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 import type { StoragePagination } from '@mastra/core/storage';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createWorkflow } from '@mastra/core/workflows';
@@ -51,7 +51,7 @@ describe('Scores Handlers', () => {
     it('should return empty object', async () => {
       const result = await getScorersHandler({
         mastra,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
       expect(result).toEqual({});
     });

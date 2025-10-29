@@ -306,7 +306,7 @@ export function workflowToStep<
     id: workflow.name,
     workflow,
     workflowId: toCamelCaseWithRandomSuffix(workflow.name),
-    execute: async ({ context, suspend, emit, mastra: mastraFromExecute, runtimeContext }) => {
+    execute: async ({ context, suspend, emit, mastra: mastraFromExecute, requestContext }) => {
       const realMastra = mastraFromExecute ?? mastra;
       if (realMastra) {
         workflow.__registerMastra(realMastra);
@@ -326,11 +326,11 @@ export function workflowToStep<
           ? await run.resume({
               stepId: context.isResume.stepId.split('.').slice(1).join('.'),
               context: context.inputData,
-              runtimeContext,
+              requestContext,
             })
           : await run.start({
               triggerData: context.inputData,
-              runtimeContext,
+              requestContext,
             });
 
       unwatch();

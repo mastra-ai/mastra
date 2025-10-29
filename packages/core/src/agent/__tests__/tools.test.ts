@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { TestIntegration } from '../../integration/openapi-toolset.mock';
 import { Mastra } from '../../mastra';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../runtime-context';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 
@@ -511,12 +511,12 @@ function toolsTest(version: 'v1' | 'v2') {
       expect(await result.finishReason).toBe('tool-calls');
     });
 
-    it('should make runtimeContext available to tools in generate', async () => {
+    it('should make requestContext available to tools in generate', async () => {
       // Create a mock model that calls the testTool
-      let runtimeContextModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let requestContextModel: MockLanguageModelV1 | MockLanguageModelV2;
 
       if (version === 'v1') {
-        runtimeContextModel = new MockLanguageModelV1({
+        requestContextModel = new MockLanguageModelV1({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'tool-calls',
@@ -553,7 +553,7 @@ function toolsTest(version: 'v1' | 'v2') {
           }),
         });
       } else {
-        runtimeContextModel = new MockLanguageModelV2({
+        requestContextModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'tool-calls',
@@ -592,30 +592,30 @@ function toolsTest(version: 'v1' | 'v2') {
         });
       }
 
-      const testRuntimeContext = new RuntimeContext([['test-value', 'runtimeContext-value']]);
+      const testRequestContext = new RequestContext([['test-value', 'requestContext-value']]);
       let capturedValue: string | null = null;
 
       const testTool = createTool({
-        id: 'runtimeContext-test-tool',
-        description: 'A tool that verifies runtimeContext is available',
+        id: 'requestContext-test-tool',
+        description: 'A tool that verifies requestContext is available',
         inputSchema: z.object({
           query: z.string(),
         }),
-        execute: ({ runtimeContext }) => {
-          capturedValue = runtimeContext.get('test-value')!;
+        execute: ({ requestContext }) => {
+          capturedValue = requestContext.get('test-value')!;
 
           return Promise.resolve({
             success: true,
-            runtimeContextAvailable: !!runtimeContext,
-            runtimeContextValue: capturedValue,
+            requestContextAvailable: !!requestContext,
+            requestContextValue: capturedValue,
           });
         },
       });
 
       const agent = new Agent({
-        name: 'runtimeContext-test-agent',
-        instructions: 'You are an agent that tests runtimeContext availability.',
-        model: runtimeContextModel,
+        name: 'requestContext-test-agent',
+        instructions: 'You are an agent that tests requestContext availability.',
+        model: requestContextModel,
         tools: { testTool },
       });
 
@@ -629,30 +629,30 @@ function toolsTest(version: 'v1' | 'v2') {
       let response;
       let toolCall;
       if (version === 'v1') {
-        response = await testAgent.generateLegacy('Use the runtimeContext-test-tool with query "test"', {
+        response = await testAgent.generateLegacy('Use the requestContext-test-tool with query "test"', {
           toolChoice: 'required',
-          runtimeContext: testRuntimeContext,
+          requestContext: testRequestContext,
         });
         toolCall = response.toolResults.find(result => result.toolName === 'testTool');
       } else {
-        response = await testAgent.generate('Use the runtimeContext-test-tool with query "test"', {
+        response = await testAgent.generate('Use the requestContext-test-tool with query "test"', {
           toolChoice: 'required',
-          runtimeContext: testRuntimeContext,
+          requestContext: testRequestContext,
         });
         toolCall = response.toolResults.find(result => result.payload.toolName === 'testTool').payload;
       }
 
-      expect(toolCall?.result?.runtimeContextAvailable).toBe(true);
-      expect(toolCall?.result?.runtimeContextValue).toBe('runtimeContext-value');
-      expect(capturedValue).toBe('runtimeContext-value');
+      expect(toolCall?.result?.requestContextAvailable).toBe(true);
+      expect(toolCall?.result?.requestContextValue).toBe('requestContext-value');
+      expect(capturedValue).toBe('requestContext-value');
     });
 
-    it('should make runtimeContext available to tools in stream', async () => {
+    it('should make requestContext available to tools in stream', async () => {
       // Create a mock model that calls the testTool
-      let runtimeContextModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let requestContextModel: MockLanguageModelV1 | MockLanguageModelV2;
 
       if (version === 'v1') {
-        runtimeContextModel = new MockLanguageModelV1({
+        requestContextModel = new MockLanguageModelV1({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'tool-calls',
@@ -689,7 +689,7 @@ function toolsTest(version: 'v1' | 'v2') {
           }),
         });
       } else {
-        runtimeContextModel = new MockLanguageModelV2({
+        requestContextModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'tool-calls',
@@ -728,30 +728,30 @@ function toolsTest(version: 'v1' | 'v2') {
         });
       }
 
-      const testRuntimeContext = new RuntimeContext([['test-value', 'runtimeContext-value']]);
+      const testRequestContext = new RequestContext([['test-value', 'requestContext-value']]);
       let capturedValue: string | null = null;
 
       const testTool = createTool({
-        id: 'runtimeContext-test-tool',
-        description: 'A tool that verifies runtimeContext is available',
+        id: 'requestContext-test-tool',
+        description: 'A tool that verifies requestContext is available',
         inputSchema: z.object({
           query: z.string(),
         }),
-        execute: ({ runtimeContext }) => {
-          capturedValue = runtimeContext.get('test-value')!;
+        execute: ({ requestContext }) => {
+          capturedValue = requestContext.get('test-value')!;
 
           return Promise.resolve({
             success: true,
-            runtimeContextAvailable: !!runtimeContext,
-            runtimeContextValue: capturedValue,
+            requestContextAvailable: !!requestContext,
+            requestContextValue: capturedValue,
           });
         },
       });
 
       const agent = new Agent({
-        name: 'runtimeContext-test-agent',
-        instructions: 'You are an agent that tests runtimeContext availability.',
-        model: runtimeContextModel,
+        name: 'requestContext-test-agent',
+        instructions: 'You are an agent that tests requestContext availability.',
+        model: requestContextModel,
         tools: { testTool },
       });
 
@@ -765,18 +765,18 @@ function toolsTest(version: 'v1' | 'v2') {
       let stream;
       let toolCall;
       if (version === 'v1') {
-        stream = await testAgent.streamLegacy('Use the runtimeContext-test-tool with query "test"', {
+        stream = await testAgent.streamLegacy('Use the requestContext-test-tool with query "test"', {
           toolChoice: 'required',
-          runtimeContext: testRuntimeContext,
+          requestContext: testRequestContext,
         });
 
         await stream.consumeStream();
 
         toolCall = (await stream.toolResults).find(result => result.toolName === 'testTool');
       } else {
-        stream = await testAgent.stream('Use the runtimeContext-test-tool with query "test"', {
+        stream = await testAgent.stream('Use the requestContext-test-tool with query "test"', {
           toolChoice: 'required',
-          runtimeContext: testRuntimeContext,
+          requestContext: testRequestContext,
         });
 
         await stream.consumeStream();
@@ -784,9 +784,9 @@ function toolsTest(version: 'v1' | 'v2') {
         toolCall = (await stream.toolResults).find(result => result.payload.toolName === 'testTool').payload;
       }
 
-      expect(toolCall?.result?.runtimeContextAvailable).toBe(true);
-      expect(toolCall?.result?.runtimeContextValue).toBe('runtimeContext-value');
-      expect(capturedValue).toBe('runtimeContext-value');
+      expect(toolCall?.result?.requestContextAvailable).toBe(true);
+      expect(toolCall?.result?.requestContextValue).toBe('requestContext-value');
+      expect(capturedValue).toBe('requestContext-value');
     });
   });
 }

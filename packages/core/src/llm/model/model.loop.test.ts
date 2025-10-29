@@ -3,7 +3,7 @@ import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { describe, expect, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../runtime-context';
 import { MastraLLMVNext } from './model.loop';
 
 const model = new MastraLLMVNext({
@@ -13,7 +13,7 @@ const model = new MastraLLMVNext({
 describe.concurrent('MastraLLMVNext', () => {
   it('should generate text - mastra', async () => {
     const result = model.stream({
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       messageList: new MessageList().add(
         [
           {
@@ -44,7 +44,7 @@ describe.concurrent('MastraLLMVNext', () => {
         ],
         'input',
       ),
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       tracingContext: {},
       agentId: 'test-agent',
     });
@@ -66,7 +66,7 @@ describe.concurrent('MastraLLMVNext', () => {
         ],
         'input',
       ),
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       tracingContext: {},
       agentId: 'test-agent',
     });
@@ -87,7 +87,7 @@ describe.concurrent('MastraLLMVNext', () => {
         ],
         'input',
       ),
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       tracingContext: {},
       agentId: 'test-agent',
     });
@@ -108,7 +108,7 @@ describe.concurrent('MastraLLMVNext', () => {
         ],
         'input',
       ),
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       tracingContext: {},
       structuredOutput: {
         schema: z.object({
@@ -173,7 +173,7 @@ describe.concurrent('MastraLLMVNext', () => {
         ],
         'input',
       ),
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       tracingContext: {},
       structuredOutput: {
         schema: z.object({
@@ -204,7 +204,7 @@ describe.concurrent('MastraLLMVNext', () => {
         ],
         'input',
       ),
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       tracingContext: {},
       structuredOutput: {
         schema: z.object({
@@ -235,7 +235,7 @@ describe.concurrent('MastraLLMVNext', () => {
         ],
         'input',
       ),
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       tracingContext: {},
       structuredOutput: {
         schema: z.object({
@@ -271,7 +271,7 @@ describe.concurrent('MastraLLMVNext', () => {
         ],
         'input',
       ),
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       tracingContext: {},
       structuredOutput: {
         schema: z.object({

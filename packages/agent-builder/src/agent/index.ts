@@ -91,7 +91,7 @@ export class AgentBuilder extends Agent {
   ): Promise<any> => {
     const { maxSteps, ...baseOptions } = generateOptions;
 
-    const originalInstructions = await this.getInstructions({ runtimeContext: generateOptions?.runtimeContext });
+    const originalInstructions = await this.getInstructions({ requestContext: generateOptions?.requestContext });
     const additionalInstructions = baseOptions.instructions;
 
     let enhancedInstructions = originalInstructions as string;
@@ -126,7 +126,7 @@ export class AgentBuilder extends Agent {
   ): Promise<any> => {
     const { maxSteps, ...baseOptions } = streamOptions;
 
-    const originalInstructions = await this.getInstructions({ runtimeContext: streamOptions?.runtimeContext });
+    const originalInstructions = await this.getInstructions({ requestContext: streamOptions?.requestContext });
     const additionalInstructions = baseOptions.instructions;
 
     let enhancedInstructions = originalInstructions as string;
@@ -160,7 +160,7 @@ export class AgentBuilder extends Agent {
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     const { ...baseOptions } = streamOptions || {};
 
-    const originalInstructions = await this.getInstructions({ runtimeContext: streamOptions?.runtimeContext });
+    const originalInstructions = await this.getInstructions({ requestContext: streamOptions?.requestContext });
     const additionalInstructions = baseOptions.instructions;
 
     let enhancedInstructions = originalInstructions as string;
@@ -194,7 +194,7 @@ export class AgentBuilder extends Agent {
   > {
     const { ...baseOptions } = options || {};
 
-    const originalInstructions = await this.getInstructions({ runtimeContext: options?.runtimeContext });
+    const originalInstructions = await this.getInstructions({ requestContext: options?.requestContext });
     const additionalInstructions = baseOptions.instructions;
 
     let enhancedInstructions = originalInstructions as string;

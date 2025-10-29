@@ -92,10 +92,10 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
         typeof validatedScore.additionalContext === 'string'
           ? validatedScore.additionalContext
           : JSON.stringify(validatedScore.additionalContext),
-      runtimeContext:
-        typeof validatedScore.runtimeContext === 'string'
-          ? validatedScore.runtimeContext
-          : JSON.stringify(validatedScore.runtimeContext),
+      requestContext:
+        typeof validatedScore.requestContext === 'string'
+          ? validatedScore.requestContext
+          : JSON.stringify(validatedScore.requestContext),
       entityType: validatedScore.entityType,
       entityData:
         typeof validatedScore.entity === 'string' ? validatedScore.entity : JSON.stringify(validatedScore.entity),

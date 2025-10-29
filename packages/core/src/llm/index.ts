@@ -21,7 +21,7 @@ import type { z, ZodSchema } from 'zod';
 
 import type { TracingContext } from '../ai-tracing';
 import type { Run } from '../run/types';
-import type { RuntimeContext } from '../runtime-context';
+import type { RequestContext } from '../runtime-context';
 import type { CoreTool } from '../tools/types';
 import type { MastraLanguageModel } from './model/shared.types';
 
@@ -120,7 +120,7 @@ type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = unde
   telemetry?: TelemetrySettings;
   threadId?: string;
   resourceId?: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   tracingContext: TracingContext;
 } & Run;
 

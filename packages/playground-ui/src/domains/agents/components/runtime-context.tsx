@@ -14,33 +14,33 @@ import { Braces, CopyIcon, ExternalLink } from 'lucide-react';
 import { formatJSON, isValidJson } from '@/lib/formatting';
 import { useLinkComponent } from '@/lib/framework';
 
-export const RuntimeContext = () => {
-  const { runtimeContext, setRuntimeContext } = usePlaygroundStore();
-  const [runtimeContextValue, setRuntimeContextValue] = useState<string>('');
+export const RequestContext = () => {
+  const { requestContext, setRequestContext } = usePlaygroundStore();
+  const [requestContextValue, setRequestContextValue] = useState<string>('');
   const theme = useCodemirrorTheme();
 
-  const { handleCopy } = useCopyToClipboard({ text: runtimeContextValue });
+  const { handleCopy } = useCopyToClipboard({ text: requestContextValue });
 
-  const runtimeContextStr = JSON.stringify(runtimeContext);
+  const requestContextStr = JSON.stringify(requestContext);
 
   useEffect(() => {
     const run = async () => {
-      if (!isValidJson(runtimeContextStr)) {
+      if (!isValidJson(requestContextStr)) {
         toast.error('Invalid JSON');
         return;
       }
 
-      const formatted = await formatJSON(runtimeContextStr);
-      setRuntimeContextValue(formatted);
+      const formatted = await formatJSON(requestContextStr);
+      setRequestContextValue(formatted);
     };
 
     run();
-  }, [runtimeContextStr]);
+  }, [requestContextStr]);
 
-  const handleSaveRuntimeContext = () => {
+  const handleSaveRequestContext = () => {
     try {
-      const parsedContext = JSON.parse(runtimeContextValue);
-      setRuntimeContext(parsedContext);
+      const parsedContext = JSON.parse(requestContextValue);
+      setRequestContext(parsedContext);
       toast.success('Runtime context saved successfully');
     } catch (error) {
       console.error('error', error);
@@ -50,14 +50,14 @@ export const RuntimeContext = () => {
 
   const buttonClass = 'text-icon3 hover:text-icon6';
 
-  const formatRuntimeContext = async () => {
-    if (!isValidJson(runtimeContextValue)) {
+  const formatRequestContext = async () => {
+    if (!isValidJson(requestContextValue)) {
       toast.error('Invalid JSON');
       return;
     }
 
-    const formatted = await formatJSON(runtimeContextValue);
-    setRuntimeContextValue(formatted);
+    const formatted = await formatJSON(requestContextValue);
+    setRequestContextValue(formatted);
   };
 
   return (
@@ -65,19 +65,19 @@ export const RuntimeContext = () => {
       <div>
         <div className="flex items-center justify-between pb-2">
           <Txt as="label" variant="ui-md" className="text-icon3">
-            Runtime Context (JSON)
+            Request Context (JSON)
           </Txt>
 
           <div className="flex items-center gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
-                <button onClick={formatRuntimeContext} className={buttonClass}>
+                <button onClick={formatRequestContext} className={buttonClass}>
                   <Icon>
                     <Braces />
                   </Icon>
                 </button>
               </TooltipTrigger>
-              <TooltipContent>Format the Runtime Context JSON</TooltipContent>
+              <TooltipContent>Format the Request Context JSON</TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -88,37 +88,37 @@ export const RuntimeContext = () => {
                   </Icon>
                 </button>
               </TooltipTrigger>
-              <TooltipContent>Copy Runtime Context</TooltipContent>
+              <TooltipContent>Copy Request Context</TooltipContent>
             </Tooltip>
           </div>
         </div>
 
         <CodeMirror
-          value={runtimeContextValue}
-          onChange={setRuntimeContextValue}
+          value={requestContextValue}
+          onChange={setRequestContextValue}
           theme={theme}
           extensions={[jsonLanguage]}
           className="h-[400px] overflow-y-scroll bg-surface3 rounded-lg overflow-hidden p-3"
         />
 
         <div className="flex justify-end pt-2">
-          <Button onClick={handleSaveRuntimeContext}>Save</Button>
+          <Button onClick={handleSaveRequestContext}>Save</Button>
         </div>
       </div>
     </TooltipProvider>
   );
 };
 
-export const RuntimeContextWrapper = ({ children }: { children: ReactNode }) => {
+export const RequestContextWrapper = ({ children }: { children: ReactNode }) => {
   const { Link } = useLinkComponent();
 
   return (
     <div className="max-w-3xl p-5 overflow-y-scroll h-full">
       <div className="rounded-lg p-4 pb-5 bg-surface4 shadow-md space-y-3 border border-border1 mb-5">
         <Txt as="p" variant="ui-lg" className="text-icon3">
-          Mastra provides runtime context, which is a system based on dependency injection that enables you to configure
+          Mastra provides request context, which is a system based on dependency injection that enables you to configure
           your agents and tools with runtime variables. If you find yourself creating several different agents that do
-          very similar things, runtime context allows you to combine them into one agent.
+          very similar things, request context allows you to combine them into one agent.
         </Txt>
 
         <Button as={Link} to="https://mastra.ai/en/docs/agents/runtime-variables" target="_blank">

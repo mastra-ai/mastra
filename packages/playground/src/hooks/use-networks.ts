@@ -30,7 +30,7 @@ export const useVNextNetworks = () => {
 };
 
 export const useVNextNetwork = (networkId: string, enabled = true) => {
-  const { runtimeContext } = usePlaygroundStore();
+  const { requestContext } = usePlaygroundStore();
   const [network, setNetwork] = useState<GetVNextNetworkResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -39,7 +39,7 @@ export const useVNextNetwork = (networkId: string, enabled = true) => {
       setIsLoading(true);
       try {
         const network = client.getVNextNetwork(networkId);
-        setNetwork(await network.details(runtimeContext));
+        setNetwork(await network.details(requestContext));
       } catch (error) {
         setNetwork(null);
         console.error('Error fetching network', error);
@@ -52,7 +52,7 @@ export const useVNextNetwork = (networkId: string, enabled = true) => {
     if (networkId && enabled) {
       fetchNetwork();
     }
-  }, [networkId, enabled, runtimeContext]);
+  }, [networkId, enabled, requestContext]);
 
   return { vNextNetwork: network, isLoading };
 };

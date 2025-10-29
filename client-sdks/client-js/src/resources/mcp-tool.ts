@@ -1,6 +1,6 @@
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/runtime-context';
 import type { ClientOptions, McpToolInfo } from '../types';
-import { runtimeContextQueryString } from '../utils';
+import { requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
 /**
@@ -19,27 +19,27 @@ export class MCPTool extends BaseResource {
 
   /**
    * Retrieves details about this specific tool from the MCP server.
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing the tool's information (name, description, schema).
    */
-  details(runtimeContext?: RuntimeContext | Record<string, any>): Promise<McpToolInfo> {
-    return this.request(`/api/mcp/${this.serverId}/tools/${this.toolId}${runtimeContextQueryString(runtimeContext)}`);
+  details(requestContext?: RequestContext | Record<string, any>): Promise<McpToolInfo> {
+    return this.request(`/api/mcp/${this.serverId}/tools/${this.toolId}${requestContextQueryString(requestContext)}`);
   }
 
   /**
    * Executes this specific tool on the MCP server.
-   * @param params - Parameters for tool execution, including data/args and optional runtimeContext.
+   * @param params - Parameters for tool execution, including data/args and optional requestContext.
    * @returns Promise containing the result of the tool execution.
    */
-  execute(params: { data?: any; runtimeContext?: RuntimeContext }): Promise<any> {
+  execute(params: { data?: any; requestContext?: RequestContext }): Promise<any> {
     const body: any = {};
     if (params.data !== undefined) body.data = params.data;
-    // If none of data, args the body might be empty or just contain runtimeContext.
+    // If none of data, args the body might be empty or just contain requestContext.
     // The handler will look for these, so an empty args object might be appropriate if that's the intent.
     // else body.data = {}; // Or let it be empty if no specific input fields are used
 
-    if (params.runtimeContext !== undefined) {
-      body.runtimeContext = params.runtimeContext;
+    if (params.requestContext !== undefined) {
+      body.requestContext = params.requestContext;
     }
 
     return this.request(`/api/mcp/${this.serverId}/tools/${this.toolId}/execute`, {

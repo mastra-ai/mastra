@@ -7,7 +7,7 @@ import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { InputProcessor, OutputProcessor } from '../processors';
-import type { RuntimeContext } from '../runtime-context';
+import type { RequestContext } from '../runtime-context';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
@@ -21,7 +21,7 @@ export type MultiPrimitiveExecutionOptions = {
   runId?: string;
 
   /** Runtime context containing dynamic configuration and state */
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
 
   /** Maximum number of steps to run */
   maxSteps?: number;
@@ -64,7 +64,7 @@ export type AgentExecutionOptions<
   savePerStep?: boolean;
 
   /** Runtime context containing dynamic configuration and state */
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
 
   /** @deprecated Use memory.resource instead. Identifier for the resource/user */
   resourceId?: string;

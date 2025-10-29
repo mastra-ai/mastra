@@ -302,7 +302,7 @@ export async function searchMemoryHandler(c: Context) {
     const threadId = c.req.query('threadId');
     const limit = parseLimit(c.req.query('limit'));
     const memoryConfig = c.req.query('memoryConfig') ? JSON.parse(c.req.query('memoryConfig')!) : undefined;
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
 
     const result = await getOriginalSearchMemoryHandler({
       mastra,
@@ -312,7 +312,7 @@ export async function searchMemoryHandler(c: Context) {
       threadId,
       limit,
       memoryConfig,
-      runtimeContext,
+      requestContext,
     });
 
     return c.json(result);
@@ -325,7 +325,7 @@ export async function deleteMessagesHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const body = await c.req.json();
     const messageIds = body?.messageIds;
 
@@ -333,7 +333,7 @@ export async function deleteMessagesHandler(c: Context) {
       mastra,
       agentId,
       messageIds,
-      runtimeContext,
+      requestContext,
     });
 
     return c.json(result);

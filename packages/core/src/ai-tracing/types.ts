@@ -4,7 +4,7 @@
 
 import type { MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
-import type { RuntimeContext } from '../runtime-context';
+import type { RequestContext } from '../runtime-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows';
 
 // ============================================================================
@@ -468,7 +468,7 @@ interface CreateBaseOptions<TType extends AISpanType> {
   /** Policy-level tracing configuration */
   tracingPolicy?: TracingPolicy;
   /** Runtime context for metadata extraction */
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
 }
 
 /**
@@ -598,11 +598,11 @@ export interface TracingPolicy {
  */
 export interface TraceState {
   /**
-   * RuntimeContext keys to extract as metadata for all spans in this trace.
-   * Computed by merging the tracing config's runtimeContextKeys
-   * with the per-request runtimeContextKeys.
+   * RequestContext keys to extract as metadata for all spans in this trace.
+   * Computed by merging the tracing config's requestContextKeys
+   * with the per-request requestContextKeys.
    */
-  runtimeContextKeys: string[];
+  requestContextKeys: string[];
 }
 
 /**
@@ -612,11 +612,11 @@ export interface TracingOptions {
   /** Metadata to add to the root trace span */
   metadata?: Record<string, any>;
   /**
-   * Additional RuntimeContext keys to extract as metadata for this trace.
-   * These keys are added to the runtimeContextKeys config.
+   * Additional RequestContext keys to extract as metadata for this trace.
+   * These keys are added to the requestContextKeys config.
    * Supports dot notation for nested values (e.g., 'user.id', 'session.data.experimentId').
    */
-  runtimeContextKeys?: string[];
+  requestContextKeys?: string[];
   /**
    * Trace ID to use for this execution (1-32 hexadecimal characters).
    * If provided, this trace will be part of the specified trace rather than starting a new one.
@@ -666,11 +666,11 @@ export interface TracingConfig {
   /** Set to `true` if you want to see spans internal to the operation of mastra */
   includeInternalSpans?: boolean;
   /**
-   * RuntimeContext keys to automatically extract as metadata for all spans
+   * RequestContext keys to automatically extract as metadata for all spans
    * created with this tracing configuration.
    * Supports dot notation for nested values.
    */
-  runtimeContextKeys?: string[];
+  requestContextKeys?: string[];
 }
 
 /**
@@ -714,7 +714,7 @@ export type SamplingStrategy =
  * Options passed when using a custom sampler strategy
  */
 export interface CustomSamplerOptions {
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   metadata?: Record<string, any>;
 }
 
@@ -796,7 +796,7 @@ export interface AISpanProcessor {
  */
 export interface ConfigSelectorOptions {
   /** Runtime context */
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
 }
 
 /**

@@ -1,7 +1,7 @@
 import EventEmitter from 'events';
 import type { StepFlowEntry, StepResult } from '../..';
 import type { Mastra } from '../../..';
-import { RuntimeContext } from '../../../di';
+import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
 import type { StepExecutor } from '../step-executor';
 import type { ProcessorArgs } from '.';
@@ -17,7 +17,7 @@ export async function processWorkflowLoop(
     resumeSteps,
     resumeData,
     parentWorkflow,
-    runtimeContext,
+    requestContext,
     runCount = 0,
   }: ProcessorArgs,
   {
@@ -40,7 +40,7 @@ export async function processWorkflowLoop(
     // TODO: implement state
     state: {},
     emitter: new EventEmitter() as any, // TODO
-    runtimeContext: new RuntimeContext(), // TODO
+    requestContext: new RequestContext(), // TODO
     inputData: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
     abortController: new AbortController(),
@@ -63,7 +63,7 @@ export async function processWorkflowLoop(
           prevResult: stepResult,
           resumeData,
           activeSteps,
-          runtimeContext,
+          requestContext,
         },
       });
     } else {
@@ -80,7 +80,7 @@ export async function processWorkflowLoop(
           prevResult: stepResult,
           resumeData,
           activeSteps,
-          runtimeContext,
+          requestContext,
           runCount,
         },
       });
@@ -100,7 +100,7 @@ export async function processWorkflowLoop(
           prevResult: stepResult,
           resumeData,
           activeSteps,
-          runtimeContext,
+          requestContext,
           runCount,
         },
       });
@@ -118,7 +118,7 @@ export async function processWorkflowLoop(
           prevResult: stepResult,
           resumeData,
           activeSteps,
-          runtimeContext,
+          requestContext,
         },
       });
     }
@@ -136,7 +136,7 @@ export async function processWorkflowForEach(
     resumeSteps,
     resumeData,
     parentWorkflow,
-    runtimeContext,
+    requestContext,
   }: ProcessorArgs,
   {
     pubsub,
@@ -169,7 +169,7 @@ export async function processWorkflowForEach(
         prevResult: currentResult,
         resumeData,
         activeSteps,
-        runtimeContext,
+        requestContext,
       },
     });
 
@@ -194,7 +194,7 @@ export async function processWorkflowForEach(
         startedAt: Date.now(),
         payload: (prevResult as any)?.output,
       } as any,
-      runtimeContext,
+      requestContext,
     });
 
     for (let i = 0; i < concurrency; i++) {
@@ -211,7 +211,7 @@ export async function processWorkflowForEach(
           prevResult,
           resumeData,
           activeSteps,
-          runtimeContext,
+          requestContext,
         },
       });
     }
@@ -230,7 +230,7 @@ export async function processWorkflowForEach(
       startedAt: Date.now(),
       payload: (prevResult as any)?.output,
     } as any,
-    runtimeContext,
+    requestContext,
   });
 
   await pubsub.publish('workflows', {
@@ -246,7 +246,7 @@ export async function processWorkflowForEach(
       prevResult,
       resumeData,
       activeSteps,
-      runtimeContext,
+      requestContext,
     },
   });
 }

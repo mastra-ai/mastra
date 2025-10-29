@@ -13,7 +13,7 @@ import { v4 as uuid } from '@lukeed/uuid';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/runtime-context';
 import type { OutputSchema, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
@@ -32,7 +32,7 @@ import type {
   NetworkStreamParams,
 } from '../types';
 
-import { parseClientRuntimeContext, runtimeContextQueryString } from '../utils';
+import { parseClientRequestContext, requestContextQueryString } from '../utils';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
@@ -44,7 +44,7 @@ async function executeToolCallAndRespond({
   runId,
   resourceId,
   threadId,
-  runtimeContext,
+  requestContext,
   respondFn,
 }: {
   params: StreamParams<any>;
@@ -52,7 +52,7 @@ async function executeToolCallAndRespond({
   runId?: string;
   resourceId?: string;
   threadId?: string;
-  runtimeContext?: RuntimeContext<any>;
+  requestContext?: RequestContext<any>;
   respondFn: Agent['generate'];
 }) {
   if (response.finishReason === 'tool-calls') {
@@ -77,7 +77,7 @@ async function executeToolCallAndRespond({
             runId,
             resourceId,
             threadId,
-            runtimeContext: runtimeContext as RuntimeContext,
+            requestContext: requestContext as RequestContext,
             tracingContext: { currentSpan: undefined },
             suspend: async () => {},
           },
@@ -162,24 +162,24 @@ export class AgentVoice extends BaseResource {
 
   /**
    * Get available speakers for the agent's voice provider
-   * @param runtimeContext - Optional runtime context to pass as query parameter
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing list of available speakers
    */
   getSpeakers(
-    runtimeContext?: RuntimeContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, any>,
   ): Promise<Array<{ voiceId: string; [key: string]: any }>> {
-    return this.request(`/api/agents/${this.agentId}/voice/speakers${runtimeContextQueryString(runtimeContext)}`);
+    return this.request(`/api/agents/${this.agentId}/voice/speakers${requestContextQueryString(requestContext)}`);
   }
 
   /**
    * Get the listener configuration for the agent's voice provider
-   * @param runtimeContext - Optional runtime context to pass as query parameter
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing a check if the agent has listening capabilities
    */
-  getListener(runtimeContext?: RuntimeContext | Record<string, any>): Promise<{ enabled: boolean }> {
-    return this.request(`/api/agents/${this.agentId}/voice/listener${runtimeContextQueryString(runtimeContext)}`);
+  getListener(requestContext?: RequestContext | Record<string, any>): Promise<{ enabled: boolean }> {
+    return this.request(`/api/agents/${this.agentId}/voice/listener${requestContextQueryString(requestContext)}`);
   }
 }
 
@@ -196,11 +196,11 @@ export class Agent extends BaseResource {
 
   /**
    * Retrieves details about the agent
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing agent details including model and instructions
    */
-  details(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetAgentResponse> {
-    return this.request(`/api/agents/${this.agentId}${runtimeContextQueryString(runtimeContext)}`);
+  details(requestContext?: RequestContext | Record<string, any>): Promise<GetAgentResponse> {
+    return this.request(`/api/agents/${this.agentId}${requestContextQueryString(requestContext)}`);
   }
 
   /**
@@ -225,11 +225,11 @@ export class Agent extends BaseResource {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
-      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
     };
 
-    const { runId, resourceId, threadId, runtimeContext } = processedParams as GenerateLegacyParams;
+    const { runId, resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
 
     const response: GenerateReturn<any, Output, StructuredOutput> = await this.request(
       `/api/agents/${this.agentId}/generate-legacy`,
@@ -261,7 +261,7 @@ export class Agent extends BaseResource {
               runId,
               resourceId,
               threadId,
-              runtimeContext: runtimeContext as RuntimeContext,
+              requestContext: requestContext as RequestContext,
               tracingContext: { currentSpan: undefined },
               suspend: async () => {},
             },
@@ -326,7 +326,7 @@ export class Agent extends BaseResource {
     const processedParams = {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
-      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput
         ? {
@@ -336,7 +336,7 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    const { runId, resourceId, threadId, runtimeContext } = processedParams as StreamParams;
+    const { runId, resourceId, threadId, requestContext } = processedParams as StreamParams;
 
     const response = await this.request<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>(
       `/api/agents/${this.agentId}/generate`,
@@ -353,7 +353,7 @@ export class Agent extends BaseResource {
         runId,
         resourceId,
         threadId,
-        runtimeContext: runtimeContext as RuntimeContext<any>,
+        requestContext: requestContext as RequestContext<any>,
         respondFn: this.generate.bind(this),
       }) as unknown as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
     }
@@ -722,7 +722,7 @@ export class Agent extends BaseResource {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
-      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
     };
 
@@ -1191,7 +1191,7 @@ export class Agent extends BaseResource {
                     runId: processedParams.runId,
                     resourceId: processedParams.resourceId,
                     threadId: processedParams.threadId,
-                    runtimeContext: processedParams.runtimeContext as RuntimeContext,
+                    requestContext: processedParams.requestContext as RequestContext,
                     // TODO: Pass proper tracing context when client-js supports tracing
                     tracingContext: { currentSpan: undefined },
                     suspend: async () => {},
@@ -1363,7 +1363,7 @@ export class Agent extends BaseResource {
     const processedParams: StreamParams<OUTPUT> = {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
-      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput
         ? {
@@ -1556,7 +1556,7 @@ export class Agent extends BaseResource {
                     runId: processedParams.runId,
                     resourceId: processedParams.resourceId,
                     threadId: processedParams.threadId,
-                    runtimeContext: processedParams.runtimeContext as RuntimeContext,
+                    requestContext: processedParams.requestContext as RequestContext,
                     // TODO: Pass proper tracing context when client-js supports tracing
                     tracingContext: { currentSpan: undefined },
                     suspend: async () => {},
@@ -1642,11 +1642,11 @@ export class Agent extends BaseResource {
   /**
    * Gets details about a specific tool available to the agent
    * @param toolId - ID of the tool to retrieve
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing tool details
    */
-  getTool(toolId: string, runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetToolResponse> {
-    return this.request(`/api/agents/${this.agentId}/tools/${toolId}${runtimeContextQueryString(runtimeContext)}`);
+  getTool(toolId: string, requestContext?: RequestContext | Record<string, any>): Promise<GetToolResponse> {
+    return this.request(`/api/agents/${this.agentId}/tools/${toolId}${requestContextQueryString(requestContext)}`);
   }
 
   /**
@@ -1657,11 +1657,11 @@ export class Agent extends BaseResource {
    */
   executeTool(
     toolId: string,
-    params: { data: any; runtimeContext?: RuntimeContext | Record<string, any> },
+    params: { data: any; requestContext?: RequestContext | Record<string, any> },
   ): Promise<any> {
     const body = {
       data: params.data,
-      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      requestContext: parseClientRequestContext(params.requestContext),
     };
     return this.request(`/api/agents/${this.agentId}/tools/${toolId}/execute`, {
       method: 'POST',
@@ -1671,20 +1671,20 @@ export class Agent extends BaseResource {
 
   /**
    * Retrieves evaluation results for the agent
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing agent evaluations
    */
-  evals(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetEvalsByAgentIdResponse> {
-    return this.request(`/api/agents/${this.agentId}/evals/ci${runtimeContextQueryString(runtimeContext)}`);
+  evals(requestContext?: RequestContext | Record<string, any>): Promise<GetEvalsByAgentIdResponse> {
+    return this.request(`/api/agents/${this.agentId}/evals/ci${requestContextQueryString(requestContext)}`);
   }
 
   /**
    * Retrieves live evaluation results for the agent
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing live agent evaluations
    */
-  liveEvals(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetEvalsByAgentIdResponse> {
-    return this.request(`/api/agents/${this.agentId}/evals/live${runtimeContextQueryString(runtimeContext)}`);
+  liveEvals(requestContext?: RequestContext | Record<string, any>): Promise<GetEvalsByAgentIdResponse> {
+    return this.request(`/api/agents/${this.agentId}/evals/live${requestContextQueryString(requestContext)}`);
   }
   /**
    * Updates the model for the agent

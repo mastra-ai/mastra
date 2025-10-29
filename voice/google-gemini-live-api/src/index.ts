@@ -117,7 +117,7 @@ export class GeminiLiveVoice extends MastraVoice<
 
   // Tool integration properties
   private tools?: ToolsInput;
-  private runtimeContext?: any;
+  private requestContext?: any;
 
   // Store the configuration options
   private options: GeminiLiveVoiceConfig;
@@ -409,15 +409,15 @@ export class GeminiLiveVoice extends MastraVoice<
   /**
    * Establish connection to the Gemini Live API
    */
-  async connect({ runtimeContext }: { runtimeContext?: any } = {}): Promise<void> {
+  async connect({ requestContext }: { requestContext?: any } = {}): Promise<void> {
     return this.traced(async () => {
       if (this.state === 'connected') {
         this.log('Already connected to Gemini Live API');
         return;
       }
 
-      // Store runtime context for tool execution
-      this.runtimeContext = runtimeContext;
+      // Store request context for tool execution
+      this.requestContext = requestContext;
 
       // Emit connecting event
       this.emit('session', { state: 'connecting' });
@@ -1553,7 +1553,7 @@ export class GeminiLiveVoice extends MastraVoice<
 
         // Execute with proper context
         result = await tool.execute(
-          { context: toolArgs, runtimeContext: this.runtimeContext },
+          { context: toolArgs, requestContext: this.requestContext },
           {
             toolCallId: toolId,
             messages: [],

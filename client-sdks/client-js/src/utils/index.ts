@@ -1,27 +1,27 @@
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 
-export function parseClientRuntimeContext(runtimeContext?: RuntimeContext | Record<string, any>) {
-  if (runtimeContext) {
-    if (runtimeContext instanceof RuntimeContext) {
-      return Object.fromEntries(runtimeContext.entries());
+export function parseClientRequestContext(requestContext?: RequestContext | Record<string, any>) {
+  if (requestContext) {
+    if (requestContext instanceof RequestContext) {
+      return Object.fromEntries(requestContext.entries());
     }
-    return runtimeContext;
+    return requestContext;
   }
   return undefined;
 }
 
-export function base64RuntimeContext(runtimeContext?: Record<string, any>): string | undefined {
-  if (runtimeContext) {
-    return btoa(JSON.stringify(runtimeContext));
+export function base64RequestContext(requestContext?: Record<string, any>): string | undefined {
+  if (requestContext) {
+    return btoa(JSON.stringify(requestContext));
   }
   return undefined;
 }
 
-export function runtimeContextQueryString(runtimeContext?: RuntimeContext | Record<string, any>): string {
-  const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-  if (!runtimeContextParam) return '';
+export function requestContextQueryString(requestContext?: RequestContext | Record<string, any>): string {
+  const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
+  if (!requestContextParam) return '';
   const searchParams = new URLSearchParams();
-  searchParams.set('runtimeContext', runtimeContextParam);
+  searchParams.set('requestContext', requestContextParam);
   const queryString = searchParams.toString();
   return queryString ? `?${queryString}` : '';
 }

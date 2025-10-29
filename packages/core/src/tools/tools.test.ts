@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 
-import { RuntimeContext } from '../runtime-context';
+import { RequestContext } from '../runtime-context';
 import { createTool } from './tool';
 
 const mockFindUser = vi.fn().mockImplementation(async nameS => {
@@ -31,7 +31,7 @@ describe('createTool', () => {
     await testTool.execute?.(
       {
         context: { name: 'Dero Israel' },
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       },
       {
         toolCallId: '123',
@@ -50,7 +50,7 @@ describe('createTool', () => {
     const user = await testTool.execute?.(
       {
         context: { name: 'Dero Israel' },
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       },
       {
         toolCallId: '123',
@@ -68,7 +68,7 @@ describe('createTool', () => {
     const user = await testTool.execute?.(
       {
         context: { name: 'Taofeeq Oluderu' },
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       },
       {
         toolCallId: '123',

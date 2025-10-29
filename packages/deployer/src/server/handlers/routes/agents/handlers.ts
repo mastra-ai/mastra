@@ -1,7 +1,7 @@
 import type { Mastra, ProviderConfig } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import { getProviderConfig, PROVIDER_REGISTRY } from '@mastra/core/llm';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/runtime-context';
 import type { ChunkType } from '@mastra/core/stream';
 import { ChunkFrom } from '@mastra/core/stream';
 import {
@@ -99,7 +99,7 @@ export const vNextBodyOptions: any = {
 export async function getAgentsHandler(c: Context) {
   const serializedAgents = await getOriginalAgentsHandler({
     mastra: c.get('mastra'),
-    runtimeContext: c.get('runtimeContext'),
+    requestContext: c.get('requestContext'),
   });
 
   return c.json(serializedAgents);
@@ -138,13 +138,13 @@ export async function getProvidersHandler(c: Context) {
 export async function getAgentByIdHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const requestContext: RequestContext = c.get('requestContext');
   const isPlayground = c.req.header('x-mastra-dev-playground') === 'true';
 
   const result = await getOriginalAgentByIdHandler({
     mastra,
     agentId,
-    runtimeContext,
+    requestContext,
     isPlayground,
   });
 
@@ -154,12 +154,12 @@ export async function getAgentByIdHandler(c: Context) {
 export async function getEvalsByAgentIdHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const requestContext: RequestContext = c.get('requestContext');
 
   const result = await getOriginalEvalsByAgentIdHandler({
     mastra,
     agentId,
-    runtimeContext,
+    requestContext,
   });
 
   return c.json(result);
@@ -168,12 +168,12 @@ export async function getEvalsByAgentIdHandler(c: Context) {
 export async function getLiveEvalsByAgentIdHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const requestContext: RequestContext = c.get('requestContext');
 
   const result = await getOriginalLiveEvalsByAgentIdHandler({
     mastra,
     agentId,
-    runtimeContext,
+    requestContext,
   });
 
   return c.json(result);
@@ -183,13 +183,13 @@ export async function generateLegacyHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const requestContext: RequestContext = c.get('requestContext');
     const body = await c.req.json();
 
     const result = await getOriginalGenerateLegacyHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
       body,
       abortSignal: c.req.raw.signal,
     });
@@ -204,13 +204,13 @@ export async function generateHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const requestContext: RequestContext = c.get('requestContext');
     const body = await c.req.json();
 
     const result = await getOriginalGenerateHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
       body,
       abortSignal: c.req.raw.signal,
     });
@@ -225,13 +225,13 @@ export async function streamGenerateLegacyHandler(c: Context): Promise<Response 
   try {
     const mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const requestContext: RequestContext = c.get('requestContext');
     const body = await c.req.json();
 
     const streamResponse = await getOriginalStreamGenerateLegacyHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
       body,
       abortSignal: c.req.raw.signal,
     });
@@ -245,7 +245,7 @@ export async function streamGenerateLegacyHandler(c: Context): Promise<Response 
 export async function streamGenerateHandler(c: Context): Promise<Response | undefined> {
   const mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const requestContext: RequestContext = c.get('requestContext');
   const body = await c.req.json();
   const logger = mastra.getLogger();
 
@@ -254,7 +254,7 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
     streamResponse = await getOriginalStreamGenerateHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
       body,
       abortSignal: c.req.raw.signal,
     });
@@ -306,7 +306,7 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
 export async function approveToolCallHandler(c: Context): Promise<Response | undefined> {
   const mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const requestContext: RequestContext = c.get('requestContext');
   const body = await c.req.json();
   const logger = mastra.getLogger();
 
@@ -314,7 +314,7 @@ export async function approveToolCallHandler(c: Context): Promise<Response | und
   try {
     streamResponse = await getOriginalApproveToolCallHandler({
       mastra,
-      runtimeContext,
+      requestContext,
       agentId,
       body,
       abortSignal: c.req.raw.signal,
@@ -374,7 +374,7 @@ export async function approveToolCallHandler(c: Context): Promise<Response | und
 export async function declineToolCallHandler(c: Context): Promise<Response | undefined> {
   const mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const requestContext: RequestContext = c.get('requestContext');
   const body = await c.req.json();
   const logger = mastra.getLogger();
 
@@ -382,7 +382,7 @@ export async function declineToolCallHandler(c: Context): Promise<Response | und
   try {
     streamResponse = await getOriginalDeclineToolCallHandler({
       mastra,
-      runtimeContext,
+      requestContext,
       agentId,
       body,
       abortSignal: c.req.raw.signal,
@@ -442,7 +442,7 @@ export async function declineToolCallHandler(c: Context): Promise<Response | und
 export async function streamNetworkHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const requestContext: RequestContext = c.get('requestContext');
   const body = await c.req.json();
   const logger = mastra.getLogger();
 
@@ -450,7 +450,7 @@ export async function streamNetworkHandler(c: Context) {
   const agent = await getOriginalGetAgentFromSystem({ mastra, agentId });
 
   // Check if agent has memory configured before starting the stream
-  const memory = await agent.getMemory({ runtimeContext });
+  const memory = await agent.getMemory({ requestContext });
 
   if (!memory) {
     return handleError(
@@ -472,7 +472,7 @@ export async function streamNetworkHandler(c: Context) {
     streamResponse = await getOriginalStreamNetworkHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
       body,
       // abortSignal: c.req.raw.signal,
     });
@@ -532,13 +532,13 @@ export async function streamUIMessageHandler(c: Context): Promise<Response | und
   try {
     const mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const requestContext: RequestContext = c.get('requestContext');
     const body = await c.req.json();
 
     const streamResponse = await getOriginalStreamUIMessageHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
       body,
       abortSignal: c.req.raw.signal,
     });

@@ -9,7 +9,7 @@ import type {
 } from '@mastra/core/a2a';
 import type { Agent } from '@mastra/core/agent';
 import type { IMastraLogger } from '@mastra/core/logger';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/runtime-context';
 import { z } from 'zod';
 import { convertToCoreMessage, normalizeError, createSuccessResponse, createErrorResponse } from '../a2a/protocol';
 import type { InMemoryTaskStore } from '../a2a/store';
@@ -45,9 +45,9 @@ export async function getAgentCardByIdHandler({
     url: 'https://mastra.ai',
   },
   version = '1.0',
-  runtimeContext,
+  requestContext,
 }: Context & {
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   agentId: keyof ReturnType<typeof mastra.getAgents>;
   executionUrl?: string;
   version?: string;
@@ -63,8 +63,8 @@ export async function getAgentCardByIdHandler({
   }
 
   const [instructions, tools] = await Promise.all([
-    agent.getInstructions({ runtimeContext }),
-    agent.getTools({ runtimeContext }),
+    agent.getInstructions({ requestContext }),
+    agent.getTools({ requestContext }),
   ]);
 
   // Extract agent information to create the AgentCard
@@ -113,7 +113,7 @@ export async function handleMessageSend({
   agent,
   agentId,
   logger,
-  runtimeContext,
+  requestContext,
 }: {
   requestId: string;
   params: MessageSendParams;
@@ -121,7 +121,7 @@ export async function handleMessageSend({
   agent: Agent;
   agentId: string;
   logger?: IMastraLogger;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
 }) {
   validateMessageSendParams(params);
 
@@ -150,7 +150,7 @@ export async function handleMessageSend({
   try {
     const { text } = await agent.generate([convertToCoreMessage(message)], {
       runId: taskId,
-      runtimeContext,
+      requestContext,
     });
 
     currentData = applyUpdateToTask(currentData, {
@@ -229,7 +229,7 @@ export async function* handleMessageStream({
   agent,
   agentId,
   logger,
-  runtimeContext,
+  requestContext,
 }: {
   requestId: string;
   params: MessageSendParams;
@@ -237,7 +237,7 @@ export async function* handleMessageStream({
   agent: Agent;
   agentId: string;
   logger?: IMastraLogger;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
 }) {
   yield createSuccessResponse(requestId, {
     state: 'working',
@@ -257,7 +257,7 @@ export async function* handleMessageStream({
       taskStore,
       agent,
       agentId,
-      runtimeContext,
+      requestContext,
       logger,
     });
   } catch (err) {
@@ -332,14 +332,14 @@ export async function getAgentExecutionHandler({
   requestId,
   mastra,
   agentId,
-  runtimeContext,
+  requestContext,
   method,
   params,
   taskStore,
   logger,
 }: Context & {
   requestId: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   agentId: string;
   method: 'message/send' | 'message/stream' | 'tasks/get' | 'tasks/cancel';
   params: MessageSendParams | TaskQueryParams | TaskIdParams;
@@ -364,7 +364,7 @@ export async function getAgentExecutionHandler({
           taskStore,
           agent,
           agentId,
-          runtimeContext,
+          requestContext,
         });
         return result;
       }
@@ -375,7 +375,7 @@ export async function getAgentExecutionHandler({
           params: params as MessageSendParams,
           agent,
           agentId,
-          runtimeContext,
+          requestContext,
         });
         return result;
 

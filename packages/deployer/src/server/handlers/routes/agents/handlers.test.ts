@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import type { Agent } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 import { ChunkFrom } from '@mastra/core/stream';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -135,7 +135,7 @@ describe('Handlers', () => {
       } as any,
       get: vi.fn((key: string) => {
         if (key === 'mastra') return mockMastra;
-        if (key === 'runtimeContext') return new RuntimeContext();
+        if (key === 'requestContext') return new RequestContext();
         return undefined;
       }),
       header: vi.fn(),

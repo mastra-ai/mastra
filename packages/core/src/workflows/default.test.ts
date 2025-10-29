@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import type { Span } from '@opentelemetry/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { RuntimeContext } from '../di';
+import { RequestContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { DefaultExecutionEngine } from './default';
 import type { Emitter, StepResult } from './types';
@@ -10,7 +10,7 @@ import type { Emitter, StepResult } from './types';
 describe('DefaultExecutionEngine.executeConditional error handling', () => {
   let engine: DefaultExecutionEngine;
   let emitter: Emitter;
-  let runtimeContext: RuntimeContext;
+  let requestContext: RequestContext;
   let abortController: AbortController;
 
   beforeEach(() => {
@@ -21,7 +21,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
       off: (_event: string, _callback: (data: any) => void) => {},
       once: (_event: string, _callback: (data: any) => void) => {},
     };
-    runtimeContext = new RuntimeContext();
+    requestContext = new RequestContext();
     abortController = new AbortController();
   });
 
@@ -80,7 +80,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
       },
       emitter,
       abortController,
-      runtimeContext,
+      requestContext,
       tracingContext: {},
     });
   }

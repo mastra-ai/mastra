@@ -2,7 +2,7 @@ import type { CoreMessage } from 'ai';
 import type { Agent, AiMessageType, UIMessageWithMetadata } from '../../agent';
 import type { TracingContext } from '../../ai-tracing';
 import { MastraError } from '../../error';
-import type { RuntimeContext } from '../../runtime-context';
+import type { RequestContext } from '../../runtime-context';
 import { Workflow } from '../../workflows';
 import type { WorkflowResult, StepResult } from '../../workflows';
 import type { MastraScorer } from '../base';
@@ -15,7 +15,7 @@ type RunExperimentDataItem<TTarget = unknown> = {
       ? string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]
       : unknown;
   groundTruth?: any;
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   tracingContext?: TracingContext;
 };
 
@@ -212,7 +212,7 @@ async function executeWorkflow(target: Workflow, item: RunExperimentDataItem<any
   const run = await target.createRunAsync({ disableScorers: true });
   const workflowResult = await run.start({
     inputData: item.input,
-    runtimeContext: item.runtimeContext,
+    requestContext: item.requestContext,
   });
 
   return {
@@ -230,13 +230,13 @@ async function executeAgent(agent: Agent, item: RunExperimentDataItem<any>) {
     return await agent.generate(item.input as any, {
       scorers: {},
       returnScorerData: true,
-      runtimeContext: item.runtimeContext,
+      requestContext: item.requestContext,
     });
   } else {
     return await agent.generateLegacy(item.input as any, {
       scorers: {},
       returnScorerData: true,
-      runtimeContext: item.runtimeContext,
+      requestContext: item.requestContext,
     });
   }
 }
@@ -255,7 +255,7 @@ async function runScorers(
           input: targetResult.scoringData?.input,
           output: targetResult.scoringData?.output,
           groundTruth: item.groundTruth,
-          runtimeContext: item.runtimeContext,
+          requestContext: item.requestContext,
           tracingContext: item.tracingContext,
         });
 
@@ -285,7 +285,7 @@ async function runScorers(
           input: targetResult.scoringData.input,
           output: targetResult.scoringData.output,
           groundTruth: item.groundTruth,
-          runtimeContext: item.runtimeContext,
+          requestContext: item.requestContext,
           tracingContext: item.tracingContext,
         });
         workflowScorerResults[scorer.name] = score;
@@ -307,7 +307,7 @@ async function runScorers(
                 input: stepResult.payload,
                 output: stepResult.output,
                 groundTruth: item.groundTruth,
-                runtimeContext: item.runtimeContext,
+                requestContext: item.requestContext,
                 tracingContext: item.tracingContext,
               });
               stepResults[scorer.name] = score;

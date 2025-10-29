@@ -5,7 +5,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
-import type { RuntimeContext } from '../../../runtime-context';
+import type { RequestContext } from '../../../runtime-context';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
@@ -41,7 +41,7 @@ interface PrepareMemoryStepOptions<
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
   resourceId?: string;
   runId: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
   methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   /**
@@ -62,7 +62,7 @@ export function createPrepareMemoryStep<
   threadFromArgs,
   resourceId,
   runId,
-  runtimeContext,
+  requestContext,
   instructions,
   memoryConfig,
   memory,
@@ -92,7 +92,7 @@ export function createPrepareMemoryStep<
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'user');
         const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcessors({
-          runtimeContext,
+          requestContext,
           tracingContext,
           messageList,
           inputProcessorOverrides: options.inputProcessors,
@@ -172,7 +172,7 @@ export function createPrepareMemoryStep<
               threadId: threadObject.id,
               vectorMessageSearch: new MessageList().add(options.messages, `user`).getLatestUserContent() || '',
               memoryConfig,
-              runtimeContext,
+              requestContext,
             })
           : [],
         memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
@@ -230,7 +230,7 @@ export function createPrepareMemoryStep<
         .add(options.messages, 'user');
 
       const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcessors({
-        runtimeContext,
+        requestContext,
         tracingContext,
         messageList,
         inputProcessorOverrides: options.inputProcessors,

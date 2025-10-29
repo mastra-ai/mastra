@@ -311,12 +311,12 @@ export type MemoryConfig = {
       | {
           /**
            * Language model to use for title generation.
-           * Can be static or a function that receives runtime context for dynamic selection.
+           * Can be static or a function that receives request context for dynamic selection.
            */
           model: DynamicArgument<MastraLanguageModel>;
           /**
            * Custom instructions for title generation.
-           * Can be static or a function that receives runtime context for dynamic customization.
+           * Can be static or a function that receives request context for dynamic customization.
            */
           instructions?: DynamicArgument<string>;
         };

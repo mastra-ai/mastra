@@ -26,7 +26,7 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
-import type { RuntimeContext } from '../runtime-context';
+import type { RequestContext } from '../runtime-context';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
 import type { OutputSchema } from '../stream';
 import type { InferSchemaOutput } from '../stream/base/schema';
@@ -93,10 +93,10 @@ export interface AgentCreateOptions {
 // This is used in place of DynamicArgument so that model router IDE autocomplete works.
 // Without this TS doesn't understand the function/string union type from DynamicArgument
 type DynamicModel = ({
-  runtimeContext,
+  requestContext,
   mastra,
 }: {
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   mastra?: Mastra;
 }) => Promise<MastraModelConfig> | MastraModelConfig;
 
@@ -240,8 +240,8 @@ export type AgentGenerateOptions<
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Telemetry settings */
   telemetry?: TelemetrySettings;
-  /** RuntimeContext for dependency injection */
-  runtimeContext?: RuntimeContext;
+  /** RequestContext for dependency injection */
+  requestContext?: RequestContext;
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   /** Whether to return the input required to run scorers for agents, defaults to false */
@@ -325,8 +325,8 @@ export type AgentStreamOptions<
   experimental_output?: EXPERIMENTAL_OUTPUT;
   /** Telemetry settings */
   telemetry?: TelemetrySettings;
-  /** RuntimeContext for dependency injection */
-  runtimeContext?: RuntimeContext;
+  /** RequestContext for dependency injection */
+  requestContext?: RequestContext;
   /**
    * Whether to save messages incrementally on step finish
    * @default false
@@ -376,7 +376,7 @@ export type AgentExecuteOnFinishOptions = {
   readOnlyMemory?: boolean;
   threadId?: string;
   resourceId?: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
   memoryConfig: MemoryConfig | undefined;
   outputText: string;
