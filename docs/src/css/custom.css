@@ -750,7 +750,7 @@ span[class*="categoryLinkLabel"] {
     border-top: var(--border-sm) solid var(--border);
     color: var(--mastra-text-secondary);
     padding: 2rem 0;
-    display: none !important
+    display: none !important;
   }
 
   .footer__link-item {
@@ -1212,10 +1212,9 @@ p {
 }
 
 @media (min-width: 997px) {
-
-.theme-doc-sidebar-item-link.theme-doc-sidebar-item-link-level-1 > a {
- padding-inline-start: 0.5rem;
-}
+  .theme-doc-sidebar-item-link.theme-doc-sidebar-item-link-level-1 > a {
+    padding-inline-start: 0.5rem;
+  }
 
   p {
     @apply tracking-[-0.09px] leading-[1.6];
@@ -1315,4 +1314,9 @@ p {
   .docusaurus-mt-lg {
     overflow-x: revert;
   }
+}
+
+/* Hide sidebar items with sidebar-hidden class */
+.sidebar-hidden {
+  display: none !important;
 }
