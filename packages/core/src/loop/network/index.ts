@@ -75,7 +75,6 @@ async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtim
     instructions,
     model: model,
     memory: memoryToUse,
-    tools: { ...toolsToUse, ...memoryTools },
     // @ts-ignore
     _agentNetworkAppend: true,
   });
