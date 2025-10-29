@@ -3,6 +3,7 @@ import { FeedbackForm } from "./feedback-form";
 import { Button } from "./ui/button";
 import React, { useState } from "react";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
+import { T } from "gt-react";
 
 export const FeedbackTrigger: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -26,7 +27,9 @@ export const FeedbackTrigger: React.FC = () => {
           onClick={handleOpen}
           className="bg-(--mastra-surface-3) w-full rounded-xl hover:opacity-90 h-8 justify-center flex items-center px-4 text-sm font-normal"
         >
-          Question? Give us feedback
+          <T>
+            Question? Give us feedback
+          </T>
         </Button>
       ) : (
         <FeedbackForm
