@@ -27,7 +27,7 @@
   "devDependencies": {
     "@types/node": "^24.3.0",
     "mastra": "^0.17.5",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.3"
   },
   "pnpm": {
     "overrides": {

@@ -237,7 +237,7 @@
     "rollup": "^4.50.2",
     "ts-morph": "^27.0.2",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.3",
     "vitest": "^3.2.4",
     "zod": "^3.25.76",
     "zod-v4": "npm:zod@4.1.12"

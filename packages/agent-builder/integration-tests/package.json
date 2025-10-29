@@ -20,7 +20,7 @@
     "@mastra/libsql": "*",
     "@mastra/mcp": "*",
     "mastra": "*",
-    "typescript": "^5.8.2",
+    "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   },
   "pnpm": {
