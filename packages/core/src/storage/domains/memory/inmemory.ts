@@ -9,7 +9,6 @@ import type {
   ThreadSortDirection,
   ThreadSortOptions,
 } from '../../types';
-import { safelyParseJSON } from '../../utils';
 import type { StoreOperations } from '../operations';
 import { MemoryStorage } from './base';
 
@@ -123,7 +122,8 @@ export class InMemoryMemory extends MemoryStorage {
           const convertedMessage = {
             id: targetMessage.id,
             threadId: targetMessage.thread_id,
-            content: safelyParseJSON(targetMessage.content),
+            content:
+              typeof targetMessage.content === 'string' ? JSON.parse(targetMessage.content) : targetMessage.content,
             role: targetMessage.role as 'user' | 'assistant' | 'system' | 'tool',
             type: targetMessage.type,
             createdAt: targetMessage.createdAt,
@@ -147,7 +147,7 @@ export class InMemoryMemory extends MemoryStorage {
                   const convertedPrevMessage = {
                     id: message.id,
                     threadId: message.thread_id,
-                    content: safelyParseJSON(message.content),
+                    content: typeof message.content === 'string' ? JSON.parse(message.content) : message.content,
                     role: message.role as 'user' | 'assistant' | 'system' | 'tool',
                     type: message.type,
                     createdAt: message.createdAt,
@@ -177,7 +177,7 @@ export class InMemoryMemory extends MemoryStorage {
                   const convertedNextMessage = {
                     id: message.id,
                     threadId: message.thread_id,
-                    content: safelyParseJSON(message.content),
+                    content: typeof message.content === 'string' ? JSON.parse(message.content) : message.content,
                     role: message.role as 'user' | 'assistant' | 'system' | 'tool',
                     type: message.type,
                     createdAt: message.createdAt,
@@ -207,7 +207,7 @@ export class InMemoryMemory extends MemoryStorage {
           const convertedMessage = {
             id: msg.id,
             threadId: msg.thread_id,
-            content: safelyParseJSON(msg.content),
+            content: typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content,
             role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
             type: msg.type,
             createdAt: msg.createdAt,
@@ -236,7 +236,7 @@ export class InMemoryMemory extends MemoryStorage {
       ...rest,
       threadId: thread_id,
       ...(message.resourceId && { resourceId: message.resourceId }),
-      content: safelyParseJSON(content),
+      content: typeof content === 'string' ? content : JSON.parse(content),
       role: role as MastraMessageV2['role'],
     } satisfies MastraMessageV2;
   }
@@ -286,7 +286,7 @@ export class InMemoryMemory extends MemoryStorage {
       const storageMessage: StorageMessageType = {
         id: message.id,
         thread_id: message.threadId || '',
-        content: JSON.stringify(message.content),
+        content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
         role: message.role || 'user',
         type: message.type || 'text',
         createdAt: message.createdAt,
@@ -321,7 +321,7 @@ export class InMemoryMemory extends MemoryStorage {
       if (update.resourceId !== undefined) storageMsg.resourceId = update.resourceId;
       // Deep merge content if present
       if (update.content !== undefined) {
-        let oldContent = safelyParseJSON(storageMsg.content);
+        let oldContent = typeof storageMsg.content === 'string' ? JSON.parse(storageMsg.content) : storageMsg.content;
         let newContent = update.content;
         if (typeof newContent === 'object' && typeof oldContent === 'object') {
           // Deep merge for metadata/content fields
@@ -369,7 +369,7 @@ export class InMemoryMemory extends MemoryStorage {
       updatedMessages.push({
         id: storageMsg.id,
         threadId: storageMsg.thread_id,
-        content: safelyParseJSON(storageMsg.content),
+        content: typeof storageMsg.content === 'string' ? JSON.parse(storageMsg.content) : storageMsg.content,
         role: storageMsg.role === 'user' || storageMsg.role === 'assistant' ? storageMsg.role : 'user',
         type: storageMsg.type,
         createdAt: storageMsg.createdAt,
@@ -460,7 +460,8 @@ export class InMemoryMemory extends MemoryStorage {
           const convertedMessage = {
             id: targetMessage.id,
             threadId: targetMessage.thread_id,
-            content: safelyParseJSON(targetMessage.content),
+            content:
+              typeof targetMessage.content === 'string' ? JSON.parse(targetMessage.content) : targetMessage.content,
             role: targetMessage.role as 'user' | 'assistant' | 'system' | 'tool',
             type: targetMessage.type,
             createdAt: targetMessage.createdAt,
@@ -484,7 +485,7 @@ export class InMemoryMemory extends MemoryStorage {
                   const convertedPrevMessage = {
                     id: message.id,
                     threadId: message.thread_id,
-                    content: safelyParseJSON(message.content),
+                    content: typeof message.content === 'string' ? JSON.parse(message.content) : message.content,
                     role: message.role as 'user' | 'assistant' | 'system' | 'tool',
                     type: message.type,
                     createdAt: message.createdAt,
@@ -514,7 +515,7 @@ export class InMemoryMemory extends MemoryStorage {
                   const convertedNextMessage = {
                     id: message.id,
                     threadId: message.thread_id,
-                    content: safelyParseJSON(message.content),
+                    content: typeof message.content === 'string' ? JSON.parse(message.content) : message.content,
                     role: message.role as 'user' | 'assistant' | 'system' | 'tool',
                     type: message.type,
                     createdAt: message.createdAt,
@@ -558,7 +559,7 @@ export class InMemoryMemory extends MemoryStorage {
           const convertedMessage = {
             id: msg.id,
             threadId: msg.thread_id,
-            content: safelyParseJSON(msg.content),
+            content: typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content,
             role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
             type: msg.type,
             createdAt: msg.createdAt,
@@ -572,7 +573,7 @@ export class InMemoryMemory extends MemoryStorage {
           const convertedMessage = {
             id: msg.id,
             threadId: msg.thread_id,
-            content: safelyParseJSON(msg.content),
+            content: typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content,
             role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
             type: msg.type,
             createdAt: msg.createdAt,
