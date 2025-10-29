@@ -1178,7 +1178,7 @@ export class Workflow<
       !!resume?.label ||
       !!(resume?.steps && resume.steps.length === 0 && (!runCount || runCount === 0));
     // this check is for cases where you suspend/resume a nested workflow.
-    // retryCount helps us know the step has been run at least once, which means it's running in a loop and should not be calling resume.
+    // runCount helps us know the step has been run at least once, which means it's running in a loop and should not be calling resume.
 
     const run = isResume ? await this.createRunAsync({ runId: resume.runId }) : await this.createRunAsync({ runId });
     const nestedAbortCb = () => {
