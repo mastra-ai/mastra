@@ -503,7 +503,7 @@ describe('Stream ID Consistency', () => {
     const { messages } = await storage.listMessages({ threadId });
     console.log('messages', messages);
 
-    const assistantMessage = messages.find((m: MastraMessageV1) => m.role === 'assistant');
+    const assistantMessage = messages.find(m => m.role === 'assistant');
     console.log('assistantMessage', assistantMessage);
     const startEvent = chunks.find(chunk => chunk.type === 'start');
     console.log('startEvent', startEvent);
