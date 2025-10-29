@@ -1379,14 +1379,13 @@ export class Agent<
     if (!memory) {
       return [];
     }
-    const result = await memory.rememberMessages({
+    return memory.rememberMessages({
       threadId,
       resourceId,
       config: memoryConfig,
       // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
       vectorMessageSearch,
     });
-    return result.messages;
   }
 
   /**
