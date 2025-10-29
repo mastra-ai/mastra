@@ -11,7 +11,7 @@ export default function Home() {
             <h1>Welcome to Mastra Documentation</h1>
             <p>TypeScript agent framework for building AI applications</p>
             <div className="mt-4">
-              <Link className="button button--primary button--lg" href="/docs">
+              <Link className="button button--primary button--lg" to="/docs">
                 Get Started
               </Link>
             </div>

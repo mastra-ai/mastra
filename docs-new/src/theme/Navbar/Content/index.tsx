@@ -10,6 +10,7 @@ import NavbarLogo from '@theme/Navbar/Logo';
 import NavbarSearch from '@theme/Navbar/Search';
 
 import styles from './styles.module.css';
+import LocaleControl from '@site/src/components/locale-control';
 
 function useNavbarItems() {
   // TODO temporary casting until ThemeConfig type is improved
@@ -72,6 +73,7 @@ export default function NavbarContent(): ReactNode {
         // Ask the user to add the respective navbar items => more flexible
         <>
           <NavbarItems items={rightItems} />
+          <LocaleControl />
           <NavbarColorModeToggle className={styles.colorModeToggle} />
           {!searchBarItem && (
             <NavbarSearch>
