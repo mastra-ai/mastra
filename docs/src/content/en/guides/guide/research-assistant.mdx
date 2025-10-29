@@ -1,7 +1,5 @@
 ---
 title: "Guide: Building a Research Paper Assistant with RAG | Mastra RAG Guides"
-sidebar_position: 4
-sidebar_label: "RAG: Research Assistant"
 description: Guide on creating an AI research assistant that can analyze and answer questions about academic papers using RAG.
 ---
 
@@ -100,7 +98,7 @@ const vectorQueryTool = createVectorQueryTool({
 export const researchAgent = new Agent({
   name: "Research Assistant",
   instructions: `You are a helpful research assistant that analyzes academic papers and technical documents.
-    Use the provided vector query tool to find relevant information from your knowledge base, 
+    Use the provided vector query tool to find relevant information from your knowledge base,
     and provide accurate, well-supported answers based on the retrieved content.
     Focus on the specific content available in the tool and acknowledge if you cannot find sufficient information to answer a question.
     Base your responses only on the content provided, not on general knowledge.`,

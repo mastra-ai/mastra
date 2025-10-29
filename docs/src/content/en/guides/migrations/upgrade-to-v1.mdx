@@ -1,7 +1,5 @@
 ---
 title: "Migration: Upgrade to Mastra v1 | Migration Guide"
-sidebar_position: 1
-sidebar_label: "v1.0"
 description: "Learn how to upgrade through breaking changes in pre-v1 versions of Mastra."
 ---
 
@@ -202,7 +200,7 @@ export const accountBalance = createTool({
   outputSchema: z.object({
     balance: z.number(),
   }),
-  execute: async ({ context, mcp }) => {    
+  execute: async ({ context, mcp }) => {
     if (mcp) {
       await checkAuth(mcp.extra.authInfo)
 
@@ -236,7 +234,7 @@ export const accountBalance = createTool({
 
 ### Changed: Memory Scope Defaults
 
-`@mastra/memory` - `0.16.0`  
+`@mastra/memory` - `0.16.0`
 `@mastra/core` - `0.22.0`
 
 The default memory scope for both **working memory** and **semantic recall** has changed from `'thread'` to `'resource'`.
@@ -270,8 +268,8 @@ const memory = new Memory({
       enabled: true,
       scope: 'thread', // Explicitly set to thread-scoped
       template: `# User Profile
-- **Name**: 
-- **Interests**: 
+- **Name**:
+- **Interests**:
 `,
     },
     semanticRecall: {
