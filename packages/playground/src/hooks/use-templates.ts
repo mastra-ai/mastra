@@ -230,7 +230,7 @@ const processTemplateInstallRecord = (
       });
     }
 
-    const runId = record.runId || record.payload.runId;
+    const runId = record.runId || record.payload?.runId;
 
     newState = {
       ...newState,

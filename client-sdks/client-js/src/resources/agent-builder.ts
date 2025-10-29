@@ -66,6 +66,42 @@ export class AgentBuilder extends BaseResource {
   }
 
   /**
+   * Creates a transform stream that parses binary chunks into JSON records.
+   */
+  private createRecordParserTransform(): TransformStream<ArrayBuffer, { type: string; payload: any }> {
+    let failedChunk: string | undefined = undefined;
+
+    return new TransformStream<ArrayBuffer, { type: string; payload: any }>({
+      start() {},
+      async transform(chunk, controller) {
+        try {
+          // Decode binary data to text
+          const decoded = new TextDecoder().decode(chunk);
+
+          // Split by record separator
+          const chunks = decoded.split(RECORD_SEPARATOR);
+
+          // Process each chunk
+          for (const chunk of chunks) {
+            if (chunk) {
+              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
+              try {
+                const parsedChunk = JSON.parse(newChunk);
+                controller.enqueue(parsedChunk);
+                failedChunk = undefined;
+              } catch {
+                failedChunk = newChunk;
+              }
+            }
+          }
+        } catch {
+          // Silently ignore processing errors
+        }
+      },
+    });
+  }
+
+  /**
    * @deprecated Use createRunAsync() instead.
    * @throws {Error} Always throws an error directing users to use createRunAsync()
    */
@@ -290,39 +326,7 @@ export class AgentBuilder extends BaseResource {
       throw new Error('Response body is null');
     }
 
-    let failedChunk: string | undefined = undefined;
-
-    const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(transformStream);
+    return response.body.pipeThrough(this.createRecordParserTransform());
   }
 
   /**
@@ -353,39 +357,7 @@ export class AgentBuilder extends BaseResource {
       throw new Error('Response body is null');
     }
 
-    let failedChunk: string | undefined = undefined;
-
-    const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(transformStream);
+    return response.body.pipeThrough(this.createRecordParserTransform());
   }
 
   /**
@@ -446,39 +418,7 @@ export class AgentBuilder extends BaseResource {
       throw new Error('Response body is null');
     }
 
-    let failedChunk: string | undefined = undefined;
-
-    const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(transformStream);
+    return response.body.pipeThrough(this.createRecordParserTransform());
   }
 
   /**
@@ -504,39 +444,7 @@ export class AgentBuilder extends BaseResource {
       throw new Error('Response body is null');
     }
 
-    let failedChunk: string | undefined = undefined;
-
-    const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(transformStream);
+    return response.body.pipeThrough(this.createRecordParserTransform());
   }
 
   /**
@@ -562,39 +470,7 @@ export class AgentBuilder extends BaseResource {
       throw new Error('Response body is null');
     }
 
-    let failedChunk: string | undefined = undefined;
-
-    const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(transformStream);
+    return response.body.pipeThrough(this.createRecordParserTransform());
   }
 
   /**
@@ -628,39 +504,7 @@ export class AgentBuilder extends BaseResource {
       throw new Error('Response body is null');
     }
 
-    let failedChunk: string | undefined = undefined;
-
-    const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(transformStream);
+    return response.body.pipeThrough(this.createRecordParserTransform());
   }
 
   /**

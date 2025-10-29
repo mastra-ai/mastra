@@ -136,8 +136,10 @@ describe('AgentBuilder.runs', () => {
 describe('AgentBuilder Streaming Methods (fetch-mocked)', () => {
   let fetchMock: any;
   let agentBuilder: AgentBuilder;
+  let originalFetch: any;
 
   beforeEach(() => {
+    originalFetch = globalThis.fetch;
     fetchMock = vi.fn((input: any) => {
       const url = String(input);
 
@@ -188,6 +190,7 @@ describe('AgentBuilder Streaming Methods (fetch-mocked)', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    globalThis.fetch = originalFetch;
   });
 
   it('observeStream returns ReadableStream with cached and live events', async () => {
