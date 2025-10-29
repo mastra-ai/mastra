@@ -228,8 +228,7 @@ export class Agent<
         maxRetries: mdl.maxRetries ?? config?.maxRetries ?? 0,
         enabled: mdl.enabled ?? true,
       }));
-      // Capture an immutable snapshot of the original array config
-      this.#originalModel = this.model.map(mdl => ({ ...mdl }));
+      this.#originalModel = [...this.model];
     } else {
       this.model = config.model;
       this.#originalModel = config.model;
@@ -994,10 +993,7 @@ export class Agent<
    * @internal
    */
   __resetToOriginalModel() {
-    // Restore from snapshot; clone to avoid aliasing future mutations
-    this.model = Array.isArray(this.#originalModel)
-      ? [...this.#originalModel]
-      : this.#originalModel;
+    this.model = this.#originalModel;
     this.logger.debug(`[Agents:${this.name}] Model reset to original.`, { model: this.model, name: this.name });
   }
 
