@@ -1387,7 +1387,7 @@ export class Agent<
         // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
         vectorMessageSearch,
       })
-      .then(r => r.messagesV2);
+      .then(r => r.messages);
   }
 
   /**

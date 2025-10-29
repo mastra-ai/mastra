@@ -287,7 +287,7 @@ export abstract class MastraMemory extends MastraBase {
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }): Promise<{ messages: MastraMessageV1[]; messagesV2: MastraMessageV2[] }>;
+  }): Promise<{ messages: MastraMessageV2[] }>;
 
   estimateTokens(text: string): number {
     return Math.ceil(text.split(' ').length * 1.3);

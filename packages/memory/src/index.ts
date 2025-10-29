@@ -237,14 +237,13 @@ export class Memory extends MastraMemory {
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }): Promise<{ messages: MastraMessageV1[]; messagesV2: MastraMessageV2[] }> {
+  }): Promise<{ messages: MastraMessageV2[] }> {
     const threadConfig = this.getMergedThreadConfig(config || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, threadConfig);
 
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
       return {
         messages: [],
-        messagesV2: [],
       };
     }
 
@@ -256,11 +255,8 @@ export class Memory extends MastraMemory {
       threadConfig: config,
     });
 
-    // Using MessageList here just to convert mixed input messages to single type output messages
-    const list = new MessageList({ threadId, resourceId }).add(messagesResult.messages, 'memory');
-
     this.logger.debug(`Remembered message history includes ${messagesResult.messages.length} messages.`);
-    return { messages: list.get.all.v1(), messagesV2: list.get.all.v2() };
+    return { messages: messagesResult.messages };
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {

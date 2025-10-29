@@ -30,7 +30,7 @@ export class MockMemory extends MastraMemory {
   async rememberMessages({ threadId }: { threadId: string }) {
     const { messages } = await this.storage.listMessages({ threadId });
     const list = new MessageList().add(messages, `memory`);
-    return { messages: list.get.remembered.v1(), messagesV2: list.get.remembered.v2() };
+    return { messages: list.get.remembered.v2() };
   }
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
