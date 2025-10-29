@@ -604,17 +604,6 @@ describe('Agent Builder Handlers', () => {
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
     });
 
-    it('should throw error when step is not provided', async () => {
-      await expect(
-        resumeAgentBuilderActionHandler({
-          mastra: mockMastra,
-          actionId: 'workflow-builder',
-          runId: 'test-run',
-          body: { step: '', resumeData: {} },
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'step required to resume workflow' }));
-    });
-
     it('should resume action run successfully', async () => {
       const run = await reusableWorkflow.createRunAsync({
         runId: 'test-run',

@@ -179,7 +179,7 @@ export class AgentBuilder extends BaseResource {
    */
   async resume(
     params: {
-      step: string | string[];
+      step?: string | string[];
       resumeData?: unknown;
       runtimeContext?: RuntimeContext;
     },
@@ -204,7 +204,7 @@ export class AgentBuilder extends BaseResource {
    */
   async resumeAsync(
     params: {
-      step: string | string[];
+      step?: string | string[];
       resumeData?: unknown;
       runtimeContext?: RuntimeContext;
     },
