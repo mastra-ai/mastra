@@ -333,6 +333,14 @@ const sidebars = {
     },
     {
       type: "category",
+      label: "Scorers",
+      collapsed: true,
+      items: [
+        { type: "doc", id: "scorers/running-in-ci", label: "Running in CI" },
+      ],
+    },
+    {
+      type: "category",
       label: "Voice",
       collapsed: true,
       items: [
