@@ -936,7 +936,7 @@ describe('Memory Handlers', () => {
             format: 2,
             parts: [
               { type: 'text', text: 'Check this image' },
-              { type: 'file', mimeType: 'image/png', data: 'base64data' },
+              { type: 'file', mimeType: 'image/png', data: 'data:image/png;base64,base64data' },
             ],
             content: 'Check this image',
             metadata: {
