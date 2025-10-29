@@ -123,7 +123,7 @@ export class MastraClient extends BaseResource {
    * @param threadId - ID of the memory thread to retrieve
    * @returns MemoryThread instance
    */
-  public getMemoryThread(threadId: string, agentId: string) {
+  public getMemoryThread({ threadId, agentId }: { threadId: string; agentId: string }) {
     return new MemoryThread(this.options, threadId, agentId);
   }
 
