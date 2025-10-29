@@ -56,8 +56,6 @@ import type { AISDKV5OutputStream } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
-import { InstrumentClass } from '../telemetry';
-import { Telemetry } from '../telemetry/telemetry';
 import { createTool } from '../tools';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
@@ -66,7 +64,6 @@ import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
-import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
 import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata } from './message-list';
@@ -96,12 +93,12 @@ type ModelFallbacks = {
   enabled: boolean;
 }[];
 
-function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
-  if (value instanceof Promise) {
-    return value.then(cb);
+function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>, cb: (value: T) => R): R | Promise<R> {
+  if (value instanceof Promise || (value != null && typeof (value as PromiseLike<T>).then === 'function')) {
+    return Promise.resolve(value).then(cb);
   }
 
-  return cb(value);
+  return cb(value as T);
 }
 
 // Helper to resolve threadId from args (supports both new and old API)
@@ -137,36 +134,6 @@ function resolveThreadIdFromArgs(args: {
  * });
  * ```
  */
-@InstrumentClass({
-  prefix: 'agent',
-  excludeMethods: [
-    'hasOwnMemory',
-    'getMemory',
-    '__primitive',
-    '__registerMastra',
-    '__registerPrimitives',
-    '__runInputProcessors',
-    '__runOutputProcessors',
-    '_wrapToolsWithAITracing',
-    'getProcessorRunner',
-    '__setTools',
-    '__setLogger',
-    '__setTelemetry',
-    'log',
-    'listAgents',
-    'getModel',
-    'getInstructions',
-    'getTools',
-    'getLLM',
-    'getWorkflows',
-    'getDefaultGenerateOptionsLegacy',
-    'getDefaultStreamOptionsLegacy',
-    'getDefaultStreamOptions',
-    'getDescription',
-    'getScorers',
-    'getVoice',
-  ],
-})
 export class Agent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -281,7 +248,6 @@ export class Agent<
     if (config.mastra) {
       this.__registerMastra(config.mastra);
       this.__registerPrimitives({
-        telemetry: config.mastra.getTelemetry(),
         logger: config.mastra.getLogger(),
       });
     }
@@ -301,7 +267,7 @@ export class Agent<
     if (config.voice) {
       this.#voice = config.voice;
       if (typeof config.tools !== 'function') {
-        this.#voice?.addTools(this.tools);
+        this.#voice?.addTools(this.#tools as TTools);
       }
       if (typeof config.instructions === 'string') {
         this.#voice?.addInstructions(config.instructions);
@@ -618,44 +584,6 @@ export class Agent<
     }
   }
 
-  get instructions() {
-    this.logger.warn('The instructions property is deprecated. Please use getInstructions() instead.');
-
-    if (typeof this.#instructions === 'function') {
-      const mastraError = new MastraError({
-        id: 'AGENT_INSTRUCTIONS_INCOMPATIBLE_WITH_FUNCTION_INSTRUCTIONS',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: {
-          agentName: this.name,
-        },
-        text: 'Instructions are not compatible when instructions are a function. Please use getInstructions() instead.',
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-
-    // Throw error for non-string instructions to force migration
-    if (typeof this.#instructions !== 'string') {
-      const mastraError = new MastraError({
-        id: 'AGENT_INSTRUCTIONS_MUST_BE_STRING_FOR_DEPRECATED_GETTER',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: {
-          agentName: this.name,
-          instructionsType: Array.isArray(this.#instructions) ? 'array' : 'object',
-        },
-        text: 'The instructions getter is deprecated and only supports string instructions. For non-string instructions, please use getInstructions() instead.',
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-
-    return this.#instructions;
-  }
-
   /**
    * Gets the instructions for this agent, resolving function-based instructions if necessary.
    * Instructions define the agent's behavior and capabilities.
@@ -696,7 +624,7 @@ export class Agent<
 
   /**
    * Helper function to convert agent instructions to string for backward compatibility
-   * Used for legacy methods that expect string instructions (e.g., voice, telemetry)
+   * Used for legacy methods that expect string instructions (e.g., voice)
    * @internal
    */
   #convertInstructionsToString(instructions: AgentInstructions): string {
@@ -852,27 +780,6 @@ export class Agent<
     });
   }
 
-  get tools() {
-    this.logger.warn('The tools property is deprecated. Please use getTools() instead.');
-
-    if (typeof this.#tools === 'function') {
-      const mastraError = new MastraError({
-        id: 'AGENT_GET_TOOLS_FUNCTION_INCOMPATIBLE_WITH_TOOL_FUNCTION_TYPE',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: {
-          agentName: this.name,
-        },
-        text: 'Tools are not compatible when tools are a function. Please use getTools() instead.',
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-
-    return ensureToolProperties(this.#tools) as TTools;
-  }
-
   /**
    * Gets the tools configured for this agent, resolving function-based tools if necessary.
    * Tools extend the agent's capabilities, allowing it to perform specific actions or access external systems.
@@ -912,30 +819,9 @@ export class Agent<
     });
   }
 
-  get llm() {
-    this.logger.warn('The llm property is deprecated. Please use getLLM() instead.');
-
-    if (typeof this.model === 'function') {
-      const mastraError = new MastraError({
-        id: 'AGENT_LLM_GETTER_INCOMPATIBLE_WITH_FUNCTION_MODEL',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: {
-          agentName: this.name,
-        },
-        text: 'LLM is not compatible when model is a function. Please use getLLM() instead.',
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-
-    return this.getLLM();
-  }
-
   /**
    * Gets or creates an LLM instance based on the provided or configured model.
-   * The LLM wraps the language model with additional capabilities like telemetry and error handling.
+   * The LLM wraps the language model with additional capabilities like error handling.
    *
    * @example
    * ```typescript
@@ -1150,14 +1036,10 @@ export class Agent<
   #primitives?: MastraPrimitives;
 
   /**
-   * Registers telemetry and logger primitives with the agent.
+   * Registers  logger primitives with the agent.
    * @internal
    */
   __registerPrimitives(p: MastraPrimitives) {
-    if (p.telemetry) {
-      this.__setTelemetry(p.telemetry);
-    }
-
     if (p.logger) {
       this.__setLogger(p.logger);
     }
@@ -1320,105 +1202,6 @@ export class Agent<
     this.#memory = memory;
   }
 
-  /* @deprecated use agent.getMemory() and query memory directly */
-  async fetchMemory({
-    threadId,
-    thread: passedThread,
-    memoryConfig,
-    resourceId,
-    runId,
-    userMessages,
-    systemMessage,
-    messageList = new MessageList({ threadId, resourceId }),
-    runtimeContext = new RuntimeContext(),
-  }: {
-    resourceId: string;
-    threadId: string;
-    thread?: StorageThreadType;
-    memoryConfig?: MemoryConfig;
-    userMessages?: CoreMessage[];
-    systemMessage?: CoreMessage;
-    runId?: string;
-    messageList?: MessageList;
-    runtimeContext?: RuntimeContext;
-  }) {
-    const memory = await this.getMemory({ runtimeContext });
-    if (memory) {
-      const thread = passedThread ?? (await memory.getThreadById({ threadId }));
-
-      if (!thread) {
-        // If no thread, nothing to fetch from memory.
-        // The messageList already contains the current user messages and system message.
-        return { threadId: threadId || '', messages: userMessages || [] };
-      }
-
-      if (userMessages && userMessages.length > 0) {
-        messageList.add(userMessages, 'memory');
-      }
-
-      if (systemMessage?.role === 'system') {
-        messageList.addSystem(systemMessage, 'memory');
-      }
-
-      const [memoryMessages, memorySystemMessage] =
-        threadId && memory
-          ? await Promise.all([
-              memory
-                .rememberMessages({
-                  threadId,
-                  resourceId,
-                  config: memoryConfig,
-                  vectorMessageSearch: messageList.getLatestUserContent() || '',
-                })
-                .then((r: any) => r.messagesV2),
-              memory.getSystemMessage({ threadId, resourceId, memoryConfig }),
-            ])
-          : [[], null];
-
-      this.logger.debug('Fetched messages from memory', {
-        threadId,
-        runId,
-        fetchedCount: memoryMessages.length,
-      });
-
-      if (memorySystemMessage) {
-        messageList.addSystem(memorySystemMessage, 'memory');
-      }
-
-      messageList.add(memoryMessages, 'memory');
-
-      const systemMessages =
-        messageList
-          .getSystemMessages()
-          ?.map(m => m.content)
-          ?.join(`\n`) ?? undefined;
-
-      const newMessages = messageList.get.input.v1() as CoreMessage[];
-
-      const processedMemoryMessages = await memory.processMessages({
-        // these will be processed
-        messages: messageList.get.remembered.v1() as CoreMessage[],
-        // these are here for inspecting but shouldn't be returned by the processor
-        // - ex TokenLimiter needs to measure all tokens even though it's only processing remembered messages
-        newMessages,
-        systemMessage: systemMessages,
-        memorySystemMessage: memorySystemMessage || undefined,
-      });
-
-      const returnList = new MessageList()
-        .addSystem(systemMessages)
-        .add(processedMemoryMessages, 'memory')
-        .add(newMessages, 'user');
-
-      return {
-        threadId: thread.id,
-        messages: returnList.get.all.prompt(),
-      };
-    }
-
-    return { threadId: threadId || '', messages: userMessages || [] };
-  }
-
   /**
    * Retrieves and converts memory tools to CoreTool format.
    * @internal
@@ -1500,30 +1283,8 @@ export class Agent<
         runtimeContext,
         inputProcessorOverrides,
       });
-      // Create traced version of runInputProcessors similar to workflow _runStep pattern
-      const tracedRunInputProcessors = (messageList: MessageList, tracingContext: TracingContext) => {
-        const telemetry = this.#mastra?.getTelemetry();
-        if (!telemetry) {
-          return runner.runInputProcessors(messageList, tracingContext, undefined);
-        }
-
-        return telemetry.traceMethod(
-          async (data: { messageList: MessageList }) => {
-            return runner.runInputProcessors(data.messageList, tracingContext, telemetry);
-          },
-          {
-            spanName: `agent.${this.name}.inputProcessors`,
-            attributes: {
-              'agent.name': this.name,
-              'inputProcessors.count': runner.inputProcessors.length.toString(),
-              'inputProcessors.names': runner.inputProcessors.map(p => p.name).join(','),
-            },
-          },
-        )({ messageList });
-      };
-
       try {
-        messageList = await tracedRunInputProcessors(messageList, tracingContext);
+        messageList = await runner.runInputProcessors(messageList, tracingContext);
       } catch (error) {
         if (error instanceof TripWire) {
           tripwireTriggered = true;
@@ -1577,30 +1338,8 @@ export class Agent<
         outputProcessorOverrides,
       });
 
-      // Create traced version of runOutputProcessors similar to workflow _runStep pattern
-      const tracedRunOutputProcessors = (messageList: MessageList, tracingContext: TracingContext) => {
-        const telemetry = this.#mastra?.getTelemetry();
-        if (!telemetry) {
-          return runner.runOutputProcessors(messageList, tracingContext, undefined);
-        }
-
-        return telemetry.traceMethod(
-          async (data: { messageList: MessageList }) => {
-            return runner.runOutputProcessors(data.messageList, tracingContext, telemetry);
-          },
-          {
-            spanName: `agent.${this.name}.outputProcessors`,
-            attributes: {
-              'agent.name': this.name,
-              'outputProcessors.count': runner.outputProcessors.length.toString(),
-              'outputProcessors.names': runner.outputProcessors.map(p => p.name).join(','),
-            },
-          },
-        )({ messageList });
-      };
-
       try {
-        messageList = await tracedRunOutputProcessors(messageList, tracingContext);
+        messageList = await runner.runOutputProcessors(messageList, tracingContext);
       } catch (e) {
         if (e instanceof TripWire) {
           tripwireTriggered = true;
@@ -3151,28 +2890,6 @@ export class Agent<
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
 
-    // Set thread ID and resource ID context for telemetry
-    const activeSpan = Telemetry.getActiveSpan();
-    const baggageEntries: Record<string, { value: string }> = {};
-
-    if (threadFromArgs?.id) {
-      if (activeSpan) {
-        activeSpan.setAttribute('threadId', threadFromArgs.id);
-      }
-      baggageEntries.threadId = { value: threadFromArgs.id };
-    }
-
-    if (resourceId) {
-      if (activeSpan) {
-        activeSpan.setAttribute('resourceId', resourceId);
-      }
-      baggageEntries.resourceId = { value: resourceId };
-    }
-
-    if (Object.keys(baggageEntries).length > 0) {
-      Telemetry.setBaggage(baggageEntries);
-    }
-
     const memory = await this.getMemory({ runtimeContext });
     const saveQueueManager = new SaveQueueManager({
       logger: this.logger,
@@ -3380,32 +3097,6 @@ export class Agent<
 
     return models;
   }
-  /**
-   * Merges telemetry wrapper with default onFinish callback when needed
-   * @internal
-   */
-  #mergeOnFinishWithTelemetry(streamOptions: any, defaultStreamOptions: any) {
-    let finalOnFinish = streamOptions?.onFinish || defaultStreamOptions.onFinish;
-
-    if (
-      streamOptions?.onFinish &&
-      streamOptions.onFinish.__hasOriginalOnFinish === false &&
-      defaultStreamOptions.onFinish
-    ) {
-      // Create composite callback: telemetry wrapper + default callback
-      const telemetryWrapper = streamOptions.onFinish;
-      const defaultCallback = defaultStreamOptions.onFinish;
-
-      finalOnFinish = async (data: any) => {
-        // Call telemetry wrapper first (for span attributes, etc.)
-        await telemetryWrapper(data);
-        // Then call the default callback
-        await defaultCallback(data);
-      };
-    }
-
-    return finalOnFinish;
-  }
 
   /**
    * Executes the agent with VNext execution model, handling tools, memory, and streaming.
@@ -3467,29 +3158,6 @@ export class Agent<
       runtimeContext,
     });
 
-    // Set Telemetry context
-    // Set thread ID and resource ID context for telemetry
-    const activeSpan = Telemetry.getActiveSpan();
-    const baggageEntries: Record<string, { value: string }> = {};
-
-    if (threadFromArgs?.id) {
-      if (activeSpan) {
-        activeSpan.setAttribute('threadId', threadFromArgs.id);
-      }
-      baggageEntries.threadId = { value: threadFromArgs.id };
-    }
-
-    if (resourceId) {
-      if (activeSpan) {
-        activeSpan.setAttribute('resourceId', resourceId);
-      }
-      baggageEntries.resourceId = { value: resourceId };
-    }
-
-    if (Object.keys(baggageEntries).length > 0) {
-      Telemetry.setBaggage(baggageEntries);
-    }
-
     const memory = await this.getMemory({ runtimeContext });
 
     const saveQueueManager = new SaveQueueManager({
@@ -3519,7 +3187,6 @@ export class Agent<
       executeOnFinish: this.#executeOnFinish.bind(this),
       outputProcessors: this.#outputProcessors,
       llm,
-      getTelemetry: this.#mastra?.getTelemetry?.bind(this.#mastra),
     };
 
     // Create the workflow with all necessary context
@@ -3770,7 +3437,6 @@ export class Agent<
       runId,
       routingAgent: this,
       routingAgentOptions: {
-        telemetry: options?.telemetry,
         modelSettings: options?.modelSettings,
         memory: options?.memory,
       },
@@ -3816,7 +3482,6 @@ export class Agent<
     const mergedStreamOptions = {
       ...defaultStreamOptions,
       ...(streamOptions ?? {}),
-      onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
     const llm = await this.getLLM({
@@ -3906,7 +3571,6 @@ export class Agent<
     let mergedStreamOptions = {
       ...defaultStreamOptions,
       ...streamOptions,
-      onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
     const llm = await this.getLLM({
@@ -4395,7 +4059,6 @@ export class Agent<
     const mergedStreamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
       ...defaultStreamOptions,
       ...streamOptions,
-      onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
       experimental_generateMessageId:
         defaultStreamOptions.experimental_generateMessageId || this.#mastra?.generateId?.bind(this.#mastra),
     };
@@ -4557,189 +4220,6 @@ export class Agent<
 
     return streamObjectResult as StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> &
       TracingProperties;
-  }
-
-  /**
-   * Convert text to speech using the configured voice provider
-   * @param input Text or text stream to convert to speech
-   * @param options Speech options including speaker and provider-specific options
-   * @returns Audio stream
-   * @deprecated Use agent.voice.speak() instead
-   */
-  async speak(
-    input: string | NodeJS.ReadableStream,
-    options?: {
-      speaker?: string;
-      [key: string]: any;
-    },
-  ): Promise<NodeJS.ReadableStream | void> {
-    if (!this.voice) {
-      const mastraError = new MastraError({
-        id: 'AGENT_SPEAK_METHOD_VOICE_NOT_CONFIGURED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: {
-          agentName: this.name,
-        },
-        text: 'No voice provider configured',
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-
-    this.logger.warn('Warning: agent.speak() is deprecated. Please use agent.voice.speak() instead.');
-
-    try {
-      return this.voice.speak(input, options);
-    } catch (e: unknown) {
-      let err;
-      if (e instanceof MastraError) {
-        err = e;
-      } else {
-        err = new MastraError(
-          {
-            id: 'AGENT_SPEAK_METHOD_ERROR',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.UNKNOWN,
-            details: {
-              agentName: this.name,
-            },
-            text: 'Error during agent speak',
-          },
-          e,
-        );
-      }
-      this.logger.trackException(err);
-      this.logger.error(err.toString());
-      throw err;
-    }
-  }
-
-  /**
-   * Convert speech to text using the configured voice provider
-   * @param audioStream Audio stream to transcribe
-   * @param options Provider-specific transcription options
-   * @returns Text or text stream
-   * @deprecated Use agent.voice.listen() instead
-   */
-  async listen(
-    audioStream: NodeJS.ReadableStream,
-    options?: {
-      [key: string]: any;
-    },
-  ): Promise<string | NodeJS.ReadableStream | void> {
-    if (!this.voice) {
-      const mastraError = new MastraError({
-        id: 'AGENT_LISTEN_METHOD_VOICE_NOT_CONFIGURED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: {
-          agentName: this.name,
-        },
-        text: 'No voice provider configured',
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-    this.logger.warn('Warning: agent.listen() is deprecated. Please use agent.voice.listen() instead');
-
-    try {
-      return this.voice.listen(audioStream, options);
-    } catch (e: unknown) {
-      let err;
-      if (e instanceof MastraError) {
-        err = e;
-      } else {
-        err = new MastraError(
-          {
-            id: 'AGENT_LISTEN_METHOD_ERROR',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.UNKNOWN,
-            details: {
-              agentName: this.name,
-            },
-            text: 'Error during agent listen',
-          },
-          e,
-        );
-      }
-      this.logger.trackException(err);
-      this.logger.error(err.toString());
-      throw err;
-    }
-  }
-
-  /**
-   * Get a list of available speakers from the configured voice provider
-   * @throws {Error} If no voice provider is configured
-   * @returns {Promise<Array<{voiceId: string}>>} List of available speakers
-   * @deprecated Use agent.voice.getSpeakers() instead
-   */
-  async getSpeakers() {
-    if (!this.voice) {
-      const mastraError = new MastraError({
-        id: 'AGENT_SPEAKERS_METHOD_VOICE_NOT_CONFIGURED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: {
-          agentName: this.name,
-        },
-        text: 'No voice provider configured',
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-
-    this.logger.warn('Warning: agent.getSpeakers() is deprecated. Please use agent.voice.getSpeakers() instead.');
-
-    try {
-      return await this.voice.getSpeakers();
-    } catch (e: unknown) {
-      let err;
-      if (e instanceof MastraError) {
-        err = e;
-      } else {
-        err = new MastraError(
-          {
-            id: 'AGENT_GET_SPEAKERS_METHOD_ERROR',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.UNKNOWN,
-            details: {
-              agentName: this.name,
-            },
-            text: 'Error during agent getSpeakers',
-          },
-          e,
-        );
-      }
-      this.logger.trackException(err);
-      this.logger.error(err.toString());
-      throw err;
-    }
-  }
-
-  /**
-   * Converts the agent to a workflow step for use in legacy workflows.
-   * The step accepts a prompt and returns text output.
-   *
-   * @deprecated Use agent directly in workflows instead
-   *
-   * @example
-   * ```typescript
-   * const agentStep = agent.toStep();
-   * const workflow = new Workflow({
-   *   steps: {
-   *     analyze: agentStep
-   *   }
-   * });
-   * ```
-   */
-  toStep(): Step<TAgentId, z.ZodObject<{ prompt: z.ZodString }>, z.ZodObject<{ text: z.ZodString }>, any> {
-    const x = agentToStep(this);
-    return new Step(x);
   }
 
   /**

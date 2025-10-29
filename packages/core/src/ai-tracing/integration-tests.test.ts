@@ -674,17 +674,15 @@ const mockModelV2 = new MockLanguageModelV2({
  * Creates base Mastra configuration for tests with AI tracing enabled.
  *
  * @param testExporter - The TestExporter instance to capture tracing events
- * @returns Base configuration object with telemetry disabled and AI tracing configured
+ * @returns Base configuration object with AI tracing configured
  *
  * Features:
- * - Telemetry disabled for faster test execution
  * - Mock storage for isolation
  * - AI tracing with TestExporter for span validation
  * - Integration tests configuration
  */
 function getBaseMastraConfig(testExporter: TestExporter, options = {}) {
   return {
-    telemetry: { enabled: false },
     storage: new MockStore(),
     observability: {
       configs: {
@@ -1201,6 +1199,10 @@ describe('AI Tracing Integration Tests', () => {
         }
         expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
 
+        expect(llmGenerationSpan?.endTime).toBeDefined();
+        expect(agentRunSpan?.endTime).toBeDefined();
+        expect(llmGenerationSpan?.endTime!.getTime()).toBeLessThanOrEqual(agentRunSpan?.endTime!.getTime());
+
         testExporter.finalExpectations();
       });
     },
@@ -1375,6 +1377,10 @@ describe('AI Tracing Integration Tests', () => {
         }
         expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
 
+        expect(llmGenerationSpan?.endTime).toBeDefined();
+        expect(agentRunSpan?.endTime).toBeDefined();
+        expect(llmGenerationSpan?.endTime!.getTime()).toBeLessThanOrEqual(agentRunSpan?.endTime!.getTime());
+
         testExporter.finalExpectations();
       });
     },
@@ -1477,6 +1483,15 @@ describe('AI Tracing Integration Tests', () => {
 
         expect(testAgentLlmSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
         expect(processorAgentLlmSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
+
+        expect(testAgentLlmSpan?.endTime).toBeDefined();
+        expect(testAgentSpan?.endTime).toBeDefined();
+        expect(testAgentLlmSpan?.endTime!.getTime()).toBeLessThanOrEqual(testAgentSpan?.endTime!.getTime());
+
+        expect(processorAgentLlmSpan?.endTime).toBeDefined();
+        expect(processorAgentSpan?.endTime).toBeDefined();
+        expect(processorAgentLlmSpan?.endTime!.getTime()).toBeLessThanOrEqual(processorAgentSpan?.endTime!.getTime());
+
         testExporter.finalExpectations();
       });
     },
