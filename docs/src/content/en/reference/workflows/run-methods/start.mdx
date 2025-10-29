@@ -45,17 +45,21 @@ const result = await run.start({
       name: "tracingContext",
       type: "TracingContext",
       isOptional: true,
-      description: "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+      description:
+        "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
       properties: [
         {
-          parameters: [{
-            name: "currentSpan",
-            type: "AISpan",
-            isOptional: true,
-            description: "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "currentSpan",
+              type: "AISpan",
+              isOptional: true,
+              description:
+                "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
+            },
+          ],
+        },
+      ],
     },
     {
       name: "tracingOptions",
@@ -64,14 +68,17 @@ const result = await run.start({
       description: "Options for AI tracing configuration.",
       properties: [
         {
-          parameters: [{
-            name: "metadata",
-            type: "Record<string, any>",
-            isOptional: true,
-            description: "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+      ],
     },
     {
       name: "outputOptions",
@@ -80,14 +87,17 @@ const result = await run.start({
       description: "Options for AI tracing configuration.",
       properties: [
         {
-          parameters: [{
-            name: "includeState",
-            type: "boolean",
-            isOptional: true,
-            description: "Whether to include the workflow run state in the result."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "includeState",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Whether to include the workflow run state in the result.",
+            },
+          ],
+        },
+      ],
     },
   ]}
 />
@@ -99,13 +109,15 @@ const result = await run.start({
     {
       name: "result",
       type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
-      description: "A promise that resolves to the workflow execution result containing step outputs and status",
+      description:
+        "A promise that resolves to the workflow execution result containing step outputs and status",
     },
     {
       name: "traceId",
       type: "string",
       isOptional: true,
-      description: "The trace ID associated with this execution when AI tracing is enabled. Use this to correlate logs and debug execution flow.",
+      description:
+        "The trace ID associated with this execution when AI tracing is enabled. Use this to correlate logs and debug execution flow.",
     },
   ]}
 />
@@ -122,13 +134,13 @@ runtimeContext.set("variable", false);
 
 const result = await run.start({
   inputData: {
-    value: "initial data"
+    value: "initial data",
   },
-  runtimeContext
+  runtimeContext,
 });
 ```
 
 ## Related
 
-- [Workflows overview](../../../docs/workflows/overview.mdx#run-workflow)
-- [Workflow.createRunAsync()](../create-run.mdx)
+- [Workflows overview](/docs/workflows/overview#running-workflows)
+- [Workflow.createRunAsync()](../workflow-methods/create-run)

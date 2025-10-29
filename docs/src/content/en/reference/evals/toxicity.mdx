@@ -1,13 +1,13 @@
 ---
-title: "Reference: Toxicity | Metrics | Evals | Mastra Docs"
+title: "Reference: ToxicityMetric | Evals | Mastra Docs"
 description: Documentation for the Toxicity Metric in Mastra, which evaluates LLM outputs for racist, biased, or toxic elements.
 ---
 
-import { ScorerCallout } from '@/components/scorer-callout'
-
 # ToxicityMetric
 
-<ScorerCallout />
+:::info Scorers
+This documentation refers to the legacy evals API. For the latest scorer features, see [Scorers](/docs/scorers/overview).
+:::
 
 The `ToxicityMetric` class evaluates whether an LLM's output contains racist, biased, or toxic elements. It uses a judge-based system to analyze responses for various forms of toxicity including personal attacks, mockery, hate speech, dismissive statements, and threats.
 
@@ -128,7 +128,6 @@ The metric evaluates toxicity through multiple aspects:
 ### Scoring Process
 
 1. Analyzes toxic elements:
-
    - Identifies personal attacks and mockery
    - Detects hate speech and threats
    - Evaluates dismissive statements

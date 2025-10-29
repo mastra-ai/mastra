@@ -1,5 +1,5 @@
 ---
-title: Mastra Client Memory API
+title: "Reference: Memory API | Client SDK | Mastra Docs"
 description: Learn how to manage conversation threads and message history in Mastra using the client-js SDK.
 ---
 
@@ -117,7 +117,11 @@ const result = await thread.deleteMessage("message-id");
 Delete multiple messages from a thread in a single operation:
 
 ```typescript
-const result = await thread.deleteMessages(["message-1", "message-2", "message-3"]);
+const result = await thread.deleteMessages([
+  "message-1",
+  "message-2",
+  "message-3",
+]);
 // Returns: { success: true, message: "3 messages deleted successfully" }
 ```
 
