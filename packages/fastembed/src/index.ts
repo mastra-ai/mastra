@@ -61,7 +61,6 @@ const fastEmbedLegacyProvider = experimental_customProvider({
   },
 });
 
-
 // V2 provider for AI SDK v5 compatibility
 const fastEmbedProvider = customProvider({
   textEmbeddingModels: {
@@ -87,7 +86,6 @@ const fastEmbedProvider = customProvider({
     },
   },
 });
-
 
 export const fastembed = Object.assign(fastEmbedProvider.textEmbeddingModel(`bge-small-en-v1.5`), {
   small: fastEmbedProvider.textEmbeddingModel(`bge-small-en-v1.5`),

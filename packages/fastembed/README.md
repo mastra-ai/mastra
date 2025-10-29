@@ -42,12 +42,12 @@ import { fastembed } from '@mastra/fastembed';
 const embedder = fastembed;
 
 // Named exports for v2 models
-const small = fastembed.small;  // bge-small-en-v1.5
-const base = fastembed.base;    // bge-base-en-v1.5
+const small = fastembed.small; // bge-small-en-v1.5
+const base = fastembed.base; // bge-base-en-v1.5
 
 // Legacy v1 models (for backwards compatibility)
-const smallLegacy = fastembed.smallLegacy;  // bge-small-en-v1.5 (v1 spec)
-const baseLegacy = fastembed.baseLegacy;    // bge-base-en-v1.5 (v1 spec)
+const smallLegacy = fastembed.smallLegacy; // bge-small-en-v1.5 (v1 spec)
+const baseLegacy = fastembed.baseLegacy; // bge-base-en-v1.5 (v1 spec)
 ```
 
 ### Direct Usage with AI SDK v5
