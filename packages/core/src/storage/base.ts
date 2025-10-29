@@ -520,7 +520,7 @@ export abstract class MastraStorage extends MastraBase {
     } & ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
 
-  async listMessages(args: StorageListMessagesInput): Promise<PaginationInfo & { messages: MastraMessageV2[] }> {
+  async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     if (this.stores?.memory) {
       return this.stores.memory.listMessages(args);
     }

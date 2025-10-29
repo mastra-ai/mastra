@@ -90,6 +90,10 @@ export type StorageListMessagesInput = {
       end?: Date;
     };
   };
+  orderBy?: {
+    field: 'createdAt';
+    direction: 'ASC' | 'DESC';
+  };
 };
 
 export type StorageListMessagesOutput = PaginationInfo & {

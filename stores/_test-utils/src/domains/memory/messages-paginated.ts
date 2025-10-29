@@ -88,6 +88,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
         filter: {
           dateRange: { start: yesterday },
         },
+        orderBy: { field: 'createdAt', direction: 'ASC' },
         threadId: thread.id,
       });
       expect(fromYesterday.total).toBe(4);
@@ -105,10 +106,10 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       const thread = createSampleThread();
       await storage.saveThread({ thread });
 
-      const messages = [createSampleMessageV1({ threadId: thread.id }), createSampleMessageV1({ threadId: thread.id })];
+      const messages = [createSampleMessageV2({ threadId: thread.id }), createSampleMessageV2({ threadId: thread.id })];
 
       // Save messages
-      const savedMessages = await storage.saveMessages({ messages });
+      const savedMessages = await storage.saveMessages({ messages, format: 'v2' });
 
       expect(savedMessages).toEqual(messages);
 
@@ -229,21 +230,32 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
 
       await storage.saveMessages({ messages: messages, format: 'v2' });
 
-      const { messages: retrievedMessages } = await storage.listMessages({ threadId: thread.id });
+      const { messages: retrievedMessages } = await storage.listMessages({
+        threadId: thread.id,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+
       expect(retrievedMessages).toHaveLength(3);
       const contentParts = retrievedMessages.map((m: any) =>
         m.content.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text),
       );
       expect(contentParts).toEqual([['First'], ['Second'], ['Third']]);
 
-      const { messages: retrievedMessages2 } = await storage.listMessages({ threadId: thread2.id });
+      const { messages: retrievedMessages2 } = await storage.listMessages({
+        threadId: thread2.id,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+
       expect(retrievedMessages2).toHaveLength(3);
       const contentParts2 = retrievedMessages2.map((m: any) =>
         m.content.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text),
       );
       expect(contentParts2).toEqual([['Fourth'], ['Fifth'], ['Sixth']]);
 
-      const { messages: retrievedMessages3 } = await storage.listMessages({ threadId: thread3.id });
+      const { messages: retrievedMessages3 } = await storage.listMessages({
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        threadId: thread3.id,
+      });
       expect(retrievedMessages3).toHaveLength(2);
       const contentParts3 = retrievedMessages3.map((m: any) =>
         m.content.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text),
@@ -358,6 +370,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
         threadId: thread.id,
         limit: 2,
         offset: 1,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
         include: [
           {
             id: messages[4]!.id, // 'E' from thread-bar

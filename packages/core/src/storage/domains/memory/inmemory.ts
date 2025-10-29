@@ -323,10 +323,15 @@ export class InMemoryMemory extends MemoryStorage {
     filter,
     limit,
     offset = 0,
+    orderBy,
   }: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     this.logger.debug(`MockStore: listMessages called for thread ${threadId}`);
 
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
+    // Determine sort field and direction, default to DESC (newest first)
+    const sortField = orderBy?.field || 'createdAt';
+    const sortDirection = orderBy?.direction || 'DESC';
 
     // Determine how many results to return
     // Default pagination is always 40 unless explicitly specified
@@ -367,8 +372,12 @@ export class InMemoryMemory extends MemoryStorage {
       });
     }
 
-    // Sort thread messages by createdAt before pagination
-    threadMessages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    // Sort thread messages before pagination
+    threadMessages.sort((a: any, b: any) => {
+      const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : a[sortField];
+      const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : b[sortField];
+      return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+    });
 
     // Get total count of thread messages (for pagination metadata)
     const totalThreadMessages = threadMessages.length;
@@ -480,8 +489,12 @@ export class InMemoryMemory extends MemoryStorage {
       }
     }
 
-    // Sort all messages (paginated + included) by createdAt for final output
-    messages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    // Sort all messages (paginated + included) for final output
+    messages.sort((a: any, b: any) => {
+      const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : a[sortField];
+      const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : b[sortField];
+      return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+    });
 
     // Calculate hasMore
     let hasMore;

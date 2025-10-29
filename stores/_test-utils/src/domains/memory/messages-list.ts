@@ -270,6 +270,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
     it('should sort messages by createdAt', async () => {
       const result = await storage.listMessages({
         threadId: thread.id,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
       });
 
       const timestamps = result.messages.map(m => new Date(m.createdAt).getTime());
@@ -462,6 +463,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         const result = await storage.listMessages({
           threadId: thread.id,
           limit: 2,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
           include: [
             {
               id: messages[2]!.id, // Message 3
@@ -514,6 +516,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
             createdAt: new Date(Date.now() + 20000 + i * 1000),
           }),
         );
+
         await storage.saveMessages({ messages: otherMessages, format: 'v2' });
 
         const result = await storage.listMessages({
@@ -521,6 +524,9 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           resourceId: thread.resourceId,
           limit: 3,
         });
+
+        console.log(thread.resourceId);
+        console.log(result);
 
         expect(result.messages).toHaveLength(3);
         expect(result.messages.every(m => m.resourceId === thread.resourceId)).toBe(true);

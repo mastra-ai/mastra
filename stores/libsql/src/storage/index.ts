@@ -10,7 +10,6 @@ import type {
   PaginationInfo,
   StorageColumn,
   StoragePagination,
-  StorageGetMessagesArg,
   StorageResourceType,
   TABLE_NAMES,
   WorkflowRun,

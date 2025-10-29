@@ -45,20 +45,19 @@ export class MemoryLibSQL extends MemoryStorage {
       threadId: row.thread_id,
       resourceId: row.resourceId,
     } as MastraMessageV2;
-    if (row.type && row.type !== `v2`) result.type = row.type;
+    if (row.type) result.type = row.type;
     return result;
   }
 
   private async _getIncludedMessages({
     threadId,
-    selectBy,
+    include,
   }: {
     threadId: string;
-    selectBy: StorageGetMessagesArg['selectBy'];
+    include: StorageListMessagesInput['include'];
   }) {
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
-    const include = selectBy?.include;
     if (!include) return null;
 
     const unionQueries: string[] = [];
@@ -160,55 +159,65 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  public async getMessagesPaginated(
-    args: StorageGetMessagesArg & {
-      format?: 'v1' | 'v2';
-    },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, format, selectBy } = args;
-    const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
-    const perPage =
-      perPageInput !== undefined ? perPageInput : resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-    const fromDate = dateRange?.start;
-    const toDate = dateRange?.end;
-
-    const messages: MastraMessageV2[] = [];
-
-    if (selectBy?.include?.length) {
-      try {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
-        if (includeMessages) {
-          messages.push(...includeMessages);
-        }
-      } catch (error) {
-        throw new MastraError(
-          {
-            id: 'LIBSQL_STORE_GET_MESSAGES_PAGINATED_GET_INCLUDE_MESSAGES_FAILED',
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-            details: { threadId },
-          },
-          error,
-        );
-      }
+  public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    const threadId = args.threadId;
+    if (!threadId.trim()) {
+      const mastraError = new MastraError({
+        id: 'LIBSQL_STORE_LIST_MESSAGES_THREAD_ID_REQUIRED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'threadId must be a non-empty string',
+        details: { threadId },
+      });
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
+      throw mastraError;
     }
 
+    const include = args.include;
+    const offset = args.offset || 0;
+    // Handle limit: false means get ALL messages, undefined means default to 40
+    let limit = 40;
+    if (args.limit !== undefined) {
+      if (args.limit === false) {
+        limit = Number.MAX_SAFE_INTEGER; // Get all messages
+      } else if (typeof args.limit === 'number' && args.limit > 0) {
+        limit = args.limit;
+      }
+    }
+    // offset is the number of items to skip, not a page number
+    const currentOffset = offset;
+    const filter = args.filter;
+    // Determine sort field and direction, default to DESC (newest first)
+    const sortField = args.orderBy?.field || 'createdAt';
+    const sortDirection = args.orderBy?.direction || 'DESC';
+
+    const fromDate = filter?.dateRange?.start;
+    const toDate = filter?.dateRange?.end;
+
+    const messages: MastraMessageV2[] = [];
+    const messageIds = new Set<string>();
+
     try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      const currentOffset = page * perPage;
-
+      // Step 1: Get paginated messages from the thread first
       const conditions: string[] = [`thread_id = ?`];
       const queryParams: InValue[] = [threadId];
+
+      if (args.resourceId) {
+        conditions.push(`"resourceId" = ?`);
+        queryParams.push(args.resourceId);
+      }
 
       if (fromDate) {
         conditions.push(`"createdAt" >= ?`);
         queryParams.push(fromDate.toISOString());
       }
+
       if (toDate) {
         conditions.push(`"createdAt" <= ?`);
         queryParams.push(toDate.toISOString());
       }
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       const countResult = await this.client.execute({
@@ -217,37 +226,79 @@ export class MemoryLibSQL extends MemoryStorage {
       });
       const total = Number(countResult.rows?.[0]?.count ?? 0);
 
-      if (total === 0 && messages.length === 0) {
+      if (total === 0) {
         return {
           messages: [],
           total: 0,
-          page,
-          perPage,
+          page: Math.floor(offset / limit),
+          perPage: limit,
           hasMore: false,
         };
       }
 
-      const excludeIds = messages.map(m => m.id);
-      const excludeIdsParam = excludeIds.map((_, idx) => `$${idx + queryParams.length + 1}`).join(', ');
-
       const dataResult = await this.client.execute({
-        sql: `SELECT id, content, role, type, "createdAt", "resourceId", "thread_id" FROM ${TABLE_MESSAGES} ${whereClause} ${excludeIds.length ? `AND id NOT IN (${excludeIdsParam})` : ''} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
-        args: [...queryParams, ...excludeIds, perPage, currentOffset],
+        sql: `SELECT id, content, role, type, "createdAt", "resourceId", "thread_id" FROM ${TABLE_MESSAGES} ${whereClause} ORDER BY "${sortField}" ${sortDirection} LIMIT ? OFFSET ?`,
+        args: [...queryParams, limit, currentOffset],
       });
 
-      messages.push(...(dataResult.rows || []).map((row: any) => this.parseRow(row)));
+      // Add paginated messages to the result
+      for (const row of dataResult.rows || []) {
+        const msg = this.parseRow(row);
+        messages.push(msg);
+        messageIds.add(msg.id);
+      }
 
-      const messagesToReturn =
-        format === 'v1'
-          ? new MessageList().add(messages, 'memory').get.all.v1()
-          : new MessageList().add(messages, 'memory').get.all.v2();
+      // Step 2: Add included messages (if any), excluding duplicates
+      if (include?.length) {
+        try {
+          const includeMessages = await this._getIncludedMessages({ threadId, include });
+          if (includeMessages) {
+            for (const msg of includeMessages) {
+              if (!messageIds.has(msg.id)) {
+                messages.push(msg);
+                messageIds.add(msg.id);
+              }
+            }
+          }
+        } catch (error) {
+          const mastraError = new MastraError(
+            {
+              id: 'LIBSQL_STORE_LIST_MESSAGES_INCLUDE_MESSAGES_FAILED',
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.THIRD_PARTY,
+              details: { threadId },
+            },
+            error,
+          );
+          this.logger?.trackException?.(mastraError);
+          this.logger?.error?.(mastraError.toString());
+          throw mastraError;
+        }
+      }
+
+      const messagesToReturn = new MessageList().add(messages, 'memory').get.all.v2();
+
+      // Calculate page from offset and limit
+      const page = Math.floor(offset / limit);
+
+      // Calculate hasMore
+      let hasMore;
+      if (include && include.length > 0) {
+        // When using include, check if we've returned all messages from the thread
+        // because include might bring in messages beyond the pagination window
+        const returnedThreadMessageIds = new Set(messagesToReturn.filter(m => m.threadId === threadId).map(m => m.id));
+        hasMore = returnedThreadMessageIds.size < total;
+      } else {
+        // Standard pagination: check if there are more pages
+        hasMore = offset + limit < total;
+      }
 
       return {
         messages: messagesToReturn,
         total,
         page,
-        perPage,
-        hasMore: currentOffset + messages.length < total,
+        perPage: limit,
+        hasMore,
       };
     } catch (error) {
       const mastraError = new MastraError(
@@ -261,17 +312,8 @@ export class MemoryLibSQL extends MemoryStorage {
       );
       this.logger?.trackException?.(mastraError);
       this.logger?.error?.(mastraError.toString());
-      return { messages: [], total: 0, page, perPage, hasMore: false };
+      return { messages: [], total: 0, page: offset, perPage: limit, hasMore: false };
     }
-  }
-
-  async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    throw new MastraError({
-      id: 'LIBSQL_STORAGE_LIST_MESSAGES_NOT_SUPPORTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: `Listing messages is not implemented by this storage adapter (${this.constructor.name})`,
-    });
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
