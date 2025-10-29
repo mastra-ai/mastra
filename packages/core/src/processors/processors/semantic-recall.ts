@@ -424,7 +424,7 @@ ${formattedSections.join('\n')}
         return messages;
       }
 
-      const indexName = this.getDefaultIndexName();
+      const indexName = this.indexName || this.getDefaultIndexName();
 
       // Collect all embeddings first
       const vectors: number[][] = [];
@@ -433,6 +433,11 @@ ${formattedSections.join('\n')}
       let vectorDimension = 0;
 
       for (const message of messages) {
+        // Skip system messages - they're instructions, not user content
+        if (message.role === 'system') {
+          continue;
+        }
+
         // Extract text content from the message
         const textContent = this.extractTextContent(message);
         if (!textContent) {
