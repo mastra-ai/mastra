@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Agent } from '../agent';
 import { Mastra } from '../../mastra';
 import { createScorer } from '../../scores';
 import { runScorer } from '../../scores/hooks';
+import { Agent } from '../agent';
 import { getDummyResponseModel } from './mock-model';
 
 vi.mock('../../scores/hooks', () => ({

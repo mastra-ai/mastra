@@ -1,8 +1,8 @@
+import { openai as openai_v4 } from '@ai-sdk/openai';
+import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
-import { openai as openai_v5 } from '@ai-sdk/openai-v5';
-import { openai as openai_v4 } from '@ai-sdk/openai';
 
 export function getOpenAIModel(version: 'v1' | 'v2') {
   if (version === 'v1') {

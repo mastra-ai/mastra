@@ -1,10 +1,10 @@
+import type { UIMessageWithMetadata } from '../agent';
 import { MessageList } from '../agent/message-list';
+import type { CoreMessage } from '../llm';
 import { MastraMemory } from '../memory';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig, MessageDeleteInput } from '../memory';
 import { InMemoryStore } from '../storage';
 import type { StorageGetMessagesArg, ThreadSortOptions } from '../storage';
-import type { CoreMessage } from '../llm';
-import type { UIMessageWithMetadata } from '../agent';
 
 export class MockMemory extends MastraMemory {
   threads: Record<string, StorageThreadType> = {};
@@ -45,8 +45,6 @@ export class MockMemory extends MastraMemory {
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   async saveMessages({
     messages,
-    memoryConfig,
-    format = 'v1',
   }: {
     messages: (MastraMessageV1 | MastraMessageV2)[];
     memoryConfig?: MemoryConfig;
