@@ -388,13 +388,17 @@ export async function getMessagesHandler({
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
 
-    const thread = await memory.getThreadById({ threadId: threadId! });
+    if (!threadId) {
+      throw new Error(`No threadId found`);
+    }
+
+    const thread = await memory.getThreadById({ threadId: threadId });
     if (!thread) {
       throw new HTTPException(404, { message: 'Thread not found' });
     }
 
     return await memory.query({
-      threadId: threadId!,
+      threadId: threadId,
       ...(limit && { selectBy: { last: limit } }),
     });
   } catch (error) {
