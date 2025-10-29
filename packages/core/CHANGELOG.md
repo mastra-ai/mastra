@@ -1,5 +1,52 @@
 # @mastra/core
 
+## 0.23.2
+
+### Patch Changes
+
+- Fix agent onChunk callback receiving wrapped chunk instead of direct chunk ([#9402](https://github.com/mastra-ai/mastra/pull/9402))
+
+- Ensure model_generation spans end before agent_run spans. ([#9393](https://github.com/mastra-ai/mastra/pull/9393))
+
+- Fix OpenAI schema validation errors in processors ([#9400](https://github.com/mastra-ai/mastra/pull/9400))
+
+- Don't call `os.homedir()` at top level (but lazy invoke it) to accommodate sandboxed environments ([#9357](https://github.com/mastra-ai/mastra/pull/9357))
+
+- Detect thenable objects returned by AI model providers ([#9414](https://github.com/mastra-ai/mastra/pull/9414))
+
+- Bug fix: Use input processors that are passed in generate or stream agent options rather than always defaulting to the processors set on the Agent class. ([#9422](https://github.com/mastra-ai/mastra/pull/9422))
+
+- Fix tool input validation to use schema-compat transformed schemas ([#9360](https://github.com/mastra-ai/mastra/pull/9360))
+
+  Previously, tool input validation used the original Zod schema while the LLM received a schema-compat transformed version. This caused validation failures when LLMs (like OpenAI o3 or Claude 3.5 Haiku) sent arguments matching the transformed schema but not the original.
+
+  For example:
+  - OpenAI o3 reasoning models convert `.optional()` to `.nullable()`, sending `null` values
+  - Claude 3.5 Haiku strips `min`/`max` string constraints, sending shorter strings
+  - Validation would reject these valid responses because it checked against the original schema
+
+  The fix ensures validation uses the same schema-compat processed schema that was sent to the LLM, eliminating this mismatch.
+
+- Add import for WritableStream in execution-engine and dedupe llm.getModel in agent.ts ([#9341](https://github.com/mastra-ai/mastra/pull/9341))
+
+- pass writableStream parameter to workflow execution ([#9339](https://github.com/mastra-ai/mastra/pull/9339))
+
+- Save correct status in snapshot for all workflow parallel steps. ([#9398](https://github.com/mastra-ai/mastra/pull/9398))
+  This ensures when you poll workflow run result using `getWorkflowRunExecutionResult(runId)`, you get the right status for all parallel steps
+
+- Add ability to pass agent options when wrapping an agent with createStep. This allows configuring agent execution settings when using agents as workflow steps. ([#9359](https://github.com/mastra-ai/mastra/pull/9359))
+
+- Fix network loop iteration counter and usage promise handling: ([#9415](https://github.com/mastra-ai/mastra/pull/9415))
+  - Fixed iteration counter in network loop that was stuck at 0 due to falsy check. Properly handled zero values to ensure maxSteps is correctly enforced.
+  - Fixed usage promise resolution in RunOutput stream by properly resolving or rejecting the promise on stream close, preventing hanging promises when streams complete.
+
+- Workflow validation zod v4 support ([#9363](https://github.com/mastra-ai/mastra/pull/9363))
+
+- Fix usage tracking with agent network ([#9413](https://github.com/mastra-ai/mastra/pull/9413))
+
+- Updated dependencies [[`6bb26c4`](https://github.com/mastra-ai/mastra/commit/6bb26c4e82795d70515577a7cbd1e186c07ccf24), [`8d8f674`](https://github.com/mastra-ai/mastra/commit/8d8f67428ad1bcc944e2666179c886bae80120f5)]:
+  - @mastra/schema-compat@0.11.6
+
 ## 0.23.2-alpha.1
 
 ### Patch Changes
