@@ -31,7 +31,6 @@ export const AgentMetadataModelSwitcher = ({
   updateModel,
   resetModel,
 }: AgentMetadataModelSwitcherProps) => {
-  console.log({ defaultProvider, defaultModel });
   // Store the original values on first mount - these never change
   const [originalProvider] = useState(defaultProvider);
   const [originalModel] = useState(defaultModel);
