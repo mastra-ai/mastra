@@ -357,7 +357,10 @@ describe('Agent Network with Working Memory', () => {
     runWorkingMemoryTests(() => memory);
   });
 
-  describe('Experimental Working Memory Tool - Thread Scope', () => {
+  /**
+   * The experimental working memory tool will be removed in the future, so we can probably remove this test suite.
+   */
+  describe.skip('Experimental Working Memory Tool - Thread Scope', () => {
     let memory: Memory;
 
     beforeEach(() => {
@@ -383,7 +386,10 @@ describe('Agent Network with Working Memory', () => {
     runWorkingMemoryTests(() => memory);
   });
 
-  describe('Experimental Working Memory Tool - Resource Scope', () => {
+  /**
+   * The experimental working memory tool will be removed in the future, so we can probably remove this test suite.
+   */
+  describe.skip('Experimental Working Memory Tool - Resource Scope', () => {
     let memory: Memory;
 
     beforeEach(() => {

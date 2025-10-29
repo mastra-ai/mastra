@@ -13,6 +13,44 @@ import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream'
 import { createStep, createWorkflow } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
+import type { MastraMemory } from '../../memory';
+
+async function getMemoryInstructions(memoryToUse?: MastraMemory) {
+  if (!memoryToUse) {
+    return { memoryTools: {}, memoryInstructions: '' };
+  }
+
+  const memoryTools = await memoryToUse?.getTools?.();
+
+  const memoryToolList = Object.entries({ ...memoryTools })
+    .map(([name, tool]) => {
+      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(
+        zodToJsonSchema((tool as any).inputSchema || z.object({})),
+      )}`;
+    })
+    .join('\n');
+
+  const memoryInstructions = `
+            ## Memory Tools
+
+            Memory tools are available for storing and updating user information:
+            ${memoryToolList}
+
+            **IMPORTANT DISTINCTION:**
+            - Memory tools should be called BY YOU DIRECTLY using your tool-calling capability
+            - After calling a memory tool, you MUST still provide a routing decision in your response
+            - If the user's request ONLY requires updating memory (no other action needed), call the memory tool AND return next_step="none" with primitiveType="none"
+            - If the user's request requires BOTH memory update AND another action (like calling an agent or tool), call the memory tool AND route to the appropriate primitive
+
+            **Response Format When Using Memory Tools:**
+            1. First, call the memory tool directly (if needed)
+            2. Then, provide your routing decision JSON:
+               - If only memory was needed: {"primitiveId": "none", "primitiveType": "none", ...}
+               - If another action is needed: {"primitiveId": "...", "primitiveType": "agent|workflow|tool", ...}
+  `;
+
+  return { memoryTools, memoryInstructions };
+}
 
 async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtimeContext: RuntimeContext }) {
   const instructionsToUse = await agent.getInstructions({ runtimeContext: runtimeContext });
@@ -37,14 +75,15 @@ async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtim
     })
     .join('\n');
 
-  const memoryTools = await memoryToUse?.getTools?.();
-  const toolList = Object.entries({ ...toolsToUse, ...memoryTools })
+  const toolList = Object.entries({ ...toolsToUse })
     .map(([name, tool]) => {
       return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(
         zodToJsonSchema((tool as any).inputSchema || z.object({})),
       )}`;
     })
     .join('\n');
+
+  const { memoryInstructions, memoryTools } = await getMemoryInstructions(memoryToUse);
 
   const instructions = `
           You are a router in a network of specialized AI agents.
@@ -67,6 +106,7 @@ async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtim
           When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.
           When calling an agent, the prompt should be a text value, like you would call an LLM in a chat interface.
           Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.
+          ${memoryInstructions}
         `;
 
   return new Agent({
@@ -75,6 +115,7 @@ async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtim
     instructions,
     model: model,
     memory: memoryToUse,
+    tools: { ...memoryTools },
     // @ts-ignore
     _agentNetworkAppend: true,
   });
@@ -269,6 +310,9 @@ export async function createNetworkLoop({
 
       const routingAgent = await getRoutingAgent({ runtimeContext, agent });
 
+      const memoryToUse = await agent.getMemory({ runtimeContext: runtimeContext });
+      const { memoryInstructions } = await getMemoryInstructions(memoryToUse);
+
       let completionResult;
 
       let iterationCount = (inputData.iteration ?? -1) + 1;
@@ -436,6 +480,8 @@ export async function createNetworkLoop({
                     }
 
                     The 'selectionReason' property should explain why you picked the primitive${inputData.verboseIntrospection ? ', as well as why the other primitives were not picked.' : '.'}
+
+                    ${memoryInstructions}
                     `,
         },
       ];
@@ -450,7 +496,7 @@ export async function createNetworkLoop({
           }),
         },
         runtimeContext: runtimeContext,
-        maxSteps: 1,
+        maxSteps: 10,
         memory: {
           thread: initData?.threadId ?? runId,
           resource: initData?.threadResourceId ?? networkName,
@@ -459,9 +505,34 @@ export async function createNetworkLoop({
         ...routingAgentOptions,
       };
 
+      console.log('\n=== ROUTING AGENT CALL (iteration', iterationCount, ') ===');
+
+      const routingAgentTools = await routingAgent.getTools({ runtimeContext });
+      console.log('Routing agent tools:', Object.keys(routingAgentTools || {}));
+
       const result = await tryGenerateWithJsonFallback(routingAgent, prompt, options);
 
+      console.log('Result:', {
+        hasObject: !!result.object,
+        finishReason: result.finishReason,
+        toolCallsCount: result.steps?.[0]?.toolCalls?.length || 0,
+      });
+
       const object = result.object;
+
+      if (object) {
+        console.log('✓ Routing decision:', {
+          primitiveId: object.primitiveId,
+          primitiveType: object.primitiveType,
+        });
+      } else {
+        console.error('✗ ERROR: result.object is undefined!');
+        console.error('  Finish reason:', result.finishReason);
+        if (result.steps?.[0]?.toolCalls) {
+          const toolNames = result.steps[0].toolCalls.map((tc: any) => tc.payload?.toolName);
+          console.error('  Tool calls made instead:', toolNames);
+        }
+      }
 
       const endPayload = {
         task: inputData.task,
@@ -888,6 +959,8 @@ export async function createNetworkLoop({
         runId,
       });
 
+      console.log('inputDataToUse', inputDataToUse);
+
       const finalResult = await tool.execute(
         {
           runtimeContext,
@@ -951,6 +1024,8 @@ export async function createNetworkLoop({
         from: ChunkFrom.NETWORK,
         runId,
       });
+
+      console.log('finalResult', finalResult);
 
       return endPayload;
     },
