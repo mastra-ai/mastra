@@ -135,7 +135,6 @@ export class MastraClient extends BaseResource {
     threadId: string,
     opts: { agentId?: string; networkId?: string; runtimeContext?: RuntimeContext | Record<string, any> } = {},
   ): Promise<GetMemoryThreadMessagesResponse> {
-    const { agentId, networkId } = opts;
     let url = '';
     if (opts.agentId) {
       url = `/api/memory/threads/${threadId}/messages?agentId=${opts.agentId}${runtimeContextQueryString(opts.runtimeContext, '&')}`;
