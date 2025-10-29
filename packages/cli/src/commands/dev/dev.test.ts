@@ -122,8 +122,6 @@ describe('dev command - inspect flag behavior', () => {
         debug: false,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 50));
-
       expect(execaMock).toHaveBeenCalled();
       const callArgs = execaMock.mock.calls[0];
       const commands = callArgs[1] as string[];
@@ -147,8 +145,6 @@ describe('dev command - inspect flag behavior', () => {
         debug: false,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 50));
-
       expect(execaMock).toHaveBeenCalled();
       const callArgs = execaMock.mock.calls[0];
       const commands = callArgs[1] as string[];
@@ -171,8 +167,6 @@ describe('dev command - inspect flag behavior', () => {
         https: false,
         debug: false,
       });
-
-      await new Promise(resolve => setTimeout(resolve, 50));
 
       expect(execaMock).toHaveBeenCalled();
       const callArgs = execaMock.mock.calls[0];
@@ -199,8 +193,6 @@ describe('dev command - inspect flag behavior', () => {
         debug: false,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 50));
-
       expect(execaMock).toHaveBeenCalled();
       const callArgs = execaMock.mock.calls[0];
       const commands = callArgs[1] as string[];
@@ -222,8 +214,6 @@ describe('dev command - inspect flag behavior', () => {
         https: false,
         debug: false,
       });
-
-      await new Promise(resolve => setTimeout(resolve, 50));
 
       expect(execaMock).toHaveBeenCalled();
       const callArgs = execaMock.mock.calls[0];
@@ -247,8 +237,6 @@ describe('dev command - inspect flag behavior', () => {
         debug: false,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 50));
-
       expect(execaMock).toHaveBeenCalled();
       const callArgs = execaMock.mock.calls[0];
       const commands = callArgs[1] as string[];
@@ -270,8 +258,6 @@ describe('dev command - inspect flag behavior', () => {
         https: false,
         debug: false,
       });
-
-      await new Promise(resolve => setTimeout(resolve, 50));
 
       expect(execaMock).toHaveBeenCalled();
       const callArgs = execaMock.mock.calls[0];
@@ -297,8 +283,6 @@ describe('dev command - inspect flag behavior', () => {
         debug: false,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 50));
-
       expect(execaMock).toHaveBeenCalled();
       const callArgs = execaMock.mock.calls[0];
       const commands = callArgs[1] as string[];
@@ -321,8 +305,6 @@ describe('dev command - inspect flag behavior', () => {
         https: false,
         debug: false,
       });
-
-      await new Promise(resolve => setTimeout(resolve, 50));
 
       expect(execaMock).toHaveBeenCalled();
       const callArgs = execaMock.mock.calls[0];
