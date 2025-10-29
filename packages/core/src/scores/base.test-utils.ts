@@ -1,4 +1,4 @@
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from '@internal/external-types/test-tools';
 import z from 'zod';
 import { createScorer } from './base';
 

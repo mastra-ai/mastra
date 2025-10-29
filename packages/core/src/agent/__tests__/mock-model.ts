@@ -1,5 +1,5 @@
 import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from '@internal/external-types/test-tools';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 
 export function getDummyResponseModel(version: 'v1' | 'v2') {

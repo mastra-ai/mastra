@@ -4,7 +4,7 @@ import type { LanguageModelV2, LanguageModelV2TextPart } from '@ai-sdk/provider-
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 import type { CoreMessage, LanguageModelV1, CoreSystemMessage } from 'ai';
 import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from '@internal/external-types/test-tools';
 import { APICallError, stepCountIs } from 'ai-v5';
 import type { SystemModelMessage } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';

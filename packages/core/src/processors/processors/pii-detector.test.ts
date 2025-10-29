@@ -1,5 +1,5 @@
 import type { TextPart } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from '@internal/external-types/test-tools';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';

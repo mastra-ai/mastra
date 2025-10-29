@@ -20,6 +20,16 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
+    },
+    "./test-tools": {
+      "import": {
+        "types": "./dist/test-tools.d.ts",
+        "default": "./dist/test-tools.js"
+      },
+      "require": {
+        "types": "./dist/test-tools.d.ts",
+        "default": "./dist/test-tools.cjs"
+      }
     }
   },
   "scripts": {
@@ -37,7 +47,8 @@
     "@internal/types-builder": "workspace:*",
     "@microsoft/api-extractor": "^7.53.1",
     "@types/node": "^20.19.0",
-    "ai": "^4.3.19",
+    "ai-v5": "npm:ai@5.0.76",
+    "ai-v4": "npm:ai@4.3.19",
     "eslint": "^9.36.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",

@@ -1,4 +1,4 @@
-export type { Tool, ToolExecutionOptions, Schema } from 'ai';
+export type { Tool, ToolExecutionOptions, Schema } from 'ai-v4';
 export type { Tool as ToolV5, ToolCallOptions, FlexibleSchema } from '@ai-sdk/provider-utils';
 
 /**

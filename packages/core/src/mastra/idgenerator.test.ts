@@ -1,4 +1,4 @@
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from '@internal/external-types/test-tools';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';

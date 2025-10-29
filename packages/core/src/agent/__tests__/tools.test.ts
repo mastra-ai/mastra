@@ -1,5 +1,5 @@
 import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from '@internal/external-types/test-tools';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
