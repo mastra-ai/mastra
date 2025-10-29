@@ -82,5 +82,12 @@
     "@mastra/voice-speechify": "0.11.11",
     "@mastra/inngest": "0.18.2"
   },
-  "changesets": []
+  "changesets": [
+    "beige-papayas-divide",
+    "eager-wings-film",
+    "flat-sites-shine",
+    "hot-parts-prove",
+    "small-rice-drum",
+    "some-ducks-beg"
+  ]
 }
