@@ -1,5 +1,5 @@
 ---
-title: "Providers: Inception | Models | Mastra"
+title: "Inception | Models | Mastra"
 description: "Use Inception models with Mastra. 2 models available."
 ---
 
@@ -7,6 +7,8 @@ description: "Use Inception models with Mastra. 2 models available."
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
 import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
 
 # <img src="https://models.dev/logos/inception.svg" alt="Inception logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Inception
 
@@ -24,7 +26,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "inception/mercury",
+  model: "inception/mercury"
 });
 
 // Generate a response
@@ -47,31 +49,31 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-    {
-      model: "inception/mercury",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: false,
-      contextWindow: 128000,
-      maxOutput: 16384,
-      inputCost: 0.25,
-      outputCost: 1,
-    },
-    {
-      model: "inception/mercury-coder",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: false,
-      contextWindow: 128000,
-      maxOutput: 16384,
-      inputCost: 0.25,
-      outputCost: 1,
-    },
-  ]}
+  {
+    "model": "inception/mercury",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.25,
+    "outputCost": 1
+  },
+  {
+    "model": "inception/mercury-coder",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.25,
+    "outputCost": 1
+  }
+]}
 />
 
 ## Advanced Configuration
@@ -86,9 +88,9 @@ const agent = new Agent({
     id: "inception/mercury",
     apiKey: process.env.INCEPTION_API_KEY,
     headers: {
-      "X-Custom-Header": "value",
-    },
-  },
+      "X-Custom-Header": "value"
+    }
+  }
 });
 ```
 
@@ -99,7 +101,11 @@ const agent = new Agent({
   name: "dynamic-agent",
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced ? "inception/mercury-coder" : "inception/mercury";
-  },
+    return useAdvanced
+      ? "inception/mercury-coder"
+      : "inception/mercury";
+  }
 });
 ```
+
+

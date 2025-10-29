@@ -1,5 +1,5 @@
 ---
-title: "Providers: Z.AI Coding Plan | Models | Mastra"
+title: "Z.AI Coding Plan | Models | Mastra"
 description: "Use Z.AI Coding Plan models with Mastra. 5 models available."
 ---
 
@@ -7,6 +7,8 @@ description: "Use Z.AI Coding Plan models with Mastra. 5 models available."
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
 import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
 
 # <img src="https://models.dev/logos/zai-coding-plan.svg" alt="Z.AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Z.AI Coding Plan
 
@@ -24,7 +26,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "zai-coding-plan/glm-4.5",
+  model: "zai-coding-plan/glm-4.5"
 });
 
 // Generate a response
@@ -47,67 +49,67 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-    {
-      model: "zai-coding-plan/glm-4.5",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: true,
-      contextWindow: 131072,
-      maxOutput: 98304,
-      inputCost: null,
-      outputCost: null,
-    },
-    {
-      model: "zai-coding-plan/glm-4.5-air",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: true,
-      contextWindow: 131072,
-      maxOutput: 98304,
-      inputCost: null,
-      outputCost: null,
-    },
-    {
-      model: "zai-coding-plan/glm-4.5-flash",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: true,
-      contextWindow: 131072,
-      maxOutput: 98304,
-      inputCost: null,
-      outputCost: null,
-    },
-    {
-      model: "zai-coding-plan/glm-4.5v",
-      imageInput: true,
-      audioInput: false,
-      videoInput: true,
-      toolUsage: true,
-      reasoning: true,
-      contextWindow: 64000,
-      maxOutput: 16384,
-      inputCost: null,
-      outputCost: null,
-    },
-    {
-      model: "zai-coding-plan/glm-4.6",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: true,
-      contextWindow: 204800,
-      maxOutput: 131072,
-      inputCost: null,
-      outputCost: null,
-    },
-  ]}
+  {
+    "model": "zai-coding-plan/glm-4.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "zai-coding-plan/glm-4.5-air",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "zai-coding-plan/glm-4.5-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "zai-coding-plan/glm-4.5v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 64000,
+    "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "zai-coding-plan/glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
 />
 
 ## Advanced Configuration
@@ -122,9 +124,9 @@ const agent = new Agent({
     id: "zai-coding-plan/glm-4.5",
     apiKey: process.env.ZHIPU_API_KEY,
     headers: {
-      "X-Custom-Header": "value",
-    },
-  },
+      "X-Custom-Header": "value"
+    }
+  }
 });
 ```
 
@@ -135,7 +137,11 @@ const agent = new Agent({
   name: "dynamic-agent",
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced ? "zai-coding-plan/glm-4.6" : "zai-coding-plan/glm-4.5";
-  },
+    return useAdvanced
+      ? "zai-coding-plan/glm-4.6"
+      : "zai-coding-plan/glm-4.5";
+  }
 });
 ```
+
+

@@ -95,8 +95,8 @@ export const mastraClient = new MastraClient({
       description: "Creates a new memory thread with the given parameters.",
     },
     {
-      name: "getMemoryThread(threadId)",
-      type: "Promise<MemoryThread>",
+      name: "getMemoryThread({ threadId, agentId })",
+      type: "MemoryThread",
       description: "Fetches a specific memory thread by ID.",
     },
     {
