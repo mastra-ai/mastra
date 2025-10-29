@@ -55,7 +55,6 @@ export default defineConfig({
     'src/network/index.ts',
     'src/network/vNext/index.ts',
     'src/vector/filter/index.ts',
-    'src/telemetry/otel-vendor.ts',
     'src/test-utils/llm-mock.ts',
     'src/processors/index.ts',
     'src/zod-to-json.ts',

@@ -1,8 +1,4 @@
-"use client";
-import { ArrowUpRight } from "lucide-react";
-
-import { T, Var } from "gt-next/client";
-import Image from "next/image";
+import React from "react";
 
 interface ShowcaseCardProps {
   title: string;
@@ -11,13 +7,30 @@ interface ShowcaseCardProps {
   link: string;
 }
 
+const ArrowUpRight = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M7 7h10v10" />
+    <path d="M7 17 17 7" />
+  </svg>
+);
+
 const ShowcaseCard = ({
   title,
   description,
   image,
   link,
 }: ShowcaseCardProps) => (
-  <div className="group showcase-item rounded-lg border-[0.5px] border-[var(--light-border-muted)] dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden transition-all">
+  <div className="group showcase-item rounded-lg border-[0.5px] border-(--border) dark:border-[#343434] bg-white dark:bg-[#050505] overflow-hidden transition-all hover:opacity-90">
     <a
       style={{
         textDecoration: "none",
@@ -27,24 +40,28 @@ const ShowcaseCard = ({
       target="_blank"
       rel="noopener noreferrer"
     >
-      <div className="aspect-video relative overflow-hidden bg-zinc-900">
-        <Image
-          src={`/image/showcase/optimized/${image}`}
+      <div className="aspect-video relative overflow-hidden bg-[#050505]">
+        <img
+          src={`/img/showcase/optimized/${image}`}
           alt={title}
           className="object-cover w-full h-full transition-transform group-hover:scale-105"
-          fill
-          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          loading="lazy"
         />
       </div>
       <div className="p-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-[var(--light-green-accent-2)] dark:group-hover:text-[hsl(var(--tag-green))]">
+          <h3 className="text-lg font-semibold text-[var(--mastra-text-primary)] group-hover:text-[var(--mastra-green-accent-2)]">
             {title}
           </h3>
-          <ArrowUpRight className="h-4 w-4 opacity-0 -translate-y-1 translate-x-1 group-hover:opacity-100 group-hover:translate-y-0 group-hover:translate-x-0 transition-all text-zinc-600 dark:text-zinc-400" />
+          <div className="opacity-0 -translate-y-1 translate-x-1 group-hover:opacity-100 group-hover:translate-y-0 group-hover:translate-x-0 transition-all text-[var(--mastra-text-tertiary)]">
+            <ArrowUpRight />
+          </div>
         </div>
         {description && (
-          <p className="mt-2 decoration-0 text-sm text-zinc-600 dark:text-zinc-400">
+          <p
+            className="mt-2 text-sm text-[var(--mastra-text-tertiary)]"
+            style={{ textDecoration: "none" }}
+          >
             {description}
           </p>
         )}
@@ -136,24 +153,20 @@ export const ShowcaseGrid = () => {
   ];
 
   return (
-    <T id="components.showcase_grid.0">
-      <div className="mx-auto max-w-7xl  px-4  py-12 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold tracking-tight mb-4 text-zinc-900 dark:text-zinc-100">
-            Showcase
-          </h1>
-          <p className="text-lg text-zinc-600 dark:text-zinc-400">
-            Check out these applications built with Mastra.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Var>
-            {showcaseItems.map((item) => (
-              <ShowcaseCard key={item.title} {...item} />
-            ))}
-          </Var>
-        </div>
+    <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+      <div className="text-center mb-12">
+        <h1 className="text-4xl font-bold tracking-tight mb-4 text-[var(--mastra-text-primary)]">
+          Showcase
+        </h1>
+        <p className="text-lg text-[var(--mastra-text-tertiary)]">
+          Check out these applications built with Mastra.
+        </p>
       </div>
-    </T>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {showcaseItems.map((item) => (
+          <ShowcaseCard key={item.title} {...item} />
+        ))}
+      </div>
+    </div>
   );
 };

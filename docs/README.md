@@ -36,12 +36,11 @@ npm i
 ```
 
 > The docs have a separate `package.json` file and is not part of the workspace so please do not use
-> `pnpm` or `yarn` to launch the docs.
 
 Run the appropriate CLI command in your terminal:
 
 ```bash
-npm run dev
+npm start
 ```
 
 The docs will be served on `localhost:3000/docs`.

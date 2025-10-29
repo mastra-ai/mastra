@@ -1,5 +1,5 @@
 ---
-title: Mastra Client Agents API
+title: "Reference: Agents API | Client SDK | Mastra Docs"
 description: Learn how to interact with Mastra AI agents, including generating responses, streaming interactions, and managing agent tools using the client-js SDK.
 ---
 
@@ -67,11 +67,10 @@ const response = await agent.stream({
 
 // Process data stream with the processDataStream util
 response.processDataStream({
-  onChunk: async(chunk) => {
+  onChunk: async (chunk) => {
     console.log(chunk);
   },
 });
-
 
 // You can also read from response body directly
 const reader = response.body.getReader();
@@ -89,40 +88,41 @@ Client-side tools allow you to execute custom functions on the client side when 
 #### Basic Usage
 
 ```typescript
-import { createTool } from '@mastra/client-js';
-import { z } from 'zod';
+import { createTool } from "@mastra/client-js";
+import { z } from "zod";
 
 const colorChangeTool = createTool({
-  id: 'changeColor',
-  description: 'Changes the background color',
+  id: "changeColor",
+  description: "Changes the background color",
   inputSchema: z.object({
     color: z.string(),
   }),
   execute: async ({ context }) => {
     document.body.style.backgroundColor = context.color;
     return { success: true };
-  }
-})
-
+  },
+});
 
 // Use with generate
 const response = await agent.generate({
-  messages: 'Change the background to blue',
-  clientTools: {colorChangeTool},
+  messages: "Change the background to blue",
+  clientTools: { colorChangeTool },
 });
 
 // Use with stream
 const response = await agent.stream({
-  messages: 'Change the background to green',
-  clientTools: {colorChangeTool},
+  messages: "Change the background to green",
+  clientTools: { colorChangeTool },
 });
 
 response.processDataStream({
   onChunk: async (chunk) => {
-    if (chunk.type === 'text-delta') {
+    if (chunk.type === "text-delta") {
       console.log(chunk.payload.text);
-    } else if (chunk.type === 'tool-call') {
-      console.log(`calling tool ${chunk.payload.toolName} with args ${JSON.stringify(chunk.payload.args, null, 2)}`);
+    } else if (chunk.type === "tool-call") {
+      console.log(
+        `calling tool ${chunk.payload.toolName} with args ${JSON.stringify(chunk.payload.args, null, 2)}`,
+      );
     }
   },
 });
@@ -148,25 +148,20 @@ const evals = await agent.evals();
 const liveEvals = await agent.liveEvals();
 ```
 
-
 ### Stream
-
 
 Stream responses using the enhanced API with improved method signatures. This method provides enhanced capabilities and format flexibility, with support for Mastra's native format.
 
 ```typescript
-const response = await agent.stream(
-  "Tell me a story",
-  {
-    threadId: "thread-1",
-    clientTools: { colorChangeTool },
-  }
-);
+const response = await agent.stream("Tell me a story", {
+  threadId: "thread-1",
+  clientTools: { colorChangeTool },
+});
 
 // Process the stream
 response.processDataStream({
   onChunk: async (chunk) => {
-    if (chunk.type === 'text-delta') {
+    if (chunk.type === "text-delta") {
       console.log(chunk.payload.text);
     }
   },
@@ -179,9 +174,9 @@ To stream AI SDK-formatted parts on the client from an `agent.stream(...)` respo
 
 ```typescript filename="client-ai-sdk-transform.ts" copy
 import { createUIMessageStream } from 'ai';
-import { toAISdkStream } from '@mastra/ai-sdk/v5';
+import { toAISdkStream } from '@mastra/ai-sdk';
 
-const response = await agent.stream({ messages: 'Tell me a story' });
+const response = await agent.stream({ messages: "Tell me a story" });
 
 // Convert Mastra stream to AI SDK stream
 const aiSdkStream = toAISdkStream(response);
@@ -204,11 +199,8 @@ for await (const part of uiMessageStream) {
 Generate a response using the enhanced API with improved method signatures and AI SDK v5 compatibility:
 
 ```typescript
-const response = await agent.generate(
-  "Hello, how are you?",
-  {
-    threadId: "thread-1",
-    resourceId: "resource-1",
-  }
-);
+const response = await agent.generate("Hello, how are you?", {
+  threadId: "thread-1",
+  resourceId: "resource-1",
+});
 ```

@@ -1,6 +1,5 @@
 import type { ToolsInput } from '../agent';
 import { MastraBase } from '../base';
-import { InstrumentClass } from '../telemetry';
 
 export type VoiceEventType = 'speaking' | 'writing' | 'error' | string;
 
@@ -29,10 +28,6 @@ export interface VoiceConfig<T = unknown> {
   };
 }
 
-@InstrumentClass({
-  prefix: 'voice',
-  excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', '#log'],
-})
 export abstract class MastraVoice<
   TOptions = unknown,
   TSpeakOptions = unknown,
@@ -59,17 +54,6 @@ export abstract class MastraVoice<
     this.speechModel = speechModel;
     this.speaker = speaker;
     this.realtimeConfig = realtimeConfig;
-  }
-
-  traced<T extends Function>(method: T, methodName: string): T {
-    return (
-      this.telemetry?.traceMethod(method, {
-        spanName: `voice.${methodName}`,
-        attributes: {
-          'voice.type': this.speechModel?.name || this.listeningModel?.name || 'unknown',
-        },
-      }) ?? method
-    );
   }
 
   /**

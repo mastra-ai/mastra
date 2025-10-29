@@ -90,17 +90,17 @@ export abstract class MemoryStorage extends MastraBase {
 
   async getResourceById(_: { resourceId: string }): Promise<StorageResourceType | null> {
     throw new Error(
-      `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-        `To use per-resource working memory, switch to one of these supported storage adapters.`,
+      `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). ` +
+        `This is likely a bug - all Mastra storage adapters should implement resource support. ` +
+        `Please report this issue at https://github.com/mastra-ai/mastra/issues`,
     );
   }
 
   async saveResource(_: { resource: StorageResourceType }): Promise<StorageResourceType> {
     throw new Error(
-      `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-        `To use per-resource working memory, switch to one of these supported storage adapters.`,
+      `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). ` +
+        `This is likely a bug - all Mastra storage adapters should implement resource support. ` +
+        `Please report this issue at https://github.com/mastra-ai/mastra/issues`,
     );
   }
 
@@ -110,9 +110,9 @@ export abstract class MemoryStorage extends MastraBase {
     metadata?: Record<string, unknown>;
   }): Promise<StorageResourceType> {
     throw new Error(
-      `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-        `To use per-resource working memory, switch to one of these supported storage adapters.`,
+      `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). ` +
+        `This is likely a bug - all Mastra storage adapters should implement resource support. ` +
+        `Please report this issue at https://github.com/mastra-ai/mastra/issues`,
     );
   }
 

@@ -3,7 +3,7 @@ import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { TracingContext } from '../../ai-tracing';
-import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { Processor } from '../index';
 
 /**
@@ -30,9 +30,9 @@ export interface TranslationResult {
  * Language detection and translation result (simplified for minimal tokens)
  */
 export interface LanguageDetectionResult {
-  iso_code?: string;
-  confidence?: number;
-  translated_text?: string;
+  iso_code: string | null;
+  confidence: number | null;
+  translated_text?: string | null; // Only present when strategy is 'translate'
 }
 
 /**
@@ -40,7 +40,7 @@ export interface LanguageDetectionResult {
  */
 export interface LanguageDetectorOptions {
   /** Model configuration for the detection/translation agent */
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
 
   /**
    * Target language(s) for the project.
@@ -254,11 +254,18 @@ export class LanguageDetector implements Processor {
     try {
       const model = await this.detectionAgent.getModel();
       let response;
-      const schema = z.object({
-        iso_code: z.string().optional(),
-        confidence: z.number().min(0).max(1).optional(),
-        translated_text: z.string().optional(),
+
+      const baseSchema = z.object({
+        iso_code: z.string().describe('ISO language code').nullable(),
+        confidence: z.number().min(0).max(1).describe('Detection confidence').nullable(),
       });
+
+      const schema =
+        this.strategy === 'translate'
+          ? baseSchema.extend({
+              translated_text: z.string().describe('Translated text').nullable(),
+            })
+          : baseSchema;
 
       if (model.specificationVersion === 'v2') {
         response = await this.detectionAgent.generate(prompt, {
@@ -278,15 +285,20 @@ export class LanguageDetector implements Processor {
         });
       }
 
-      if (response.object.translated_text && !response.object.confidence) {
-        response.object.confidence = 0.95;
+      const result = response.object as LanguageDetectionResult;
+
+      if (result.translated_text && !result.confidence) {
+        result.confidence = 0.95;
       }
 
-      return response.object;
+      return result;
     } catch (error) {
       console.warn('[LanguageDetector] Detection agent failed, assuming target language:', error);
       // Fail open - assume target language if detection fails
-      return {};
+      return {
+        iso_code: null,
+        confidence: null,
+      };
     }
   }
 
@@ -377,7 +389,7 @@ export class LanguageDetector implements Processor {
     result: LanguageDetectionResult,
     originalMessage?: MastraDBMessage,
   ): MastraDBMessage {
-    const isTargetLanguage = this.isTargetLanguage(result.iso_code);
+    const isTargetLanguage = this.isTargetLanguage(result.iso_code ?? undefined);
 
     const metadata = {
       ...message.content.metadata,

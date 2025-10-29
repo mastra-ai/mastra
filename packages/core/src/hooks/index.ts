@@ -1,5 +1,6 @@
 import type { Metric, MetricResult } from '../eval/metric';
 import type { TestInfo } from '../eval/types';
+import type { SystemMessage } from '../llm';
 import type { ScoringHookInput } from '../scores';
 
 import mitt from './mitt';
@@ -19,7 +20,7 @@ type EvaluationHookData = {
   result: MetricResult;
   agentName: string;
   metricName: string;
-  instructions: string;
+  instructions: SystemMessage;
   runId: string;
   globalRunId: string;
   testInfo?: TestInfo;
