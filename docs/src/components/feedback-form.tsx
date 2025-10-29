@@ -115,7 +115,7 @@ export const FeedbackForm = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<
     "idle" | "success" | "error"
-  >("idle");
+  >("error");
   const [errorMessage, setErrorMessage] = useState<string>("");
 
   const form = useForm<FeedbackFormData>({
@@ -179,8 +179,8 @@ export const FeedbackForm = ({
   return (
     <div className="p-4 pt-2 px-0 border max-h-[400px] border-gray-200 dark:border-borders-1 rounded-[10px] bg-white dark:bg-[var(--primary-bg)]">
       {submitStatus === "success" ? (
-        <div className="text-center py-4">
-          <p className="text-sm text-black dark:text-white">
+        <div className="text-center py-4 px-2">
+          <p className="text-sm mb-0! text-black dark:text-white">
             Thank you! Your feedback has been submitted
           </p>
         </div>
@@ -243,7 +243,7 @@ export const FeedbackForm = ({
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="dark:bg-[#121212] focus-visible:outline-2 focus-visible:outline-accent-green bg-(--mastra-surface-3) w-full rounded-[10px] hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-[var(--light-color-text-5)] dark:text-white text-[14px]"
+                className="dark:bg-[#121212] bg-(--mastra-surface-3) w-full rounded-[10px] hover:opacity-90 h-8 justify-center flex items-center px-4 text-[var(--light-color-text-5)] dark:text-white text-[14px]"
               >
                 {isSubmitting ? (
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -253,9 +253,9 @@ export const FeedbackForm = ({
               </Button>
             </div>
 
-            {errorMessage && (
-              <div className="mt-3 p-2 rounded bg-red-50 dark:bg-red-900/20">
-                <p className="text-xs text-red-500 dark:text-red-400">
+            {true && (
+              <div className="mt-3 mx-4 p-2 rounded-[10px] bg-red-50 dark:bg-red-900/20">
+                <p className="text-xs mb-0! text-red-500 font-mono dark:text-red-400">
                   Something went wrong. Please try again
                   {errorMessage && (
                     <span className="block mt-1 opacity-75">
