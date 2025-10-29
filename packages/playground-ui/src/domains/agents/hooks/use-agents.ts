@@ -68,3 +68,18 @@ export const useUpdateModelInModelList = (agentId: string) => {
     },
   });
 };
+
+export const useResetAgentModel = (agentId: string) => {
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => client.getAgent(agentId).resetModel(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+    },
+    onError: err => {
+      console.error('Error resetting model', err);
+    },
+  });
+};

@@ -14,6 +14,7 @@ import {
   setAgentInstructionsHandler,
   streamGenerateHandler,
   updateAgentModelHandler,
+  resetAgentModelHandler,
   vNextBodyOptions,
   deprecatedStreamVNextHandler,
   streamUIMessageHandler,
@@ -748,6 +749,32 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     updateAgentModelHandler,
+  );
+
+  router.post(
+    '/:agentId/model/reset',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Reset the agent model to the original model set during construction',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Model reset to original successfully',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    resetAgentModelHandler,
   );
 
   router.post(

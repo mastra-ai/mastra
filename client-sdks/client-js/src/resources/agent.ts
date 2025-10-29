@@ -1704,6 +1704,16 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * Resets the agent's model to the original model that was set during construction
+   * @returns Promise containing a success message
+   */
+  resetModel(): Promise<{ message: string }> {
+    return this.request(`/api/agents/${this.agentId}/model/reset`, {
+      method: 'POST',
+    });
+  }
+
+  /**
    * Updates the model for the agent in the model list
    * @param params - Parameters for updating the model
    * @returns Promise containing the updated model

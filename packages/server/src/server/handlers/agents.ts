@@ -899,6 +899,23 @@ export async function updateAgentModelHandler({
   }
 }
 
+export async function resetAgentModelHandler({
+  mastra,
+  agentId,
+}: Context & {
+  agentId: string;
+}): Promise<{ message: string }> {
+  try {
+    const agent = await getAgentFromSystem({ mastra, agentId });
+
+    agent.__resetToOriginalModel();
+
+    return { message: 'Agent model reset to original' };
+  } catch (error) {
+    return handleError(error, 'error resetting agent model');
+  }
+}
+
 export async function reorderAgentModelListHandler({
   mastra,
   agentId,
@@ -975,6 +992,28 @@ export async function updateAgentModelInModelListHandler({
     return handleError(error, 'error updating model list');
   }
 }
+
+// export async function resetAgentModelListHandler({
+//   mastra,
+//   agentId,
+// }: Context & {
+//   agentId: string;
+// }): Promise<{ message: string }> {
+//   try {
+//     const agent = await getAgentFromSystem({ mastra, agentId });
+
+//     const modelList = await agent.getModelList();
+//     if (!modelList || modelList.length === 0) {
+//       throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
+//     }
+
+//     agent.updateModelInModelList({ id: modelConfigId, model: undefined, maxRetries: undefined, enabled: undefined });
+
+//     return { message: 'Model list reset' };
+//   } catch (error) {
+//     return handleError(error, 'error resetting model list');
+//   }
+// }
 
 export async function getProvidersHandler() {
   try {

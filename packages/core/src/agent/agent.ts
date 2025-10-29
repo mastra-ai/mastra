@@ -144,6 +144,7 @@ export class Agent<
   #instructions: DynamicAgentInstructions;
   readonly #description?: string;
   model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
+  #originalModel: DynamicArgument<MastraModelConfig> | ModelFallbacks;
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
@@ -227,8 +228,10 @@ export class Agent<
         maxRetries: mdl.maxRetries ?? config?.maxRetries ?? 0,
         enabled: mdl.enabled ?? true,
       }));
+      this.#originalModel = this.model;
     } else {
       this.model = config.model;
+      this.#originalModel = config.model;
     }
 
     this.maxRetries = config.maxRetries ?? 0;
@@ -981,6 +984,17 @@ export class Agent<
   __updateModel({ model }: { model: DynamicArgument<MastraModelConfig> }) {
     this.model = model;
     this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
+  }
+
+  /**
+   * Resets the agent's model to the original model that was set during construction.
+   * This restores the original LanguageModelV2 or model configuration that may have
+   * been overwritten by __updateModel().
+   * @internal
+   */
+  __resetToOriginalModel() {
+    this.model = this.#originalModel;
+    this.logger.debug(`[Agents:${this.name}] Model reset to original.`, { model: this.model, name: this.name });
   }
 
   reorderModels(modelIds: string[]) {
