@@ -389,6 +389,11 @@ export class InngestRun<
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
     const writer = writable.getWriter();
+    writer.write({
+      type: 'workflow-start',
+      // @ts-ignore
+      payload: { runId: this.runId },
+    });
     const unwatch = this.watch(async event => {
       try {
         const e: any = {
@@ -401,6 +406,11 @@ export class InngestRun<
     }, 'watch-v2');
 
     this.closeStreamAction = async () => {
+      writer.write({
+        type: 'workflow-finish',
+        // @ts-ignore
+        payload: { runId: this.runId },
+      });
       unwatch();
 
       try {
@@ -769,7 +779,6 @@ export class InngestWorkflow<
           outputOptions,
           writableStream: new WritableStream<WorkflowStreamEvent>({
             write(chunk) {
-              console.log('writing a chunk', chunk);
               emitter.emit('watch-v2', chunk);
             },
           }),
@@ -1122,49 +1131,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     super({ mastra, options });
     this.inngestStep = inngestStep;
     this.inngestAttempts = inngestAttempts;
-  }
-
-  async execute<TState, TInput, TOutput>(params: {
-    workflowId: string;
-    runId: string;
-    resourceId?: string;
-    graph: ExecutionGraph;
-    serializedStepGraph: SerializedStepFlowEntry[];
-    input?: TInput;
-    initialState?: TState;
-    resume?: {
-      // TODO: add execute path
-      steps: string[];
-      stepResults: Record<string, StepResult<any, any, any, any>>;
-      resumePayload: any;
-      resumePath: number[];
-    };
-    emitter: Emitter;
-    retryConfig?: {
-      attempts?: number;
-      delay?: number;
-    };
-    runtimeContext: RuntimeContext;
-    abortController: AbortController;
-    currentSpan?: AnyAISpan;
-    writableStream?: WritableStream<ChunkType>;
-    outputOptions?: {
-      includeState?: boolean;
-    };
-  }): Promise<TOutput> {
-    await params.emitter.emit('watch-v2', {
-      type: 'workflow-start',
-      payload: { runId: params.runId },
-    });
-
-    const result = await super.execute<TState, TInput, TOutput>(params);
-
-    await params.emitter.emit('watch-v2', {
-      type: 'workflow-finish',
-      payload: { runId: params.runId },
-    });
-
-    return result;
   }
 
   protected async fmtReturnValue<TOutput>(

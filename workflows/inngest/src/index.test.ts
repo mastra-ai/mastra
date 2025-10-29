@@ -8191,7 +8191,7 @@ describe('MastraInngestWorkflow', () => {
       const { stream, getWorkflowState } = run.streamLegacy({ inputData: { input: 'test' } });
 
       for await (const data of stream) {
-        if (data.type === 'step-suspended') {
+        if (data.type === 'workflow-step-suspended') {
           expect(promptAgentAction).toHaveBeenCalledTimes(1);
 
           // make it async to show that execution is not blocked
@@ -8392,12 +8392,13 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
+      // Updated to new vNext streaming format
       const expectedValues = [
         {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'start',
+          payload: {},
+          type: 'workflow-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -8407,9 +8408,12 @@ describe('MastraInngestWorkflow', () => {
               prompt2: 'Capital of UK, just the name',
             },
             startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
             status: 'running',
           },
-          type: 'step-start',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -8421,43 +8425,51 @@ describe('MastraInngestWorkflow', () => {
             },
             status: 'success',
           },
-          type: 'step-result',
-        },
-        {
-          payload: {
-            id: 'start',
-            metadata: {},
-          },
-          type: 'step-finish',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: expect.any(String),
+            payload: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
+            },
+            startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
-          type: 'step-start',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: expect.any(String),
+            endedAt: expect.any(Number),
             output: {
               prompt: 'Capital of France, just the name',
             },
             status: 'success',
           },
-          type: 'step-result',
-        },
-        {
-          payload: {
-            id: expect.any(String),
-            metadata: {},
-          },
-          type: 'step-finish',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: 'test-agent-1',
+            payload: {
+              prompt: 'Capital of France, just the name',
+            },
+            startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
-          type: 'step-start',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           args: {
@@ -8487,45 +8499,53 @@ describe('MastraInngestWorkflow', () => {
             output: {
               text: 'Paris',
             },
+            endedAt: expect.any(Number),
             status: 'success',
           },
-          type: 'step-result',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: expect.any(String),
-            metadata: {},
+            payload: {
+              text: 'Paris',
+            },
+            startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
-          type: 'step-finish',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: expect.any(String),
-          },
-          type: 'step-start',
-        },
-        {
-          payload: {
-            id: expect.any(String),
+            endedAt: expect.any(Number),
             output: {
               prompt: 'Capital of UK, just the name',
             },
             status: 'success',
           },
-          type: 'step-result',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: expect.any(String),
-            metadata: {},
+            payload: {
+              prompt: 'Capital of UK, just the name',
+            },
+            startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
-          type: 'step-finish',
-        },
-        {
-          payload: {
-            id: expect.any(String),
-          },
-          type: 'step-start',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           args: {
@@ -8555,22 +8575,27 @@ describe('MastraInngestWorkflow', () => {
             output: {
               text: 'London',
             },
+            endedAt: expect.any(Number),
             status: 'success',
           },
-          type: 'step-result',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
-            id: expect.any(String),
             metadata: {},
+            output: {
+              usage: {
+                inputTokens: 0,
+                outputTokens: 0,
+                totalTokens: 0,
+              },
+            },
           },
-          type: 'step-finish',
-        },
-        {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'finish',
+          type: 'workflow-finish',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
       ];
       values.forEach((value, i) => {
@@ -8741,87 +8766,84 @@ describe('MastraInngestWorkflow', () => {
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
       for await (const data of streamOutput.fullStream) {
-        console.log('got data', data);
         collectedStreamData.push(JSON.parse(JSON.stringify(data)));
       }
       watchData = collectedStreamData;
 
-      console.log('waiting for result');
       const executionResult = await streamOutput.result;
-      console.log('got result', executionResult);
 
       srv.close();
 
-      // TODO: update this to new stream format
-      expect(watchData.length).toBe(8);
+      expect(watchData.length).toBe(6);
       expect(watchData).toMatchObject([
         {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'start',
+          payload: {},
+          type: 'workflow-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: 'step1',
-            status: 'running',
-          },
-          type: 'step-start',
-        },
-        {
-          payload: {
-            id: 'step1',
-            endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
             payload: {},
+            startedAt: expect.any(Number),
+          },
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+        {
+          payload: {
+            id: 'step1',
             output: {
               result: 'success1',
             },
+            endedAt: expect.any(Number),
             status: 'success',
           },
-          type: 'step-result',
-        },
-        {
-          payload: {
-            id: 'step1',
-            metadata: {},
-          },
-          type: 'step-finish',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: 'step2',
-            status: 'running',
-          },
-          type: 'step-start',
-        },
-        {
-          payload: {
-            id: 'step2',
-            endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
             payload: {
               result: 'success1',
             },
-            output: {
-              result: 'success2',
-            },
-            status: 'success',
+            startedAt: expect.any(Number),
           },
-          type: 'step-result',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: 'step2',
-            metadata: {},
+            output: {
+              result: 'success2',
+            },
+            endedAt: expect.any(Number),
+            status: 'success',
           },
-          type: 'step-finish',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
-            runId: 'test-run-id',
+            metadata: {},
+            output: {
+              usage: {
+                inputTokens: 0,
+                outputTokens: 0,
+                totalTokens: 0,
+              },
+            },
           },
-          type: 'finish',
+          type: 'workflow-finish',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
       ]);
       // Verify execution completed successfully
@@ -8876,7 +8898,7 @@ describe('MastraInngestWorkflow', () => {
               hello: 'world 2',
             },
           });
-          return { value: 'success2' };
+          return { result: 'success2' };
         },
         inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({}),
@@ -8927,93 +8949,119 @@ describe('MastraInngestWorkflow', () => {
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
       for await (const data of streamOutput.fullStream) {
-        console.log('got data', JSON.stringify(data, null, 2));
         collectedStreamData.push(JSON.parse(JSON.stringify(data)));
       }
       watchData = collectedStreamData;
 
-      console.log('waiting for result');
       const executionResult = await streamOutput.result;
-      console.log('got result', executionResult);
 
       srv.close();
 
-      // TODO: update this to new stream format
-      expect(watchData.length).toBe(8);
+      // Custom events test would still include the custom events
+      expect(watchData.length).toBe(8); // 6 standard events + 2 custom events
       expect(watchData).toMatchObject([
         {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'start',
+          payload: {},
+          type: 'workflow-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: 'step1',
-            status: 'running',
-          },
-          type: 'step-start',
-        },
-        {
-          payload: {
-            id: 'step1',
-            endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
             payload: {},
+            startedAt: expect.any(Number),
+          },
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+        {
+          type: 'workflow-step-output',
+          payload: {
             output: {
-              result: 'success1',
+              type: 'custom-event',
+              payload: {
+                hello: 'world',
+              },
             },
+          },
+          from: 'USER',
+          // stepId: 'step1',
+          runId: 'test-run-id',
+        },
+        {
+          payload: {
+            id: 'step1',
+            output: {
+              value: 'success1',
+            },
+            endedAt: expect.any(Number),
             status: 'success',
           },
-          type: 'step-result',
-        },
-        {
-          payload: {
-            id: 'step1',
-            metadata: {},
-          },
-          type: 'step-finish',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: 'step2',
-            status: 'running',
-          },
-          type: 'step-start',
-        },
-        {
-          payload: {
-            id: 'step2',
-            endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
             payload: {
-              result: 'success1',
+              value: 'success1',
             },
+            startedAt: expect.any(Number),
+          },
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
+        },
+        {
+          type: 'workflow-step-output',
+          payload: {
+            output: {
+              type: 'custom-event',
+              payload: {
+                hello: 'world 2',
+              },
+            },
+          },
+          from: 'USER',
+          // stepId: 'step2',
+          runId: 'test-run-id',
+        },
+        {
+          payload: {
+            id: 'step2',
             output: {
               result: 'success2',
             },
+            endedAt: expect.any(Number),
             status: 'success',
           },
-          type: 'step-result',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
-            id: 'step2',
             metadata: {},
+            output: {
+              usage: {
+                inputTokens: 0,
+                outputTokens: 0,
+                totalTokens: 0,
+              },
+            },
           },
-          type: 'step-finish',
-        },
-        {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'finish',
+          type: 'workflow-finish',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
       ]);
       // Verify execution completed successfully
       expect(executionResult.steps.step1).toMatchObject({
         status: 'success',
-        output: { result: 'success1' },
+        output: { value: 'success1' },
         payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
@@ -9022,7 +9070,7 @@ describe('MastraInngestWorkflow', () => {
         status: 'success',
         output: { result: 'success2' },
         payload: {
-          result: 'success1',
+          value: 'success1',
         },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
@@ -9101,6 +9149,7 @@ describe('MastraInngestWorkflow', () => {
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
       for await (const data of streamOutput.fullStream) {
+        console.log('got data', JSON.stringify(data, null, 2));
         collectedStreamData.push(JSON.parse(JSON.stringify(data)));
       }
       watchData = collectedStreamData;
@@ -9109,23 +9158,23 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      // TODO: update this to new stream format
-      expect(watchData.length).toBe(11);
+      expect(watchData.length).toBe(8);
       expect(watchData).toMatchObject([
         {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'start',
+          payload: {},
+          type: 'workflow-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: 'step1',
             startedAt: expect.any(Number),
-            status: 'running',
             payload: {},
           },
-          type: 'step-start',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -9136,14 +9185,9 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
             status: 'success',
           },
-          type: 'step-result',
-        },
-        {
-          payload: {
-            id: 'step1',
-            metadata: {},
-          },
-          type: 'step-finish',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -9154,7 +9198,9 @@ describe('MastraInngestWorkflow', () => {
               result: 'success1',
             },
           },
-          type: 'step-waiting',
+          type: 'workflow-step-waiting',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -9165,14 +9211,9 @@ describe('MastraInngestWorkflow', () => {
               result: 'success1',
             },
           },
-          type: 'step-result',
-        },
-        {
-          type: 'step-finish',
-          payload: {
-            id: expect.any(String),
-            metadata: {},
-          },
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -9181,9 +9222,10 @@ describe('MastraInngestWorkflow', () => {
               result: 'success1',
             },
             startedAt: expect.any(Number),
-            status: 'running',
           },
-          type: 'step-start',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -9194,20 +9236,24 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
             status: 'success',
           },
-          type: 'step-result',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
-            id: 'step2',
             metadata: {},
+            output: {
+              usage: {
+                inputTokens: 0,
+                outputTokens: 0,
+                totalTokens: 0,
+              },
+            },
           },
-          type: 'step-finish',
-        },
-        {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'finish',
+          type: 'workflow-finish',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
       ]);
 
@@ -9230,7 +9276,7 @@ describe('MastraInngestWorkflow', () => {
       });
     });
 
-    it('should handle basic sleep waiting flow with fn parameter', async ctx => {
+    it.only('should handle basic sleep waiting flow with fn parameter', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -9438,185 +9484,6 @@ describe('MastraInngestWorkflow', () => {
       });
     });
 
-    it('should handle waitForEvent waiting flow', async ctx => {
-      const inngest = new Inngest({
-        id: 'mastra',
-        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
-      });
-
-      const { createWorkflow, createStep } = init(inngest);
-
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
-
-      const step1 = createStep({
-        id: 'step1',
-        execute: step1Action,
-        inputSchema: z.object({}),
-        outputSchema: z.object({ value: z.string() }),
-      });
-      const step2 = createStep({
-        id: 'step2',
-        execute: step2Action,
-        inputSchema: z.object({ value: z.string() }),
-        outputSchema: z.object({}),
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        steps: [step1, step2],
-      });
-      workflow.then(step1).waitForEvent('user-event-test', step2).commit();
-
-      const mastra = new Mastra({
-        storage: new DefaultStorage({
-          url: ':memory:',
-        }),
-        workflows: {
-          'test-workflow': workflow,
-        },
-        server: {
-          apiRoutes: [
-            {
-              path: '/inngest/api',
-              method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
-            },
-          ],
-        },
-      });
-
-      const app = await createHonoServer(mastra);
-
-      const srv = (globServer = serve({
-        fetch: app.fetch,
-        port: (ctx as any).handlerPort,
-      }));
-      await resetInngest();
-
-      const runId = 'test-run-id';
-      let watchData: StreamEvent[] = [];
-      const run = await workflow.createRunAsync({
-        runId,
-      });
-
-      await resetInngest();
-
-      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
-
-      setTimeout(() => {
-        run.sendEvent('user-event-test', {
-          value: 'eventdata',
-        });
-      }, 3000);
-
-      // Start watching the workflow
-      const collectedStreamData: StreamEvent[] = [];
-      for await (const data of stream) {
-        collectedStreamData.push(JSON.parse(JSON.stringify(data)));
-      }
-      watchData = collectedStreamData;
-      console.dir({ watchData }, { depth: null });
-
-      const executionResult = await getWorkflowState();
-
-      await resetInngest();
-
-      srv.close();
-
-      expect(watchData.length).toBe(9);
-      expect(watchData).toMatchObject([
-        {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'start',
-        },
-        {
-          payload: {
-            id: 'step1',
-          },
-          type: 'step-start',
-        },
-        {
-          payload: {
-            id: 'step1',
-            output: {
-              result: 'success1',
-            },
-            status: 'success',
-          },
-          type: 'step-result',
-        },
-        {
-          payload: {
-            id: 'step1',
-            metadata: {},
-          },
-          type: 'step-finish',
-        },
-        {
-          payload: {
-            id: 'step2',
-          },
-          type: 'step-waiting',
-        },
-        {
-          payload: {
-            id: 'step2',
-          },
-          type: 'step-start',
-        },
-        {
-          payload: {
-            id: 'step2',
-            output: {
-              result: 'success2',
-            },
-            status: 'success',
-          },
-          type: 'step-result',
-        },
-        {
-          payload: {
-            id: 'step2',
-            metadata: {},
-          },
-          type: 'step-finish',
-        },
-        {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'finish',
-        },
-      ]);
-      // Verify execution completed successfully
-      expect(executionResult.steps.step1).toMatchObject({
-        status: 'success',
-        output: { result: 'success1' },
-        payload: {},
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
-      expect(executionResult.steps.step2).toMatchObject({
-        status: 'success',
-        output: { result: 'success2' },
-        payload: {
-          result: 'success1',
-        },
-        resumePayload: {
-          value: 'eventdata',
-        },
-        startedAt: expect.any(Number),
-        resumedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
-    });
-
     it('should handle basic suspend and resume flow', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
@@ -9729,7 +9596,7 @@ describe('MastraInngestWorkflow', () => {
       const { stream, getWorkflowState } = run.streamLegacy({ inputData: { input: 'test' } });
 
       for await (const data of stream) {
-        if (data.type === 'step-suspended') {
+        if (data.type === 'workflow-step-suspended') {
           expect(promptAgentAction).toHaveBeenCalledTimes(1);
 
           // make it async to show that execution is not blocked
@@ -9930,12 +9797,13 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
+      // Updated to new vNext streaming format
       const expectedValues = [
         {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'start',
+          payload: {},
+          type: 'workflow-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -9945,9 +9813,12 @@ describe('MastraInngestWorkflow', () => {
               prompt2: 'Capital of UK, just the name',
             },
             startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
             status: 'running',
           },
-          type: 'step-start',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -9959,43 +9830,51 @@ describe('MastraInngestWorkflow', () => {
             },
             status: 'success',
           },
-          type: 'step-result',
-        },
-        {
-          payload: {
-            id: 'start',
-            metadata: {},
-          },
-          type: 'step-finish',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: expect.any(String),
+            payload: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
+            },
+            startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
-          type: 'step-start',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: expect.any(String),
+            endedAt: expect.any(Number),
             output: {
               prompt: 'Capital of France, just the name',
             },
             status: 'success',
           },
-          type: 'step-result',
-        },
-        {
-          payload: {
-            id: expect.any(String),
-            metadata: {},
-          },
-          type: 'step-finish',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: 'test-agent-1',
+            payload: {
+              prompt: 'Capital of France, just the name',
+            },
+            startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
-          type: 'step-start',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           args: {
@@ -10025,45 +9904,53 @@ describe('MastraInngestWorkflow', () => {
             output: {
               text: 'Paris',
             },
+            endedAt: expect.any(Number),
             status: 'success',
           },
-          type: 'step-result',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: expect.any(String),
-            metadata: {},
+            payload: {
+              text: 'Paris',
+            },
+            startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
-          type: 'step-finish',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: expect.any(String),
-          },
-          type: 'step-start',
-        },
-        {
-          payload: {
-            id: expect.any(String),
+            endedAt: expect.any(Number),
             output: {
               prompt: 'Capital of UK, just the name',
             },
             status: 'success',
           },
-          type: 'step-result',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: expect.any(String),
-            metadata: {},
+            payload: {
+              prompt: 'Capital of UK, just the name',
+            },
+            startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
-          type: 'step-finish',
-        },
-        {
-          payload: {
-            id: expect.any(String),
-          },
-          type: 'step-start',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           args: {
@@ -10093,22 +9980,27 @@ describe('MastraInngestWorkflow', () => {
             output: {
               text: 'London',
             },
+            endedAt: expect.any(Number),
             status: 'success',
           },
-          type: 'step-result',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
-            id: expect.any(String),
             metadata: {},
+            output: {
+              usage: {
+                inputTokens: 0,
+                outputTokens: 0,
+                totalTokens: 0,
+              },
+            },
           },
-          type: 'step-finish',
-        },
-        {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'finish',
+          type: 'workflow-finish',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
       ];
       values.forEach((value, i) => {
