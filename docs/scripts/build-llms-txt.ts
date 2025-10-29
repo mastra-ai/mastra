@@ -175,7 +175,7 @@ async function concatenateMDDocs(sourceDir: string) {
   }
 }
 
-const docsDir = path.join(process.cwd(), "docs");
+const docsDir = path.join(process.cwd(), "src/content/en/docs");
 
 concatenateMDDocs(docsDir).catch((error) => {
   console.error(

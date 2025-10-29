@@ -99,9 +99,9 @@ const config = {
       "@docusaurus/plugin-content-docs",
       {
         id: "models",
-        path: "models",
+        path: "src/content/en/models",
         routeBasePath: "models",
-        sidebarPath: "./sidebarsModels.js",
+        sidebarPath: "./src/content/en/models/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
     ],
@@ -109,9 +109,9 @@ const config = {
       "@docusaurus/plugin-content-docs",
       {
         id: "guides",
-        path: "guides",
+        path: "src/content/en/guides",
         routeBasePath: "guides",
-        sidebarPath: "./sidebarsGuides.js",
+        sidebarPath: "./src/content/en/guides/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
     ],
@@ -119,9 +119,9 @@ const config = {
       "@docusaurus/plugin-content-docs",
       {
         id: "examples",
-        path: "examples",
+        path: "src/content/en/examples",
         routeBasePath: "examples",
-        sidebarPath: "./sidebarsExamples.js",
+        sidebarPath: "./src/content/en/examples/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
     ],
@@ -129,9 +129,9 @@ const config = {
       "@docusaurus/plugin-content-docs",
       {
         id: "reference",
-        path: "reference",
+        path: "src/content/en/reference",
         routeBasePath: "reference",
-        sidebarPath: "./sidebarsReference.js",
+        sidebarPath: "./src/content/en/reference/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
     ],
@@ -143,7 +143,8 @@ const config = {
       /** @type {import('@docusaurus/preset-classic').Options} */
       ({
         docs: {
-          sidebarPath: "./sidebars.js",
+          path: "src/content/en/docs",
+          sidebarPath: "./src/content/en/docs/sidebars.js",
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
