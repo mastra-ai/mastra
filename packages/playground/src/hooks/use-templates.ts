@@ -216,7 +216,8 @@ const processTemplateInstallRecord = (
   }
 
   // Handle different event types
-  if (record.type === 'start') {
+  // Support both legacy ('start') and VNext ('workflow-start') formats
+  if (record.type === 'start' || record.type === 'workflow-start') {
     // Pre-populate all workflow steps from workflowInfo if available
     const initialSteps: any = {};
     if (workflowInfo?.allSteps) {
@@ -229,9 +230,11 @@ const processTemplateInstallRecord = (
       });
     }
 
+    const runId = record.runId || record.payload.runId;
+
     newState = {
       ...newState,
-      runId: record.payload.runId,
+      runId,
       eventTimestamp: new Date().toISOString(),
       status: 'running',
       phase: 'initializing',
@@ -245,7 +248,8 @@ const processTemplateInstallRecord = (
     };
   }
 
-  if (record.type === 'step-start') {
+  // Support both legacy ('step-start') and VNext ('workflow-step-start') formats
+  if (record.type === 'step-start' || record.type === 'workflow-step-start') {
     const stepId = record.payload.id;
     newState = {
       ...newState,
@@ -274,7 +278,8 @@ const processTemplateInstallRecord = (
     };
   }
 
-  if (record.type === 'step-result') {
+  // Support both legacy ('step-result') and VNext ('workflow-step-result') formats
+  if (record.type === 'step-result' || record.type === 'workflow-step-result') {
     const stepId = record.payload.id;
     const status = record.payload.status;
     const hasError = record.payload.error;
@@ -329,7 +334,8 @@ const processTemplateInstallRecord = (
     }
   }
 
-  if (record.type === 'step-finish') {
+  // Support both legacy ('step-finish') and VNext ('workflow-step-finish') formats
+  if (record.type === 'step-finish' || record.type === 'workflow-step-finish') {
     newState = {
       ...newState,
       payload: {
@@ -339,7 +345,8 @@ const processTemplateInstallRecord = (
     };
   }
 
-  if (record.type === 'finish') {
+  // Support both legacy ('finish') and VNext ('workflow-finish') formats
+  if (record.type === 'finish' || record.type === 'workflow-finish') {
     // Don't override error states - if we're already in error phase, stay there
     if (newState.phase === 'error' || newState.status === 'failed') {
       newState = {
