@@ -21,7 +21,21 @@ description: "Pinecone API key",
 {
 name: "environment",
 type: "string",
-description: 'Pinecone environment (e.g., "us-west1-gcp")',
+description: 'Pinecone `controllerHostUrl` to bypass the control-plane',
+},
+{
+name: "cloud",
+type: "'gcp' | 'aws' | 'azure'",
+isOptional: true,
+defaultValue: "aws",
+description: 'Pinecone cloud provider to use for new indexes (e.g. "gcp" | "aws" | "azure")',
+},
+{
+name: "region",
+type: "string",
+isOptional: true,
+defaultValue: "us-west1",
+description: 'Pinecone cloud region to use for new indexes ((e.g. "us-west1")',
 },
 ]}
 />
