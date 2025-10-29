@@ -27,6 +27,7 @@ import { delay } from '../utils';
 import { MessageList } from './message-list/index';
 import { assertNoDuplicateParts } from './test-utils';
 import { Agent } from './index';
+import { randomUUID } from 'crypto';
 
 config();
 
@@ -4814,7 +4815,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         expect(messagesResult.messages.length).toBe(1);
         expect(messagesResult.messages[0].role).toBe('user');
-        expect(messagesResult.messages[0].content.content).toBe('no progress');
+        const firstTextPart = messagesResult.messages[0].content.parts.find(p => p.type === 'text');
+        expect(firstTextPart?.text).toBe('no progress');
       });
     }, 500000);
 
@@ -5305,7 +5307,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     // Helper function to create a MastraMessageV2
     const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): MastraMessageV2 => ({
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       role,
       content: {
         format: 2,
