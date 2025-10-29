@@ -46,7 +46,7 @@ const thread = await mastraClient.createMemoryThread({
 特定のメモリスレッドのインスタンスを取得します：
 
 ```typescript
-const thread = mastraClient.getMemoryThread("thread-id", "agent-id");
+const thread = mastraClient.getMemoryThread({ threadId: "thread-id", agentId: "agent-id" });
 ```
 
 

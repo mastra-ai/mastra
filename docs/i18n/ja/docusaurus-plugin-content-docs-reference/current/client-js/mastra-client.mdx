@@ -85,12 +85,12 @@ export const mastraClient = new MastraClient({
     {
       name: "getAgents()",
       type: "Promise<Record<string, GetAgentResponse>>",
-      description: "利用可能なすべてのエージェント インスタンスを返します。",
+      description: "利用可能なすべてのエージェントインスタンスを返します。",
     },
     {
       name: "getAgent(agentId)",
       type: "Agent",
-      description: "IDで特定のエージェント インスタンスを取得します。",
+      description: "IDで特定のエージェントインスタンスを取得します。",
     },
     {
       name: "getMemoryThreads(params)",
@@ -104,8 +104,8 @@ export const mastraClient = new MastraClient({
       description: "指定したパラメータで新しいメモリスレッドを作成します。",
     },
     {
-      name: "getMemoryThread(threadId)",
-      type: "Promise<MemoryThread>",
+      name: "getMemoryThread({ threadId, agentId })",
+      type: "MemoryThread",
       description: "IDで特定のメモリスレッドを取得します。",
     },
     {
@@ -116,7 +116,7 @@ export const mastraClient = new MastraClient({
     {
       name: "getMemoryStatus()",
       type: "Promise<MemoryStatus>",
-      description: "メモリシステムの現在のステータスを返します。",
+      description: "メモリシステムの現在の状態を返します。",
     },
     {
       name: "getTools()",
@@ -126,22 +126,22 @@ export const mastraClient = new MastraClient({
     {
       name: "getTool(toolId)",
       type: "Tool",
-      description: "IDで特定のツール インスタンスを取得します。",
+      description: "IDで特定のツールインスタンスを取得します。",
     },
     {
       name: "getWorkflows()",
       type: "Record<string, Workflow>",
-      description: "利用可能なすべてのワークフロー インスタンスを返します。",
+      description: "利用可能なすべてのワークフローインスタンスを返します。",
     },
     {
       name: "getWorkflow(workflowId)",
       type: "Workflow",
-      description: "IDで特定のワークフロー インスタンスを取得します。",
+      description: "IDで特定のワークフローインスタンスを取得します。",
     },
     {
       name: "getVector(vectorName)",
       type: "MastraVector",
-      description: "名前を指定してベクターストア インスタンスを返します。",
+      description: "名前を指定してベクターストアのインスタンスを返します。",
     },
     {
       name: "getLogs(params)",
@@ -162,13 +162,13 @@ export const mastraClient = new MastraClient({
       name: "getAITrace(traceId)",
       type: "Promise<AITraceRecord>",
       description:
-        "IDで特定のAIトレースを取得します。関連するすべてのスパンと詳細を含みます。",
+        "IDで特定のAIトレースを取得し、関連するすべてのスパンと詳細を含みます。",
     },
     {
       name: "getAITraces(params)",
       type: "Promise<GetAITracesResponse>",
       description:
-        "AIトレースのルートスパンのページネートされた一覧を、任意のフィルター付きで取得します。すべてのスパンを含む完全なトレースは getAITrace() を使用してください。",
+        "オプションのフィルター付きで、AIトレースのルートスパンのページネートされた一覧を取得します。全スパンを含む完全なトレースを取得するには getAITrace() を使用してください。",
     },
   ]}
 />

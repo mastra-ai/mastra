@@ -1,5 +1,6 @@
 import Link from "@docusaurus/Link";
 import { GithubStarCount } from "@site/src/components/github-star-count";
+import LocaleControl from "@site/src/components/gt/LocaleControl";
 import { ThemeSwitcher } from "@site/src/components/theme-switcher";
 import NavbarLayout from "@theme/Navbar/Layout";
 import NavbarMobileSidebarToggle from "@theme/Navbar/MobileSidebar/Toggle";
@@ -31,6 +32,8 @@ function NavbarContentDesktop() {
           </div>
           <div className="flex gap-4 items-center">
             <GithubStarCount />
+            {/* Adding locale control to header for ease of access in GT implementation*/}
+            <LocaleControl />
             <div className="hidden lg:block">
               <ThemeSwitcher />
             </div>
