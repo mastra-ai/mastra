@@ -5,11 +5,11 @@ description: Learn how to use logging in Mastra to monitor execution, capture ap
 
 # Logging
 
-Mastra's logging system captures function execution, input data, and output responses in a structured format.
+Mastra's logging system captures logs from agents, workflows, and tools. Logs contain information about function execution, input data, and output responses in a structured format.
 
 When deploying to Mastra Cloud, logs are shown on the [Logs](../mastra-cloud/observability.mdx) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
 
-## PinoLogger
+## Configuring logs with PinoLogger
 
 When [initializing a new Mastra project](../getting-started/installation.mdx) using the CLI, `PinoLogger` is included by default.
 
@@ -28,7 +28,7 @@ export const mastra = new Mastra({
 
 > See the [PinoLogger](../../reference/observability/logger.mdx) API reference for all available configuration options.
 
-## Logging from workflows and tools
+## Customizing logs
 
 Mastra provides access to a logger instance via the `mastra.getLogger()` method, available inside both workflow steps and tools. The logger supports standard severity levels: `debug`, `info`, `warn`, and `error`.
 
@@ -81,8 +81,7 @@ export const testTool = createTool({
 });
 ```
 
-
-## Logging with additional data
+### Logging with additional data
 
 Logger methods accept an optional second argument for additional data. This can be any value, such as an object, string, or number.
 
