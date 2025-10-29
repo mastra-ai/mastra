@@ -45,7 +45,6 @@
   "dependencies": {
     "@mastra/client-js": "workspace:*",
     "@radix-ui/react-tooltip": "^1.2.7",
-    "ai-v5": "npm:ai@5.0.76",
     "hast-util-to-jsx-runtime": "^2.3.6",
     "lucide-react": "^0.522.0",
     "shiki": "^1.29.2",
