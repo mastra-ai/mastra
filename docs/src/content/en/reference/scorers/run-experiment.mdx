@@ -10,23 +10,23 @@ The `runExperiment` function enables batch evaluation of agents and workflows by
 ## Usage Example
 
 ```typescript
-import { runExperiment } from '@mastra/core/scores';
-import { myAgent } from './agents/my-agent';
-import { myScorer1, myScorer2 } from './scorers';
+import { runExperiment } from "@mastra/core/scores";
+import { myAgent } from "./agents/my-agent";
+import { myScorer1, myScorer2 } from "./scorers";
 
 const result = await runExperiment({
   target: myAgent,
   data: [
     { input: "What is machine learning?" },
     { input: "Explain neural networks" },
-    { input: "How does AI work?" }
+    { input: "How does AI work?" },
   ],
   scorers: [myScorer1, myScorer2],
   concurrency: 2,
   onItemComplete: ({ item, targetResult, scorerResults }) => {
     console.log(`Completed: ${item.input}`);
     console.log(`Scores:`, scorerResults);
-  }
+  },
 });
 
 console.log(`Average scores:`, result.scores);
@@ -46,13 +46,15 @@ console.log(`Processed ${result.summary.totalItems} items`);
     {
       name: "data",
       type: "RunExperimentDataItem[]",
-      description: "Array of test cases with input data and optional ground truth.",
+      description:
+        "Array of test cases with input data and optional ground truth.",
       isOptional: false,
     },
     {
       name: "scorers",
       type: "MastraScorer[] | WorkflowScorerConfig",
-      description: "Array of scorers for agents, or configuration object for workflows specifying scorers for the workflow and individual steps.",
+      description:
+        "Array of scorers for agents, or configuration object for workflows specifying scorers for the workflow and individual steps.",
       isOptional: false,
     },
     {
@@ -65,7 +67,8 @@ console.log(`Processed ${result.summary.totalItems} items`);
     {
       name: "onItemComplete",
       type: "function",
-      description: "Callback function called after each test case completes. Receives item, target result, and scorer results.",
+      description:
+        "Callback function called after each test case completes. Receives item, target result, and scorer results.",
       isOptional: true,
     },
   ]}
@@ -78,13 +81,15 @@ console.log(`Processed ${result.summary.totalItems} items`);
     {
       name: "input",
       type: "string | string[] | CoreMessage[] | any",
-      description: "Input data for the target. For agents: messages or strings. For workflows: workflow input data.",
+      description:
+        "Input data for the target. For agents: messages or strings. For workflows: workflow input data.",
       isOptional: false,
     },
     {
       name: "groundTruth",
       type: "any",
-      description: "Expected or reference output for comparison during scoring.",
+      description:
+        "Expected or reference output for comparison during scoring.",
       isOptional: true,
     },
     {
@@ -117,7 +122,8 @@ For workflows, you can specify scorers at different levels using `WorkflowScorer
     {
       name: "steps",
       type: "Record<string, MastraScorer[]>",
-      description: "Object mapping step IDs to arrays of scorers for evaluating individual step outputs.",
+      description:
+        "Object mapping step IDs to arrays of scorers for evaluating individual step outputs.",
       isOptional: true,
     },
   ]}
@@ -130,7 +136,8 @@ For workflows, you can specify scorers at different levels using `WorkflowScorer
     {
       name: "scores",
       type: "Record<string, any>",
-      description: "Average scores across all test cases, organized by scorer name.",
+      description:
+        "Average scores across all test cases, organized by scorer name.",
     },
     {
       name: "summary",
@@ -150,33 +157,35 @@ For workflows, you can specify scorers at different levels using `WorkflowScorer
 ### Agent Evaluation
 
 ```typescript
-import { runExperiment } from '@mastra/core/scores';
-import { createScorer } from '@mastra/core/scores';
+import { runExperiment } from "@mastra/core/scores";
+import { createScorer } from "@mastra/core/scores";
 
 const myScorer = createScorer({
-  name: 'My Scorer',
+  name: "My Scorer",
   description: "Check if Agent's response contains ground truth",
-  type: 'agent'
+  type: "agent",
 }).generateScore(({ run }) => {
-  const response = run.output[0]?.content || '';
-  const expectedResponse = run.groundTruth
-  return response.includes(expectedResponse) ? 1 : 0
+  const response = run.output[0]?.content || "";
+  const expectedResponse = run.groundTruth;
+  return response.includes(expectedResponse) ? 1 : 0;
 });
 
 const result = await runExperiment({
   target: chatAgent,
   data: [
-    { 
+    {
       input: "What is AI?",
-      groundTruth: "AI is a field of computer science that creates intelligent machines."
+      groundTruth:
+        "AI is a field of computer science that creates intelligent machines.",
     },
     {
       input: "How does machine learning work?",
-      groundTruth: "Machine learning uses algorithms to learn patterns from data."
-    }
+      groundTruth:
+        "Machine learning uses algorithms to learn patterns from data.",
+    },
   ],
   scorers: [relevancyScorer],
-  concurrency: 3
+  concurrency: 3,
 });
 ```
 
@@ -187,24 +196,24 @@ const workflowResult = await runExperiment({
   target: myWorkflow,
   data: [
     { input: { query: "Process this data", priority: "high" } },
-    { input: { query: "Another task", priority: "low" } }
+    { input: { query: "Another task", priority: "low" } },
   ],
   scorers: {
     workflow: [outputQualityScorer],
     steps: {
-      'validation-step': [validationScorer],
-      'processing-step': [processingScorer]
-    }
+      "validation-step": [validationScorer],
+      "processing-step": [processingScorer],
+    },
   },
   onItemComplete: ({ item, targetResult, scorerResults }) => {
     console.log(`Workflow completed for: ${item.input.query}`);
     if (scorerResults.workflow) {
-      console.log('Workflow scores:', scorerResults.workflow);
+      console.log("Workflow scores:", scorerResults.workflow);
     }
     if (scorerResults.steps) {
-      console.log('Step scores:', scorerResults.steps);
+      console.log("Step scores:", scorerResults.steps);
     }
-  }
+  },
 });
 ```
 

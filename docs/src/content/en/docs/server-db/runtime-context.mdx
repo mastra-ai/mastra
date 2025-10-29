@@ -1,9 +1,7 @@
 ---
-title: "Runtime Context | Agents | Mastra Docs"
+title: "Runtime Context | Server & DB | Mastra Docs"
 description: Learn how to use Mastra's RuntimeContext to provide dynamic, request-specific configuration to agents.
 ---
-
-import { Callout } from "nextra/components";
 
 # Runtime Context
 
@@ -13,11 +11,13 @@ Agents, tools, and workflows can all accept `RuntimeContext` as a parameter, mak
 
 Use `RuntimeContext` when a primitive’s behavior should change based on runtime conditions. For example, you might switch models or storage backends based on user attributes, or adjust instructions and tool selection based on language.
 
-<Callout>
-  **Note:** `RuntimeContext` is primarily used for passing data into specific
-  requests. It's distinct from agent memory, which handles conversation
-  history and state persistence across multiple calls.
-</Callout>
+:::note
+
+**Note:** `RuntimeContext` is primarily used for passing data into specific
+requests. It's distinct from agent memory, which handles conversation
+history and state persistence across multiple calls.
+
+:::
 
 ## Setting values
 
@@ -40,33 +40,33 @@ runtimeContext.set("user-tier", "enterprise");
 
 const agent = mastra.getAgent("weatherAgent");
 await agent.generate("What's the weather in London?", {
-  runtimeContext
-})
+  runtimeContext,
+});
 
 const routingAgent = mastra.getAgent("routingAgent");
 routingAgent.network("What's the weather in London?", {
-  runtimeContext
+  runtimeContext,
 });
 
 const run = await mastra.getWorkflow("weatherWorkflow").createRunAsync();
 await run.start({
   inputData: {
-    location: "London"
+    location: "London",
   },
-  runtimeContext
+  runtimeContext,
 });
 await run.resume({
   resumeData: {
-    city: "New York"
+    city: "New York",
   },
-  runtimeContext
+  runtimeContext,
 });
 
 await weatherTool.execute({
   context: {
-    location: "London"
+    location: "London",
   },
-  runtimeContext
+  runtimeContext,
 });
 ```
 
@@ -74,7 +74,7 @@ await weatherTool.execute({
 
 You can populate `runtimeContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { RuntimeContext } from "@mastra/core/runtime-context";
 import { testWeatherAgent } from "./agents/test-weather-agent";
@@ -87,22 +87,25 @@ export const mastra = new Mastra({
         const country = context.req.header("CF-IPCountry");
         const runtimeContext = context.get("runtimeContext");
 
-        runtimeContext.set("temperature-unit", country === "US" ? "fahrenheit" : "celsius");
+        runtimeContext.set(
+          "temperature-unit",
+          country === "US" ? "fahrenheit" : "celsius",
+        );
 
         await next();
-      }
-    ]
-  }
+      },
+    ],
+  },
 });
 ```
 
-> See [Middleware](../server-db/middleware.mdx) for how to use server middleware.
+> See [Middleware](/docs/server-db/middleware) for how to use server middleware.
 
 ## Accessing values with agents
 
 You can access the `runtimeContext` argument from any supported configuration options in agents. These functions can be sync or `async`. Use the `.get()` method to read values from `runtimeContext`.
 
-```typescript {7-8,15,18,21} filename="src/mastra/agents/weather-agent.ts" showLineNumbers
+```typescript {7-8,15,18,21} title="src/mastra/agents/weather-agent.ts" showLineNumbers
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
@@ -131,13 +134,13 @@ export const weatherAgent = new Agent({
 
 You can also use `runtimeContext` with other options like `agents`, `workflows`, `scorers`, `inputProcessors`, and `outputProcessors`.
 
-> See [Agent](../../reference/agents/agent.mdx) for a full list of configuration options.
+> See [Agent](/reference/agents/agent) for a full list of configuration options.
 
 ## Accessing values from workflow steps
 
 You can access the `runtimeContext` argument from a workflow step's `execute` function. This function can be sync or async. Use the `.get()` method to read values from `runtimeContext`.
 
-```typescript {7-8} filename="src/mastra/workflows/weather-workflow.ts" showLineNumbers copy
+```typescript {7-8} title="src/mastra/workflows/weather-workflow.ts" showLineNumbers copy
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
@@ -151,17 +154,17 @@ const stepOne = createStep({
       // ...
     }
     // ...
-  }
+  },
 });
 ```
 
-> See [createStep()](../../reference/workflows/step.mdx) for a full list of configuration options.
+> See [createStep()](/reference/workflows/step) for a full list of configuration options.
 
 ## Accessing values with tools
 
-You can access the `runtimeContext` argument from a tool’s `execute` function. This function is `async`.  Use the `.get()` method to read values from `runtimeContext`.
+You can access the `runtimeContext` argument from a tool’s `execute` function. This function is `async`. Use the `.get()` method to read values from `runtimeContext`.
 
-```typescript {7-8} filename="src/mastra/tools/weather-tool.ts" showLineNumbers
+```typescript {7-8} title="src/mastra/tools/weather-tool.ts" showLineNumbers
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
@@ -174,17 +177,17 @@ export const weatherTool = createTool({
     if (userTier === "enterprise") {
       // ...
     }
-   // ...
-  }
+    // ...
+  },
 });
 ```
 
-> See [createTool()](../../reference/tools/create-tool.mdx) for a full list of configuration options.
+> See [createTool()](/reference/tools/create-tool) for a full list of configuration options.
 
 ## Related
 
-- [Runtime Context Example](../../examples/agents/runtime-context.mdx)
-- [Agent Runtime Context](../agents/overview.mdx#using-runtimecontext)
-- [Workflow Runtime Context](../workflows/overview.mdx#using-runtimecontext)
-- [Tool Runtime Context](../tools-mcp/overview.mdx#using-runtimecontext)
-- [Server Middleware Runtime Context](../server-db/middleware.mdx)
+- [Runtime Context Example](/examples/agents/runtime-context)
+- [Agent Runtime Context](/docs/agents/overview#using-runtimecontext)
+- [Workflow Runtime Context](../workflows/overview#using-runtimecontext)
+- [Tool Runtime Context](../tools-mcp/overview#using-runtimecontext)
+- [Server Middleware Runtime Context](/docs/server-db/middleware)

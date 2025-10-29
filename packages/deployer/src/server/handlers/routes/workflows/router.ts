@@ -564,7 +564,6 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                   },
                 },
               },
-              required: ['step'],
             },
           },
         },
