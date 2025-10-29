@@ -66,6 +66,42 @@ export class AgentBuilder extends BaseResource {
   }
 
   /**
+   * Creates a transform stream that parses binary chunks into JSON records.
+   */
+  private createRecordParserTransform(): TransformStream<ArrayBuffer, { type: string; payload: any }> {
+    let failedChunk: string | undefined = undefined;
+
+    return new TransformStream<ArrayBuffer, { type: string; payload: any }>({
+      start() {},
+      async transform(chunk, controller) {
+        try {
+          // Decode binary data to text
+          const decoded = new TextDecoder().decode(chunk);
+
+          // Split by record separator
+          const chunks = decoded.split(RECORD_SEPARATOR);
+
+          // Process each chunk
+          for (const chunk of chunks) {
+            if (chunk) {
+              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
+              try {
+                const parsedChunk = JSON.parse(newChunk);
+                controller.enqueue(parsedChunk);
+                failedChunk = undefined;
+              } catch {
+                failedChunk = newChunk;
+              }
+            }
+          }
+        } catch {
+          // Silently ignore processing errors
+        }
+      },
+    });
+  }
+
+  /**
    * @deprecated Use createRunAsync() instead.
    * @throws {Error} Always throws an error directing users to use createRunAsync()
    */
@@ -290,39 +326,7 @@ export class AgentBuilder extends BaseResource {
       throw new Error('Response body is null');
     }
 
-    let failedChunk: string | undefined = undefined;
-
-    const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(transformStream);
+    return response.body.pipeThrough(this.createRecordParserTransform());
   }
 
   /**
@@ -353,39 +357,7 @@ export class AgentBuilder extends BaseResource {
       throw new Error('Response body is null');
     }
 
-    let failedChunk: string | undefined = undefined;
-
-    const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(transformStream);
+    return response.body.pipeThrough(this.createRecordParserTransform());
   }
 
   /**
@@ -420,6 +392,119 @@ export class AgentBuilder extends BaseResource {
         onRecord(record);
       }
     }
+  }
+
+  /**
+   * Observes an existing agent builder action run stream.
+   * Replays cached execution from the beginning, then continues with live stream.
+   * This is the recommended method for recovery after page refresh/hot reload.
+   * This calls `/api/agent-builder/:actionId/observe` (which delegates to observeStreamVNext).
+   */
+  async observeStream(params: { runId: string }) {
+    const searchParams = new URLSearchParams();
+    searchParams.set('runId', params.runId);
+
+    const url = `/api/agent-builder/${this.actionId}/observe?${searchParams.toString()}`;
+    const response: Response = await this.request(url, {
+      method: 'POST',
+      stream: true,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to observe agent builder action stream: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    return response.body.pipeThrough(this.createRecordParserTransform());
+  }
+
+  /**
+   * Observes an existing agent builder action run stream using VNext streaming API.
+   * Replays cached execution from the beginning, then continues with live stream.
+   * This calls `/api/agent-builder/:actionId/observe-streamVNext`.
+   */
+  async observeStreamVNext(params: { runId: string }) {
+    const searchParams = new URLSearchParams();
+    searchParams.set('runId', params.runId);
+
+    const url = `/api/agent-builder/${this.actionId}/observe-streamVNext?${searchParams.toString()}`;
+    const response: Response = await this.request(url, {
+      method: 'POST',
+      stream: true,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to observe agent builder action stream VNext: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    return response.body.pipeThrough(this.createRecordParserTransform());
+  }
+
+  /**
+   * Observes an existing agent builder action run stream using legacy streaming API.
+   * Replays cached execution from the beginning, then continues with live stream.
+   * This calls `/api/agent-builder/:actionId/observe-stream-legacy`.
+   */
+  async observeStreamLegacy(params: { runId: string }) {
+    const searchParams = new URLSearchParams();
+    searchParams.set('runId', params.runId);
+
+    const url = `/api/agent-builder/${this.actionId}/observe-stream-legacy?${searchParams.toString()}`;
+    const response: Response = await this.request(url, {
+      method: 'POST',
+      stream: true,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to observe agent builder action stream legacy: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    return response.body.pipeThrough(this.createRecordParserTransform());
+  }
+
+  /**
+   * Resumes a suspended agent builder action and streams the results.
+   * This calls `/api/agent-builder/:actionId/resume-stream`.
+   */
+  async resumeStream(params: {
+    runId: string;
+    step: string | string[];
+    resumeData?: unknown;
+    runtimeContext?: RuntimeContext;
+  }): Promise<ReadableStream> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('runId', params.runId);
+
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    const { runId: _, runtimeContext: __, ...resumeParams } = params;
+
+    const url = `/api/agent-builder/${this.actionId}/resume-stream?${searchParams.toString()}`;
+    const response: Response = await this.request(url, {
+      method: 'POST',
+      body: { ...resumeParams, runtimeContext },
+      stream: true,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to resume agent builder action stream: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    return response.body.pipeThrough(this.createRecordParserTransform());
   }
 
   /**
