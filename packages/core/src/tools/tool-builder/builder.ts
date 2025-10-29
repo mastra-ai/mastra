@@ -391,10 +391,12 @@ export class CoreToolBuilder extends MastraBase {
     let processedOutputSchema;
 
     if (this.getOutputSchema()) {
-      // Don't apply model compatibility layers to outputSchema since it's never sent to the LLM
-      // The outputSchema is only used internally for validation, so it can contain any valid Zod type
-      // including ZodTuple, ZodIntersection, etc. that some models don't support in their input schemas
-      processedOutputSchema = convertZodSchemaToAISDKSchema(this.getOutputSchema());
+      // Don't add any compat layers to outputSchema since it's never sent to the LLM
+      processedOutputSchema = applyCompatLayer({
+        schema: this.getOutputSchema(),
+        compatLayers: [],
+        mode: 'aiSdkSchema',
+      });
     }
 
     const definition = {
