@@ -714,6 +714,49 @@ https://mastra.ai/en/docs/memory/overview`,
       }
     }
 
+    // Add SemanticRecall output processor if configured
+    if (this.threadConfig.semanticRecall) {
+      if (!this.storage?.stores?.memory)
+        throw new MastraError({
+          category: 'USER',
+          domain: 'MASTRA_MEMORY',
+          id: 'SEMANTIC_RECALL_MISSING_STORAGE_ADAPTER',
+          text: 'Using Mastra Memory semantic recall requires a storage adapter but no attached adapter was detected.',
+        });
+
+      if (!this.vector)
+        throw new MastraError({
+          category: 'USER',
+          domain: 'MASTRA_MEMORY',
+          id: 'SEMANTIC_RECALL_MISSING_VECTOR_ADAPTER',
+          text: 'Using Mastra Memory semantic recall requires a vector adapter but no attached adapter was detected.',
+        });
+
+      if (!this.embedder)
+        throw new MastraError({
+          category: 'USER',
+          domain: 'MASTRA_MEMORY',
+          id: 'SEMANTIC_RECALL_MISSING_EMBEDDER',
+          text: 'Using Mastra Memory semantic recall requires an embedder but no attached embedder was detected.',
+        });
+
+      // Check if user already manually added SemanticRecall
+      const hasSemanticRecall = configuredProcessors.some(p => p.constructor.name === 'SemanticRecall');
+
+      if (!hasSemanticRecall) {
+        const semanticRecallConfig =
+          typeof this.threadConfig.semanticRecall === 'object' ? this.threadConfig.semanticRecall : {};
+        processors.push(
+          new SemanticRecall({
+            storage: this.storage.stores.memory,
+            vector: this.vector,
+            embedder: this.embedder,
+            ...semanticRecallConfig,
+          }),
+        );
+      }
+    }
+
     // TODO: Add working memory output processor when implemented
     // if (this.threadConfig.workingMemory) {
     //   processors.push(new WorkingMemoryProcessor({

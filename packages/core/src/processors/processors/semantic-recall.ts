@@ -6,7 +6,7 @@ import type { MastraMessageV2 } from '../../memory/types';
 import type { RuntimeContext } from '../../runtime-context';
 import type { MemoryStorage } from '../../storage/domains/memory/base';
 import type { MastraEmbeddingModel, MastraVector } from '../../vector';
-import type { InputProcessor } from '../index';
+import type { Processor } from '../index';
 
 const DEFAULT_TOP_K = 5;
 const DEFAULT_MESSAGE_RANGE = 2;
@@ -62,8 +62,9 @@ export interface SemanticRecallOptions {
 }
 
 /**
- * SemanticRecall is an input processor that performs semantic search
- * on historical messages and adds relevant context to the input.
+ * SemanticRecall is both an input and output processor that:
+ * - On input: performs semantic search on historical messages and adds relevant context
+ * - On output: creates embeddings for messages being saved to enable future semantic search
  *
  * It uses vector embeddings to find messages similar to the user's query,
  * then retrieves those messages along with surrounding context.
@@ -81,11 +82,12 @@ export interface SemanticRecallOptions {
  *
  * // Use with agent
  * const agent = new Agent({
- *   inputProcessors: [processor]
+ *   inputProcessors: [processor],
+ *   outputProcessors: [processor]
  * });
  * ```
  */
-export class SemanticRecall implements InputProcessor {
+export class SemanticRecall implements Processor {
   readonly name = 'SemanticRecall';
 
   private storage: MemoryStorage;
@@ -226,13 +228,14 @@ export class SemanticRecall implements InputProcessor {
         })
         .join('\n');
 
-      formattedSections.push(`Date: ${date}\n${formattedMessages}`);
+      formattedSections.push(`Date: ${date}
+${formattedMessages}`);
     }
 
     const formattedContent = `<remembered_from_other_conversation>
 The following messages are from previous conversations with this user. They may provide helpful context:
 
-${formattedSections.join('\n\n')}
+${formattedSections.join('\n')}
 </remembered_from_other_conversation>`;
 
     return {
@@ -389,6 +392,125 @@ ${formattedSections.join('\n\n')}
       console.error('[SemanticRecall] Error ensuring vector index:', error);
       throw error;
     }
+  }
+
+  /**
+   * Process output messages to create embeddings for messages being saved
+   * This allows semantic recall to index new messages for future retrieval
+   */
+  async processOutputResult(args: {
+    messages: MastraMessageV2[];
+    abort: (reason?: string) => never;
+    tracingContext?: TracingContext;
+    runtimeContext?: RuntimeContext;
+  }): Promise<MastraMessageV2[]> {
+    const { messages, runtimeContext } = args;
+
+    if (!this.vector || !this.embedder || !this.storage) {
+      return messages;
+    }
+
+    try {
+      const memoryContext = parseMemoryRuntimeContext(runtimeContext);
+
+      if (!memoryContext) {
+        return messages;
+      }
+
+      const { thread, resourceId } = memoryContext;
+      const threadId = thread?.id;
+
+      if (!threadId) {
+        return messages;
+      }
+
+      const indexName = this.getDefaultIndexName();
+
+      // Collect all embeddings first
+      const vectors: number[][] = [];
+      const ids: string[] = [];
+      const metadataList: Record<string, any>[] = [];
+      let vectorDimension = 0;
+
+      for (const message of messages) {
+        // Extract text content from the message
+        const textContent = this.extractTextContent(message);
+        if (!textContent) {
+          continue;
+        }
+
+        try {
+          // Create embedding for the message
+          const { embeddings, dimension } = await this.embedMessageContent(textContent);
+
+          if (embeddings.length === 0) {
+            continue;
+          }
+
+          const embedding = embeddings[0];
+          if (!embedding) {
+            continue;
+          }
+
+          vectors.push(embedding);
+          ids.push(message.id);
+          metadataList.push({
+            message_id: message.id,
+            thread_id: threadId,
+            resource_id: resourceId || '',
+            role: message.role,
+            content: textContent,
+            created_at: message.createdAt.toISOString(),
+          });
+          vectorDimension = dimension;
+        } catch (error) {
+          // Log error but don't fail the entire operation
+          console.error(`[SemanticRecall] Error creating embedding for message ${message.id}:`, error);
+        }
+      }
+
+      // If we have embeddings, ensure index exists and upsert them
+      if (vectors.length > 0) {
+        await this.ensureVectorIndex(indexName, vectorDimension);
+        await this.vector.upsert({
+          indexName,
+          vectors,
+          ids,
+          metadata: metadataList,
+        });
+      }
+    } catch (error) {
+      // Log error but don't fail the entire operation
+      console.error('[SemanticRecall] Error in processOutputResult:', error);
+    }
+
+    return messages;
+  }
+
+  /**
+   * Extract text content from a MastraMessageV2
+   */
+  private extractTextContent(message: MastraMessageV2): string {
+    if (typeof message.content === 'string') {
+      return message.content;
+    }
+
+    if (typeof message.content === 'object' && message.content !== null) {
+      const { content, parts } = message.content as { content?: string; parts?: any[] };
+
+      if (content) {
+        return content;
+      }
+
+      if (Array.isArray(parts)) {
+        return parts
+          .filter(part => part.type === 'text')
+          .map(part => part.text || '')
+          .join(' ');
+      }
+    }
+
+    return '';
   }
 
   /**
