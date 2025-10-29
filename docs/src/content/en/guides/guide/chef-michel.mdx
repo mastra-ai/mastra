@@ -1,10 +1,11 @@
 ---
-title: "Building an AI Chef Assistant | Mastra Agent Guides"
+title: "Guide: Building an AI Chef Assistant | Mastra Agent Guides"
 description: Guide on creating a Chef Assistant agent in Mastra to help users cook meals with available ingredients.
 ---
 
-import { Steps } from "nextra/components";
-import YouTube from "@/components/youtube";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import Youtube from "@site/src/components/YouTube-player";
 
 # Building an AI Chef Assistant
 
@@ -26,11 +27,11 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
 
 <Steps>
 
-### Define the Agent
+<StepItem>
 
 Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
 
-```ts copy filename="src/mastra/agents/chefAgent.ts"
+```ts copy title="src/mastra/agents/chefAgent.ts"
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
@@ -43,11 +44,13 @@ export const chefAgent = new Agent({
 });
 ```
 
-### Register the Agent with Mastra
+</StepItem>
+
+<StepItem>
 
 In your `src/mastra/index.ts` file, register the agent:
 
-```ts copy filename="src/mastra/index.ts" {2, 5}
+```ts copy title="src/mastra/index.ts" {2, 5}
 import { Mastra } from "@mastra/core";
 import { chefAgent } from "./agents/chefAgent";
 
@@ -55,6 +58,8 @@ export const mastra = new Mastra({
   agents: { chefAgent },
 });
 ```
+
+</StepItem>
 
 </Steps >
 
@@ -64,11 +69,11 @@ Depending on your requirements you can interact and get responses from the agent
 
 <Steps>
 
-### Generating Text Responses
+<StepItem>
 
 Create a new file `src/index.ts` and add a `main()` function to it. Inside, craft a query to ask the agent and log its response.
 
-```ts copy filename="src/index.ts"
+```ts copy title="src/index.ts"
 import { chefAgent } from "./mastra/agents/chefAgent";
 
 async function main() {
@@ -97,11 +102,13 @@ Query: In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some
 👨‍🍳 Chef Michel: You can make a delicious pasta al pomodoro! Here's how...
 ```
 
-### Streaming Responses
+</StepItem>
+
+<StepItem>
 
 In the previous example you might have waited a bit for the response without any sign of progress. To show the agent's output as it creates it you should instead stream its response to the terminal.
 
-```ts copy filename="src/index.ts"
+```ts copy title="src/index.ts"
 import { chefAgent } from "./mastra/agents/chefAgent";
 
 async function main() {
@@ -140,13 +147,15 @@ Great! You can make a comforting chicken curry...
 ✅ Recipe complete!
 ```
 
-### Generating a Recipe with Structured Data
+</StepItem>
 
-Instead of showing the agent's response to a human you might want to pass it along to another part of your code. For these instances your agent should return [structured output](../../docs/agents/overview.mdx#4-structured-output).
+<StepItem>
+
+Instead of showing the agent's response to a human you might want to pass it along to another part of your code. For these instances your agent should return [structured output](/docs/agents/overview#structured-output).
 
 Change your `src/index.ts` to the following:
 
-```ts copy filename="src/index.ts"
+```ts copy title="src/index.ts"
 import { chefAgent } from "./mastra/agents/chefAgent";
 import { z } from "zod";
 
@@ -168,9 +177,9 @@ async function main() {
 
   const response = await chefAgent.generate(
     [{ role: "user", content: query }],
-    { 
+    {
       structuredOutput: {
-        schema
+        schema,
       },
     },
   );
@@ -199,6 +208,8 @@ Query: I want to make lasagna, can you generate a lasagna recipe for me?
 }
 ```
 
+</StepItem>
+
 </Steps >
 
 ## Running the Agent Server
@@ -207,7 +218,7 @@ Learn how to interact with your agent through Mastra's API.
 
 <Steps>
 
-### Using `mastra dev`
+<StepItem>
 
 You can run your agent as a service using the `mastra dev` command:
 
@@ -215,9 +226,11 @@ You can run your agent as a service using the `mastra dev` command:
 mastra dev
 ```
 
-This will start a server exposing endpoints to interact with your registered agents. Within the [playground](../../docs/server-db/local-dev-playground.mdx) you can test your agent through a UI.
+This will start a server exposing endpoints to interact with your registered agents. Within the [playground](/docs/getting-started/studio) you can test your agent through a UI.
 
-### Accessing the Chef Assistant API
+</StepItem>
+
+<StepItem>
 
 By default, `mastra dev` runs on `http://localhost:4111`. Your Chef Assistant agent will be available at:
 
@@ -225,7 +238,9 @@ By default, `mastra dev` runs on `http://localhost:4111`. Your Chef Assistant ag
 POST http://localhost:4111/api/agents/chefAgent/generate
 ```
 
-### Interacting with the Agent via `curl`
+</StepItem>
+
+<StepItem>
 
 You can interact with the agent using `curl` from the command line:
 
@@ -249,5 +264,7 @@ curl -X POST http://localhost:4111/api/agents/chefAgent/generate \
   "text": "You can make delicious pancakes! Here's a simple recipe..."
 }
 ```
+
+</StepItem>
 
 </Steps>
