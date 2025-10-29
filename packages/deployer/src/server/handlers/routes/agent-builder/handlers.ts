@@ -81,7 +81,7 @@ export async function startAsyncAgentBuilderActionHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const runtimeContext = c.get('runtimeContext');
     const actionId = c.req.param('actionId');
-    const { inputData } = await c.req.json();
+    const { inputData, tracingOptions } = await c.req.json();
     const runId = c.req.query('runId');
 
     disableHotReload();
@@ -91,6 +91,7 @@ export async function startAsyncAgentBuilderActionHandler(c: Context) {
       actionId,
       runId,
       inputData,
+      tracingOptions,
     });
 
     enableHotReload();
@@ -106,7 +107,7 @@ export async function startAgentBuilderActionRunHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const runtimeContext = c.get('runtimeContext');
     const actionId = c.req.param('actionId');
-    const { inputData } = await c.req.json();
+    const { inputData, tracingOptions } = await c.req.json();
     const runId = c.req.query('runId');
 
     await getOriginalStartAgentBuilderActionRunHandler({
@@ -115,6 +116,7 @@ export async function startAgentBuilderActionRunHandler(c: Context) {
       actionId,
       runId,
       inputData,
+      tracingOptions,
     });
 
     return c.json({ message: 'Agent builder action run started' });
@@ -175,7 +177,7 @@ export async function streamAgentBuilderActionHandler(c: Context) {
     const runtimeContext = c.get('runtimeContext');
     const logger = mastra.getLogger();
     const actionId = c.req.param('actionId');
-    const { inputData } = await c.req.json();
+    const { inputData, tracingOptions } = await c.req.json();
     const runId = c.req.query('runId');
 
     c.header('Transfer-Encoding', 'chunked');
@@ -190,6 +192,7 @@ export async function streamAgentBuilderActionHandler(c: Context) {
             runId,
             inputData,
             runtimeContext,
+            tracingOptions,
           });
 
           const reader = result.getReader();
@@ -275,7 +278,7 @@ export async function resumeAsyncAgentBuilderActionHandler(c: Context) {
     const runtimeContext = c.get('runtimeContext');
     const actionId = c.req.param('actionId');
     const runId = c.req.query('runId');
-    const { step, resumeData } = await c.req.json();
+    const { step, resumeData, tracingOptions } = await c.req.json();
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume action' });
@@ -288,6 +291,7 @@ export async function resumeAsyncAgentBuilderActionHandler(c: Context) {
       actionId,
       runId,
       body: { step, resumeData },
+      tracingOptions,
     });
 
     enableHotReload();
@@ -304,7 +308,7 @@ export async function resumeAgentBuilderActionHandler(c: Context) {
     const runtimeContext = c.get('runtimeContext');
     const actionId = c.req.param('actionId');
     const runId = c.req.query('runId');
-    const { step, resumeData } = await c.req.json();
+    const { step, resumeData, tracingOptions } = await c.req.json();
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume action' });
@@ -317,6 +321,7 @@ export async function resumeAgentBuilderActionHandler(c: Context) {
       actionId,
       runId,
       body: { step, resumeData },
+      tracingOptions,
     });
 
     enableHotReload();
@@ -430,7 +435,7 @@ export async function streamLegacyAgentBuilderActionHandler(c: Context) {
     const runtimeContext = c.get('runtimeContext');
     const logger = mastra.getLogger();
     const actionId = c.req.param('actionId');
-    const { inputData } = await c.req.json();
+    const { inputData, tracingOptions } = await c.req.json();
     const runId = c.req.query('runId');
 
     c.header('Transfer-Encoding', 'chunked');
@@ -445,6 +450,7 @@ export async function streamLegacyAgentBuilderActionHandler(c: Context) {
             runId,
             inputData,
             runtimeContext,
+            tracingOptions,
           });
 
           const reader = result?.stream?.getReader();
