@@ -3,7 +3,7 @@ import { ReadableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
 import { AISpanType, wrapMastra } from '@mastra/core/ai-tracing';
-import type { TracingContext, AnyAISpan, TracingOptions } from '@mastra/core/ai-tracing';
+import type { TracingContext, TracingOptions } from '@mastra/core/ai-tracing';
 import { RuntimeContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
@@ -406,14 +406,15 @@ export class InngestRun<
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
     const writer = writable.getWriter();
-    writer.write({
-      // @ts-ignore
-      type: 'start',
-      // @ts-ignore
-      payload: { runId: this.runId },
-    });
     const unwatch = this.watch(async event => {
       try {
+        writer.write({
+          // @ts-ignore
+          type: 'start',
+          // @ts-ignore
+          payload: { runId: this.runId },
+        });
+
         const e: any = {
           ...event,
           type: event.type.replace('workflow-', ''),
@@ -429,7 +430,7 @@ export class InngestRun<
     }, 'watch-v2');
 
     this.closeStreamAction = async () => {
-      writer.write({
+      await writer.write({
         type: 'finish',
         // @ts-ignore
         payload: { runId: this.runId },
@@ -804,7 +805,7 @@ export class InngestWorkflow<
           outputOptions,
           writableStream: new WritableStream<WorkflowStreamEvent>({
             write(chunk) {
-              emitter.emit('watch-v2', chunk);
+              void emitter.emit('watch-v2', chunk).catch(() => {});
             },
           }),
         });
