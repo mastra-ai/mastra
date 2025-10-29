@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@site/src/css/utils";
 
 export const PulsingDots = ({ className }: { className?: string }) => {
   return (

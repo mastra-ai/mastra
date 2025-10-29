@@ -112,13 +112,33 @@ export const watchAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
 );
 
 export const streamAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
-  workflows.streamLegacyWorkflowHandler,
+  workflows.streamWorkflowHandler,
   'Streaming agent builder action',
+);
+
+export const streamLegacyAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
+  workflows.streamLegacyWorkflowHandler,
+  'Streaming legacy agent builder action',
 );
 
 export const streamVNextAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
   workflows.streamVNextWorkflowHandler,
   'Streaming VNext agent builder action',
+);
+
+export const observeStreamLegacyAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
+  workflows.observeStreamLegacyWorkflowHandler,
+  'Observing legacy stream for agent builder action',
+);
+
+export const observeStreamAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
+  workflows.observeStreamWorkflowHandler,
+  'Observing stream for agent builder action',
+);
+
+export const observeStreamVNextAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
+  workflows.observeStreamVNextWorkflowHandler,
+  'Observing VNext stream for agent builder action',
 );
 
 export const resumeAsyncAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
@@ -129,6 +149,11 @@ export const resumeAsyncAgentBuilderActionHandler = createAgentBuilderWorkflowHa
 export const resumeAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
   workflows.resumeWorkflowHandler,
   'Resuming agent builder action',
+);
+
+export const resumeStreamAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
+  workflows.resumeStreamWorkflowHandler,
+  'Resuming stream for agent builder action',
 );
 
 export const getAgentBuilderActionRunsHandler = createAgentBuilderWorkflowHandler(

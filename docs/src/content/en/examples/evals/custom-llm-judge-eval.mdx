@@ -1,14 +1,13 @@
 ---
-title: "Example: Real World Countries | Evals | Mastra Docs"
+title: "Example: LLM as a Judge Evaluation | Evals | Mastra Docs"
 description: Example of creating a custom LLM-based evaluation metric.
 ---
 
-import { GithubLink } from "@/components/github-link";
-import { ScorerCallout } from "@/components/scorer-callout";
-
 # LLM as a Judge Evaluation
 
-<ScorerCallout />
+:::note
+The Scorers API is currently in beta. We're actively working on improvements and appreciate your feedback. For questions or feature requests, please reach out on [Discord](https://discord.gg/mastra).
+:::
 
 This example shows how to create a custom LLM-based evaluation metric to determine real countries of the world. The metric accepts a `query` and a `response`, and returns a score and reason based on how accurately the response matches the query.
 
@@ -29,7 +28,7 @@ A custom eval in Mastra can use an LLM to judge the quality of a response based 
 
 Together, these allow you to define custom evaluation logic that might not be covered by Mastra's built-in metrics.
 
-```typescript filename="src/mastra/evals/example-real-world-countries.ts" showLineNumbers copy
+```typescript title="src/mastra/evals/example-real-world-countries.ts" showLineNumbers copy
 import { Metric, type MetricResult } from "@mastra/core";
 import { MastraAgentJudge } from "@mastra/evals/judge";
 import { type LanguageModel } from "@mastra/core/llm";
@@ -69,9 +68,9 @@ class WorldCountryJudge extends MastraAgentJudge {
           info: z.object({
             reason: z.string(),
             matches: z.array(z.string()),
-            misses: z.array(z.string())
-          })
-        })
+            misses: z.array(z.string()),
+          }),
+        }),
       },
     });
 
@@ -117,7 +116,7 @@ Extends Mastra’s `Metric` class and acts as the main evaluation entry point. I
 
 This example shows a strong alignment between the response and the evaluation criteria. The metric assigns a high score and includes supporting details to explain why the output meets expectations.
 
-```typescript filename="src/example-high-real-world-countries.ts" showLineNumbers copy
+```typescript title="src/example-high-real-world-countries.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { WorldCountryMetric } from "./mastra/evals/example-real-world-countries";
 
@@ -150,7 +149,7 @@ The output receives a high score because everything in the response matches what
 
 In this example, the response includes a mix of correct and incorrect elements. The metric returns a mid-range score to reflect this and provides details to explain what was right and what was missed.
 
-```typescript filename="src/example-partial-real-world-countries.ts" showLineNumbers copy
+```typescript title="src/example-partial-real-world-countries.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { WorldCountryMetric } from "./mastra/evals/example-real-world-countries";
 
@@ -183,7 +182,7 @@ The score reflects partial success because the response includes some valid, and
 
 In this example, the response doesn’t meet the evaluation criteria at all. None of the expected elements are present, so the metric returns a low score.
 
-```typescript filename="src/example-low-real-world-countries.ts" showLineNumbers copy
+```typescript title="src/example-low-real-world-countries.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { WorldCountryMetric } from "./mastra/evals/example-real-world-countries";
 
@@ -247,6 +246,6 @@ An explanation for the score, with details including:
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/custom-eval"
 />

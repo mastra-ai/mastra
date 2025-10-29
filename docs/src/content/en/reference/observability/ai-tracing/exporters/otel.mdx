@@ -1,16 +1,17 @@
 ---
-title: "OtelExporter | Exporters | AI Tracing | Reference"
+title: "Reference: OtelExporter | Observability | Mastra Docs"
 description: OpenTelemetry exporter for AI tracing
 ---
 
-import { PropertiesTable } from "@/components/properties-table";
-import { Callout } from "nextra/components";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # OtelExporter
 
-<Callout type="warning">
+:::warning
+
 The OtelExporter is currently **experimental**. APIs and configuration options may change in future releases.
-</Callout>
+
+:::
 
 Sends AI tracing data to any OpenTelemetry-compatible observability platform using standardized GenAI semantic conventions.
 
@@ -27,7 +28,7 @@ interface OtelExporterConfig {
   provider?: ProviderConfig;
   timeout?: number;
   batchSize?: number;
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  logLevel?: "debug" | "info" | "warn" | "error";
 }
 ```
 
@@ -60,9 +61,10 @@ interface OtelExporterConfig {
     {
       name: "resourceAttributes",
       type: "DetectedResourceAttributes",
-      description: "Optional OpenTelemetry Resource Attributes (values here override any defaults)",
+      description:
+        "Optional OpenTelemetry Resource Attributes (values here override any defaults)",
       required: false,
-    }
+    },
   ]}
 />
 
@@ -89,7 +91,8 @@ interface Dash0Config {
     {
       name: "endpoint",
       type: "string",
-      description: "Dash0 ingress endpoint (e.g., ingress.us-west-2.aws.dash0.com:4317)",
+      description:
+        "Dash0 ingress endpoint (e.g., ingress.us-west-2.aws.dash0.com:4317)",
       required: true,
     },
     {
@@ -106,7 +109,7 @@ interface Dash0Config {
 ```typescript
 interface SignozConfig {
   apiKey: string;
-  region?: 'us' | 'eu' | 'in';
+  region?: "us" | "eu" | "in";
   endpoint?: string;
 }
 ```
@@ -154,7 +157,8 @@ interface NewRelicConfig {
     {
       name: "endpoint",
       type: "string",
-      description: "Custom endpoint (default: https://otlp.nr-data.net:443/v1/traces)",
+      description:
+        "Custom endpoint (default: https://otlp.nr-data.net:443/v1/traces)",
       required: false,
     },
   ]}
@@ -187,7 +191,8 @@ interface TraceloopConfig {
     {
       name: "endpoint",
       type: "string",
-      description: "Custom endpoint (default: https://api.traceloop.com/v1/traces)",
+      description:
+        "Custom endpoint (default: https://api.traceloop.com/v1/traces)",
       required: false,
     },
   ]}
@@ -231,7 +236,7 @@ interface LaminarConfig {
 ```typescript
 interface CustomConfig {
   endpoint: string;
-  protocol?: 'http/json' | 'http/protobuf' | 'grpc' | 'zipkin';
+  protocol?: "http/json" | "http/protobuf" | "grpc" | "zipkin";
   headers?: Record<string, string>;
 }
 ```
@@ -282,14 +287,14 @@ Flushes pending traces and shuts down the exporter.
 ### Basic Usage
 
 ```typescript
-import { OtelExporter } from '@mastra/otel-exporter';
+import { OtelExporter } from "@mastra/otel-exporter";
 
 const exporter = new OtelExporter({
   provider: {
     signoz: {
       apiKey: process.env.SIGNOZ_API_KEY,
-      region: 'us',
-    }
+      region: "us",
+    },
   },
 });
 ```
@@ -300,15 +305,15 @@ const exporter = new OtelExporter({
 const exporter = new OtelExporter({
   provider: {
     custom: {
-      endpoint: 'https://my-collector.example.com/v1/traces',
-      protocol: 'http/protobuf',
+      endpoint: "https://my-collector.example.com/v1/traces",
+      protocol: "http/protobuf",
       headers: {
-        'x-api-key': process.env.API_KEY,
+        "x-api-key": process.env.API_KEY,
       },
-    }
+    },
   },
   timeout: 60000,
-  logLevel: 'debug',
+  logLevel: "debug",
 });
 ```
 
@@ -317,12 +322,14 @@ const exporter = new OtelExporter({
 The exporter maps Mastra AI spans to OpenTelemetry spans following GenAI semantic conventions:
 
 ### Span Names
+
 - `MODEL_GENERATION` → `chat {model}` or `tool_selection {model}`
 - `TOOL_CALL` → `tool.execute {tool_name}`
 - `AGENT_RUN` → `agent.{agent_id}`
 - `WORKFLOW_RUN` → `workflow.{workflow_id}`
 
 ### Span Kinds
+
 - Root agent/workflow spans → `SERVER`
 - LLM calls → `CLIENT`
 - Tool calls → `INTERNAL` or `CLIENT`
@@ -332,30 +339,31 @@ The exporter maps Mastra AI spans to OpenTelemetry spans following GenAI semanti
 
 The exporter maps to standard OTEL GenAI attributes:
 
-| Mastra Attribute | OTEL Attribute |
-|------------------|----------------|
-| `model` | `gen_ai.request.model` |
-| `provider` | `gen_ai.system` |
-| `inputTokens` / `promptTokens` | `gen_ai.usage.input_tokens` |
-| `outputTokens` / `completionTokens` | `gen_ai.usage.output_tokens` |
-| `temperature` | `gen_ai.request.temperature` |
-| `maxOutputTokens` | `gen_ai.request.max_tokens` |
-| `finishReason` | `gen_ai.response.finish_reasons` |
+| Mastra Attribute                    | OTEL Attribute                   |
+| ----------------------------------- | -------------------------------- |
+| `model`                             | `gen_ai.request.model`           |
+| `provider`                          | `gen_ai.system`                  |
+| `inputTokens` / `promptTokens`      | `gen_ai.usage.input_tokens`      |
+| `outputTokens` / `completionTokens` | `gen_ai.usage.output_tokens`     |
+| `temperature`                       | `gen_ai.request.temperature`     |
+| `maxOutputTokens`                   | `gen_ai.request.max_tokens`      |
+| `finishReason`                      | `gen_ai.response.finish_reasons` |
 
 ## Protocol Requirements
 
 Different providers require different OTEL exporter packages:
 
-| Protocol | Required Package | Providers |
-|----------|------------------|-----------|
-| gRPC | `@opentelemetry/exporter-trace-otlp-grpc` | Dash0 |
+| Protocol      | Required Package                           | Providers                  |
+| ------------- | ------------------------------------------ | -------------------------- |
+| gRPC          | `@opentelemetry/exporter-trace-otlp-grpc`  | Dash0                      |
 | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` | SigNoz, New Relic, Laminar |
-| HTTP/JSON | `@opentelemetry/exporter-trace-otlp-http` | Traceloop, Custom |
-| Zipkin | `@opentelemetry/exporter-zipkin` | Zipkin collectors |
+| HTTP/JSON     | `@opentelemetry/exporter-trace-otlp-http`  | Traceloop, Custom          |
+| Zipkin        | `@opentelemetry/exporter-zipkin`           | Zipkin collectors          |
 
 ## Parent-Child Relationships
 
 The exporter preserves span hierarchy from Mastra's AI tracing:
+
 - Uses `parentSpanId` directly from Mastra spans
 - Maintains correct nesting for agents, workflows, LLM calls, and tools
 - Exports complete traces with all relationships intact

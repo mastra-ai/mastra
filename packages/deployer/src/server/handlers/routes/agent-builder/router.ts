@@ -11,11 +11,16 @@ import {
   getAgentBuilderActionsHandler,
   resumeAgentBuilderActionHandler,
   resumeAsyncAgentBuilderActionHandler,
+  resumeStreamAgentBuilderActionHandler,
   startAgentBuilderActionRunHandler,
   watchAgentBuilderActionHandler,
   startAsyncAgentBuilderActionHandler,
   streamAgentBuilderActionHandler,
+  streamLegacyAgentBuilderActionHandler,
   streamVNextAgentBuilderActionHandler,
+  observeStreamLegacyAgentBuilderActionHandler,
+  observeStreamAgentBuilderActionHandler,
+  observeStreamVNextAgentBuilderActionHandler,
   cancelAgentBuilderActionRunHandler,
   sendAgentBuilderActionRunEventHandler,
 } from './handlers';
@@ -186,8 +191,18 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   type: 'object',
                   description: 'Runtime context for the agent builder action execution',
                 },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the action execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
-              required: ['step'],
             },
           },
         },
@@ -231,6 +246,71 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   type: 'object',
                   description: 'Runtime context for the agent builder action execution',
                 },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the action execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    resumeAsyncAgentBuilderActionHandler,
+  );
+
+  router.post(
+    '/:actionId/resume-stream',
+    describeRoute({
+      description: 'Resume a suspended agent builder action that uses streamVNext',
+      tags: ['agent-builder'],
+      parameters: [
+        {
+          name: 'actionId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                step: {
+                  oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+                },
+                resumeData: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the agent builder action execution',
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the action execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
               required: ['step'],
             },
@@ -238,7 +318,97 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    resumeAsyncAgentBuilderActionHandler,
+    resumeStreamAgentBuilderActionHandler,
+  );
+
+  router.post(
+    '/:actionId/stream-legacy',
+    describeRoute({
+      description: 'Stream legacy agent builder action in real-time',
+      parameters: [
+        {
+          name: 'actionId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                inputData: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the agent builder action execution',
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the action execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'agent builder action run started',
+        },
+        404: {
+          description: 'agent builder action not found',
+        },
+      },
+      tags: ['agent-builder'],
+    }),
+    streamLegacyAgentBuilderActionHandler,
+  );
+
+  router.post(
+    '/:actionId/observe-stream-legacy',
+    describeRoute({
+      description: 'Observe agent builder action stream in real-time',
+      parameters: [
+        {
+          name: 'actionId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'agent builder action stream observed',
+        },
+        404: {
+          description: 'agent builder action not found',
+        },
+      },
+      tags: ['agent-builder'],
+    }),
+    observeStreamLegacyAgentBuilderActionHandler,
   );
 
   router.post(
@@ -271,6 +441,17 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   type: 'object',
                   description: 'Runtime context for the agent builder action execution',
                 },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the action execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
             },
           },
@@ -287,6 +468,68 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
       tags: ['agent-builder'],
     }),
     streamAgentBuilderActionHandler,
+  );
+
+  router.post(
+    '/:actionId/observe',
+    describeRoute({
+      description: 'Observe agent builder action stream in real-time using the streaming API',
+      parameters: [
+        {
+          name: 'actionId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'agent builder action stream observed',
+        },
+        404: {
+          description: 'agent builder action not found',
+        },
+      },
+      tags: ['agent-builder'],
+    }),
+    observeStreamAgentBuilderActionHandler,
+  );
+
+  router.post(
+    '/:actionId/observe-streamVNext',
+    describeRoute({
+      description: 'Observe agent builder action stream in real-time using the VNext streaming API',
+      parameters: [
+        {
+          name: 'actionId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'agent builder action stream vNext observed',
+        },
+        404: {
+          description: 'agent builder action not found',
+        },
+      },
+      tags: ['agent-builder'],
+    }),
+    observeStreamVNextAgentBuilderActionHandler,
   );
 
   router.post(
@@ -318,6 +561,21 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                 runtimeContext: {
                   type: 'object',
                   description: 'Runtime context for the agent builder action execution',
+                },
+                closeOnSuspend: {
+                  type: 'boolean',
+                  description: 'Close the stream on suspend',
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the action execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
                 },
               },
             },
@@ -398,6 +656,17 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   type: 'object',
                   description: 'Runtime context for the agent builder action execution',
                 },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the action execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
             },
           },
@@ -445,6 +714,17 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                 runtimeContext: {
                   type: 'object',
                   description: 'Runtime context for the agent builder action execution',
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the action execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
                 },
               },
             },

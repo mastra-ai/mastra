@@ -1,5 +1,6 @@
 import { algoliasearch, type SearchClient } from "algoliasearch";
 import { useEffect, useRef, useState } from "react";
+import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 
 /**
  * Options that can be passed to Algolia search.
@@ -142,6 +143,7 @@ export function useAlgoliaSearch(
   debounceTime = 100,
   searchOptions?: AlgoliaSearchOptions,
 ): UseAlgoliaSearchResult {
+  const { siteConfig } = useDocusaurusContext();
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [results, setResults] = useState<AlgoliaResult[]>([]);
@@ -158,19 +160,18 @@ export function useAlgoliaSearch(
   const hasMore = currentPage < totalPages - 1;
 
   useEffect(() => {
-    // Initialize Algolia client with your credentials
-    // You'll need to set these environment variables
-    const appId = process.env.NEXT_PUBLIC_ALGOLIA_APP_ID;
-    const apiKey = process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY;
+    // Initialize Algolia client with your credentials from site config
+    const { algoliaAppId: appId, algoliaSearchApiKey: apiKey } =
+      siteConfig.customFields || {};
 
     if (appId && apiKey) {
-      algoliaClient.current = algoliasearch(appId, apiKey);
+      algoliaClient.current = algoliasearch(appId as string, apiKey as string);
     } else {
       console.warn(
-        "Algolia credentials not found. Please set NEXT_PUBLIC_ALGOLIA_APP_ID and NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY environment variables.",
+        "Algolia credentials not found. Please set algoliaAppId and algoliaSearchApiKey in docusaurus.config.js customFields.",
       );
     }
-  }, []);
+  }, [siteConfig]);
 
   useEffect(() => {
     // Clear previous timer on each search change
@@ -373,7 +374,7 @@ export function useAlgoliaSearch(
                 {
                   title: displayTitle,
                   excerpt: excerpt,
-                  url: typedHit.url || "",
+                  url: toRelativePath(typedHit.url || ""),
                 },
               ];
 
@@ -381,7 +382,7 @@ export function useAlgoliaSearch(
                 objectID: typedHit.objectID,
                 title: displayTitle,
                 excerpt: excerpt,
-                url: typedHit.url || "",
+                url: toRelativePath(typedHit.url || ""),
                 section: typedHit.section,
                 priority: typedHit.priority,
                 depth: typedHit.depth,
@@ -550,14 +551,18 @@ export function useAlgoliaSearch(
               objectID: typedHit.objectID,
               title: displayTitle,
               excerpt,
-              url: typedHit.url || "",
+              url: toRelativePath(typedHit.url || ""),
               section: typedHit.section,
               priority: typedHit.priority,
               depth: typedHit.depth,
               _highlightResult: typedHit._highlightResult,
               _snippetResult: typedHit._snippetResult,
               sub_results: [
-                { title: displayTitle, excerpt, url: typedHit.url || "" },
+                {
+                  title: displayTitle,
+                  excerpt,
+                  url: toRelativePath(typedHit.url || ""),
+                },
               ],
             };
           },
@@ -594,4 +599,22 @@ export function useAlgoliaSearch(
 
 function stripColon(title: string) {
   return title.charAt(title.length - 1) === ":" ? title.slice(0, -1) : title;
+}
+
+/**
+ * Convert absolute URLs to relative paths to prevent issues with preview branches
+ * @param url - URL from Algolia (could be absolute or relative)
+ * @returns Relative path with hash if present
+ */
+function toRelativePath(url: string): string {
+  if (!url) return "";
+
+  try {
+    // Try to parse as URL - if it's absolute, extract pathname + hash
+    const urlObj = new URL(url);
+    return urlObj.pathname + urlObj.hash;
+  } catch {
+    // If URL parsing fails, it's likely already a relative path
+    return url;
+  }
 }

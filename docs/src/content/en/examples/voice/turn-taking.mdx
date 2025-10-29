@@ -1,9 +1,9 @@
 ---
-title: Turn Taking
+title: "Example: AI Debate with Turn Taking | Voice | Mastra Docs"
 description: Example of using Mastra to create a multi-agent debate with turn-taking conversation flow.
 ---
 
-import { GithubLink } from "@/components/github-link";
+import GithubLink from "@site/src/components/GithubLink";
 
 # AI Debate with Turn Taking
 
@@ -13,7 +13,7 @@ The following code snippets demonstrate how to implement a multi-agent conversat
 
 First, we need to create two agents with distinct personalities and voice capabilities:
 
-```typescript filename="src/mastra/agents/index.ts"
+```typescript title="src/mastra/agents/index.ts"
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { OpenAIVoice } from "@mastra/voice-openai";
@@ -43,7 +43,7 @@ export const skepticAgent = new Agent({
 
 Next, register both agents with your Mastra instance:
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 import { PinoLogger } from "@mastra/loggers";
 import { Mastra } from "@mastra/core/mastra";
 import { optimistAgent, skepticAgent } from "./agents";
@@ -64,7 +64,7 @@ export const mastra = new Mastra({
 
 This example demonstrates how to manage the turn-taking flow between agents, ensuring each agent responds to the previous agent's statements:
 
-```typescript filename="src/debate/turn-taking.ts"
+```typescript title="src/debate/turn-taking.ts"
 import { mastra } from "../../mastra";
 import { playAudio, Recorder } from "@mastra/node-audio";
 import * as p from "@clack/prompts";
@@ -209,7 +209,7 @@ export async function runDebate(topic: string, turns: number = 3) {
 
 Here's a simple script to run the debate from the command line:
 
-```typescript filename="src/index.ts"
+```typescript title="src/index.ts"
 import { runDebate } from "./debate/turn-taking";
 import * as p from "@clack/prompts";
 
@@ -265,7 +265,7 @@ main().catch((error) => {
 
 For web applications, you can create a simple Next.js component that allows users to start a debate and listen to the agents' responses:
 
-```tsx filename="app/components/DebateInterface.tsx"
+```tsx title="app/components/DebateInterface.tsx"
 "use client";
 
 import { useState, useRef } from "react";

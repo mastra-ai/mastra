@@ -1,5 +1,5 @@
 ---
-title: "Next.js Tracing | Mastra Observability Documentation"
+title: "Next.js Tracing | Observability | Mastra Docs"
 description: "Set up OpenTelemetry tracing for Next.js applications"
 ---
 
@@ -11,7 +11,7 @@ Next.js requires additional configuration to enable OpenTelemetry tracing.
 
 Start by enabling the instrumentation hook in your Next.js config:
 
-```ts filename="next.config.ts" showLineNumbers copy
+```ts title="next.config.ts" showLineNumbers copy
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -27,7 +27,7 @@ export default nextConfig;
 
 Configure your Mastra instance:
 
-```typescript filename="mastra.config.ts" copy
+```typescript title="mastra.config.ts" copy
 import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
@@ -55,7 +55,7 @@ npm install @opentelemetry/api langfuse-vercel
 
 2. Create an instrumentation file:
 
-```ts filename="instrumentation.ts" copy
+```ts title="instrumentation.ts" copy
 import {
   NodeSDK,
   ATTR_SERVICE_NAME,
@@ -91,7 +91,7 @@ npm install @opentelemetry/api @vercel/otel
 
 2. Create an instrumentation file at the root of your project (or in the src folder if using one):
 
-```ts filename="instrumentation.ts" copy
+```ts title="instrumentation.ts" copy
 import { registerOTel } from "@vercel/otel";
 
 export function register() {

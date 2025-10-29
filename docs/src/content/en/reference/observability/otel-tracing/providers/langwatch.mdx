@@ -1,5 +1,5 @@
 ---
-title: "Reference: LangWatch Integration | Mastra Observability Docs"
+title: "Reference: LangWatch | Observability | Mastra Docs"
 description: Documentation for integrating LangWatch with Mastra, a specialized observability platform for LLM applications.
 ---
 
@@ -31,7 +31,7 @@ export const mastra = new Mastra({
     export: {
       type: "custom",
       exporter: new LangWatchExporter({
-        apiKey: process.env.LANGWATCH_API_KEY
+        apiKey: process.env.LANGWATCH_API_KEY,
       }),
     },
   },

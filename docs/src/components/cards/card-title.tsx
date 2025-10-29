@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@site/src/lib/utils";
 import { sluggify } from "./card-items-inner";
 
 export function CardTitle({

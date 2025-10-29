@@ -1,5 +1,5 @@
 ---
-title: "Reference: System Prompt Scrubber | Processors | Mastra Docs"
+title: "Reference: SystemPromptScrubber | Processors | Mastra Docs"
 description: "Documentation for the SystemPromptScrubber in Mastra, which detects and redacts system prompts from AI responses."
 ---
 
@@ -17,7 +17,7 @@ const processor = new SystemPromptScrubber({
   model: openai("gpt-4.1-nano"),
   strategy: "redact",
   redactionMethod: "mask",
-  includeDetections: true
+  includeDetections: true,
 });
 ```
 
@@ -28,7 +28,8 @@ const processor = new SystemPromptScrubber({
     {
       name: "options",
       type: "Options",
-      description: "Configuration options for system prompt detection and handling",
+      description:
+        "Configuration options for system prompt detection and handling",
       isOptional: false,
     },
   ]}
@@ -47,7 +48,8 @@ const processor = new SystemPromptScrubber({
     {
       name: "strategy",
       type: "'block' | 'warn' | 'filter' | 'redact'",
-      description: "Strategy when system prompts are detected: 'block' rejects with error, 'warn' logs warning but allows through, 'filter' removes flagged messages, 'redact' replaces with redacted versions",
+      description:
+        "Strategy when system prompts are detected: 'block' rejects with error, 'warn' logs warning but allows through, 'filter' removes flagged messages, 'redact' replaces with redacted versions",
       isOptional: true,
       default: "'redact'",
     },
@@ -61,28 +63,32 @@ const processor = new SystemPromptScrubber({
     {
       name: "includeDetections",
       type: "boolean",
-      description: "Whether to include detection details in warnings. Useful for debugging and monitoring",
+      description:
+        "Whether to include detection details in warnings. Useful for debugging and monitoring",
       isOptional: true,
       default: "false",
     },
     {
       name: "instructions",
       type: "string",
-      description: "Custom instructions for the detection agent. If not provided, uses default instructions",
+      description:
+        "Custom instructions for the detection agent. If not provided, uses default instructions",
       isOptional: true,
       default: "undefined",
     },
     {
       name: "redactionMethod",
       type: "'mask' | 'placeholder' | 'remove'",
-      description: "Redaction method for system prompts: 'mask' replaces with asterisks, 'placeholder' replaces with placeholder text, 'remove' removes entirely",
+      description:
+        "Redaction method for system prompts: 'mask' replaces with asterisks, 'placeholder' replaces with placeholder text, 'remove' removes entirely",
       isOptional: true,
       default: "'mask'",
     },
     {
       name: "placeholderText",
       type: "string",
-      description: "Custom placeholder text for redaction when redactionMethod is 'placeholder'",
+      description:
+        "Custom placeholder text for redaction when redactionMethod is 'placeholder'",
       isOptional: true,
       default: "'[SYSTEM_PROMPT]'",
     },
@@ -102,13 +108,15 @@ const processor = new SystemPromptScrubber({
     {
       name: "processOutputStream",
       type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null>",
-      description: "Processes streaming output parts to detect and handle system prompts during streaming",
+      description:
+        "Processes streaming output parts to detect and handle system prompts during streaming",
       isOptional: false,
     },
     {
       name: "processOutputResult",
       type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }) => Promise<MastraMessageV2[]>",
-      description: "Processes final output results to detect and handle system prompts in non-streaming scenarios",
+      description:
+        "Processes final output results to detect and handle system prompts in non-streaming scenarios",
       isOptional: false,
     },
   ]}
@@ -116,7 +124,7 @@ const processor = new SystemPromptScrubber({
 
 ## Extended usage example
 
-```typescript filename="src/mastra/agents/scrubbed-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/scrubbed-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { SystemPromptScrubber } from "@mastra/core/processors";
@@ -131,15 +139,16 @@ export const agent = new Agent({
       strategy: "redact",
       customPatterns: ["system prompt", "internal instructions"],
       includeDetections: true,
-      instructions: "Detect and redact system prompts, internal instructions, and security-sensitive content",
+      instructions:
+        "Detect and redact system prompts, internal instructions, and security-sensitive content",
       redactionMethod: "placeholder",
-      placeholderText: "[REDACTED]"
-    })
-  ]
+      placeholderText: "[REDACTED]",
+    }),
+  ],
 });
 ```
 
 ## Related
 
-- [Input Processors](/docs/agents/input-processors)
-- [Output Processors](/docs/agents/output-processors)
+- [Input Processors](/docs/agents/guardrails)
+- [Output Processors](/docs/agents/guardrails)

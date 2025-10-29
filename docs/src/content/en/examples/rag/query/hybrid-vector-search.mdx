@@ -3,7 +3,7 @@ title: "Example: Hybrid Vector Search | RAG | Mastra Docs"
 description: Example of using metadata filters with PGVector to enhance vector search results in Mastra.
 ---
 
-import { GithubLink } from "@/components/github-link";
+import GithubLink from "@site/src/components/GithubLink";
 
 # Hybrid Vector Search
 
@@ -23,7 +23,7 @@ The system implements filtered vector search using Mastra and PGVector. Here's w
 2. Shows how to filter by different metadata fields
 3. Demonstrates combining vector similarity with metadata filtering
 
-> **Note**: For examples of how to extract metadata from your documents, see the [Metadata Extraction](../embedding/metadata-extraction.mdx) guide.
+> **Note**: For examples of how to extract metadata from your documents, see the [Metadata Extraction](../embedding/metadata-extraction) guide.
 >
 > To learn how to create and store embeddings, see the [Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) guide.
 
@@ -33,7 +33,7 @@ The system implements filtered vector search using Mastra and PGVector. Here's w
 
 Make sure to set up your environment variables:
 
-```bash filename=".env"
+```bash title=".env"
 OPENAI_API_KEY=your_openai_api_key_here
 POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
@@ -42,7 +42,7 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 
 Import the necessary dependencies:
 
-```typescript copy showLineNumbers filename="src/index.ts"
+```typescript copy showLineNumbers title="src/index.ts"
 import { embed } from "ai";
 import { PgVector } from "@mastra/pg";
 import { openai } from "@ai-sdk/openai";
@@ -52,7 +52,7 @@ import { openai } from "@ai-sdk/openai";
 
 Initialize PgVector with your connection string:
 
-```typescript copy showLineNumbers{4} filename="src/index.ts"
+```typescript copy showLineNumbers{4} title="src/index.ts"
 const pgVector = new PgVector({
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
@@ -62,7 +62,7 @@ const pgVector = new PgVector({
 
 ### Filter by Metadata Value
 
-```typescript copy showLineNumbers{6} filename="src/index.ts"
+```typescript copy showLineNumbers{6} title="src/index.ts"
 // Create embedding for the query
 const { embedding } = await embed({
   model: openai.embedding("text-embedding-3-small"),

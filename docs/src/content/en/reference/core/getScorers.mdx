@@ -10,7 +10,7 @@ The `getScorers()` method returns all scorers that have been registered with the
 ## Usage Example
 
 ```typescript
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
 // Get all registered scorers
 const allScorers = mastra.getScorers();
@@ -30,7 +30,8 @@ This method takes no parameters.
     {
       name: "scorers",
       type: "Record<string, MastraScorer> | undefined",
-      description: "An object containing all registered scorers, where keys are scorer names and values are MastraScorer instances. Returns undefined if no scorers are registered.",
+      description:
+        "An object containing all registered scorers, where keys are scorer names and values are MastraScorer instances. Returns undefined if no scorers are registered.",
     },
   ]}
 />

@@ -1,13 +1,13 @@
 ---
-title: "Reference: Completeness | Metrics | Evals | Mastra Docs"
+title: "Reference: CompletenessMetric | Evals | Mastra Docs"
 description: Documentation for the Completeness Metric in Mastra, which evaluates how thoroughly LLM outputs cover key elements present in the input.
 ---
 
-import { ScorerCallout } from '@/components/scorer-callout'
-
 # CompletenessMetric
 
-<ScorerCallout />
+:::info Scorers
+This documentation refers to the legacy evals API. For the latest scorer features, see [Scorers](/docs/scorers/overview).
+:::
 
 The `CompletenessMetric` class evaluates how thoroughly an LLM's output covers the key elements present in the input. It analyzes nouns, verbs, topics, and terms to determine coverage and provides a detailed completeness score.
 
@@ -130,7 +130,6 @@ The metric evaluates completeness through linguistic element coverage analysis.
 ### Scoring Process
 
 1. Extracts key elements:
-
    - Nouns and named entities
    - Action verbs
    - Topic-specific terms

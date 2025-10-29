@@ -250,11 +250,11 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | { type: 'waitForEvent'; event: string; step: Step; timeout?: number }
   | {
       type: 'parallel';
-      steps: StepFlowEntry[];
+      steps: { type: 'step'; step: Step }[];
     }
   | {
       type: 'conditional';
-      steps: StepFlowEntry[];
+      steps: { type: 'step'; step: Step }[];
       conditions: ConditionFunction<any, any, any, any, TEngineType>[];
       serializedConditions: { id: string; fn: string }[];
     }
@@ -307,11 +307,17 @@ export type SerializedStepFlowEntry =
     }
   | {
       type: 'parallel';
-      steps: SerializedStepFlowEntry[];
+      steps: {
+        type: 'step';
+        step: SerializedStep;
+      }[];
     }
   | {
       type: 'conditional';
-      steps: SerializedStepFlowEntry[];
+      steps: {
+        type: 'step';
+        step: SerializedStep;
+      }[];
       serializedConditions: { id: string; fn: string }[];
     }
   | {

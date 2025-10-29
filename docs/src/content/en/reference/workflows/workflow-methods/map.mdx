@@ -20,7 +20,8 @@ workflow.map(async ({ inputData }) => `${inputData.value} - map`
     {
       name: "mappingFunction",
       type: "(params: { inputData: any }) => any",
-      description: "Function that transforms input data and returns the mapped result",
+      description:
+        "Function that transforms input data and returns the mapped result",
       isOptional: false,
     },
   ]}
@@ -40,4 +41,4 @@ workflow.map(async ({ inputData }) => `${inputData.value} - map`
 
 ## Related
 
-- [Input data mapping](../../../docs/workflows/input-data-mapping.mdx)
+- [Input data mapping](/docs/workflows/input-data-mapping)

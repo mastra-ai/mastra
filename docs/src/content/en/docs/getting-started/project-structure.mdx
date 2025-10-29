@@ -1,9 +1,7 @@
 ---
-title: "Local Project Structure | Getting Started | Mastra Docs"
+title: "Project Structure | Getting Started | Mastra Docs"
 description: Guide on organizing folders and files in Mastra, including best practices and recommended structures.
 ---
-
-import { FileTree, Callout } from "nextra/components";
 
 # Project Structure
 
@@ -15,57 +13,51 @@ Mastra is a framework, but it's **unopinionated** about how you organize or colo
 
 A project created with the `create mastra` command looks like this:
 
-<FileTree>
-  <FileTree.Folder name="src" defaultOpen>
-    <FileTree.Folder name="mastra" defaultOpen>
-      <FileTree.Folder name="agents" defaultOpen>
-        <FileTree.File name="weather-agent.ts" />
-      </FileTree.Folder>
-      <FileTree.Folder name="tools" defaultOpen>
-        <FileTree.File name="weather-tool.ts" />
-      </FileTree.Folder>
-      <FileTree.Folder name="workflows" defaultOpen>
-        <FileTree.File name="weather-workflow.ts" />
-      </FileTree.Folder>
-      <FileTree.Folder name="scorers" defaultOpen>
-        <FileTree.File name="weather-scorer.ts" />
-      </FileTree.Folder>
-      <FileTree.File name="index.ts" />
-    </FileTree.Folder>
-  </FileTree.Folder>
-  <FileTree.File name=".env.example" />
-  <FileTree.File name="package.json" />
-  <FileTree.File name="tsconfig.json" />
-</FileTree>
+```
+src/
+├── mastra/
+│   ├── agents/
+│   │   └── weather-agent.ts
+│   ├── tools/
+│   │   └── weather-tool.ts
+│   ├── workflows/
+│   │   └── weather-workflow.ts
+│   ├── scorers/
+│   │   └── weather-scorer.ts
+│   └── index.ts
+├── .env.example
+├── package.json
+└── tsconfig.json
+```
 
-<Callout type="info">
+:::info
 Tip - Use the predefined files as templates. Duplicate and adapt them to quickly create your own agents, tools, workflows, etc.
-</Callout>
+:::
 
 ### Folders
 
 Folders organize your agent's resources, like agents, tools, and workflows.
 
-| Folder                 | Description |
-| ---------------------- | ------------ |
-| `src/mastra`           | Entry point for all Mastra-related code and configuration.|
-| `src/mastra/agents`    | Define and configure your agents - their behavior, goals, and tools. |
-| `src/mastra/workflows` | Define multi-step workflows that orchestrate agents and tools together. |
-| `src/mastra/tools`     | Create reusable tools that your agents can call |
-| `src/mastra/mcp`       | (Optional) Implement custom MCP servers to share your tools with external agents |
-| `src/mastra/scorers`   | (Optional) Define scorers for evaluating agent performance over time |
+| Folder                 | Description                                                                                                                              |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/mastra`           | Entry point for all Mastra-related code and configuration.                                                                               |
+| `src/mastra/agents`    | Define and configure your agents - their behavior, goals, and tools.                                                                     |
+| `src/mastra/workflows` | Define multi-step workflows that orchestrate agents and tools together.                                                                  |
+| `src/mastra/tools`     | Create reusable tools that your agents can call                                                                                          |
+| `src/mastra/mcp`       | (Optional) Implement custom MCP servers to share your tools with external agents                                                         |
+| `src/mastra/scorers`   | (Optional) Define scorers for evaluating agent performance over time                                                                     |
 | `src/mastra/public`    | (Optional) Contents are copied into the `.build/output` directory during the build process, making them available for serving at runtime |
 
 ### Top-level files
 
 Top-level files define how your Mastra project is configured, built, and connected to its environment.
 
-| File                  | Description |
-| --------------------- | ------------ |
-| `src/mastra/index.ts` | Central entry point where you configure and initialize Mastra. |
+| File                  | Description                                                                                                       |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `src/mastra/index.ts` | Central entry point where you configure and initialize Mastra.                                                    |
 | `.env.example`        | Template for environment variables - copy and rename to `.env` to add your secret [model provider](/models) keys. |
-| `package.json`        | Defines project metadata, dependencies, and available npm scripts. |
-| `tsconfig.json`       | Configures TypeScript options such as path aliases, compiler settings, and build output. |
+| `package.json`        | Defines project metadata, dependencies, and available npm scripts.                                                |
+| `tsconfig.json`       | Configures TypeScript options such as path aliases, compiler settings, and build output.                          |
 
 ## Next steps
 

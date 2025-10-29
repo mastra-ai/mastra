@@ -1,13 +1,13 @@
 ---
-title: "Reference: Textual Difference | Evals | Mastra Docs"
+title: "Reference: TextualDifferenceMetric | Evals | Mastra Docs"
 description: Documentation for the Textual Difference Metric in Mastra, which measures textual differences between strings using sequence matching.
 ---
 
-import { ScorerCallout } from '@/components/scorer-callout'
-
 # TextualDifferenceMetric
 
-<ScorerCallout />
+:::info Scorers
+This documentation refers to the legacy evals API. For the latest scorer features, see [Scorers](/docs/scorers/overview).
+:::
 
 The `TextualDifferenceMetric` class uses sequence matching to measure the textual differences between two strings. It provides detailed information about changes, including the number of operations needed to transform one text into another.
 
@@ -119,7 +119,6 @@ The metric calculates several measures:
 ### Scoring Process
 
 1. Analyzes textual differences:
-
    - Performs sequence matching between input and output
    - Counts the number of change operations required
    - Measures length differences

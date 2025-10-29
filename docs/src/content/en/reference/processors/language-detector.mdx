@@ -1,5 +1,5 @@
 ---
-title: "Reference: Language Detector | Processors | Mastra Docs"
+title: "Reference: LanguageDetector | Processors | Mastra Docs"
 description: "Documentation for the LanguageDetector in Mastra, which detects language and can translate content in AI responses."
 ---
 
@@ -17,7 +17,7 @@ const processor = new LanguageDetector({
   model: openai("gpt-4.1-nano"),
   targetLanguages: ["English", "en"],
   threshold: 0.8,
-  strategy: "translate"
+  strategy: "translate",
 });
 ```
 
@@ -28,7 +28,8 @@ const processor = new LanguageDetector({
     {
       name: "options",
       type: "Options",
-      description: "Configuration options for language detection and translation",
+      description:
+        "Configuration options for language detection and translation",
       isOptional: false,
     },
   ]}
@@ -47,42 +48,48 @@ const processor = new LanguageDetector({
     {
       name: "targetLanguages",
       type: "string[]",
-      description: "Target language(s) for the project. If content is detected in a different language, it may be translated. Can be language name ('English') or ISO code ('en')",
+      description:
+        "Target language(s) for the project. If content is detected in a different language, it may be translated. Can be language name ('English') or ISO code ('en')",
       isOptional: true,
       default: "['English', 'en']",
     },
     {
       name: "threshold",
       type: "number",
-      description: "Confidence threshold for language detection (0-1). Only process when detection confidence exceeds this threshold",
+      description:
+        "Confidence threshold for language detection (0-1). Only process when detection confidence exceeds this threshold",
       isOptional: true,
       default: "0.7",
     },
     {
       name: "strategy",
       type: "'detect' | 'translate' | 'block' | 'warn'",
-      description: "Strategy when non-target language is detected: 'detect' only detects language, 'translate' automatically translates to target language, 'block' rejects content not in target language, 'warn' logs warning but allows through",
+      description:
+        "Strategy when non-target language is detected: 'detect' only detects language, 'translate' automatically translates to target language, 'block' rejects content not in target language, 'warn' logs warning but allows through",
       isOptional: true,
       default: "'detect'",
     },
     {
       name: "preserveOriginal",
       type: "boolean",
-      description: "Whether to preserve original content in message metadata. Useful for audit trails and debugging",
+      description:
+        "Whether to preserve original content in message metadata. Useful for audit trails and debugging",
       isOptional: true,
       default: "true",
     },
     {
       name: "instructions",
       type: "string",
-      description: "Custom detection instructions for the agent. If not provided, uses default instructions",
+      description:
+        "Custom detection instructions for the agent. If not provided, uses default instructions",
       isOptional: true,
       default: "undefined",
     },
     {
       name: "minTextLength",
       type: "number",
-      description: "Minimum text length to perform detection. Short text is often unreliable for language detection",
+      description:
+        "Minimum text length to perform detection. Short text is often unreliable for language detection",
       isOptional: true,
       default: "10",
     },
@@ -96,7 +103,8 @@ const processor = new LanguageDetector({
     {
       name: "translationQuality",
       type: "'speed' | 'quality' | 'balanced'",
-      description: "Translation quality preference: 'speed' prioritizes fast translation, 'quality' prioritizes accuracy, 'balanced' balances between speed and quality",
+      description:
+        "Translation quality preference: 'speed' prioritizes fast translation, 'quality' prioritizes accuracy, 'balanced' balances between speed and quality",
       isOptional: true,
       default: "'quality'",
     },
@@ -116,7 +124,8 @@ const processor = new LanguageDetector({
     {
       name: "processInput",
       type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
-      description: "Processes input messages to detect language and optionally translate content before sending to LLM",
+      description:
+        "Processes input messages to detect language and optionally translate content before sending to LLM",
       isOptional: false,
     },
   ]}
@@ -124,7 +133,7 @@ const processor = new LanguageDetector({
 
 ## Extended usage example
 
-```typescript filename="src/mastra/agents/multilingual-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/multilingual-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { LanguageDetector } from "@mastra/core/processors";
@@ -140,15 +149,16 @@ export const agent = new Agent({
       threshold: 0.8,
       strategy: "translate",
       preserveOriginal: true,
-      instructions: "Detect language and translate non-English content to English while preserving original intent",
+      instructions:
+        "Detect language and translate non-English content to English while preserving original intent",
       minTextLength: 10,
       includeDetectionDetails: true,
-      translationQuality: "quality"
-    })
-  ]
+      translationQuality: "quality",
+    }),
+  ],
 });
 ```
 
 ## Related
 
-- [Input Processors](/docs/agents/input-processors)
+- [Input Processors](/docs/agents/guardrails)

@@ -515,17 +515,6 @@ describe('vNext Workflow Handlers', () => {
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
     });
 
-    it('should throw error when step is not provided', async () => {
-      await expect(
-        resumeWorkflowHandler({
-          mastra: mockMastra,
-          workflowId: 'test-workflow',
-          runId: 'test-run',
-          body: { step: '', resumeData: {} },
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'step required to resume workflow' }));
-    });
-
     it('should resume workflow run successfully', async () => {
       const run = await reusableWorkflow.createRunAsync({
         runId: 'test-run',

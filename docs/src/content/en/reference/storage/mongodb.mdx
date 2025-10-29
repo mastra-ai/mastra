@@ -1,5 +1,5 @@
 ---
-title: "MongoDB Storage | Storage System | Mastra Core"
+title: "Reference: MongoDB Storage | Storage | Mastra Docs"
 description: Documentation for the MongoDB storage implementation in Mastra.
 ---
 
@@ -40,8 +40,7 @@ const storage = new MongoDBStore({
     {
       name: "dbName",
       type: "string",
-      description:
-        "The name of the database you want the storage to use.",
+      description: "The name of the database you want the storage to use.",
       isOptional: false,
     },
     {
@@ -50,7 +49,7 @@ const storage = new MongoDBStore({
       description:
         "MongoDB client options for advanced configuration (SSL, connection pooling, etc.). See advanced configuration [here](https://www.mongodb.com/docs/drivers/node/current/connect/connection-options/).",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -87,7 +86,7 @@ const store2 = new MongoDBStore({
 The storage implementation handles collection creation and management automatically. It creates the following collections:
 
 - `mastra_workflow_snapshot`: Stores workflow state and execution data
-- `mastra_evals`: Stores evaluation results and metadata  
+- `mastra_evals`: Stores evaluation results and metadata
 - `mastra_threads`: Stores conversation threads
 - `mastra_messages`: Stores individual messages
 - `mastra_traces`: Stores telemetry and tracing data

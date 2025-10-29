@@ -34,7 +34,8 @@ await agent.listAgents();
     {
       name: "agents",
       type: "Promise<Record<string, Agent>>",
-      description: "A promise that resolves to a record of agent names to their corresponding Agent instances.",
+      description:
+        "A promise that resolves to a record of agent names to their corresponding Agent instances.",
     },
   ]}
 />
@@ -45,7 +46,7 @@ await agent.listAgents();
 import { RuntimeContext } from "@mastra/core/runtime-context";
 
 await agent.listAgents({
-  runtimeContext: new RuntimeContext()
+  runtimeContext: new RuntimeContext(),
 });
 ```
 
@@ -58,11 +59,12 @@ await agent.listAgents({
       type: "RuntimeContext",
       isOptional: true,
       defaultValue: "new RuntimeContext()",
-      description: "Runtime context for dependency injection and contextual information.",
+      description:
+        "Runtime context for dependency injection and contextual information.",
     },
   ]}
 />
 
 ## Related
 
-- [Agents overview](../../docs/agents/overview.mdx)
+- [Agents overview](/docs/agents/overview)

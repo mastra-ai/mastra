@@ -1,5 +1,7 @@
 ---
-title: "Branching, Merging, Conditions | Workflows (Legacy) | Mastra Docs"
+title: "Control Flow in Legacy Workflows: Branching, Merging, and Conditions | Workflows (Legacy) | Mastra Docs"
+sidebar_position: 7
+sidebar_label: "Control Flow"
 description: "Control flow in Mastra legacy workflows allows you to manage branching, merging, and conditions to construct legacy workflows that meet your logic requirements."
 ---
 
@@ -15,7 +17,7 @@ You can run multiple steps at the same time if they don't depend on each other. 
 myWorkflow.step(fetchUserData).step(fetchOrderData);
 ```
 
-See the [Parallel Steps](../../examples/workflows_legacy/parallel-steps.mdx) example for more details.
+See the [Parallel Steps](/examples/workflows_legacy/parallel-steps) example for more details.
 
 ## Sequential Execution
 
@@ -25,7 +27,7 @@ Sometimes you need to run steps in strict order to ensure outputs from one step 
 myWorkflow.step(fetchOrderData).then(validateData).then(processOrder);
 ```
 
-See the [Sequential Steps](../../examples/workflows_legacy/sequential-steps.mdx) example for more details.
+See the [Sequential Steps](/examples/workflows_legacy/sequential-steps) example for more details.
 
 ## Branching and Merging Paths
 
@@ -49,7 +51,7 @@ In this example:
 - Separately, stepA also triggers stepC, which in turn leads to stepE.
 - Separately, stepF is triggered when both stepD and stepE are completed.
 
-See the [Branching Paths](../../examples/workflows_legacy/branching-paths.mdx) example for more details.
+See the [Branching Paths](/examples/workflows_legacy/branching-paths) example for more details.
 
 ## Merging Multiple Branches
 
@@ -356,7 +358,7 @@ The `getStepResult` method provides a type-safe way to access step results. This
 
 For better type safety, you can provide a type parameter to `getStepResult`:
 
-```typescript showLineNumbers filename="src/mastra/workflows/get-step-result.ts" copy
+```typescript showLineNumbers title="src/mastra/workflows/get-step-result.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
@@ -395,7 +397,7 @@ const analyzeDataStep = new LegacyStep({
 
 The most type-safe approach is to reference the step directly in the `getStepResult` call:
 
-```typescript showLineNumbers filename="src/mastra/workflows/step-reference.ts" copy
+```typescript showLineNumbers title="src/mastra/workflows/step-reference.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
@@ -442,7 +444,7 @@ Variable mapping is an explicit way to define data flow between steps.
 This approach makes dependencies clear and provides good type safety.
 The data injected into the step is available in the `context.inputData` object, and typed based on the `inputSchema` of the step.
 
-```typescript showLineNumbers filename="src/mastra/workflows/variable-mapping.ts" copy
+```typescript showLineNumbers title="src/mastra/workflows/variable-mapping.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
@@ -495,14 +497,14 @@ workflow
   .commit();
 ```
 
-For more details on variable mapping, see the [Data Mapping with Workflow Variables](./variables.mdx) documentation.
+For more details on variable mapping, see the [Data Mapping with Workflow Variables](./variables) documentation.
 
 ### Using the Context Object
 
 The context object provides direct access to all step results and their outputs. This approach is more flexible but requires careful handling to maintain type safety.
 You can access step results directly through the `context.steps` object:
 
-```typescript showLineNumbers filename="src/mastra/workflows/context-access.ts" copy
+```typescript showLineNumbers title="src/mastra/workflows/context-access.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
@@ -537,7 +539,7 @@ workflow.step(fetchUserStep).then(processOrderStep).commit();
 For comprehensive type safety across your entire workflow, you can define types for all steps and pass them to the Workflow
 This allows you to get type safety for the context object on conditions, and on step results in the final workflow output.
 
-```typescript showLineNumbers filename="src/mastra/workflows/workflow-typing.ts" copy
+```typescript showLineNumbers title="src/mastra/workflows/workflow-typing.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
@@ -592,7 +594,7 @@ workflow
 
 In addition to step results, you can access the original trigger data that started the workflow:
 
-```typescript showLineNumbers filename="src/mastra/workflows/trigger-data.ts" copy
+```typescript showLineNumbers title="src/mastra/workflows/trigger-data.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
@@ -630,7 +632,7 @@ workflow.step(processOrderStep).commit();
 
 The data injected into the step is available in the `context.inputData` object, and typed based on the `inputSchema` of the step.
 
-```typescript showLineNumbers filename="src/mastra/workflows/resume-data.ts" copy
+```typescript showLineNumbers title="src/mastra/workflows/resume-data.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
@@ -678,7 +680,7 @@ console.log({ resumedResult });
 
 You can get typed access to the results of a workflow by injecting the step types into the `Workflow` type params:
 
-```typescript showLineNumbers filename="src/mastra/workflows/get-results.ts" copy
+```typescript showLineNumbers title="src/mastra/workflows/get-results.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
@@ -741,23 +743,19 @@ if (result.results.fetchUser.status === "success") {
 ### Best Practices for Data Flow
 
 1. **Use getStepResult with Step References for Type Safety**
-
    - Ensures TypeScript can infer the correct types
    - Catches type errors at compile time
 
 2. \*_Use Variable Mapping for Explicit Dependencies_
-
    - Makes data flow clear and maintainable
    - Provides good documentation of step dependencies
 
 3. **Define Output Schemas for Steps**
-
    - Validates data at runtime
    - Validates return type of the `execute` function
    - Improves type inference in TypeScript
 
 4. **Handle Missing Data Gracefully**
-
    - Always check if step results exist before accessing properties
    - Provide fallback values for optional data
 

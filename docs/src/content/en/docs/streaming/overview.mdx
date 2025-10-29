@@ -1,11 +1,9 @@
 ---
-title: "Streaming Overview | Streaming | Mastra"
+title: "Streaming Overview | Streaming | Mastra Docs"
 description: "Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced."
 ---
 
-
 # Streaming Overview
-
 
 Mastra supports real-time, incremental responses from agents and workflows, allowing users to see output as it’s generated instead of waiting for completion. This is useful for chat, long-form content, multi-step workflows, or any scenario where immediate feedback matters.
 
@@ -22,7 +20,7 @@ You can pass a single string for simple prompts, an array of strings when provid
 
 ### Using `Agent.stream()`
 
-A `textStream` breaks the response into chunks as it's generated, allowing output to stream progressively instead of arriving all at once.  Iterate over the `textStream` using a `for await` loop to inspect each stream chunk.
+A `textStream` breaks the response into chunks as it's generated, allowing output to stream progressively instead of arriving all at once. Iterate over the `textStream` using a `for await` loop to inspect each stream chunk.
 
 ```typescript {3,7} showLineNumbers copy
 const testAgent = mastra.getAgent("testAgent");
@@ -36,7 +34,7 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-> See [Agent.stream()](../../reference/agents/stream.mdx) for more information.
+> See [Agent.stream()](/reference/streaming/agents/stream) for more information.
 
 ### Output from `Agent.stream()`
 
@@ -58,7 +56,6 @@ An agent stream provides access to various response properties:
 - **`stream.finishReason`**: The reason the agent stopped streaming.
 - **`stream.usage`**: Token usage information.
 
-
 ### AI SDK v5 Compatibility
 
 AI SDK v5 uses `LanguageModelV2` for the model providers. If you are getting an error that you are using an AI SDK v4 model you will need to upgrade your model package to the next major version.
@@ -70,7 +67,7 @@ const testAgent = mastra.getAgent("testAgent");
 
 const stream = await testAgent.stream(
   [{ role: "user", content: "Help me organize my day" }],
-  { format: "aisdk" }
+  { format: "aisdk" },
 );
 
 for await (const chunk of stream.textStream) {
@@ -94,7 +91,7 @@ for await (const chunk of networkStream) {
 }
 ```
 
-> See [Agent.network()](../../reference/agents/network.mdx) for more information.
+> See [Agent.network()](/reference/agents/network) for more information.
 
 #### Network stream properties
 
@@ -107,15 +104,17 @@ The network stream provides access to execution information:
 ```typescript {9-11} showLineNumbers copy
 const testAgent = mastra.getAgent("testAgent");
 
-const networkStream = await testAgent.network("Research dolphins then write a report");
+const networkStream = await testAgent.network(
+  "Research dolphins then write a report",
+);
 
 for await (const chunk of networkStream) {
   console.log(chunk);
 }
 
-console.log('Final status:', await networkStream.status);
-console.log('Final result:', await networkStream.result);
-console.log('Token usage:', await networkStream.usage);
+console.log("Final status:", await networkStream.status);
+console.log("Final result:", await networkStream.result);
+console.log("Token usage:", await networkStream.usage);
 ```
 
 ## Streaming with workflows
@@ -131,8 +130,8 @@ const run = await testWorkflow.createRunAsync();
 
 const stream = await run.streamVNext({
   inputData: {
-    value: "initial data"
-  }
+    value: "initial data",
+  },
 });
 
 for await (const chunk of stream) {
@@ -140,7 +139,7 @@ for await (const chunk of stream) {
 }
 ```
 
-> See [Run.streamVNext()](../../reference/workflows/run-methods/streamVNext.mdx) for more information.
+> See Run.streamVNext() method documentation for more information.
 
 ### Output from `Run.stream()`
 
@@ -172,6 +171,6 @@ A workflow stream provides access to various response properties:
 
 ## Related
 
-- [Streaming events](./events.mdx)
-- [Using Agents](../agents/overview.mdx)
-- [Workflows overview](../workflows/overview.mdx)
+- [Streaming events](./events)
+- [Using Agents](/docs/agents/overview)
+- [Workflows overview](../workflows/overview)

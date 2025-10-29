@@ -1,14 +1,13 @@
 ---
-title: "Example: Completeness | Evals | Mastra Docs"
+title: "Example: Completeness Evaluation | Evals | Mastra Docs"
 description: Example of using the Completeness metric to evaluate how thoroughly responses cover input elements.
 ---
 
-import { GithubLink } from "@/components/github-link";
-import { ScorerCallout } from '@/components/scorer-callout'
-
 # Completeness Evaluation
 
-<ScorerCallout />
+:::note
+The Scorers API is currently in beta. We're actively working on improvements and appreciate your feedback. For questions or feature requests, please reach out on [Discord](https://discord.gg/mastra).
+:::
 
 Use `CompletenessMetric` to evaluate whether the response includes all key elements from the input. The metric accepts a `query` and a `response`, and returns a score and an `info` object with detailed element level comparisons.
 
@@ -22,7 +21,7 @@ npm install @mastra/evals
 
 In this example, the response contains every element from the input. The content matches exactly, resulting in full coverage.
 
-```typescript filename="src/example-complete-coverage.ts" showLineNumbers copy
+```typescript title="src/example-complete-coverage.ts" showLineNumbers copy
 import { CompletenessMetric } from "@mastra/evals/nlp";
 
 const metric = new CompletenessMetric();
@@ -65,7 +64,7 @@ The output receives a score of 1 because all input elements are present in the r
 
 In this example, the response includes all of the input elements, but also adds extra content that wasn’t in the original query.
 
-```typescript filename="src/example-partial-coverage.ts" showLineNumbers copy
+```typescript title="src/example-partial-coverage.ts" showLineNumbers copy
 import { CompletenessMetric } from "@mastra/evals/nlp";
 
 const metric = new CompletenessMetric();
@@ -108,7 +107,7 @@ The output receives a high score because no input elements are missing. However,
 
 In this example, the response contains only some of the elements from the input. Key terms are missing or altered, resulting in reduced coverage.
 
-```typescript filename="src/example-minimal-coverage.ts" showLineNumbers copy
+```typescript title="src/example-minimal-coverage.ts" showLineNumbers copy
 import { CompletenessMetric } from "@mastra/evals/nlp";
 
 const metric = new CompletenessMetric();
@@ -150,7 +149,8 @@ You can create a `CompletenessMetric` instance with default settings. No additio
 ```typescript showLineNumbers copy
 const metric = new CompletenessMetric();
 ```
-> See [CompletenessMetric](/reference/evals/completeness.mdx) for a full list of configuration options.
+
+> See [CompletenessMetric](/reference/evals/completeness) for a full list of configuration options.
 
 ## Understanding the results
 
@@ -193,6 +193,6 @@ An explanation for the score, with details including:
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/completeness"
 />

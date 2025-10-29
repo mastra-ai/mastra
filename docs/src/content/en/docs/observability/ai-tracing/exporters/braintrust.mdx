@@ -3,8 +3,6 @@ title: "Braintrust Exporter | AI Tracing | Observability | Mastra Docs"
 description: "Send AI traces to Braintrust for evaluation and monitoring"
 ---
 
-import { Callout } from "nextra/components";
-
 # Braintrust Exporter
 
 [Braintrust](https://www.braintrust.dev/) is an evaluation and monitoring platform that helps you measure and improve LLM application quality. The Braintrust exporter sends your AI traces to Braintrust, enabling systematic evaluation, scoring, and experimentation.
@@ -12,6 +10,7 @@ import { Callout } from "nextra/components";
 ## When to Use Braintrust
 
 Braintrust excels at:
+
 - **Evaluation workflows** - Systematic quality measurement
 - **Experiment tracking** - Compare model versions and prompts
 - **Dataset management** - Curate test cases and golden datasets
@@ -33,14 +32,14 @@ npm install @mastra/braintrust
 3. **API Key**: Generate in Braintrust Settings → API Keys
 4. **Environment Variables**: Set your credentials:
 
-```bash filename=".env"
+```bash title=".env"
 BRAINTRUST_API_KEY=sk-xxxxxxxxxxxxxxxx
 BRAINTRUST_PROJECT_NAME=my-project  # Optional, defaults to 'mastra-tracing'
 ```
 
 ### Basic Setup
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { BraintrustExporter } from "@mastra/braintrust";
 
@@ -48,7 +47,7 @@ export const mastra = new Mastra({
   observability: {
     configs: {
       braintrust: {
-        serviceName: 'my-service',
+        serviceName: "my-service",
         exporters: [
           new BraintrustExporter({
             apiKey: process.env.BRAINTRUST_API_KEY,
@@ -69,10 +68,10 @@ new BraintrustExporter({
   apiKey: process.env.BRAINTRUST_API_KEY!,
 
   // Optional settings
-  projectName: 'my-project',          // Default: 'mastra-tracing'
-  endpoint: 'https://api.braintrust.dev',  // Custom endpoint if needed
-  logLevel: 'info',                   // Diagnostic logging: debug | info | warn | error
-})
+  projectName: "my-project", // Default: 'mastra-tracing'
+  endpoint: "https://api.braintrust.dev", // Custom endpoint if needed
+  logLevel: "info", // Diagnostic logging: debug | info | warn | error
+});
 ```
 
 ## Related

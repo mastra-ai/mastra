@@ -1,14 +1,13 @@
 ---
-title: "Example: Answer Relevancy | Evals | Mastra Docs"
+title: "Example: Answer Relevancy Evaluation | Evals | Mastra Docs"
 description: Example of using the Answer Relevancy metric to evaluate response relevancy to queries.
 ---
 
-import { GithubLink } from "@/components/github-link";
-import { ScorerCallout } from '@/components/scorer-callout'
-
 # Answer Relevancy Evaluation
 
-<ScorerCallout />
+:::note
+The Scorers API is currently in beta. We're actively working on improvements and appreciate your feedback. For questions or feature requests, please reach out on [Discord](https://discord.gg/mastra).
+:::
 
 Use `AnswerRelevancyMetric` to evaluate how relevant the response is to the original query. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 
@@ -22,14 +21,15 @@ npm install @mastra/evals
 
 In this example, the response accurately addresses the input query with specific and relevant information.
 
-```typescript filename="src/example-high-answer-relevancy.ts" showLineNumbers copy
+```typescript title="src/example-high-answer-relevancy.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { AnswerRelevancyMetric } from "@mastra/evals/llm";
 
 const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"));
 
 const query = "What are the health benefits of regular exercise?";
-const response = "Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.";
+const response =
+  "Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.";
 
 const result = await metric.measure(query, response);
 
@@ -53,7 +53,7 @@ The output receives a high score because it accurately answers the query without
 
 In this example, the response addresses the query in part but includes additional information that isn’t directly relevant.
 
-```typescript filename="src/example-partial-answer-relevancy.ts" showLineNumbers copy
+```typescript title="src/example-partial-answer-relevancy.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { AnswerRelevancyMetric } from "@mastra/evals/llm";
 
@@ -85,14 +85,15 @@ The output receives a lower score because it partially answers the query. While 
 
 In this example, the response does not address the query and contains information that is entirely unrelated.
 
-```typescript filename="src/example-low-answer-relevancy.ts" showLineNumbers copy
+```typescript title="src/example-low-answer-relevancy.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { AnswerRelevancyMetric } from "@mastra/evals/llm";
 
 const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"));
 
 const query = "What are the benefits of meditation?";
-const response = "The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.";
+const response =
+  "The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.";
 
 const result = await metric.measure(query, response);
 
@@ -122,7 +123,8 @@ const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"), {
   scale: 1,
 });
 ```
-> See [AnswerRelevancyMetric](/reference/evals/answer-relevancy.mdx) for a full list of configuration options.
+
+> See [AnswerRelevancyMetric](/reference/evals/answer-relevancy) for a full list of configuration options.
 
 ## Understanding the results
 
@@ -157,6 +159,6 @@ An explanation for the score, with details including:
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/answer-relevancy"
 />

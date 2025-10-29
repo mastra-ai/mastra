@@ -20,7 +20,8 @@ mastra.setLogger({ logger: new PinoLogger({ name: "testLogger" }) });
     {
       name: "options",
       type: "{ logger: TLogger }",
-      description: "An object containing the logger instance to set for all components.",
+      description:
+        "An object containing the logger instance to set for all components.",
     },
   ]}
 />
@@ -32,7 +33,8 @@ mastra.setLogger({ logger: new PinoLogger({ name: "testLogger" }) });
     {
       name: "logger",
       type: "TLogger",
-      description: "The logger instance to set for all components (agents, workflows, etc.).",
+      description:
+        "The logger instance to set for all components (agents, workflows, etc.).",
     },
   ]}
 />
@@ -43,5 +45,5 @@ This method does not return a value.
 
 ## Related
 
-- [Logging overview](../../docs/observability/logging.mdx)
-- [Logger reference](../../reference/observability/logger.mdx)
+- [Logging overview](/docs/observability/logging)
+- [Logger reference](/reference/observability/logging/pino-logger)

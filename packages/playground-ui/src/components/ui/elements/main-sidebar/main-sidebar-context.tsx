@@ -20,18 +20,21 @@ export function useMainSidebar() {
   return context;
 }
 
-function stateInitializer() {
-  const storedState = window.localStorage.getItem(SIDEBAR_COOKIE_NAME);
-
-  return storedState === 'collapsed' ? 'collapsed' : 'default';
-}
-
 const setLocalStorage = (value: SidebarState) => {
   window.localStorage.setItem(SIDEBAR_COOKIE_NAME, value.toString());
 };
 
 export function MainSidebarProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = React.useState<SidebarState>(stateInitializer);
+  // Always start with 'default' to prevent hydration mismatch
+  const [state, setState] = React.useState<SidebarState>(() => 'default');
+
+  // Sync with localStorage after hydration
+  React.useLayoutEffect(() => {
+    const storedState = window.localStorage.getItem(SIDEBAR_COOKIE_NAME);
+    if (storedState === 'collapsed' || storedState === 'default') {
+      setState(storedState);
+    }
+  }, []);
 
   const toggleSidebar = React.useCallback(() => {
     setLocalStorage(state === 'default' ? 'collapsed' : 'default');

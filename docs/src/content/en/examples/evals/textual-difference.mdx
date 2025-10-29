@@ -1,14 +1,13 @@
 ---
-title: "Example: Textual Difference | Evals | Mastra Docs"
+title: "Example: Textual Difference Evaluation | Evals | Mastra Docs"
 description: Example of using the Textual Difference metric to evaluate similarity between text strings by analyzing sequence differences and changes.
 ---
 
-import { GithubLink } from "@/components/github-link";
-import { ScorerCallout } from '@/components/scorer-callout'
-
 # Textual Difference Evaluation
 
-<ScorerCallout />
+:::note
+The Scorers API is currently in beta. We're actively working on improvements and appreciate your feedback. For questions or feature requests, please reach out on [Discord](https://discord.gg/mastra).
+:::
 
 Use `TextualDifferenceMetric` to evaluate the similarity between two text strings by analyzing sequence differences and edit operations. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing confidence, ratio, number of changes, and length difference.
 
@@ -22,8 +21,7 @@ npm install @mastra/evals
 
 In this example, the texts are exactly the same. The metric identifies complete similarity with a perfect score and no detected changes.
 
-
-```typescript filename="src/example-no-differences.ts" showLineNumbers copy
+```typescript title="src/example-no-differences.ts" showLineNumbers copy
 import { TextualDifferenceMetric } from "@mastra/evals/nlp";
 
 const metric = new TextualDifferenceMetric();
@@ -51,11 +49,12 @@ The metric returns a high score, indicating the texts are identical. The detaile
   }
 }
 ```
+
 ## Minor differences example
 
 In this example, the texts have small variations. The metric detects these minor differences and returns a moderate similarity score.
 
-```typescript filename="src/example-minor-differences.ts" showLineNumbers copy
+```typescript title="src/example-minor-differences.ts" showLineNumbers copy
 import { TextualDifferenceMetric } from "@mastra/evals/nlp";
 
 const metric = new TextualDifferenceMetric();
@@ -88,7 +87,7 @@ The metric returns a moderate score reflecting the small variations between the 
 
 In this example, the texts differ significantly. The metric detects extensive changes and returns a low similarity score.
 
-```typescript filename="src/example-major-differences.ts" showLineNumbers copy
+```typescript title="src/example-major-differences.ts" showLineNumbers copy
 import { TextualDifferenceMetric } from "@mastra/evals/nlp";
 
 const metric = new TextualDifferenceMetric();
@@ -125,7 +124,7 @@ You can create a `TextualDifferenceMetric` instance with default settings. No ad
 const metric = new TextualDifferenceMetric();
 ```
 
-> See [TextualDifferenceMetric](/reference/evals/textual-difference.mdx) for a full list of configuration options.
+> See [TextualDifferenceMetric](/reference/evals/textual-difference) for a full list of configuration options.
 
 ## Understanding the results
 
@@ -164,6 +163,6 @@ An explanation for the score, with details including:
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/textual-difference"
 />

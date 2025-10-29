@@ -13,7 +13,7 @@ The `.getThreadsByResourceIdPaginated()` method retrieves threads associated wit
 await memory.getThreadsByResourceIdPaginated({
   resourceId: "user-123",
   page: 0,
-  perPage: 10
+  perPage: 10,
 });
 ```
 
@@ -61,14 +61,15 @@ await memory.getThreadsByResourceIdPaginated({
     {
       name: "result",
       type: "Promise<PaginationInfo & { threads: StorageThreadType[] }>",
-      description: "A promise that resolves to paginated thread results with metadata",
+      description:
+        "A promise that resolves to paginated thread results with metadata",
     },
   ]}
 />
 
 ## Extended usage example
 
-```typescript filename="src/test-memory.ts" showLineNumbers copy
+```typescript title="src/test-memory.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
 const agent = mastra.getAgent("agent");
@@ -83,7 +84,7 @@ while (hasMorePages) {
     page: currentPage,
     perPage: 25,
     orderBy: "createdAt",
-    sortDirection: "ASC"
+    sortDirection: "ASC",
   });
 
   if (!threads) {
@@ -102,8 +103,8 @@ while (hasMorePages) {
 
 ## Related
 
-- [Memory Class Reference](/reference/memory/Memory.mdx)
-- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId.mdx) - Non-paginated version
-- [Getting Started with Memory](/docs/memory/overview.mdx) (Covers threads/resources concept)
-- [createThread](/reference/memory/createThread.mdx)
-- [getThreadById](/reference/memory/getThreadById.mdx)
+- [Memory Class Reference](/reference/memory/memory-class)
+- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId) - Non-paginated version
+- [Getting Started with Memory](/docs/memory/overview) (Covers threads/resources concept)
+- [createThread](/reference/memory/createThread)
+- [getThreadById](/reference/memory/getThreadById)

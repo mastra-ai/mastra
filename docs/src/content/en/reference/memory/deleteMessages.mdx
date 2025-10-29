@@ -40,7 +40,7 @@ await memory?.deleteMessages(["671ae63f-3a91-4082-a907-fe7de78e10ec"]);
 
 ## Extended usage example
 
-```typescript filename="src/test-memory.ts" showLineNumbers copy
+```typescript title="src/test-memory.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 import { UIMessageWithMetadata } from "@mastra/core/agent";
 
@@ -49,12 +49,14 @@ const memory = await agent.getMemory();
 
 const { uiMessages } = await memory!.query({ threadId: "thread-123" });
 
-const messageIds = uiMessages.map((message: UIMessageWithMetadata) => message.id);
+const messageIds = uiMessages.map(
+  (message: UIMessageWithMetadata) => message.id,
+);
 await memory?.deleteMessages([...messageIds]);
 ```
 
 ## Related
 
-- [Memory Class Reference](/reference/memory/Memory.mdx)
-- [query](/reference/memory/query.mdx)
-- [Getting Started with Memory](/docs/memory/overview.mdx)
+- [Memory Class Reference](/reference/memory/memory-class)
+- [query](/reference/memory/query)
+- [Getting Started with Memory](/docs/memory/overview)

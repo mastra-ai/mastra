@@ -1,5 +1,5 @@
 ---
-title: Runtime Context Example | Agents | Mastra Docs
+title: "Example: Runtime Context | Agents | Mastra Docs"
 description: Learn how to create and configure dynamic agents using runtime context to adapt behavior based on user subscription tiers.
 ---
 
@@ -11,7 +11,7 @@ This example demonstrates how to use runtime context to create a single agent th
 
 This example uses OpenAI models through Mastra's model router. Make sure to add `OPENAI_API_KEY` to your `.env` file.
 
-```bash filename=".env" copy
+```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -19,7 +19,7 @@ OPENAI_API_KEY=<your-api-key>
 
 Create an agent that adapts all its properties based on the user's subscription tier:
 
-```typescript filename="src/mastra/agents/support-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/support-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
@@ -29,7 +29,7 @@ import {
   knowledgeBase,
   ticketSystem,
   advancedAnalytics,
-  customIntegration
+  customIntegration,
 } from "../tools/support-tools";
 import { CharacterLimiterProcessor } from "../processors/character-limiter";
 import { responseQualityScorer } from "../scorers/response-quality";
@@ -44,7 +44,11 @@ export const supportAgent = new Agent({
   name: "dynamic-support-agent",
   description: "AI support agent that adapts to user subscription tiers",
 
-  instructions: async ({ runtimeContext }: { runtimeContext: RuntimeContext<SupportRuntimeContext> }) => {
+  instructions: async ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
     const userTier = runtimeContext.get("user-tier");
     const language = runtimeContext.get("language");
 
@@ -60,7 +64,11 @@ export const supportAgent = new Agent({
     ${userTier === "enterprise" ? "You have access to custom integrations and advanced analytics." : ""}`;
   },
 
-  model: ({ runtimeContext }: { runtimeContext: RuntimeContext<SupportRuntimeContext> }) => {
+  model: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
     const userTier = runtimeContext.get("user-tier");
 
     if (userTier === "enterprise") return "openai/gpt-5";
@@ -68,7 +76,11 @@ export const supportAgent = new Agent({
     return "openai/gpt-4o-mini";
   },
 
-  tools: ({ runtimeContext }: { runtimeContext: RuntimeContext<SupportRuntimeContext> }) => {
+  tools: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
     const userTier = runtimeContext.get("user-tier");
     const baseTools = [knowledgeBase, ticketSystem];
 
@@ -83,7 +95,11 @@ export const supportAgent = new Agent({
     return baseTools;
   },
 
-  memory: ({ runtimeContext }: { runtimeContext: RuntimeContext<SupportRuntimeContext> }) => {
+  memory: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
     const userTier = runtimeContext.get("user-tier");
 
     switch (userTier) {
@@ -115,7 +131,11 @@ export const supportAgent = new Agent({
     }
   },
 
-  inputProcessors: ({ runtimeContext }: { runtimeContext: RuntimeContext<SupportRuntimeContext> }) => {
+  inputProcessors: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
     const userTier = runtimeContext.get("user-tier");
 
     switch (userTier) {
@@ -129,21 +149,35 @@ export const supportAgent = new Agent({
     }
   },
 
-  outputProcessors: ({ runtimeContext }: { runtimeContext: RuntimeContext<SupportRuntimeContext> }) => {
+  outputProcessors: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
     const userTier = runtimeContext.get("user-tier");
 
     switch (userTier) {
       case "enterprise":
-        return [new TokenLimiterProcessor({ limit: 2000, strategy: "truncate" })];
+        return [
+          new TokenLimiterProcessor({ limit: 2000, strategy: "truncate" }),
+        ];
       case "pro":
-        return [new TokenLimiterProcessor({ limit: 500, strategy: "truncate" })];
+        return [
+          new TokenLimiterProcessor({ limit: 500, strategy: "truncate" }),
+        ];
       case "free":
       default:
-        return [new TokenLimiterProcessor({ limit: 100, strategy: "truncate" })];
+        return [
+          new TokenLimiterProcessor({ limit: 100, strategy: "truncate" }),
+        ];
     }
   },
 
-  scorers: ({ runtimeContext }: { runtimeContext: RuntimeContext<SupportRuntimeContext> }) => {
+  scorers: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
     const userTier = runtimeContext.get("user-tier");
 
     if (userTier === "enterprise") {
@@ -151,22 +185,22 @@ export const supportAgent = new Agent({
     }
 
     return [];
-  }
+  },
 });
 ```
 
-> See [Agent](../../reference/agents/agent.mdx) for a full list of configuration options.
+> See [Agent](/reference/agents/agent) for a full list of configuration options.
 
 ## Registering the Agent
 
 Register the agent in your main Mastra instance:
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { supportAgent } from "./agents/support-agent";
 
 export const mastra = new Mastra({
-  agents: { supportAgent }
+  agents: { supportAgent },
 });
 ```
 
@@ -174,7 +208,7 @@ export const mastra = new Mastra({
 
 ### Free Tier User
 
-```typescript filename="src/examples/free-tier-usage.ts" showLineNumbers copy
+```typescript title="src/examples/free-tier-usage.ts" showLineNumbers copy
 import "dotenv/config";
 import { mastra } from "../mastra";
 import { RuntimeContext } from "@mastra/core/runtime-context";
@@ -188,7 +222,7 @@ runtimeContext.set("language", "en");
 
 const response = await agent.generate(
   "I'm having trouble with API rate limits. Can you help?",
-  { runtimeContext }
+  { runtimeContext },
 );
 
 console.log(response.text);
@@ -196,7 +230,7 @@ console.log(response.text);
 
 ### Pro Tier User
 
-```typescript filename="src/examples/pro-tier-usage.ts" showLineNumbers copy
+```typescript title="src/examples/pro-tier-usage.ts" showLineNumbers copy
 import "dotenv/config";
 import { mastra } from "../mastra";
 import { RuntimeContext } from "@mastra/core/runtime-context";
@@ -210,7 +244,7 @@ runtimeContext.set("language", "es");
 
 const response = await agent.generate(
   "I need detailed analytics on my API usage patterns and optimization recommendations.",
-  { runtimeContext }
+  { runtimeContext },
 );
 
 console.log(response.text);
@@ -218,7 +252,7 @@ console.log(response.text);
 
 ### Enterprise Tier User
 
-```typescript filename="src/examples/enterprise-tier-usage.ts" showLineNumbers copy
+```typescript title="src/examples/enterprise-tier-usage.ts" showLineNumbers copy
 import "dotenv/config";
 import { mastra } from "../mastra";
 import { RuntimeContext } from "@mastra/core/runtime-context";
@@ -232,7 +266,7 @@ runtimeContext.set("language", "ja");
 
 const response = await agent.generate(
   "I need to integrate our custom webhook system with your platform and get real-time analytics on our usage across multiple environments.",
-  { runtimeContext }
+  { runtimeContext },
 );
 
 console.log(response.text);
@@ -250,8 +284,8 @@ This runtime context approach provides:
 
 ## Related
 
-- [Runtime Context Documentation](../../docs/server-db/runtime-context.mdx)
-- [Agent Reference](../../reference/agents/agent.mdx)
-- [Input Processors](../../docs/agents/input-processors.mdx)
-- [Output Processors](../../docs/agents/output-processors.mdx)
-- [Scorers](../../docs/scorers/overview.mdx)
+- [Runtime Context Documentation](/docs/server-db/runtime-context)
+- [Agent Reference](/reference/agents/agent)
+- [Input Processors](/docs/agents/guardrails)
+- [Output Processors](/docs/agents/guardrails)
+- [Scorers](/docs/scorers/overview)

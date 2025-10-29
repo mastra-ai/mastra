@@ -3,8 +3,6 @@ title: "Cloud Exporter | AI Tracing | Observability | Mastra Docs"
 description: "Send traces to Mastra Cloud for production monitoring"
 ---
 
-import { Callout } from "nextra/components";
-
 # Cloud Exporter
 
 The `CloudExporter` sends traces to Mastra Cloud for centralized monitoring and team collaboration. It's automatically enabled when using the default observability configuration with a valid access token.
@@ -12,6 +10,7 @@ The `CloudExporter` sends traces to Mastra Cloud for centralized monitoring and 
 ## When to Use CloudExporter
 
 CloudExporter is ideal for:
+
 - **Production monitoring** - Centralized trace visualization
 - **Team collaboration** - Share traces across your organization
 - **Advanced analytics** - Insights and performance metrics
@@ -25,13 +24,13 @@ CloudExporter is ideal for:
 2. **Access Token**: Generate in Mastra Cloud → Settings → API Tokens
 3. **Environment Variables**: Set your credentials:
 
-```bash filename=".env"
+```bash title=".env"
 MASTRA_CLOUD_ACCESS_TOKEN=mst_xxxxxxxxxxxxxxxx
 ```
 
 ### Basic Setup
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { CloudExporter } from "@mastra/core/ai-tracing";
 
@@ -39,9 +38,9 @@ export const mastra = new Mastra({
   observability: {
     configs: {
       production: {
-        serviceName: 'my-service',
+        serviceName: "my-service",
         exporters: [
-          new CloudExporter(),  // Uses MASTRA_CLOUD_ACCESS_TOKEN env var
+          new CloudExporter(), // Uses MASTRA_CLOUD_ACCESS_TOKEN env var
         ],
       },
     },
@@ -56,7 +55,7 @@ When using the default observability configuration, CloudExporter is automatical
 ```typescript
 export const mastra = new Mastra({
   observability: {
-    default: { enabled: true },  // Automatically includes CloudExporter if token exists
+    default: { enabled: true }, // Automatically includes CloudExporter if token exists
   },
 });
 ```
@@ -69,15 +68,15 @@ new CloudExporter({
   accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
 
   // Optional - for self-hosted Mastra Cloud
-  endpoint: 'https://cloud.your-domain.com',
+  endpoint: "https://cloud.your-domain.com",
 
   // Batching configuration
-  maxBatchSize: 1000,     // Max spans per batch
-  maxBatchWaitMs: 5000,   // Max wait before sending batch
+  maxBatchSize: 1000, // Max spans per batch
+  maxBatchWaitMs: 5000, // Max wait before sending batch
 
   // Diagnostic logging
-  logLevel: 'info',  // debug | info | warn | error
-})
+  logLevel: "info", // debug | info | warn | error
+});
 ```
 
 ## Viewing Traces
@@ -102,9 +101,11 @@ new CloudExporter({
 
 ## Performance
 
-<Callout type="info">
-  CloudExporter uses intelligent batching to optimize network usage. Traces are buffered and sent in batches, reducing overhead while maintaining near real-time visibility.
-</Callout>
+:::info
+
+CloudExporter uses intelligent batching to optimize network usage. Traces are buffered and sent in batches, reducing overhead while maintaining near real-time visibility.
+
+:::
 
 ### Batching Behavior
 

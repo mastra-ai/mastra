@@ -1,5 +1,5 @@
 ---
-title: "Reference: Upstash Vector Store | Vector Databases | Mastra Docs"
+title: "Reference: Upstash Vector Store | Vectors | Mastra Docs"
 description: Documentation for the UpstashVector class in Mastra, which provides vector search using Upstash Vector.
 ---
 
@@ -70,7 +70,8 @@ Note: This method is a no-op for Upstash as indexes are created automatically.
       name: "sparseVectors",
       type: "{ indices: number[], values: number[] }[]",
       isOptional: true,
-      description: "Array of sparse vectors for hybrid search. Each sparse vector must have matching indices and values arrays.",
+      description:
+        "Array of sparse vectors for hybrid search. Each sparse vector must have matching indices and values arrays.",
     },
     {
       name: "metadata",
@@ -105,7 +106,8 @@ Note: This method is a no-op for Upstash as indexes are created automatically.
       name: "sparseVector",
       type: "{ indices: number[], values: number[] }",
       isOptional: true,
-      description: "Optional sparse vector for hybrid search. Must have matching indices and values arrays.",
+      description:
+        "Optional sparse vector for hybrid search. Must have matching indices and values arrays.",
     },
     {
       name: "topK",
@@ -131,13 +133,15 @@ Note: This method is a no-op for Upstash as indexes are created automatically.
       name: "fusionAlgorithm",
       type: "FusionAlgorithm",
       isOptional: true,
-      description: "Algorithm used to combine dense and sparse search results in hybrid search (e.g., RRF - Reciprocal Rank Fusion)",
+      description:
+        "Algorithm used to combine dense and sparse search results in hybrid search (e.g., RRF - Reciprocal Rank Fusion)",
     },
     {
       name: "queryMode",
       type: "QueryMode",
       isOptional: true,
-      description: "Search mode: 'DENSE' for dense-only, 'SPARSE' for sparse-only, or 'HYBRID' for combined search",
+      description:
+        "Search mode: 'DENSE' for dense-only, 'SPARSE' for sparse-only, or 'HYBRID' for combined search",
     },
   ]}
 />
@@ -197,7 +201,8 @@ interface IndexStats {
     {
       name: "update",
       type: "object",
-      description: "Update object containing vector, sparse vector, and/or metadata",
+      description:
+        "Update object containing vector, sparse vector, and/or metadata",
     },
   ]}
 />
@@ -234,65 +239,68 @@ Upstash Vector supports hybrid search that combines semantic search (dense vecto
 ### Basic Hybrid Usage
 
 ```typescript copy
-import { UpstashVector } from '@mastra/upstash';
+import { UpstashVector } from "@mastra/upstash";
 
 const vectorStore = new UpstashVector({
   url: process.env.UPSTASH_VECTOR_URL,
-  token: process.env.UPSTASH_VECTOR_TOKEN
+  token: process.env.UPSTASH_VECTOR_TOKEN,
 });
 
 // Upsert vectors with both dense and sparse components
-const denseVectors = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]];
+const denseVectors = [
+  [0.1, 0.2, 0.3],
+  [0.4, 0.5, 0.6],
+];
 const sparseVectors = [
   { indices: [1, 5, 10], values: [0.8, 0.6, 0.4] },
-  { indices: [2, 6, 11], values: [0.7, 0.5, 0.3] }
+  { indices: [2, 6, 11], values: [0.7, 0.5, 0.3] },
 ];
 
 await vectorStore.upsert({
-  indexName: 'hybrid-index',
+  indexName: "hybrid-index",
   vectors: denseVectors,
   sparseVectors: sparseVectors,
-  metadata: [{ title: 'Document 1' }, { title: 'Document 2' }]
+  metadata: [{ title: "Document 1" }, { title: "Document 2" }],
 });
 
 // Query with hybrid search
 const results = await vectorStore.query({
-  indexName: 'hybrid-index',
+  indexName: "hybrid-index",
   queryVector: [0.1, 0.2, 0.3],
   sparseVector: { indices: [1, 5], values: [0.9, 0.7] },
-  topK: 10
+  topK: 10,
 });
 ```
 
 ### Advanced Hybrid Search Options
 
 ```typescript copy
-import { FusionAlgorithm, QueryMode } from '@upstash/vector';
+import { FusionAlgorithm, QueryMode } from "@upstash/vector";
 
 // Query with specific fusion algorithm
 const fusionResults = await vectorStore.query({
-  indexName: 'hybrid-index',
+  indexName: "hybrid-index",
   queryVector: [0.1, 0.2, 0.3],
   sparseVector: { indices: [1, 5], values: [0.9, 0.7] },
   fusionAlgorithm: FusionAlgorithm.RRF,
-  topK: 10
+  topK: 10,
 });
 
 // Dense-only search
 const denseResults = await vectorStore.query({
-  indexName: 'hybrid-index',
+  indexName: "hybrid-index",
   queryVector: [0.1, 0.2, 0.3],
   queryMode: QueryMode.DENSE,
-  topK: 10
+  topK: 10,
 });
 
 // Sparse-only search
 const sparseResults = await vectorStore.query({
-  indexName: 'hybrid-index',
+  indexName: "hybrid-index",
   queryVector: [0.1, 0.2, 0.3], // Still required for index structure
   sparseVector: { indices: [1, 5], values: [0.9, 0.7] },
   queryMode: QueryMode.SPARSE,
-  topK: 10
+  topK: 10,
 });
 ```
 
@@ -301,13 +309,13 @@ const sparseResults = await vectorStore.query({
 ```typescript copy
 // Update both dense and sparse components
 await vectorStore.updateVector({
-  indexName: 'hybrid-index',
-  id: 'vector-id',
+  indexName: "hybrid-index",
+  id: "vector-id",
   update: {
     vector: [0.2, 0.3, 0.4],
     sparseVector: { indices: [2, 7, 12], values: [0.9, 0.8, 0.6] },
-    metadata: { title: 'Updated Document' }
-  }
+    metadata: { title: "Updated Document" },
+  },
 });
 ```
 

@@ -3,8 +3,6 @@ title: "Langfuse Exporter | AI Tracing | Observability | Mastra Docs"
 description: "Send AI traces to Langfuse for LLM observability and analytics"
 ---
 
-import { Callout } from "nextra/components";
-
 # Langfuse Exporter
 
 [Langfuse](https://langfuse.com/) is an open-source observability platform specifically designed for LLM applications. The Langfuse exporter sends your AI traces to Langfuse, providing detailed insights into model performance, token usage, and conversation flows.
@@ -12,6 +10,7 @@ import { Callout } from "nextra/components";
 ## When to Use Langfuse
 
 Langfuse is ideal when you need:
+
 - **LLM-specific analytics** - Token usage, costs, latency breakdown
 - **Conversation tracking** - Session-based trace grouping
 - **Quality scoring** - Manual and automated evaluation scores
@@ -32,7 +31,7 @@ npm install @mastra/langfuse
 2. **API Keys**: Create public/secret key pair in Langfuse Settings → API Keys
 3. **Environment Variables**: Set your credentials
 
-```bash filename=".env"
+```bash title=".env"
 LANGFUSE_PUBLIC_KEY=pk-lf-xxxxxxxxxxxx
 LANGFUSE_SECRET_KEY=sk-lf-xxxxxxxxxxxx
 LANGFUSE_BASE_URL=https://cloud.langfuse.com  # Or your self-hosted URL
@@ -40,7 +39,7 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com  # Or your self-hosted URL
 
 ### Basic Setup
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { LangfuseExporter } from "@mastra/langfuse";
 
@@ -48,7 +47,7 @@ export const mastra = new Mastra({
   observability: {
     configs: {
       langfuse: {
-        serviceName: 'my-service',
+        serviceName: "my-service",
         exporters: [
           new LangfuseExporter({
             publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
@@ -72,25 +71,27 @@ export const mastra = new Mastra({
 The Langfuse exporter supports two modes for sending traces:
 
 #### Realtime Mode (Development)
+
 Traces appear immediately in Langfuse dashboard, ideal for debugging:
 
 ```typescript
 new LangfuseExporter({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
   secretKey: process.env.LANGFUSE_SECRET_KEY!,
-  realtime: true,  // Flush after each event
-})
+  realtime: true, // Flush after each event
+});
 ```
 
 #### Batch Mode (Production)
+
 Better performance with automatic batching:
 
 ```typescript
 new LangfuseExporter({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
   secretKey: process.env.LANGFUSE_SECRET_KEY!,
-  realtime: false,  // Default - batch traces
-})
+  realtime: false, // Default - batch traces
+});
 ```
 
 ### Complete Configuration
@@ -102,17 +103,17 @@ new LangfuseExporter({
   secretKey: process.env.LANGFUSE_SECRET_KEY!,
 
   // Optional settings
-  baseUrl: process.env.LANGFUSE_BASE_URL,     // Default: https://cloud.langfuse.com
-  realtime: process.env.NODE_ENV === 'development',  // Dynamic mode selection
-  logLevel: 'info',  // Diagnostic logging: debug | info | warn | error
+  baseUrl: process.env.LANGFUSE_BASE_URL, // Default: https://cloud.langfuse.com
+  realtime: process.env.NODE_ENV === "development", // Dynamic mode selection
+  logLevel: "info", // Diagnostic logging: debug | info | warn | error
 
   // Langfuse-specific options
   options: {
-    environment: process.env.NODE_ENV,        // Shows in UI for filtering
-    version: process.env.APP_VERSION,         // Track different versions
-    release: process.env.GIT_COMMIT,          // Git commit hash
+    environment: process.env.NODE_ENV, // Shows in UI for filtering
+    version: process.env.APP_VERSION, // Track different versions
+    release: process.env.GIT_COMMIT, // Git commit hash
   },
-})
+});
 ```
 
 ## Related

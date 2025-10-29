@@ -1,5 +1,5 @@
 ---
-title: "Reference: PG Vector Store | Vector Databases | Mastra Docs"
+title: "Reference: PG Vector Store | Vectors | Mastra Docs"
 description: Documentation for the PgVector class in Mastra, which provides vector search using PostgreSQL with pgvector extension.
 ---
 
@@ -584,16 +584,18 @@ try {
 ### Performance Optimization
 
 #### IVFFlat Tuning
+
 - **lists parameter**: Set to `sqrt(n) * 2` where n is the number of vectors
 - More lists = better accuracy but slower build time
 - Fewer lists = faster build but potentially lower accuracy
 
 #### HNSW Tuning
-- **m parameter**: 
+
+- **m parameter**:
   - 8-16: Moderate accuracy, lower memory
   - 16-32: High accuracy, moderate memory
   - 32-64: Very high accuracy, high memory
-- **efConstruction**: 
+- **efConstruction**:
   - 32-64: Fast build, good quality
   - 64-128: Slower build, better quality
   - 128-256: Slowest build, best quality
@@ -601,6 +603,7 @@ try {
 ### Index Recreation Behavior
 
 The system automatically detects configuration changes and only rebuilds indexes when necessary:
+
 - Same configuration: Index is kept (no recreation)
 - Changed configuration: Index is dropped and rebuilt
 - This prevents the performance issues from unnecessary index recreations
@@ -617,10 +620,11 @@ The system automatically detects configuration changes and only rebuilds indexes
 The `PgVector` class exposes its underlying PostgreSQL connection pool as a public field:
 
 ```typescript
-pgVector.pool // instance of pg.Pool
+pgVector.pool; // instance of pg.Pool
 ```
 
 This enables advanced usage such as running direct SQL queries, managing transactions, or monitoring pool state. When using the pool directly:
+
 - You are responsible for releasing clients (`client.release()`) after use.
 - The pool remains accessible after calling `disconnect()`, but new queries will fail.
 - Direct access bypasses any validation or transaction logic provided by PgVector methods.

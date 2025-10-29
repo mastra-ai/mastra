@@ -26,6 +26,8 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
 
   #streamFinished = false;
 
+  #streamError: Error | undefined;
+
   #delayedPromises = {
     usage: new DelayedPromise<LanguageModelUsage>(),
     result: new DelayedPromise<TResult>(),
@@ -99,12 +101,25 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
               from: ChunkFrom.WORKFLOW,
               payload: {
                 workflowStatus: self.#status,
-                metadata: {},
+                metadata: self.#streamError
+                  ? {
+                      error: self.#streamError,
+                      errorMessage: self.#streamError?.message,
+                    }
+                  : {},
                 output: {
                   // @ts-ignore
                   usage: self.#usageCount,
                 },
               },
+            });
+
+            self.#delayedPromises.usage.resolve(self.#usageCount);
+
+            Object.entries(self.#delayedPromises).forEach(([key, promise]) => {
+              if (promise.status.type === 'pending') {
+                promise.reject(new Error(`promise '${key}' was not resolved or rejected when stream finished`));
+              }
             });
 
             self.#streamFinished = true;
@@ -176,6 +191,8 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
    */
   rejectResults(error: Error) {
     this.#delayedPromises.result.reject(error);
+    this.#status = 'failed';
+    this.#streamError = error;
   }
 
   /**
@@ -237,7 +254,12 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
               from: ChunkFrom.WORKFLOW,
               payload: {
                 workflowStatus: self.#status,
-                metadata: {},
+                metadata: self.#streamError
+                  ? {
+                      error: self.#streamError,
+                      errorMessage: self.#streamError?.message,
+                    }
+                  : {},
                 output: {
                   // @ts-ignore
                   usage: self.#usageCount,

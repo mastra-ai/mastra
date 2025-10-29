@@ -1,5 +1,5 @@
 ---
-title: "Create A Mastra Production Server"
+title: "Create a Mastra Production Server | Server & DB | Mastra Docs"
 description: "Learn how to configure and deploy a production-ready Mastra server with custom settings for APIs, CORS, and more"
 ---
 
@@ -29,7 +29,7 @@ adding additional server behaviour.
 
 You can configure server `port` and `timeout` in the Mastra instance.
 
-```typescript filename="src/mastra/index.ts" copy showLineNumbers
+```typescript title="src/mastra/index.ts" copy showLineNumbers
 import { Mastra } from "@mastra/core/mastra";
 
 export const mastra = new Mastra({
@@ -49,7 +49,7 @@ invoked for any HTTP method that matches the path.
 
 Mastra requires `module` and `moduleResolution` values that support modern Node.js versions. Older settings like `CommonJS` or `node` are incompatible with Mastra’s packages and will cause resolution errors.
 
-```json {4-5} filename="tsconfig.json" copy
+```json {4-5} title="tsconfig.json" copy
 {
   "compilerOptions": {
     "target": "ES2022",
@@ -62,9 +62,7 @@ Mastra requires `module` and `moduleResolution` values that support modern Node.
     "noEmit": true,
     "outDir": "dist"
   },
-  "include": [
-    "src/**/*"
-  ]
+  "include": ["src/**/*"]
 }
 ```
 
@@ -74,7 +72,7 @@ Mastra requires `module` and `moduleResolution` values that support modern Node.
 
 Mastra allows you to configure CORS (Cross-Origin Resource Sharing) settings for your server.
 
-```typescript filename="src/mastra/index.ts" copy showLineNumbers
+```typescript title="src/mastra/index.ts" copy showLineNumbers
 import { Mastra } from "@mastra/core/mastra";
 
 export const mastra = new Mastra({

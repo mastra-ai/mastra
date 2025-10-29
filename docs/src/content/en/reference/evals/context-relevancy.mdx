@@ -1,13 +1,13 @@
 ---
-title: "Reference: Context Relevancy | Evals | Mastra Docs"
+title: "Reference: ContextRelevancyMetric | Evals | Mastra Docs"
 description: Documentation for the Context Relevancy Metric, which evaluates the relevance of retrieved context in RAG pipelines.
 ---
 
-import { ScorerCallout } from '@/components/scorer-callout'
-
 # ContextRelevancyMetric
 
-<ScorerCallout />
+:::info Scorers
+This documentation refers to the legacy evals API. For the latest scorer features, see [Scorers](/docs/scorers/overview).
+:::
 
 The `ContextRelevancyMetric` class evaluates the quality of your RAG (Retrieval-Augmented Generation) pipeline's retriever by measuring how relevant the retrieved context is to the input query. It uses an LLM-based evaluation system that first extracts statements from the context and then assesses their relevance to the input.
 
@@ -134,7 +134,6 @@ The metric evaluates how well retrieved context matches the query through binary
 ### Scoring Process
 
 1. Extracts statements from context:
-
    - Breaks down context into meaningful units
    - Preserves semantic relationships
 
