@@ -8,6 +8,7 @@ import * as fsExtra from 'fs-extra';
 import type { Plugin, RollupWatcherEvent } from 'rollup';
 
 import { devLogger } from '../../utils/dev-logger.js';
+import { shouldSkipDotenvLoading } from '../utils.js';
 
 export class DevBundler extends Bundler {
   private customEnvFile?: string;
@@ -18,6 +19,11 @@ export class DevBundler extends Bundler {
   }
 
   getEnvFiles(): Promise<string[]> {
+    // Skip loading .env files if MASTRA_SKIP_DOTENV is set
+    if (shouldSkipDotenvLoading()) {
+      return Promise.resolve([]);
+    }
+
     const possibleFiles = ['.env.development', '.env.local', '.env'];
     if (this.customEnvFile) {
       possibleFiles.unshift(this.customEnvFile);
