@@ -987,13 +987,12 @@ export class Agent<
   }
 
   /**
-   * Resets the agent's model to the original model that was set during construction.
-   * This restores the original LanguageModelV2 or model configuration that may have
-   * been overwritten by __updateModel().
+   * Resets the agent's model to the original model set during construction.
+   * Clones arrays to prevent reordering mutations from affecting the original snapshot.
    * @internal
    */
   __resetToOriginalModel() {
-    this.model = this.#originalModel;
+    this.model = Array.isArray(this.#originalModel) ? [...this.#originalModel] : this.#originalModel;
     this.logger.debug(`[Agents:${this.name}] Model reset to original.`, { model: this.model, name: this.name });
   }
 
