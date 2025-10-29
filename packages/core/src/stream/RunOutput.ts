@@ -101,10 +101,12 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
               from: ChunkFrom.WORKFLOW,
               payload: {
                 workflowStatus: self.#status,
-                metadata: {
-                  error: self.#streamError,
-                  errorMessage: self.#streamError?.message,
-                },
+                metadata: self.#streamError
+                  ? {
+                      error: self.#streamError,
+                      errorMessage: self.#streamError?.message,
+                    }
+                  : {},
                 output: {
                   // @ts-ignore
                   usage: self.#usageCount,
@@ -244,10 +246,12 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
               from: ChunkFrom.WORKFLOW,
               payload: {
                 workflowStatus: self.#status,
-                metadata: {
-                  error: self.#streamError,
-                  errorMessage: self.#streamError?.message,
-                },
+                metadata: self.#streamError
+                  ? {
+                      error: self.#streamError,
+                      errorMessage: self.#streamError?.message,
+                    }
+                  : {},
                 output: {
                   // @ts-ignore
                   usage: self.#usageCount,
