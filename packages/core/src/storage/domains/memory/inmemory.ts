@@ -8,6 +8,10 @@ import type {
   ThreadOrderBy,
   ThreadSortDirection,
   ThreadSortOptions,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListThreadsByResourceIdPaginatedInput,
+  StorageListThreadsByResourceIdPaginatedOutput,
 } from '../../types';
 import { safelyParseJSON } from '../../utils';
 import type { StoreOperations } from '../operations';
@@ -259,6 +263,18 @@ export class InMemoryMemory extends MemoryStorage {
     return list.get.all.v2();
   }
 
+  async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    throw new Error(
+      `listMessages is not yet implemented by this storage adapter (${this.constructor.name}). ` +
+        `This method is currently being rolled out across all storage adapters. ` +
+        `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
+    );
+  }
+
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
+    return this.getMessagesById({ messageIds, format: 'v2' });
+  }
+
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   async saveMessages(
@@ -435,6 +451,15 @@ export class InMemoryMemory extends MemoryStorage {
       perPage: perPage,
       hasMore: clonedThreads.length > (page + 1) * perPage,
     };
+  }
+
+  async listThreadsByResourceIdPaginated(
+    args: StorageListThreadsByResourceIdPaginatedInput,
+  ): Promise<StorageListThreadsByResourceIdPaginatedOutput> {
+    const { resourceId, limit, offset, orderBy, sortDirection } = args;
+    const page = Math.floor(offset / limit);
+    const perPage = limit;
+    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage, orderBy, sortDirection });
   }
 
   async getMessagesPaginated({
