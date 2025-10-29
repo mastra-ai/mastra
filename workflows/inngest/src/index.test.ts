@@ -9438,7 +9438,7 @@ describe('MastraInngestWorkflow', () => {
       });
     });
 
-    it.only('should be able to use an agent as a step', async ctx => {
+    it('should be able to use an agent as a step', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -9572,11 +9572,24 @@ describe('MastraInngestWorkflow', () => {
       });
 
       const values: StreamEvent[] = [];
+      const agentEvents: StreamEvent[] = [];
       for await (const value of streamOutput.fullStream) {
-        values.push(value);
+        if (value.type !== 'workflow-step-output') {
+          values.push(value);
+        } else {
+          agentEvents.push(value);
+        }
       }
 
       srv.close();
+
+      // @ts-ignore
+      expect(agentEvents.map(event => event?.payload?.output?.type)).toEqual([
+        'step-start',
+        'text-delta',
+        'step-finish',
+        'finish',
+      ]);
 
       // Updated to new vNext streaming format
       const expectedValues = [
@@ -9653,28 +9666,6 @@ describe('MastraInngestWorkflow', () => {
           type: 'workflow-step-start',
           from: 'WORKFLOW',
           runId: 'test-run-id',
-        },
-        {
-          args: {
-            prompt: 'Capital of France, just the name',
-          },
-          name: 'test-agent-1',
-          type: 'tool-call-streaming-start',
-        },
-        {
-          args: {
-            prompt: 'Capital of France, just the name',
-          },
-          argsTextDelta: 'Paris',
-          name: 'test-agent-1',
-          type: 'tool-call-delta',
-        },
-        {
-          args: {
-            prompt: 'Capital of France, just the name',
-          },
-          name: 'test-agent-1',
-          type: 'tool-call-streaming-finish',
         },
         {
           payload: {

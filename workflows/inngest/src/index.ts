@@ -39,6 +39,7 @@ import type {
   StepWithComponent,
   SuspendOptions,
   WorkflowStreamEvent,
+  AgentStepOptions,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import { NonRetriableError, RetryAfterError } from 'inngest';
@@ -775,7 +776,7 @@ export class InngestWorkflow<
           runtimeContext: new RuntimeContext(), // TODO
           resume,
           abortController: new AbortController(),
-          currentSpan: undefined, // TODO: Pass actual parent AI span from workflow execution context
+          // currentSpan: undefined, // TODO: Pass actual parent AI span from workflow execution context
           outputOptions,
           writableStream: new WritableStream<WorkflowStreamEvent>({
             write(chunk) {
@@ -862,6 +863,7 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
 >(
   agent: Agent<TStepId, any, any>,
+  agentOptions?: AgentStepOptions,
 ): Step<TStepId, any, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
 
 export function createStep<
@@ -908,6 +910,7 @@ export function createStep<
         outputSchema: TStepOutput;
         execute: (context: ToolExecutionContext<TStepInput>) => Promise<any>;
       }),
+  agentOptions?: AgentStepOptions,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType> {
   if (isAgent(params)) {
     return {
@@ -916,12 +919,23 @@ export function createStep<
       // @ts-ignore
       inputSchema: z.object({
         prompt: z.string(),
+        // resourceId: z.string().optional(),
+        // threadId: z.string().optional(),
       }),
       // @ts-ignore
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort, tracingContext }) => {
+      execute: async ({
+        inputData,
+        [EMITTER_SYMBOL]: emitter,
+        [STREAM_FORMAT_SYMBOL]: streamFormat,
+        runtimeContext,
+        tracingContext,
+        abortSignal,
+        abort,
+        writer,
+      }) => {
         let streamPromise = {} as {
           promise: Promise<string>;
           resolve: (value: string) => void;
@@ -937,54 +951,43 @@ export function createStep<
           args: inputData,
         };
 
-        if ((await params.getLLM()).getModel().specificationVersion === `v2`) {
-          const { fullStream } = await params.stream(inputData.prompt, {
-            runtimeContext,
-            tracingContext,
-            onFinish: result => {
-              streamPromise.resolve(result.text);
-            },
-            abortSignal,
-          });
+        let stream: ReadableStream<any>;
 
-          if (abortSignal.aborted) {
-            return abort();
-          }
-
-          await emitter.emit('watch-v2', {
-            type: 'tool-call-streaming-start',
-            ...(toolData ?? {}),
-          });
-
-          for await (const chunk of fullStream) {
-            if (chunk.type === 'text-delta') {
-              await emitter.emit('watch-v2', {
-                type: 'tool-call-delta',
-                ...(toolData ?? {}),
-                argsTextDelta: chunk.payload.text,
-              });
-            }
-          }
-        } else {
+        if ((await params.getModel()).specificationVersion === 'v1') {
           const { fullStream } = await params.streamLegacy(inputData.prompt, {
+            ...(agentOptions ?? {}),
+            // resourceId: inputData.resourceId,
+            // threadId: inputData.threadId,
             runtimeContext,
             tracingContext,
             onFinish: result => {
               streamPromise.resolve(result.text);
+              void agentOptions?.onFinish?.(result);
+            },
+            abortSignal,
+          });
+          stream = fullStream as any;
+        } else {
+          const modelOutput = await params.stream(inputData.prompt, {
+            ...(agentOptions ?? {}),
+            runtimeContext,
+            tracingContext,
+            onFinish: result => {
+              streamPromise.resolve(result.text);
+              void agentOptions?.onFinish?.(result);
             },
             abortSignal,
           });
 
-          if (abortSignal.aborted) {
-            return abort();
-          }
+          stream = modelOutput.fullStream;
+        }
 
+        if (streamFormat === 'legacy') {
           await emitter.emit('watch-v2', {
             type: 'tool-call-streaming-start',
             ...(toolData ?? {}),
           });
-
-          for await (const chunk of fullStream) {
+          for await (const chunk of stream) {
             if (chunk.type === 'text-delta') {
               await emitter.emit('watch-v2', {
                 type: 'tool-call-delta',
@@ -993,12 +996,19 @@ export function createStep<
               });
             }
           }
+          await emitter.emit('watch-v2', {
+            type: 'tool-call-streaming-finish',
+            ...(toolData ?? {}),
+          });
+        } else {
+          for await (const chunk of stream) {
+            await writer.write(chunk as any);
+          }
         }
 
-        await emitter.emit('watch-v2', {
-          type: 'tool-call-streaming-finish',
-          ...(toolData ?? {}),
-        });
+        if (abortSignal.aborted) {
+          return abort();
+        }
 
         return {
           text: await streamPromise.promise,

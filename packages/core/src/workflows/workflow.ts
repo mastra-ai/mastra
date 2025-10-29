@@ -48,7 +48,7 @@ import { getZodErrors } from './utils';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
-type AgentStepOptions = Omit<
+export type AgentStepOptions = Omit<
   AgentExecutionOptions & AgentStreamOptions,
   | 'format'
   | 'tracingContext'
