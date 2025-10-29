@@ -442,6 +442,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.6',
   ];
   readonly huggingface: readonly [
+    'MiniMaxAI/MiniMax-M2',
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
     'Qwen/Qwen3-Embedding-4B',
