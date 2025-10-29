@@ -2,7 +2,7 @@ import { tool } from 'ai-v5';
 import { convertArrayToReadableStream } from 'ai-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import type { loop } from '../loop';
+import type { LoopFn } from './utils';
 import {
   createTestModels,
   defaultSettings,
@@ -14,7 +14,7 @@ import {
   createMessageListWithUserMessage,
 } from './utils';
 
-export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
+export function resultObjectTests({ loopFn, runId }: { loopFn: LoopFn; runId: string }) {
   describe('result.warnings', () => {
     it('should resolve with warnings', async () => {
       const result = loopFn({

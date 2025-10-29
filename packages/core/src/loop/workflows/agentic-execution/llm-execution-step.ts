@@ -427,32 +427,34 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
   };
 }
 
-export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
-  models,
-  _internal,
-  messageId,
-  runId,
-  tools,
-  toolChoice,
-  messageList,
-  includeRawChunks,
-  modelSettings,
-  providerOptions,
-  options,
-  toolCallStreaming,
-  controller,
-  structuredOutput,
-  outputProcessors,
-  headers,
-  downloadRetries,
-  downloadConcurrency,
-  processorStates,
-}: OuterLLMRun<Tools, OUTPUT>) {
+export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>() {
   return createStep({
     id: 'llm-execution',
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
-    execute: async ({ inputData, bail, tracingContext }) => {
+    execute: async ({ inputData, bail, tracingContext, state }) => {
+      // Access dynamic data from workflow state (shared across nested workflows)
+      const {
+        models,
+        messageId,
+        runId,
+        tools,
+        toolChoice,
+        messageList,
+        modelSettings,
+        providerOptions,
+        options,
+        toolCallStreaming,
+        structuredOutput,
+        outputProcessors,
+        headers,
+        downloadRetries,
+        downloadConcurrency,
+        processorStates,
+        includeRawChunks,
+        controller,
+        _internal,
+      } = state;
       let modelResult;
       let warnings: any;
       let request: any;

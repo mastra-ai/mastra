@@ -3,7 +3,7 @@ import type { generateText as generateText5 } from 'ai-v5';
 import { convertArrayToReadableStream, mockId, MockLanguageModelV2 } from 'ai-v5/test';
 import { assertType, describe, expect, it } from 'vitest';
 import z from 'zod';
-import type { loop } from '../loop';
+import type { LoopFn } from './utils';
 import type { LoopOptions } from '../types';
 import {
   createMessageListWithUserMessage,
@@ -14,13 +14,12 @@ import {
   testUsage,
 } from './utils';
 
-export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
+export function generateTextTestsV5({ loopFn, runId }: { loopFn: LoopFn; runId: string }) {
   const generateText = async (args: Omit<LoopOptions, 'runId'>): ReturnType<typeof generateText5> => {
     const output = await loopFn({
       runId,
       ...args,
     });
-    // @ts-expect-error -- missing `experimental_output` in v5 getFullOutput
     return output.aisdk.v5.getFullOutput();
   };
 

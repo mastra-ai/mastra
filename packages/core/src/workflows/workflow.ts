@@ -1192,14 +1192,18 @@ export class Workflow<
     }
 
     const res = isResume
-      ? await run.resume({
-          resumeData,
-          step: resume.steps as any,
-          runtimeContext,
-          tracingContext,
-          outputOptions: { includeState: true, includeResumeLabels: true },
-          label: resume.label,
-        })
+      ? await (async () => {
+          return run.resume({
+            resumeData,
+            step: resume.steps as any,
+            runtimeContext,
+            tracingContext,
+            outputOptions: { includeState: true, includeResumeLabels: true },
+            label: resume.label,
+            // Pass the current state as stateOverride to ensure nested workflows get fresh execution objects
+            stateOverride: state,
+          });
+        })()
       : await run.start({
           inputData,
           runtimeContext,
@@ -2009,6 +2013,7 @@ export class Run<
     runtimeContext,
     tracingContext,
     tracingOptions,
+    stateOverride,
     outputOptions,
   }: {
     resumeData?: z.input<TInput>;
@@ -2020,6 +2025,7 @@ export class Run<
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
+    stateOverride?: Partial<z.infer<TState>>;
     outputOptions?: {
       includeState?: boolean;
       includeResumeLabels?: boolean;
@@ -2031,6 +2037,7 @@ export class Run<
       runtimeContext,
       tracingContext,
       tracingOptions,
+      stateOverride,
       outputOptions,
     });
   }
@@ -2047,6 +2054,7 @@ export class Run<
     tracingContext,
     tracingOptions,
     forEachIndex,
+    stateOverride,
     outputOptions,
   }: {
     resumeData?: z.input<TInput>;
@@ -2059,6 +2067,7 @@ export class Run<
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     forEachIndex?: number;
+    stateOverride?: Partial<z.infer<TState>>;
     outputOptions?: {
       includeState?: boolean;
       includeResumeLabels?: boolean;
@@ -2105,6 +2114,7 @@ export class Run<
           }),
           isVNext: true,
           forEachIndex,
+          stateOverride,
           outputOptions,
         });
 
@@ -2239,6 +2249,7 @@ export class Run<
       includeResumeLabels?: boolean;
     };
     forEachIndex?: number;
+    stateOverride?: Partial<z.infer<TState>>;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._resume({ ...params, retryCount: params.retryCount ?? params.runCount });
   }
@@ -2266,6 +2277,7 @@ export class Run<
       includeResumeLabels?: boolean;
     };
     forEachIndex?: number;
+    stateOverride?: Partial<z.infer<TState>>;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -2274,6 +2286,14 @@ export class Run<
 
     if (!snapshot) {
       throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
+    }
+
+    // Merge stateOverride with snapshot value (workflow state) to allow refreshing execution-specific objects
+    if (params.stateOverride) {
+      snapshot.value = {
+        ...snapshot.value,
+        ...params.stateOverride,
+      };
     }
 
     if (snapshot.status !== 'suspended') {

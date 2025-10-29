@@ -5,7 +5,7 @@ import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import type { LoopRun } from '../types';
-import { createAgenticLoopWorkflow } from './agentic-loop';
+import type { createAgenticLoopWorkflow } from './agentic-loop';
 
 /**
  * Check if a ReadableStreamDefaultController is open and can accept data.
@@ -26,22 +26,25 @@ export function isControllerOpen(controller: ReadableStreamDefaultController<any
 export function workflowLoopStream<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
->({
-  resumeContext,
-  requireToolApproval,
-  models,
-  toolChoice,
-  modelSettings,
-  _internal,
-  messageId,
-  runId,
-  messageList,
-  startTimestamp,
-  streamState,
-  agentId,
-  toolCallId,
-  ...rest
-}: LoopRun<Tools, OUTPUT>) {
+>(
+  agenticLoopWorkflow: ReturnType<typeof createAgenticLoopWorkflow>,
+  {
+    resumeContext,
+    requireToolApproval,
+    models,
+    toolChoice,
+    modelSettings,
+    _internal,
+    messageId,
+    runId,
+    messageList,
+    startTimestamp,
+    streamState,
+    agentId,
+    toolCallId,
+    ...rest
+  }: LoopRun<Tools, OUTPUT>,
+) {
   return new ReadableStream<ChunkType<OUTPUT>>({
     start: async controller => {
       const writer = new WritableStream<ChunkType<OUTPUT>>({
@@ -50,26 +53,38 @@ export function workflowLoopStream<
         },
       });
 
-      const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
-        resumeContext,
-        messageId: messageId!,
+      // Use the pre-created workflow instance passed as parameter
+      const workflowInputData = {
         models,
-        _internal,
-        modelSettings,
-        toolChoice,
-        controller,
-        writer,
+        messageId: messageId!,
         runId,
         messageList,
         startTimestamp,
         streamState,
+        tools: rest.tools,
+        toolChoice,
+        modelSettings,
+        providerOptions: rest.providerOptions,
+        options: rest.options,
+        toolCallStreaming: rest.toolCallStreaming,
+        structuredOutput: rest.structuredOutput,
+        outputProcessors: rest.outputProcessors,
+        headers: rest.headers,
+        downloadRetries: rest.downloadRetries,
+        downloadConcurrency: rest.downloadConcurrency,
+        processorStates: rest.processorStates,
+        stopWhen: rest.stopWhen,
+        maxSteps: rest.maxSteps,
+        returnScorerData: rest.returnScorerData,
+        modelSpanTracker: rest.modelSpanTracker,
+        experimental_generateMessageId: rest.experimental_generateMessageId,
+        includeRawChunks: rest.includeRawChunks,
+        // Dynamic params that change per execution
+        _internal,
+        controller,
+        writer,
         agentId,
-        ...rest,
-      });
-
-      if (rest.mastra) {
-        agenticLoopWorkflow.__registerMastra(rest.mastra);
-      }
+      };
 
       const initialData = {
         messageId: messageId!,
@@ -112,14 +127,36 @@ export function workflowLoopStream<
         runtimeContext.set('__mastra_requireToolApproval', true);
       }
 
+      // Execution-specific objects that need to be fresh on each execution (including resume)
+      const freshExecutionObjects = {
+        controller,
+        writer,
+        _internal,
+        messageList, // messageList needs to be fresh on resume as well
+        streamState, // streamState with fresh serialize/deserialize functions
+        tools: rest.tools, // tools contain functions that can't be serialized
+        modelSpanTracker: rest.modelSpanTracker, // modelSpanTracker contains functions that can't be serialized
+        models, // models contain provider functions that can't be serialized
+        options: rest.options, // options contains callback functions (onFinish, onStepFinish, etc.) that can't be serialized
+        outputProcessors: rest.outputProcessors, // output processors may contain functions that can't be serialized
+      };
+
+      // Store workflow data in initialState, merging with fresh execution objects
+      const initialState = { ...workflowInputData, ...freshExecutionObjects };
+
       const executionResult = resumeContext
-        ? await run.resume({
-            resumeData: resumeContext.resumeData,
-            tracingContext: rest.modelSpanTracker?.getTracingContext(),
-            label: toolCallId,
-          })
+        ? await (async () => {
+            return run.resume({
+              resumeData: resumeContext.resumeData,
+              tracingContext: rest.modelSpanTracker?.getTracingContext(),
+              label: toolCallId,
+              runtimeContext,
+              stateOverride: freshExecutionObjects, // Override stale execution-specific objects from snapshot
+            });
+          })()
         : await run.start({
             inputData: initialData,
+            initialState,
             tracingContext: rest.modelSpanTracker?.getTracingContext(),
             runtimeContext,
           });

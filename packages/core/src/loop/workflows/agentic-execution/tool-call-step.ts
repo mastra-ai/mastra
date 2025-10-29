@@ -3,27 +3,19 @@ import type { OutputSchema } from '../../../stream/base/schema';
 import { ChunkFrom } from '../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { createStep } from '../../../workflows';
-import type { OuterLLMRun } from '../../types';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
 
 export function createToolCallStep<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
->({
-  tools,
-  messageList,
-  options,
-  writer,
-  controller,
-  runId,
-  streamState,
-  modelSpanTracker,
-}: OuterLLMRun<Tools, OUTPUT>) {
+>() {
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
-    execute: async ({ inputData, suspend, resumeData, runtimeContext }) => {
+    execute: async ({ inputData, suspend, resumeData, runtimeContext, state }) => {
+      // Access dynamic data from workflow state (shared across nested workflows)
+      const { tools, messageList, options, runId, streamState, modelSpanTracker, controller, writer } = state;
       // If the tool was already executed by the provider, skip execution
       if (inputData.providerExecuted) {
         return {
@@ -34,7 +26,7 @@ export function createToolCallStep<
 
       const tool =
         tools?.[inputData.toolName] ||
-        Object.values(tools || {})?.find(tool => `id` in tool && tool.id === inputData.toolName);
+        Object.values(tools || {})?.find((tool: any) => `id` in tool && tool.id === inputData.toolName);
 
       if (!tool) {
         throw new Error(`Tool ${inputData.toolName} not found`);
@@ -93,7 +85,6 @@ export function createToolCallStep<
             }
           }
         }
-
         const toolOptions: MastraToolInvocationOptions = {
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,

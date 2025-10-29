@@ -11,10 +11,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { MastraModelOutput } from '../../stream/base/output';
-import type { loop } from '../loop';
+import type { LoopFn } from './utils';
 import { createMessageListWithUserMessage, createTestModels, defaultSettings, testUsage } from './utils';
 
-export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
+export function toolsTests({ loopFn, runId }: { loopFn: LoopFn; runId: string }) {
   describe.skip('provider-executed tools', () => {
     describe('single provider-executed tool call and result', () => {
       let result: MastraModelOutput;

@@ -11,7 +11,7 @@ import { MockLanguageModelV2 } from 'ai-v5/test';
 import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
-import type { loop } from '../loop';
+import type { LoopFn } from './utils';
 import { createMockServerResponse } from './mock-server-response';
 import { createMessageListWithUserMessage, mockDate, testUsage } from './utils';
 
@@ -85,7 +85,7 @@ export function verifyNoObjectGeneratedError(
   expect(noObjectGeneratedError.finishReason).toEqual(expected.finishReason);
 }
 
-export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
+export function streamObjectTests({ loopFn, runId }: { loopFn: LoopFn; runId: string }) {
   describe('loopFn', () => {
     describe('result.object auto consume promise', () => {
       it('should resolve object promise without manual stream consumption', async () => {
@@ -1138,7 +1138,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           await convertAsyncIterableToArray(output.objectStream);
 
           // consume expected error rejection
-          await output.object.catch(err => {
+          await output.object.catch((err: any) => {
             expect(err).toMatchInlineSnapshot(`[Error: Structured output validation failed
 ✖ Required
   → at content
@@ -1350,7 +1350,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           await convertAsyncIterableToArray(objectStream);
 
           // consume expected error rejection
-          await object.catch(err => {
+          await object.catch((err: any) => {
             expect(err).toMatchInlineSnapshot(`[Error: Structured output validation failed
 ✖ Required
   → at content

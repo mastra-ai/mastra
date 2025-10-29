@@ -83,6 +83,7 @@ import type {
   DynamicAgentInstructions,
 } from './types';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
+import { createAgenticLoopWorkflow } from '../loop/workflows/agentic-loop';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
@@ -159,6 +160,8 @@ export class Agent<
   #inputProcessors?: DynamicArgument<InputProcessor[]>;
   #outputProcessors?: DynamicArgument<OutputProcessor[]>;
   readonly #options?: AgentCreateOptions;
+  #prepareStreamWorkflow: ReturnType<typeof createPrepareStreamWorkflow>;
+  #agenticLoopWorkflow?: ReturnType<typeof createAgenticLoopWorkflow>;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -286,6 +289,27 @@ export class Agent<
 
     // @ts-ignore Flag for agent network messages
     this._agentNetworkAppend = config._agentNetworkAppend || false;
+
+    // Create the workflow once at instance level
+    // We'll pass execution-specific data (capabilities, saveQueueManager) as inputs
+    this.#prepareStreamWorkflow = createPrepareStreamWorkflow({
+      agentId: this.id,
+    });
+
+    // Create agentic-loop workflow once at instance level
+    this.#agenticLoopWorkflow = createAgenticLoopWorkflow({
+      logger: this.logger,
+      mastra: this.#mastra,
+    });
+
+    // Register workflows with mastra if available
+    if (this.#mastra) {
+      // This shouldn't be registered, because we manually choose to resume the inner workflow
+      // and don't need storage on the main workflow
+      // this.#prepareStreamWorkflow.__registerMastra(this.#mastra);
+      // Only register mastra on loop workflows (not other workflows)
+      this.#agenticLoopWorkflow.__registerMastra(this.#mastra);
+    }
   }
 
   getMastraInstance() {
@@ -854,6 +878,7 @@ export class Agent<
             models: enabledModels,
             mastra: this.#mastra,
             options: { tracingPolicy: this.#options?.tracingPolicy },
+            workflow: this.#agenticLoopWorkflow,
           });
         });
       } else {
@@ -1056,6 +1081,13 @@ export class Agent<
    */
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
+    // Register workflows with mastra for snapshot persistence
+    if (this.#prepareStreamWorkflow) {
+      this.#prepareStreamWorkflow.__registerMastra(mastra);
+    }
+    if (this.#agenticLoopWorkflow) {
+      this.#agenticLoopWorkflow.__registerMastra(mastra);
+    }
     // Mastra will be passed to the LLM when it's created in getLLM()
   }
 
@@ -3189,30 +3221,38 @@ export class Agent<
       llm,
     };
 
-    // Create the workflow with all necessary context
-    const executionWorkflow = createPrepareStreamWorkflow({
-      capabilities,
-      options: { ...options, methodType },
-      threadFromArgs,
-      resourceId,
+    // Use the instance-level workflow created in the constructor
+    const executionWorkflow = this.#prepareStreamWorkflow;
+
+    // Pass dynamic (call-level) arguments as workflow input
+    const run = await executionWorkflow.createRunAsync({
       runId,
-      runtimeContext,
-      agentAISpan: agentAISpan!,
-      methodType,
-      format: format as FORMAT,
-      instructions,
-      memoryConfig,
-      memory,
-      saveQueueManager,
-      returnScorerData: options.returnScorerData,
-      requireToolApproval: options.requireToolApproval,
-      resumeContext,
-      agentId: this.id,
-      toolCallId: options.toolCallId,
+      resourceId,
     });
 
-    const run = await executionWorkflow.createRunAsync();
-    const result = await run.start({ tracingContext: { currentSpan: agentAISpan } });
+    const result = await run.start({
+      inputData: {
+        options: { ...options, methodType },
+        threadFromArgs,
+        resourceId,
+        runId,
+        methodType,
+        format: format as FORMAT,
+        instructions,
+        memoryConfig,
+        memory,
+        returnScorerData: options.returnScorerData,
+        requireToolApproval: options.requireToolApproval,
+        resumeContext,
+        toolCallId: options.toolCallId,
+        // Pass execution-specific objects as inputs
+        capabilities,
+        saveQueueManager,
+        agentAISpan, // Pass the agent span directly to prevent it from being overwritten
+      },
+      runtimeContext,
+      tracingContext: { currentSpan: agentAISpan },
+    });
 
     return result;
   }

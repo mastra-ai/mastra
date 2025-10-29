@@ -5,30 +5,31 @@ import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
-import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(
-  { models, _internal, ...rest }: OuterLLMRun<Tools, OUTPUT>,
   llmExecutionStep: any,
 ) {
   return createStep({
     id: 'llmExecutionMappingStep',
     inputSchema: z.array(toolCallOutputSchema),
     outputSchema: llmIterationOutputSchema,
-    execute: async ({ inputData, getStepResult, bail }) => {
+    execute: async ({ inputData, getStepResult, bail, state }) => {
+      // Access dynamic data from workflow state (shared across nested workflows)
+      const { messageList, options, runId, experimental_generateMessageId, controller, _internal } = state;
+
       const initialResult = getStepResult(llmExecutionStep);
 
       if (inputData?.every(toolCall => toolCall?.result === undefined)) {
         const errorResults = inputData.filter(toolCall => toolCall?.error);
 
-        const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
+        const toolResultMessageId = experimental_generateMessageId?.() || _internal?.generateId?.();
 
         if (errorResults?.length) {
           errorResults.forEach(toolCall => {
             const chunk: ChunkType = {
               type: 'tool-error',
-              runId: rest.runId,
+              runId,
               from: ChunkFrom.AGENT,
               payload: {
                 error: toolCall.error,
@@ -38,10 +39,10 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
                 providerMetadata: toolCall.providerMetadata,
               },
             };
-            rest.controller.enqueue(chunk);
+            controller.enqueue(chunk);
           });
 
-          rest.messageList.add(
+          messageList.add(
             {
               id: toolResultMessageId,
               role: 'tool',
@@ -69,7 +70,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
         for (const toolCall of inputData) {
           const chunk: ChunkType = {
             type: 'tool-result',
-            runId: rest.runId,
+            runId,
             from: ChunkFrom.AGENT,
             payload: {
               args: toolCall.args,
@@ -81,19 +82,19 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
             },
           };
 
-          rest.controller.enqueue(chunk);
+          controller.enqueue(chunk);
 
           if (initialResult?.metadata?.modelVersion === 'v2') {
-            await rest.options?.onChunk?.({
+            await options?.onChunk?.({
               chunk: convertMastraChunkToAISDKv5({
                 chunk,
               }),
             } as any);
           }
 
-          const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
+          const toolResultMessageId = experimental_generateMessageId?.() || _internal?.generateId?.();
 
-          rest.messageList.add(
+          messageList.add(
             {
               id: toolResultMessageId,
               role: 'tool',
@@ -114,9 +115,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
         return {
           ...initialResult,
           messages: {
-            all: rest.messageList.get.all.aiV5.model(),
-            user: rest.messageList.get.input.aiV5.model(),
-            nonUser: rest.messageList.get.response.aiV5.model(),
+            all: messageList.get.all.aiV5.model(),
+            user: messageList.get.input.aiV5.model(),
+            nonUser: messageList.get.response.aiV5.model(),
           },
         };
       }

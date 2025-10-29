@@ -14,7 +14,7 @@ import {
 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import z from 'zod';
-import type { loop } from '../loop';
+import type { LoopFn } from './utils';
 import type { ChunkType } from '../../stream/types';
 import {
   createTestModels,
@@ -27,7 +27,7 @@ import {
 } from './utils';
 import { ModelSpanTracker } from '../../ai-tracing';
 
-export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
+export function optionsTests({ loopFn, runId }: { loopFn: LoopFn; runId: string }) {
   describe('options.abortSignal', () => {
     it('should forward abort signal to tool execution during streaming', async () => {
       const messageList = createMessageListWithUserMessage();
@@ -5769,7 +5769,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       const chunks = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
 
-      expect(chunks.filter(chunk => chunk.type === 'raw')).toMatchInlineSnapshot(`
+      expect(chunks.filter((chunk: any) => chunk.type === 'raw')).toMatchInlineSnapshot(`
           [
             {
               "rawValue": {
@@ -5822,7 +5822,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       const chunks = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
 
-      expect(chunks.filter(chunk => chunk.type === 'raw')).toHaveLength(0);
+      expect(chunks.filter((chunk: any) => chunk.type === 'raw')).toHaveLength(0);
     });
 
     it('should pass through the includeRawChunks flag correctly to the model', async () => {

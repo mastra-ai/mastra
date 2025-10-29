@@ -1,46 +1,28 @@
 import type { StepResult, ToolSet } from 'ai-v5';
 import { InternalSpans } from '../../../ai-tracing';
 import type { OutputSchema } from '../../../stream/base/schema';
-import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createWorkflow } from '../../../workflows';
-import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 import { isControllerOpen } from '../stream';
 
-interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>
-  extends LoopRun<Tools, OUTPUT> {
-  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
-  writer: WritableStream<ChunkType<OUTPUT>>;
+interface CreateAgenticLoopWorkflowOptions {
+  logger?: any;
+  mastra?: any;
 }
 
-export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(
-  params: AgenticLoopParams<Tools, OUTPUT>,
-) {
-  const { models, _internal, messageId, runId, toolChoice, messageList, modelSettings, controller, writer, ...rest } =
-    params;
-
-  // Track accumulated steps across iterations to pass to stopWhen
-  const accumulatedSteps: StepResult<Tools>[] = [];
-  // Track previous content to determine what's new in each step
-  let previousContentLength = 0;
-
+export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
+  logger,
+  mastra,
+}: CreateAgenticLoopWorkflowOptions) {
   const agenticExecutionWorkflow = createAgenticExecutionWorkflow<Tools, OUTPUT>({
-    messageId: messageId!,
-    models,
-    _internal,
-    modelSettings,
-    toolChoice,
-    controller,
-    writer,
-    messageList,
-    runId,
-    ...rest,
+    logger,
+    mastra,
   });
 
-  return createWorkflow({
+  const workflow = createWorkflow({
     id: 'agentic-loop',
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
@@ -55,8 +37,11 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       },
     },
   })
-    .dowhile(agenticExecutionWorkflow, async ({ inputData }) => {
+    .dowhile(agenticExecutionWorkflow, async ({ inputData, state, setState }) => {
       const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
+      // Access dynamic data from workflow state (shared across nested workflows)
+      const { stopWhen, runId, controller, accumulatedSteps = [], previousContentLength = 0 } = state;
+
       let hasFinishedSteps = false;
 
       const allContent: StepResult<Tools>['content'] = typedInputData.messages.nonUser.flatMap(
@@ -65,7 +50,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
 
       // Only include new content in this step (content added since the previous iteration)
       const currentContent = allContent.slice(previousContentLength);
-      previousContentLength = allContent.length;
+      const newPreviousContentLength = allContent.length;
 
       const currentStep: StepResult<Tools> = {
         content: currentContent,
@@ -93,14 +78,21 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         providerMetadata: typedInputData.metadata?.providerMetadata,
       };
 
-      accumulatedSteps.push(currentStep);
+      const newAccumulatedSteps = [...accumulatedSteps, currentStep];
+
+      // Update state with new accumulated steps and previous content length
+      setState({
+        ...state,
+        accumulatedSteps: newAccumulatedSteps,
+        previousContentLength: newPreviousContentLength,
+      });
 
       // Only call stopWhen if we're continuing (not on the final step)
-      if (rest.stopWhen && typedInputData.stepResult?.isContinued && accumulatedSteps.length > 0) {
+      if (stopWhen && typedInputData.stepResult?.isContinued && newAccumulatedSteps.length > 0) {
         const conditions = await Promise.all(
-          (Array.isArray(rest.stopWhen) ? rest.stopWhen : [rest.stopWhen]).map(condition => {
+          (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(condition => {
             return condition({
-              steps: accumulatedSteps,
+              steps: newAccumulatedSteps,
             });
           }),
         );
@@ -135,4 +127,11 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       return typedInputData.stepResult?.isContinued ?? false;
     })
     .commit();
+
+  // Register mastra with the workflow if provided
+  if (mastra) {
+    workflow.__registerMastra(mastra);
+  }
+
+  return workflow;
 }

@@ -4,8 +4,17 @@ import type {
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream, mockId } from 'ai-v5/test';
+import type { ToolSet } from 'ai-v5';
 import type { ModelManagerModelConfig } from '../../stream/types';
+import type { LoopOptions } from '../types';
+import type { OutputSchema } from '../../stream/base/schema';
 import { MessageList } from '../../agent/message-list';
+
+// Type for test loop function that matches the old single-parameter signature
+// Using any for return type to avoid generic type issues in tests
+export type LoopFn = <Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined>(
+  options: LoopOptions<Tools, OUTPUT>,
+) => any;
 
 export const mockDate = new Date('2024-01-01T00:00:00Z');
 
