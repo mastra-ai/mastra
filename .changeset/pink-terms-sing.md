@@ -2,4 +2,4 @@
 '@mastra/inngest': minor
 ---
 
-Update peer dependencies to match core package version bump (0.22.3)
+Update peer dependencies to match core package version bump (1.0.0)
