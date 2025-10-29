@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ChildProcess } from 'child_process';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('execa', () => ({
   execa: vi.fn(),
@@ -281,20 +281,17 @@ describe('dev command - inspect flag behavior', () => {
     });
   });
 
-  describe('mutual exclusivity', () => {
-    it('should not pass --inspect when both inspect and inspectBrk are provided', async () => {
+  describe('empty string edge case', () => {
+    it('should use default --inspect when inspect is empty string', async () => {
       const { dev } = await import('./dev');
-
-      const inspectValue = true && !true;
-      const inspectBrkValue = true;
 
       await dev({
         dir: undefined,
         root: process.cwd(),
         tools: undefined,
         env: undefined,
-        inspect: inspectValue,
-        inspectBrk: inspectBrkValue,
+        inspect: '',
+        inspectBrk: false,
         customArgs: undefined,
         https: false,
         debug: false,
@@ -306,8 +303,33 @@ describe('dev command - inspect flag behavior', () => {
       const callArgs = execaMock.mock.calls[0];
       const commands = callArgs[1] as string[];
 
-      expect(commands).not.toContain('--inspect');
+      expect(commands).toContain('--inspect');
+      expect(commands.some(cmd => cmd.startsWith('--inspect='))).toBe(false);
+    });
+
+    it('should use default --inspect-brk when inspectBrk is empty string', async () => {
+      const { dev } = await import('./dev');
+
+      await dev({
+        dir: undefined,
+        root: process.cwd(),
+        tools: undefined,
+        env: undefined,
+        inspect: false,
+        inspectBrk: '',
+        customArgs: undefined,
+        https: false,
+        debug: false,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(execaMock).toHaveBeenCalled();
+      const callArgs = execaMock.mock.calls[0];
+      const commands = callArgs[1] as string[];
+
       expect(commands).toContain('--inspect-brk');
+      expect(commands.some(cmd => cmd.startsWith('--inspect-brk='))).toBe(false);
     });
   });
 });

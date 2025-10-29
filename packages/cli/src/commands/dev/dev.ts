@@ -50,17 +50,16 @@ const startServer = async (
 
     const commands = [];
 
-    if (startOptions.inspect) {
-      const inspectFlag = typeof startOptions.inspect === 'string'
-        ? `--inspect=${startOptions.inspect}`
-        : '--inspect';
+    const inspect = startOptions.inspect === '' ? true : startOptions.inspect;
+    const inspectBrk = startOptions.inspectBrk === '' ? true : startOptions.inspectBrk;
+
+    if (inspect) {
+      const inspectFlag = typeof inspect === 'string' ? `--inspect=${inspect}` : '--inspect';
       commands.push(inspectFlag);
     }
 
-    if (startOptions.inspectBrk) {
-      const inspectBrkFlag = typeof startOptions.inspectBrk === 'string'
-        ? `--inspect-brk=${startOptions.inspectBrk}`
-        : '--inspect-brk';
+    if (inspectBrk) {
+      const inspectBrkFlag = typeof inspectBrk === 'string' ? `--inspect-brk=${inspectBrk}` : '--inspect-brk';
       commands.push(inspectBrkFlag);
     }
 

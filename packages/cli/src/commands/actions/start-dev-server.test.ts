@@ -23,7 +23,7 @@ describe('startDevServer - inspect flag integration', () => {
     vi.clearAllMocks();
   });
 
-  describe('boolean inspect values (current behavior)', () => {
+  describe('boolean inspect values', () => {
     it('should pass boolean true for inspect to dev function', async () => {
       const { startDevServer } = await import('./start-dev-server');
 
