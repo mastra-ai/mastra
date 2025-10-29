@@ -1,5 +1,5 @@
 import path from 'path';
-import { pathToFileURL } from 'url';
+import { readFileSync } from 'fs';
 import process from 'process';
 
 const baseUrl = process.env.MASTRA_DEPLOYMENT_URL || 'https://mastra.ai'; //'localhost:3000';
@@ -7,15 +7,10 @@ const baseUrl = process.env.MASTRA_DEPLOYMENT_URL || 'https://mastra.ai'; //'loc
 const loadRedirects = async () => {
   process.chdir('docs');
 
-  const configPath = path.resolve('vercel.json');
-  const configUrl = pathToFileURL(configPath).href;
-  const configModule = await import(configUrl);
+  const vercelJsonPath = path.resolve('vercel.json');
+  const vercelJson = JSON.parse(readFileSync(vercelJsonPath, 'utf-8'));
 
-  const resolvedConfig =
-    typeof configModule.default === 'function' ? await configModule.default() : configModule.default;
-
-  const redirectsFn = resolvedConfig?.redirects;
-  const redirects = typeof redirectsFn === 'function' ? await redirectsFn() : redirectsFn;
+  const redirects = vercelJson.redirects || [];
 
   return redirects;
 };
