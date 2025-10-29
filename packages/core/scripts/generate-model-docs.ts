@@ -630,7 +630,7 @@ Browse the directory of available models using the navigation on the left, or ex
 <CardGrid>
     <CardGridItem
       title="Gateways"
-      href="./models/gateways"
+      href="/models/gateways"
     >
       <div className="space-y-3">
         <div className="flex flex-col gap-2">
@@ -670,7 +670,7 @@ ${grouped.gateways.size > 3 ? `        <div className="text-sm text-gray-600 dar
     </CardGridItem>
     <CardGridItem
       title="Providers"
-      href="./models/providers"
+      href="/models/providers"
     >
       <div className="space-y-3">
         <div className="flex flex-col gap-2">
@@ -694,7 +694,7 @@ ${grouped.gateways.size > 3 ? `        <div className="text-sm text-gray-600 dar
 
 You can also discover models directly in your editor. Mastra provides full autocomplete for the \`model\` field - just start typing, and your IDE will show available options.
 
-Alternatively, browse and test models in the [Playground](/docs/server-db/local-dev-playground) UI.
+Alternatively, browse and test models in the [Playground](/docs/getting-started/studio) UI.
 
 :::info
 
@@ -920,7 +920,7 @@ ${allProviders
     p => `    <CardGridItem
       title="${p.name.replace(/&/g, '&amp;')}"
       description="${p.models.length} models"
-      href="./providers/${p.id}"
+      href="/models/providers/${p.id}"
       logo="${getLogoUrl(p.id)}"
     />`,
   )
@@ -986,7 +986,7 @@ ${getGeneratedComment()}
 
 ${provider.name} is available through the AI SDK. Install the provider package to use their models with Mastra.${aiSdkDocsText}
 
-To use this provider with Mastra agents, see the [Agent Overview documentation](/en/docs/agents/overview).
+To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/agents/overview).
 
 ## Installation
 
