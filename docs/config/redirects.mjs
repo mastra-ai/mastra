@@ -1453,4 +1453,9 @@ export const redirectList = [
     destination: "/:locale/docs/agents/overview",
     permanent: true,
   },
+  {
+    source: "/:locale/examples/agents/calling-agents",
+    destination: "/:locale/docs/agents/overview",
+    permanent: true,
+  },
 ];

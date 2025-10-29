@@ -148,20 +148,90 @@ export const mastra = new Mastra({
 });
 ```
 
-## Referencing an agent
+## Calling an agent
 
-You can call agents from workflow steps, tools, the Mastra Client, or the command line. Get a reference by calling `.getAgent()` on your `mastra` or `mastraClient` instance, depending on your setup:
+You can call agents from workflow steps, tools, or the Mastra Client. Get a reference by calling `.getAgent()` on your `mastra` or `mastraClient` instance, depending on your setup:
 
 ```typescript showLineNumbers copy
 const testAgent = mastra.getAgent("testAgent");
 ```
 <Callout type="info">
   <p>
-    `mastra.getAgent()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
+    `mastra.getAgent()` is preferred over directly importing an agent in to your file, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
   </p>
 </Callout>
 
-> See [Calling agents](../../examples/agents/calling-agents.mdx) for more information.
+### From a workflow step
+
+The `mastra` instance is passed as an argument to a workflow step’s `execute` function. It provides access to registered agents using `getAgent()`. Use this method to retrieve your agent, then call `generate()` with a prompt.
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  // ...
+  execute: async ({ mastra }) => {
+
+    const agent = mastra.getAgent("harryPotterAgent");
+    const response = await agent.generate("What is your favorite room in Hogwarts?");
+
+    console.log(response.text);
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .commit();
+```
+
+### From a tool
+
+The `mastra` instance is available within a tool’s `execute` function. Use `getAgent()` to retrieve a registered agent and call `generate()` with a prompt.
+
+```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const testTool = createTool({
+  // ...
+  execute: async ({ mastra }) => {
+
+    const agent = mastra.getAgent("harryPotterAgent");
+    const response = await agent.generate("What is your favorite room in Hogwarts?");
+
+    console.log(response!.text);
+  }
+});
+```
+
+### Using HTTP or curl
+
+You can interact with a registered agent by sending a `POST` request to your Mastra application's `/generate` endpoint. Include a `messages` array of role/content pairs.
+
+```bash
+curl -X POST http://localhost:4111/api/agents/harryPotterAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is your favorite room in Hogwarts?"
+      }
+    ]
+  }'| jq -r '.text'
+```
+
+**Example output**
+
+```text
+Well, if I had to choose, I'd say the Gryffindor common room.
+It's where I've spent some of my best moments with Ron and Hermione.
+The warm fire, the cozy armchairs, and the sense of camaraderie make it feel like home.
+Plus, it's where we plan all our adventures!
+```
 
 ## Generating responses
 
