@@ -293,10 +293,9 @@ If you want to adopt the new default behavior, you can optionally remove explici
 **Breaking Changes:**
 
 1. `MastraMessageV2` type renamed to `MastraDBMessage`
-2. Memory methods now return consistent object wrappers
-3. `format` parameter removed from all get methods
-4. MessageList `.v2()` methods renamed to `.db()`
-5. AI SDK format conversion moved to `@mastra/ai-sdk/ui`
+2. `format` parameter removed from all get methods, `MastraDBMessage` is always the returned format, which can then be converted as needed via helper utils in `@mastra/ai-sdk`
+3. MessageList `.v2()` methods renamed to `.db()`
+4. AI SDK format conversion moved to `@mastra/ai-sdk/ui`
 
 **Why these changes?**
 
@@ -313,41 +312,23 @@ Replace all instances of `MastraMessageV2` with `MastraDBMessage`:
 
 ```typescript
 // Before
-import { MastraMessageV2 } from '@mastra/core';
-const messages: MastraMessageV2[] = await memory.query({ threadId });
-
+import { MastraMessageV2 } from "@mastra/core";
+function yourCustomFunction(input: MastraMessageV2) {}
 // After
-import { MastraDBMessage } from '@mastra/core';
-const result = await memory.query({ threadId });
-const messages: MastraDBMessage[] = result.messages;
+import { MastraDBMessage } from "@mastra/core";
+function yourCustomFunction(input: MastraDBMessage) {}
 ```
 
 #### 2. Update Memory Method Return Types
 
-The `rememberMessages` method now returns an object wrapper for consistency:
+The `rememberMessages` method now returns an object wrapper for consistency between all methods:
 
 ```typescript
 // Before
 const messages = await memory.rememberMessages({ threadId, resourceId });
-// messages was MastraDBMessage[]
 
 // After
-const result = await memory.rememberMessages({ threadId, resourceId });
-const messages = result.messages; // MastraDBMessage[]
-```
-
-#### 3. Update MessageList Usage
-
-Replace all `.v2()` calls with `.db()`:
-
-```typescript
-// Before
-const allMessages = messageList.get.all.v2();
-const inputMessages = messageList.get.input.v2();
-
-// After
-const allMessages = messageList.get.all.db();
-const inputMessages = messageList.get.input.db();
+const { messages } = await memory.rememberMessages({ threadId, resourceId });
 ```
 
 #### 4. Update AI SDK Format Conversion
@@ -356,8 +337,8 @@ Message format conversion for AI SDK compatibility has moved to dedicated utilit
 
 ```typescript
 // Before
-import { toAISdkFormat } from '@mastra/ai-sdk/v5';
-const uiMessages = toAISdkFormat(messages);
+import { convertMessages } from '@mastra/core';
+const uiMessages = convertMessages(messages).to('AI.V5');
 
 // After
 import { toAISdkV5Messages, toAISdkV4Messages } from '@mastra/ai-sdk/ui';
@@ -375,15 +356,15 @@ The `format` parameter has been removed from all get methods. `MastraDBMessage` 
 
 ```typescript
 // Before
-const messages = await memory.getMessages({ threadId, format: 'v2' });
-const uiMessages = await memory.getMessages({ threadId, format: 'ui' });
+const messages = await memory.getMessages({ threadId, format: "v2" });
+const uiMessages = await memory.getMessages({ threadId, format: "ui" });
 
 // After
 const result = await memory.query({ threadId });
 const messages = result.messages; // Always MastraDBMessage[]
 
 // Use conversion functions for AI SDK formats
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
 const uiMessages = toAISdkV5Messages(messages);
 ```
 
