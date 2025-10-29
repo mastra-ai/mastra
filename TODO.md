@@ -276,28 +276,33 @@ const threadMessages = (await memory.query({ threadId: msgThreadId })).messages;
 
 ## 📋 Documentation Updates Needed
 
-### 15. Update Migration Guide
-**File:** `docs-new/docs/reference/agents/migration-guide.md`
+### 15. Update Migration Guide ✅ COMPLETE
+**File:** Created new migration guide at `docs/src/content/en/guides/migrations/message-format-unification.mdx`
 
-**Action:**
-- [ ] Document removal of `format` parameter from get methods
-- [ ] Document standardized return type `{ messages: MastraDBMessage[] }`
-- [ ] Document removal of `MastraMessageV2` type
-- [ ] Document MessageList `.v2()` → `.db()` rename
-- [ ] Add examples of new API usage
-- [ ] Add examples of using `@mastra/ai-sdk/ui` conversion functions
+**Status:** ✅ **COMPLETE**
+- [x] Created comprehensive migration guide for message format unification
+- [x] Documented removal of `format` parameter from get methods
+- [x] Documented standardized return type `{ messages: MastraDBMessage[] }`
+- [x] Documented removal of `MastraMessageV2` type
+- [x] Documented MessageList `.v2()` → `.db()` rename
+- [x] Added examples of new API usage
+- [x] Added examples of using `@mastra/ai-sdk/ui` conversion functions
+- [x] Included migration steps, troubleshooting, and complete before/after examples
 
 ---
 
-### 16. Update Memory API Docs
+### 16. Update Memory API Docs ✅ COMPLETE
 **Files:**
-- `docs-new/docs/reference/memory/*.md`
+- `docs/src/content/en/reference/memory/query.mdx` ✅
+- `docs/src/content/en/reference/memory/deleteMessages.mdx` ✅
+- `docs/src/content/en/reference/client-js/memory.mdx` ✅
 
-**Action:**
-- [ ] Update all memory method signatures
-- [ ] Update return type examples
-- [ ] Update code samples to use new API
-- [ ] Ensure consistency with migration guide
+**Status:** ✅ **COMPLETE**
+- [x] Updated all memory method signatures to reflect new API
+- [x] Updated return type examples to use `{ messages: MastraDBMessage[] }`
+- [x] Updated code samples to use new API (removed format parameter)
+- [x] Added AI SDK conversion examples using `@mastra/ai-sdk/ui`
+- [x] Ensured consistency with migration guide
 
 ---
 
