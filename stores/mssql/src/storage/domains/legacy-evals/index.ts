@@ -13,7 +13,7 @@ function transformEvalRow(row: Record<string, any>): EvalRow {
       testInfoValue = typeof row.test_info === 'string' ? JSON.parse(row.test_info) : row.test_info;
     } catch {}
   }
-  if (row.test_info) {
+  if (row.result) {
     try {
       resultValue = typeof row.result === 'string' ? JSON.parse(row.result) : row.result;
     } catch {}
@@ -63,7 +63,7 @@ export class LegacyEvalsMSSQL extends LegacyEvalsStorage {
       if (error && error.number === 208 && error.message && error.message.includes('Invalid object name')) {
         return [];
       }
-      console.error('Failed to get evals for the specified agent: ' + error?.message);
+      this.logger?.error?.('Failed to get evals for the specified agent:', error);
       throw error;
     }
   }
@@ -168,7 +168,7 @@ export class LegacyEvalsMSSQL extends LegacyEvalsStorage {
         error,
       );
       this.logger?.error?.(mastraError.toString());
-      this.logger?.trackException(mastraError);
+      this.logger?.trackException?.(mastraError);
       throw mastraError;
     }
   }

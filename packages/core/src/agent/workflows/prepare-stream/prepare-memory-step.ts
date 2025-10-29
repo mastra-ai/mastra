@@ -95,6 +95,7 @@ export function createPrepareMemoryStep<
           runtimeContext,
           tracingContext,
           messageList,
+          inputProcessorOverrides: options.inputProcessors,
         });
         return {
           threadExists: false,
@@ -233,6 +234,7 @@ export function createPrepareMemoryStep<
         runtimeContext,
         tracingContext,
         messageList,
+        inputProcessorOverrides: options.inputProcessors,
       });
 
       const systemMessages = messageList.getSystemMessages();

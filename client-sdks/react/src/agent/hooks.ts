@@ -10,6 +10,7 @@ import { useRef, useState } from 'react';
 import { toUIMessage } from '@/lib/ai-sdk';
 import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
 import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
+import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
 
 export interface MastraChatProps {
   agentId: string;
@@ -291,16 +292,21 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
 
   const sendMessage = async ({ mode = 'stream', ...args }: SendMessageArgs) => {
     const nextMessage: Omit<CoreUserMessage, 'id'> = { role: 'user', content: [{ type: 'text', text: args.message }] };
-    const messages = args.coreUserMessages ? [nextMessage, ...args.coreUserMessages] : [nextMessage];
+    const coreUserMessages = [nextMessage];
 
-    setMessages(s => [...s, { role: 'user', parts: [{ type: 'text', text: args.message }] }] as MastraUIMessage[]);
+    if (args.coreUserMessages) {
+      coreUserMessages.push(...args.coreUserMessages);
+    }
+
+    const uiMessages = coreUserMessages.map(fromCoreUserMessageToUIMessage);
+    setMessages(s => [...s, ...uiMessages] as MastraUIMessage[]);
 
     if (mode === 'generate') {
-      await generate({ ...args, coreUserMessages: messages });
+      await generate({ ...args, coreUserMessages });
     } else if (mode === 'stream') {
-      await stream({ ...args, coreUserMessages: messages });
+      await stream({ ...args, coreUserMessages });
     } else if (mode === 'network') {
-      await network({ ...args, coreUserMessages: messages });
+      await network({ ...args, coreUserMessages });
     }
   };
 

@@ -19,7 +19,7 @@ const octokit = new Octokit({
 /**
  * Get the details of the PR, create a new branch, cherry-pick the commit, push the branch, and create a PR.
  */
-async function github({ pull_number }: { pull_number: number }) {
+async function github({ pull_number, continue: continueAfterCherryPick }: { pull_number: number; continue: boolean }) {
   const prDetails = await octokit.pulls.get({
     owner,
     repo,
@@ -62,19 +62,48 @@ async function github({ pull_number }: { pull_number: number }) {
     });
   } catch {}
 
-  try {
-    childProcess.execSync(`git branch -D "${backportBranchName}"`, {
+  if (!continueAfterCherryPick) {
+    try {
+      childProcess.execSync(`git branch -D "${backportBranchName}"`, {
+        stdio: `inherit`,
+      });
+    } catch {}
+  }
+
+  if (continueAfterCherryPick) {
+    childProcess.execSync(`git switch "${backportBranchName}"`, {
       stdio: `inherit`,
     });
-  } catch {}
 
-  childProcess.execSync(`git checkout -b "${backportBranchName}"`, {
-    stdio: `inherit`,
-  });
+    try {
+      childProcess.execSync(`git cherry-pick --continue`, {
+        stdio: `inherit`,
+      });
+    } catch {}
+  } else {
+    childProcess.execSync(`git checkout -b "${backportBranchName}"`, {
+      stdio: `inherit`,
+    });
 
-  childProcess.execSync(`git cherry-pick -x ${commitSha}`, {
-    stdio: `inherit`,
-  });
+    try {
+      childProcess.execSync(`git cherry-pick -x ${commitSha}`, {
+        stdio: `inherit`,
+      });
+    } catch (err) {
+      console.error('[ERROR]: cherry-pick failed', err);
+
+      await octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: pull_number,
+        body: `Failed to backport the PR. Please manually create a backport PR.
+cc @${prDetails.data.user.login}
+      `,
+      });
+
+      return;
+    }
+  }
 
   childProcess.execSync(`git push origin +${backportBranchName} --force`, {
     stdio: `inherit`,
@@ -124,16 +153,23 @@ const main = defineCommand({
       description: 'The PR number to backport',
       required: true,
     },
+    continue: {
+      type: 'boolean',
+      description: 'continue after cherry-pick',
+      required: false,
+      default: false,
+    },
   },
   setup() {
     console.log('Starting backport script. If this script fails, finish the rest manually.');
   },
   async run({ args }) {
-    const { pr } = args;
+    const { pr, continue: continueAfterCherryPick } = args;
     try {
-      await github({ pull_number: Number(pr) });
+      await github({ pull_number: Number(pr), continue: continueAfterCherryPick });
     } catch (err) {
       console.error(err);
+      process.exit(1);
     } finally {
       console.log('Backport script completed.');
     }

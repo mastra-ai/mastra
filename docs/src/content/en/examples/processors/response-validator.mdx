@@ -11,33 +11,37 @@ This example shows how to create a custom output processor that validates AI res
 
 A custom output processor in Mastra implements the `Processor` interface with the `processOutputResult` method for final result validation. This processor examines the complete response and validates it contains all specified keywords.
 
-```typescript filename="src/mastra/processors/response-validator.ts" showLineNumbers copy
+```typescript title="src/mastra/processors/response-validator.ts" showLineNumbers copy
 import type { Processor, MastraMessageV2 } from "@mastra/core/processors";
 
 export class ResponseValidator implements Processor {
-  readonly name = 'response-validator';
-  
+  readonly name = "response-validator";
+
   constructor(private requiredKeywords: string[] = []) {}
 
-  processOutputResult({ messages, abort }: { 
-    messages: MastraMessageV2[]; 
-    abort: (reason?: string) => never 
+  processOutputResult({
+    messages,
+    abort,
+  }: {
+    messages: MastraMessageV2[];
+    abort: (reason?: string) => never;
   }): MastraMessageV2[] {
     const responseText = messages
-      .map(msg => msg.content.parts
-        .filter(part => part.type === 'text')
-        .map(part => (part as any).text)
-        .join('')
+      .map((msg) =>
+        msg.content.parts
+          .filter((part) => part.type === "text")
+          .map((part) => (part as any).text)
+          .join(""),
       )
-      .join('');
-    
+      .join("");
+
     // Check for required keywords
     for (const keyword of this.requiredKeywords) {
       if (!responseText.toLowerCase().includes(keyword.toLowerCase())) {
         abort(`Response missing required keyword: ${keyword}`);
       }
     }
-    
+
     return messages;
   }
 }
@@ -52,17 +56,18 @@ export class ResponseValidator implements Processor {
 
 ### Using the processor
 
-```typescript filename="src/mastra/agents/example-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/example-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { ResponseValidator } from "../processors/response-validator";
 
 export const validatedAgent = new Agent({
-  name: 'validated-agent',
-  instructions: 'You are a helpful assistant. Always mention the key concepts in your responses.',
+  name: "validated-agent",
+  instructions:
+    "You are a helpful assistant. Always mention the key concepts in your responses.",
   model: openai("gpt-4o"),
   outputProcessors: [
-    new ResponseValidator(['artificial intelligence', 'machine learning']), // Require both keywords
+    new ResponseValidator(["artificial intelligence", "machine learning"]), // Require both keywords
   ],
 });
 ```
@@ -71,18 +76,19 @@ export const validatedAgent = new Agent({
 
 This example shows a response that contains all required keywords and passes validation successfully.
 
-```typescript filename="src/example-high-response-validation.ts" showLineNumbers copy
+```typescript title="src/example-high-response-validation.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { ResponseValidator } from "./mastra/processors/response-validator";
 
 // Create agent that requires AI-related keywords
 export const agent = new Agent({
-  name: 'validated-agent',
-  instructions: 'You are an AI expert. Always mention artificial intelligence and machine learning when discussing AI topics.',
+  name: "validated-agent",
+  instructions:
+    "You are an AI expert. Always mention artificial intelligence and machine learning when discussing AI topics.",
   model: openai("gpt-4o"),
   outputProcessors: [
-    new ResponseValidator(['artificial intelligence', 'machine learning']),
+    new ResponseValidator(["artificial intelligence", "machine learning"]),
   ],
 });
 
@@ -104,18 +110,18 @@ The response passes validation because it contains both required keywords:
 
 This example shows what happens when a response is missing one or more required keywords.
 
-```typescript filename="src/example-partial-response-validation.ts" showLineNumbers copy
+```typescript title="src/example-partial-response-validation.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { ResponseValidator } from "./mastra/processors/response-validator";
 
 // Reuse same agent but require security-related keywords
 export const agent = new Agent({
-  name: 'validated-agent',
-  instructions: 'You are a helpful assistant.',
+  name: "validated-agent",
+  instructions: "You are a helpful assistant.",
   model: openai("gpt-4o"),
   outputProcessors: [
-    new ResponseValidator(['security', 'privacy', 'encryption']), // Require all three
+    new ResponseValidator(["security", "privacy", "encryption"]), // Require all three
   ],
 });
 
@@ -145,18 +151,18 @@ Response missing required keyword: encryption
 
 This example demonstrates validation failure when none of the required keywords are present in the response.
 
-```typescript filename="src/example-low-response-validation.ts" showLineNumbers copy
+```typescript title="src/example-low-response-validation.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { ResponseValidator } from "./mastra/processors/response-validator";
 
 // Reuse same agent but require financial keywords
 export const agent = new Agent({
-  name: 'validated-agent',
-  instructions: 'You are a general assistant.',
+  name: "validated-agent",
+  instructions: "You are a general assistant.",
   model: openai("gpt-4o"),
   outputProcessors: [
-    new ResponseValidator(['blockchain', 'cryptocurrency', 'bitcoin']),
+    new ResponseValidator(["blockchain", "cryptocurrency", "bitcoin"]),
   ],
 });
 
@@ -186,12 +192,12 @@ Response missing required keyword: blockchain
 
 You can create more sophisticated validators with custom logic:
 
-```typescript filename="src/example-advanced-response-validation.ts" showLineNumbers copy
+```typescript title="src/example-advanced-response-validation.ts" showLineNumbers copy
 import type { Processor, MastraMessageV2 } from "@mastra/core/processors";
 
 export class AdvancedResponseValidator implements Processor {
-  readonly name = 'advanced-response-validator';
-  
+  readonly name = "advanced-response-validator";
+
   constructor(
     private config: {
       requiredKeywords?: string[];
@@ -199,32 +205,40 @@ export class AdvancedResponseValidator implements Processor {
       minLength?: number;
       maxLength?: number;
       requireAllKeywords?: boolean;
-    } = {}
+    } = {},
   ) {}
 
-  processOutputResult({ messages, abort }: { 
-    messages: MastraMessageV2[]; 
-    abort: (reason?: string) => never 
+  processOutputResult({
+    messages,
+    abort,
+  }: {
+    messages: MastraMessageV2[];
+    abort: (reason?: string) => never;
   }): MastraMessageV2[] {
     const responseText = messages
-      .map(msg => msg.content.parts
-        .filter(part => part.type === 'text')
-        .map(part => (part as any).text)
-        .join('')
+      .map((msg) =>
+        msg.content.parts
+          .filter((part) => part.type === "text")
+          .map((part) => (part as any).text)
+          .join(""),
       )
-      .join('');
-    
+      .join("");
+
     const lowerText = responseText.toLowerCase();
-    
+
     // Length validation
     if (this.config.minLength && responseText.length < this.config.minLength) {
-      abort(`Response too short: ${responseText.length} characters (min: ${this.config.minLength})`);
+      abort(
+        `Response too short: ${responseText.length} characters (min: ${this.config.minLength})`,
+      );
     }
-    
+
     if (this.config.maxLength && responseText.length > this.config.maxLength) {
-      abort(`Response too long: ${responseText.length} characters (max: ${this.config.maxLength})`);
+      abort(
+        `Response too long: ${responseText.length} characters (max: ${this.config.maxLength})`,
+      );
     }
-    
+
     // Forbidden words check
     if (this.config.forbiddenWords) {
       for (const word of this.config.forbiddenWords) {
@@ -233,7 +247,7 @@ export class AdvancedResponseValidator implements Processor {
         }
       }
     }
-    
+
     // Required keywords check
     if (this.config.requiredKeywords) {
       if (this.config.requireAllKeywords !== false) {
@@ -245,28 +259,30 @@ export class AdvancedResponseValidator implements Processor {
         }
       } else {
         // Require AT LEAST ONE keyword
-        const hasAnyKeyword = this.config.requiredKeywords.some(keyword =>
-          lowerText.includes(keyword.toLowerCase())
+        const hasAnyKeyword = this.config.requiredKeywords.some((keyword) =>
+          lowerText.includes(keyword.toLowerCase()),
         );
         if (!hasAnyKeyword) {
-          abort(`Response missing any of required keywords: ${this.config.requiredKeywords.join(', ')}`);
+          abort(
+            `Response missing any of required keywords: ${this.config.requiredKeywords.join(", ")}`,
+          );
         }
       }
     }
-    
+
     return messages;
   }
 }
 
 // Usage example
 export const advancedAgent = new Agent({
-  name: 'advanced-validated-agent',
-  instructions: 'You are a technical writer.',
+  name: "advanced-validated-agent",
+  instructions: "You are a technical writer.",
   model: openai("gpt-4o"),
   outputProcessors: [
     new AdvancedResponseValidator({
-      requiredKeywords: ['technical', 'implementation'],
-      forbiddenWords: ['maybe', 'probably', 'might'],
+      requiredKeywords: ["technical", "implementation"],
+      forbiddenWords: ["maybe", "probably", "might"],
       minLength: 100,
       maxLength: 1000,
       requireAllKeywords: true,
@@ -280,27 +296,32 @@ export const advancedAgent = new Agent({
 When using `ResponseValidator`, the processor:
 
 ### Successful validation
+
 - **All keywords present**: Responses containing all required keywords pass through unchanged
 - **Case insensitive**: Matching works regardless of capitalization
 - **Full text search**: Searches across all text content in the response
 
 ### Failed validation
+
 - **Missing keywords**: Any missing required keyword sets `result.tripwire = true`
 - **Detailed error**: `result.tripwireReason` specifies which keyword was missing
 - **Immediate blocking**: Response is blocked before being returned to the user
 - **No exceptions**: Check `result.tripwire` instead of using try/catch blocks
 
 ### Validation behavior
+
 - **Complete response**: Operates on the full generated response, not streaming parts
 - **Text-only**: Only validates text content, ignoring other message parts
 - **Sequential checking**: Checks keywords in order and fails on first missing keyword
 
 ### Configuration options
+
 - **requiredKeywords**: Array of keywords that must all be present
 - **Case sensitivity**: Validation is case-insensitive by default
 - **Custom logic**: Extend the class for more complex validation rules
 
 ### Best practices
+
 - **Clear instructions**: Update agent instructions to guide toward required keywords
 - **Reasonable keywords**: Choose keywords that naturally fit the response domain
 - **Fallback handling**: Implement retry logic for failed validations
@@ -308,6 +329,7 @@ When using `ResponseValidator`, the processor:
 - **Testing**: Test with various response styles to avoid false positives
 
 ### Use cases
+
 - **Compliance**: Ensure responses meet regulatory or policy requirements
 - **Quality control**: Validate that responses address specific topics
 - **Brand guidelines**: Ensure responses mention required terms or concepts

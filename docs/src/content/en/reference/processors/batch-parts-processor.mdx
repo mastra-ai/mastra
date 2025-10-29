@@ -1,5 +1,5 @@
 ---
-title: "Reference: Batch Parts Processor | Processors | Mastra Docs"
+title: "Reference: BatchPartsProcessor | Processors | Mastra Docs"
 description: "Documentation for the BatchPartsProcessor in Mastra, which batches multiple stream parts together to reduce frequency of emissions."
 ---
 
@@ -15,7 +15,7 @@ import { BatchPartsProcessor } from "@mastra/core/processors";
 const processor = new BatchPartsProcessor({
   batchSize: 5,
   maxWaitTime: 100,
-  emitOnNonText: true
+  emitOnNonText: true,
 });
 ```
 
@@ -46,14 +46,16 @@ const processor = new BatchPartsProcessor({
     {
       name: "maxWaitTime",
       type: "number",
-      description: "Maximum time to wait before emitting a batch (in milliseconds). If set, will emit the current batch even if it hasn't reached batchSize",
+      description:
+        "Maximum time to wait before emitting a batch (in milliseconds). If set, will emit the current batch even if it hasn't reached batchSize",
       isOptional: true,
       default: "undefined (no timeout)",
     },
     {
       name: "emitOnNonText",
       type: "boolean",
-      description: "Whether to emit immediately when a non-text part is encountered",
+      description:
+        "Whether to emit immediately when a non-text part is encountered",
       isOptional: true,
       default: "true",
     },
@@ -79,7 +81,8 @@ const processor = new BatchPartsProcessor({
     {
       name: "flush",
       type: "(state?: BatchPartsState) => ChunkType | null",
-      description: "Force flush any remaining batched parts when the stream ends",
+      description:
+        "Force flush any remaining batched parts when the stream ends",
       isOptional: false,
     },
   ]}
@@ -87,7 +90,7 @@ const processor = new BatchPartsProcessor({
 
 ## Extended usage example
 
-```typescript filename="src/mastra/agents/batched-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/batched-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { BatchPartsProcessor } from "@mastra/core/processors";
@@ -100,12 +103,12 @@ export const agent = new Agent({
     new BatchPartsProcessor({
       batchSize: 5,
       maxWaitTime: 100,
-      emitOnNonText: true
-    })
-  ]
+      emitOnNonText: true,
+    }),
+  ],
 });
 ```
 
 ## Related
 
-- [Output Processors documentation](/docs/agents/output-processors)
+- [Output Processors documentation](/docs/agents/guardrails)

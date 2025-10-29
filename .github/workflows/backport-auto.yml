@@ -5,7 +5,7 @@ permissions:
   pull-requests: write
 
 on:
-  pull_request:
+  pull_request_target:
     types: [closed]
     branches: [main]
 
@@ -36,10 +36,8 @@ jobs:
       - name: Re-checkout with app token
         uses: actions/checkout@v5
         with:
+          ref: ${{ github.base_ref }}
           token: ${{ steps.app-auth.outputs.token }}
-          # Fetch entire git history so Changesets can generate changelogs
-          # with the correct commits
-          fetch-depth: 0
           persist-credentials: true
 
       - name: Setup pnpm and Node.js

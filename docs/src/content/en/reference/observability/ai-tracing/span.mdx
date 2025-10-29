@@ -1,9 +1,9 @@
 ---
-title: "Span | AI Tracing | Reference"
+title: "Reference: Span | Observability | Mastra Docs"
 description: Span interfaces, methods, and lifecycle events
 ---
 
-import { PropertiesTable } from "@/components/properties-table";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Span
 
@@ -15,34 +15,34 @@ Base interface for all span types.
 interface BaseSpan<TType extends AISpanType> {
   /** Unique span identifier */
   id: string;
-  
+
   /** OpenTelemetry-compatible trace ID (32 hex chars) */
   traceId: string;
-  
+
   /** Name of the span */
   name: string;
-  
+
   /** Type of the span */
   type: TType;
-  
+
   /** When span started */
   startTime: Date;
-  
+
   /** When span ended */
   endTime?: Date;
-  
+
   /** Type-specific attributes */
   attributes?: AISpanTypeMap[TType];
-  
+
   /** User-defined metadata */
   metadata?: Record<string, any>;
-  
+
   /** Input passed at the start of the span */
   input?: any;
-  
+
   /** Output generated at the end of the span */
   output?: any;
-  
+
   /** Error information if span failed */
   errorInfo?: {
     message: string;
@@ -51,7 +51,7 @@ interface BaseSpan<TType extends AISpanType> {
     category?: string;
     details?: Record<string, any>;
   };
-  
+
   /** Is an event span? (occurs at startTime, has no endTime) */
   isEvent: boolean;
 }
@@ -65,10 +65,10 @@ AI Span interface, used internally for tracing. Extends BaseSpan with lifecycle 
 interface AISpan<TType extends AISpanType> extends BaseSpan<TType> {
   /** Is an internal span? (spans internal to the operation of mastra) */
   isInternal: boolean;
-  
+
   /** Parent span reference (undefined for root spans) */
   parent?: AnyAISpan;
-  
+
   /** Pointer to the AITracing instance */
   aiTracing: AITracing;
 }
@@ -301,7 +301,7 @@ Exported AI Span interface, used for tracing exporters. A lightweight version of
 interface ExportedAISpan<TType extends AISpanType> extends BaseSpan<TType> {
   /** Parent span id reference (undefined for root spans) */
   parentSpanId?: string;
-  
+
   /** TRUE if the span is the root span of a trace */
   isRootSpan: boolean;
 }
@@ -316,13 +316,13 @@ Events emitted during the span lifecycle.
 ```typescript
 enum AITracingEventType {
   /** Emitted when a span is created and started */
-  SPAN_STARTED = 'span_started',
-  
+  SPAN_STARTED = "span_started",
+
   /** Emitted when a span is updated via update() */
-  SPAN_UPDATED = 'span_updated',
-  
+  SPAN_UPDATED = "span_updated",
+
   /** Emitted when a span is ended via end() or error() */
-  SPAN_ENDED = 'span_ended',
+  SPAN_ENDED = "span_ended",
 }
 ```
 
@@ -330,9 +330,9 @@ enum AITracingEventType {
 
 ```typescript
 type AITracingEvent =
-  | { type: 'span_started'; exportedSpan: AnyExportedAISpan }
-  | { type: 'span_updated'; exportedSpan: AnyExportedAISpan }
-  | { type: 'span_ended'; exportedSpan: AnyExportedAISpan };
+  | { type: "span_started"; exportedSpan: AnyExportedAISpan }
+  | { type: "span_updated"; exportedSpan: AnyExportedAISpan }
+  | { type: "span_ended"; exportedSpan: AnyExportedAISpan };
 ```
 
 Exporters receive these events to process and send trace data to observability platforms.
@@ -358,14 +358,17 @@ Union type for cases that need to handle any exported span type.
 ## See Also
 
 ### Documentation
+
 - [AI Tracing Overview](/docs/observability/ai-tracing/overview) - Concepts and usage
 - [Creating Child Spans](/docs/observability/ai-tracing/overview#creating-child-spans) - Practical examples
 - [Retrieving Trace IDs](/docs/observability/ai-tracing/overview#retrieving-trace-ids) - Using trace IDs
 
 ### Reference
-- [AITracing Classes](/reference/observability/ai-tracing/ai-tracing) - Core tracing classes
+
+- [AITracing Classes](/reference/observability/ai-tracing/) - Core tracing classes
 - [Interfaces](/reference/observability/ai-tracing/interfaces) - Complete type reference
 - [Configuration](/reference/observability/ai-tracing/configuration) - Configuration options
 
 ### Examples
+
 - [Basic AI Tracing](/examples/observability/basic-ai-tracing) - Working with spans

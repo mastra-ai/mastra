@@ -20,12 +20,14 @@ mastra.getWorkflow("testWorkflow");
     {
       name: "id",
       type: "TWorkflowId extends keyof TWorkflows",
-      description: "The ID of the workflow to retrieve. Must be a valid workflow ID that exists in the Mastra configuration.",
+      description:
+        "The ID of the workflow to retrieve. Must be a valid workflow ID that exists in the Mastra configuration.",
     },
     {
       name: "options",
       type: "{ serialized?: boolean }",
-      description: "Optional configuration object. When `serialized` is true, returns only the workflow name instead of the full workflow instance.",
+      description:
+        "Optional configuration object. When `serialized` is true, returns only the workflow name instead of the full workflow instance.",
       optional: true,
     },
   ]}
@@ -38,11 +40,12 @@ mastra.getWorkflow("testWorkflow");
     {
       name: "workflow",
       type: "TWorkflows[TWorkflowId]",
-      description: "The workflow instance with the specified ID. Throws an error if the workflow is not found.",
+      description:
+        "The workflow instance with the specified ID. Throws an error if the workflow is not found.",
     },
   ]}
 />
 
 ## Related
 
-- [Workflows overview](../../docs/workflows/overview.mdx)
+- [Workflows overview](/docs/workflows/overview)
