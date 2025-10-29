@@ -81,7 +81,7 @@ export class ProcessorRunner {
   }
 
   async runOutputProcessors(messageList: MessageList, tracingContext?: TracingContext): Promise<MessageList> {
-    const responseMessages = messageList.clear.response.v2();
+    const responseMessages = messageList.clear.response.db();
 
     let processableMessages: MastraDBMessage[] = [...responseMessages];
 
@@ -286,7 +286,7 @@ export class ProcessorRunner {
   }
 
   async runInputProcessors(messageList: MessageList, tracingContext?: TracingContext): Promise<MessageList> {
-    const userMessages = messageList.clear.input.v2();
+    const userMessages = messageList.clear.input.db();
 
     let processableMessages: MastraDBMessage[] = [...userMessages];
 

@@ -130,7 +130,7 @@ export function generateConversationHistory({
   return {
     fakeCore: list.get.all.v1() as CoreMessage[],
     messages: list.get.all.v1(),
-    messagesV2: list.get.all.v2(),
+    messagesV2: list.get.all.db(),
     counts,
   };
 }

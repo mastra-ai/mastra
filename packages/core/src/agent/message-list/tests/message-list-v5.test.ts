@@ -969,7 +969,7 @@ describe('MessageList V5 Support', () => {
       }
 
       // Get V2 messages back (this is what InputProcessors receive)
-      const v2Messages = messageList.get.all.v2();
+      const v2Messages = messageList.get.all.db();
       const v2FilePart = v2Messages[0].content.parts?.find((p: any) => p.type === 'file');
 
       // The URL should remain unchanged when converting back to V2
@@ -1293,7 +1293,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'input');
 
         // Get V2 messages and check providerMetadata was preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const filePart = v2Messages[0].content.parts.find(p => p.type === 'file');
         expect(filePart).toBeDefined();
@@ -1329,7 +1329,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and check providerMetadata was preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const textPart = v2Messages[0].content.parts.find(p => p.type === 'text');
         expect(textPart).toBeDefined();
@@ -1366,7 +1366,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and check providerMetadata was preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const reasoningPart = v2Messages[0].content.parts.find(p => p.type === 'reasoning');
         expect(reasoningPart).toBeDefined();
@@ -1406,7 +1406,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and check callProviderMetadata was preserved on tool-invocation
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const toolPart = v2Messages[0].content.parts.find(p => p.type === 'tool-invocation');
         expect(toolPart).toBeDefined();
@@ -1448,7 +1448,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and check providerMetadata was preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const sourcePart = v2Messages[0].content.parts.find(p => p.type === 'source');
         expect(sourcePart).toBeDefined();
@@ -1495,7 +1495,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and verify all providerMetadata preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         const parts = v2Messages[0].content.parts;
 
         const textPart = parts.find(p => p.type === 'text');

@@ -531,7 +531,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               // Add structured output to the latest assistant message metadata
               if (self.#bufferedObject !== undefined) {
-                const responseMessages = messageList.get.response.v2();
+                const responseMessages = messageList.get.response.db();
                 const lastAssistantMessage = [...responseMessages].reverse().find(m => m.role === 'assistant');
                 if (lastAssistantMessage) {
                   if (!lastAssistantMessage.content.metadata) {

@@ -544,7 +544,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         messageList.add(userMessage, 'user');
         messageList.add(assistantMessages, 'response');
 
-        const messages = messageList.get.all.v2();
+        const messages = messageList.get.all.db();
 
         await memory.saveMessages({ messages });
         const result = await memory.rememberMessages({

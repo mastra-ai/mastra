@@ -239,7 +239,7 @@ export class Memory extends MastraMemory {
     const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
 
     // Always return mastra-db format (V2)
-    const messages = list.get.all.v2();
+    const messages = list.get.all.db();
 
     return { messages };
   }
@@ -681,7 +681,7 @@ ${workingMemory}`;
     const config = this.getMergedThreadConfig(memoryConfig);
 
     const result = this.storage.saveMessages({
-      messages: new MessageList().add(updatedMessages, 'memory').get.all.v2(),
+      messages: new MessageList().add(updatedMessages, 'memory').get.all.db(),
       format: 'v2',
     });
 

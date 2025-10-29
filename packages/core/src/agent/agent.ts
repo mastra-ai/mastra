@@ -2336,7 +2336,7 @@ export class Agent<
           .addSystem(systemMessages)
           .add(context || [], 'context')
           .add(processedMemoryMessages, 'memory')
-          .add(messageList.get.input.v2(), 'user')
+          .add(messageList.get.input.db(), 'user')
           .get.all.prompt();
 
         return {
@@ -3840,7 +3840,7 @@ export class Agent<
       }
 
       const newText = outputProcessorResult.messageList.get.response
-        .v2()
+        .db()
         .map(msg => msg.content.parts.map(part => (part.type === 'text' ? part.text : '')).join(''))
         .join('');
 
@@ -3850,7 +3850,7 @@ export class Agent<
       // If there are output processors, check for structured data in message metadata
       if (finalOutputProcessors && finalOutputProcessors.length > 0) {
         // First check if any output processor provided structured data via metadata
-        const messages = outputProcessorResult.messageList.get.response.v2();
+        const messages = outputProcessorResult.messageList.get.response.db();
         this.logger.debug(
           'Checking messages for experimentalOutput metadata:',
           messages.map(m => ({
@@ -3960,7 +3960,7 @@ export class Agent<
     }
 
     const newText = outputProcessorResult.messageList.get.response
-      .v2()
+      .db()
       .map(msg => msg.content.parts.map(part => (part.type === 'text' ? part.text : '')).join(''))
       .join('');
 

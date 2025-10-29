@@ -725,7 +725,7 @@ function runStreamTest(version: 'v1' | 'v2') {
           ],
           `memory`,
         );
-        return { messages: list.get.remembered.aiV4.core(), messagesV2: list.get.remembered.v2() };
+        return { messages: list.get.remembered.aiV4.core(), messagesV2: list.get.remembered.db() };
       };
 
       mockMemory.getThreadById = async function getThreadById() {

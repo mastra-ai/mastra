@@ -412,7 +412,6 @@ describe('Working Memory Tests', () => {
       const assistantMessages = saved.filter(m => m.role === 'assistant');
       expect(
         assistantMessages.every(m => {
-          // TODO: seems like saveMessages says it returns MastraDBMessage but it's returning V1
           return JSON.stringify(m).includes(`updateWorkingMemory`);
         }),
       ).toBe(false);

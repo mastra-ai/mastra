@@ -269,7 +269,7 @@ export function createPrepareMemoryStep<
       // Add user-provided system message if present
       addSystemMessage(processedList, options.system, 'user-provided');
 
-      processedList.add(processedMemoryMessages, 'memory').add(messageList.get.input.v2(), 'user');
+      processedList.add(processedMemoryMessages, 'memory').add(messageList.get.input.db(), 'user');
 
       return {
         thread: threadObject,

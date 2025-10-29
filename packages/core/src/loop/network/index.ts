@@ -163,7 +163,7 @@ export async function prepareMemoryStep({
       resourceId: thread?.resourceId,
     });
     messageList.add(messages, 'user');
-    const messagesToSave = messageList.get.all.v2();
+    const messagesToSave = messageList.get.all.db();
 
     if (memory) {
       promises.push(

@@ -84,7 +84,7 @@ class MessageConverter {
       // Old format keys (backward compatibility)
       case 'Mastra.V2':
       case 'mastra-db':
-        return this.messageList.get.all.v2();
+        return this.messageList.get.all.db();
       case 'AIV4.UI':
       case 'aiv4-ui':
         return this.messageList.get.all.aiV4.ui();

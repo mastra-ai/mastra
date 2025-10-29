@@ -256,7 +256,7 @@ export class InMemoryMemory extends MemoryStorage {
 
     const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
     if (format === 'v1') return list.get.all.v1();
-    return list.get.all.v2();
+    return list.get.all.db();
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
@@ -296,7 +296,7 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     const list = new MessageList().add(messages, 'memory');
-    if (format === `v2`) return list.get.all.v2();
+    if (format === `v2`) return list.get.all.db();
     return list.get.all.v1();
   }
 

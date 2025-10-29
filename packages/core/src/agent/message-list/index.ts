@@ -50,11 +50,6 @@ export type MastraDBMessage = MastraMessageShared & {
   content: MastraMessageContentV2;
 };
 
-/**
- * @deprecated Use MastraDBMessage instead. This alias will be removed in a future version.
- */
-export type MastraMessageV2 = MastraDBMessage;
-
 export type MastraMessageContentV3 = {
   format: 3; // format 3 === UIMessage in AI SDK v5
   parts: AIV5Type.UIMessage['parts'];
@@ -253,7 +248,7 @@ export class MessageList {
   public get clear() {
     return {
       input: {
-        v2: (): MastraDBMessage[] => {
+        db: (): MastraDBMessage[] => {
           const userMessages = Array.from(this.newUserMessages);
           this.messages = this.messages.filter(m => !this.newUserMessages.has(m));
           this.newUserMessages.clear();
@@ -261,7 +256,7 @@ export class MessageList {
         },
       },
       response: {
-        v2: () => {
+        db: () => {
           const responseMessages = Array.from(this.newResponseMessages);
           this.messages = this.messages.filter(m => !this.newResponseMessages.has(m));
           this.newResponseMessages.clear();
@@ -273,8 +268,8 @@ export class MessageList {
 
   private all = {
     v3: (): MastraMessageV3[] => this.cleanV3Metadata(this.messages.map(this.mastraMessageV2ToMastraMessageV3)),
-    v2: (): MastraDBMessage[] => this.messages,
-    v1: (): MastraMessageV1[] => convertToV1Messages(this.all.v2()),
+    db: (): MastraDBMessage[] => this.messages,
+    v1: (): MastraMessageV1[] => convertToV1Messages(this.all.db()),
 
     aiV5: {
       model: (): AIV5Type.ModelMessage[] => this.aiV5UIMessagesToAIV5ModelMessages(this.all.aiV5.ui()),
@@ -359,11 +354,11 @@ export class MessageList {
     /* @deprecated use list.get.all.aiV4.prompt() instead */
     prompt: () => this.all.aiV4.prompt(),
     /* @deprecated use list.get.all.aiV4.ui() */
-    ui: (): UIMessageWithMetadata[] => this.all.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+    ui: (): UIMessageWithMetadata[] => this.all.db().map(MessageList.mastraMessageV2ToAIV4UIMessage),
     /* @deprecated use list.get.all.aiV4.core() */
     core: (): AIV4Type.CoreMessage[] => this.aiV4UIMessagesToAIV4CoreMessages(this.all.aiV4.ui()),
     aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.all.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+      ui: (): UIMessageWithMetadata[] => this.all.db().map(MessageList.mastraMessageV2ToAIV4UIMessage),
       core: (): AIV4Type.CoreMessage[] => this.aiV4UIMessagesToAIV4CoreMessages(this.all.aiV4.ui()),
 
       // Used when calling AI SDK streamText/generateText
@@ -389,9 +384,9 @@ export class MessageList {
   };
 
   private remembered = {
-    v3: () => this.remembered.v2().map(this.mastraMessageV2ToMastraMessageV3),
-    v2: () => this.messages.filter(m => this.memoryMessages.has(m)),
-    v1: () => convertToV1Messages(this.remembered.v2()),
+    v3: () => this.remembered.db().map(this.mastraMessageV2ToMastraMessageV3),
+    db: () => this.messages.filter(m => this.memoryMessages.has(m)),
+    v1: () => convertToV1Messages(this.remembered.db()),
 
     aiV5: {
       model: () => this.aiV5UIMessagesToAIV5ModelMessages(this.remembered.aiV5.ui()),
@@ -399,19 +394,19 @@ export class MessageList {
     },
 
     /* @deprecated use list.get.remembered.aiV4.ui() */
-    ui: (): UIMessageWithMetadata[] => this.remembered.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+    ui: (): UIMessageWithMetadata[] => this.remembered.db().map(MessageList.mastraMessageV2ToAIV4UIMessage),
     /* @deprecated use list.get.remembered.aiV4.core() */
     core: (): AIV4Type.CoreMessage[] => this.aiV4UIMessagesToAIV4CoreMessages(this.all.aiV4.ui()),
     aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.remembered.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+      ui: (): UIMessageWithMetadata[] => this.remembered.db().map(MessageList.mastraMessageV2ToAIV4UIMessage),
       core: (): AIV4Type.CoreMessage[] => this.aiV4UIMessagesToAIV4CoreMessages(this.all.aiV4.ui()),
     },
   };
   // TODO: need to update this for new .aiV4/5.x() pattern
   private rememberedPersisted = {
-    v2: () => this.all.v2().filter(m => this.memoryMessagesPersisted.has(m)),
-    v1: () => convertToV1Messages(this.rememberedPersisted.v2()),
-    ui: () => this.rememberedPersisted.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+    db: () => this.all.db().filter(m => this.memoryMessagesPersisted.has(m)),
+    v1: () => convertToV1Messages(this.rememberedPersisted.db()),
+    ui: () => this.rememberedPersisted.db().map(MessageList.mastraMessageV2ToAIV4UIMessage),
     core: () => this.aiV4UIMessagesToAIV4CoreMessages(this.rememberedPersisted.ui()),
   };
 
@@ -420,8 +415,8 @@ export class MessageList {
       this.cleanV3Metadata(
         this.messages.filter(m => this.newUserMessages.has(m)).map(this.mastraMessageV2ToMastraMessageV3),
       ),
-    v2: () => this.messages.filter(m => this.newUserMessages.has(m)),
-    v1: () => convertToV1Messages(this.input.v2()),
+    db: () => this.messages.filter(m => this.newUserMessages.has(m)),
+    v1: () => convertToV1Messages(this.input.db()),
 
     aiV5: {
       model: () => this.aiV5UIMessagesToAIV5ModelMessages(this.input.aiV5.ui()),
@@ -429,11 +424,11 @@ export class MessageList {
     },
 
     /* @deprecated use list.get.input.aiV4.ui() instead */
-    ui: () => this.input.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+    ui: () => this.input.db().map(MessageList.mastraMessageV2ToAIV4UIMessage),
     /* @deprecated use list.get.core.aiV4.ui() instead */
     core: () => this.aiV4UIMessagesToAIV4CoreMessages(this.input.ui()),
     aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.input.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+      ui: (): UIMessageWithMetadata[] => this.input.db().map(MessageList.mastraMessageV2ToAIV4UIMessage),
       core: (): AIV4Type.CoreMessage[] => this.aiV4UIMessagesToAIV4CoreMessages(this.input.aiV4.ui()),
     },
   };
@@ -443,15 +438,15 @@ export class MessageList {
       this.cleanV3Metadata(
         this.messages.filter(m => this.newUserMessagesPersisted.has(m)).map(this.mastraMessageV2ToMastraMessageV3),
       ),
-    v2: (): MastraDBMessage[] => this.messages.filter(m => this.newUserMessagesPersisted.has(m)),
-    v1: (): MastraMessageV1[] => convertToV1Messages(this.inputPersisted.v2()),
-    ui: (): UIMessageWithMetadata[] => this.inputPersisted.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+    db: (): MastraDBMessage[] => this.messages.filter(m => this.newUserMessagesPersisted.has(m)),
+    v1: (): MastraMessageV1[] => convertToV1Messages(this.inputPersisted.db()),
+    ui: (): UIMessageWithMetadata[] => this.inputPersisted.db().map(MessageList.mastraMessageV2ToAIV4UIMessage),
     core: () => this.aiV4UIMessagesToAIV4CoreMessages(this.inputPersisted.ui()),
   };
 
   private response = {
-    v3: (): MastraMessageV3[] => this.response.v2().map(this.mastraMessageV2ToMastraMessageV3),
-    v2: (): MastraDBMessage[] => this.messages.filter(m => this.newResponseMessages.has(m)),
+    v3: (): MastraMessageV3[] => this.response.db().map(this.mastraMessageV2ToMastraMessageV3),
+    db: (): MastraDBMessage[] => this.messages.filter(m => this.newResponseMessages.has(m)),
     v1: (): MastraMessageV1[] => convertToV1Messages(this.response.v3().map(MessageList.mastraMessageV3ToV2)),
 
     aiV5: {
@@ -644,7 +639,7 @@ export class MessageList {
     },
 
     aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.response.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+      ui: (): UIMessageWithMetadata[] => this.response.db().map(MessageList.mastraMessageV2ToAIV4UIMessage),
       core: (): AIV4Type.CoreMessage[] => this.aiV4UIMessagesToAIV4CoreMessages(this.response.aiV4.ui()),
     },
   };
@@ -654,8 +649,8 @@ export class MessageList {
       this.cleanV3Metadata(
         this.messages.filter(m => this.newResponseMessagesPersisted.has(m)).map(this.mastraMessageV2ToMastraMessageV3),
       ),
-    v2: (): MastraDBMessage[] => this.messages.filter(m => this.newResponseMessagesPersisted.has(m)),
-    ui: (): UIMessageWithMetadata[] => this.responsePersisted.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+    db: (): MastraDBMessage[] => this.messages.filter(m => this.newResponseMessagesPersisted.has(m)),
+    ui: (): UIMessageWithMetadata[] => this.responsePersisted.db().map(MessageList.mastraMessageV2ToAIV4UIMessage),
   };
 
   public drainUnsavedMessages(): MastraDBMessage[] {

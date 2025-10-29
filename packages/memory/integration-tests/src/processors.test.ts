@@ -120,9 +120,9 @@ describe('Memory with Processors', () => {
     // create response message list to add to memory
     const messages = new MessageList({ threadId: thread.id, resourceId })
       .add(allMessagesResult, 'response')
-      .get.all.v2();
+      .get.all.db();
 
-    const listed = new MessageList({ threadId: thread.id, resourceId }).add(messages, 'memory').get.all.v2();
+    const listed = new MessageList({ threadId: thread.id, resourceId }).add(messages, 'memory').get.all.db();
 
     // We should get all 20 messages
     expect(listed.length).toBe(20);
@@ -158,8 +158,8 @@ describe('Memory with Processors', () => {
       messages: v2ToCoreMessages(queryResult.uiMessages),
       processors: [new ToolCallFilter({ exclude: ['weather'] })],
     });
-    const messages = new MessageList({ threadId: thread.id, resourceId }).add(result, 'response').get.all.v2();
-    expect(new MessageList().add(messages, 'memory').get.all.v2().length).toBeLessThan(messagesV2.length);
+    const messages = new MessageList({ threadId: thread.id, resourceId }).add(result, 'response').get.all.db();
+    expect(new MessageList().add(messages, 'memory').get.all.db().length).toBeLessThan(messagesV2.length);
     expect(filterToolCallsByName(result, 'weather')).toHaveLength(0);
     expect(filterToolResultsByName(result, 'weather')).toHaveLength(0);
     expect(filterToolCallsByName(result, 'calculator')).toHaveLength(1);
@@ -174,8 +174,8 @@ describe('Memory with Processors', () => {
       messages: v2ToCoreMessages(queryResult2.uiMessages),
       processors: [],
     });
-    const messages2 = new MessageList({ threadId: thread.id, resourceId }).add(result2, 'response').get.all.v2();
-    expect(new MessageList().add(messages2, 'memory').get.all.v2()).toHaveLength(messagesV2.length);
+    const messages2 = new MessageList({ threadId: thread.id, resourceId }).add(result2, 'response').get.all.db();
+    expect(new MessageList().add(messages2, 'memory').get.all.db()).toHaveLength(messagesV2.length);
     expect(filterToolCallsByName(result2, 'weather')).toHaveLength(1);
     expect(filterToolResultsByName(result2, 'weather')).toHaveLength(1);
     expect(filterToolCallsByName(result2, 'calculator')).toHaveLength(1);

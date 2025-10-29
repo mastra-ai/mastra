@@ -111,7 +111,7 @@ describe('MessageList', () => {
       expect(list.get.all.aiV5.model()).toHaveLength(0);
       expect(list.get.all.aiV5.ui()).toHaveLength(0);
       expect(list.get.all.v1()).toHaveLength(0);
-      expect(list.get.all.v2()).toHaveLength(0);
+      expect(list.get.all.db()).toHaveLength(0);
       expect(list.get.all.v3()).toHaveLength(0);
 
       list.add(
@@ -131,7 +131,7 @@ describe('MessageList', () => {
       expect(list.get.all.aiV5.model()).toHaveLength(1);
       expect(list.get.all.aiV5.ui()).toHaveLength(1);
       expect(list.get.all.v1()).toHaveLength(1);
-      expect(list.get.all.v2()).toHaveLength(1);
+      expect(list.get.all.db()).toHaveLength(1);
       expect(list.get.all.v3()).toHaveLength(1);
 
       expect(list.getSystemMessages(`memory`)).toHaveLength(1);
@@ -153,7 +153,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(input, 'input');
 
-      const messages = list.get.all.v2();
+      const messages = list.get.all.db();
       expect(messages.length).toBe(1);
 
       expect(messages[0]).toEqual({
@@ -181,7 +181,7 @@ describe('MessageList', () => {
         resourceId,
       }).add(input, 'input');
 
-      const messages = list.get.all.v2();
+      const messages = list.get.all.db();
       expect(messages.length).toBe(1);
 
       expect(messages[0]).toEqual({
@@ -296,7 +296,7 @@ describe('MessageList', () => {
       const list = new MessageList().add(dbMessage, 'memory');
 
       // Check that args are preserved in both parts and toolInvocations
-      const v2Messages = list.get.all.v2();
+      const v2Messages = list.get.all.db();
       expect(v2Messages).toHaveLength(1);
 
       // Check parts array has correct args and no duplicate entries
@@ -372,7 +372,7 @@ describe('MessageList', () => {
         .add(toolResultMessage, 'response');
 
       // Check that args are preserved in v2 messages (internal representation)
-      const v2Messages = list.get.all.v2();
+      const v2Messages = list.get.all.db();
       expect(v2Messages).toHaveLength(2);
 
       const assistantV2Message = v2Messages[1];
@@ -455,7 +455,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'response');
 
-      expect(list.get.all.v2()).toEqual([
+      expect(list.get.all.db()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -494,7 +494,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'input');
 
-      expect(list.get.all.v2()).toEqual([
+      expect(list.get.all.db()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -526,7 +526,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
-      expect(list.get.all.v2()).toEqual([
+      expect(list.get.all.db()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -636,7 +636,7 @@ describe('MessageList', () => {
           resourceId,
         },
       ];
-      expect(new MessageList({ threadId, resourceId }).add(messageSequence, 'input').get.all.v2()).toEqual(
+      expect(new MessageList({ threadId, resourceId }).add(messageSequence, 'input').get.all.db()).toEqual(
         expected.map(m => ({ ...m, createdAt: expect.any(Date) })),
       );
 
@@ -701,7 +701,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
-      expect(list.get.all.v2()).toEqual([
+      expect(list.get.all.db()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -735,7 +735,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
-      expect(list.get.all.v2()).toEqual([
+      expect(list.get.all.db()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -770,7 +770,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'response');
 
-      expect(list.get.all.v2()).toEqual([
+      expect(list.get.all.db()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -809,7 +809,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'input');
 
-      expect(list.get.all.v2()).toEqual([
+      expect(list.get.all.db()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -859,7 +859,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
-      expect(list.get.all.v2()).toEqual([
+      expect(list.get.all.db()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -951,7 +951,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
-      expect(list.get.all.v2()).toEqual([
+      expect(list.get.all.db()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -1031,7 +1031,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'memory');
 
-      expect(list.get.all.v2()).toEqual([
+      expect(list.get.all.db()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -1069,7 +1069,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
-      expect(list.get.all.v2()).toEqual([
+      expect(list.get.all.db()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -1109,7 +1109,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(input, 'input');
 
-      const messages = list.get.all.v2();
+      const messages = list.get.all.db();
       expect(messages.length).toBe(1);
 
       expect(messages[0]).toEqual({
@@ -1150,7 +1150,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(input, 'input');
 
-      const messages = list.get.all.v2();
+      const messages = list.get.all.db();
       expect(messages.length).toBe(1);
 
       expect(messages[0]).toEqual({
@@ -1222,7 +1222,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
-      expect(list.get.all.v2()).toEqual([
+      expect(list.get.all.db()).toEqual([
         {
           id: userMsgV1.id,
           role: 'user',
@@ -1307,7 +1307,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
-      expect(list.get.all.v2()).toEqual([
+      expect(list.get.all.db()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -1373,7 +1373,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
-      expect(list.get.all.v2()).toEqual([
+      expect(list.get.all.db()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -1408,7 +1408,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'memory');
 
-      expect(list.get.all.v2()).toEqual([
+      expect(list.get.all.db()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -1485,7 +1485,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
-      expect(list.get.all.v2()).toEqual([
+      expect(list.get.all.db()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -1567,7 +1567,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'memory');
 
-      expect(list.get.all.v2()).toEqual([
+      expect(list.get.all.db()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -1967,7 +1967,7 @@ describe('MessageList', () => {
         expect(systemMessages[0]?.role).toBe('system');
         expect(systemMessages[0]?.content).toBe(systemMsgContent);
 
-        expect(list.get.all.v2().length).toBe(0); // Should not be in MastraDBMessage list
+        expect(list.get.all.db().length).toBe(0); // Should not be in MastraDBMessage list
         expect(list.get.all.ui().length).toBe(0); // Should not be in UI messages
       });
 
@@ -2007,7 +2007,7 @@ describe('MessageList', () => {
         expect(systemMessages.find(m => m.content === 'System setup complete.')).toBeDefined();
         expect(systemMessages.find(m => m.content === 'Another system note.')).toBeDefined();
 
-        expect(list.get.all.v2().length).toBe(2); // user and assistant
+        expect(list.get.all.db().length).toBe(2); // user and assistant
         expect(list.get.all.ui().length).toBe(2); // user and assistant
       });
     });
@@ -2139,7 +2139,7 @@ describe('MessageList', () => {
         expect(systemMessages[0]?.content).toBe(agentInstructions);
 
         // Should have user messages
-        const userMessages = list.get.all.v2().filter(m => m.role === 'user');
+        const userMessages = list.get.all.db().filter(m => m.role === 'user');
         expect(userMessages.length).toBe(2);
       });
     });
@@ -2179,7 +2179,7 @@ describe('MessageList', () => {
       list.add(latestMessage, 'memory');
       list.add(messageV2, 'response');
 
-      expect(list.get.all.v2()[0].content.parts).toEqual([
+      expect(list.get.all.db()[0].content.parts).toEqual([
         { type: 'step-start' },
         {
           type: 'tool-invocation',
@@ -2224,7 +2224,7 @@ describe('MessageList', () => {
       list.add(latestMessage, 'memory');
       list.add(messageV2, 'response');
 
-      expect(list.get.all.v2()[0].content.parts).toEqual([
+      expect(list.get.all.db()[0].content.parts).toEqual([
         { type: 'step-start' },
         { type: 'text', text: 'Let me do this.' },
         {
@@ -2270,7 +2270,7 @@ describe('MessageList', () => {
       list.add(latestMessage, 'memory');
       list.add(messageV2, 'response');
 
-      expect(list.get.all.v2()[0].content.parts).toEqual([
+      expect(list.get.all.db()[0].content.parts).toEqual([
         { type: 'step-start' },
         { type: 'text', text: 'Doing it.' },
         {
@@ -2315,7 +2315,7 @@ describe('MessageList', () => {
       list.add(latestMessage, 'memory');
       list.add(messageV2, 'response');
 
-      expect(list.get.all.v2()[0].content.parts).toEqual([
+      expect(list.get.all.db()[0].content.parts).toEqual([
         { type: 'step-start' },
         { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'A', toolName: 'foo', args: {} } },
         {
@@ -2362,7 +2362,7 @@ describe('MessageList', () => {
       list.add(latestMessage, 'memory');
       list.add(messageV2, 'response');
 
-      expect(list.get.all.v2()[0].content.parts).toEqual([
+      expect(list.get.all.db()[0].content.parts).toEqual([
         { type: 'step-start' },
         { type: 'text', text: 'Old reasoning' },
         {
@@ -2388,7 +2388,7 @@ describe('MessageList', () => {
         content: { ...base.content, parts: [{ type: 'step-start' }, { type: 'text', text: 'First...' }] },
       } satisfies MastraDBMessage;
       list.add(msg1, 'memory');
-      expect(list.get.all.v2()[0].content.parts).toEqual([{ type: 'step-start' }, { type: 'text', text: 'First...' }]);
+      expect(list.get.all.db()[0].content.parts).toEqual([{ type: 'step-start' }, { type: 'text', text: 'First...' }]);
 
       // Step 2: Add tool-invocation (call)
       let msg2 = {
@@ -2406,7 +2406,7 @@ describe('MessageList', () => {
         },
       } satisfies MastraDBMessage;
       list.add(msg2, 'memory');
-      expect(list.get.all.v2()[0].content.parts).toEqual([
+      expect(list.get.all.db()[0].content.parts).toEqual([
         { type: 'step-start' },
         { type: 'text', text: 'First...' },
         { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'call-5', toolName: 'foo', args: {} } },
@@ -2428,7 +2428,7 @@ describe('MessageList', () => {
         },
       } satisfies MastraDBMessage;
       list.add(msg3, 'response');
-      expect(list.get.all.v2()[0].content.parts).toEqual([
+      expect(list.get.all.db()[0].content.parts).toEqual([
         { type: 'step-start' },
         { type: 'text', text: 'First...' },
         {
@@ -2513,7 +2513,7 @@ describe('MessageList', () => {
       expect(() => list.add(messageWithStringContent, 'input')).not.toThrow();
 
       // Verify the content remains as a JSON string (not parsed back to object)
-      const messages = list.get.all.v2();
+      const messages = list.get.all.db();
       expect(messages.length).toBe(1);
       expect(messages[0].content.content).toBe(JSON.stringify(inputData)); // Should stay as string
       expect(typeof messages[0].content.content).toBe('string'); // Should be a string, not an object
@@ -2532,7 +2532,7 @@ describe('MessageList', () => {
       expect(() => list.add(messageWithJSONString, 'input')).not.toThrow();
 
       // The content should stay as a string, not be parsed to an object
-      const messages = list.get.all.v2();
+      const messages = list.get.all.db();
       expect(messages[0].content.content).toBe('{"data": "value", "number": 42}'); // Should stay as string
       expect(typeof messages[0].content.content).toBe('string'); // Should be a string, not an object
       expect(messages[0].content.parts).toEqual([
@@ -2918,7 +2918,7 @@ describe('MessageList', () => {
         };
 
         const list = new MessageList({ threadId, resourceId }).add(v2Message, 'input');
-        const messages = list.get.all.v2();
+        const messages = list.get.all.db();
 
         expect(messages.length).toBe(1);
         expect(messages[0].content.metadata).toEqual(metadata);
@@ -2945,7 +2945,7 @@ describe('MessageList', () => {
         // Convert to UI and back to v2
         const uiMessages = list.get.all.ui();
         const newList = new MessageList({ threadId, resourceId }).add(uiMessages, 'response');
-        const v2Messages = newList.get.all.v2();
+        const v2Messages = newList.get.all.db();
 
         expect(v2Messages[0].content.metadata).toEqual(metadata);
       });
@@ -2969,7 +2969,7 @@ describe('MessageList', () => {
         };
 
         const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'input');
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
 
         expect(v2Messages.length).toBe(1);
         expect(v2Messages[0].content.metadata).toEqual(metadata);
@@ -2990,7 +2990,7 @@ describe('MessageList', () => {
         } as UIMessageWithMetadata & { context: string; customField: string };
 
         const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'input');
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
 
         expect(v2Messages.length).toBe(1);
         expect(v2Messages[0].content.metadata).toEqual({ preserved: true });
@@ -3009,7 +3009,7 @@ describe('MessageList', () => {
         };
 
         const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'input');
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
 
         expect(v2Messages.length).toBe(1);
         expect(v2Messages[0].content.metadata).toBeUndefined();
@@ -3027,7 +3027,7 @@ describe('MessageList', () => {
 
         const list = new MessageList({ threadId, resourceId });
         list.add(uiMessage, 'input');
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
 
         expect(v2Messages.length).toBe(1);
         expect(v2Messages[0].content.metadata).toEqual({});
@@ -3055,8 +3055,8 @@ describe('MessageList', () => {
         const list1 = new MessageList({ threadId, resourceId }).add(uiMessageNull, 'input');
         const list2 = new MessageList({ threadId, resourceId }).add(uiMessageUndefined, 'input');
 
-        expect(list1.get.all.v2()[0].content.metadata).toBeUndefined();
-        expect(list2.get.all.v2()[0].content.metadata).toBeUndefined();
+        expect(list1.get.all.db()[0].content.metadata).toBeUndefined();
+        expect(list2.get.all.db()[0].content.metadata).toBeUndefined();
       });
 
       it('should preserve metadata for assistant UIMessage with tool invocations', () => {
@@ -3073,7 +3073,7 @@ describe('MessageList', () => {
         };
 
         const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'response');
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
 
         expect(v2Messages.length).toBe(1);
         expect(v2Messages[0].content.metadata).toEqual(metadata);
@@ -3113,7 +3113,7 @@ describe('MessageList', () => {
         list.add(assistantResponse, 'response');
 
         // Get final messages (what would be saved to memory)
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
 
         // Verify user message metadata is preserved
         const savedUserMessage = v2Messages.find(m => m.id === 'user-msg-flow');
@@ -3152,7 +3152,7 @@ describe('MessageList', () => {
         list.add(onlookMessage, 'input');
 
         // Verify it's saved correctly as v2
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages[0].content.metadata).toEqual(onlookMessage.metadata);
 
         // Verify it roundtrips back to UI format
@@ -3197,7 +3197,7 @@ describe('MessageList', () => {
       messageList.add(messagesWithMetadata[1], 'response');
 
       // Get messages in v2 format (what would be saved to memory)
-      const v2Messages = messageList.get.all.v2();
+      const v2Messages = messageList.get.all.db();
 
       // Verify metadata is preserved in v2 format
       expect(v2Messages.length).toBe(2);
@@ -3416,7 +3416,7 @@ describe('MessageList', () => {
       newList.add(v1MessagesWithSuffixes, 'memory');
 
       // Get the v2 messages to see how they're stored
-      const v2Messages = newList.get.all.v2();
+      const v2Messages = newList.get.all.db();
 
       // Check that all messages are preserved with their IDs
       expect(v2Messages.length).toBe(4);

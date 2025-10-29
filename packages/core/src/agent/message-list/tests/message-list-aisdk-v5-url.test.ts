@@ -290,7 +290,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
       messageList.add(modelMessages, 'input');
 
       // Get V2 messages (what gets stored internally)
-      const v2Messages = messageList.get.all.v2();
+      const v2Messages = messageList.get.all.db();
 
       // Verify the V2 message structure
       expect(v2Messages).toHaveLength(1);
