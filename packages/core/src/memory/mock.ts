@@ -1,8 +1,10 @@
 import { MessageList } from '../agent/message-list';
 import { MastraMemory } from '../memory';
-import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig } from '../memory';
+import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig, MessageDeleteInput } from '../memory';
 import { InMemoryStore } from '../storage';
-import type { StorageGetMessagesArg } from '../storage';
+import type { StorageGetMessagesArg, ThreadSortOptions } from '../storage';
+import type { CoreMessage } from '../llm';
+import type { UIMessageWithMetadata } from '../agent';
 
 export class MockMemory extends MastraMemory {
   threads: Record<string, StorageThreadType> = {};
@@ -41,10 +43,18 @@ export class MockMemory extends MastraMemory {
   // saveMessages for both v1 and v2
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
-    return this.storage.saveMessages(args);
+  async saveMessages({
+    messages,
+    memoryConfig,
+    format = 'v1',
+  }: {
+    messages: (MastraMessageV1 | MastraMessageV2)[];
+    memoryConfig?: MemoryConfig;
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    // Convert all messages to v2 format before saving (like the real Memory class does)
+    const v2Messages = new MessageList().add(messages, 'memory').get.all.v2();
+    return this.storage.saveMessages({ messages: v2Messages, format: 'v2' });
   }
 
   async rememberMessages() {
@@ -52,8 +62,8 @@ export class MockMemory extends MastraMemory {
     return { messages: list.get.remembered.v1(), messagesV2: list.get.remembered.v2() };
   }
 
-  async getThreadsByResourceId() {
-    return [];
+  async getThreadsByResourceId(props: { resourceId: string } & ThreadSortOptions) {
+    return this.storage.getThreadsByResourceId(props);
   }
 
   async getThreadsByResourceIdPaginated(
@@ -63,26 +73,49 @@ export class MockMemory extends MastraMemory {
       perPage: number;
     } & any, // ThreadSortOptions
   ): Promise<any & { threads: StorageThreadType[] }> {
-    // Mock implementation - return empty results with pagination info
-    return {
-      threads: [],
-      totalCount: 0,
-      totalPages: 0,
-      currentPage: args.page,
-      perPage: args.perPage,
-      hasNextPage: false,
-      hasPreviousPage: false,
-    };
+    return this.storage.getThreadsByResourceIdPaginated(args);
   }
-  async query() {
-    return { messages: [], uiMessages: [], messagesV2: [] };
+  async query({ threadId, resourceId, selectBy }: StorageGetMessagesArg): Promise<{
+    messages: CoreMessage[];
+    uiMessages: UIMessageWithMetadata[];
+    messagesV2: MastraMessageV2[];
+  }> {
+    // Get raw messages from storage
+    const rawMessages = await this.storage.getMessages({
+      threadId,
+      resourceId,
+      format: 'v2',
+      selectBy,
+    });
+
+    // Convert using MessageList like the real Memory class does
+    const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
+    return {
+      get messages() {
+        const v1Messages = list.get.all.v1();
+        // Handle selectBy.last if provided
+        if (selectBy?.last && v1Messages.length > selectBy.last) {
+          return v1Messages.slice(v1Messages.length - selectBy.last) as CoreMessage[];
+        }
+        return v1Messages as CoreMessage[];
+      },
+      get uiMessages() {
+        return list.get.all.ui();
+      },
+      get messagesV2() {
+        return list.get.all.v2();
+      },
+    };
   }
   async deleteThread(threadId: string) {
     return this.storage.deleteThread({ threadId });
   }
 
-  async deleteMessages(messageIds: string[]): Promise<void> {
-    return this.storage.deleteMessages(messageIds);
+  async deleteMessages(messageIds: MessageDeleteInput): Promise<void> {
+    const ids = Array.isArray(messageIds)
+      ? messageIds?.map(item => (typeof item === 'string' ? item : item.id))
+      : [messageIds];
+    return this.storage.deleteMessages(ids);
   }
 
   // Add missing method implementations
