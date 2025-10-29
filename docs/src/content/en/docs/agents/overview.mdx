@@ -393,60 +393,6 @@ const response = await testAgentThatDoesntSupportStructuredOutput.generate(
 console.log(response.object);
 ```
 
-
-## Working with images
-
-Agents can analyze and describe images by processing both the visual content and any text within them. To enable image analysis, pass an object with `type: 'image'` and the image URL in the `content` array. You can combine image content with text prompts to guide the agent's analysis.
-
-```typescript showLineNumbers copy
-const response = await testAgent.generate([
-  {
-    role: "user",
-    content: [
-      {
-        type: "image",
-        image: "https://placebear.com/cache/395-205.jpg",
-        mimeType: "image/jpeg"
-      },
-      {
-        type: "text",
-        text: "Describe the image in detail, and extract all the text in the image."
-      }
-    ]
-  }
-]);
-
-console.log(response.text);
-```
-
-For a detailed guide to creating and configuring tools, see the [Tools Overview](../tools-mcp/overview.mdx) page.
-
-### Using `maxSteps`
-
-The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 1, but can be increased:
-
-```typescript showLineNumbers copy
-const response = await testAgent.generate("Help me organize my day", {
-  maxSteps: 5
-});
-
-console.log(response.text);
-```
-
-### Using `onStepFinish`
-
-You can monitor the progress of multi-step operations using the `onStepFinish` callback. This is useful for debugging or providing progress updates to users.
-
-`onStepFinish` is only available when streaming or generating text without structured output.
-
-```typescript showLineNumbers copy
-const response = await testAgent.generate("Help me organize my day", {
-  onStepFinish: ({ text, toolCalls, toolResults, finishReason, usage }) => {
-    console.log({ text, toolCalls, toolResults, finishReason, usage });
-  }
-});
-```
-
 ## Using tools
 
 Agents can use tools to go beyond language generation, enabling structured interactions with external APIs and services. Tools allow agents to access data and perform clearly defined operations in a reliable, repeatable way.
@@ -482,6 +428,59 @@ export const testAgent = new Agent({
 ```
 
 > See [Runtime Context](../server-db/runtime-context.mdx) for more information.
+
+## Using `maxSteps`
+
+The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 1, but can be increased:
+
+```typescript showLineNumbers copy
+const response = await testAgent.generate("Help me organize my day", {
+  maxSteps: 5
+});
+
+console.log(response.text);
+```
+
+## Using `onStepFinish`
+
+You can monitor the progress of multi-step operations using the `onStepFinish` callback. This is useful for debugging or providing progress updates to users.
+
+`onStepFinish` is only available when streaming or generating text without structured output.
+
+```typescript showLineNumbers copy
+const response = await testAgent.generate("Help me organize my day", {
+  onStepFinish: ({ text, toolCalls, toolResults, finishReason, usage }) => {
+    console.log({ text, toolCalls, toolResults, finishReason, usage });
+  }
+});
+```
+
+## Working with images
+
+Agents can analyze and describe images by processing both the visual content and any text within them. To enable image analysis, pass an object with `type: 'image'` and the image URL in the `content` array. You can combine image content with text prompts to guide the agent's analysis.
+
+```typescript showLineNumbers copy
+const response = await testAgent.generate([
+  {
+    role: "user",
+    content: [
+      {
+        type: "image",
+        image: "https://placebear.com/cache/395-205.jpg",
+        mimeType: "image/jpeg"
+      },
+      {
+        type: "text",
+        text: "Describe the image in detail, and extract all the text in the image."
+      }
+    ]
+  }
+]);
+
+console.log(response.text);
+```
+
+For a detailed guide to creating and configuring tools, see the [Tools Overview](../tools-mcp/overview.mdx) page.
 
 ## Testing with Mastra Playground
 
