@@ -114,6 +114,14 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
               },
             });
 
+            self.#delayedPromises.usage.resolve(self.#usageCount);
+
+            Object.entries(self.#delayedPromises).forEach(([key, promise]) => {
+              if (promise.status.type === 'pending') {
+                promise.reject(new Error(`promise '${key}' was not resolved or rejected when stream finished`));
+              }
+            });
+
             self.#streamFinished = true;
             self.#emitter.emit('finish');
           },
