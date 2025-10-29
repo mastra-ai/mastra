@@ -1,12 +1,31 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import type { Embedder } from '../../embeddings';
-import type { MastraMessageV2 } from '../../message';
+import type { MastraMessageV2 } from '../../agent/types';
+import type { Embedder } from '../../llm/model';
 import { RuntimeContext } from '../../runtime-context';
 import type { MemoryStorage } from '../../storage/domains/memory/base';
-import type { VectorStore } from '../../vector';
+import type { VectorStore } from '../../vector/types';
 
 import { SemanticRecall } from './semantic-recall';
+
+// Helper function to create test messages in MastraMessageV2 format
+function createTestMessage(
+  id: string,
+  role: 'user' | 'assistant' | 'system',
+  content: string,
+  createdAt: Date = new Date(),
+): MastraMessageV2 {
+  return {
+    id,
+    role,
+    content: {
+      format: 2,
+      parts: [],
+      content,
+    },
+    createdAt,
+  };
+}
 
 describe('SemanticRecall', () => {
   let mockStorage: MemoryStorage;
@@ -154,19 +173,7 @@ describe('SemanticRecall', () => {
         topK: 2,
       });
 
-      const inputMessages: MastraMessageV2[] = [
-        {
-          id: 'msg-new',
-          role: 'user',
-          content: {
-            format: 2,
-
-            content: 'Test query',
-
-            parts: [],
-          },
-        },
-      ];
+      const inputMessages: MastraMessageV2[] = [createTestMessage('msg-new', 'user', 'Test query')];
 
       vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
         embeddings: [[0.1, 0.2, 0.3]],
@@ -182,8 +189,18 @@ describe('SemanticRecall', () => {
       ]);
 
       vi.mocked(mockStorage.getMessages).mockResolvedValue([
-        { id: 'msg-1', role: 'user', content: 'Message 1' },
-        { id: 'msg-2', role: 'assistant', content: 'Message 2' },
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: { format: 2, parts: [], content: 'Message 1' },
+          createdAt: new Date(),
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          content: { format: 2, parts: [], content: 'Message 2' },
+          createdAt: new Date(),
+        },
       ]);
 
       await processor.processInput({
@@ -208,19 +225,7 @@ describe('SemanticRecall', () => {
         threshold: 0.9,
       });
 
-      const inputMessages: MastraMessageV2[] = [
-        {
-          id: 'msg-new',
-          role: 'user',
-          content: {
-            format: 2,
-
-            content: 'Test query',
-
-            parts: [],
-          },
-        },
-      ];
+      const inputMessages: MastraMessageV2[] = [createTestMessage('msg-new', 'user', 'Test query')];
 
       vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
         embeddings: [[0.1, 0.2, 0.3]],
@@ -238,8 +243,8 @@ describe('SemanticRecall', () => {
       ]);
 
       vi.mocked(mockStorage.getMessages).mockResolvedValue([
-        { id: 'msg-1', role: 'user', content: 'Message 1' },
-        { id: 'msg-3', role: 'user', content: 'Message 3' },
+        createTestMessage('msg-1', 'user', 'Message 1'),
+        createTestMessage('msg-3', 'user', 'Message 3'),
       ]);
 
       const result = await processor.processInput({
@@ -270,19 +275,7 @@ describe('SemanticRecall', () => {
         scope: 'thread',
       });
 
-      const inputMessages: MastraMessageV2[] = [
-        {
-          id: 'msg-new',
-          role: 'user',
-          content: {
-            format: 2,
-
-            content: 'Test query',
-
-            parts: [],
-          },
-        },
-      ];
+      const inputMessages: MastraMessageV2[] = [createTestMessage('msg-new', 'user', 'Test query')];
 
       vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
         embeddings: [[0.1, 0.2, 0.3]],
@@ -317,19 +310,7 @@ describe('SemanticRecall', () => {
         scope: 'resource',
       });
 
-      const inputMessages: MastraMessageV2[] = [
-        {
-          id: 'msg-new',
-          role: 'user',
-          content: {
-            format: 2,
-
-            content: 'Test query',
-
-            parts: [],
-          },
-        },
-      ];
+      const inputMessages: MastraMessageV2[] = [createTestMessage('msg-new', 'user', 'Test query')];
 
       vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
         embeddings: [[0.1, 0.2, 0.3]],
@@ -363,19 +344,7 @@ describe('SemanticRecall', () => {
         embedder: mockEmbedder,
       });
 
-      const inputMessages: MastraMessageV2[] = [
-        {
-          id: 'msg-new',
-          role: 'user',
-          content: {
-            format: 2,
-
-            content: 'Test query',
-
-            parts: [],
-          },
-        },
-      ];
+      const inputMessages: MastraMessageV2[] = [createTestMessage('msg-new', 'user', 'Test query')];
 
       vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
         embeddings: [[0.1, 0.2, 0.3]],
@@ -408,19 +377,7 @@ describe('SemanticRecall', () => {
         embedder: mockEmbedder,
       });
 
-      const inputMessages: MastraMessageV2[] = [
-        {
-          id: 'msg-new',
-          role: 'user',
-          content: {
-            format: 2,
-
-            content: 'Test query',
-
-            parts: [],
-          },
-        },
-      ];
+      const inputMessages: MastraMessageV2[] = [createTestMessage('msg-new', 'user', 'Test query')];
 
       vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
         embeddings: [[0.1, 0.2, 0.3]],
@@ -485,19 +442,7 @@ describe('SemanticRecall', () => {
         embedder: mockEmbedder,
       });
 
-      const inputMessages: MastraMessageV2[] = [
-        {
-          id: 'msg-new',
-          role: 'user',
-          content: {
-            format: 2,
-
-            content: 'Test query',
-
-            parts: [],
-          },
-        },
-      ];
+      const inputMessages: MastraMessageV2[] = [createTestMessage('msg-new', 'user', 'Test query')];
 
       // Runtime context without thread
       const emptyContext = new RuntimeContext();
@@ -628,19 +573,7 @@ describe('SemanticRecall', () => {
         messageRange: { before: 5, after: 3 },
       });
 
-      const inputMessages: MastraMessageV2[] = [
-        {
-          id: 'msg-new',
-          role: 'user',
-          content: {
-            format: 2,
-
-            content: 'Test query',
-
-            parts: [],
-          },
-        },
-      ];
+      const inputMessages: MastraMessageV2[] = [createTestMessage('msg-new', 'user', 'Test query')];
 
       vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
         embeddings: [[0.1, 0.2, 0.3]],
@@ -654,7 +587,7 @@ describe('SemanticRecall', () => {
         { id: 'vec-1', score: 0.95, metadata: { message_id: 'msg-1', thread_id: 'thread-1' } },
       ]);
 
-      vi.mocked(mockStorage.getMessages).mockResolvedValue([{ id: 'msg-1', role: 'user', content: 'Message 1' }]);
+      vi.mocked(mockStorage.getMessages).mockResolvedValue([createTestMessage('msg-1', 'user', 'Message 1')]);
 
       await processor.processInput({
         messages: inputMessages,
@@ -686,19 +619,7 @@ describe('SemanticRecall', () => {
         embedder: mockEmbedder,
       });
 
-      const inputMessages: MastraMessageV2[] = [
-        {
-          id: 'msg-new',
-          role: 'user',
-          content: {
-            format: 2,
-
-            content: 'Test query',
-
-            parts: [],
-          },
-        },
-      ];
+      const inputMessages: MastraMessageV2[] = [createTestMessage('msg-new', 'user', 'Test query')];
 
       vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
         embeddings: [[0.1, 0.2, 0.3]],
@@ -731,19 +652,7 @@ describe('SemanticRecall', () => {
         indexName: 'custom-index',
       });
 
-      const inputMessages: MastraMessageV2[] = [
-        {
-          id: 'msg-new',
-          role: 'user',
-          content: {
-            format: 2,
-
-            content: 'Test query',
-
-            parts: [],
-          },
-        },
-      ];
+      const inputMessages: MastraMessageV2[] = [createTestMessage('msg-new', 'user', 'Test query')];
 
       vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
         embeddings: [[0.1, 0.2, 0.3]],
@@ -879,19 +788,7 @@ describe('SemanticRecall', () => {
         scope: 'thread',
       });
 
-      const inputMessages: MastraMessageV2[] = [
-        {
-          id: 'msg-new',
-          role: 'user',
-          content: {
-            format: 2,
-
-            content: 'Test query',
-
-            parts: [],
-          },
-        },
-      ];
+      const inputMessages: MastraMessageV2[] = [createTestMessage('msg-new', 'user', 'Test query')];
 
       const similarMessage: MastraMessageV2 = {
         id: 'msg-similar',
@@ -927,9 +824,553 @@ describe('SemanticRecall', () => {
       expect(result[1]).toEqual(inputMessages[0]);
 
       // No system message with cross-thread formatting
-      expect(result.some(m => m.role === 'system' && m.content.includes('<remembered_from_other_conversation>'))).toBe(
-        false,
+      expect(
+        result.some(
+          m =>
+            m.role === 'system' &&
+            typeof m.content === 'object' &&
+            m.content.content?.includes('<remembered_from_other_conversation>'),
+        ),
+      ).toBe(false);
+    });
+  });
+
+  describe('Output Processing', () => {
+    it('should create embeddings for both user and assistant messages', async () => {
+      const mockStorage = {
+        getMessages: vi.fn(),
+        saveMessages: vi.fn(),
+      };
+
+      const mockEmbedder = {
+        modelId: 'test-model',
+        doEmbed: vi
+          .fn()
+          .mockResolvedValueOnce({ embeddings: [[0.1, 0.2, 0.3]] })
+          .mockResolvedValueOnce({ embeddings: [[0.4, 0.5, 0.6]] }),
+      };
+
+      const mockVector = {
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn(),
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        listIndexes: vi.fn().mockResolvedValue(['mastra-memory-test-model']),
+      };
+
+      const processor = new SemanticRecall({
+        storage: mockStorage as any,
+        embedder: mockEmbedder as any,
+        vector: mockVector as any,
+      });
+
+      const userMessage: MastraMessageV2 = {
+        id: 'msg-user-1',
+        role: 'user',
+        content: {
+          content: 'What is the weather?',
+          parts: [{ type: 'text', text: 'What is the weather?' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+
+      const assistantMessage: MastraMessageV2 = {
+        id: 'msg-assistant-1',
+        role: 'assistant',
+        content: {
+          content: 'The weather is sunny.',
+          parts: [{ type: 'text', text: 'The weather is sunny.' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:01Z'),
+      };
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('MastraMemory', {
+        thread: { id: 'thread-123' },
+        resourceId: 'user-456',
+      });
+
+      const result = await processor.processOutputResult({
+        messages: [userMessage, assistantMessage],
+        abort: vi.fn() as any,
+        runtimeContext,
+      });
+
+      // Should return messages unchanged
+      expect(result).toEqual([userMessage, assistantMessage]);
+
+      // Should create embeddings for both messages (called separately)
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
+        values: ['What is the weather?'],
+      });
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
+        values: ['The weather is sunny.'],
+      });
+
+      // Should upsert embeddings to vector store
+      expect(mockVector.upsert).toHaveBeenCalledWith({
+        vectors: [
+          [0.1, 0.2, 0.3],
+          [0.4, 0.5, 0.6],
+        ],
+        ids: ['msg-user-1', 'msg-assistant-1'],
+        metadata: [
+          {
+            message_id: 'msg-user-1',
+            thread_id: 'thread-123',
+            resource_id: 'user-456',
+            role: 'user',
+            content: 'What is the weather?',
+            created_at: '2024-01-01T10:00:00.000Z',
+          },
+          {
+            message_id: 'msg-assistant-1',
+            thread_id: 'thread-123',
+            resource_id: 'user-456',
+            role: 'assistant',
+            content: 'The weather is sunny.',
+            created_at: '2024-01-01T10:00:01.000Z',
+          },
+        ],
+        indexName: 'mastra-memory-test-model',
+      });
+    });
+
+    it('should skip system messages when creating embeddings', async () => {
+      const mockStorage = {
+        getMessages: vi.fn(),
+        saveMessages: vi.fn(),
+      };
+
+      const mockEmbedder = {
+        modelId: 'test-model',
+        doEmbed: vi
+          .fn()
+          .mockResolvedValueOnce({
+            embeddings: [[0.1, 0.2, 0.3]],
+          })
+          .mockResolvedValueOnce({
+            embeddings: [[0.4, 0.5, 0.6]],
+          }),
+      };
+
+      const mockVector = {
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn(),
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        listIndexes: vi.fn().mockResolvedValue(['mastra-memory-test-model']),
+      };
+
+      const processor = new SemanticRecall({
+        storage: mockStorage as any,
+        embedder: mockEmbedder as any,
+        vector: mockVector as any,
+      });
+
+      const systemMessage: MastraMessageV2 = {
+        id: 'msg-system-1',
+        role: 'system',
+        content: {
+          content: 'You are a helpful assistant.',
+          parts: [{ type: 'text', text: 'You are a helpful assistant.' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+
+      const userMessage: MastraMessageV2 = {
+        id: 'msg-user-1',
+        role: 'user',
+        content: {
+          content: 'Hello',
+          parts: [{ type: 'text', text: 'Hello' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:01Z'),
+      };
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('MastraMemory', {
+        thread: { id: 'thread-123' },
+        resourceId: 'user-456',
+      });
+
+      await processor.processOutputResult({
+        messages: [systemMessage, userMessage],
+        abort: vi.fn() as any,
+        runtimeContext,
+      });
+
+      // Should only create embedding for user message, not system
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
+        values: ['Hello'],
+      });
+
+      expect(mockVector.upsert).toHaveBeenCalledWith({
+        vectors: [[0.1, 0.2, 0.3]],
+        ids: ['msg-user-1'],
+        metadata: [
+          {
+            message_id: 'msg-user-1',
+            thread_id: 'thread-123',
+            resource_id: 'user-456',
+            role: 'user',
+            content: 'Hello',
+            created_at: '2024-01-01T10:00:01.000Z',
+          },
+        ],
+        indexName: 'mastra-memory-test-model',
+      });
+    });
+
+    it('should handle messages with no text content', async () => {
+      const mockStorage = {
+        getMessages: vi.fn(),
+        saveMessages: vi.fn(),
+      };
+
+      const mockEmbedder = {
+        modelId: 'test-model',
+        doEmbed: vi.fn().mockResolvedValue({
+          embeddings: [[0.1, 0.2, 0.3]],
+        }),
+      };
+
+      const mockVector = {
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn(),
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        listIndexes: vi.fn().mockResolvedValue(['mastra-memory-test-model']),
+      };
+
+      const processor = new SemanticRecall({
+        storage: mockStorage as any,
+        embedder: mockEmbedder as any,
+        vector: mockVector as any,
+      });
+
+      const emptyMessage: MastraMessageV2 = {
+        id: 'msg-empty-1',
+        role: 'user',
+        content: {
+          content: '',
+          parts: [],
+        },
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+
+      const validMessage: MastraMessageV2 = {
+        id: 'msg-valid-1',
+        role: 'user',
+        content: {
+          content: 'Hello',
+          parts: [{ type: 'text', text: 'Hello' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:01Z'),
+      };
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('MastraMemory', {
+        thread: { id: 'thread-123' },
+        resourceId: 'user-456',
+      });
+
+      await processor.processOutputResult({
+        messages: [emptyMessage, validMessage],
+        abort: vi.fn() as any,
+        runtimeContext,
+      });
+
+      // Should only create embedding for message with content
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
+        values: ['Hello'],
+      });
+
+      expect(mockVector.upsert).toHaveBeenCalledWith({
+        vectors: [[0.1, 0.2, 0.3]],
+        ids: ['msg-valid-1'],
+        metadata: expect.arrayContaining([
+          expect.objectContaining({
+            message_id: 'msg-valid-1',
+          }),
+        ]),
+        indexName: 'mastra-memory-test-model',
+      });
+    });
+
+    it('should create vector index if it does not exist', async () => {
+      const mockStorage = {
+        getMessages: vi.fn(),
+        saveMessages: vi.fn(),
+      };
+
+      const mockEmbedder = {
+        modelId: 'test-model',
+        doEmbed: vi.fn().mockResolvedValue({
+          embeddings: [[0.1, 0.2, 0.3]],
+        }),
+      };
+
+      const mockVector = {
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn(),
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        listIndexes: vi.fn().mockResolvedValue([]),
+      };
+
+      const processor = new SemanticRecall({
+        storage: mockStorage as any,
+        embedder: mockEmbedder as any,
+        vector: mockVector as any,
+      });
+
+      const userMessage: MastraMessageV2 = {
+        id: 'msg-user-1',
+        role: 'user',
+        content: {
+          content: 'Hello',
+          parts: [{ type: 'text', text: 'Hello' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('MastraMemory', {
+        thread: { id: 'thread-123' },
+        resourceId: 'user-456',
+      });
+
+      await processor.processOutputResult({
+        messages: [userMessage],
+        abort: vi.fn() as any,
+        runtimeContext,
+      });
+
+      // Should create index with correct dimension
+      expect(mockVector.createIndex).toHaveBeenCalledWith({
+        indexName: 'mastra-memory-test-model',
+        dimension: 3,
+        metric: 'cosine',
+      });
+    });
+
+    it('should use custom index name if provided', async () => {
+      const mockStorage = {
+        getMessages: vi.fn(),
+        saveMessages: vi.fn(),
+      };
+
+      const mockEmbedder = {
+        modelId: 'test-model',
+        doEmbed: vi.fn().mockResolvedValue({
+          embeddings: [[0.1, 0.2, 0.3]],
+        }),
+      };
+
+      const mockVector = {
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn(),
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        listIndexes: vi.fn().mockResolvedValue([]),
+      };
+
+      const processor = new SemanticRecall({
+        storage: mockStorage as any,
+        embedder: mockEmbedder as any,
+        vector: mockVector as any,
+        indexName: 'custom-index',
+      });
+
+      const userMessage: MastraMessageV2 = {
+        id: 'msg-user-1',
+        role: 'user',
+        content: {
+          content: 'Hello',
+          parts: [{ type: 'text', text: 'Hello' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('MastraMemory', {
+        thread: { id: 'thread-123' },
+        resourceId: 'user-456',
+      });
+
+      await processor.processOutputResult({
+        messages: [userMessage],
+        abort: vi.fn() as any,
+        runtimeContext,
+      });
+
+      // Should use custom index name
+      expect(mockVector.createIndex).toHaveBeenCalledWith({
+        indexName: 'custom-index',
+        dimension: 3,
+        metric: 'cosine',
+      });
+
+      expect(mockVector.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          indexName: 'custom-index',
+        }),
       );
+    });
+
+    it('should return original messages when no threadId', async () => {
+      const mockStorage = {
+        getMessages: vi.fn(),
+        saveMessages: vi.fn(),
+      };
+
+      const mockEmbedder = {
+        modelId: 'test-model',
+        doEmbed: vi.fn(),
+      };
+
+      const mockVector = {
+        upsert: vi.fn(),
+        query: vi.fn(),
+        createIndex: vi.fn(),
+        listIndexes: vi.fn(),
+      };
+
+      const processor = new SemanticRecall({
+        storage: mockStorage as any,
+        embedder: mockEmbedder as any,
+        vector: mockVector as any,
+      });
+
+      const userMessage: MastraMessageV2 = {
+        id: 'msg-user-1',
+        role: 'user',
+        content: {
+          content: 'Hello',
+          parts: [{ type: 'text', text: 'Hello' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+
+      const runtimeContext = new RuntimeContext();
+      // No memory context set
+
+      const result = await processor.processOutputResult({
+        messages: [userMessage],
+        abort: vi.fn() as any,
+        runtimeContext,
+      });
+
+      // Should return messages unchanged
+      expect(result).toEqual([userMessage]);
+
+      // Should not create embeddings
+      expect(mockEmbedder.doEmbed).not.toHaveBeenCalled();
+      expect(mockVector.upsert).not.toHaveBeenCalled();
+    });
+
+    it('should handle embedding errors gracefully', async () => {
+      const mockStorage = {
+        getMessages: vi.fn(),
+        saveMessages: vi.fn(),
+      };
+
+      const mockEmbedder = {
+        modelId: 'test-model',
+        doEmbed: vi.fn().mockRejectedValue(new Error('Embedding service unavailable')),
+      };
+
+      const mockVector = {
+        upsert: vi.fn(),
+        query: vi.fn(),
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        listIndexes: vi.fn().mockResolvedValue(['mastra-memory-test-model']),
+      };
+
+      const processor = new SemanticRecall({
+        storage: mockStorage as any,
+        embedder: mockEmbedder as any,
+        vector: mockVector as any,
+      });
+
+      const userMessage: MastraMessageV2 = {
+        id: 'msg-user-1',
+        role: 'user',
+        content: {
+          content: 'Hello',
+          parts: [{ type: 'text', text: 'Hello' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('MastraMemory', {
+        thread: { id: 'thread-123' },
+        resourceId: 'user-456',
+      });
+
+      const result = await processor.processOutputResult({
+        messages: [userMessage],
+        abort: vi.fn() as any,
+        runtimeContext,
+      });
+
+      // Should return messages unchanged even on error
+      expect(result).toEqual([userMessage]);
+
+      // Should not call upsert if embedding fails
+      expect(mockVector.upsert).not.toHaveBeenCalled();
+    });
+
+    it('should handle vector store errors gracefully', async () => {
+      const mockStorage = {
+        getMessages: vi.fn(),
+        saveMessages: vi.fn(),
+      };
+
+      const mockEmbedder = {
+        modelId: 'test-model',
+        doEmbed: vi.fn().mockResolvedValue({
+          embeddings: [[0.1, 0.2, 0.3]],
+        }),
+      };
+
+      const mockVector = {
+        upsert: vi.fn().mockRejectedValue(new Error('Vector store unavailable')),
+        query: vi.fn(),
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        listIndexes: vi.fn().mockResolvedValue(['mastra-memory-test-model']),
+      };
+
+      const processor = new SemanticRecall({
+        storage: mockStorage as any,
+        embedder: mockEmbedder as any,
+        vector: mockVector as any,
+      });
+
+      const userMessage: MastraMessageV2 = {
+        id: 'msg-user-1',
+        role: 'user',
+        content: {
+          content: 'Hello',
+          parts: [{ type: 'text', text: 'Hello' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('MastraMemory', {
+        thread: { id: 'thread-123' },
+        resourceId: 'user-456',
+      });
+
+      const result = await processor.processOutputResult({
+        messages: [userMessage],
+        abort: vi.fn() as any,
+        runtimeContext,
+      });
+
+      // Should return messages unchanged even on error
+      expect(result).toEqual([userMessage]);
+
+      // Should have attempted to upsert
+      expect(mockVector.upsert).toHaveBeenCalled();
     });
   });
 });
