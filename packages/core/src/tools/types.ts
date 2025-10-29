@@ -6,10 +6,8 @@ import type {
   ToolExecutionOptions,
   Schema,
 } from '@internal/external-types';
-// @ts-ignore - MCP SDK subpath imports not fully supported by tsup
-import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/dist/esm/shared/protocol.js';
-// @ts-ignore - MCP SDK subpath imports not fully supported by tsup
-import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/dist/esm/types.js';
+import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/types.js';
 
 import type { IAction, IExecutionContext, MastraUnion } from '../action';
 import type { TracingContext } from '../ai-tracing';
