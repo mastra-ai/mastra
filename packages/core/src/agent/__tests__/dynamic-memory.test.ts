@@ -1,11 +1,11 @@
+import { simulateReadableStream } from 'ai';
+import { MockLanguageModelV1 } from 'ai/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, expect, it } from 'vitest';
-import { Agent } from '../agent';
-import { InMemoryStore } from '../../storage';
 import { MockMemory } from '../../memory';
-import { MockLanguageModelV1 } from 'ai/test';
-import { simulateReadableStream } from 'ai';
 import { RuntimeContext } from '../../runtime-context';
+import { InMemoryStore } from '../../storage';
+import { Agent } from '../agent';
 
 function dynamicMemoryTest(version: 'v1' | 'v2') {
   describe(`${version} - dynamic memory configuration`, () => {

@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { InMemoryStore } from '@mastra/core/storage';
-import { BenchmarkStore } from '../benchmark-store';
 import { rm } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -78,7 +77,7 @@ describe('BenchmarkStore', () => {
   describe('hydrate', () => {
     it('should restore store data from a JSON file', async () => {
       // Create first store with data
-      const store1 = new BenchmarkStore();
+      const store1 = new InMemoryStore();
       await store1.init();
 
       const thread = {
@@ -109,7 +108,7 @@ describe('BenchmarkStore', () => {
       await store1.persist(testFilePath);
 
       // Create new store and hydrate
-      const store2 = new BenchmarkStore();
+      const store2 = new InMemoryStore();
       await store2.init();
       await store2.hydrate(testFilePath);
 
