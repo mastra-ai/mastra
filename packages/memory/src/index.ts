@@ -196,18 +196,20 @@ export class Memory extends MastraMemory {
       filter,
       ...(vectorResults?.length
         ? {
-            include: vectorResults.map(r => ({
-              id: r.metadata?.message_id,
-              threadId: r.metadata?.thread_id,
-              withNextMessages:
-                typeof vectorConfig.messageRange === 'number'
-                  ? vectorConfig.messageRange
-                  : vectorConfig.messageRange.after,
-              withPreviousMessages:
-                typeof vectorConfig.messageRange === 'number'
-                  ? vectorConfig.messageRange
-                  : vectorConfig.messageRange.before,
-            })),
+            include: vectorResults
+              .filter(r => r.metadata?.message_id && r.metadata?.thread_id)
+              .map(r => ({
+                id: r.metadata?.message_id,
+                threadId: r.metadata?.thread_id,
+                withNextMessages:
+                  typeof vectorConfig.messageRange === 'number'
+                    ? vectorConfig.messageRange
+                    : vectorConfig.messageRange.after,
+                withPreviousMessages:
+                  typeof vectorConfig.messageRange === 'number'
+                    ? vectorConfig.messageRange
+                    : vectorConfig.messageRange.before,
+              })),
           }
         : {}),
     });

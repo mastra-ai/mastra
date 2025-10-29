@@ -1,5 +1,12 @@
 import { MessageList } from '../agent/message-list';
-import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig, MemoryQueryResult } from '../memory';
+import type {
+  StorageThreadType,
+  MastraMessageV1,
+  MastraMessageV2,
+  MemoryConfig,
+  MemoryQueryResult,
+  MessageDeleteInput,
+} from '../memory';
 import { InMemoryStore } from '../storage';
 import type { StorageListMessagesInput } from '../storage';
 import { MastraMemory } from './memory';
@@ -58,8 +65,10 @@ export class MockMemory extends MastraMemory {
     return this.storage.deleteThread({ threadId });
   }
 
-  async deleteMessages(messageIds: string[]): Promise<void> {
-    return this.storage.deleteMessages(messageIds);
+  async deleteMessages(messageIds: MessageDeleteInput): Promise<void> {
+    const arr = Array.isArray(messageIds) ? messageIds : [messageIds];
+    const ids = arr.map(m => (typeof m === 'string' ? m : m.id));
+    return this.storage.deleteMessages(ids);
   }
 
   // Add missing method implementations
