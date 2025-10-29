@@ -2,7 +2,7 @@
   "redirects": [
     {
       "source": "/docs/getting-started/model-providers",
-      "destination": "/docs/models",
+      "destination": "/models",
       "permanent": true
     },
     {
@@ -12,7 +12,7 @@
     },
     {
       "source": "/docs/getting-started/model-capability",
-      "destination": "/docs/models",
+      "destination": "/models",
       "permanent": true
     },
     {
@@ -182,12 +182,12 @@
     },
     {
       "source": "/examples/memory",
-      "destination": "/docs/examples/memory/memory-with-libsql",
+      "destination": "/examples/memory/memory-with-libsql",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank",
-      "destination": "/docs/examples/rag/rerank/rerank",
+      "destination": "/examples/rag/rerank/rerank",
       "permanent": true
     },
     {
@@ -197,42 +197,42 @@
     },
     {
       "source": "/examples/rag/embed-chunk-array",
-      "destination": "/docs/examples/rag/embedding/embed-chunk-array",
+      "destination": "/examples/rag/embedding/embed-chunk-array",
       "permanent": true
     },
     {
       "source": "/examples/rag/embed-text-chunk",
-      "destination": "/docs/examples/rag/embedding/embed-text-chunk",
+      "destination": "/examples/rag/embedding/embed-text-chunk",
       "permanent": true
     },
     {
       "source": "/examples/rag/filter-rag",
-      "destination": "/docs/examples/rag/usage/filter-rag",
+      "destination": "/examples/rag/usage/filter-rag",
       "permanent": true
     },
     {
       "source": "/examples/rag/insert-embedding-in-astra",
-      "destination": "/docs/examples/rag/upsert/upsert-embeddings#astra-db",
+      "destination": "/examples/rag/upsert/upsert-embeddings#astra-db",
       "permanent": true
     },
     {
       "source": "/examples/rag/insert-embedding-in-pgvector",
-      "destination": "/docs/examples/rag/upsert/upsert-embeddings#pgvector",
+      "destination": "/examples/rag/upsert/upsert-embeddings#pgvector",
       "permanent": true
     },
     {
       "source": "/examples/rag/insert-embedding-in-chroma",
-      "destination": "/docs/examples/rag/upsert/upsert-embeddings#chroma",
+      "destination": "/examples/rag/upsert/upsert-embeddings#chroma",
       "permanent": true
     },
     {
       "source": "/examples/rag/insert-embedding-in-pinecone",
-      "destination": "/docs/examples/rag/upsert/upsert-embeddings#pinecone",
+      "destination": "/examples/rag/upsert/upsert-embeddings#pinecone",
       "permanent": true
     },
     {
       "source": "/examples/memory/short-term-working-memory",
-      "destination": "/docs/examples/memory/memory-with-libsql",
+      "destination": "/examples/memory/memory-with-libsql",
       "permanent": true
     },
     {
@@ -267,22 +267,22 @@
     },
     {
       "source": "/docs/guide/guides/01-harry-potter",
-      "destination": "/docs/guides",
+      "destination": "/guides",
       "permanent": true
     },
     {
       "source": "/docs/guide/guides/02-chef-michel",
-      "destination": "/docs/guides/guide/chef-michel",
+      "destination": "/guides/guide/chef-michel",
       "permanent": true
     },
     {
       "source": "/docs/guides/chef-michel",
-      "destination": "/docs/guides/guide/chef-michel",
+      "destination": "/guides/guide/chef-michel",
       "permanent": true
     },
     {
       "source": "/docs/guide/guides/03-stock-agent",
-      "destination": "/docs/guides/guide/stock-agent",
+      "destination": "/guides/guide/stock-agent",
       "permanent": true
     },
     {
@@ -302,87 +302,87 @@
     },
     {
       "source": "/docs/reference/cli/engine",
-      "destination": "/docs/reference",
+      "destination": "/reference",
       "permanent": true
     },
     {
       "source": "/docs/reference/workflows/step-retries",
-      "destination": "/docs/reference/workflows/workflow",
+      "destination": "/reference/workflows/workflow",
       "permanent": true
     },
     {
       "source": "/docs/reference/observability/otel-config",
-      "destination": "/docs/reference/observability/otel-config",
+      "destination": "/reference/observability/otel-config",
       "permanent": true
     },
     {
       "source": "/docs/reference/client-js",
-      "destination": "/docs/reference/client-js/agents",
+      "destination": "/reference/client-js/agents",
       "permanent": true
     },
     {
       "source": "/docs/reference/memory/addMessage",
-      "destination": "/docs/reference/memory/createThread",
+      "destination": "/reference/memory/createThread",
       "permanent": true
     },
     {
       "source": "/docs/reference/memory/rememberMessages",
-      "destination": "/docs/reference/memory/createThread",
+      "destination": "/reference/memory/createThread",
       "permanent": true
     },
     {
       "source": "/docs/reference/observability/combine-loggers",
-      "destination": "/docs/reference/observability/logger",
+      "destination": "/reference/observability/logger",
       "permanent": true
     },
     {
       "source": "/reference/rag/retrieval",
-      "destination": "/docs/examples/rag/query/retrieve-results",
+      "destination": "/examples/rag/query/retrieve-results",
       "permanent": true
     },
     {
       "source": "/docs/reference/rag/pgstore",
-      "destination": "/docs/reference/rag/pg",
+      "destination": "/reference/rag/pg",
       "permanent": true
     },
     {
       "source": "/docs/reference/rag/reranker",
-      "destination": "/docs/reference/rag/rerank",
+      "destination": "/reference/rag/rerank",
       "permanent": true
     },
     {
       "source": "/docs/reference/storage/mastra-storage",
-      "destination": "/docs/reference/storage/libsql",
+      "destination": "/reference/storage/libsql",
       "permanent": true
     },
     {
       "source": "/docs/reference/tts/generate",
-      "destination": "/docs/reference/voice/mastra-voice",
+      "destination": "/reference/voice/mastra-voice",
       "permanent": true
     },
     {
       "source": "/docs/reference/tts/providers-and-models",
-      "destination": "/docs/reference/voice/mastra-voice",
+      "destination": "/reference/voice/mastra-voice",
       "permanent": true
     },
     {
       "source": "/docs/reference/tts/provider-and-models",
-      "destination": "/docs/reference/voice/mastra-voice",
+      "destination": "/reference/voice/mastra-voice",
       "permanent": true
     },
     {
       "source": "/docs/reference/voice/voice.close",
-      "destination": "/docs/reference/voice/mastra-voice",
+      "destination": "/reference/voice/mastra-voice",
       "permanent": true
     },
     {
       "source": "/docs/reference/voice/voice.off",
-      "destination": "/docs/reference/voice/mastra-voice",
+      "destination": "/reference/voice/mastra-voice",
       "permanent": true
     },
     {
       "source": "/docs/reference/tts/stream",
-      "destination": "/docs/reference/voice/mastra-voice",
+      "destination": "/reference/voice/mastra-voice",
       "permanent": true
     },
     {
@@ -397,17 +397,7 @@
     },
     {
       "source": "/docs/local-dev/sync",
-      "destination": "/docs/integrations",
-      "permanent": true
-    },
-    {
-      "source": "/docs/local-dev/syncs",
-      "destination": "/docs/integrations",
-      "permanent": true
-    },
-    {
-      "source": "/docs/local-dev/syncing-projects",
-      "destination": "/docs/server-db/local-dev-playground",
+      "destination": "/docs/getting-started/studio",
       "permanent": true
     },
     {
@@ -442,132 +432,132 @@
     },
     {
       "source": "/examples/rag/adjust-chunk-delimiters",
-      "destination": "/docs/examples/rag/chunking/adjust-chunk-delimiters",
+      "destination": "/examples/rag/chunking/adjust-chunk-delimiters",
       "permanent": true
     },
     {
       "source": "/examples/rag/adjust-chunk-size",
-      "destination": "/docs/examples/rag/chunking/adjust-chunk-size",
+      "destination": "/examples/rag/chunking/adjust-chunk-size",
       "permanent": true
     },
     {
       "source": "/examples/rag/basic-rag",
-      "destination": "/docs/examples/rag/usage/basic-rag",
+      "destination": "/examples/rag/usage/basic-rag",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunk-html",
-      "destination": "/docs/examples/rag/chunking/chunk-html",
+      "destination": "/examples/rag/chunking/chunk-html",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunk-json",
-      "destination": "/docs/examples/rag/chunking/chunk-json",
+      "destination": "/examples/rag/chunking/chunk-json",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunk-markdown",
-      "destination": "/docs/examples/rag/chunking/chunk-markdown",
+      "destination": "/examples/rag/chunking/chunk-markdown",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunk-text",
-      "destination": "/docs/examples/rag/chunking/chunk-text",
+      "destination": "/examples/rag/chunking/chunk-text",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking",
-      "destination": "/docs/examples/rag/chunking/chunk-text",
+      "destination": "/examples/rag/chunking/chunk-text",
       "permanent": true
     },
     {
       "source": "/examples/rag/cleanup-rag",
-      "destination": "/docs/examples/rag/usage/cleanup-rag",
+      "destination": "/examples/rag/usage/cleanup-rag",
       "permanent": true
     },
     {
       "source": "/examples/rag/cot-rag",
-      "destination": "/docs/examples/rag/usage/cot-rag",
+      "destination": "/examples/rag/usage/cot-rag",
       "permanent": true
     },
     {
       "source": "/examples/rag/cot-workflow-rag",
-      "destination": "/docs/examples/rag/usage/cot-workflow-rag",
+      "destination": "/examples/rag/usage/cot-workflow-rag",
       "permanent": true
     },
     {
       "source": "/examples/rag/embed-text-with-cohere",
-      "destination": "/docs/examples/rag/embedding/embed-text-with-cohere",
+      "destination": "/examples/rag/embedding/embed-text-with-cohere",
       "permanent": true
     },
     {
       "source": "/examples/rag/graph-rag",
-      "destination": "/docs/examples/rag/usage/graph-rag",
+      "destination": "/examples/rag/usage/graph-rag",
       "permanent": true
     },
     {
       "source": "/examples/rag/hybrid-vector-search",
-      "destination": "/docs/examples/rag/query/hybrid-vector-search",
+      "destination": "/examples/rag/query/hybrid-vector-search",
       "permanent": true
     },
     {
       "source": "/examples/rag/insert-embedding-in-libsql",
-      "destination": "/docs/reference/rag/libsql",
+      "destination": "/reference/rag/libsql",
       "permanent": true
     },
     {
       "source": "/examples/rag/insert-embedding-in-qdrant",
-      "destination": "/docs/reference/rag/qdrant",
+      "destination": "/reference/rag/qdrant",
       "permanent": true
     },
     {
       "source": "/examples/rag/insert-embedding-in-upstash",
-      "destination": "/docs/reference/rag/upstash",
+      "destination": "/reference/rag/upstash",
       "permanent": true
     },
     {
       "source": "/examples/rag/insert-embedding-in-vectorize",
-      "destination": "/docs/reference/rag/pg",
+      "destination": "/reference/rag/pg",
       "permanent": true
     },
     {
       "source": "/examples/rag/metadata-extraction",
-      "destination": "/docs/examples/rag/embedding/metadata-extraction",
+      "destination": "/examples/rag/embedding/metadata-extraction",
       "permanent": true
     },
     {
       "source": "/examples/rag/query/metadata-extraction",
-      "destination": "/docs/examples/rag/embedding/metadata-extraction",
+      "destination": "/examples/rag/embedding/metadata-extraction",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank-rag",
-      "destination": "/docs/examples/rag/rerank/rerank",
+      "destination": "/examples/rag/rerank/rerank",
       "permanent": true
     },
     {
       "source": "/examples/rag/reranking-with-cohere",
-      "destination": "/docs/examples/rag/rerank/reranking-with-cohere",
+      "destination": "/examples/rag/rerank/reranking-with-cohere",
       "permanent": true
     },
     {
       "source": "/examples/rag/usage/rerank-rag",
-      "destination": "/docs/examples/rag/rerank/rerank",
+      "destination": "/examples/rag/rerank/rerank",
       "permanent": true
     },
     {
       "source": "/examples/rag/retrieve-results",
-      "destination": "/docs/examples/rag/query/retrieve-results",
+      "destination": "/examples/rag/query/retrieve-results",
       "permanent": true
     },
     {
       "source": "/examples/voice",
-      "destination": "/docs/examples/voice/text-to-speech",
+      "destination": "/examples/voice/text-to-speech",
       "permanent": true
     },
     {
       "source": "/examples/workflows/subscribed-steps",
-      "destination": "/docs/examples/workflows/agent-and-tool-interop",
+      "destination": "/examples/workflows/agent-and-tool-interop",
       "permanent": true
     },
     {
@@ -577,12 +567,12 @@
     },
     {
       "source": "/reference/tools/mcp-configuration",
-      "destination": "/docs/reference/tools/mcp-client",
+      "destination": "/reference/tools/mcp-client",
       "permanent": true
     },
     {
       "source": "/reference/observability/create-logger",
-      "destination": "/docs/reference/observability/logger",
+      "destination": "/reference/observability/logger",
       "permanent": true
     },
     {
@@ -592,7 +582,7 @@
     },
     {
       "source": "/reference/rag/vector-search",
-      "destination": "/docs/examples/rag/query/hybrid-vector-search",
+      "destination": "/examples/rag/query/hybrid-vector-search",
       "permanent": true
     },
     {
@@ -602,37 +592,37 @@
     },
     {
       "source": "/examples/evals/word-inclusion",
-      "destination": "/docs/examples/evals/custom-native-javascript-eval",
+      "destination": "/examples/evals/custom-native-javascript-eval",
       "permanent": true
     },
     {
       "source": "/examples/evals/custom-eval",
-      "destination": "/docs/examples/evals/custom-llm-judge-eval",
+      "destination": "/examples/evals/custom-llm-judge-eval",
       "permanent": true
     },
     {
       "source": "/examples/workflows/agent-and-tool-interop",
-      "destination": "/docs/examples/workflows/agent-as-step",
+      "destination": "/examples/workflows/agent-as-step",
       "permanent": true
     },
     {
       "source": "/reference/agents/createTool",
-      "destination": "/docs/reference/tools/create-tool",
+      "destination": "/reference/tools/create-tool",
       "permanent": true
     },
     {
       "source": "/reference/workflows/start",
-      "destination": "/docs/reference/workflows/run-methods/start",
+      "destination": "/reference/workflows/run-methods/start",
       "permanent": true
     },
     {
       "source": "/reference/workflows/resume",
-      "destination": "/docs/reference/workflows/run-methods/resume",
+      "destination": "/reference/workflows/run-methods/resume",
       "permanent": true
     },
     {
       "source": "/reference/workflows/watch",
-      "destination": "/docs/reference/workflows/run-methods/watch",
+      "destination": "/reference/workflows/run-methods/watch",
       "permanent": true
     },
     {
@@ -642,7 +632,7 @@
     },
     {
       "source": "/examples/agents/hierarchical-multi-agent",
-      "destination": "/docs/examples/agents/supervisor-agent",
+      "destination": "/examples/agents/supervisor-agent",
       "permanent": true
     },
     {
@@ -657,127 +647,127 @@
     },
     {
       "source": "/reference/agents/getAgent",
-      "destination": "/docs/reference/core/getAgent",
+      "destination": "/reference/core/getAgent",
       "permanent": true
     },
     {
       "source": "/reference/workflows/branch",
-      "destination": "/docs/reference/workflows/workflow-methods/branch",
+      "destination": "/reference/workflows/workflow-methods/branch",
       "permanent": true
     },
     {
       "source": "/reference/workflows/commit",
-      "destination": "/docs/reference/workflows/workflow-methods/commit",
+      "destination": "/reference/workflows/workflow-methods/commit",
       "permanent": true
     },
     {
       "source": "/reference/workflows/create-run",
-      "destination": "/docs/reference/workflows/workflow-methods/create-run",
+      "destination": "/reference/workflows/workflow-methods/create-run",
       "permanent": true
     },
     {
       "source": "/reference/workflows/dountil",
-      "destination": "/docs/reference/workflows/workflow-methods/dountil",
+      "destination": "/reference/workflows/workflow-methods/dountil",
       "permanent": true
     },
     {
       "source": "/reference/workflows/dowhile",
-      "destination": "/docs/reference/workflows/workflow-methods/dowhile",
+      "destination": "/reference/workflows/workflow-methods/dowhile",
       "permanent": true
     },
     {
       "source": "/reference/workflows/foreach",
-      "destination": "/docs/reference/workflows/workflow-methods/foreach",
+      "destination": "/reference/workflows/workflow-methods/foreach",
       "permanent": true
     },
     {
       "source": "/reference/workflows/map",
-      "destination": "/docs/reference/workflows/workflow-methods/map",
+      "destination": "/reference/workflows/workflow-methods/map",
       "permanent": true
     },
     {
       "source": "/reference/workflows/parallel",
-      "destination": "/docs/reference/workflows/workflow-methods/parallel",
+      "destination": "/reference/workflows/workflow-methods/parallel",
       "permanent": true
     },
     {
       "source": "/reference/workflows/sendEvent",
-      "destination": "/docs/reference/workflows/workflow-methods/sendEvent",
+      "destination": "/reference/workflows/workflow-methods/sendEvent",
       "permanent": true
     },
     {
       "source": "/reference/workflows/sleep",
-      "destination": "/docs/reference/workflows/workflow-methods/sleep",
+      "destination": "/reference/workflows/workflow-methods/sleep",
       "permanent": true
     },
     {
       "source": "/reference/workflows/sleepUntil",
-      "destination": "/docs/reference/workflows/workflow-methods/sleepUntil",
+      "destination": "/reference/workflows/workflow-methods/sleepUntil",
       "permanent": true
     },
     {
       "source": "/reference/workflows/then",
-      "destination": "/docs/reference/workflows/workflow-methods/then",
+      "destination": "/reference/workflows/workflow-methods/then",
       "permanent": true
     },
     {
       "source": "/reference/workflows/waitForEvent",
-      "destination": "/docs/reference/workflows/workflow-methods/waitForEvent",
+      "destination": "/reference/workflows/workflow-methods/waitForEvent",
       "permanent": true
     },
     {
       "source": "/reference/templates",
-      "destination": "/docs/reference/templates/overview",
+      "destination": "/reference/templates/overview",
       "permanent": true
     },
     {
       "source": "/reference/agents/stream",
-      "destination": "/docs/reference/streaming/agents/stream",
+      "destination": "/reference/streaming/agents/stream",
       "permanent": true
     },
     {
       "source": "/reference/streaming/agents",
-      "destination": "/docs/reference/streaming/agents/stream",
+      "destination": "/reference/streaming/agents/stream",
       "permanent": true
     },
     {
       "source": "/reference/agents/streamVNext",
-      "destination": "/docs/reference/streaming/agents/streamVNext",
+      "destination": "/reference/streaming/agents/streamVNext",
       "permanent": true
     },
     {
       "source": "/reference/agents/ChunkType",
-      "destination": "/docs/reference/streaming/ChunkType",
+      "destination": "/reference/streaming/ChunkType",
       "permanent": true
     },
     {
       "source": "/reference/agents/MastraModelOutput",
-      "destination": "/docs/reference/streaming/agents/MastraModelOutput",
+      "destination": "/reference/streaming/agents/MastraModelOutput",
       "permanent": true
     },
     {
       "source": "/reference/workflows/run-methods/stream",
-      "destination": "/docs/reference/streaming/workflows/stream",
+      "destination": "/reference/streaming/workflows/stream",
       "permanent": true
     },
     {
       "source": "/reference/workflows/run-methods/streamVNext",
-      "destination": "/docs/reference/streaming/workflows/streamVNext",
+      "destination": "/reference/streaming/workflows/streamVNext",
       "permanent": true
     },
     {
       "source": "/reference/networks/agent-network",
-      "destination": "/docs/reference/agents/network",
+      "destination": "/reference/agents/network",
       "permanent": true
     },
     {
       "source": "/reference/agents/generateVNext",
-      "destination": "/docs/reference/agents/generate",
+      "destination": "/reference/agents/generate",
       "permanent": true
     },
     {
       "source": "/reference/streaming/agents/streamVNext",
-      "destination": "/docs/reference/streaming/agents/stream",
+      "destination": "/reference/streaming/agents/stream",
       "permanent": true
     },
     {
@@ -792,87 +782,87 @@
     },
     {
       "source": "/reference/observability/ai-tracing",
-      "destination": "/docs/reference/observability/ai-tracing/ai-tracing",
+      "destination": "/reference/observability/ai-tracing/ai-tracing",
       "permanent": true
     },
     {
       "source": "/reference/observability/logger",
-      "destination": "/docs/reference/observability/logging/pino-logger",
+      "destination": "/reference/observability/logging/pino-logger",
       "permanent": true
     },
     {
       "source": "/reference/observability/otel-config",
-      "destination": "/docs/reference/observability/otel-tracing/otel-config",
+      "destination": "/reference/observability/otel-tracing/otel-config",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/arize-ax",
-      "destination": "/docs/reference/observability/otel-tracing/providers/arize-ax",
+      "destination": "/reference/observability/otel-tracing/providers/arize-ax",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/arize-phoenix",
-      "destination": "/docs/reference/observability/otel-tracing/providers/arize-phoenix",
+      "destination": "/reference/observability/otel-tracing/providers/arize-phoenix",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/braintrust",
-      "destination": "/docs/reference/observability/otel-tracing/providers/braintrust",
+      "destination": "/reference/observability/otel-tracing/providers/braintrust",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/dash0",
-      "destination": "/docs/reference/observability/otel-tracing/providers/dash0",
+      "destination": "/reference/observability/otel-tracing/providers/dash0",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/keywordsai",
-      "destination": "/docs/reference/observability/otel-tracing/providers/keywordsai",
+      "destination": "/reference/observability/otel-tracing/providers/keywordsai",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/laminar",
-      "destination": "/docs/reference/observability/otel-tracing/providers/laminar",
+      "destination": "/reference/observability/otel-tracing/providers/laminar",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/langfuse",
-      "destination": "/docs/reference/observability/otel-tracing/providers/langfuse",
+      "destination": "/reference/observability/otel-tracing/providers/langfuse",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/langsmith",
-      "destination": "/docs/reference/observability/otel-tracing/providers/langsmith",
+      "destination": "/reference/observability/otel-tracing/providers/langsmith",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/langwatch",
-      "destination": "/docs/reference/observability/otel-tracing/providers/langwatch",
+      "destination": "/reference/observability/otel-tracing/providers/langwatch",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/new-relic",
-      "destination": "/docs/reference/observability/otel-tracing/providers/new-relic",
+      "destination": "/reference/observability/otel-tracing/providers/new-relic",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/signoz",
-      "destination": "/docs/reference/observability/otel-tracing/providers/signoz",
+      "destination": "/reference/observability/otel-tracing/providers/signoz",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/traceloop",
-      "destination": "/docs/reference/observability/otel-tracing/providers/traceloop",
+      "destination": "/reference/observability/otel-tracing/providers/traceloop",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers",
-      "destination": "/docs/reference/observability/otel-tracing/providers",
+      "destination": "/reference/observability/otel-tracing/providers",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/index",
-      "destination": "/docs/reference/observability/otel-tracing/providers",
+      "destination": "/reference/observability/otel-tracing/providers",
       "permanent": true
     },
     {
@@ -887,72 +877,72 @@
     },
     {
       "source": "/reference/rag/astra",
-      "destination": "/docs/reference/vectors/astra",
+      "destination": "/reference/vectors/astra",
       "permanent": true
     },
     {
       "source": "/reference/rag/chroma",
-      "destination": "/docs/reference/vectors/chroma",
+      "destination": "/reference/vectors/chroma",
       "permanent": true
     },
     {
       "source": "/reference/rag/vectorize",
-      "destination": "/docs/reference/vectors/vectorize",
+      "destination": "/reference/vectors/vectorize",
       "permanent": true
     },
     {
       "source": "/reference/rag/couchbase",
-      "destination": "/docs/reference/vectors/couchbase",
+      "destination": "/reference/vectors/couchbase",
       "permanent": true
     },
     {
       "source": "/reference/rag/lance",
-      "destination": "/docs/reference/vectors/lance",
+      "destination": "/reference/vectors/lance",
       "permanent": true
     },
     {
       "source": "/reference/rag/libsql",
-      "destination": "/docs/reference/vectors/libsql",
+      "destination": "/reference/vectors/libsql",
       "permanent": true
     },
     {
       "source": "/reference/rag/mongodb",
-      "destination": "/docs/reference/vectors/mongodb",
+      "destination": "/reference/vectors/mongodb",
       "permanent": true
     },
     {
       "source": "/reference/rag/opensearch",
-      "destination": "/docs/reference/vectors/opensearch",
+      "destination": "/reference/vectors/opensearch",
       "permanent": true
     },
     {
       "source": "/reference/rag/pg",
-      "destination": "/docs/reference/vectors/pg",
+      "destination": "/reference/vectors/pg",
       "permanent": true
     },
     {
       "source": "/reference/rag/pinecone",
-      "destination": "/docs/reference/vectors/pinecone",
+      "destination": "/reference/vectors/pinecone",
       "permanent": true
     },
     {
       "source": "/reference/rag/qdrant",
-      "destination": "/docs/reference/vectors/qdrant",
+      "destination": "/reference/vectors/qdrant",
       "permanent": true
     },
     {
       "source": "/reference/rag/s3vectors",
-      "destination": "/docs/reference/vectors/s3vectors",
+      "destination": "/reference/vectors/s3vectors",
       "permanent": true
     },
     {
       "source": "/reference/rag/turbopuffer",
-      "destination": "/docs/reference/vectors/turbopuffer",
+      "destination": "/reference/vectors/turbopuffer",
       "permanent": true
     },
     {
       "source": "/reference/rag/upstash",
-      "destination": "/docs/reference/vectors/upstash",
+      "destination": "/reference/vectors/upstash",
       "permanent": true
     },
     {
@@ -967,32 +957,32 @@
     },
     {
       "source": "/reference/cli/init",
-      "destination": "/docs/reference/cli/mastra",
+      "destination": "/reference/cli/mastra",
       "permanent": true
     },
     {
       "source": "/reference/cli/dev",
-      "destination": "/docs/reference/cli/mastra",
+      "destination": "/reference/cli/mastra",
       "permanent": true
     },
     {
       "source": "/reference/cli/build",
-      "destination": "/docs/reference/cli/mastra",
+      "destination": "/reference/cli/mastra",
       "permanent": true
     },
     {
       "source": "/reference/cli/start",
-      "destination": "/docs/reference/cli/mastra",
+      "destination": "/reference/cli/mastra",
       "permanent": true
     },
     {
       "source": "/reference/cli/lint",
-      "destination": "/docs/reference/cli/mastra",
+      "destination": "/reference/cli/mastra",
       "permanent": true
     },
     {
       "source": "/reference/cli/scorers",
-      "destination": "/docs/reference/cli/mastra",
+      "destination": "/reference/cli/mastra",
       "permanent": true
     },
     {
@@ -1002,7 +992,7 @@
     },
     {
       "source": "/reference/agents/migration-guide",
-      "destination": "/docs/guides/migrations/vnext-to-standard-apis",
+      "destination": "/guides/migrations/vnext-to-standard-apis",
       "permanent": true
     },
     {
@@ -1052,82 +1042,82 @@
     },
     {
       "source": "/examples/scorers/answer-relevancy",
-      "destination": "/docs/reference/scorers/answer-relevancy",
+      "destination": "/reference/scorers/answer-relevancy",
       "permanent": true
     },
     {
       "source": "/examples/scorers/answer-similarity",
-      "destination": "/docs/reference/scorers/answer-similarity",
+      "destination": "/reference/scorers/answer-similarity",
       "permanent": true
     },
     {
       "source": "/examples/scorers/bias",
-      "destination": "/docs/reference/scorers/bias",
+      "destination": "/reference/scorers/bias",
       "permanent": true
     },
     {
       "source": "/examples/scorers/completeness",
-      "destination": "/docs/reference/scorers/completeness",
+      "destination": "/reference/scorers/completeness",
       "permanent": true
     },
     {
       "source": "/examples/scorers/content-similarity",
-      "destination": "/docs/reference/scorers/content-similarity",
+      "destination": "/reference/scorers/content-similarity",
       "permanent": true
     },
     {
       "source": "/examples/scorers/context-precision",
-      "destination": "/docs/reference/scorers/context-precision",
+      "destination": "/reference/scorers/context-precision",
       "permanent": true
     },
     {
       "source": "/examples/scorers/context-relevance",
-      "destination": "/docs/reference/scorers/context-relevance",
+      "destination": "/reference/scorers/context-relevance",
       "permanent": true
     },
     {
       "source": "/examples/scorers/faithfulness",
-      "destination": "/docs/reference/scorers/faithfulness",
+      "destination": "/reference/scorers/faithfulness",
       "permanent": true
     },
     {
       "source": "/examples/scorers/hallucination",
-      "destination": "/docs/reference/scorers/hallucination",
+      "destination": "/reference/scorers/hallucination",
       "permanent": true
     },
     {
       "source": "/examples/scorers/keyword-coverage",
-      "destination": "/docs/reference/scorers/keyword-coverage",
+      "destination": "/reference/scorers/keyword-coverage",
       "permanent": true
     },
     {
       "source": "/examples/scorers/textual-difference",
-      "destination": "/docs/reference/scorers/textual-difference",
+      "destination": "/reference/scorers/textual-difference",
       "permanent": true
     },
     {
       "source": "/examples/scorers/tone-consistency",
-      "destination": "/docs/reference/scorers/tone-consistency",
+      "destination": "/reference/scorers/tone-consistency",
       "permanent": true
     },
     {
       "source": "/examples/scorers/tool-call-accuracy",
-      "destination": "/docs/reference/scorers/tool-call-accuracy",
+      "destination": "/reference/scorers/tool-call-accuracy",
       "permanent": true
     },
     {
       "source": "/examples/scorers/prompt-alignment",
-      "destination": "/docs/reference/scorers/prompt-alignment",
+      "destination": "/reference/scorers/prompt-alignment",
       "permanent": true
     },
     {
       "source": "/examples/scorers/noise-sensitivity",
-      "destination": "/docs/reference/scorers/noise-sensitivity",
+      "destination": "/reference/scorers/noise-sensitivity",
       "permanent": true
     },
     {
       "source": "/examples/scorers/toxicity",
-      "destination": "/docs/reference/scorers/toxicity",
+      "destination": "/reference/scorers/toxicity",
       "permanent": true
     },
     {
