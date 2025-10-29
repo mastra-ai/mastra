@@ -1,9 +1,10 @@
 ---
-title: "MastraAuthSupabase Class"
+title: "MastraAuthSupabase Class | Auth | Mastra Docs"
 description: "Documentation for the MastraAuthSupabase class, which authenticates Mastra applications using Supabase Auth."
 ---
 
-import { Tabs, Tab } from "@/components/tabs";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # MastraAuthSupabase Class
 
@@ -13,7 +14,7 @@ The `MastraAuthSupabase` class provides authentication for Mastra using Supabase
 
 This example uses Supabase Auth. Make sure to add your Supabase credentials to your `.env` file and ensure your Supabase project is properly configured.
 
-```env filename=".env" copy
+```env title=".env" copy
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 ```
@@ -30,16 +31,16 @@ npm install @mastra/auth-supabase@latest
 
 ## Usage example
 
-```typescript {2,7-9} filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,7-9} title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
-import { MastraAuthSupabase } from '@mastra/auth-supabase';
+import { MastraAuthSupabase } from "@mastra/auth-supabase";
 
 export const mastra = new Mastra({
   // ..
   server: {
     experimental_auth: new MastraAuthSupabase({
       url: process.env.SUPABASE_URL,
-      anonKey: process.env.SUPABASE_ANON_KEY
+      anonKey: process.env.SUPABASE_ANON_KEY,
     }),
   },
 });
@@ -47,7 +48,7 @@ export const mastra = new Mastra({
 
 > **Note:** The default `authorizeUser` method checks the `isAdmin` column in the `users` table in the `public` schema. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
 
-> See the [MastraAuthSupabase](/reference/auth/supabase.mdx) API reference for all available configuration options.
+> See the [MastraAuthSupabase](/reference/auth/supabase) API reference for all available configuration options.
 
 ## Client-side setup
 
@@ -57,7 +58,7 @@ When using Supabase auth, you'll need to retrieve the access token from Supabase
 
 Use the Supabase client to authenticate users and retrieve their access token:
 
-```typescript filename="lib/auth.ts" showLineNumbers copy
+```typescript title="lib/auth.ts" showLineNumbers copy
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient("<supabase-url>", "<supabase-key>");
@@ -76,28 +77,28 @@ const accessToken = authTokenResponse.data?.session?.access_token;
 
 When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Supabase access token in the `Authorization` header:
 
-```typescript {6} filename="lib/mastra/mastra-client.ts" showLineNumbers copy
+```typescript {6} title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
   baseUrl: "https://<mastra-api-url>",
   headers: {
-    Authorization: `Bearer ${accessToken}`
-  }
+    Authorization: `Bearer ${accessToken}`,
+  },
 });
 ```
 
 > **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
 
-> See [Mastra Client SDK](/docs/server-db/mastra-client.mdx) for more configuration options.
+> See [Mastra Client SDK](/docs/server-db/mastra-client) for more configuration options.
 
 ### Making authenticated requests
 
 Once `MastraClient` is configured with the Supabase access token, you can send authenticated requests:
 
-<Tabs items={["MastraClient", "curl"]}>
-  <Tab>
-    ```tsx filename="src/components/test-agent.tsx" showLineNumbers copy
+<Tabs>
+  <TabItem value="curl" label="cURL">
+    ```tsx title="src/components/test-agent.tsx" showLineNumbers copy
     import { mastraClient } from "../../lib/mastra-client";
 
     export const TestAgent = () => {
@@ -114,8 +115,9 @@ Once `MastraClient` is configured with the Supabase access token, you can send a
       return <button onClick={handleClick}>Test Agent</button>;
     };
     ```
-  </Tab>
-  <Tab>
+
+  </TabItem>
+  <TabItem value="react" label="React">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -124,5 +126,5 @@ Once `MastraClient` is configured with the Supabase access token, you can send a
         "messages": "Weather in London"
       }'
     ```
-  </Tab>
+  </TabItem>
 </Tabs>

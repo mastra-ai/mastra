@@ -2,9 +2,8 @@
  * OpenTelemetry AI Tracing Exporter for Mastra
  */
 
-import { AITracingEventType } from '@mastra/core/ai-tracing';
-import type { AITracingExporter, AITracingEvent, AnyExportedAISpan, TracingConfig } from '@mastra/core/ai-tracing';
-import { ConsoleLogger } from '@mastra/core/logger';
+import type { AITracingEvent, AnyExportedAISpan, TracingConfig } from '@mastra/core/ai-tracing';
+import { AITracingEventType, BaseExporter } from '@mastra/core/ai-tracing';
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
@@ -22,22 +21,21 @@ import { resolveProviderConfig } from './provider-configs.js';
 import { SpanConverter } from './span-converter.js';
 import type { OtelExporterConfig } from './types.js';
 
-export class OtelExporter implements AITracingExporter {
+export class OtelExporter extends BaseExporter {
   private config: OtelExporterConfig;
   private tracingConfig?: TracingConfig;
   private spanConverter: SpanConverter;
   private processor?: BatchSpanProcessor;
   private exporter?: SpanExporter;
   private isSetup: boolean = false;
-  private isDisabled: boolean = false;
-  private logger: ConsoleLogger;
 
   name = 'opentelemetry';
 
   constructor(config: OtelExporterConfig) {
+    super(config);
+
     this.config = config;
     this.spanConverter = new SpanConverter();
-    this.logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
 
     // Set up OpenTelemetry diagnostics if debug mode
     if (config.logLevel === 'debug') {
@@ -189,12 +187,7 @@ export class OtelExporter implements AITracingExporter {
     this.isSetup = true;
   }
 
-  async exportEvent(event: AITracingEvent): Promise<void> {
-    // Skip if disabled due to configuration errors
-    if (this.isDisabled) {
-      return;
-    }
-
+  protected async _exportEvent(event: AITracingEvent): Promise<void> {
     // Only process SPAN_ENDED events for OTEL
     // OTEL expects complete spans with start and end times
     if (event.type !== AITracingEventType.SPAN_ENDED) {

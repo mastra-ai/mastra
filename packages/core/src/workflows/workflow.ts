@@ -48,7 +48,7 @@ import { getZodErrors } from './utils';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
-type AgentStepOptions = Omit<
+export type AgentStepOptions = Omit<
   AgentExecutionOptions & AgentStreamOptions,
   | 'format'
   | 'tracingContext'
@@ -1169,7 +1169,13 @@ export class Workflow<
       validateInputs: validateInputs ?? false,
     };
 
-    const isResume = !!(resume?.steps && resume.steps.length > 0) || !!resume?.label;
+    const isResume =
+      !!(resume?.steps && resume.steps.length > 0) ||
+      !!resume?.label ||
+      !!(resume?.steps && resume.steps.length === 0 && (!retryCount || retryCount === 0));
+    // this check is for cases where you suspend/resume a nested workflow.
+    // retryCount helps us know the step has been run at least once, which means it's running in a loop and should not be calling resume.
+
     const run = isResume ? await this.createRunAsync({ runId: resume.runId }) : await this.createRunAsync({ runId });
     const nestedAbortCb = () => {
       abort();
@@ -1187,14 +1193,14 @@ export class Workflow<
       emitter.emit('nested-watch', { event, workflowId: this.id, runId: run.runId, isResume: !!resume?.steps?.length });
     }, 'watch');
 
-    if (retryCount && retryCount > 0 && resume?.steps?.length && runtimeContext) {
+    if (retryCount && retryCount > 0 && isResume && runtimeContext) {
       runtimeContext.set('__mastraWorflowInputData', inputData);
     }
 
     const res = isResume
       ? await run.resume({
           resumeData,
-          step: resume.steps as any,
+          step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
           runtimeContext,
           tracingContext,
           outputOptions: { includeState: true, includeResumeLabels: true },
@@ -1458,7 +1464,7 @@ export class Run<
     return this.#mastra;
   }
 
-  #streamOutput?: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+  protected streamOutput?: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   protected closeStreamAction?: () => Promise<void>;
   protected executionResults?: Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   protected stateSchema?: z.ZodObject<any>;
@@ -1874,7 +1880,7 @@ export class Run<
    * @returns A readable stream of the workflow events
    */
   observeStreamVNext(): ReadableStream<WorkflowStreamEvent> {
-    if (!this.#streamOutput) {
+    if (!this.streamOutput) {
       return new ReadableStream<WorkflowStreamEvent>({
         pull(controller) {
           controller.close();
@@ -1885,7 +1891,7 @@ export class Run<
       });
     }
 
-    return this.#streamOutput.fullStream;
+    return this.streamOutput.fullStream;
   }
 
   async streamAsync({
@@ -1920,8 +1926,8 @@ export class Run<
       includeResumeLabels?: boolean;
     };
   } = {}): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    if (this.closeStreamAction && this.#streamOutput) {
-      return this.#streamOutput;
+    if (this.closeStreamAction && this.streamOutput) {
+      return this.streamOutput;
     }
 
     this.closeStreamAction = async () => {};
@@ -1977,25 +1983,25 @@ export class Run<
           } else if (executionResults.status !== 'suspended') {
             self.closeStreamAction?.().catch(() => {});
           }
-          if (self.#streamOutput) {
-            self.#streamOutput.updateResults(
+          if (self.streamOutput) {
+            self.streamOutput.updateResults(
               executionResults as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>,
             );
           }
         } catch (err) {
-          self.#streamOutput?.rejectResults(err as unknown as Error);
+          self.streamOutput?.rejectResults(err as unknown as Error);
           self.closeStreamAction?.().catch(() => {});
         }
       },
     });
 
-    this.#streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
       runId: this.runId,
       workflowId: this.workflowId,
       stream,
     });
 
-    return this.#streamOutput;
+    return this.streamOutput;
   }
 
   /**
@@ -2110,22 +2116,28 @@ export class Run<
 
         self.executionResults = executionResultsPromise;
 
-        const executionResults = await executionResultsPromise;
-        self.closeStreamAction?.().catch(() => {});
+        let executionResults;
+        try {
+          executionResults = await executionResultsPromise;
+          self.closeStreamAction?.().catch(() => {});
 
-        if (self.#streamOutput) {
-          self.#streamOutput.updateResults(executionResults);
+          if (self.streamOutput) {
+            self.streamOutput.updateResults(executionResults);
+          }
+        } catch (err) {
+          self.streamOutput?.rejectResults(err as unknown as Error);
+          self.closeStreamAction?.().catch(() => {});
         }
       },
     });
 
-    this.#streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
       runId: this.runId,
       workflowId: this.workflowId,
       stream,
     });
 
-    return this.#streamOutput;
+    return this.streamOutput;
   }
 
   watch(cb: (event: WatchEvent) => void, type: 'watch'): () => void;
@@ -2270,13 +2282,21 @@ export class Run<
       throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
     }
 
+    if (snapshot.status !== 'suspended') {
+      throw new Error('This workflow run was not suspended');
+    }
+
     const snapshotResumeLabel = params.label ? snapshot?.resumeLabels?.[params.label] : undefined;
     const stepParam = snapshotResumeLabel?.stepId ?? params.step;
 
     // Auto-detect suspended steps if no step is provided
     let steps: string[];
     if (stepParam) {
-      steps = (Array.isArray(stepParam) ? stepParam : [stepParam]).map(step =>
+      let newStepParam = stepParam;
+      if (typeof stepParam === 'string') {
+        newStepParam = stepParam.split('.');
+      }
+      steps = (Array.isArray(newStepParam) ? newStepParam : [newStepParam]).map(step =>
         typeof step === 'string' ? step : step?.id,
       );
     } else {
@@ -2318,10 +2338,6 @@ export class Run<
     }
 
     if (!params.retryCount) {
-      if (snapshot.status !== 'suspended') {
-        throw new Error('This workflow run was not suspended');
-      }
-
       const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
 
       const isStepSuspended = suspendedStepIds.includes(steps?.[0] ?? '');
@@ -2424,7 +2440,7 @@ export class Run<
     this.executionResults = executionResultPromise;
 
     return executionResultPromise.then(result => {
-      this.#streamOutput?.updateResults(result as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>);
+      this.streamOutput?.updateResults(result as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>);
 
       return result;
     });
@@ -2455,7 +2471,7 @@ export class Run<
    * @returns The execution results of the workflow run
    */
   _getExecutionResults(): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> | undefined {
-    return this.executionResults ?? this.#streamOutput?.result;
+    return this.executionResults ?? this.streamOutput?.result;
   }
 }
 

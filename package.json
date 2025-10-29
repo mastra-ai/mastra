@@ -61,7 +61,7 @@
     "test:evals": "pnpm --filter ./packages/evals test",
     "test:agent-builder": "pnpm --filter ./packages/agent-builder test",
     "test:agent-builder:integration": "pnpm --filter @mastra/agent-builder-integration-tests test",
-    "test:observability": "pnpm --filter \"./observability/*\" test",
+    "test:observability": "node scripts/test-observability.cjs",
     "lint-staged": "lint-staged",
     "lint": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!@internal/playground\" lint",
     "preinstall": "npx only-allow pnpm",
