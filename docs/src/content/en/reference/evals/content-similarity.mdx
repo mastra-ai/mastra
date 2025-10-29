@@ -1,13 +1,13 @@
 ---
-title: "Reference: Content Similarity | Evals | Mastra Docs"
+title: "Reference: ContentSimilarityMetric | Evals | Mastra Docs"
 description: Documentation for the Content Similarity Metric in Mastra, which measures textual similarity between strings and provides a matching score.
 ---
 
-import { ScorerCallout } from '@/components/scorer-callout'
-
 # ContentSimilarityMetric
 
-<ScorerCallout />
+:::info Scorers
+This documentation refers to the legacy evals API. For the latest scorer features, see [Scorers](/docs/scorers/overview).
+:::
 
 The `ContentSimilarityMetric` class measures the textual similarity between two strings, providing a score that indicates how closely they match. It supports configurable options for case sensitivity and whitespace handling.
 
@@ -118,7 +118,6 @@ The metric evaluates textual similarity through character-level matching and con
 ### Scoring Process
 
 1. Normalizes text:
-
    - Case normalization (if ignoreCase: true)
    - Whitespace normalization (if ignoreWhitespace: true)
 
