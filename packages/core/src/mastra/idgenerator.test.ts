@@ -2,181 +2,17 @@ import { MockLanguageModelV1 } from 'ai/test';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';
-import type { MastraMessageV2 } from '../agent/types';
 import { MastraError } from '../error';
-import type { StorageThreadType, MemoryConfig, MastraMessageV1 } from '../memory';
-import { MastraMemory } from '../memory/memory';
+import { MockMemory } from '../memory/mock';
 import { RuntimeContext } from '../runtime-context';
-import type { StorageGetMessagesArg, PaginationInfo, ThreadSortOptions } from '../storage';
+import { InMemoryStore } from '../storage';
 import { Mastra } from './index';
-
-// Mock Memory class for testing
-class MockMemory extends MastraMemory {
-  threads: Record<string, StorageThreadType> = {};
-  messages: Map<string, MastraMessageV1> = new Map();
-
-  constructor() {
-    super({ name: 'mock' });
-    Object.defineProperty(this, 'storage', {
-      get: () => ({
-        init: async () => {},
-        getThreadById: this.getThreadById.bind(this),
-        saveThread: async ({ thread }: { thread: StorageThreadType }) => {
-          return this.saveThread({ thread });
-        },
-        getMessages: this.getMessages.bind(this),
-        saveMessages: this.saveMessages.bind(this),
-      }),
-    });
-    this._hasOwnStorage = true;
-  }
-
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.threads[threadId] || null;
-  }
-
-  async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
-    const newThread = { ...thread, updatedAt: new Date() };
-    if (!newThread.createdAt) {
-      newThread.createdAt = new Date();
-    }
-    this.threads[thread.id] = newThread;
-    return this.threads[thread.id];
-  }
-
-  async getMessages({
-    threadId,
-    resourceId,
-    format: _format = 'v1',
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[]> {
-    let results = Array.from(this.messages.values());
-    if (threadId) results = results.filter(m => m.threadId === threadId);
-    if (resourceId) results = results.filter(m => m.resourceId === resourceId);
-    return results;
-  }
-
-  async saveMessages(args: {
-    messages: MastraMessageV1[] | MastraMessageV2[] | (MastraMessageV1 | MastraMessageV2)[];
-    memoryConfig?: MemoryConfig | undefined;
-    format?: 'v1' | undefined;
-  }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: {
-    messages: MastraMessageV1[] | MastraMessageV2[] | (MastraMessageV1 | MastraMessageV2)[];
-    memoryConfig?: MemoryConfig | undefined;
-    format: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  async saveMessages(args: {
-    messages: MastraMessageV1[] | MastraMessageV2[] | (MastraMessageV1 | MastraMessageV2)[];
-    memoryConfig?: MemoryConfig | undefined;
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    const { messages } = args as any;
-    for (const msg of messages) {
-      const existing = this.messages.get(msg.id);
-      if (existing) {
-        this.messages.set(msg.id, {
-          ...existing,
-          ...msg,
-          createdAt: existing.createdAt,
-        });
-      } else {
-        this.messages.set(msg.id, msg);
-      }
-    }
-    return messages;
-  }
-
-  async rememberMessages() {
-    return { messages: [], messagesV2: [] };
-  }
-
-  async getThreadsByResourceId() {
-    return [];
-  }
-
-  async query({ threadId, resourceId }: StorageGetMessagesArg) {
-    let results = Array.from(this.messages.values());
-    if (threadId) results = results.filter(m => m.threadId === threadId);
-    if (resourceId) results = results.filter(m => m.resourceId === resourceId);
-
-    // Convert MastraMessageV1 to CoreMessage format
-    const coreMessages = results.map(msg => ({
-      role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
-      content: msg.content,
-    }));
-
-    return { messages: coreMessages as any, uiMessages: [] };
-  }
-
-  async deleteThread() {}
-
-  async getWorkingMemory() {
-    return null;
-  }
-
-  async getWorkingMemoryTemplate() {
-    return null;
-  }
-
-  async getThreadsByResourceIdPaginated(
-    args: { resourceId: string; page: number; perPage: number } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    return {
-      threads: [],
-      total: 0,
-      page: args.page,
-      perPage: args.perPage,
-      hasMore: false,
-    };
-  }
-
-  getMergedThreadConfig(config?: MemoryConfig) {
-    return config || {};
-  }
-
-  async updateWorkingMemory({
-    threadId: _threadId,
-    resourceId: _resourceId,
-    workingMemory: _workingMemory,
-    memoryConfig: _memoryConfig,
-  }: {
-    threadId: string;
-    resourceId?: string;
-    workingMemory: string;
-    memoryConfig?: MemoryConfig;
-  }): Promise<void> {
-    // Mock implementation
-  }
-
-  async __experimental_updateWorkingMemoryVNext({
-    threadId: _threadId,
-    resourceId: _resourceId,
-    workingMemory: _workingMemory,
-    searchString: _searchString,
-    memoryConfig: _memoryConfig,
-  }: {
-    threadId: string;
-    resourceId?: string;
-    workingMemory: string;
-    searchString?: string;
-    memoryConfig?: MemoryConfig;
-  }): Promise<{ success: boolean; reason: string }> {
-    // Mock implementation
-    return { success: true, reason: 'Mock implementation' };
-  }
-
-  async deleteMessages(messageIds: string[]): Promise<void> {
-    // Mock implementation - remove messages by ID
-    for (const messageId of messageIds) {
-      this.messages.delete(messageId);
-    }
-  }
-}
 
 // Helper function to create a Mastra instance with proper memory registration
 function createMastraWithMemory(idGenerator?: () => string) {
   // Create a mock memory instance
-  const memory = new MockMemory();
+  const storage = new InMemoryStore();
+  const memory = new MockMemory({ storage });
 
   // Create an agent with the registered memory
   const agent = new Agent({
@@ -458,7 +294,8 @@ describe('Mastra ID Generator', () => {
     });
 
     it('should use custom ID generator across multiple agents', async () => {
-      const memory1 = new MockMemory();
+      const storage = new InMemoryStore();
+      const memory1 = new MockMemory({ storage });
       const agent1 = new Agent({
         name: 'agent1',
         instructions: 'You are agent 1',
@@ -473,7 +310,8 @@ describe('Mastra ID Generator', () => {
         memory: memory1,
       });
 
-      const memory2 = new MockMemory();
+      const storage2 = new InMemoryStore();
+      const memory2 = new MockMemory({ storage: storage2 });
       const agent2 = new Agent({
         name: 'agent2',
         instructions: 'You are agent 2',
@@ -537,7 +375,8 @@ describe('Mastra ID Generator', () => {
             expect(mastraInstance.getIdGenerator()).toBe(customIdGenerator);
           }
 
-          return new MockMemory();
+          const storage = new InMemoryStore();
+          return new MockMemory({ storage });
         },
       });
 
@@ -582,7 +421,8 @@ describe('Mastra ID Generator', () => {
           // Verify access to custom ID generator
           expect(mastraInstance?.getIdGenerator()).toBe(customIdGenerator);
 
-          const memory = new MockMemory();
+          const storage = new InMemoryStore();
+          const memory = new MockMemory({ storage });
           // Customize memory based on context
           if (contextUserId && contextSessionId) {
             memory.name = `memory-${contextUserId}-${contextSessionId}`;
@@ -632,7 +472,8 @@ describe('Mastra ID Generator', () => {
           const userId = runtimeContext.get('userId');
           expect(mastraInstance?.getIdGenerator()).toBe(customIdGenerator);
 
-          const memory = new MockMemory();
+          const storage = new InMemoryStore();
+          const memory = new MockMemory({ storage });
           memory.name = `memory-${userId}`;
           memoryInstances.push(memory);
           return memory;
@@ -688,7 +529,8 @@ describe('Mastra ID Generator', () => {
           if (shouldFail) {
             throw new Error('Memory creation failed');
           }
-          return new MockMemory();
+          const storage = new InMemoryStore();
+          return new MockMemory({ storage });
         },
       });
 
@@ -764,7 +606,8 @@ describe('Mastra ID Generator', () => {
 
   describe('End-to-End User Workflows', () => {
     it('should handle complete user conversation workflow', async () => {
-      const memory = new MockMemory();
+      const storage = new InMemoryStore();
+      const memory = new MockMemory({ storage });
       const agent = new Agent({
         name: 'helpAgent',
         instructions: 'You are a helpful assistant',
@@ -796,7 +639,8 @@ describe('Mastra ID Generator', () => {
     });
 
     it('should handle multi-user concurrent conversations', async () => {
-      const memory = new MockMemory();
+      const storage = new InMemoryStore();
+      const memory = new MockMemory({ storage });
       const agent = new Agent({
         name: 'multiUserAgent',
         instructions: 'You are a multi-user assistant',
@@ -838,7 +682,8 @@ describe('Mastra ID Generator', () => {
     });
 
     it('should handle complex workflow with memory operations', async () => {
-      const memory = new MockMemory();
+      const storage = new InMemoryStore();
+      const memory = new MockMemory({ storage });
       const agent = new Agent({
         name: 'workflowAgent',
         instructions: 'You are a workflow assistant',
@@ -885,7 +730,8 @@ describe('Mastra ID Generator', () => {
     });
 
     it('should handle streaming operations with memory persistence', async () => {
-      const memory = new MockMemory();
+      const storage = new InMemoryStore();
+      const memory = new MockMemory({ storage });
       const agent = new Agent({
         name: 'streamingAgent',
         instructions: 'You are a streaming assistant',

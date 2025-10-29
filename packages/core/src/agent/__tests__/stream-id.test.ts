@@ -7,9 +7,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../mastra';
 import type { StorageThreadType } from '../../memory';
+import { MockMemory } from '../../memory/mock';
+import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
-import type { MastraMessageV1 } from '../message-list';
-import { MockMemory } from '../test-utils';
+import { MastraMessageV1 } from '../message-list';
 
 describe('Stream ID Consistency', () => {
   /**
@@ -18,9 +19,11 @@ describe('Stream ID Consistency', () => {
 
   let memory: MockMemory;
   let mastra: Mastra;
+  let storage: InMemoryStore;
 
   beforeEach(() => {
-    memory = new MockMemory();
+    storage = new InMemoryStore();
+    memory = new MockMemory({ storage });
     mastra = new Mastra();
   });
 
@@ -435,7 +438,8 @@ describe('Stream ID Consistency', () => {
   }, 10000); // Increase timeout to 10 seconds
 
   it('should have messageIds when using toUIMessageStream', async () => {
-    const mockMemory = new MockMemory();
+    const storage = new InMemoryStore();
+    const mockMemory = new MockMemory({ storage });
     const threadId = randomUUID();
     const resourceId = 'user-1';
     const initialThread: StorageThreadType = {

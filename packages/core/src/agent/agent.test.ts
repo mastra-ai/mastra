@@ -15,16 +15,16 @@ import { z } from 'zod';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
-import type { MastraMessageV2, StorageThreadType } from '../memory';
+import { MockMemory, type MastraMessageV2, type StorageThreadType } from '../memory';
 import { RuntimeContext } from '../runtime-context';
 import { createScorer } from '../scores';
 import { runScorer } from '../scores/hooks';
-import { MockStore } from '../storage';
+import { InMemoryStore, MockStore } from '../storage';
 import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import { delay } from '../utils';
 import { MessageList } from './message-list/index';
-import { assertNoDuplicateParts, MockMemory } from './test-utils';
+import { assertNoDuplicateParts } from './test-utils';
 import { Agent } from './index';
 
 config();
@@ -1136,7 +1136,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       // Create memory with generateTitle config using custom model
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       // Override getMergedThreadConfig to return our test config
       mockMemory.getMergedThreadConfig = () => {
@@ -1318,7 +1319,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       }
 
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       // Override getMergedThreadConfig to return dynamic model selection
       mockMemory.getMergedThreadConfig = () => {
@@ -1560,7 +1562,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let titleGenerationCallCount = 0;
       let agentCallCount = 0;
 
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       // Test with generateTitle: true
       mockMemory.getMergedThreadConfig = () => {
@@ -1767,7 +1770,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should handle errors in title generation gracefully', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       // Pre-create the thread with the expected title
       const originalTitle = 'New Thread 2024-01-01T00:00:00.000Z';
@@ -1851,7 +1855,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should not generate title when config is undefined or null', async () => {
       let titleGenerationCallCount = 0;
       let agentCallCount = 0;
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       // Test with undefined config
       mockMemory.getMergedThreadConfig = () => {
@@ -2025,7 +2030,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let capturedPrompt = '';
       let usedLanguage = '';
 
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
 
@@ -2264,7 +2270,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let capturedPrompt = '';
       const customInstructions = 'Generate a creative and engaging title based on the conversation';
 
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
 
@@ -2407,7 +2414,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should use default instructions when instructions config is undefined', async () => {
       let capturedPrompt = '';
 
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
 
@@ -2542,7 +2550,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should handle errors in dynamic instructions gracefully', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       // Pre-create the thread with the expected title
       const originalTitle = 'New Thread 2024-01-01T00:00:00.000Z';
@@ -2669,7 +2678,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should handle empty or null instructions appropriately', async () => {
       let capturedPrompt = '';
 
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       let titleModel1: MockLanguageModelV1 | MockLanguageModelV2;
       let titleModel2: MockLanguageModelV1 | MockLanguageModelV2;
@@ -3464,7 +3474,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should create a new thread with metadata using generate', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const agent = new Agent({
         name: 'test-agent',
         instructions: 'test',
@@ -3501,7 +3512,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should update metadata for an existing thread using generate', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const initialThread: StorageThreadType = {
         id: 'thread-1',
         resourceId: 'user-1',
@@ -3548,7 +3560,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should not update metadata if it is the same using generate', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const initialThread: StorageThreadType = {
         id: 'thread-1',
         resourceId: 'user-1',
@@ -3593,7 +3606,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should create a new thread with metadata using stream', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const agent = new Agent({
         name: 'test-agent',
         instructions: 'test',
@@ -3633,7 +3647,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('generate - should still work with deprecated threadId and resourceId', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const agent = new Agent({
         name: 'test-agent',
         instructions: 'test',
@@ -3660,7 +3675,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('stream - should still work with deprecated threadId and resourceId', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const agent = new Agent({
         name: 'test-agent',
         instructions: 'test',
@@ -4473,7 +4489,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     describe('generate', () => {
       it('should rescue partial messages (including tool calls) if generate is aborted/interrupted', async () => {
-        const mockMemory = new MockMemory();
+        const storage = new InMemoryStore();
+        const mockMemory = new MockMemory({ storage });
         let saveCallCount = 0;
         let savedMessages: any[] = [];
         mockMemory.saveMessages = async function (...args) {
@@ -4585,7 +4602,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       it('should incrementally save messages across steps and tool calls', async () => {
-        const mockMemory = new MockMemory();
+        const storage = new InMemoryStore();
+        const mockMemory = new MockMemory({ storage });
         let saveCallCount = 0;
         mockMemory.saveMessages = async function (...args) {
           saveCallCount++;
@@ -4643,7 +4661,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }, 500000);
 
       it('should incrementally save messages with multiple tools and multi-step generation', async () => {
-        const mockMemory = new MockMemory();
+        const storage = new InMemoryStore();
+        const mockMemory = new MockMemory({ storage });
         let saveCallCount = 0;
         mockMemory.saveMessages = async function (...args) {
           saveCallCount++;
@@ -4718,7 +4737,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }, 500000);
 
       it('should persist the full message after a successful run', async () => {
-        const mockMemory = new MockMemory();
+        const storage = new InMemoryStore();
+        const mockMemory = new MockMemory({ storage });
         const agent = new Agent({
           name: 'test-agent-generate',
           instructions: 'test',
@@ -4751,7 +4771,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       it('should only call saveMessages for the user message when no assistant parts are generated', async () => {
-        const mockMemory = new MockMemory();
+        const storage = new InMemoryStore();
+        const mockMemory = new MockMemory({ storage });
 
         let messages = await mockMemory.getMessages({
           threadId: `thread-2-${version}-generate`,
@@ -4800,7 +4821,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     }, 500000);
 
     it('should not save any message if interrupted before any part is emitted', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       let saveCallCount = 0;
 
       mockMemory.saveMessages = async function (...args) {
@@ -4842,7 +4864,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should not save thread if error occurs after starting response but before completion', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const saveThreadSpy = vi.spyOn(mockMemory, 'saveThread');
 
       let errorModel: MockLanguageModelV1 | MockLanguageModelV2;
@@ -5278,1260 +5301,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
     });
   }
-
-  describe(`${version} - dynamic memory configuration`, () => {
-    let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
-    if (version === 'v1') {
-      dummyModel = new MockLanguageModelV1({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: `Dummy response`,
-        }),
-      });
-    } else {
-      dummyModel = new MockLanguageModelV2({
-        doStream: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          stream: convertArrayToReadableStream([
-            { type: 'text-delta', id: '1', delta: 'Dummy response' },
-            {
-              type: 'finish',
-              id: '2',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-          warnings: [],
-        }),
-      });
-    }
-
-    it('should support static memory configuration', async () => {
-      const mockMemory = new MockMemory();
-      const agent = new Agent({
-        name: 'static-memory-agent',
-        instructions: 'test agent',
-        model: dummyModel,
-        memory: mockMemory,
-      });
-
-      const memory = await agent.getMemory();
-      expect(memory).toBe(mockMemory);
-    });
-
-    it('should support dynamic memory configuration with runtimeContext', async () => {
-      const premiumMemory = new MockMemory();
-      const standardMemory = new MockMemory();
-
-      const agent = new Agent({
-        name: 'dynamic-memory-agent',
-        instructions: 'test agent',
-        model: dummyModel,
-        memory: ({ runtimeContext }) => {
-          const userTier = runtimeContext.get('userTier');
-          return userTier === 'premium' ? premiumMemory : standardMemory;
-        },
-      });
-
-      // Test with premium context
-      const premiumContext = new RuntimeContext();
-      premiumContext.set('userTier', 'premium');
-      const premiumResult = await agent.getMemory({ runtimeContext: premiumContext });
-      expect(premiumResult).toBe(premiumMemory);
-
-      // Test with standard context
-      const standardContext = new RuntimeContext();
-      standardContext.set('userTier', 'standard');
-      const standardResult = await agent.getMemory({ runtimeContext: standardContext });
-      expect(standardResult).toBe(standardMemory);
-    });
-
-    it('should support async dynamic memory configuration', async () => {
-      const mockMemory = new MockMemory();
-
-      const agent = new Agent({
-        name: 'async-memory-agent',
-        instructions: 'test agent',
-        model: dummyModel,
-        memory: async ({ runtimeContext }) => {
-          const userId = runtimeContext.get('userId') as string;
-          // Simulate async memory creation/retrieval
-          await new Promise(resolve => setTimeout(resolve, 10));
-          (mockMemory as any).threads[`user-${userId}`] = {
-            id: `user-${userId}`,
-            resourceId: userId,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          };
-          return mockMemory;
-        },
-      });
-
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('userId', 'user123');
-
-      const memory = await agent.getMemory({ runtimeContext });
-      expect(memory).toBe(mockMemory);
-      expect((memory as any)?.threads['user-user123']).toBeDefined();
-    });
-
-    it('should throw error when dynamic memory function returns empty value', async () => {
-      const agent = new Agent({
-        name: 'invalid-memory-agent',
-        instructions: 'test agent',
-        model: dummyModel,
-        memory: () => null as any,
-      });
-
-      await expect(agent.getMemory()).rejects.toThrow('Function-based memory returned empty value');
-    });
-
-    it('should work with memory in generate method with dynamic configuration', async () => {
-      const mockMemory = new MockMemory();
-
-      const agent = new Agent({
-        name: 'generate-memory-agent',
-        instructions: 'test agent',
-        model: dummyModel,
-        memory: ({ runtimeContext }) => {
-          const environment = runtimeContext.get('environment');
-          if (environment === 'test') {
-            return mockMemory;
-          }
-          // Return a default mock memory instead of undefined
-          return new MockMemory();
-        },
-      });
-
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('environment', 'test');
-
-      let response;
-      if (version === 'v1') {
-        response = await agent.generateLegacy('test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-1',
-            },
-          },
-          runtimeContext,
-        });
-      } else {
-        response = await agent.generate('test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-1',
-            },
-          },
-          runtimeContext,
-        });
-      }
-
-      expect(response.text).toBe('Dummy response');
-
-      // Verify that thread was created in memory
-      const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
-      expect(thread).toBeDefined();
-      expect(thread?.resourceId).toBe('user-1');
-    });
-
-    it('should work with memory in stream method with dynamic configuration', async () => {
-      const mockMemory = new MockMemory();
-
-      let model;
-      if (version === 'v1') {
-        model = new MockLanguageModelV1({
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [
-                { type: 'text-delta', textDelta: 'Dynamic' },
-                { type: 'text-delta', textDelta: ' memory' },
-                { type: 'text-delta', textDelta: ' response' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        });
-      } else {
-        model = new MockLanguageModelV2({
-          doStream: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-            stream: convertArrayToReadableStream([
-              {
-                type: 'stream-start',
-                warnings: [],
-              },
-              {
-                type: 'response-metadata',
-                id: 'id-0',
-                modelId: 'mock-model-id',
-                timestamp: new Date(0),
-              },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Dynamic' },
-              { type: 'text-delta', id: '1', delta: ' memory' },
-              { type: 'text-delta', id: '1', delta: ' response' },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-              },
-            ]),
-          }),
-        });
-      }
-
-      const agent = new Agent({
-        name: 'stream-memory-agent',
-        instructions: 'test agent',
-        model,
-        memory: ({ runtimeContext }) => {
-          const enableMemory = runtimeContext.get('enableMemory');
-          return enableMemory ? mockMemory : new MockMemory();
-        },
-      });
-
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('enableMemory', true);
-
-      let stream;
-
-      if (version === 'v1') {
-        stream = await agent.streamLegacy('test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-stream',
-            },
-          },
-          runtimeContext,
-        });
-      } else {
-        stream = await agent.stream('test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-stream',
-            },
-          },
-          runtimeContext,
-        });
-      }
-
-      let finalText = '';
-      for await (const textPart of stream.textStream) {
-        finalText += textPart;
-      }
-
-      expect(finalText).toBe('Dynamic memory response');
-
-      // Verify that thread was created in memory
-      const thread = await mockMemory.getThreadById({ threadId: 'thread-stream' });
-      expect(thread).toBeDefined();
-      expect(thread?.resourceId).toBe('user-1');
-    });
-
-    it('should preserve system messages from user input when memory is enabled', async () => {
-      const mockMemory = new MockMemory();
-
-      // Mock the LLM to capture what messages it receives
-      let capturedMessages: any[] = [];
-      let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              text: 'Test response with jokes! Super!!!!',
-              usage: { promptTokens: 10, completionTokens: 5 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-        });
-      } else {
-        dummyModel = new MockLanguageModelV2({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              content: [{ type: 'text', text: 'Test response with jokes! Super!!!!' }],
-              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-            };
-          },
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'stream-start',
-                  warnings: [],
-                },
-                {
-                  type: 'response-metadata',
-                  id: 'mock-response-id',
-                  modelId: 'mock-model-v2',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response with jokes! Super!!!!' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      }
-
-      const agent = new Agent({
-        name: 'system-message-test-agent',
-        instructions: 'You are a test agent',
-        model: dummyModel,
-        memory: mockMemory,
-      });
-
-      const testMessages = [
-        {
-          role: 'user' as const,
-          content: 'Hello, my name is John',
-        },
-        {
-          role: 'system' as const,
-          content: 'You always put jokes in your conversation and also always say Super!!!!',
-        },
-      ];
-
-      if (version === 'v1') {
-        await agent.generateLegacy(testMessages, {
-          threadId: 'test-thread',
-          resourceId: 'test-resource',
-          runId: 'test-run',
-        });
-      } else {
-        await agent.generate(testMessages, {
-          threadId: 'test-thread',
-          resourceId: 'test-resource',
-          runId: 'test-run',
-        });
-      }
-
-      // Check if system message from user input is preserved in the final prompt
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const userSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('You always put jokes in your conversation'),
-      );
-
-      expect(userSystemMessage).toBeDefined();
-      expect(userSystemMessage?.content).toContain(
-        'You always put jokes in your conversation and also always say Super!!!!',
-      );
-    });
-
-    it('should preserve system messages from user input when memory is enabled (stream)', async () => {
-      const mockMemory = new MockMemory();
-      let capturedMessages: any[] = [];
-      let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: prompt, rawSettings: {} },
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-delta', textDelta: 'Test response with jokes! Super!!!!' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      } else {
-        dummyModel = new MockLanguageModelV2({
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'stream-start',
-                  warnings: [],
-                },
-                {
-                  type: 'response-metadata',
-                  id: 'mock-response-id',
-                  modelId: 'mock-model-v2',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response with jokes! Super!!!!' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      }
-
-      const agent = new Agent({
-        name: 'system-message-test-agent-stream',
-        instructions: 'You are a test agent',
-        model: dummyModel,
-        memory: mockMemory,
-      });
-
-      const testMessages = [
-        {
-          role: 'user' as const,
-          content: 'Hello, my name is John',
-        },
-        {
-          role: 'system' as const,
-          content: 'You always put jokes in your conversation and also always say Super!!!!',
-        },
-      ];
-
-      if (version === 'v1') {
-        const stream = await agent.streamLegacy(testMessages, {
-          threadId: 'test-thread',
-          resourceId: 'test-resource',
-          runId: 'test-run',
-        });
-        // Consume the stream to trigger the model call
-        for await (const _chunk of stream.textStream) {
-          // Just consume the stream
-        }
-      } else {
-        const stream = await agent.stream(testMessages, {
-          threadId: 'test-thread',
-          resourceId: 'test-resource',
-          runId: 'test-run',
-        });
-        // Consume the stream to trigger the model call
-        for await (const _chunk of stream.fullStream) {
-          // Just consume the stream
-        }
-      }
-
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const userSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('You always put jokes in your conversation'),
-      );
-
-      expect(userSystemMessage).toBeDefined();
-      expect(userSystemMessage?.content).toContain(
-        'You always put jokes in your conversation and also always say Super!!!!',
-      );
-    });
-
-    it('should preserve system messages from user input without memory (stream)', async () => {
-      let capturedMessages: any[] = [];
-      let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: prompt, rawSettings: {} },
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-delta', textDelta: 'Test response with jokes! Super!!!!' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      } else {
-        dummyModel = new MockLanguageModelV2({
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'stream-start',
-                  warnings: [],
-                },
-                {
-                  type: 'response-metadata',
-                  id: 'mock-response-id-3',
-                  modelId: 'mock-model-v2',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response with jokes! Super!!!!' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      }
-
-      const agent = new Agent({
-        name: 'system-message-test-agent-stream-no-memory',
-        instructions: 'You are a test agent',
-        model: dummyModel,
-      });
-
-      const testMessages = [
-        {
-          role: 'user' as const,
-          content: 'Hello, my name is John',
-        },
-        {
-          role: 'system' as const,
-          content: 'You always put jokes in your conversation and also always say Super!!!!',
-        },
-      ];
-
-      if (version === 'v1') {
-        const stream = await agent.streamLegacy(testMessages);
-        // Consume the stream to trigger the model call
-        for await (const _chunk of stream.textStream) {
-          // Just consume the stream
-        }
-      } else {
-        const stream = await agent.stream(testMessages);
-        // Consume the stream to trigger the model call
-        for await (const _chunk of stream.fullStream) {
-          // Just consume the stream
-        }
-      }
-
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const userSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('You always put jokes in your conversation'),
-      );
-
-      expect(userSystemMessage).toBeDefined();
-      expect(userSystemMessage?.content).toContain(
-        'You always put jokes in your conversation and also always say Super!!!!',
-      );
-    });
-
-    it('should preserve system messages from user input without memory', async () => {
-      // Mock the LLM to capture what messages it receives
-      let capturedMessages: any[] = [];
-      let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              text: 'Test response with jokes! Super!!!!',
-              usage: { promptTokens: 10, completionTokens: 5 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-        });
-      } else {
-        dummyModel = new MockLanguageModelV2({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              content: [{ type: 'text', text: 'Test response with jokes! Super!!!!' }],
-              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-            };
-          },
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'stream-start',
-                  warnings: [],
-                },
-                {
-                  type: 'response-metadata',
-                  id: 'mock-response-id-2',
-                  modelId: 'mock-model-v2',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response with jokes! Super!!!!' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      }
-
-      const agent = new Agent({
-        name: 'system-message-test-agent-no-memory',
-        instructions: 'You are a test agent',
-        model: dummyModel,
-      });
-
-      const testMessages = [
-        {
-          role: 'user' as const,
-          content: 'Hello, my name is John',
-        },
-        {
-          role: 'system' as const,
-          content: 'You always put jokes in your conversation and also always say Super!!!!',
-        },
-      ];
-
-      if (version === 'v1') {
-        await agent.generateLegacy(testMessages);
-      } else {
-        await agent.generate(testMessages);
-      }
-
-      // Check if system message from user input is preserved in the final prompt
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const userSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('You always put jokes in your conversation'),
-      );
-
-      expect(userSystemMessage).toBeDefined();
-      expect(userSystemMessage?.content).toContain(
-        'You always put jokes in your conversation and also always say Super!!!!',
-      );
-    });
-
-    it('should support system option in generate method', async () => {
-      // Mock the LLM to capture what messages it receives
-      let capturedMessages: any[] = [];
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              text: 'Test response',
-              usage: { promptTokens: 10, completionTokens: 5 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-        });
-      } else {
-        testModel = new MockLanguageModelV2({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              content: [{ type: 'text', text: 'Test response' }],
-              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-            };
-          },
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                { type: 'stream-start', warnings: [] },
-                {
-                  type: 'response-metadata',
-                  id: 'mock-response-id',
-                  modelId: 'mock-model-v2',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      }
-
-      const agent = new Agent({
-        name: 'system-option-generate-test',
-        instructions: 'Default instructions',
-        model: testModel,
-      });
-
-      // Test generate with system option
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello', {
-          system: 'You must respond in JSON format',
-        });
-      } else {
-        await agent.generate('Hello', {
-          system: 'You must respond in JSON format',
-        });
-      }
-
-      // Check if system message from option was added
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const customSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('You must respond in JSON format'),
-      );
-
-      expect(customSystemMessage).toBeDefined();
-      expect(customSystemMessage?.content).toContain('You must respond in JSON format');
-    });
-
-    it('should support system option in stream method', async () => {
-      // Mock the LLM to capture what messages it receives
-      let capturedMessages: any[] = [];
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              text: 'Test response',
-              usage: { promptTokens: 10, completionTokens: 5 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              stream: simulateReadableStream({
-                chunks: [
-                  { type: 'text-delta', textDelta: 'Test response' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: { promptTokens: 10, completionTokens: 5 },
-                  },
-                ],
-              }),
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-        });
-      } else {
-        testModel = new MockLanguageModelV2({
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                { type: 'stream-start', warnings: [] },
-                {
-                  type: 'response-metadata',
-                  id: 'mock-response-id',
-                  modelId: 'mock-model-v2',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      }
-
-      const agent = new Agent({
-        name: 'system-option-stream-test',
-        instructions: 'Default instructions',
-        model: testModel,
-      });
-
-      // Test stream with system option
-      if (version === 'v1') {
-        const streamResult = await agent.streamLegacy('Hello', {
-          system: 'Always be concise',
-        });
-        // Properly consume the v1 stream
-        for await (const _chunk of streamResult.textStream) {
-          // Just consume the stream
-        }
-      } else {
-        const streamResult = await agent.stream('Hello', {
-          system: 'Always be concise',
-        });
-        await streamResult.getFullOutput(); // Consume the stream
-      }
-
-      // Check if system message from option was added
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const customSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('Always be concise'),
-      );
-
-      expect(customSystemMessage).toBeDefined();
-      expect(customSystemMessage?.content).toContain('Always be concise');
-    });
-
-    it('should work with both instructions override and system option', async () => {
-      let capturedMessages: any[] = [];
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              text: 'Response',
-              usage: { promptTokens: 10, completionTokens: 5 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-        });
-      } else {
-        testModel = new MockLanguageModelV2({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              content: [{ type: 'text', text: 'Response' }],
-              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-            };
-          },
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                { type: 'stream-start', warnings: [] },
-                {
-                  type: 'response-metadata',
-                  id: 'mock-response-id',
-                  modelId: 'mock-model-v2',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Response' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      }
-
-      const agent = new Agent({
-        name: 'combined-test-agent',
-        instructions: 'Default instructions',
-        model: testModel,
-      });
-
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello', {
-          instructions: 'Override instructions',
-          system: 'Additional system context',
-        });
-      } else {
-        await agent.generate('Hello', {
-          instructions: 'Override instructions',
-          system: 'Additional system context',
-        });
-      }
-
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const allSystemContent = systemMessages.map(m => m.content).join(' ');
-
-      expect(allSystemContent).toContain('Override instructions');
-      expect(allSystemContent).toContain('Additional system context');
-    });
-
-    it('should support CoreSystemMessage object in generate method', async () => {
-      // Skip this test for v1 as it only applies to VNext methods
-      if (version === 'v1') {
-        return;
-      }
-
-      let capturedMessages: any[] = [];
-      const testModel = new MockLanguageModelV2({
-        doGenerate: async ({ prompt }) => {
-          capturedMessages = prompt;
-          return {
-            content: [{ type: 'text', text: 'Test response' }],
-            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-            finishReason: 'stop',
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-          };
-        },
-        doStream: async ({ prompt }) => {
-          capturedMessages = prompt;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              {
-                type: 'response-metadata',
-                id: 'mock-response-id',
-                modelId: 'mock-model-v2',
-                timestamp: new Date(0),
-              },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Test response' },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              },
-            ]),
-          };
-        },
-      });
-
-      const agent = new Agent({
-        name: 'core-system-message-test',
-        instructions: 'Default instructions',
-        model: testModel,
-      });
-
-      // Test with CoreSystemMessage object
-      await agent.generate('Hello', {
-        system: {
-          role: 'system',
-          content: 'You are a helpful assistant that responds in JSON format',
-        },
-      });
-
-      // Check if system message was properly added
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const jsonSystemMessage = systemMessages.find(
-        m =>
-          typeof m.content === 'string' &&
-          m.content.includes('You are a helpful assistant that responds in JSON format'),
-      );
-
-      expect(jsonSystemMessage).toBeDefined();
-      expect(jsonSystemMessage?.content).toBe('You are a helpful assistant that responds in JSON format');
-    });
-
-    it('should support SystemModelMessage object in stream method', async () => {
-      // Skip this test for v1 as it only applies to VNext methods
-      if (version === 'v1') {
-        return;
-      }
-
-      let capturedMessages: any[] = [];
-      const testModel = new MockLanguageModelV2({
-        doStream: async ({ prompt }) => {
-          capturedMessages = prompt;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              {
-                type: 'response-metadata',
-                id: 'mock-response-id',
-                modelId: 'mock-model-v2',
-                timestamp: new Date(0),
-              },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Test' },
-              { type: 'text-delta', id: '1', delta: ' response' },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              },
-            ]),
-          };
-        },
-      });
-
-      const agent = new Agent({
-        name: 'system-model-message-stream-test',
-        instructions: 'Default instructions',
-        model: testModel,
-      });
-
-      // Test with SystemModelMessage object (AI SDK v5 format)
-      const result = await agent.stream('Hello', {
-        system: {
-          role: 'system',
-          content: 'You are an expert programmer who provides detailed explanations',
-        },
-      });
-
-      // Consume the stream
-      const fullContent = await result.textStream;
-      for await (const _chunk of fullContent) {
-        // Just consume the stream
-      }
-
-      // Check if system message was properly handled
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const expertSystemMessage = systemMessages.find(
-        m =>
-          typeof m.content === 'string' &&
-          m.content.includes('You are an expert programmer who provides detailed explanations'),
-      );
-
-      expect(expertSystemMessage).toBeDefined();
-    });
-
-    it('should handle mixed system message types correctly', async () => {
-      // Skip this test for v1 as it only applies to VNext methods
-      if (version === 'v1') {
-        return;
-      }
-
-      let capturedMessages: any[] = [];
-      const testModel = new MockLanguageModelV2({
-        doGenerate: async ({ prompt }) => {
-          capturedMessages = prompt;
-          return {
-            content: [{ type: 'text', text: 'Test response' }],
-            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-            finishReason: 'stop',
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-          };
-        },
-        doStream: async ({ prompt }) => {
-          capturedMessages = prompt;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              {
-                type: 'response-metadata',
-                id: 'mock-response-id',
-                modelId: 'mock-model-v2',
-                timestamp: new Date(0),
-              },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Test response' },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              },
-            ]),
-          };
-        },
-      });
-
-      const agent = new Agent({
-        name: 'mixed-system-test',
-        instructions: 'Default instructions',
-        model: testModel,
-      });
-
-      // Test 1: String system message
-      capturedMessages = [];
-      await agent.generate('Test 1', {
-        system: 'String system message',
-      });
-      let systemMessages = capturedMessages.filter(m => m.role === 'system');
-      let customSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('String system message'),
-      );
-      expect(customSystemMessage).toBeDefined();
-
-      // Test 2: CoreSystemMessage object
-      capturedMessages = [];
-      await agent.generate('Test 2', {
-        system: {
-          role: 'system',
-          content: 'CoreSystemMessage content',
-        },
-      });
-      systemMessages = capturedMessages.filter(m => m.role === 'system');
-      customSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('CoreSystemMessage content'),
-      );
-      expect(customSystemMessage).toBeDefined();
-
-      // Test 3: SystemModelMessage with string content
-      capturedMessages = [];
-      await agent.generate('Test 3', {
-        system: {
-          role: 'system',
-          content: 'SystemModelMessage with full string content',
-        },
-      });
-      systemMessages = capturedMessages.filter(m => m.role === 'system');
-      customSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('SystemModelMessage with full string content'),
-      );
-      expect(customSystemMessage).toBeDefined();
-    });
-
-    it('should support arrays of system messages', async () => {
-      // Skip this test for v1 as it only applies to VNext methods
-      if (version === 'v1') {
-        return;
-      }
-
-      let capturedMessages: any[] = [];
-      const testModel = new MockLanguageModelV2({
-        doGenerate: async ({ prompt }) => {
-          capturedMessages = prompt;
-          return {
-            content: [{ type: 'text', text: 'Test response' }],
-            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-            finishReason: 'stop',
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-          };
-        },
-        doStream: async ({ prompt }) => {
-          capturedMessages = prompt;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              {
-                type: 'response-metadata',
-                id: 'mock-response-id',
-                modelId: 'mock-model-v2',
-                timestamp: new Date(0),
-              },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Test response' },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              },
-            ]),
-          };
-        },
-      });
-
-      const agent = new Agent({
-        name: 'array-system-test',
-        instructions: 'Default instructions',
-        model: testModel,
-      });
-
-      // Test 1: Array of strings
-      capturedMessages = [];
-      await agent.generate('Test string array', {
-        system: ['First string message', 'Second string message', 'Third string message'],
-      });
-
-      let systemMessages = capturedMessages.filter(m => m.role === 'system');
-      let hasFirst = systemMessages.some(
-        m => typeof m.content === 'string' && m.content.includes('First string message'),
-      );
-      let hasSecond = systemMessages.some(
-        m => typeof m.content === 'string' && m.content.includes('Second string message'),
-      );
-      let hasThird = systemMessages.some(
-        m => typeof m.content === 'string' && m.content.includes('Third string message'),
-      );
-
-      expect(hasFirst).toBe(true);
-      expect(hasSecond).toBe(true);
-      expect(hasThird).toBe(true);
-
-      // Test 2: Array of CoreSystemMessage objects
-      capturedMessages = [];
-      await agent.generate('Test object array', {
-        system: [
-          { role: 'system', content: 'First system message' },
-          { role: 'system', content: 'Second system message' },
-          { role: 'system', content: 'Third system message' },
-        ],
-      });
-
-      systemMessages = capturedMessages.filter(m => m.role === 'system');
-      hasFirst = systemMessages.some(m => typeof m.content === 'string' && m.content.includes('First system message'));
-      hasSecond = systemMessages.some(
-        m => typeof m.content === 'string' && m.content.includes('Second system message'),
-      );
-      hasThird = systemMessages.some(m => typeof m.content === 'string' && m.content.includes('Third system message'));
-
-      expect(hasFirst).toBe(true);
-      expect(hasSecond).toBe(true);
-      expect(hasThird).toBe(true);
-    });
-  });
 
   describe(`${version} - Input Processors`, () => {
     let mockModel: MockLanguageModelV1 | MockLanguageModelV2;
@@ -7111,294 +5880,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(invalidResult.tripwire).toBe(true);
         expect(invalidResult.tripwireReason).toBe('Content validation failed');
       });
-    });
-  });
-
-  describe(`${version} - UIMessageWithMetadata support`, () => {
-    let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
-    const mockMemory = new MockMemory();
-
-    beforeEach(() => {
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doGenerate: async () => ({
-            finishReason: 'stop',
-            usage: { completionTokens: 10, promptTokens: 3 },
-            text: 'Response acknowledging metadata',
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [
-                { type: 'text-delta', textDelta: 'Response' },
-                { type: 'text-delta', textDelta: ' acknowledging' },
-                { type: 'text-delta', textDelta: ' metadata' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        });
-      } else {
-        dummyModel = new MockLanguageModelV2({
-          doStream: async () => ({
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Response' },
-              { type: 'text-delta', id: '1', delta: ' acknowledging' },
-              { type: 'text-delta', id: '1', delta: ' metadata' },
-              { type: 'text-end', id: '1' },
-              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
-            ]),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-          }),
-        });
-      }
-    });
-
-    it('should preserve metadata in generate method', async () => {
-      const agent = new Agent({
-        name: 'metadata-test-agent',
-        instructions: 'You are a helpful assistant',
-        model: dummyModel,
-        memory: mockMemory,
-      });
-
-      const messagesWithMetadata = [
-        {
-          role: 'user' as const,
-          content: 'Hello with metadata',
-          parts: [{ type: 'text' as const, text: 'Hello with metadata' }],
-          metadata: {
-            source: 'web-ui',
-            customerId: '12345',
-            context: { orderId: 'ORDER-789', status: 'pending' },
-          },
-        },
-      ];
-
-      if (version === 'v1') {
-        await agent.generateLegacy(messagesWithMetadata, {
-          memory: {
-            resource: 'customer-12345',
-            thread: {
-              id: 'support-thread',
-            },
-          },
-        });
-      } else {
-        await agent.generate(messagesWithMetadata, {
-          memory: {
-            resource: 'customer-12345',
-            thread: {
-              id: 'support-thread',
-            },
-          },
-        });
-      }
-      // Verify messages were saved with metadata
-      const savedMessages = await mockMemory.getMessages({
-        threadId: 'support-thread',
-        resourceId: 'customer-12345',
-        format: 'v2',
-        selectBy: {
-          last: 10,
-        },
-      });
-
-      expect(savedMessages.length).toBeGreaterThan(0);
-
-      // Find the user message
-      const userMessage = savedMessages.find(m => m.role === 'user');
-      expect(userMessage).toBeDefined();
-
-      // Check that metadata was preserved in v2 format
-      if (
-        userMessage &&
-        'content' in userMessage &&
-        typeof userMessage.content === 'object' &&
-        'metadata' in userMessage.content
-      ) {
-        expect(userMessage.content.metadata).toEqual({
-          source: 'web-ui',
-          customerId: '12345',
-          context: { orderId: 'ORDER-789', status: 'pending' },
-        });
-      }
-    });
-
-    it('should preserve metadata in stream method', async () => {
-      const agent = new Agent({
-        name: 'metadata-stream-agent',
-        instructions: 'You are a helpful assistant',
-        model: dummyModel,
-        memory: mockMemory,
-      });
-
-      const messagesWithMetadata = [
-        {
-          role: 'user' as const,
-          content: 'Stream with metadata',
-          parts: [{ type: 'text' as const, text: 'Stream with metadata' }],
-          metadata: {
-            source: 'mobile-app',
-            sessionId: 'session-123',
-            deviceInfo: { platform: 'iOS', version: '17.0' },
-          },
-        },
-      ];
-
-      let stream;
-      if (version === 'v1') {
-        stream = await agent.streamLegacy(messagesWithMetadata, {
-          memory: {
-            resource: 'user-mobile',
-            thread: {
-              id: 'mobile-thread',
-            },
-          },
-        });
-      } else {
-        stream = await agent.stream(messagesWithMetadata, {
-          memory: {
-            resource: 'user-mobile',
-            thread: {
-              id: 'mobile-thread',
-            },
-          },
-        });
-      }
-
-      // Consume the stream
-      let finalText = '';
-      for await (const textPart of stream.textStream) {
-        finalText += textPart;
-      }
-
-      expect(finalText).toBe('Response acknowledging metadata');
-
-      // Verify messages were saved with metadata
-      const savedMessages = await mockMemory.getMessages({
-        threadId: 'mobile-thread',
-        resourceId: 'user-mobile',
-        format: 'v2',
-        selectBy: {
-          last: 10,
-        },
-      });
-
-      expect(savedMessages.length).toBeGreaterThan(0);
-
-      // Find the user message
-      const userMessage = savedMessages.find(m => m.role === 'user');
-      expect(userMessage).toBeDefined();
-
-      // Check that metadata was preserved
-      if (
-        userMessage &&
-        'content' in userMessage &&
-        typeof userMessage.content === 'object' &&
-        'metadata' in userMessage.content
-      ) {
-        expect(userMessage.content.metadata).toEqual({
-          source: 'mobile-app',
-          sessionId: 'session-123',
-          deviceInfo: { platform: 'iOS', version: '17.0' },
-        });
-      }
-    });
-
-    it('should handle mixed messages with and without metadata', async () => {
-      const agent = new Agent({
-        name: 'mixed-metadata-agent',
-        instructions: 'You are a helpful assistant',
-        model: dummyModel,
-        memory: mockMemory,
-      });
-
-      const mixedMessages = [
-        {
-          role: 'user' as const,
-          content: 'First message with metadata',
-          parts: [{ type: 'text' as const, text: 'First message with metadata' }],
-          metadata: {
-            messageType: 'initial',
-            priority: 'high',
-          },
-        },
-        {
-          role: 'assistant' as const,
-          content: 'Response without metadata',
-          parts: [{ type: 'text' as const, text: 'Response without metadata' }],
-        },
-        {
-          role: 'user' as const,
-          content: 'Second user message',
-          parts: [{ type: 'text' as const, text: 'Second user message' }],
-          // No metadata on this message
-        },
-      ];
-
-      if (version === 'v1') {
-        await agent.generateLegacy(mixedMessages, {
-          memory: {
-            resource: 'mixed-user',
-            thread: {
-              id: 'mixed-thread',
-            },
-          },
-        });
-      } else {
-        await agent.generate(mixedMessages, {
-          memory: {
-            resource: 'mixed-user',
-            thread: {
-              id: 'mixed-thread',
-            },
-          },
-        });
-      }
-      // Verify messages were saved correctly
-      const savedMessages = await mockMemory.getMessages({
-        threadId: 'mixed-thread',
-        resourceId: 'mixed-user',
-        format: 'v2',
-        selectBy: {
-          last: 10,
-        },
-      });
-
-      expect(savedMessages.length).toBeGreaterThan(0);
-
-      // Find messages and check metadata
-      const messagesAsV2 = savedMessages as MastraMessageV2[];
-      const firstUserMessage = messagesAsV2.find(
-        m =>
-          m.role === 'user' &&
-          m.content.parts?.[0]?.type === 'text' &&
-          m.content.parts[0].text.includes('First message'),
-      );
-      const secondUserMessage = messagesAsV2.find(
-        m =>
-          m.role === 'user' && m.content.parts?.[0]?.type === 'text' && m.content.parts[0].text.includes('Second user'),
-      );
-
-      // First message should have metadata
-      expect(firstUserMessage?.content.metadata).toEqual({
-        messageType: 'initial',
-        priority: 'high',
-      });
-
-      // Second message should not have metadata
-      expect(secondUserMessage?.content.metadata).toBeUndefined();
     });
   });
 

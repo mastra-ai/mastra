@@ -11,10 +11,12 @@ import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { noopLogger } from '../../logger';
 import type { StorageThreadType } from '../../memory';
+import { MockMemory } from '../../memory';
+import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { MessageList } from '../message-list/index';
-import { assertNoDuplicateParts, MockMemory } from '../test-utils';
+import { assertNoDuplicateParts } from '../test-utils';
 import { getDummyResponseModel, getEmptyResponseModel, getErrorResponseModel } from './mock-model';
 
 config();
@@ -34,7 +36,8 @@ function runStreamTest(version: 'v1' | 'v2') {
 
   describe(`${version} - stream`, () => {
     it('should rescue partial messages (including tool calls) if stream is aborted/interrupted', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       let saveCallCount = 0;
       let savedMessages: any[] = [];
       mockMemory.saveMessages = async function (...args) {
@@ -156,7 +159,8 @@ function runStreamTest(version: 'v1' | 'v2') {
     }, 500000);
 
     it('should incrementally save messages across steps and tool calls', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       let saveCallCount = 0;
       mockMemory.saveMessages = async function (...args) {
         saveCallCount++;
@@ -217,7 +221,8 @@ function runStreamTest(version: 'v1' | 'v2') {
     }, 500000);
 
     it('should incrementally save messages with multiple tools and multi-step streaming', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       let saveCallCount = 0;
       mockMemory.saveMessages = async function (...args) {
         saveCallCount++;
@@ -296,7 +301,8 @@ function runStreamTest(version: 'v1' | 'v2') {
     }, 500000);
 
     it('should persist the full message after a successful run', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const agent = new Agent({
         name: 'test-agent',
         instructions: 'test',
@@ -443,7 +449,8 @@ function runStreamTest(version: 'v1' | 'v2') {
     });
 
     it('should only call saveMessages for the user message when no assistant parts are generated', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       let saveCallCount = 0;
 
       mockMemory.saveMessages = async function (...args) {
@@ -482,7 +489,8 @@ function runStreamTest(version: 'v1' | 'v2') {
     });
 
     it('should not save any message if interrupted before any part is emitted', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       let saveCallCount = 0;
 
       mockMemory.saveMessages = async function (...args) {
@@ -522,7 +530,8 @@ function runStreamTest(version: 'v1' | 'v2') {
     });
 
     it('should not save thread if error occurs after starting response but before completion', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const saveThreadSpy = vi.spyOn(mockMemory, 'saveThread');
 
       let errorModel: MockLanguageModelV1 | MockLanguageModelV2;
@@ -713,7 +722,8 @@ function runStreamTest(version: 'v1' | 'v2') {
     });
 
     it(`should show correct request input for multi-turn inputs with memory`, async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const threadId = '1';
       const resourceId = '2';
       // @ts-ignore
@@ -799,7 +809,8 @@ function runStreamTest(version: 'v1' | 'v2') {
     });
 
     it(`should order tool calls/results and response text properly`, async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
 
       const weatherTool = createTool({
         id: 'get_weather',

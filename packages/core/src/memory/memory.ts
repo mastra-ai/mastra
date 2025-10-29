@@ -19,11 +19,21 @@ import type {
   WorkingMemoryTemplate,
 } from './types';
 
+// Type for flexible message deletion input
+export type MessageDeleteInput = string[] | { id: string }[];
+
 export type MemoryProcessorOpts = {
   systemMessage?: string;
   memorySystemMessage?: string;
   newMessages?: CoreMessage[];
 };
+
+export type MemoryQueryResult = {
+  messages: CoreMessage[];
+  uiMessages: UIMessageWithMetadata[];
+  messagesV2: MastraMessageV2[];
+} & PaginationInfo;
+
 /**
  * Interface for message processors that can filter or transform messages
  * before they're sent to the LLM.
@@ -354,11 +364,7 @@ export abstract class MastraMemory extends MastraBase {
    * @param threadId - The unique identifier of the thread
    * @returns Promise resolving to array of messages, uiMessages, and messagesV2
    */
-  abstract query({ threadId, resourceId, selectBy }: StorageGetMessagesArg): Promise<{
-    messages: CoreMessage[];
-    uiMessages: UIMessageWithMetadata[];
-    messagesV2: MastraMessageV2[];
-  }>;
+  abstract query({ threadId, resourceId, selectBy }: StorageGetMessagesArg): Promise<MemoryQueryResult>;
 
   /**
    * Helper method to create a new thread
@@ -517,8 +523,8 @@ export abstract class MastraMemory extends MastraBase {
 
   /**
    * Deletes multiple messages by their IDs
-   * @param messageIds - Array of message IDs to delete
+   * @param messageIds - Can be a single ID, array of IDs, or objects with ID property
    * @returns Promise that resolves when all messages are deleted
    */
-  abstract deleteMessages(messageIds: string[]): Promise<void>;
+  abstract deleteMessages(messageIds: MessageDeleteInput): Promise<void>;
 }
