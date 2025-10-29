@@ -177,7 +177,7 @@ export const useStreamWorkflow = () => {
 
   const handleStreamError = (err: unknown, defaultMessage: string, setIsStreaming?: (isStreaming: boolean) => void) => {
     // Expected error during cleanup - safe to ignore
-    if (err instanceof DOMException && err.name === 'TypeError') {
+    if (err instanceof TypeError) {
       return;
     }
     const errorMessage = err instanceof Error ? err.message : defaultMessage;
