@@ -661,3 +661,64 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
     isStreaming,
   };
 };
+
+/**
+ * Hook for observing template installation with full replay capability.
+ * Uses observeStream() which replays cached execution from beginning, then continues live.
+ * This is the recommended approach for recovery after page refresh/hot reload.
+ */
+export const useObserveStreamTemplateInstall = (workflowInfo?: any) => {
+  const client = useMastraClient();
+  const { streamResult, isStreaming, processStream } = useTemplateStreamProcessor(workflowInfo);
+
+  const observeInstall = useMutation({
+    mutationFn: async ({ runId }: { runId: string }) => {
+      const maxRetries = 3;
+      const retryDelay = 2000; // 2 seconds
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          // Initialize state - but observeStream will replay full history
+          // so we don't need to rely on localStorage as fallback
+          const template = client.getAgentBuilderAction('merge-template');
+
+          // Use observeStream to get full replay + live updates
+          const stream = await template.observeStream({ runId });
+          await processStream(stream, runId);
+
+          // If we get here, the observe stream completed successfully
+          return;
+        } catch (error: any) {
+          console.error(`💥 [observeInstall] Attempt ${attempt} failed:`, error);
+          const isNetworkError =
+            error?.message?.includes('Failed to fetch') ||
+            error?.message?.includes('NetworkError') ||
+            error?.message?.includes('network error') ||
+            error?.message?.includes('fetch') ||
+            error?.code === 'NETWORK_ERROR' ||
+            error?.name === 'TypeError';
+
+          console.warn(`ObserveStream attempt ${attempt}/${maxRetries} failed:`, error);
+
+          if (isNetworkError && attempt < maxRetries) {
+            console.log(
+              `🔄 ObserveStream network error detected (likely hot reload), retrying in ${retryDelay}ms... (attempt ${attempt + 1}/${maxRetries})`,
+            );
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            continue; // Retry
+          }
+
+          // If it's not a network error or we've exhausted retries, throw
+          console.error('❌ [observeInstall] Non-network error or max retries reached, throwing:', error);
+          throw error;
+        }
+      }
+    },
+  });
+
+  return {
+    observeInstall,
+    streamResult,
+    isStreaming,
+  };
+};
