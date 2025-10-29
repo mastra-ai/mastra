@@ -5,7 +5,7 @@ import { augmentWithInit } from './storageWithInit';
 it('should augment the storage with init', async () => {
   const mockStorage = {
     init: vi.fn().mockResolvedValue(true),
-    listMessages: vi.fn().mockResolvedValue([]),
+    listMessages: vi.fn().mockResolvedValue({ messages: [] }),
   } as unknown as MastraStorage;
 
   const augmentedStorage = augmentWithInit(mockStorage);
@@ -17,7 +17,7 @@ it('should augment the storage with init', async () => {
 it("shouln't double augment the storage", async () => {
   const mockStorage = {
     init: vi.fn().mockResolvedValue(true),
-    listMessages: vi.fn().mockResolvedValue([]),
+    listMessages: vi.fn().mockResolvedValue({ messages: [] }),
   } as unknown as MastraStorage;
 
   const augmentedStorage = augmentWithInit(mockStorage);
