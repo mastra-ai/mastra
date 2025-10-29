@@ -185,6 +185,16 @@ export const useStreamWorkflow = () => {
     setIsStreaming?.(false);
   };
 
+  const handleWorkflowFinish = (value: StreamVNextChunkType) => {
+    if (value.type === 'workflow-finish') {
+      const streamStatus = value.payload?.workflowStatus;
+      const metadata = value.payload?.metadata;
+      if (streamStatus === 'failed') {
+        throw new Error(metadata?.errorMessage || 'Workflow execution failed');
+      }
+    }
+  };
+
   const streamWorkflow = useMutation({
     mutationFn: async ({
       workflowId,
@@ -244,11 +254,7 @@ export const useStreamWorkflow = () => {
             }
 
             if (value.type === 'workflow-finish') {
-              const streamStatus = value.payload.workflowStatus;
-              const metadata = value.payload.metadata;
-              if (streamStatus === 'failed' && metadata?.errorMessage) {
-                throw new Error(metadata.errorMessage);
-              }
+              handleWorkflowFinish(value);
             }
           }
         }
@@ -324,11 +330,7 @@ export const useStreamWorkflow = () => {
             }
 
             if (value.type === 'workflow-finish') {
-              const streamStatus = value.payload.workflowStatus;
-              const metadata = value.payload.metadata;
-              if (streamStatus === 'failed' && metadata?.errorMessage) {
-                throw new Error(metadata.errorMessage);
-              }
+              handleWorkflowFinish(value);
             }
           }
         }
@@ -406,11 +408,7 @@ export const useStreamWorkflow = () => {
             }
 
             if (value.type === 'workflow-finish') {
-              const streamStatus = value.payload.workflowStatus;
-              const metadata = value.payload.metadata;
-              if (streamStatus === 'failed' && metadata?.errorMessage) {
-                throw new Error(metadata.errorMessage);
-              }
+              handleWorkflowFinish(value);
             }
           }
         }
