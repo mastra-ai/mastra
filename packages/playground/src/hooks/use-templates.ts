@@ -665,7 +665,6 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
 /**
  * Hook for observing template installation with full replay capability.
  * Uses observeStream() which replays cached execution from beginning, then continues live.
- * This is the recommended approach for recovery after page refresh/hot reload.
  */
 export const useObserveStreamTemplateInstall = (workflowInfo?: any) => {
   const client = useMastraClient();
