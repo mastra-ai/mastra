@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PostHogProvider } from "posthog-js/react";
 import { GTProvider } from "gt-react";
 import loadTranslations from "@site/src/loadTranslations";
+import { LocaleSync } from "@site/src/components/gt/LocaleSync";
 import React from "react";
 
 const queryClient = new QueryClient({
@@ -37,6 +38,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
       >
         <KapaProvider integrationId={kapaIntegrationId || ""}>
           <GTProvider locales={locales} loadTranslations={loadTranslations}>
+            <LocaleSync />
             <Toaster />
             <CookieConsent />
             {children}
