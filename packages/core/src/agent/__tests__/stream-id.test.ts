@@ -10,7 +10,7 @@ import type { StorageThreadType } from '../../memory';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
-import { MastraMessageV1 } from '../message-list';
+import type { MastraMessageV1 } from '../message-list';
 
 describe('Stream ID Consistency', () => {
   /**
