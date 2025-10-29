@@ -1,5 +1,5 @@
 ---
-title: "Providers: LucidQuery AI | Models | Mastra"
+title: "LucidQuery AI | Models | Mastra"
 description: "Use LucidQuery AI models with Mastra. 2 models available."
 ---
 
@@ -7,6 +7,8 @@ description: "Use LucidQuery AI models with Mastra. 2 models available."
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
 import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
 
 # <img src="https://models.dev/logos/lucidquery.svg" alt="LucidQuery AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LucidQuery AI
 
@@ -24,7 +26,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "lucidquery/lucidnova-rf1-100b",
+  model: "lucidquery/lucidnova-rf1-100b"
 });
 
 // Generate a response
@@ -47,31 +49,31 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-    {
-      model: "lucidquery/lucidnova-rf1-100b",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: true,
-      contextWindow: 120000,
-      maxOutput: 8000,
-      inputCost: 2,
-      outputCost: 5,
-    },
-    {
-      model: "lucidquery/lucidquery-nexus-coder",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: true,
-      contextWindow: 250000,
-      maxOutput: 60000,
-      inputCost: 2,
-      outputCost: 5,
-    },
-  ]}
+  {
+    "model": "lucidquery/lucidnova-rf1-100b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 120000,
+    "maxOutput": 8000,
+    "inputCost": 2,
+    "outputCost": 5
+  },
+  {
+    "model": "lucidquery/lucidquery-nexus-coder",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 250000,
+    "maxOutput": 60000,
+    "inputCost": 2,
+    "outputCost": 5
+  }
+]}
 />
 
 ## Advanced Configuration
@@ -86,9 +88,9 @@ const agent = new Agent({
     id: "lucidquery/lucidnova-rf1-100b",
     apiKey: process.env.LUCIDQUERY_API_KEY,
     headers: {
-      "X-Custom-Header": "value",
-    },
-  },
+      "X-Custom-Header": "value"
+    }
+  }
 });
 ```
 
@@ -102,6 +104,8 @@ const agent = new Agent({
     return useAdvanced
       ? "lucidquery/lucidquery-nexus-coder"
       : "lucidquery/lucidnova-rf1-100b";
-  },
+  }
 });
 ```
+
+
