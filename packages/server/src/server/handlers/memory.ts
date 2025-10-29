@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
-import type { RuntimeContext } from '@mastra/core/di';
+import { RuntimeContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -56,7 +56,7 @@ async function getMemoryFromContext({
   if (agent) {
     return (
       (await agent?.getMemory({
-        runtimeContext,
+        runtimeContext: runtimeContext ?? new RuntimeContext(),
       })) || mastra.getMemory()
     );
   }
@@ -394,11 +394,10 @@ export async function getMessagesHandler({
       throw new HTTPException(404, { message: 'Thread not found' });
     }
 
-    const { messages } = await memory.query({
+    return await memory.query({
       threadId: threadId!,
       ...(limit && { selectBy: { last: limit } }),
     });
-    return { messages };
   } catch (error) {
     return handleError(error, 'Error getting messages');
   }
@@ -435,7 +434,7 @@ export async function getWorkingMemoryHandler({
         : template;
     const workingMemory = await memory.getWorkingMemory({ threadId: threadId!, resourceId, memoryConfig });
     const config = memory.getMergedThreadConfig(memoryConfig || {});
-    const source = config.workingMemory?.scope === 'resource' && resourceId ? 'resource' : 'thread';
+    const source = config.workingMemory?.scope !== 'thread' && resourceId ? 'resource' : 'thread';
     return { workingMemory, source, workingMemoryTemplate, threadExists };
   } catch (error) {
     return handleError(error, 'Error getting working memory');
