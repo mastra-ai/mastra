@@ -253,9 +253,9 @@ description: "Use ${provider.name} models with Mastra. ${modelCount} model${mode
 
 ${getGeneratedComment()}
 
-import { ProviderModelsTable } from "@/components/provider-models-table";
-import { PropertiesTable } from "@/components/properties-table";
-import { Callout } from "nextra/components";
+import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
 ${provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible' ? 'import { Tabs, Tab } from "@/components/tabs";' : ''}
 
 # <img src="${getLogoUrl(provider.id)}" alt="${provider.name} logo" className="${getLogoClass(provider.id)}" />${provider.name}
@@ -288,15 +288,17 @@ ${
   !PROVIDERS_WITH_INSTALLED_PACKAGES.includes(provider.id)
     ? // if it's not a directly supported provider then it's openai compatible, so warn about it
       `
-<Callout type="info">
+:::info
+
 Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. Check the [${provider.name} documentation](${docUrl || '#'}) for details.
-</Callout>
+
+:::
 `
     : ``
 }
 ## Models
 
-<ProviderModelsTable 
+<ProviderModelsTable
   models={${modelDataJson}}
 />
 
@@ -329,7 +331,7 @@ const agent = new Agent({
   name: "dynamic-agent",
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
+    return useAdvanced
       ? "${provider.id}/${provider.models[provider.models.length - 1]}"
       : "${provider.id}/${provider.models[0]}";
   }
@@ -477,7 +479,7 @@ ${allModels.map(m => `| \`${m}\` |`).join('\n')}
     : `<img src="${getLogoUrl(gatewayName)}" alt="${displayName} logo" className="${getLogoClass(gatewayName)}" />`;
 
   return `---
-title: "${displayName} | Models | Mastra"  
+title: "${displayName} | Models | Mastra"
 description: "Use AI models through ${displayName}."
 ---
 
@@ -511,7 +513,7 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
 # Use gateway API key
 ${gatewayName.toUpperCase()}_API_KEY=your-gateway-key
 
-# Or use provider API keys directly  
+# Or use provider API keys directly
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=ant-...
 \`\`\`
@@ -548,9 +550,9 @@ Mastra provides a unified interface for working with LLMs across multiple provid
 
 - **One API for any model** - Access any model without having to install and manage additional provider dependencies.
 
-- **Access the newest AI** - Use new models the moment they're released, no matter which provider they come from. Avoid vendor lock-in with Mastra's provider-agnostic interface.  
+- **Access the newest AI** - Use new models the moment they're released, no matter which provider they come from. Avoid vendor lock-in with Mastra's provider-agnostic interface.
 
-- [**Mix and match models**](#mix-and-match-models) - Use different models for different tasks. For example, run GPT-4o-mini for large-context processing, then switch to Claude Opus 4.1 for reasoning tasks.  
+- [**Mix and match models**](#mix-and-match-models) - Use different models for different tasks. For example, run GPT-4o-mini for large-context processing, then switch to Claude Opus 4.1 for reasoning tasks.
 
 - [**Model fallbacks**](#model-fallbacks) - If a provider experiences an outage, Mastra can automatically switch to another provider at the application level, minimizing latency compared to API gateways.
 
@@ -577,7 +579,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
     import { Agent } from "@mastra/core";
 
     const agent = new Agent({
-      name: "my-agent", 
+      name: "my-agent",
       instructions: "You are a helpful assistant",
       model: "anthropic/claude-4-5-sonnet"
     })
@@ -611,7 +613,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
 
     const agent = new Agent({
       name: "my-agent",
-      instructions: "You are a helpful assistant", 
+      instructions: "You are a helpful assistant",
       model: "openrouter/anthropic/claude-haiku-4-5"
     })
     \`\`\`
@@ -708,12 +710,12 @@ import { Agent } from "@mastra/core";
 const documentProcessor = new Agent({
   name: "document-processor",
   instructions: "Extract and summarize key information from documents",
-  model: "openai/gpt-4o-mini" 
+  model: "openai/gpt-4o-mini"
 })
 
 // Use a powerful reasoning model for complex analysis
 const reasoningAgent = new Agent({
-  name: "reasoning-agent", 
+  name: "reasoning-agent",
   instructions: "Analyze data and provide strategic recommendations",
   model: "anthropic/claude-opus-4-1"
 })
@@ -756,7 +758,7 @@ const planner = new Agent({
   model: "openai/o3-pro",
 });
 
-const lowEffort = 
+const lowEffort =
   await planner.generate("Plan a simple 3 item dinner menu");
 
 // Message level (apply only to this message)
@@ -879,7 +881,7 @@ ${gatewaysList
       description="${grouped.gateways.get(g)?.reduce((sum, p) => sum + p.models.length, 0) || 0} models"
       href="./gateways/${g}"
       logo="${getLogoUrl(g)}"
-      
+
     />`;
   })
   .join(
@@ -1143,7 +1145,7 @@ async function generateDocs() {
    - ${grouped.popular.length + grouped.other.length + aiSdkProviders.length} provider pages + 1 overview
    - ${grouped.gateways.size} gateway pages + 1 overview
    - 1 main index page
-   
+
    Total: ${grouped.popular.length + grouped.other.length + aiSdkProviders.length + grouped.gateways.size + 3} pages generated
   `);
 }
