@@ -14,6 +14,8 @@ import ContentVisibility from "@theme/ContentVisibility";
 import type { Props } from "@theme/DocItem/Layout";
 
 import styles from "./styles.module.css";
+import SubscribeForm from "@site/src/components/subscribe-form";
+import { FeedbackTrigger } from "@site/src/components/feedback-trigger";
 
 /**
  * Decide if the toc should be rendered, on mobile or desktop viewports
@@ -58,9 +60,16 @@ export default function DocItemLayout({ children }: Props): ReactNode {
           <DocItemPaginator />
         </div>
       </div>
-      {docTOC.desktop && (
+      {docTOC.desktop ? (
         <div id="toc-column" className={clsx("col col--3")}>
           {docTOC.desktop}
+        </div>
+      ) : (
+        <div id="toc-column" className={clsx("col col--3")}>
+          <div className="hidden xl:flex flex-col gap-4 px-1.5">
+            <SubscribeForm />
+            <FeedbackTrigger />
+          </div>
         </div>
       )}
     </div>
