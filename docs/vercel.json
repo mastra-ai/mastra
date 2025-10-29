@@ -21,11 +21,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/08-running-evals",
-      "destination": "/docs/evals/overview",
-      "permanent": true
-    },
-    {
       "source": "/docs/agents/00-overview",
       "destination": "/docs/agents/overview",
       "permanent": true
@@ -48,26 +43,6 @@
     {
       "source": "/docs/agents/03-adding-voice",
       "destination": "/docs/agents/adding-voice",
-      "permanent": true
-    },
-    {
-      "source": "/docs/evals/00-overview",
-      "destination": "/docs/evals/overview",
-      "permanent": true
-    },
-    {
-      "source": "/docs/evals/01-textual-evals",
-      "destination": "/docs/evals/textual-evals",
-      "permanent": true
-    },
-    {
-      "source": "/docs/evals/02-custom-eval",
-      "destination": "/docs/evals/custom-eval",
-      "permanent": true
-    },
-    {
-      "source": "/docs/evals/03-running-in-ci",
-      "destination": "/docs/evals/running-in-ci",
       "permanent": true
     },
     {
@@ -238,11 +213,6 @@
     {
       "source": "/docs/integrations",
       "destination": "/docs/tools-mcp/mcp-overview",
-      "permanent": true
-    },
-    {
-      "source": "/docs/evals/01-supported-evals",
-      "destination": "/docs/evals/overview",
       "permanent": true
     },
     {
@@ -588,16 +558,6 @@
     {
       "source": "/docs/frameworks/agentic-uis",
       "destination": "/docs/frameworks/agentic-uis/ai-sdk",
-      "permanent": true
-    },
-    {
-      "source": "/examples/evals/word-inclusion",
-      "destination": "/examples/evals/custom-native-javascript-eval",
-      "permanent": true
-    },
-    {
-      "source": "/examples/evals/custom-eval",
-      "destination": "/examples/evals/custom-llm-judge-eval",
       "permanent": true
     },
     {
@@ -1128,31 +1088,6 @@
     {
       "source": "/docs/tools-mcp/runtime-context",
       "destination": "/docs/server-db/runtime-context",
-      "permanent": true
-    },
-    {
-      "source": "/docs/evals",
-      "destination": "/docs/scorers/evals-old-api",
-      "permanent": true
-    },
-    {
-      "source": "/docs/evals/overview",
-      "destination": "/docs/scorers/evals-old-api/overview",
-      "permanent": true
-    },
-    {
-      "source": "/docs/evals/custom-eval",
-      "destination": "/docs/scorers/evals-old-api/custom-eval",
-      "permanent": true
-    },
-    {
-      "source": "/docs/evals/running-in-ci",
-      "destination": "/docs/scorers/evals-old-api/running-in-ci",
-      "permanent": true
-    },
-    {
-      "source": "/docs/evals/textual-evals",
-      "destination": "/docs/scorers/evals-old-api/textual-evals",
       "permanent": true
     },
     {
