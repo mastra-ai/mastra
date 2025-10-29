@@ -230,5 +230,9 @@
   "sidebar.modelsSidebar.doc.Zhipu AI Coding Plan": {
     "message": "Zhipu AI Coding Plan",
     "description": "The label for the doc item 'Zhipu AI Coding Plan' in sidebar 'modelsSidebar', linking to the doc providers/zhipuai-coding-plan"
+  },
+  "sidebar.modelsSidebar.doc.ZenMux": {
+    "message": "ZenMux",
+    "description": "The label for the doc item 'ZenMux' in sidebar 'modelsSidebar', linking to the doc providers/zenmux"
   }
 }

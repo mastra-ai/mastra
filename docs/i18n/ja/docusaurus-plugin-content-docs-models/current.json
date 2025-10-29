@@ -230,5 +230,9 @@
   "sidebar.modelsSidebar.doc.Zhipu AI Coding Plan": {
     "message": "Zhipu AI コーディングプラン",
     "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Zhipu AI Coding Plan」のラベル。ドキュメント providers/zhipuai-coding-plan へのリンク"
+  },
+  "sidebar.modelsSidebar.doc.ZenMux": {
+    "message": "ZenMux",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「ZenMux」のラベル。ドキュメント providers/zenmux へのリンクです"
   }
 }
