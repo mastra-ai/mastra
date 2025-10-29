@@ -2,7 +2,7 @@ import { MockLanguageModelV1 } from 'ai/test';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';
-import { MockMemory } from '../agent/test-utils';
+import { MockMemory } from '../memory/mock';
 import { MastraError } from '../error';
 import { RuntimeContext } from '../runtime-context';
 import { InMemoryStore } from '../storage';
