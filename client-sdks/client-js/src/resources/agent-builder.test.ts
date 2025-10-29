@@ -2,9 +2,9 @@ import type { Server, IncomingMessage } from 'http';
 import { createServer } from 'http';
 import type { AddressInfo } from 'net';
 import { describe, it, beforeAll, beforeEach, afterAll, expect, vi, afterEach } from 'vitest';
+import type { ClientOptions } from '../types';
 import { AgentBuilder } from './agent-builder';
 import { Workflow } from './workflow';
-import type { ClientOptions } from '../types';
 
 describe('AgentBuilder.runs', () => {
   let server: Server;
