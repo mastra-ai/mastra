@@ -121,23 +121,15 @@
 
 ## 🟢 MEDIUM PRIORITY: API Cleanup & Consistency
 
-### 7. Remove Deprecated Type Alias
+### 7. Remove Deprecated Type Alias ✅ COMPLETE
 **Issue:** We have a deprecated `MastraMessageV2` alias that should be removed in a breaking change
 
 **File:** `packages/core/src/agent/message-list/index.ts`
 
-**Current:**
-```typescript
-/**
- * @deprecated Use MastraDBMessage instead. This alias will be removed in a future version.
- */
-export type MastraMessageV2 = MastraDBMessage;
-```
-
-**Action:**
-- [ ] Remove the `MastraMessageV2` type alias entirely
-- [ ] We're already doing a breaking change, no need to keep deprecated aliases
-- [ ] Search codebase for any remaining `MastraMessageV2` usage and replace with `MastraDBMessage`
+**Status:** ✅ **COMPLETE** (completed earlier in the project)
+- [x] Removed the `MastraMessageV2` type alias entirely
+- [x] We're already doing a breaking change, no need to keep deprecated aliases
+- [x] Searched codebase for any remaining `MastraMessageV2` usage and replaced with `MastraDBMessage`
 
 ---
 
@@ -198,22 +190,36 @@ export type MastraMessageV2 = MastraDBMessage;
 
 ---
 
-### 11. Rename `.v2()` Methods to `.db()` or `.mastraDb()`
+### 11. Rename `.v2()` Methods to `.db()` or `.mastraDb()` ✅ COMPLETE
 **Issue:** MessageList get methods use `.v2()` suffix which is confusing now
 
 **File:** `packages/core/src/agent/message-list/index.ts`
 
-**Current naming:**
-- `list.get.all.v2()`
-- Similar for other methods
-
-**Action:**
-- [ ] Decide on naming: `.db()` vs `.mastraDb()`
-  - **Recommendation:** `.db()` is shorter and clearer, lets do that (decided!)
-- [ ] Rename all `.v2()` methods to `.db()`
-- [ ] Update all usages across codebase
-- [ ] Update tests
-- [ ] Update documentation
+**Status:** ✅ **COMPLETE**
+- [x] Decided on naming: `.db()` (shorter and clearer)
+- [x] Renamed all `.v2()` methods to `.db()` in:
+  - packages/core/src/agent/message-list/index.ts
+  - packages/core/src/agent/message-list/tests/message-list.test.ts
+  - packages/core/src/agent/message-list/utils/convert-messages.ts
+  - packages/core/src/storage/domains/memory/inmemory.ts
+  - packages/core/src/processors/processors/structured-output.test.ts
+  - packages/core/src/processors/runner.ts
+  - packages/core/src/loop/network/index.ts
+  - packages/core/src/stream/base/output.ts
+  - packages/core/src/agent/agent.ts
+  - packages/core/src/agent/workflows/prepare-stream/prepare-memory-step.ts
+  - packages/core/src/agent/__tests__/stream.test.ts
+  - packages/core/src/agent/message-list/tests/message-list-aisdk-v5-url.test.ts
+  - packages/core/src/agent/message-list/tests/message-list-url-handling.test.ts
+  - packages/core/src/agent/message-list/tests/message-list-v5.test.ts
+  - packages/memory/integration-tests/src/processors.test.ts
+  - packages/memory/integration-tests/src/test-utils.ts
+  - packages/memory/integration-tests/src/reusable-tests.ts
+  - packages/memory/integration-tests-v5/src/processors.test.ts
+  - packages/memory/integration-tests-v5/src/test-utils.ts
+  - packages/memory/src/index.ts
+- [x] Updated all usages across codebase
+- [x] Updated tests
 
 ---
 
@@ -238,21 +244,16 @@ export type MastraMessageV2 = MastraDBMessage;
 
 ---
 
-### 13. Fix TODO Comment in Tests
+### 13. Fix TODO Comment in Tests ✅ COMPLETE
 **Issue:** Test comment suggests `saveMessages` returns wrong format
 
 **File:** `packages/memory/integration-tests/src/working-memory.test.ts`
 
-**Comment:**
-```typescript
-// TODO: seems like saveMessages says it returns MastraDBMessage but it's returning V1
-```
-
-**Action:**
-- [ ] Investigate if `saveMessages` actually returns the wrong format
-- [ ] If yes, fix the implementation
-- [ ] If no, remove the TODO comment
-- [ ] Add test to verify return format is correct, we should use the new format only
+**Status:** ✅ **COMPLETE**
+- [x] Investigated - `saveMessages` correctly returns `MastraDBMessage[]` when `format: 'v2'` is specified
+- [x] The overload signatures are correct
+- [x] Removed the TODO comment
+- [x] Tests already verify the return format is correct (checking `m.content.parts` which is MastraDBMessage format)
 
 ---
 
