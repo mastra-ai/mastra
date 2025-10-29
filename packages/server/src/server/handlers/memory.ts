@@ -1,4 +1,3 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions } from '@mastra/core/storage';
