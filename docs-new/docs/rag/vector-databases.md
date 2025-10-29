@@ -1,6 +1,7 @@
 ---
-title: 'Storing Embeddings in A Vector Database '
+title: Vector Databases
 description: Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
+sidebar_position: 3
 ---
 
 import Tabs from '@theme/Tabs';
@@ -38,7 +39,7 @@ After generating embeddings, you need to store them in a database that supports 
 
   </TabItem>
 
-  <TabItem value="using-postgresql-with-pgvector" label="Using PostgreSQL with pgvector">
+  <TabItem value="pgvector" label="Pg Vector">
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { PgVector } from '@mastra/pg';
 
@@ -268,7 +269,7 @@ metadata: chunks.map(chunk => ({ text: chunk.text })),
 ````
 
 </TabItem>
-<TabItem value="using-lancedb" label="Using LanceDB">
+<TabItem value="using-lancedb" label="LanceDB">
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { LanceVectorStore } from '@mastra/lance'
 
@@ -331,7 +332,7 @@ Before storing embeddings, you need to create an index with the appropriate dime
 ```ts filename="store-embeddings.ts" showLineNumbers copy
 // Create an index with dimension 1536 (for text-embedding-3-small)
 await store.createIndex({
-  indexName: 'myCollection',
+  indexName: "myCollection",
   dimension: 1536,
 });
 ```
@@ -461,9 +462,9 @@ After creating an index, you can store embeddings along with their basic metadat
 ```ts filename="store-embeddings.ts" showLineNumbers copy
 // Store embeddings with their corresponding metadata
 await store.upsert({
-  indexName: 'myCollection', // index name
+  indexName: "myCollection", // index name
   vectors: embeddings, // array of embedding vectors
-  metadata: chunks.map(chunk => ({
+  metadata: chunks.map((chunk) => ({
     text: chunk.text, // The original text content
     id: chunk.id, // Optional unique identifier
   })),
@@ -488,9 +489,9 @@ Vector stores support rich metadata (any JSON-serializable fields) for filtering
 ```ts showLineNumbers copy
 // Store embeddings with rich metadata for better organization and filtering
 await store.upsert({
-  indexName: 'myCollection',
+  indexName: "myCollection",
   vectors: embeddings,
-  metadata: chunks.map(chunk => ({
+  metadata: chunks.map((chunk) => ({
     // Basic content
     text: chunk.text,
     id: chunk.id,
@@ -501,7 +502,7 @@ await store.upsert({
 
     // Temporal metadata
     createdAt: new Date().toISOString(),
-    version: '1.0',
+    version: "1.0",
 
     // Custom fields
     language: chunk.language,

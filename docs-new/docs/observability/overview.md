@@ -1,6 +1,7 @@
 ---
-title: 'Overview '
+title: "Overview "
 description: Monitor and debug applications with Mastra's Observability features.
+sidebar_position: 1
 ---
 
 # Observability Overview
@@ -39,9 +40,9 @@ Traditional distributed tracing with OpenTelemetry:
 Configure Observability in your Mastra instance:
 
 ```typescript filename="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { PinoLogger } from '@mastra/core';
-import { LibSqlStorage } from '@mastra/libsql';
+import { Mastra } from "@mastra/core";
+import { PinoLogger } from "@mastra/core";
+import { LibSqlStorage } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   // ... other config
@@ -50,7 +51,7 @@ export const mastra = new Mastra({
     default: { enabled: true }, // Enables AI Tracing
   },
   storage: new LibSQLStore({
-    url: 'file:./mastra.db', // Storage is required for tracing
+    url: "file:./mastra.db", // Storage is required for tracing
   }),
   telemetry: {
     enabled: true, // Enables OTEL Tracing

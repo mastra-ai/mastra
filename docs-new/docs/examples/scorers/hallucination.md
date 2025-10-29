@@ -1,5 +1,5 @@
 ---
-title: 'Hallucination '
+title: "Hallucination "
 description: Example of using the Hallucination scorer to evaluate factual contradictions in responses.
 ---
 

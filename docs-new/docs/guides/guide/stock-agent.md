@@ -1,6 +1,6 @@
 ---
 sidebar_position: 2
-title: 'Tools: Stock Agent'
+title: "Tools: Stock Agent"
 description: Guide on creating a simple stock agent in Mastra to fetch the last day's closing stock price for a given symbol.
 ---
 
@@ -27,14 +27,14 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
 Create a new file `src/mastra/agents/stockAgent.ts` and define your agent:
 
 ```ts copy filename="src/mastra/agents/stockAgent.ts"
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
 export const stockAgent = new Agent({
-  name: 'Stock Agent',
+  name: "Stock Agent",
   instructions:
-    'You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.',
-  model: openai('gpt-4o-mini'),
+    "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
+  model: openai("gpt-4o-mini"),
 });
 ```
 
@@ -43,8 +43,8 @@ export const stockAgent = new Agent({
 In your `src/mastra/index.ts` file, register the agent:
 
 ```ts copy filename="src/mastra/index.ts" {2, 5}
-import { Mastra } from '@mastra/core';
-import { stockAgent } from './agents/stockAgent';
+import { Mastra } from "@mastra/core";
+import { stockAgent } from "./agents/stockAgent";
 
 export const mastra = new Mastra({
   agents: { stockAgent },
@@ -60,22 +60,24 @@ So far the Stock Agent doesn't know anything about the current stock prices. To 
 Create a new file `src/mastra/tools/stockPrices.ts`. Inside, add a `stockPrices` tool that will fetch the last day's closing stock price for a given symbol:
 
 ```ts filename="src/mastra/tools/stockPrices.ts"
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
 const getStockPrice = async (symbol: string) => {
-  const data = await fetch(`https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`).then(r => r.json());
-  return data.prices['4. close'];
+  const data = await fetch(
+    `https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`,
+  ).then((r) => r.json());
+  return data.prices["4. close"];
 };
 
 export const stockPrices = createTool({
-  id: 'Get Stock Price',
+  id: "Get Stock Price",
   inputSchema: z.object({
     symbol: z.string(),
   }),
   description: `Fetches the last day's closing stock price for a given symbol`,
   execute: async ({ context: { symbol } }) => {
-    console.log('Using tool to fetch stock price for', symbol);
+    console.log("Using tool to fetch stock price for", symbol);
     return {
       symbol,
       currentPrice: await getStockPrice(symbol),
@@ -89,15 +91,15 @@ export const stockPrices = createTool({
 Inside `src/mastra/agents/stockAgent.ts` import your newly created `stockPrices` tool and add it to the agent.
 
 ```ts copy filename="src/mastra/agents/stockAgent.ts" {3, 10-12}
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { stockPrices } from '../tools/stockPrices';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { stockPrices } from "../tools/stockPrices";
 
 export const stockAgent = new Agent({
-  name: 'Stock Agent',
+  name: "Stock Agent",
   instructions:
-    'You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.',
-  model: openai('gpt-4o-mini'),
+    "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
+  model: openai("gpt-4o-mini"),
   tools: {
     stockPrices,
   },
@@ -116,7 +118,7 @@ You can run your agent as a service using the `mastra dev` command:
 mastra dev
 ```
 
-This will start a server exposing endpoints to interact with your registered agents. Within the [playground](/docs/server-db/local-dev-playground) you can test your `stockAgent` and `stockPrices` tool through a UI.
+This will start a server exposing endpoints to interact with your registered agents. Within the [playground](/docs/getting-started/studio) you can test your `stockAgent` and `stockPrices` tool through a UI.
 
 ### Accessing the Stock Agent API
 

@@ -1,6 +1,7 @@
 ---
-title: 'Built-in Scorers'
+title: "Off the Shelf Scorers"
 description: "Overview of Mastra's ready-to-use scorers for evaluating AI outputs across quality, safety, and performance dimensions."
+sidebar_position: 2
 ---
 
 # Built-in Scorers

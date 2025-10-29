@@ -31,13 +31,10 @@ export function workflowLoopStream<
   {
     resumeContext,
     requireToolApproval,
-    telemetry_settings,
     models,
     toolChoice,
     modelSettings,
     _internal,
-    modelStreamSpan,
-    llmAISpan,
     messageId,
     runId,
     messageList,
@@ -56,18 +53,9 @@ export function workflowLoopStream<
         },
       });
 
-      modelStreamSpan.setAttributes({
-        ...(telemetry_settings?.recordInputs !== false
-          ? {
-              'stream.prompt.toolChoice': toolChoice ? JSON.stringify(toolChoice) : 'auto',
-            }
-          : {}),
-      });
-
       // Use the pre-created workflow instance passed as parameter
       const workflowInputData = {
         models,
-        telemetry_settings,
         messageId: messageId!,
         runId,
         messageList,
@@ -93,7 +81,6 @@ export function workflowLoopStream<
         includeRawChunks: rest.includeRawChunks,
         // Dynamic params that change per execution
         _internal,
-        modelStreamSpan,
         controller,
         writer,
         agentId,
@@ -118,17 +105,6 @@ export function workflowLoopStream<
           totalUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
         },
       };
-
-      const msToFirstChunk = _internal?.now?.()! - startTimestamp!;
-
-      modelStreamSpan.addEvent('ai.stream.firstChunk', {
-        'ai.response.msToFirstChunk': msToFirstChunk,
-      });
-
-      modelStreamSpan.setAttributes({
-        'stream.response.timestamp': new Date(startTimestamp).toISOString(),
-        'stream.response.msToFirstChunk': msToFirstChunk,
-      });
 
       if (!resumeContext) {
         controller.enqueue({
@@ -158,12 +134,10 @@ export function workflowLoopStream<
       const freshExecutionObjects = {
         controller,
         writer,
-        modelStreamSpan,
         _internal,
         messageList, // messageList needs to be fresh on resume as well
         streamState, // streamState with fresh serialize/deserialize functions
         tools: rest.tools, // tools contain functions that can't be serialized
-        telemetry_settings, // telemetry_settings contains tracer functions that can't be serialized
         modelSpanTracker: rest.modelSpanTracker, // modelSpanTracker contains functions that can't be serialized
         models, // models contain provider functions that can't be serialized
       };
@@ -172,7 +146,7 @@ export function workflowLoopStream<
         ? await (async () => {
             return run.resume({
               resumeData: resumeContext.resumeData,
-              tracingContext: { currentSpan: llmAISpan },
+              tracingContext: rest.modelSpanTracker?.getTracingContext(),
               label: toolCallId,
               runtimeContext,
               stateOverride: freshExecutionObjects, // Override stale execution-specific objects from snapshot
@@ -181,7 +155,7 @@ export function workflowLoopStream<
         : await run.start({
             inputData: initialData,
             initialState,
-            tracingContext: { currentSpan: llmAISpan },
+            tracingContext: rest.modelSpanTracker?.getTracingContext(),
             runtimeContext,
           });
 
@@ -207,14 +181,6 @@ export function workflowLoopStream<
             reason: executionResult.result.stepResult.reason,
           },
         },
-      });
-
-      const msToFinish = (_internal?.now?.() ?? Date.now()) - startTimestamp;
-      modelStreamSpan.addEvent('ai.stream.finish');
-      modelStreamSpan.setAttributes({
-        'stream.response.msToFinish': msToFinish,
-        'stream.response.avgOutputTokensPerSecond':
-          (1000 * (executionResult?.result?.output?.usage?.outputTokens ?? 0)) / msToFinish,
       });
 
       controller.close();

@@ -5,63 +5,74 @@
 
 const theme = {
   plain: {
-    color: '#fff',
-    backgroundColor: '#171717',
+    color: "#fff",
+    backgroundColor: "#171717",
   },
   styles: [
     {
-      types: ['comment', 'prolog', 'doctype', 'cdata'],
+      types: ["comment", "prolog", "doctype", "cdata"],
       style: {
-        color: '#939393',
-        fontStyle: 'italic',
+        color: "#939393",
+        fontStyle: "italic",
       },
     },
     {
-      types: ['namespace'],
+      types: ["namespace"],
       style: {
         opacity: 0.7,
       },
     },
     {
-      types: ['string', 'attr-value'],
+      types: ["string", "attr-value"],
       style: {
-        color: '#46f488',
+        color: "#46f488",
       },
     },
     {
-      types: ['punctuation', 'operator'],
+      types: ["punctuation", "operator"],
       style: {
-        color: '#fff',
+        color: "#fff",
       },
     },
     {
-      types: ['entity', 'url', 'symbol', 'number', 'boolean', 'variable', 'constant', 'property', 'regex', 'inserted'],
+      types: [
+        "entity",
+        "url",
+        "symbol",
+        "number",
+        "boolean",
+        "variable",
+        "constant",
+        "property",
+        "regex",
+        "inserted",
+      ],
       style: {
-        color: '#fff',
+        color: "#fff",
       },
     },
     {
-      types: ['atrule', 'keyword', 'attr-name', 'selector'],
+      types: ["atrule", "keyword", "attr-name", "selector"],
       style: {
-        color: '#fa7b6a',
+        color: "#fa7b6a",
       },
     },
     {
-      types: ['function', 'deleted', 'tag'],
+      types: ["function", "deleted", "tag"],
       style: {
-        color: '#d06bee',
+        color: "#d06bee",
       },
     },
     {
-      types: ['function-variable'],
+      types: ["function-variable"],
       style: {
-        color: '#d06bee',
+        color: "#d06bee",
       },
     },
     {
-      types: ['tag', 'selector', 'keyword'],
+      types: ["tag", "selector", "keyword"],
       style: {
-        color: '#fa7b6a',
+        color: "#fa7b6a",
       },
     },
   ],

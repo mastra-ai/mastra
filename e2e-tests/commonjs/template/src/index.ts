@@ -9,7 +9,7 @@ Object.entries(agents).forEach(([key, agent]: [string, any]) => {
   serializedAgents[key] = {
     // Only include specific properties we know exist
     name: agent.name,
-    instructions: agent.instructions,
+    instructions: agent.getInstructions(),
     // Add any other properties that need to be explicitly accessed
   };
 

@@ -62,6 +62,7 @@ export function createPrepareMemoryStep({ agentId }: PrepareMemoryStepOptions) {
           runtimeContext,
           tracingContext,
           messageList,
+          inputProcessorOverrides: options.inputProcessors,
         });
         return {
           threadExists: false,
@@ -130,7 +131,8 @@ export function createPrepareMemoryStep({ agentId }: PrepareMemoryStepOptions) {
 
       const config = memory.getMergedThreadConfig(memoryConfig || {});
       const hasResourceScopeSemanticRecall =
-        typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === 'resource';
+        (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== 'thread') ||
+        config?.semanticRecall === true;
       let [memoryMessages, memorySystemMessage] = await Promise.all([
         existingThread || hasResourceScopeSemanticRecall
           ? capabilities.getMemoryMessages({
@@ -199,6 +201,7 @@ export function createPrepareMemoryStep({ agentId }: PrepareMemoryStepOptions) {
         runtimeContext,
         tracingContext,
         messageList,
+        inputProcessorOverrides: options.inputProcessors,
       });
 
       const systemMessages = messageList.getSystemMessages();

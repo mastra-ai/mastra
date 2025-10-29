@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { Mastra, WorkflowRun } from '..';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
+import type { AgentExecutionOptions, AgentStreamOptions } from '../agent';
 import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
 import type { TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
 import { MastraBase } from '../base';
@@ -43,6 +44,23 @@ import type {
   WorkflowRunStatus,
   WorkflowStreamEvent,
 } from './types';
+import { getZodErrors } from './utils';
+
+// Options that can be passed when wrapping an agent with createStep
+// These work for both stream() (v2) and streamLegacy() (v1) methods
+type AgentStepOptions = Omit<
+  AgentExecutionOptions & AgentStreamOptions,
+  | 'format'
+  | 'tracingContext'
+  | 'runtimeContext'
+  | 'abortSignal'
+  | 'context'
+  | 'onStepFinish'
+  | 'output'
+  | 'experimental_output'
+  | 'resourceId'
+  | 'threadId'
+>;
 
 export function mapVariable<TStep extends Step<string, any, any, any, any, any>>({
   step,
@@ -136,6 +154,7 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
 >(
   agent: Agent<TStepId, any, any>,
+  agentOptions?: AgentStepOptions,
 ): Step<TStepId, any, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType>;
 
 export function createStep<
@@ -160,6 +179,7 @@ export function createStep<
     | StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>
     | Agent<any, any, any>
     | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>,
+  agentOptions?: AgentStepOptions,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType> {
   if (params instanceof Agent) {
     return {
@@ -204,22 +224,26 @@ export function createStep<
 
         if ((await params.getModel()).specificationVersion === 'v1') {
           const { fullStream } = await params.streamLegacy(inputData.prompt, {
+            ...(agentOptions ?? {}),
             // resourceId: inputData.resourceId,
             // threadId: inputData.threadId,
             runtimeContext,
             tracingContext,
             onFinish: result => {
               streamPromise.resolve(result.text);
+              void agentOptions?.onFinish?.(result);
             },
             abortSignal,
           });
           stream = fullStream as any;
         } else {
           const modelOutput = await params.stream(inputData.prompt, {
+            ...(agentOptions ?? {}),
             runtimeContext,
             tracingContext,
             onFinish: result => {
               streamPromise.resolve(result.text);
+              void agentOptions?.onFinish?.(result);
             },
             abortSignal,
           });
@@ -472,10 +496,6 @@ export class Workflow<
   }
 
   __registerPrimitives(p: MastraPrimitives) {
-    if (p.telemetry) {
-      this.__setTelemetry(p.telemetry);
-    }
-
     if (p.logger) {
       this.__setLogger(p.logger);
     }
@@ -1102,7 +1122,7 @@ export class Workflow<
     runtimeContext,
     abort,
     abortSignal,
-    runCount,
+    retryCount,
     tracingContext,
     writer,
     validateInputs,
@@ -1130,7 +1150,7 @@ export class Workflow<
     abortSignal: AbortSignal;
     bail: (result: any) => any;
     abort: () => any;
-    runCount?: number;
+    retryCount?: number;
     tracingContext?: TracingContext;
     writer?: WritableStream<ChunkType>;
     validateInputs?: boolean;
@@ -1167,7 +1187,7 @@ export class Workflow<
       emitter.emit('nested-watch', { event, workflowId: this.id, runId: run.runId, isResume: !!resume?.steps?.length });
     }, 'watch');
 
-    if (runCount && runCount > 0 && resume?.steps?.length && runtimeContext) {
+    if (retryCount && retryCount > 0 && resume?.steps?.length && runtimeContext) {
       runtimeContext.set('__mastraWorflowInputData', inputData);
     }
 
@@ -1531,9 +1551,9 @@ export class Run<
         const validatedInputData = await inputSchema.safeParseAsync(inputData);
 
         if (!validatedInputData.success) {
+          const errors = getZodErrors(validatedInputData.error);
           throw new Error(
-            'Invalid input data: \n' +
-              validatedInputData.error.errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+            'Invalid input data: \n' + errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
           );
         }
 
@@ -1553,9 +1573,9 @@ export class Run<
         const validatedInputData = await inputSchema.safeParseAsync(initialState);
 
         if (!validatedInputData.success) {
+          const errors = getZodErrors(validatedInputData.error);
           throw new Error(
-            'Invalid input data: \n' +
-              validatedInputData.error.errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+            'Invalid input data: \n' + errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
           );
         }
 
@@ -1578,9 +1598,9 @@ export class Run<
       const validatedResumeData = await resumeSchema.safeParseAsync(resumeData);
 
       if (!validatedResumeData.success) {
+        const errors = getZodErrors(validatedResumeData.error);
         throw new Error(
-          'Invalid resume data: \n' +
-            validatedResumeData.error.errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+          'Invalid resume data: \n' + errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
         );
       }
 
@@ -1798,6 +1818,11 @@ export class Run<
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
       closeOnSuspend?: boolean;
+      initialState?: z.input<TState>;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
     } = {},
   ): ReturnType<typeof this.streamVNext> {
     return this.streamVNext(args);
@@ -1886,6 +1911,7 @@ export class Run<
     tracingOptions,
     closeOnSuspend = true,
     initialState,
+    outputOptions,
   }: {
     inputData?: z.input<TInput>;
     runtimeContext?: RuntimeContext;
@@ -1893,6 +1919,10 @@ export class Run<
     tracingOptions?: TracingOptions;
     closeOnSuspend?: boolean;
     initialState?: z.input<TState>;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
   } = {}): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     if (this.closeStreamAction && this.#streamOutput) {
       return this.#streamOutput;
@@ -1933,6 +1963,7 @@ export class Run<
           tracingContext,
           tracingOptions,
           initialState,
+          outputOptions,
           writableStream: new WritableStream<WorkflowStreamEvent>({
             write(chunk) {
               controller.enqueue(chunk);
@@ -1983,6 +2014,7 @@ export class Run<
     tracingContext,
     tracingOptions,
     stateOverride,
+    outputOptions,
   }: {
     resumeData?: z.input<TInput>;
     step?:
@@ -1994,6 +2026,10 @@ export class Run<
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     stateOverride?: Partial<z.infer<TState>>;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
   } = {}) {
     return this.resumeStreamVNext({
       resumeData,
@@ -2002,6 +2038,7 @@ export class Run<
       tracingContext,
       tracingOptions,
       stateOverride,
+      outputOptions,
     });
   }
 
@@ -2018,6 +2055,7 @@ export class Run<
     tracingOptions,
     forEachIndex,
     stateOverride,
+    outputOptions,
   }: {
     resumeData?: z.input<TInput>;
     step?:
@@ -2030,6 +2068,10 @@ export class Run<
     tracingOptions?: TracingOptions;
     forEachIndex?: number;
     stateOverride?: Partial<z.infer<TState>>;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
   } = {}) {
     this.closeStreamAction = async () => {};
 
@@ -2073,6 +2115,7 @@ export class Run<
           isVNext: true,
           forEachIndex,
           stateOverride,
+          outputOptions,
         });
 
         self.executionResults = executionResultsPromise;
@@ -2189,7 +2232,9 @@ export class Run<
       | string[];
     label?: string;
     runtimeContext?: RuntimeContext;
+    /** @deprecated This property will be removed on November 4th, 2025. Use `retryCount` instead. */
     runCount?: number;
+    retryCount?: number;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     writableStream?: WritableStream<ChunkType>;
@@ -2200,7 +2245,7 @@ export class Run<
     forEachIndex?: number;
     stateOverride?: Partial<z.infer<TState>>;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    return this._resume(params);
+    return this._resume({ ...params, retryCount: params.retryCount ?? params.runCount });
   }
 
   protected async _resume<TResumeSchema extends z.ZodType<any>>(params: {
@@ -2215,7 +2260,7 @@ export class Run<
       | string[];
     label?: string;
     runtimeContext?: RuntimeContext;
-    runCount?: number;
+    retryCount?: number;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     writableStream?: WritableStream<ChunkType>;
@@ -2292,7 +2337,7 @@ export class Run<
       }
     }
 
-    if (!params.runCount) {
+    if (!params.retryCount) {
       if (snapshot.status !== 'suspended') {
         throw new Error('This workflow run was not suspended');
       }
@@ -2313,7 +2358,7 @@ export class Run<
     const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
 
     let runtimeContextInput;
-    if (params.runCount && params.runCount > 0 && params.runtimeContext) {
+    if (params.retryCount && params.retryCount > 0 && params.runtimeContext) {
       runtimeContextInput = params.runtimeContext.get('__mastraWorflowInputData');
       params.runtimeContext.delete('__mastraWorflowInputData');
     }
@@ -2386,6 +2431,7 @@ export class Run<
         abortController: this.abortController,
         workflowAISpan,
         outputOptions: params.outputOptions,
+        writableStream: params.writableStream,
       })
       .then(result => {
         if (!params.isVNext && result.status !== 'suspended') {

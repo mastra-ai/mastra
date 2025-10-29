@@ -1,5 +1,5 @@
 ---
-title: 'Overview'
+title: "Overview"
 description: "Access 47+ AI providers and 814+ models through Mastra's model router."
 sidebar_position: 1
 ---
@@ -144,7 +144,7 @@ Browse the directory of available models using the navigation on the left, or ex
 
 You can also discover models directly in your editor. Mastra provides full autocomplete for the `model` field - just start typing, and your IDE will show available options.
 
-Alternatively, browse and test models in the [Playground](/docs/server-db/local-dev-playground) UI.
+Alternatively, browse and test models in the [Playground](/docs/getting-started/studio) UI.
 
 :::note Development Behavior
 In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Playground stay up-to-date with the latest models. To disable, set `MASTRA_AUTO_REFRESH_PROVIDERS=false`. Auto-refresh is disabled by default in production.
@@ -155,33 +155,33 @@ In development, we auto-refresh your local model list every hour, ensuring your 
 Some models are faster but less capable, while others offer larger context windows or stronger reasoning skills. Use different models from the same provider, or mix and match across providers to fit each task.
 
 ```typescript showLineNumbers
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 // Use a cost-effective model for document processing
 const documentProcessor = new Agent({
-  name: 'document-processor',
-  instructions: 'Extract and summarize key information from documents',
-  model: 'openai/gpt-4o-mini',
+  name: "document-processor",
+  instructions: "Extract and summarize key information from documents",
+  model: "openai/gpt-4o-mini",
 });
 
 // Use a powerful reasoning model for complex analysis
 const reasoningAgent = new Agent({
-  name: 'reasoning-agent',
-  instructions: 'Analyze data and provide strategic recommendations',
-  model: 'anthropic/claude-opus-4-1',
+  name: "reasoning-agent",
+  instructions: "Analyze data and provide strategic recommendations",
+  model: "anthropic/claude-opus-4-1",
 });
 ```
 
 ## Dynamic model selection
 
-Since models are just strings, you can select them dynamically based on [runtime context](/docs/agents/runtime-context), variables, or any other logic.
+Since models are just strings, you can select them dynamically based on [runtime context](/docs/server-db/runtime-context), variables, or any other logic.
 
 ```typescript showLineNumbers
 const agent = new Agent({
-  name: 'dynamic-assistant',
+  name: "dynamic-assistant",
   model: ({ runtimeContext }) => {
-    const provider = runtimeContext.get('provider-id');
-    const model = runtimeContext.get('model-id');
+    const provider = runtimeContext.get("provider-id");
+    const model = runtimeContext.get("model-id");
     return `${provider}/${model}`;
   },
 });
@@ -201,24 +201,24 @@ Different model providers expose their own configuration options. With OpenAI, y
 // Agent level (apply to all future messages)
 const planner = new Agent({
   instructions: {
-    role: 'system',
-    content: 'You are a helpful assistant.',
+    role: "system",
+    content: "You are a helpful assistant.",
     providerOptions: {
-      openai: { reasoningEffort: 'low' },
+      openai: { reasoningEffort: "low" },
     },
   },
-  model: 'openai/o3-pro',
+  model: "openai/o3-pro",
 });
 
-const lowEffort = await planner.generate('Plan a simple 3 item dinner menu');
+const lowEffort = await planner.generate("Plan a simple 3 item dinner menu");
 
 // Message level (apply only to this message)
 const highEffort = await planner.generate([
   {
-    role: 'user',
-    content: 'Plan a simple 3 item dinner menu for a celiac',
+    role: "user",
+    content: "Plan a simple 3 item dinner menu for a celiac",
     providerOptions: {
-      openai: { reasoningEffort: 'high' },
+      openai: { reasoningEffort: "high" },
     },
   },
 ]);
@@ -230,12 +230,12 @@ If you need to specify custom headers, such as an organization ID or other provi
 
 ```typescript showLineNumbers
 const agent = new Agent({
-  name: 'custom-agent',
+  name: "custom-agent",
   model: {
-    id: 'openai/gpt-4-turbo',
+    id: "openai/gpt-4-turbo",
     apiKey: process.env.OPENAI_API_KEY,
     headers: {
-      'OpenAI-Organization': 'org-abc123',
+      "OpenAI-Organization": "org-abc123",
     },
   },
 });
@@ -250,22 +250,22 @@ Configuration differs by provider. See the provider pages in the left navigation
 Relying on a single model creates a single point of failure for your application. Model fallbacks provide automatic failover between models and providers. If the primary model becomes unavailable, requests are retried against the next configured fallback until one succeeds.
 
 ```typescript showLineNumbers
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'resilient-assistant',
-  instructions: 'You are a helpful assistant.',
+  name: "resilient-assistant",
+  instructions: "You are a helpful assistant.",
   model: [
     {
-      model: 'openai/gpt-5',
+      model: "openai/gpt-5",
       maxRetries: 3,
     },
     {
-      model: 'anthropic/claude-4-5-sonnet',
+      model: "anthropic/claude-4-5-sonnet",
       maxRetries: 2,
     },
     {
-      model: 'google/gemini-2.5-pro',
+      model: "google/gemini-2.5-pro",
       maxRetries: 2,
     },
   ],
@@ -281,12 +281,12 @@ Your users never experience the disruption - the response comes back with the sa
 Mastra supports AI SDK provider modules, should you need to use them directly.
 
 ```typescript showLineNumbers
-import { groq } from '@ai-sdk/groq';
-import { Agent } from '@mastra/core';
+import { groq } from "@ai-sdk/groq";
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  model: groq('gemma2-9b-it'),
+  name: "my-agent",
+  model: groq("gemma2-9b-it"),
 });
 ```
 

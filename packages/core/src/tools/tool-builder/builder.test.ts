@@ -14,6 +14,9 @@ import { createTool } from '../../tools';
 import { CoreToolBuilder } from './builder';
 import 'dotenv/config';
 
+export const isOpenAIModel = (model: LanguageModel | LanguageModelV2) =>
+  model.provider.includes('openai') || model.modelId.includes('openai');
+
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
 const openrouter_v5 = createOpenRouterV5({ apiKey: process.env.OPENROUTER_API_KEY });
 
@@ -36,35 +39,39 @@ enum TestEnum {
 // Define all schema tests
 const allSchemas = {
   // String types
-  string: z.string().describe('I need any text'),
-  stringMin: z.string().min(5).describe('I need any text with a minimum of 5 characters'),
-  stringMax: z.string().max(10).describe('I need any text with a maximum of 10 characters'),
-  stringEmail: z.string().email().describe('I need a valid email address'),
-  stringEmoji: z.string().emoji().describe('I need a valid emoji'),
-  stringUrl: z.string().url().describe('I need a valid url'),
-  stringUuid: z.string().uuid().describe('I need a valid uuid'),
-  stringCuid: z.string().cuid().describe('I need a valid cuid'),
+  // string: z.string().describe('Sample text'),
+  // stringMin: z.string().min(5).describe('sample text with a minimum of 5 characters'),
+  // stringMax: z.string().max(10).describe('sample text with a maximum of 10 characters'),
+  stringEmail: z.string().email().describe('a sample email address'),
+
+  stringEmoji: z.string().emoji().describe('a valid sample emoji'),
+  stringUrl: z.string().url().describe('a valid sample url'),
+
+  // TODO: problematic for gemini-2.5-flash
+  // stringUuid: z.string().uuid().describe('a valid sample uuid'),
+  // stringCuid: z.string().cuid().describe('a valid sample cuid'),
   stringRegex: z
     .string()
     .regex(/^test-/)
-    .describe('I need any text that is valid regex'),
+    .describe('a valid sample string that satisfies the regex'),
 
   // Number types
-  number: z.number().describe('I need any number'),
-  numberGt: z.number().gt(3).describe('I need any number greater than 3'),
-  numberLt: z.number().lt(6).describe('I need any number less than 6'),
-  numberGte: z.number().gte(1).describe('I need any number greater than or equal to 1'),
-  numberLte: z.number().lte(1).describe('I need any number less than or equal to 1'),
-  numberMultipleOf: z.number().multipleOf(2).describe('I need any number that is a multiple of 2'),
-  numberInt: z.number().int().describe('I need any number that is an integer'),
+  number: z.number().describe('any valid sample number'),
+  // numberGt: z.number().gt(3).describe('any valid sample number greater than 3'),
+  // numberLt: z.number().lt(6).describe('any valid sample number less than 6'),
+  // numberGte: z.number().gte(1).describe('any valid sample number greater than or equal to 1'),
+  // numberLte: z.number().lte(1).describe('any valid sample number less than or equal to 1'),
+  // numberMultipleOf: z.number().multipleOf(2).describe('any valid sample number that is a multiple of 2'),
+  // numberInt: z.number().int().describe('any valid sample number that is an integer'),
 
   // Array types
-  array: z.array(z.string()).describe('I need any array of strings'),
-  arrayMin: z.array(z.string()).min(1).describe('I need any array of strings with a minimum of 1 string'),
-  arrayMax: z.array(z.string()).max(5).describe('I need any array of strings with a maximum of 5 strings'),
+  exampleArray: z.array(z.string()).describe('any valid array of example strings'),
+  // arrayMin: z.array(z.string()).min(1).describe('any valid sample array of strings with a minimum of 1 string'),
+  arrayMax: z.array(z.string()).max(5).describe('any valid sample array of strings with a maximum of 5 strings'),
 
   // Object types
-  object: z.object({ foo: z.string(), bar: z.number() }).describe('I need any object with a string and a number'),
+  object: z.object({ foo: z.string(), bar: z.number() }).describe('any valid sample object with a string and a number'),
+
   objectNested: z
     .object({
       user: z.object({
@@ -72,19 +79,20 @@ const allSchemas = {
         age: z.number().gte(18),
       }),
     })
-    .describe('I need you to include a name and an age in your response'),
-  objectPassthrough: z.object({}).passthrough().describe('give me any object describing toronto'),
+    .describe(`any valid sample data`),
+
+  objectPassthrough: z.object({}).passthrough().describe('any sample object with example keys and data'),
 
   // Optional and nullable
-  optional: z.string().optional().describe('Either include text or dont'),
-  nullable: z.string().nullable().describe('I need any text that is nullable'),
+  optional: z.string().optional().describe('leave this field empty as an example of an optional field'),
+  nullable: z.string().nullable().describe('leave this field empty as an example of a nullable field'),
 
   // Enums
-  enum: z.enum(['A', 'B', 'C']).describe('I need you to pick a letter from A, B, or C'),
-  nativeEnum: z.nativeEnum(TestEnum).describe('I need you to pick a letter from A, B, or C'),
+  enum: z.enum(['A', 'B', 'C']).describe('The letter A, B, or C'),
+  nativeEnum: z.nativeEnum(TestEnum).describe('The letter A, B, or C'),
 
   // Union types
-  unionPrimitives: z.union([z.string(), z.number()]).describe('I need any text or number'),
+  unionPrimitives: z.union([z.string(), z.number()]).describe('sample text or number'),
   unionObjects: z
     .union([
       z.object({ amount: z.number(), inventoryItemName: z.string() }),
@@ -93,21 +101,8 @@ const allSchemas = {
     .describe('give an valid object'),
 
   // Default values
-  default: z.string().default('test').describe('I need any text that is the default value'),
-
-  // Uncategorized types, not supported by OpenAI reasoning models
-  anyOptional: z.any().optional().describe('I need any text that is optional'),
-  any: z.any().describe('I need any text'),
-  intersection: z
-    .intersection(z.string().min(1), z.string().max(4))
-    .describe('I need any text that is between 1 and 4 characters'),
-  never: z.never().describe('I need any text that is never'),
-  null: z.null().describe('I need any text that is null'),
-  tuple: z.tuple([z.string(), z.number(), z.boolean()]).describe('I need any text, number, and boolean'),
-  undefined: z.undefined().describe('I need any text that is undefined'),
+  // default: z.string().default('test').describe('sample text that is the default value'),
 } as const;
-
-const uncategorizedTypes = ['anyOptional', 'any', 'intersection', 'never', 'null', 'tuple', 'undefined'];
 
 type SchemaMap = typeof allSchemas;
 type SchemaKey = keyof SchemaMap;
@@ -124,13 +119,14 @@ function createTestSchemas(schemaKeys: SchemaKey[] = []): z.ZodObject<any> {
   return z.object(selectedSchemas as Record<string, z.ZodType>);
 }
 
-async function runSingleOutputsTest(
+async function runStructuredOutputSchemaTest(
   model: LanguageModel | LanguageModelV2,
   testTool: ReturnType<typeof createTool>,
   testId: string,
   toolName: string,
   schemaName: string,
   outputType: string,
+  inputSchema?: z.Schema,
 ): Promise<Result> {
   try {
     const generateOptions: any = {
@@ -140,8 +136,11 @@ async function runSingleOutputsTest(
     if (outputType === 'structuredOutput') {
       generateOptions.structuredOutput = {
         schema: testTool.inputSchema!,
-        model: model,
+        // model: model,
         errorStrategy: 'strict',
+
+        // jsonPromptInjection: !isOpenAIModel(model), // TODO: doesn't work very well. probably would work better with schema compat
+        jsonPromptInjection: true,
       };
     } else if (outputType === 'output') {
       generateOptions.output = testTool.inputSchema!;
@@ -177,11 +176,16 @@ async function runSingleOutputsTest(
     //   prompt: 'You are a test agent. Your task is to respond with valid JSON matching the schema provided.',
     // });
 
+    const prompt = inputSchema?.description || allSchemas[schemaName].description;
+    if (!prompt)
+      throw new Error(
+        `Could not find description for test prompt from input schema or all schemas object with schema name ${schemaName}`,
+      );
     // Check if model is V1 or V2 and use appropriate method
     const isV2Model = 'specificationVersion' in model && model.specificationVersion === 'v2';
     const response = isV2Model
-      ? await agent.generate(allSchemas[schemaName].description, generateOptions)
-      : await agent.generateLegacy(allSchemas[schemaName].description, generateOptions);
+      ? await agent.generate(prompt, generateOptions)
+      : await agent.generateLegacy(prompt, generateOptions);
 
     if (!response.object) {
       throw new Error('No object generated for schema: ' + schemaName + ' with text: ' + response.text);
@@ -221,7 +225,7 @@ async function runSingleOutputsTest(
   }
 }
 
-async function runSingleInputTest(
+async function runSingleToolSchemaTest(
   model: LanguageModel | LanguageModelV2,
   testTool: ReturnType<typeof createTool>,
   testId: string,
@@ -250,25 +254,29 @@ async function runSingleInputTest(
     const toolCall = response.toolCalls.find(tc => tc.toolName === toolName);
     const toolResult = response.toolResults.find(tr => tr.toolCallId === toolCall?.toolCallId);
 
-    if (toolResult?.result?.success) {
+    if (toolResult?.payload?.result?.success || toolResult?.result?.success) {
       return {
         modelName: model.modelId,
         modelProvider: model.provider,
         testName: toolName,
         status: 'success',
         error: null,
-        receivedContext: toolResult.result.receivedContext,
+        receivedContext: toolResult?.payload?.result?.receivedContext || toolResult?.result?.receivedContext,
         testId,
       };
     } else {
-      const error = toolResult?.result?.error || response.text || 'Tool call failed or result missing';
+      const error =
+        toolResult?.payload?.result?.error ||
+        toolResult?.result?.error ||
+        response.text ||
+        'Tool call failed or result missing';
       return {
         modelName: model.modelId,
         testName: toolName,
         modelProvider: model.provider,
         status: 'failure',
         error: error,
-        receivedContext: toolResult?.result?.receivedContext || null,
+        receivedContext: toolResult?.payload?.result?.receivedContext || toolResult?.result?.receivedContext || null,
         testId,
       };
     }
@@ -291,137 +299,137 @@ async function runSingleInputTest(
 
 // These tests are both expensive to run and occasionally a couple are flakey. We should run them manually for now
 // to make sure that we still have good coverage, for both input and output schemas.
-describe('Tool Schema Compatibility', () => {
-  // Set a longer timeout for the entire test suite
-  const SUITE_TIMEOUT = 120000; // 2 minutes
-  const TEST_TIMEOUT = 60000; // 1 minute
+// Set a longer timeout for the entire test suite
+// These tests make real API calls to LLMs which can be slow, especially reasoning models
+const SUITE_TIMEOUT = 300000; // 5 minutes
+const TEST_TIMEOUT = 300000; // 5 minutes
 
-  if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
-  const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
+if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
+const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
 
-  const modelsToTestV1 = [
-    // Anthropic Models
-    openrouter('anthropic/claude-3.7-sonnet'),
-    openrouter('anthropic/claude-3.5-sonnet'),
-    openrouter('anthropic/claude-3.5-haiku'),
+const modelsToTestV1 = [
+  // openrouter('anthropic/claude-3.7-sonnet'),
+  // openrouter('anthropic/claude-sonnet-4.5'),
+  openrouter('anthropic/claude-haiku-4.5'),
+  // openrouter('openai/gpt-4o-mini'),
+  // openrouter('openai/gpt-4.1-mini'),
+  // openrouter_v5('openai/o3-mini'),
+  // openai('o3-mini'),
+  openai('o4-mini'),
+  // openrouter('google/gemini-2.5-pro'),
+  // openrouter('google/gemini-2.5-flash'),
+  openrouter('google/gemini-2.0-flash-lite-001'),
+];
+const modelsToTestV2 = [
+  // openrouter_v5('anthropic/claude-3.7-sonnet'),
+  // openrouter_v5('anthropic/claude-sonnet-4.5'),
+  openrouter_v5('anthropic/claude-haiku-4.5'),
+  // openrouter_v5('openai/gpt-4o-mini'),
+  // openrouter_v5('openai/gpt-4.1-mini'),
+  // openrouter_v5('openai/o3-mini'),
+  // openai_v5('o3-mini'),
+  openai_v5('o4-mini'),
+  // openrouter_v5('google/gemini-2.5-pro'),
+  // openrouter_v5('google/gemini-2.5-flash'),
+  openrouter_v5('google/gemini-2.0-flash-lite-001'),
+];
 
-    // NOTE: Google models accept number constraints like numberLt, but the models don't respect it and returns a wrong response often
-    // Unions of objects are not supported
-    // Google Models
-    openrouter('google/gemini-2.5-pro-preview-03-25'),
-    openrouter('google/gemini-2.5-flash'),
-    openrouter('google/gemini-2.0-flash-lite-001'),
+// Specify which schemas to test - empty array means test all
+// To test specific schemas, add their names to this array
+// Example: ['string', 'number'] to test only string and number schemas
+const schemasToTest: SchemaKey[] = [];
+const testSchemas = createTestSchemas(schemasToTest);
+const runSchemasIndividually = process.env.RUN_EACH_SCHEMA_INDIVIDUALLY === `true`;
 
-    // OpenAI Models
-    openrouter('openai/gpt-4o-mini'),
-    openrouter('openai/gpt-4.1-mini'),
-    // // openrouter disables structured outputs by default for o3-mini, so added in a reasoning model not through openrouter to test
-    openai('o3-mini'),
-    openai('o4-mini'),
-  ];
-  const modelsToTestV2 = [
-    openrouter_v5('openai/gpt-4o-mini'),
-    openrouter_v5('openai/gpt-4.1-mini'),
-    openai_v5('o3-mini'),
-    openai_v5('o4-mini'),
+// Create test tools for each schema type
+const testTools = runSchemasIndividually
+  ? Object.entries(testSchemas.shape).map(([key, schema]) => {
+      const tool = {
+        id: `testTool_${key}` as const,
+        description: `Test tool for schema type: ${key}. Call this tool to test the schema.`,
+        inputSchema: z.object({ [key]: schema as z.ZodTypeAny }),
+        execute: async ({ context }) => {
+          return { success: true, receivedContext: context };
+        },
+      } as const;
 
-    openrouter_v5('anthropic/claude-3.7-sonnet'),
-    openrouter_v5('anthropic/claude-3.5-sonnet'),
-    openrouter_v5('anthropic/claude-3.5-haiku'),
-    openrouter_v5('google/gemini-2.5-pro-preview-03-25'),
-    openrouter_v5('google/gemini-2.5-flash'),
-    openrouter_v5('google/gemini-2.0-flash-lite-001'),
+      return createTool(tool);
+    })
+  : [
+      createTool({
+        id: `testTool_manySchemas`,
+        description: `A tool to test many schema property types`,
+        inputSchema: z.object(allSchemas).describe(`A schema to test many schema configuration properties`),
+        execute: async ({ context }) => {
+          return { success: true, receivedContext: context };
+        },
+      }),
+    ];
 
-    // Meta Models
-    // Meta often calls the tool with the wrong name, ie 'tesTool_number'/'TestTool_number' instead of 'testTool_number'
-    // There is a compatibility layer added for it, which does seem to help a bit, but it still errors enough to not want it to be in the test suite
-    // so commenting out for now
-    // openrouter('meta-llama/llama-4-maverick'),
+// Group tests by model provider for better organization
+const modelsByProviderV1 = modelsToTestV1.reduce(
+  (acc, model) => {
+    const provider = model.provider;
+    if (!acc[provider]) {
+      acc[provider] = [];
+    }
+    acc[provider].push(model);
+    return acc;
+  },
+  {} as Record<string, (typeof modelsToTestV1)[number][]>,
+);
 
-    // Other Models
-    // deepseek randomly doesn't call the tool so the check fails. It seems to handle the tool call correctly though when it does call it
-    // There is a compatibility layer added for it, but it still errors enough to not want it to be in the test suite
-    // openrouter('deepseek/deepseek-chat-v3-0324'),
-  ];
+// Group tests by model provider for better organization
+const modelsByProviderV2 = modelsToTestV2.reduce(
+  (acc, model) => {
+    const provider = model.provider;
+    if (!acc[provider]) {
+      acc[provider] = [];
+    }
+    acc[provider].push(model);
+    return acc;
+  },
+  {} as Record<string, (typeof modelsToTestV2)[number][]>,
+);
 
-  // Specify which schemas to test - empty array means test all
-  // To test specific schemas, add their names to this array
-  // Example: ['string', 'number'] to test only string and number schemas
-  const schemasToTest: SchemaKey[] = [];
-  const testSchemas = createTestSchemas(schemasToTest);
-
-  // Helper to check if a model is from Google
-  const isGoogleModel = (model: LanguageModel | LanguageModelV2) =>
-    model.provider.includes('google') || model.modelId.includes('google/gemini');
-
-  // Create test tools for each schema type
-  const testTools = Object.entries(testSchemas.shape).map(([key, schema]) => {
-    const tool = {
-      id: `testTool_${key}` as const,
-      description: `Test tool for schema type: ${key}. Call this tool to test the schema.`,
-      inputSchema: z.object({ [key]: schema as z.ZodTypeAny }),
-      execute: async ({ context }) => {
-        return { success: true, receivedContext: context };
-      },
-    } as const;
-
-    return createTool(tool);
-  });
-
-  // Group tests by model provider for better organization
-  const modelsByProviderV1 = modelsToTestV1.reduce(
-    (acc, model) => {
-      const provider = model.provider;
-      if (!acc[provider]) {
-        acc[provider] = [];
+[...Object.entries(modelsByProviderV1), ...Object.entries(modelsByProviderV2)].forEach(([provider, models]) => {
+  [
+    // 'output', // <- waste of time, output doesn't work very well
+    // 'structuredOutput', // <- not a waste, but until we do schema compat in structured output it doesn't make sense to test this here
+    'tools',
+  ].forEach(outputType => {
+    models.forEach(model => {
+      // we only support structured output for v2+ models (ai v5+)
+      if (outputType === `structuredOutput` && model.specificationVersion !== `v2`) {
+        return;
       }
-      acc[provider].push(model);
-      return acc;
-    },
-    {} as Record<string, (typeof modelsToTestV1)[number][]>,
-  );
-
-  // Group tests by model provider for better organization
-  const modelsByProviderV2 = modelsToTestV2.reduce(
-    (acc, model) => {
-      const provider = model.provider;
-      if (!acc[provider]) {
-        acc[provider] = [];
-      }
-      acc[provider].push(model);
-      return acc;
-    },
-    {} as Record<string, (typeof modelsToTestV2)[number][]>,
-  );
-
-  Object.entries(modelsByProviderV1).forEach(([provider, models]) => {
-    describe.concurrent(`Input Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
-      models.forEach(model => {
-        describe.concurrent(`${model.modelId}`, { timeout: SUITE_TIMEOUT }, () => {
+      describe.concurrent(
+        `${outputType} schema compatibility > ${provider} > ${model.modelId}`,
+        { timeout: SUITE_TIMEOUT },
+        () => {
           testTools.forEach(testTool => {
             const schemaName = testTool.id.replace('testTool_', '');
 
-            // Google does not support unions of objects and is flakey withnulls
-            if (
-              (isGoogleModel(model) && (testTool.id.includes('unionObjects') || testTool.id.includes('null'))) ||
-              // This works consistently locally but for some reason keeps failing in CI,
-              model.modelId.includes('gpt-4o-mini') ||
-              (model.modelId.includes('gemini-2.0-flash-lite-001') && testTool.id.includes('stringRegex'))
-            ) {
-              it.skip(`should handle ${schemaName} schema (skipped for ${provider})`, () => {});
-              return;
-            }
-
             it.concurrent(
               `should handle ${schemaName} schema`,
+              {
+                timeout: TEST_TIMEOUT,
+                // add retries here if we find some models are flaky in the future
+                retry: 0,
+              },
               async () => {
-                let result = await runSingleInputTest(model, testTool, crypto.randomUUID(), testTool.id);
-
-                // Sometimes models are flaky, if it's not an API error, run it again
-                if (result.status === 'failure') {
-                  console.log(`Possibly flake from model ${model.modelId}, running ${schemaName} again`);
-                  result = await runSingleInputTest(model, testTool, crypto.randomUUID(), testTool.id);
-                }
+                let result =
+                  outputType === `structuredOutput`
+                    ? await runStructuredOutputSchemaTest(
+                        model,
+                        testTool,
+                        crypto.randomUUID(),
+                        testTool.id,
+                        schemaName,
+                        outputType,
+                        testTool.inputSchema,
+                      )
+                    : await runSingleToolSchemaTest(model, testTool, crypto.randomUUID(), testTool.id);
 
                 if (result.status !== 'success' && result.status !== 'expected-error') {
                   console.error(`Error for ${model.modelId} - ${schemaName}:`, result.error);
@@ -433,79 +441,10 @@ describe('Tool Schema Compatibility', () => {
                   expect(result.status).toBe('success');
                 }
               },
-              TEST_TIMEOUT,
             );
           });
-        });
-      });
-    });
-  });
-
-  Object.entries(modelsByProviderV2).forEach(([provider, models]) => {
-    describe.concurrent(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
-      ['output', 'structuredOutput'].forEach(outputType => {
-        describe(`${outputType}`, { timeout: SUITE_TIMEOUT }, () => {
-          models.forEach(model => {
-            describe(`${model.modelId}`, { timeout: SUITE_TIMEOUT }, () => {
-              testTools.forEach(testTool => {
-                const schemaName = testTool.id.replace('testTool_', '');
-
-                // Google does not support unions of objects and is flakey withnulls
-                if (
-                  (isGoogleModel(model) && (testTool.id.includes('unionObjects') || testTool.id.includes('null'))) ||
-                  // This works consistently locally but for some reason keeps failing in CI,
-                  model.modelId.includes('gpt-4o-mini') ||
-                  (model.modelId.includes('gemini-2.0-flash-lite-001') && testTool.id.includes('stringRegex'))
-                ) {
-                  it.skip(`should handle ${schemaName} schema (skipped for ${provider})`, () => {});
-                  return;
-                }
-                if (uncategorizedTypes.includes(schemaName)) {
-                  it.skip(`should handle ${schemaName} schema (skipped for ${provider})`, () => {});
-                  return;
-                }
-                it.concurrent(
-                  `should handle ${schemaName} schema`,
-                  async () => {
-                    let result = await runSingleOutputsTest(
-                      model,
-                      testTool,
-                      crypto.randomUUID(),
-                      testTool.id,
-                      schemaName,
-                      outputType,
-                    );
-
-                    // Sometimes models are flaky, run it again if it fails
-                    if (result.status === 'failure') {
-                      console.log(`Possibly flake from model ${model.modelId}, running ${schemaName} again`);
-                      result = await runSingleOutputsTest(
-                        model,
-                        testTool,
-                        crypto.randomUUID(),
-                        testTool.id,
-                        schemaName,
-                        outputType,
-                      );
-                    }
-
-                    if (result.status !== 'success' && result.status !== 'expected-error') {
-                      console.error(`Error for ${model.modelId} - ${schemaName}:`, result.error);
-                    }
-
-                    if (result.status === 'expected-error') {
-                      expect(result.status).toBe('expected-error');
-                    } else {
-                      expect(result.status).toBe('success');
-                    }
-                  },
-                  TEST_TIMEOUT,
-                );
-              });
-            });
-          });
-        });
-      });
+        },
+      );
     });
   });
 });

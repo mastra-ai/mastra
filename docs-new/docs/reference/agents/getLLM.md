@@ -1,6 +1,6 @@
 ---
-title: 'Agent.getLLM() '
-description: 'Documentation for the `Agent.getLLM()` method in Mastra agents, which retrieves the language model instance.'
+title: "Agent.getLLM() "
+description: "Documentation for the `Agent.getLLM()` method in Mastra agents, which retrieves the language model instance."
 ---
 
 # Agent.getLLM()
@@ -44,7 +44,7 @@ description: "The language model instance configured for the agent, either as a 
 ```typescript copy
 await agent.getLLM({
   runtimeContext: new RuntimeContext(),
-  model: openai('gpt-4'),
+  model: openai("gpt-4"),
 });
 ```
 
@@ -71,4 +71,4 @@ description: "Optional model override. If provided, this model will be used used
 ## Related
 
 - [Agents overview](/docs/agents/overview)
-- [Agent Runtime Context](/docs/agents/runtime-context)
+- [Agent Runtime Context](/docs/server-db/runtime-context)

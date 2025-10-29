@@ -1,6 +1,6 @@
 ---
-title: 'Agent.streamLegacy() (Legacy) '
-description: 'Documentation for the legacy `Agent.streamLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version.'
+title: "Agent.streamLegacy() (Legacy) "
+description: "Documentation for the legacy `Agent.streamLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version."
 ---
 
 # Agent.streamLegacy() (Legacy)
@@ -16,7 +16,7 @@ The `.streamLegacy()` method is the legacy version of the agent streaming API, u
 ## Usage example
 
 ```typescript copy
-await agent.streamLegacy('message for agent');
+await agent.streamLegacy("message for agent");
 ```
 
 ## Parameters
@@ -468,14 +468,14 @@ description: "The arguments passed to the tool."
 ## Extended usage example
 
 ```typescript showLineNumbers copy
-await agent.streamLegacy('message for agent', {
+await agent.streamLegacy("message for agent", {
   temperature: 0.7,
   maxSteps: 3,
   memory: {
-    thread: 'user-123',
-    resource: 'test-app',
+    thread: "user-123",
+    resource: "test-app",
   },
-  toolChoice: 'auto',
+  toolChoice: "auto",
 });
 ```
 
@@ -492,22 +492,22 @@ The new `.stream()` method offers enhanced capabilities including AI SDK v5 comp
 #### Before (Legacy)
 
 ```typescript
-const result = await agent.streamLegacy('message', {
+const result = await agent.streamLegacy("message", {
   temperature: 0.7,
   maxSteps: 3,
-  onFinish: result => console.log(result),
+  onFinish: (result) => console.log(result),
 });
 ```
 
 #### After (New API)
 
 ```typescript
-const result = await agent.stream('message', {
+const result = await agent.stream("message", {
   modelSettings: {
     temperature: 0.7,
   },
   maxSteps: 3,
-  onFinish: result => console.log(result),
+  onFinish: (result) => console.log(result),
 });
 ```
 

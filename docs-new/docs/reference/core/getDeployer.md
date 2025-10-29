@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.getDeployer() '
-description: 'Documentation for the `Mastra.getDeployer()` method in Mastra, which retrieves the configured deployer instance.'
+title: "Mastra.getDeployer() "
+description: "Documentation for the `Mastra.getDeployer()` method in Mastra, which retrieves the configured deployer instance."
 ---
 
 # Mastra.getDeployer()

@@ -11,6 +11,7 @@ import type {
 } from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { OutputSchema, MastraModelOutput } from '@mastra/core/stream';
@@ -202,6 +203,13 @@ export class Agent extends BaseResource {
     return this.request(`/api/agents/${this.agentId}${runtimeContextQueryString(runtimeContext)}`);
   }
 
+  enhanceInstructions(instructions: string, comment: string): Promise<{ explanation: string; new_prompt: string }> {
+    return this.request(`/api/agents/${this.agentId}/instructions/enhance`, {
+      method: 'POST',
+      body: { instructions, comment },
+    });
+  }
+
   /**
    * Generates a response from the agent
    * @param params - Generation parameters including prompt
@@ -324,7 +332,6 @@ export class Agent extends BaseResource {
     }
     const processedParams = {
       ...params,
-      output: params.output ? zodToJsonSchema(params.output) : undefined,
       runtimeContext: parseClientRuntimeContext(params.runtimeContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput
@@ -1069,7 +1076,10 @@ export class Agent extends BaseResource {
           }
 
           case 'error': {
-            throw new Error(chunk.payload.error);
+            throw getErrorFromUnknown(chunk.payload.error, {
+              fallbackMessage: 'Unknown error in stream',
+              supportSerialization: false,
+            });
           }
 
           case 'data': {
@@ -1358,7 +1368,6 @@ export class Agent extends BaseResource {
     }
     const processedParams: StreamParams<OUTPUT> = {
       ...params,
-      output: params.output ? zodToJsonSchema(params.output) : undefined,
       runtimeContext: parseClientRuntimeContext(params.runtimeContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput

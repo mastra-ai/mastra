@@ -1,6 +1,7 @@
 ---
-title: 'Error Handling in Workflows '
-description: 'Learn how to handle errors in Mastra workflows using step retries, conditional branching, and monitoring.'
+title: "Error Handling"
+description: "Learn how to handle errors in Mastra workflows using step retries, conditional branching, and monitoring."
+sidebar_position: 5
 ---
 
 # Error Handling
@@ -168,12 +169,12 @@ export const testWorkflow = createWorkflow({...})
 You can monitor workflows for errors using the `watch` method:
 
 ```typescript {11} filename="src/test-workflow.ts" showLineNumbers copy
-import { mastra } from '../src/mastra';
+import { mastra } from "../src/mastra";
 
-const workflow = mastra.getWorkflow('testWorkflow');
+const workflow = mastra.getWorkflow("testWorkflow");
 const run = await workflow.createRunAsync();
 
-run.watch(event => {
+run.watch((event) => {
   const {
     payload: { currentStep },
   } = event;
@@ -187,15 +188,15 @@ run.watch(event => {
 You can monitor workflows for errors using `stream`:
 
 ```typescript {11} filename="src/test-workflow.ts" showLineNumbers copy
-import { mastra } from '../src/mastra';
+import { mastra } from "../src/mastra";
 
-const workflow = mastra.getWorkflow('testWorkflow');
+const workflow = mastra.getWorkflow("testWorkflow");
 
 const run = await workflow.createRunAsync();
 
 const stream = await run.stream({
   inputData: {
-    value: 'initial data',
+    value: "initial data",
   },
 });
 

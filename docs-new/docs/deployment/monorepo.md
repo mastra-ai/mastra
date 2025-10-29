@@ -1,11 +1,12 @@
 ---
-title: Monorepo Deployment
+title: With a monorepo
 description: Learn how to deploy Mastra applications that are part of a monorepo setup
+sidebar_position: 3
 ---
 
 # Monorepo Deployment
 
-Deploying Mastra in a monorepo follows the same approach as deploying a standalone application. While some [Cloud](./cloud-providers/) or [Serverless Platform](./serverless-platforms/) providers may introduce extra requirements, the core setup is the same.
+Deploying Mastra in a monorepo follows the same approach as deploying a standalone application. While some [Cloud](/docs/deployment/cloud-providers/overview) or [Serverless Platform](/docs/deployment/serverless-platforms/overview) providers may introduce extra requirements, the core setup is the same.
 
 ## Example monorepo
 
@@ -43,13 +44,13 @@ Common issues to watch for when deploying Mastra in a monorepo:
 Use `transpilePackages` to compile TypeScript workspace packages or libraries. List package names exactly as they appear in each `package.json`. Use `externals` to exclude dependencies resolved at runtime, and `sourcemap` to emit readable stack traces.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from "@mastra/core/mastra";
 
 export const mastra = new Mastra({
   // ...
   bundler: {
-    transpilePackages: ['utils'],
-    externals: ['ui'],
+    transpilePackages: ["utils"],
+    externals: ["ui"],
     sourcemap: true,
   },
 });

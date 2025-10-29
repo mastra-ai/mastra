@@ -1,6 +1,6 @@
 ---
-title: 'Cedar-OS Integration'
-description: 'Build AI-native frontends for your Mastra agents with Cedar-OS'
+title: "With Cedar-OS"
+description: "Build AI-native frontends for your Mastra agents with Cedar-OS"
 ---
 
 import Tabs from '@theme/Tabs';
@@ -49,14 +49,14 @@ If you already have a Mastra backend, use the **blank frontend cedar repo** opti
 Wrap your application with the CedarCopilot provider to connect to your Mastra backend:
 
 ```tsx
-import { CedarCopilot } from 'cedar-os';
+import { CedarCopilot } from "cedar-os";
 
 function App() {
   return (
     <CedarCopilot
       llmProvider={{
-        provider: 'mastra',
-        baseURL: 'http://localhost:4111', // default dev port for Mastra
+        provider: "mastra",
+        baseURL: "http://localhost:4111", // default dev port for Mastra
         apiKey: process.env.NEXT_PUBLIC_MASTRA_API_KEY, // optional — only for backend auth
       }}
     >
@@ -73,23 +73,23 @@ Configure your Mastra backend to work with Cedar by following the [Mastra Config
 [Register API routes](https://mastra.ai/en/examples/deployment/custom-api-route) in your Mastra server (or NextJS serverless routes if in a monorepo):
 
 ```ts mastra/src/index.ts
-import { registerApiRoute } from '@mastra/core/server';
+import { registerApiRoute } from "@mastra/core/server";
 
 // POST /chat
 // The chat's non-streaming default endpoint
-registerApiRoute('/chat', {
-  method: 'POST',
+registerApiRoute("/chat", {
+  method: "POST",
   // …validate input w/ zod
-  handler: async c => {
+  handler: async (c) => {
     /* your agent.generate() logic */
   },
 });
 
 // POST /chat/stream (SSE)
 // The chat's streaming default endpoint
-registerApiRoute('/chat/stream', {
-  method: 'POST',
-  handler: async c => {
+registerApiRoute("/chat/stream", {
+  method: "POST",
+  handler: async (c) => {
     /* stream agent output in SSE format */
   },
 });

@@ -1,6 +1,7 @@
 ---
-title: 'Memory Threads and Resources '
+title: "Threads and Resources"
 description: "Learn how Mastra's memory system works with working memory, conversation history, and semantic recall."
+sidebar_position: 2
 ---
 
 # Memory threads and resources
@@ -10,13 +11,13 @@ Mastra organizes memory into threads, which are records that group related inter
 1. **`thread`**: A globally unique ID representing the conversation (e.g., `support_123`). Must be unique across all resources.
 2. **`resource`**: The user or entity that owns the thread (e.g., `user_123`, `org_456`).
 
-The `resource` is especially important for [resource-scoped memory](./working-memory#resource-scoped-memory), which allows memory to persist across all threads associated with the same user or entity.
+The `resource` is especially important for [resource-scoped memory](./working-memory#resource-scoped-memory-default), which allows memory to persist across all threads associated with the same user or entity.
 
 ```typescript {4} showLineNumbers
-const stream = await agent.stream('message for agent', {
+const stream = await agent.stream("message for agent", {
   memory: {
-    thread: 'user-123',
-    resource: 'test-123',
+    thread: "user-123",
+    resource: "test-123",
   },
 });
 ```
@@ -58,8 +59,9 @@ export const testAgent = new Agent({
     options: {
       threads: {
         generateTitle: {
-          model: openai('gpt-4.1-nano'),
-          instructions: "Generate a concise title based on the user's first message",
+          model: openai("gpt-4.1-nano"),
+          instructions:
+            "Generate a concise title based on the user's first message",
         },
       },
     },
@@ -79,11 +81,13 @@ export const testAgent = new Agent({
       threads: {
         generateTitle: {
           model: ({ runtimeContext }) => {
-            const userTier = runtimeContext.get('userTier');
-            return userTier === 'premium' ? openai('gpt-4.1') : openai('gpt-4.1-nano');
+            const userTier = runtimeContext.get("userTier");
+            return userTier === "premium"
+              ? openai("gpt-4.1")
+              : openai("gpt-4.1-nano");
           },
           instructions: ({ runtimeContext }) => {
-            const language = runtimeContext.get('userLanguage') || 'English';
+            const language = runtimeContext.get("userLanguage") || "English";
             return `Generate a concise, engaging title in ${language} based on the user's first message.`;
           },
         },

@@ -9,7 +9,6 @@ import { generateTextTestsV5 } from './test-utils/generateText';
 import { optionsTests } from './test-utils/options';
 import { resultObjectTests } from './test-utils/resultObject';
 import { streamObjectTests } from './test-utils/streamObject';
-import { telemetryTests } from './test-utils/telemetry';
 import { textStreamTests } from './test-utils/textStream';
 import { toolsTests } from './test-utils/tools';
 import { toUIMessageStreamTests } from './test-utils/toUIMessageStream';
@@ -44,7 +43,6 @@ describe('Loop Tests', () => {
     toUIMessageStreamTests({ loopFn: loopWrapper, runId: 'test-run-id' });
     resultObjectTests({ loopFn: loopWrapper, runId: 'test-run-id' });
     optionsTests({ loopFn: loopWrapper, runId: 'test-run-id' });
-    telemetryTests({ loopFn: loopWrapper, runId: 'test-run-id' });
     generateTextTestsV5({ loopFn: loopWrapper, runId: 'test-run-id' });
     toolsTests({ loopFn: loopWrapper, runId: 'test-run-id' });
 
@@ -52,8 +50,6 @@ describe('Loop Tests', () => {
   });
 
   // toolsTestsV5({ executeFn: execute, runId });
-
-  // telemetryTestsV5({ executeFn: execute, runId });
 
   // optionsTestsV5({ executeFn: execute, runId });
 

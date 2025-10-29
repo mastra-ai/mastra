@@ -1,10 +1,8 @@
 import type { StepResult, ToolSet } from 'ai-v5';
 import { InternalSpans } from '../../../ai-tracing';
 import type { OutputSchema } from '../../../stream/base/schema';
-import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createWorkflow } from '../../../workflows';
-import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
@@ -39,20 +37,10 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       },
     },
   })
-    .dowhile(agenticExecutionWorkflow, async ({ inputData, state, setState, runtimeContext }) => {
+    .dowhile(agenticExecutionWorkflow, async ({ inputData, state, setState }) => {
       const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
       // Access dynamic data from workflow state (shared across nested workflows)
-      const {
-        stopWhen,
-        runId,
-        messageList,
-        maxSteps,
-        controller,
-        modelStreamSpan,
-        telemetry_settings,
-        accumulatedSteps = [],
-        previousContentLength = 0,
-      } = state;
+      const { stopWhen, runId, controller, accumulatedSteps = [], previousContentLength = 0 } = state;
 
       let hasFinishedSteps = false;
 
@@ -129,26 +117,6 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
           });
         }
       }
-
-      modelStreamSpan.setAttributes({
-        'stream.response.id': typedInputData.metadata?.id,
-        'stream.response.model': typedInputData.metadata?.modelId,
-        ...(typedInputData.metadata?.providerMetadata
-          ? { 'stream.response.providerMetadata': JSON.stringify(typedInputData.metadata.providerMetadata) }
-          : {}),
-        'stream.response.finishReason': typedInputData.stepResult?.reason,
-        'stream.usage.inputTokens': typedInputData.output.usage?.inputTokens,
-        'stream.usage.outputTokens': typedInputData.output.usage?.outputTokens,
-        'stream.usage.totalTokens': typedInputData.output.usage?.totalTokens,
-        ...(telemetry_settings?.recordOutputs !== false
-          ? {
-              'stream.response.text': typedInputData.output.text,
-              'stream.prompt.messages': JSON.stringify(messageList.get.input.aiV5.model()),
-            }
-          : {}),
-      });
-
-      modelStreamSpan.end();
 
       const reason = typedInputData.stepResult?.reason;
 

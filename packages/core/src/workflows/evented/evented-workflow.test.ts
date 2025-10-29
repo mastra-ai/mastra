@@ -4,7 +4,7 @@ import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { createTool, Mastra, Telemetry } from '../..';
+import { createTool, Mastra } from '../..';
 import { Agent } from '../../agent';
 import { RuntimeContext } from '../../di';
 import { EventEmitterPubSub } from '../../events/event-emitter';
@@ -15,8 +15,6 @@ import { mapVariable } from '../workflow';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '.';
 
 const testStorage = new MockStore();
-
-globalThis.___MASTRA_TELEMETRY___ = true;
 
 describe('Workflow', () => {
   beforeEach(() => {
@@ -6850,41 +6848,6 @@ describe('Workflow', () => {
     });
   });
 
-  describe('Accessing Mastra', () => {
-    it('should be able to access the deprecated mastra primitives', async () => {
-      let telemetry: Telemetry | undefined;
-      const step1 = createStep({
-        id: 'step1',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        execute: async ({ mastra }) => {
-          telemetry = mastra?.getTelemetry();
-          return {};
-        },
-      });
-
-      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
-      workflow.then(step1).commit();
-
-      const mastra = new Mastra({
-        logger: false,
-        storage: testStorage,
-        workflows: { 'test-workflow': workflow },
-        pubsub: new EventEmitterPubSub(),
-      });
-      await mastra.startEventEngine();
-
-      // Access new instance properties directly - should work without warning
-      const run = await workflow.createRunAsync();
-      await run.start({ inputData: {} });
-
-      expect(telemetry).toBeDefined();
-      expect(telemetry).toBeInstanceOf(Telemetry);
-
-      await mastra.stopEventEngine();
-    });
-  });
-
   describe('Agent as step', () => {
     it('should be able to use an agent as a step', async () => {
       const workflow = createWorkflow({
@@ -9035,16 +8998,16 @@ describe('Workflow', () => {
     });
   });
 
-  describe('Run count', () => {
-    it('runCount property should increment the run count when a step is executed multiple times', async () => {
+  describe('Retry count', () => {
+    it('retryCount property should increment the run count when a step is executed multiple times', async () => {
       const repeatingStep = createStep({
         id: 'repeatingStep',
         inputSchema: z.object({}),
         outputSchema: z.object({
           count: z.number(),
         }),
-        execute: async ({ runCount }) => {
-          return { count: runCount };
+        execute: async ({ retryCount }) => {
+          return { count: retryCount };
         },
       });
 
@@ -9079,8 +9042,8 @@ describe('Workflow', () => {
         outputSchema: z.object({
           count: z.number(),
         }),
-        execute: async ({ runCount }) => {
-          return { count: runCount };
+        execute: async ({ retryCount }) => {
+          return { count: retryCount };
         },
       });
 
@@ -9090,8 +9053,8 @@ describe('Workflow', () => {
         outputSchema: z.object({
           count: z.number(),
         }),
-        execute: async ({ runCount }) => {
-          return { count: runCount };
+        execute: async ({ retryCount }) => {
+          return { count: retryCount };
         },
       });
 
@@ -9123,9 +9086,9 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    it('runCount should exist and equal zero for the first run', async () => {
-      const mockExec = vi.fn().mockImplementation(async ({ runCount }) => {
-        return { count: runCount };
+    it('retryCount should exist and equal zero for the first run', async () => {
+      const mockExec = vi.fn().mockImplementation(async ({ retryCount }) => {
+        return { count: retryCount };
       });
       const step = createStep({
         id: 'step',
@@ -9155,7 +9118,7 @@ describe('Workflow', () => {
       await run.start({ inputData: {} });
 
       expect(mockExec).toHaveBeenCalledTimes(1);
-      expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ runCount: 0 }));
+      expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 0 }));
 
       await mastra.stopEventEngine();
     });

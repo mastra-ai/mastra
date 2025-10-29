@@ -5,12 +5,11 @@
     "build:lib": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"],
-      "inputs": ["$TURBO_DEFAULT$", "./tsup.config.js"]
+      "inputs": ["$TURBO_DEFAULT$", "./tsup.config.ts"]
     },
     "build": {
       "dependsOn": ["build:lib"],
-      "outputs": ["dist/**"],
-      "inputs": ["$TURBO_DEFAULT$", "../playground/dist/**"]
+      "outputs": ["dist/**"]
     }
   }
 }

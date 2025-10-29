@@ -1,5 +1,5 @@
 ---
-title: 'MCP Overview '
+title: "MCP Overview "
 description: Learn about the Model Context Protocol (MCP), how to use third-party tools via MCPClient, connect to registries, and share your own tools using MCPServer.
 ---
 
@@ -30,14 +30,14 @@ npm install @mastra/mcp@latest
 The `MCPClient` connects Mastra primitives to external MCP servers, which can be local packages (invoked using `npx`) or remote HTTP(S) endpoints. Each server must be configured with either a `command` or a `url`, depending on how it's hosted.
 
 ```typescript filename="src/mastra/mcp/test-mcp-client.ts" showLineNumbers copy
-import { MCPClient } from '@mastra/mcp';
+import { MCPClient } from "@mastra/mcp";
 
 export const testMcpClient = new MCPClient({
-  id: 'test-mcp-client',
+  id: "test-mcp-client",
   servers: {
     wikipedia: {
-      command: 'npx',
-      args: ['-y', 'wikipedia-mcp'],
+      command: "npx",
+      args: ["-y", "wikipedia-mcp"],
     },
     weather: {
       url: new URL(
@@ -55,21 +55,21 @@ export const testMcpClient = new MCPClient({
 To use tools from an MCP server in an agent, import your `MCPClient` and call `.getTools()` in the `tools` parameter. This loads from the defined MCP servers, making them available to the agent.
 
 ```typescript {4,16} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
-import { testMcpClient } from '../mcp/test-mcp-client';
+import { testMcpClient } from "../mcp/test-mcp-client";
 
 export const testAgent = new Agent({
-  name: 'Test Agent',
-  description: 'You are a helpful AI assistant',
+  name: "Test Agent",
+  description: "You are a helpful AI assistant",
   instructions: `
       You are a helpful assistant that has access to the following MCP Servers.
       - Wikipedia MCP Server
       - US National Weather Service
 
       Answer questions using the information you find using the MCP Servers.`,
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   tools: await testMcpClient.getTools(),
 });
 ```
@@ -81,16 +81,16 @@ export const testAgent = new Agent({
 To expose agents, tools, and workflows from your Mastra application to external systems over HTTP(S) use the `MCPServer` class. This makes them accessible to any system or agent that supports the protocol.
 
 ```typescript filename="src/mastra/mcp/test-mcp-server.ts" showLineNumbers copy
-import { MCPServer } from '@mastra/mcp';
+import { MCPServer } from "@mastra/mcp";
 
-import { testAgent } from '../agents/test-agent';
-import { testWorkflow } from '../workflows/test-workflow';
-import { testTool } from '../tools/test-tool';
+import { testAgent } from "../agents/test-agent";
+import { testWorkflow } from "../workflows/test-workflow";
+import { testTool } from "../tools/test-tool";
 
 export const testMcpServer = new MCPServer({
-  id: 'test-mcp-server',
-  name: 'Test Server',
-  version: '1.0.0',
+  id: "test-mcp-server",
+  name: "Test Server",
+  version: "1.0.0",
   agents: { testAgent },
   tools: { testTool },
   workflows: { testWorkflow },
@@ -104,9 +104,9 @@ export const testMcpServer = new MCPServer({
 To make an MCP server available to other systems or agents that support the protocol, register it in the main `Mastra` instance using `mcpServers`.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from "@mastra/core/mastra";
 
-import { testMcpServer } from './mcp/test-mcp-server';
+import { testMcpServer } from "./mcp/test-mcp-server";
 
 export const mastra = new Mastra({
   // ...
@@ -132,10 +132,10 @@ Use the `.getTools()` method to fetch tools from all configured MCP servers. Thi
 > See [getTools()](/docs/reference/tools/mcp-client#gettools) for more information.
 
 ```typescript {8} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
-import { testMcpClient } from '../mcp/test-mcp-client';
+import { testMcpClient } from "../mcp/test-mcp-client";
 
 export const testAgent = new Agent({
   // ...
@@ -148,14 +148,14 @@ export const testAgent = new Agent({
 Use the `.getToolsets()` method when tool configuration may vary by request or user, such as in a multi-tenant system where each user provides their own API key. This method returns toolsets that can be passed to the `toolsets` option in the agent's `.generate()` or `.stream()` calls.
 
 ```typescript {5-16,21} showLineNumbers copy
-import { MCPClient } from '@mastra/mcp';
-import { mastra } from './mastra';
+import { MCPClient } from "@mastra/mcp";
+import { mastra } from "./mastra";
 
 async function handleRequest(userPrompt: string, userApiKey: string) {
   const userMcp = new MCPClient({
     servers: {
       weather: {
-        url: new URL('http://localhost:8080/mcp'),
+        url: new URL("http://localhost:8080/mcp"),
         requestInit: {
           headers: {
             Authorization: `Bearer ${userApiKey}`,
@@ -165,7 +165,7 @@ async function handleRequest(userPrompt: string, userApiKey: string) {
     },
   });
 
-  const agent = mastra.getAgent('testAgent');
+  const agent = mastra.getAgent("testAgent");
 
   const response = await agent.generate(userPrompt, {
     toolsets: await userMcp.getToolsets(),

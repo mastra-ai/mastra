@@ -1,5 +1,5 @@
 ---
-title: 'Semantically Chunking JSON '
+title: "Semantically Chunking JSON "
 description: Chunk JSON data in Mastra to semantically chunk the document.
 ---
 
@@ -8,12 +8,12 @@ description: Chunk JSON data in Mastra to semantically chunk the document.
 When working with JSON data, you need to split it into smaller pieces while preserving the object structure. The chunk method breaks down JSON content intelligently, maintaining the relationships between keys and values. This example shows how to chunk JSON documents for search or retrieval purposes.
 
 ```tsx copy
-import { MDocument } from '@mastra/rag';
+import { MDocument } from "@mastra/rag";
 
 const testJson = {
-  name: 'John Doe',
+  name: "John Doe",
   age: 30,
-  email: 'john.doe@example.com',
+  email: "john.doe@example.com",
 };
 
 const doc = MDocument.fromJSON(JSON.stringify(testJson));

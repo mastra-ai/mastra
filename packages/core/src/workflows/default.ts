@@ -1,12 +1,10 @@
 import { randomUUID } from 'crypto';
-import { context as otlpContext, trace } from '@opentelemetry/api';
-import type { Span } from '@opentelemetry/api';
 import type { AISpan, TracingContext } from '../ai-tracing';
 import { AISpanType, wrapMastra, selectFields } from '../ai-tracing';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { IErrorDefinition } from '../error';
-import { safeParseErrorObject } from '../error/utils.js';
+import { getErrorFromUnknown } from '../error/utils.js';
 import type { MastraScorers } from '../scores';
 import { runScorer } from '../scores/hooks';
 import type { ChunkType } from '../stream/types';
@@ -27,7 +25,12 @@ import type {
   StepSuccess,
   StepSuspended,
 } from './types';
-import { getResumeLabelsByStepId, validateStepInput } from './utils';
+import {
+  getResumeLabelsByStepId,
+  validateStepInput,
+  createDeprecationProxy,
+  runCountDeprecationMessage,
+} from './utils';
 
 export type ExecutionContext = {
   workflowId: string;
@@ -47,7 +50,6 @@ export type ExecutionContext = {
     attempts: number;
     delay: number;
   };
-  executionSpan: Span;
   format?: 'legacy' | 'vnext' | undefined;
   state: Record<string, any>;
 };
@@ -80,38 +82,37 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   /**
-   * The runCounts map is used to keep track of the run count for each step.
-   * The step id is used as the key and the run count is the value.
+   * The retryCounts map is used to keep track of the retry count for each step.
+   * The step id is used as the key and the retry count is the value.
    */
-  protected runCounts = new Map<string, number>();
+  protected retryCounts = new Map<string, number>();
 
   /**
-   * Get or generate the run count for a step.
-   * If the step id is not in the map, it will be added and the run count will be 0.
-   * If the step id is in the map, it will return the run count.
+   * Get or generate the retry count for a step.
+   * If the step id is not in the map, it will be added and the retry count will be 0.
+   * If the step id is in the map, it will return the retry count.
    *
    * @param stepId - The id of the step.
-   * @returns The run count for the step.
+   * @returns The retry count for the step.
    */
-  protected getOrGenerateRunCount(stepId: Step['id']) {
-    if (this.runCounts.has(stepId)) {
-      const currentRunCount = this.runCounts.get(stepId) as number;
-      const nextRunCount = currentRunCount + 1;
+  protected getOrGenerateRetryCount(stepId: Step['id']) {
+    if (this.retryCounts.has(stepId)) {
+      const currentRetryCount = this.retryCounts.get(stepId) as number;
+      const nextRetryCount = currentRetryCount + 1;
 
-      this.runCounts.set(stepId, nextRunCount);
+      this.retryCounts.set(stepId, nextRetryCount);
 
-      return nextRunCount;
+      return nextRetryCount;
     }
 
-    const runCount = 0;
+    const retryCount = 0;
 
-    this.runCounts.set(stepId, runCount);
+    this.retryCounts.set(stepId, retryCount);
 
-    return runCount;
+    return retryCount;
   }
 
   protected async fmtReturnValue<TOutput>(
-    executionSpan: Span | undefined,
     emitter: Emitter,
     stepResults: Record<string, StepResult<any, any, any, any>>,
     lastOutput: StepResult<any, any, any, any>,
@@ -151,18 +152,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         eventTimestamp: Date.now(),
       });
 
-      if (error instanceof Error) {
-        base.error = error?.stack ?? error;
-      } else if (lastOutput.error) {
-        base.error = lastOutput.error;
-      } else if (typeof error === 'string') {
-        base.error = error;
-      } else {
-        // For non-string, non-Error values, create a descriptive error
-        const errorMessage = safeParseErrorObject(error);
-        const errorObj = new Error('Unknown error: ' + errorMessage);
-        base.error = errorObj?.stack ?? errorObj;
-      }
+      const errorSource = error || lastOutput.error;
+      const errorInstance = getErrorFromUnknown(errorSource, {
+        includeStack: false,
+        fallbackMessage: 'Unknown workflow error',
+      });
+      base.error = typeof errorSource === 'string' ? errorInstance.message : `Error: ${errorInstance.message}`;
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
@@ -188,7 +183,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
     }
 
-    executionSpan?.end();
     return base as TOutput;
   }
 
@@ -246,8 +240,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
 
-    //clear runCounts
-    this.runCounts.clear();
+    //clear retryCounts
+    this.retryCounts.clear();
 
     if (steps.length === 0) {
       const empty_graph_error = new MastraError({
@@ -260,10 +254,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       workflowAISpan?.error({ error: empty_graph_error });
       throw empty_graph_error;
     }
-
-    const executionSpan = this.mastra?.getTelemetry()?.tracer.startSpan(`workflow.${workflowId}.execute`, {
-      attributes: { componentName: workflowId, runId, resourceId },
-    });
 
     let startIdx = 0;
     if (resume?.resumePath) {
@@ -284,7 +274,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         suspendedPaths: {},
         resumeLabels: {},
         retryConfig: { attempts, delay },
-        executionSpan: executionSpan as Span,
         format: params.format,
         state: lastState ?? initialState,
       };
@@ -320,12 +309,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             lastOutput.result.status = 'success';
           }
 
-          const result = (await this.fmtReturnValue(
-            executionSpan,
-            params.emitter,
-            stepResults,
-            lastOutput.result,
-          )) as any;
+          const result = (await this.fmtReturnValue(params.emitter, stepResults, lastOutput.result)) as any;
           await this.persistStepUpdate({
             workflowId,
             runId,
@@ -372,13 +356,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           'Error executing step: ',
         );
-        const result = (await this.fmtReturnValue(
-          executionSpan,
-          params.emitter,
-          stepResults,
-          lastOutput.result,
-          e as Error,
-        )) as any;
+        const result = (await this.fmtReturnValue(params.emitter, stepResults, lastOutput.result, e as Error)) as any;
         await this.persistStepUpdate({
           workflowId,
           runId,
@@ -404,7 +382,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     // after all steps are successful, return result
-    const result = (await this.fmtReturnValue(executionSpan, params.emitter, stepResults, lastOutput.result)) as any;
+    const result = (await this.fmtReturnValue(params.emitter, stepResults, lastOutput.result)) as any;
     await this.persistStepUpdate({
       workflowId,
       runId,
@@ -527,6 +505,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           executionContext.state = state;
         },
         runCount: -1,
+        retryCount: -1,
         tracingContext: {
           currentSpan: sleepSpan,
         },
@@ -633,6 +612,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           executionContext.state = state;
         },
         runCount: -1,
+        retryCount: -1,
         tracingContext: {
           currentSpan: sleepUntilSpan,
         },
@@ -848,28 +828,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       runtimeContext,
     });
 
-    const _runStep = (step: Step<any, any, any, any>, spanName: string, attributes?: Record<string, string>) => {
-      return async (data: any) => {
-        const telemetry = this.mastra?.getTelemetry();
-        const span = executionContext.executionSpan;
-        if (!telemetry || !span) {
-          return step.execute(data);
-        }
+    const runStep = async (data: any) => {
+      // Wrap data with a Proxy to show deprecation warning for runCount
+      const proxiedData = createDeprecationProxy(data, {
+        paramName: 'runCount',
+        deprecationMessage: runCountDeprecationMessage,
+        logger: this.logger,
+      });
 
-        return otlpContext.with(trace.setSpan(otlpContext.active(), span), async () => {
-          return telemetry.traceMethod(step.execute.bind(step), {
-            spanName,
-            attributes,
-          })(data);
-        });
-      };
+      return step.execute(proxiedData);
     };
-
-    const runStep = _runStep(step, `workflow.${workflowId}.step.${step.id}`, {
-      componentName: workflowId,
-      runId,
-      resourceId: resourceId ?? '',
-    });
 
     let execResults: any;
 
@@ -889,6 +857,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           throw validationError;
         }
 
+        const retryCount = this.getOrGenerateRetryCount(step.id);
+
         const result = await runStep({
           runId,
           resourceId,
@@ -900,7 +870,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           setState: (state: any) => {
             executionContext.state = state;
           },
-          runCount: this.getOrGenerateRunCount(step.id),
+          runCount: retryCount,
+          retryCount,
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: { currentSpan: stepAISpan },
           getInitData: () => stepResults?.input as any,
@@ -1000,9 +971,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
         });
 
+        const errorInstance = getErrorFromUnknown(error, {
+          includeStack: false,
+          fallbackMessage: 'Unknown step execution error',
+        });
         execResults = {
           status: 'failed',
-          error: error?.stack,
+          error: `Error: ${errorInstance.message}`,
           endedAt: Date.now(),
         };
       }
@@ -1192,6 +1167,21 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       tracingPolicy: this.options?.tracingPolicy,
     });
 
+    const prevOutput = this.getStepOutput(stepResults, prevStep);
+    for (const step of entry.steps) {
+      if (step.type === 'step') {
+        const startTime = resume?.steps[0] === step.step.id ? undefined : Date.now();
+        const resumeTime = resume?.steps[0] === step.step.id ? Date.now() : undefined;
+        stepResults[step.step.id] = {
+          ...stepResults[step.step.id],
+          status: 'running',
+          ...(resumeTime ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
+          ...(startTime ? { startedAt: startTime } : {}),
+          ...(resumeTime ? { resumedAt: resumeTime } : {}),
+        } as StepResult<any, any, any, any>;
+      }
+    }
+
     let execResults: any;
     const results: { result: StepResult<any, any, any, any> }[] = await Promise.all(
       entry.steps.map((step, i) =>
@@ -1211,7 +1201,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: executionContext.suspendedPaths,
             resumeLabels: executionContext.resumeLabels,
             retryConfig: executionContext.retryConfig,
-            executionSpan: executionContext.executionSpan,
             state: executionContext.state,
           },
           tracingContext: {
@@ -1331,42 +1320,52 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           });
 
           try {
-            const result = await cond({
-              runId,
-              workflowId,
-              mastra: this.mastra!,
-              runtimeContext,
-              inputData: prevOutput,
-              state: executionContext.state,
-              setState: (state: any) => {
-                executionContext.state = state;
-              },
-              runCount: -1,
-              tracingContext: {
-                currentSpan: evalSpan,
-              },
-              getInitData: () => stepResults?.input as any,
-              getStepResult: getStepResult.bind(this, stepResults),
-              // TODO: this function shouldn't have suspend probably?
-              suspend: async (_suspendPayload: any): Promise<any> => {},
-              bail: () => {},
-              abort: () => {
-                abortController?.abort();
-              },
-              [EMITTER_SYMBOL]: emitter,
-              [STREAM_FORMAT_SYMBOL]: executionContext.format,
-              engine: {},
-              abortSignal: abortController?.signal,
-              writer: new ToolStream(
+            const result = await cond(
+              createDeprecationProxy(
                 {
-                  prefix: 'workflow-step',
-                  callId: randomUUID(),
-                  name: 'conditional',
                   runId,
+                  workflowId,
+                  mastra: this.mastra!,
+                  runtimeContext,
+                  inputData: prevOutput,
+                  state: executionContext.state,
+                  setState: (state: any) => {
+                    executionContext.state = state;
+                  },
+                  runCount: -1,
+                  retryCount: -1,
+                  tracingContext: {
+                    currentSpan: evalSpan,
+                  },
+                  getInitData: () => stepResults?.input as any,
+                  getStepResult: getStepResult.bind(this, stepResults),
+                  // TODO: this function shouldn't have suspend probably?
+                  suspend: async (_suspendPayload: any): Promise<any> => {},
+                  bail: () => {},
+                  abort: () => {
+                    abortController?.abort();
+                  },
+                  [EMITTER_SYMBOL]: emitter,
+                  [STREAM_FORMAT_SYMBOL]: executionContext.format,
+                  engine: {},
+                  abortSignal: abortController?.signal,
+                  writer: new ToolStream(
+                    {
+                      prefix: 'workflow-step',
+                      callId: randomUUID(),
+                      name: 'conditional',
+                      runId,
+                    },
+                    writableStream,
+                  ),
                 },
-                writableStream,
+                {
+                  paramName: 'runCount',
+                  deprecationMessage: runCountDeprecationMessage,
+                  logger: this.logger,
+                },
               ),
-            });
+            );
 
             evalSpan?.end({
               output: result,
@@ -1439,7 +1438,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: executionContext.suspendedPaths,
             resumeLabels: executionContext.resumeLabels,
             retryConfig: executionContext.retryConfig,
-            executionSpan: executionContext.executionSpan,
             state: executionContext.state,
           },
           tracingContext: {
@@ -1623,42 +1621,52 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         tracingPolicy: this.options?.tracingPolicy,
       });
 
-      isTrue = await condition({
-        workflowId,
-        runId,
-        mastra: this.mastra!,
-        runtimeContext,
-        inputData: result.output,
-        state: executionContext.state,
-        setState: (state: any) => {
-          executionContext.state = state;
-        },
-        runCount: -1,
-        tracingContext: {
-          currentSpan: evalSpan,
-        },
-        iterationCount: iteration + 1,
-        getInitData: () => stepResults?.input as any,
-        getStepResult: getStepResult.bind(this, stepResults),
-        suspend: async (_suspendPayload: any): Promise<any> => {},
-        bail: () => {},
-        abort: () => {
-          abortController?.abort();
-        },
-        [EMITTER_SYMBOL]: emitter,
-        [STREAM_FORMAT_SYMBOL]: executionContext.format,
-        engine: {},
-        abortSignal: abortController?.signal,
-        writer: new ToolStream(
+      isTrue = await condition(
+        createDeprecationProxy(
           {
-            prefix: 'workflow-step',
-            callId: randomUUID(),
-            name: 'loop',
+            workflowId,
             runId,
+            mastra: this.mastra!,
+            runtimeContext,
+            inputData: result.output,
+            state: executionContext.state,
+            setState: (state: any) => {
+              executionContext.state = state;
+            },
+            runCount: -1,
+            retryCount: -1,
+            tracingContext: {
+              currentSpan: evalSpan,
+            },
+            iterationCount: iteration + 1,
+            getInitData: () => stepResults?.input as any,
+            getStepResult: getStepResult.bind(this, stepResults),
+            suspend: async (_suspendPayload: any): Promise<any> => {},
+            bail: () => {},
+            abort: () => {
+              abortController?.abort();
+            },
+            [EMITTER_SYMBOL]: emitter,
+            [STREAM_FORMAT_SYMBOL]: executionContext.format,
+            engine: {},
+            abortSignal: abortController?.signal,
+            writer: new ToolStream(
+              {
+                prefix: 'workflow-step',
+                callId: randomUUID(),
+                name: 'loop',
+                runId,
+              },
+              writableStream,
+            ),
           },
-          writableStream,
+          {
+            paramName: 'runCount',
+            deprecationMessage: runCountDeprecationMessage,
+            logger: this.logger,
+          },
         ),
-      });
+      );
       evalSpan?.end({
         output: isTrue,
       });
@@ -2130,7 +2138,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           suspendedPaths: executionContext.suspendedPaths,
           resumeLabels: executionContext.resumeLabels,
           retryConfig: executionContext.retryConfig,
-          executionSpan: executionContext.executionSpan,
+
           state: executionContext.state,
         },
         tracingContext,

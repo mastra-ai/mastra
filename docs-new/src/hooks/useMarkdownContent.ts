@@ -1,6 +1,6 @@
-import { useDoc } from '@docusaurus/plugin-content-docs/client';
-import { useLocation } from '@docusaurus/router';
-import { useCallback } from 'react';
+import { useDoc } from "@docusaurus/plugin-content-docs/client";
+import { useLocation } from "@docusaurus/router";
+import { useCallback } from "react";
 
 /**
  * Hook for extracting markdown content from doc pages.
@@ -17,10 +17,10 @@ export const useMarkdownContent = () => {
 
   const getMarkdownContent = useCallback(() => {
     // Get the main article element which contains the markdown content
-    const articleElement = document.querySelector('article .markdown');
+    const articleElement = document.querySelector("article .markdown");
 
     if (!articleElement) {
-      return '';
+      return "";
     }
 
     // Clone the article to avoid modifying the DOM
@@ -28,12 +28,12 @@ export const useMarkdownContent = () => {
 
     // Remove unwanted elements
     const elementsToRemove = clonedArticle.querySelectorAll(
-      '[data-copy-page-button], .theme-edit-this-page, .pagination-nav',
+      "[data-copy-page-button], .theme-edit-this-page, .pagination-nav",
     );
-    elementsToRemove.forEach(el => el.remove());
+    elementsToRemove.forEach((el) => el.remove());
 
     // Extract text content while preserving structure
-    let markdownText = '';
+    let markdownText = "";
 
     // Add frontmatter and metadata
     markdownText += `# ${metadata.title}\n\n`;
@@ -43,16 +43,16 @@ export const useMarkdownContent = () => {
     }
 
     markdownText += `Source: ${window.location.origin}${location.pathname}\n\n`;
-    markdownText += '---\n\n';
+    markdownText += "---\n\n";
 
     // Helper function to convert HTML to markdown-like text
     const convertNodeToMarkdown = (node: Node, level = 0): string => {
-      let result = '';
+      let result = "";
 
       if (node.nodeType === Node.TEXT_NODE) {
         const text = node.textContent?.trim();
         if (text) {
-          result += text + ' ';
+          result += text + " ";
         }
         return result;
       }
@@ -62,87 +62,90 @@ export const useMarkdownContent = () => {
         const tagName = element.tagName.toLowerCase();
 
         // Skip script, style, and other non-content elements
-        if (['script', 'style', 'svg', 'img'].includes(tagName)) {
-          return '';
+        if (["script", "style", "svg", "img"].includes(tagName)) {
+          return "";
         }
 
         switch (tagName) {
-          case 'h1':
+          case "h1":
             result += `\n# ${element.textContent}\n\n`;
             break;
-          case 'h2':
+          case "h2":
             result += `\n## ${element.textContent}\n\n`;
             break;
-          case 'h3':
+          case "h3":
             result += `\n### ${element.textContent}\n\n`;
             break;
-          case 'h4':
+          case "h4":
             result += `\n#### ${element.textContent}\n\n`;
             break;
-          case 'h5':
+          case "h5":
             result += `\n##### ${element.textContent}\n\n`;
             break;
-          case 'h6':
+          case "h6":
             result += `\n###### ${element.textContent}\n\n`;
             break;
-          case 'p':
-            element.childNodes.forEach(child => {
+          case "p":
+            element.childNodes.forEach((child) => {
               result += convertNodeToMarkdown(child, level);
             });
-            result += '\n\n';
+            result += "\n\n";
             break;
-          case 'pre':
-          case 'code':
+          case "pre":
+          case "code":
             const codeText = element.textContent;
-            if (element.parentElement?.tagName.toLowerCase() === 'pre' || tagName === 'pre') {
+            if (
+              element.parentElement?.tagName.toLowerCase() === "pre" ||
+              tagName === "pre"
+            ) {
               result += `\n\`\`\`\n${codeText}\n\`\`\`\n\n`;
             } else {
               result += `\`${codeText}\``;
             }
             break;
-          case 'ul':
-          case 'ol':
+          case "ul":
+          case "ol":
             element.childNodes.forEach((child, index) => {
               if (child.nodeType === Node.ELEMENT_NODE) {
-                const prefix = tagName === 'ul' ? '-' : `${index + 1}.`;
+                const prefix = tagName === "ul" ? "-" : `${index + 1}.`;
                 const childElement = child as HTMLElement;
-                if (childElement.tagName.toLowerCase() === 'li') {
-                  result += `${'  '.repeat(level)}${prefix} ${childElement.textContent?.trim()}\n`;
+                if (childElement.tagName.toLowerCase() === "li") {
+                  result += `${"  ".repeat(level)}${prefix} ${childElement.textContent?.trim()}\n`;
                 }
               }
             });
-            result += '\n';
+            result += "\n";
             break;
-          case 'li':
+          case "li":
             // Already handled in ul/ol
             break;
-          case 'blockquote':
+          case "blockquote":
             const quoteText = element.textContent
               ?.trim()
-              .split('\n')
-              .map(line => `> ${line}`)
-              .join('\n');
+              .split("\n")
+              .map((line) => `> ${line}`)
+              .join("\n");
             result += `\n${quoteText}\n\n`;
             break;
-          case 'a':
-            const href = element.getAttribute('href');
+          case "a":
+            const href = element.getAttribute("href");
             result += `[${element.textContent}](${href})`;
             break;
-          case 'strong':
-          case 'b':
+          case "strong":
+          case "b":
             result += `**${element.textContent}**`;
             break;
-          case 'em':
-          case 'i':
+          case "em":
+          case "i":
             result += `*${element.textContent}*`;
             break;
-          case 'table':
+          case "table":
             // Simple table handling - just preserve the text for now
             result += `\n${element.textContent}\n\n`;
             break;
           default:
             // For other elements, recursively process children
-            element.childNodes.forEach(child => {
+            element.childNodes.forEach((child) => {
               result += convertNodeToMarkdown(child, level);
             });
         }
@@ -152,13 +155,13 @@ export const useMarkdownContent = () => {
     };
 
     // Convert the article content to markdown
-    clonedArticle.childNodes.forEach(node => {
+    clonedArticle.childNodes.forEach((node) => {
       markdownText += convertNodeToMarkdown(node);
     });
 
     // Clean up extra whitespace
     markdownText = markdownText
-      .replace(/\n{3,}/g, '\n\n') // Replace 3+ newlines with 2
+      .replace(/\n{3,}/g, "\n\n") // Replace 3+ newlines with 2
       .trim();
 
     return markdownText;

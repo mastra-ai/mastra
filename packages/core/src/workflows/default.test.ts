@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import type { Span } from '@opentelemetry/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { RuntimeContext } from '../di';
@@ -76,7 +75,6 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
           attempts: 3,
           delay: 1000,
         },
-        executionSpan: {} as Span,
       },
       emitter,
       abortController,

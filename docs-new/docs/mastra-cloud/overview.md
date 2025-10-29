@@ -1,6 +1,7 @@
 ---
-title: Mastra Cloud
+title: Overview
 description: Deployment and monitoring service for Mastra applications
+sidebar_position: 1
 ---
 
 # Mastra Cloud

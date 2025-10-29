@@ -1,6 +1,7 @@
 ---
-title: 'MastraAuthWorkos Class'
-description: 'Documentation for the MastraAuthWorkos class, which authenticates Mastra applications using WorkOS authentication.'
+title: WorkOS
+description: "Documentation for the MastraAuthWorkos class, which authenticates Mastra applications using WorkOS authentication."
+sidebar_position: 6
 ---
 
 import Tabs from '@theme/Tabs';
@@ -41,8 +42,8 @@ npm install @mastra/auth-workos@latest
 ### Basic usage with environment variables
 
 ```typescript {2,7} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { MastraAuthWorkos } from '@mastra/auth-workos';
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
   // ..
@@ -55,8 +56,8 @@ export const mastra = new Mastra({
 ### Custom configuration
 
 ```typescript {2,7-10} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { MastraAuthWorkos } from '@mastra/auth-workos';
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
   // ..
@@ -83,12 +84,12 @@ By default, `MastraAuthWorkos` checks whether the authenticated user has an 'adm
 To customize user authorization, provide a custom `authorizeUser` function:
 
 ```typescript filename="src/mastra/auth.ts" showLineNumbers copy
-import { MastraAuthWorkos } from '@mastra/auth-workos';
+import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 const workosAuth = new MastraAuthWorkos({
   apiKey: process.env.WORKOS_API_KEY,
   clientId: process.env.WORKOS_CLIENT_ID,
-  authorizeUser: async user => {
+  authorizeUser: async (user) => {
     return !!user;
   },
 });
@@ -113,15 +114,19 @@ npm install @workos-inc/node
 After users complete the WorkOS authentication flow and return with an authorization code, exchange it for an access token:
 
 ```typescript filename="lib/auth.ts" showLineNumbers copy
-import { WorkOS } from '@workos-inc/node';
+import { WorkOS } from "@workos-inc/node";
 
 const workos = new WorkOS(process.env.WORKOS_API_KEY);
 
-export const authenticateWithWorkos = async (code: string, clientId: string) => {
-  const authenticationResponse = await workos.userManagement.authenticateWithCode({
-    code,
-    clientId,
-  });
+export const authenticateWithWorkos = async (
+  code: string,
+  clientId: string,
+) => {
+  const authenticationResponse =
+    await workos.userManagement.authenticateWithCode({
+      code,
+      clientId,
+    });
 
   return authenticationResponse.accessToken;
 };
@@ -134,11 +139,11 @@ export const authenticateWithWorkos = async (code: string, clientId: string) => 
 When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid WorkOS access token in the `Authorization` header:
 
 ```typescript filename="lib/mastra/mastra-client.ts" showLineNumbers copy
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from "@mastra/client-js";
 
 export const createMastraClient = (accessToken: string) => {
   return new MastraClient({
-    baseUrl: 'https://<mastra-api-url>',
+    baseUrl: "https://<mastra-api-url>",
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },

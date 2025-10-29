@@ -1,5 +1,5 @@
 ---
-title: 'Mastra Deployer'
+title: "Mastra Deployer"
 description: Documentation for the Deployer abstract class, which handles packaging and deployment of Mastra applications.
 slug: /reference/deployer
 ---
@@ -11,12 +11,12 @@ The Deployer handles the deployment of standalone Mastra applications by packagi
 ## Usage Example
 
 ```typescript
-import { Deployer } from '@mastra/deployer';
+import { Deployer } from "@mastra/deployer";
 
 // Create a custom deployer by extending the abstract Deployer class
 class CustomDeployer extends Deployer {
   constructor() {
-    super({ name: 'custom-deployer' });
+    super({ name: "custom-deployer" });
   }
 
   // Implement the abstract deploy method
@@ -25,7 +25,7 @@ class CustomDeployer extends Deployer {
     await this.prepare(outputDirectory);
 
     // Bundle the application
-    await this._bundle('server.ts', 'mastra.ts', outputDirectory);
+    await this._bundle("server.ts", "mastra.ts", outputDirectory);
 
     // Custom deployment logic
     // ...

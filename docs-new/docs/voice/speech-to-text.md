@@ -1,6 +1,7 @@
 ---
-title: Speech-to-Text (STT) in Mastra | Mastra Docs
+title: Speech-to-Text
 description: Overview of Speech-to-Text capabilities in Mastra, including configuration, usage, and integration with voice providers.
+sidebar_position: 3
 ---
 
 # Speech-to-Text (STT)
@@ -21,7 +22,7 @@ To use STT in Mastra, you need to provide a `listeningModel` when initializing t
 ```typescript
 const voice = new OpenAIVoice({
   listeningModel: {
-    name: 'whisper-1',
+    name: "whisper-1",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });
@@ -53,29 +54,32 @@ pnpm add @mastra/voice-openai  # Example for OpenAI
 The primary method for STT is the `listen()` method, which converts spoken audio into text. Here's how to use it:
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { OpenAIVoice } from '@mastra/voice-openai';
-import { getMicrophoneStream } from '@mastra/node-audio';
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { getMicrophoneStream } from "@mastra/node-audio";
 
 const voice = new OpenAIVoice();
 
 const agent = new Agent({
-  name: 'Voice Agent',
-  instructions: 'You are a voice assistant that provides recommendations based on user input.',
-  model: openai('gpt-4o'),
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that provides recommendations based on user input.",
+  model: openai("gpt-4o"),
   voice,
 });
 
 const audioStream = getMicrophoneStream(); // Assume this function gets audio input
 
 const transcript = await agent.voice.listen(audioStream, {
-  filetype: 'm4a', // Optional: specify the audio file type
+  filetype: "m4a", // Optional: specify the audio file type
 });
 
 console.log(`User said: ${transcript}`);
 
-const { text } = await agent.generate(`Based on what the user said, provide them a recommendation: ${transcript}`);
+const { text } = await agent.generate(
+  `Based on what the user said, provide them a recommendation: ${transcript}`,
+);
 
 console.log(`Recommendation: ${text}`);
 ```

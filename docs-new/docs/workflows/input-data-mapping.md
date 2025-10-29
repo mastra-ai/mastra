@@ -1,6 +1,7 @@
 ---
-title: 'Input Data Mapping with Workflow '
-description: 'Learn how to use workflow input mapping to create more dynamic data flows in your Mastra workflows.'
+title: "Input Data Mapping"
+description: "Learn how to use workflow input mapping to create more dynamic data flows in your Mastra workflows."
+sidebar_position: 6
 ---
 
 # Input Data Mapping
@@ -72,7 +73,7 @@ Use `getInitData` to access the initial input data provided to the workflow:
 To use `mapVariable` import the necessary function from the workflows module:
 
 ```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { mapVariable } from '@mastra/core/workflows';
+import { mapVariable } from "@mastra/core/workflows";
 ```
 
 ### Renaming step with `mapVariable()`

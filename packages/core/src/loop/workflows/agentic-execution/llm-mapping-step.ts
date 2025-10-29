@@ -5,7 +5,6 @@ import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
-import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(
@@ -15,7 +14,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
     id: 'llmExecutionMappingStep',
     inputSchema: z.array(toolCallOutputSchema),
     outputSchema: llmIterationOutputSchema,
-    execute: async ({ inputData, getStepResult, bail, state, runtimeContext }) => {
+    execute: async ({ inputData, getStepResult, bail, state }) => {
       // Access dynamic data from workflow state (shared across nested workflows)
       const { messageList, options, runId, experimental_generateMessageId, controller, _internal } = state;
 

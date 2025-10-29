@@ -1,6 +1,7 @@
 ---
-title: Using with Assistant UI
-description: 'Learn how to integrate Assistant UI with Mastra'
+title: With Assistant UI
+description: "Learn how to integrate Assistant UI with Mastra"
+sidebar_position: 3
 ---
 
 # Using with Assistant UI
@@ -72,11 +73,14 @@ The default Assistant UI setup configures the chat runtime to use a local API ro
 Find the `useChatRuntime` hook in the `assistant-ui` project, typically at `app/assistant.tsx` and change the `api` property to the full URL of your Mastra agent's stream endpoint:
 
 ```typescript showLineNumbers copy filename="app/assistant.tsx" {6}
-import { useChatRuntime, AssistantChatTransport } from '@assistant-ui/react-ai-sdk';
+import {
+  useChatRuntime,
+  AssistantChatTransport,
+} from "@assistant-ui/react-ai-sdk";
 
 const runtime = useChatRuntime({
   transport: new AssistantChatTransport({
-    api: 'MASTRA_ENDPOINT',
+    api: "MASTRA_ENDPOINT",
   }),
 });
 ```

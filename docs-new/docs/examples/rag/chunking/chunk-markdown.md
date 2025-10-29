@@ -1,5 +1,5 @@
 ---
-title: 'Semantically Chunking Markdown '
+title: "Semantically Chunking Markdown "
 description: Example of using Mastra to chunk markdown documents for search or retrieval purposes.
 ---
 
@@ -8,9 +8,9 @@ description: Example of using Mastra to chunk markdown documents for search or r
 Markdown is more information-dense than raw HTML, making it easier to work with for RAG pipelines. When working with markdown, you need to split it into smaller pieces while preserving headers and formatting. The `chunk` method handles Markdown-specific elements like headers, lists, and code blocks intelligently. This example shows how to chunk markdown documents for search or retrieval purposes.
 
 ```tsx copy
-import { MDocument } from '@mastra/rag';
+import { MDocument } from "@mastra/rag";
 
-const doc = MDocument.fromMarkdown('# Your markdown content...');
+const doc = MDocument.fromMarkdown("# Your markdown content...");
 
 const chunks = await doc.chunk();
 ```

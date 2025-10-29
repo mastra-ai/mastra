@@ -10,10 +10,10 @@ The Mastra Client SDK provides a simple and type-safe interface for interacting 
 ## Usage example
 
 ```typescript filename="lib/mastra/mastra-client.ts" showLineNumbers copy
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
-  baseUrl: 'http://localhost:4111/',
+  baseUrl: "http://localhost:4111/",
 });
 ```
 
