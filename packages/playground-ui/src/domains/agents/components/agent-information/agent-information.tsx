@@ -10,6 +10,7 @@ import { useAgent } from '../../hooks/use-agent';
 import {
   useModelProviders,
   useReorderModelList,
+  useResetAgentModel,
   useUpdateAgentModel,
   useUpdateModelInModelList,
 } from '../../hooks/use-agents';
@@ -26,6 +27,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
   const { data: agent, isLoading } = useAgent(agentId);
   const { data: modelProviders } = useModelProviders();
   const { mutateAsync: updateModel } = useUpdateAgentModel(agentId);
+  const { mutateAsync: resetModel } = useResetAgentModel(agentId);
   const { mutate: reorderModelList } = useReorderModelList(agentId);
   const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
@@ -80,6 +82,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
                 agentId={agentId}
                 agent={agent}
                 updateModel={updateModel}
+                resetModel={resetModel}
                 updateModelInModelList={updateModelInModelList}
                 reorderModelList={reorderModelList}
                 modelProviders={modelProviders || []}
