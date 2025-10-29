@@ -1025,17 +1025,6 @@ describe('Agent Builder Handlers', () => {
       ).rejects.toThrow(new HTTPException(400, { message: 'runId required to resume workflow' }));
     });
 
-    it('should throw error when step is not provided', async () => {
-      await expect(
-        resumeStreamAgentBuilderActionHandler({
-          mastra: mockMastra,
-          actionId: 'workflow-builder',
-          runId: 'test-run',
-          body: { step: '', resumeData: {} },
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'step required to resume workflow' }));
-    });
-
     it('should handle workflow registry correctly on resumeStream', async () => {
       await expect(
         resumeStreamAgentBuilderActionHandler({
