@@ -809,6 +809,25 @@ export async function createNetworkLoop({
       const toolId = inputData.primitiveId;
       let tool = toolsMap[toolId];
 
+      // If tool not found with exact match, try stripping common prefixes
+      // LLMs often add prefixes like "functions." or "tools." to tool names
+      if (!tool) {
+        const prefixesToTry = ['functions.', 'tools.', 'tool.', 'function.'];
+        for (const prefix of prefixesToTry) {
+          if (toolId.startsWith(prefix)) {
+            const strippedId = toolId.slice(prefix.length);
+            tool = toolsMap[strippedId];
+            if (tool) {
+              console.warn(
+                `Tool lookup: Found tool "${strippedId}" by stripping prefix "${prefix}" from "${toolId}". ` +
+                  `Consider updating the routing agent instructions to avoid adding prefixes.`,
+              );
+              break;
+            }
+          }
+        }
+      }
+
       if (!tool) {
         const mastraError = new MastraError({
           id: 'AGENT_NETWORK_TOOL_EXECUTION_STEP_INVALID_TASK_INPUT',

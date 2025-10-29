@@ -3,12 +3,13 @@
   "private": true,
   "version": "0.1.10-alpha.1",
   "scripts": {
-    "test": "pnpm test:streaming && pnpm test:working-memory && pnpm test:agent-memory && pnpm test:processors",
+    "test": "pnpm test:streaming && pnpm test:working-memory && pnpm test:agent-memory && pnpm test:processors && pnpm test:agent-network-working-memory",
     "test:agent-memory": "vitest run ./src/agent-memory.test.ts",
     "test:libsql": "vitest run ./src/with-libsql-storage.test.ts",
     "test:streaming": "vitest run ./src/streaming-memory.test.ts",
     "test:working-memory": "vitest run ./src/working-memory.test.ts",
     "test:processors": "vitest run ./src/processors.test.ts",
+    "test:agent-network-working-memory": "vitest run ./src/agent-network-working-memory.test.ts",
     "dev": "mastra dev"
   },
   "dependencies": {
