@@ -993,28 +993,6 @@ export async function updateAgentModelInModelListHandler({
   }
 }
 
-// export async function resetAgentModelListHandler({
-//   mastra,
-//   agentId,
-// }: Context & {
-//   agentId: string;
-// }): Promise<{ message: string }> {
-//   try {
-//     const agent = await getAgentFromSystem({ mastra, agentId });
-
-//     const modelList = await agent.getModelList();
-//     if (!modelList || modelList.length === 0) {
-//       throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
-//     }
-
-//     agent.updateModelInModelList({ id: modelConfigId, model: undefined, maxRetries: undefined, enabled: undefined });
-
-//     return { message: 'Model list reset' };
-//   } catch (error) {
-//     return handleError(error, 'error resetting model list');
-//   }
-// }
-
 export async function getProvidersHandler() {
   try {
     const providers = Object.entries(PROVIDER_REGISTRY).map(([id, provider]) => {
