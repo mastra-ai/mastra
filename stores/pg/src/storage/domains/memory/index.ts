@@ -553,7 +553,7 @@ export class MemoryPG extends MemoryStorage {
         'memory',
       );
       if (format === `v1`) return list.get.all.v1();
-      return list.get.all.v2();
+      return list.get.all.db();
     } catch (error) {
       const mastraError = new MastraError(
         {
@@ -653,7 +653,7 @@ export class MemoryPG extends MemoryStorage {
       });
 
       const list = new MessageList().add(messagesWithParsedContent, 'memory');
-      const messagesToReturn = format === `v2` ? list.get.all.v2() : list.get.all.v1();
+      const messagesToReturn = format === `v2` ? list.get.all.db() : list.get.all.v1();
 
       return {
         messages: messagesToReturn,
@@ -781,7 +781,7 @@ export class MemoryPG extends MemoryStorage {
       });
 
       const list = new MessageList().add(messagesWithParsedContent, 'memory');
-      if (format === `v2`) return list.get.all.v2();
+      if (format === `v2`) return list.get.all.db();
       return list.get.all.v1();
     } catch (error) {
       throw new MastraError(

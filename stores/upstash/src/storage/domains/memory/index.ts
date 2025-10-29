@@ -377,7 +377,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       }
 
       const list = new MessageList().add(messages, 'memory');
-      if (format === `v2`) return list.get.all.v2();
+      if (format === `v2`) return list.get.all.db();
       return list.get.all.v1();
     } catch (error) {
       throw new MastraError(
@@ -609,7 +609,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
       if (format === `v1`) return list.get.all.v1();
-      return list.get.all.v2();
+      return list.get.all.db();
     } catch (error) {
       throw new MastraError(
         {
@@ -691,7 +691,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       messages.push(...paginatedMessages);
 
       const list = new MessageList().add(messages, 'memory');
-      const finalMessages = (format === `v2` ? list.get.all.v2() : list.get.all.v1()) as
+      const finalMessages = (format === `v2` ? list.get.all.db() : list.get.all.v1()) as
         | MastraMessageV1[]
         | MastraDBMessage[];
 

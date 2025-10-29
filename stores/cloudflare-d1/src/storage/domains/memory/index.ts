@@ -505,7 +505,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       this.logger.debug(`Saved ${messages.length} messages`);
       const list = new MessageList().add(messages, 'memory');
-      if (format === `v2`) return list.get.all.v2();
+      if (format === `v2`) return list.get.all.db();
       return list.get.all.v1();
     } catch (error) {
       throw new MastraError(
@@ -659,7 +659,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       });
       this.logger.debug(`Retrieved ${messages.length} messages for thread ${threadId}`);
       const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraDBMessage[], 'memory');
-      if (format === `v2`) return list.get.all.v2();
+      if (format === `v2`) return list.get.all.db();
       return list.get.all.v1();
     } catch (error) {
       const mastraError = new MastraError(
@@ -733,7 +733,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       this.logger.debug(`Retrieved ${messages.length} messages`);
       const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraDBMessage[], 'memory');
       if (format === `v1`) return list.get.all.v1();
-      return list.get.all.v2();
+      return list.get.all.db();
     } catch (error) {
       const mastraError = new MastraError(
         {
@@ -865,7 +865,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       }
 
       const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraDBMessage[], 'memory');
-      messages.push(...(format === `v2` ? list.get.all.v2() : list.get.all.v1()));
+      messages.push(...(format === `v2` ? list.get.all.db() : list.get.all.v1()));
 
       return {
         messages,

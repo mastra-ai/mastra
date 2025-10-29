@@ -263,7 +263,7 @@ export class StoreMemoryLance extends MemoryStorage {
       );
 
       const list = new MessageList({ threadId, resourceId }).add(messages.map(this.normalizeMessage), 'memory');
-      if (format === 'v2') return list.get.all.v2();
+      if (format === 'v2') return list.get.all.db();
       return list.get.all.v1();
     } catch (error: any) {
       throw new MastraError(
@@ -316,7 +316,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
       const list = new MessageList().add(messages.map(this.normalizeMessage), 'memory');
       if (format === `v1`) return list.get.all.v1();
-      return list.get.all.v2();
+      return list.get.all.db();
     } catch (error: any) {
       throw new MastraError(
         {
@@ -385,7 +385,7 @@ export class StoreMemoryLance extends MemoryStorage {
       await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([updateRecord]);
 
       const list = new MessageList().add(messages, 'memory');
-      if (format === `v2`) return list.get.all.v2();
+      if (format === `v2`) return list.get.all.db();
       return list.get.all.v1();
     } catch (error: any) {
       throw new MastraError(
@@ -665,7 +665,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
       const list = new MessageList().add(formattedMessages, 'memory');
       return {
-        messages: format === 'v2' ? list.get.all.v2() : list.get.all.v1(),
+        messages: format === 'v2' ? list.get.all.db() : list.get.all.v1(),
         total: total, // Total should be the count of messages matching the filters
         page,
         perPage,

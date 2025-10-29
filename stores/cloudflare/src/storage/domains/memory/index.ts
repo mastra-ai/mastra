@@ -559,7 +559,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           ({ ...message, type: message.type !== 'v2' ? message.type : undefined }) as MastraMessageV1,
       );
       const list = new MessageList().add(prepared, 'memory');
-      if (format === `v2`) return list.get.all.v2();
+      if (format === `v2`) return list.get.all.db();
       return list.get.all.v1();
     } catch (error) {
       throw new MastraError(
@@ -792,7 +792,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       // For v2 format, use MessageList for proper conversion
       const list = new MessageList({ threadId, resourceId }).add(prepared as MastraMessageV1[], 'memory');
-      return list.get.all.v2();
+      return list.get.all.db();
     } catch (error) {
       const mastraError = new MastraError(
         {
@@ -851,7 +851,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       // For v2 format, use MessageList for proper conversion
       const list = new MessageList().add(prepared, 'memory');
       if (format === `v1`) return list.get.all.v1();
-      return list.get.all.v2();
+      return list.get.all.db();
     } catch (error) {
       const mastraError = new MastraError(
         {

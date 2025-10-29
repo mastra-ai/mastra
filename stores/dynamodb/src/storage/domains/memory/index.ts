@@ -337,7 +337,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       );
 
       const list = new MessageList({ threadId, resourceId }).add(uniqueMessages, 'memory');
-      if (format === `v2`) return list.get.all.v2();
+      if (format === `v2`) return list.get.all.db();
       return list.get.all.v1();
     } catch (error) {
       throw new MastraError(
@@ -394,7 +394,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       const list = new MessageList().add(uniqueMessages, 'memory');
       if (format === `v1`) return list.get.all.v1();
-      return list.get.all.v2();
+      return list.get.all.db();
     } catch (error) {
       throw new MastraError(
         {
@@ -485,7 +485,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       const list = new MessageList().add(messages, 'memory');
       if (format === `v1`) return list.get.all.v1();
-      return list.get.all.v2();
+      return list.get.all.db();
     } catch (error) {
       throw new MastraError(
         {
@@ -644,7 +644,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const hasMore = end < total;
 
       const list = new MessageList({ threadId, resourceId }).add(paginatedMessages as MastraDBMessage[], 'memory');
-      const finalMessages = format === 'v2' ? list.get.all.v2() : list.get.all.v1();
+      const finalMessages = format === 'v2' ? list.get.all.db() : list.get.all.v1();
 
       return {
         messages: finalMessages,

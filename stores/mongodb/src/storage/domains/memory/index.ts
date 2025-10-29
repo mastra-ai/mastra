@@ -140,7 +140,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
       const list = new MessageList().add(messages, 'memory');
-      if (format === 'v2') return list.get.all.v2();
+      if (format === 'v2') return list.get.all.db();
       return list.get.all.v1();
     } catch (error) {
       throw new MastraError(
@@ -186,7 +186,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       const list = new MessageList().add(rawMessages.map(this.parseRow), 'memory');
       if (format === `v1`) return list.get.all.v1();
-      return list.get.all.v2();
+      return list.get.all.db();
     } catch (error) {
       throw new MastraError(
         {
@@ -277,7 +277,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const messagesToReturn =
         format === 'v1'
           ? new MessageList().add(messages, 'memory').get.all.v1()
-          : new MessageList().add(messages, 'memory').get.all.v2();
+          : new MessageList().add(messages, 'memory').get.all.db();
 
       return {
         messages: messagesToReturn,
@@ -361,7 +361,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       ]);
 
       const list = new MessageList().add(messages, 'memory');
-      if (format === 'v2') return list.get.all.v2();
+      if (format === 'v2') return list.get.all.db();
       return list.get.all.v1();
     } catch (error) {
       throw new MastraError(

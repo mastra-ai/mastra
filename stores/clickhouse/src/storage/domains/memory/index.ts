@@ -156,7 +156,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       });
 
       const list = new MessageList({ threadId, resourceId }).add(messages, 'memory');
-      if (format === `v2`) return list.get.all.v2();
+      if (format === `v2`) return list.get.all.db();
       return list.get.all.v1();
     } catch (error) {
       throw new MastraError(
@@ -237,7 +237,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
       const list = new MessageList().add(messages, 'memory');
       if (format === `v1`) return list.get.all.v1();
-      return list.get.all.v2();
+      return list.get.all.db();
     } catch (error) {
       throw new MastraError(
         {
@@ -424,7 +424,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
       const list = new MessageList().add(messages, 'memory');
 
-      if (format === `v2`) return list.get.all.v2();
+      if (format === `v2`) return list.get.all.db();
       return list.get.all.v1();
     } catch (error: any) {
       throw new MastraError(

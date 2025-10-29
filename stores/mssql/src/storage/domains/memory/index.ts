@@ -44,7 +44,7 @@ export class MemoryMSSQL extends MemoryStorage {
 
     // Use MessageList to ensure proper structure for both v1 and v2
     const list = new MessageList().add(cleanMessages, 'memory');
-    return format === 'v2' ? list.get.all.v2() : list.get.all.v1();
+    return format === 'v2' ? list.get.all.db() : list.get.all.v1();
   }
 
   constructor({
@@ -770,7 +770,7 @@ export class MemoryMSSQL extends MemoryStorage {
         return message;
       });
       const list = new MessageList().add(messagesWithParsedContent, 'memory');
-      if (format === 'v2') return list.get.all.v2();
+      if (format === 'v2') return list.get.all.db();
       return list.get.all.v1();
     } catch (error) {
       throw new MastraError(
