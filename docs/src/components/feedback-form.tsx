@@ -115,7 +115,7 @@ export const FeedbackForm = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<
     "idle" | "success" | "error"
-  >("error");
+  >("idle");
   const [errorMessage, setErrorMessage] = useState<string>("");
 
   const form = useForm<FeedbackFormData>({
@@ -253,7 +253,7 @@ export const FeedbackForm = ({
               </Button>
             </div>
 
-            {true && (
+            {errorMessage && (
               <div className="mt-3 mx-4 p-2 rounded-[10px] bg-red-50 dark:bg-red-900/20">
                 <p className="text-xs mb-0! text-red-500 font-mono dark:text-red-400">
                   Something went wrong. Please try again
