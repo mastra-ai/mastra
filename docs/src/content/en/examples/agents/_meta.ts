@@ -1,6 +1,5 @@
 const meta = {
   "calling-agents": "Calling Agents",
-  "system-prompt": "Changing the System Prompt",
   "supervisor-agent": "Supervisor Agent",
   "image-analysis": "Image Analysis",
   "runtime-context": "Runtime Context",

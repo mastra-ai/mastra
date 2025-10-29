@@ -1448,4 +1448,9 @@ export const redirectList = [
     destination: "/:locale/examples/guide/web-search",
     permanent: true,
   },
+  {
+    source: "/:locale/examples/agents/system-prompt",
+    destination: "/:locale/docs/agents/overview",
+    permanent: true,
+  },
 ];
