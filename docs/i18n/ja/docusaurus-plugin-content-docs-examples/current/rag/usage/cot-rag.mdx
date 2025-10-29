@@ -6,11 +6,15 @@ description: OpenAI と PGVector を用いて、Mastra で Chain-of-Thought 型�
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# 連鎖思考プロンプティング
+<div id="chain-of-thought-prompting">
+  # 連鎖思考プロンプティング
+</div>
 
 この例では、Mastra、OpenAI の埋め込み、そしてベクトルストアとしての PGVector を用いて、連鎖思考型の推論に重点を置いた Retrieval-Augmented Generation（RAG）システムの実装方法を示します。
 
-## 概要
+<div id="overview">
+  ## 概要
+</div>
 
 このシステムは、Mastra と OpenAI を用いて、Chain-of-Thought プロンプティングによる RAG を実装しています。主な処理は次のとおりです。
 
@@ -22,9 +26,13 @@ import GithubLink from "@site/src/components/GithubLink";
 6. ベクトルクエリツールでクエリに基づき関連チャンクを取得
 7. Chain-of-Thought 推論を用いて文脈に即した応答を生成
 
-## セットアップ
+<div id="setup">
+  ## セットアップ
+</div>
 
-### 環境のセットアップ
+<div id="environment-setup">
+  ### 環境のセットアップ
+</div>
 
 環境変数を設定してください:
 
@@ -34,7 +42,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
 
-### 依存関係
+<div id="dependencies">
+  ### 依存関係
+</div>
 
 次に、必要な依存パッケージをインポートします：
 
@@ -48,7 +58,9 @@ import { embedMany } from "ai";
 ```
 
 
-## ベクタークエリツールの作成
+<div id="vector-query-tool-creation">
+  ## ベクタークエリツールの作成
+</div>
 
 @mastra/rag からインポートした createVectorQueryTool を使うと、ベクターデータベースに対してクエリを実行するツールを作成できます。
 
@@ -61,7 +73,9 @@ const vectorQueryTool = createVectorQueryTool({
 ```
 
 
-## エージェントの設定
+<div id="agent-configuration">
+  ## エージェントの設定
+</div>
 
 Mastra エージェントを、chain-of-thought プロンプトの指示に従って構成します:
 
@@ -96,7 +110,9 @@ export const ragAgent = new Agent({
 ```
 
 
-## PgVector と Mastra のインスタンス化
+<div id="instantiate-pgvector-and-mastra">
+  ## PgVector と Mastra のインスタンス化
+</div>
 
 すべてのコンポーネントを指定して、PgVector と Mastra のインスタンスを作成します:
 
@@ -113,7 +129,9 @@ const agent = mastra.getAgent("ragAgent");
 ```
 
 
-## ドキュメント処理
+<div id="document-processing">
+  ## ドキュメント処理
+</div>
 
 ドキュメントを作成し、チャンクに分割して処理します：
 
@@ -131,7 +149,9 @@ const chunks = await doc.chunk({
 ```
 
 
-## 埋め込みの作成と保存
+<div id="creating-and-storing-embeddings">
+  ## 埋め込みの作成と保存
+</div>
 
 チャンクの埋め込みを生成し、ベクトルデータベースに格納します。
 
@@ -154,7 +174,9 @@ await vectorStore.upsert({
 ```
 
 
-## Chain-of-Thought クエリ
+<div id="chain-of-thought-querying">
+  ## Chain-of-Thought クエリ
+</div>
 
 エージェントがどのように推論を分解していくかを確認するため、さまざまなクエリを試してみましょう。
 

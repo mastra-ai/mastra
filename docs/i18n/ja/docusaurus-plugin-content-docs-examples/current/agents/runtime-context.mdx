@@ -3,11 +3,15 @@ title: "例: ランタイムコンテキスト | エージェント | Mastra ド
 description: ランタイムコンテキストを用いて、ユーザーのサブスクリプションプランに応じて挙動を適応させる動的エージェントの作成と設定方法を学びます。
 ---
 
-# ランタイムコンテキスト
+<div id="runtime-context">
+  # ランタイムコンテキスト
+</div>
 
 この例では、ランタイムコンテキストを用いて、ユーザーのサブスクリプション層に応じて、挙動、機能、モデル選択、ツール、メモリ構成、入出力処理、品質評価を動的に適応させる単一のエージェントを作成する方法を示します。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 この例では、Mastra のモデルルーター経由で OpenAI のモデルを使用します。`.env` ファイルに `OPENAI_API_KEY` を追加してください。
 
@@ -16,7 +20,9 @@ OPENAI_API_KEY=<your-api-key>
 ```
 
 
-## 動的エージェントの作成
+<div id="creating-the-dynamic-agent">
+  ## 動的エージェントの作成
+</div>
 
 ユーザーのサブスクリプションの階層に応じて、すべてのプロパティを調整するエージェントを作成します。
 
@@ -192,7 +198,9 @@ export const supportAgent = new Agent({
 
 > 設定オプションの一覧については、[Agent](/reference/agents/agent) を参照してください。
 
-## エージェントの登録
+<div id="registering-the-agent">
+  ## エージェントの登録
+</div>
 
 メインの Mastra インスタンスにエージェントを登録します：
 
@@ -206,9 +214,13 @@ export const mastra = new Mastra({
 ```
 
 
-## 使用例
+<div id="usage-examples">
+  ## 使用例
+</div>
 
-### 無料プランユーザー
+<div id="free-tier-user">
+  ### 無料プランユーザー
+</div>
 
 ```typescript title="src/examples/free-tier-usage.ts" showLineNumbers copy
 import "dotenv/config";
@@ -231,7 +243,9 @@ console.log(response.text);
 ```
 
 
-### Pro ティア ユーザー
+<div id="pro-tier-user">
+  ### Pro ティア ユーザー
+</div>
 
 ```typescript title="src/examples/pro-tier-usage.ts" showLineNumbers copy
 import "dotenv/config";
@@ -254,7 +268,9 @@ console.log(response.text);
 ```
 
 
-### エンタープライズティアのユーザー
+<div id="enterprise-tier-user">
+  ### エンタープライズティアのユーザー
+</div>
 
 ```typescript title="src/examples/enterprise-tier-usage.ts" showLineNumbers copy
 import "dotenv/config";
@@ -277,7 +293,9 @@ console.log(response.text);
 ```
 
 
-## 主要なメリット
+<div id="key-benefits">
+  ## 主要なメリット
+</div>
 
 このランタイムコンテキスト手法により、次のことが可能になります:
 
@@ -287,7 +305,9 @@ console.log(response.text);
 - **スケーラブルなアーキテクチャ**: 1つのエージェント定義で、コードの重複なく全ユーザーセグメントに対応
 - **パーソナライゼーション**: 言語設定やプラン別の指示により、ユーザーごとに最適化された体験を提供
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [ランタイムコンテキストのドキュメント](/docs/server-db/runtime-context)
 - [エージェント リファレンス](/reference/agents/agent)

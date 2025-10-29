@@ -3,11 +3,15 @@ title: "リファレンス: Lance Vector Store | Vectors | Mastra ドキュメ�
 description: "Mastra の LanceVectorStore クラスに関するドキュメント。Lance 列指向フォーマットを採用した組み込み型ベクターデータベースである LanceDB を使用して、ベクター検索を提供します。"
 ---
 
-# Lance Vector Store
+<div id="lance-vector-store">
+  # Lance Vector Store
+</div>
 
 LanceVectorStore クラスは、Lance 列指向フォーマット上に構築された組み込み型ベクターデータベースである [LanceDB](https://lancedb.github.io/lancedb/) を用いたベクトル検索を提供します。ローカル開発から本番環境まで、効率的なストレージと高速な類似検索を実現します。
 
-## ファクトリメソッド
+<div id="factory-method">
+  ## ファクトリメソッド
+</div>
 
 LanceVectorStore は作成にファクトリーパターンを採用しています。コンストラクタを直接使わず、静的な `create()` メソッドを使用してください。
 
@@ -27,7 +31,9 @@ LanceVectorStore は作成にファクトリーパターンを採用していま
   ]}
 />
 
-## コンストラクターの例
+<div id="constructor-examples">
+  ## コンストラクターの例
+</div>
 
 `LanceVectorStore` インスタンスは、静的な `create` メソッドを使って作成できます。
 
@@ -47,9 +53,13 @@ const s3Store = await LanceVectorStore.create("s3://bucket/db", {
 ```
 
 
-## メソッド
+<div id="methods">
+  ## メソッド
+</div>
 
-### createIndex()
+<div id="createindex">
+  ### createIndex()
+</div>
 
 <PropertiesTable
   content={[
@@ -85,7 +95,9 @@ const s3Store = await LanceVectorStore.create("s3://bucket/db", {
   ]}
 />
 
-#### LanceIndexConfig
+<div id="lanceindexconfig">
+  #### LanceIndexConfig
+</div>
 
 <PropertiesTable
   content={[
@@ -157,7 +169,9 @@ const s3Store = await LanceVectorStore.create("s3://bucket/db", {
   ]}
 />
 
-### createTable()
+<div id="createtable">
+  ### createTable()
+</div>
 
 <PropertiesTable
   content={[
@@ -180,7 +194,9 @@ const s3Store = await LanceVectorStore.create("s3://bucket/db", {
   ]}
 />
 
-### upsert()
+<div id="upsert">
+  ### upsert()
+</div>
 
 <PropertiesTable
   content={[
@@ -209,7 +225,9 @@ const s3Store = await LanceVectorStore.create("s3://bucket/db", {
   ]}
 />
 
-### query()
+<div id="query">
+  ### query()
+</div>
 
 <PropertiesTable
   content={[
@@ -260,7 +278,9 @@ const s3Store = await LanceVectorStore.create("s3://bucket/db", {
   ]}
 />
 
-### listTables()
+<div id="listtables">
+  ### listTables()
+</div>
 
 テーブル名の文字列配列を返します。
 
@@ -270,7 +290,9 @@ const tables = await vectorStore.listTables();
 ```
 
 
-### getTableSchema()
+<div id="gettableschema">
+  ### getTableSchema()
+</div>
 
 <PropertiesTable
   content={[
@@ -284,7 +306,9 @@ const tables = await vectorStore.listTables();
 
 指定したテーブルのスキーマを返します。
 
-### deleteTable()
+<div id="deletetable">
+  ### deleteTable()
+</div>
 
 <PropertiesTable
   content={[
@@ -296,15 +320,21 @@ const tables = await vectorStore.listTables();
   ]}
 />
 
-### deleteAllTables()
+<div id="deletealltables">
+  ### deleteAllTables()
+</div>
 
 データベース内のすべてのテーブルを削除します。
 
-### listIndexes()
+<div id="listindexes">
+  ### listIndexes()
+</div>
 
 インデックス名の文字列配列を返します。
 
-### describeIndex()
+<div id="describeindex">
+  ### describeIndex()
+</div>
 
 <PropertiesTable
   content={[
@@ -334,7 +364,9 @@ interface IndexStats {
 ```
 
 
-### deleteIndex()
+<div id="deleteindex">
+  ### deleteIndex()
+</div>
 
 <PropertiesTable
   content={[
@@ -346,7 +378,9 @@ interface IndexStats {
   ]}
 />
 
-### updateVector()
+<div id="updatevector">
+  ### updateVector()
+</div>
 
 <PropertiesTable
   content={[
@@ -387,7 +421,9 @@ interface IndexStats {
   ]}
 />
 
-### deleteVector()
+<div id="deletevector">
+  ### deleteVector()
+</div>
 
 <PropertiesTable
   content={[
@@ -404,11 +440,15 @@ interface IndexStats {
   ]}
 />
 
-### close()
+<div id="close">
+  ### close()
+</div>
 
 データベース接続を閉じる。
 
-## レスポンスの種類
+<div id="response-types">
+  ## レスポンスの種類
+</div>
 
 クエリ結果は次の形式で返されます：
 
@@ -423,7 +463,9 @@ interface QueryResult {
 ```
 
 
-## エラー処理
+<div id="error-handling">
+  ## エラー処理
+</div>
 
 ストアはキャッチ可能な型付きエラーをスローします。
 
@@ -441,7 +483,9 @@ try {
 ```
 
 
-## ベストプラクティス
+<div id="best-practices">
+  ## ベストプラクティス
+</div>
 
 - ユースケースに適したインデックス種別を使用する:
   - メモリに余裕がある場合は、より高いリコールと性能のために HNSW を使用
@@ -450,6 +494,8 @@ try {
 - データベースの利用が完了したら、`close()` メソッドで接続を正しく閉じる
 - フィルタリングを簡素化するため、メタデータは一貫したスキーマで保存する
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [メタデータフィルター](../rag/metadata-filters)

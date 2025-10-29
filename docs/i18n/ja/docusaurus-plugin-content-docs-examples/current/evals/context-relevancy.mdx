@@ -3,7 +3,9 @@ title: "例：コンテキスト関連性評価 | Evals | Mastra Docs"
 description: クエリに対してコンテキスト情報がどの程度関連しているかを評価するために、Context Relevancy 指標を用いる例。
 ---
 
-# コンテキスト関連性の評価
+<div id="context-relevancy-evaluation">
+  # コンテキスト関連性の評価
+</div>
 
 :::note
 Scorers API は現在ベータ版です。改善に鋭意取り組んでおり、皆さまのフィードバックをお待ちしています。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までお寄せください。
@@ -11,14 +13,18 @@ Scorers API は現在ベータ版です。改善に鋭意取り組んでおり�
 
 `ContextRelevancyMetric` を使用すると、取得したコンテキストが元のクエリにどれほど適合しているかを評価できます。このメトリクスは `query` と `response` を受け取り、理由を含む `info` オブジェクトとスコアを返します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/evals
 ```
 
 
-## 関連性が高い例
+<div id="high-relevancy-example">
+  ## 関連性が高い例
+</div>
 
 この例では、回答はクエリに直接関係するコンテキストだけを使用しています。すべてのコンテキスト項目が回答を支えており、結果として関連性スコアは満点となります。
 
@@ -44,7 +50,9 @@ console.log(result);
 ```
 
 
-### 関連性の高い出力
+<div id="high-relevancy-output">
+  ### 関連性の高い出力
+</div>
 
 すべてのコンテキスト文が無関係な情報を含めずにクエリへの回答に直接寄与しているため、この出力は満点となります。
 
@@ -58,7 +66,9 @@ console.log(result);
 ```
 
 
-## 関連性が混在する例
+<div id="mixed-relevancy-example">
+  ## 関連性が混在する例
+</div>
 
 この例では、応答が一部では関連するコンテキスト項目を用いているものの、無関係または有用性の低い情報も含まれています。その結果、全体の関連性スコアが低下します。
 
@@ -85,7 +95,9 @@ console.log(result);
 ```
 
 
-### 関連性が混在した出力
+<div id="mixed-relevancy-output">
+  ### 関連性が混在した出力
+</div>
 
 この出力は、日食の仕組みに関する関連情報を含んでいる一方で、全体的な関連性を損なう無関係な事実も含まれているため、評価は中程度にとどまります。
 
@@ -99,7 +111,9 @@ console.log(result);
 ```
 
 
-## 関連性が低い例
+<div id="low-relevancy-example">
+  ## 関連性が低い例
+</div>
 
 この例では、文脈の大半がクエリと無関係です。関連する項目は1つだけのため、関連性スコアは低くなります。
 
@@ -125,7 +139,9 @@ console.log(result);
 ```
 
 
-### 関連性の低い出力
+<div id="low-relevancy-output">
+  ### 関連性の低い出力
+</div>
 
 クエリに関連するコンテキスト項目が1つしかないため、出力は低評価となります。残りの項目は無関係な情報を含み、回答の裏付けには役立ちません。
 
@@ -139,7 +155,9 @@ console.log(result);
 ```
 
 
-## メトリックの設定
+<div id="metric-configuration">
+  ## メトリックの設定
+</div>
 
 クエリに関連する背景情報を表す `context` 配列を指定して、`ContextRelevancyMetric` インスタンスを作成できます。スコアの範囲を定義するために、`scale` などのオプションパラメータを設定することもできます。
 
@@ -153,7 +171,9 @@ const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
 > すべての設定オプションの一覧は、[ContextRelevancyMetric](/reference/evals/context-relevancy) を参照してください。
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `ContextRelevancyMetric` は、次の形式の結果を返します:
 
@@ -167,7 +187,9 @@ const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
 ```
 
 
-### 関連度スコア
+<div id="relevancy-score">
+  ### 関連度スコア
+</div>
 
 0〜1の範囲の関連度スコア:
 
@@ -177,7 +199,9 @@ const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
 - **0.1–0.3**: 低い関連 – わずかな文脈のみがクエリに関連。
 - **0.0**: 無関連 – クエリに関連する文脈がない。
 
-### 関連性に関する情報
+<div id="relevancy-info">
+  ### 関連性に関する情報
+</div>
 
 スコアの説明。詳細は以下を含みます:
 

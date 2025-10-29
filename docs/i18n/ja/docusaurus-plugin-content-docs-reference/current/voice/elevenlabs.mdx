@@ -3,11 +3,15 @@ title: "リファレンス: ElevenLabs | Voice | Mastra ドキュメント"
 description: "ElevenLabs の音声実装に関するドキュメント。複数の音声モデルと自然な音声合成により、高品質なテキスト読み上げ機能を提供します。"
 ---
 
-# ElevenLabs
+<div id="elevenlabs">
+  # ElevenLabs
+</div>
 
 Mastra における ElevenLabs の音声機能実装は、ElevenLabs API を用いて、高品質なテキスト読み上げ（TTS）および音声→テキスト変換（STT）を提供します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
@@ -32,7 +36,9 @@ const speakers = await voice.getSpeakers();
 ```
 
 
-## コンストラクターパラメータ
+<div id="constructor-parameters">
+  ## コンストラクターパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -53,7 +59,9 @@ const speakers = await voice.getSpeakers();
   ]}
 />
 
-### ElevenLabsVoiceConfig
+<div id="elevenlabsvoiceconfig">
+  ### ElevenLabsVoiceConfig
+</div>
 
 <PropertiesTable
   content={[
@@ -74,9 +82,13 @@ const speakers = await voice.getSpeakers();
   ]}
 />
 
-## 方法
+<div id="methods">
+  ## 方法
+</div>
 
-### speak()
+<div id="speak">
+  ### speak()
+</div>
 
 設定された音声モデルと声を使って、テキストを音声に変換します。
 
@@ -106,7 +118,9 @@ const speakers = await voice.getSpeakers();
 
 Returns: `Promise<NodeJS.ReadableStream>`
 
-### getSpeakers()
+<div id="getspeakers">
+  ### getSpeakers()
+</div>
 
 利用可能な音声オプションの配列を返します。各項目には以下が含まれます:
 
@@ -139,7 +153,9 @@ Returns: `Promise<NodeJS.ReadableStream>`
   ]}
 />
 
-### listen()
+<div id="listen">
+  ### listen()
+</div>
 
 ElevenLabs Speech-to-Text API を使用して、音声入力をテキストに変換します。
 
@@ -211,7 +227,9 @@ options オブジェクトは次のプロパティをサポートします:
 
 Returns: `Promise<string>` - 文字起こし結果のテキストを返す Promise
 
-## 重要な注意事項
+<div id="important-notes">
+  ## 重要な注意事項
+</div>
 
 1. ElevenLabs の API キーが必要です。`ELEVENLABS_API_KEY` 環境変数に設定するか、コンストラクタに渡してください。
 2. 既定の話者は Aria（ID: '9BWtsMINqrJLrRacOk9x'）です。

@@ -3,7 +3,9 @@ title: "例：完全性評価 | Evals | Mastra Docs"
 description: 応答が入力要素をどの程度カバーしているかを評価するために完全性指標を用いる例。
 ---
 
-# 完全性評価
+<div id="completeness-evaluation">
+  # 完全性評価
+</div>
 
 :::note
 Scorers API は現在ベータ版です。改善に鋭意取り組んでおり、皆さまからのフィードバックを歓迎します。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) でお寄せください。
@@ -11,14 +13,18 @@ Scorers API は現在ベータ版です。改善に鋭意取り組んでおり�
 
 `CompletenessMetric` を使用して、応答が入力の重要な要素をすべて含んでいるかを評価します。このメトリックは `query` と `response` を受け取り、スコアと、要素単位の詳細な比較を含む `info` オブジェクトを返します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/evals
 ```
 
 
-## 完全網羅の例
+<div id="complete-coverage-example">
+  ## 完全網羅の例
+</div>
 
 この例では、応答に入力のすべての要素が含まれます。内容が完全に一致するため、網羅率は100%になります。
 
@@ -36,7 +42,9 @@ console.log(result);
 ```
 
 
-### 網羅的な出力
+<div id="complete-coverage-output">
+  ### 網羅的な出力
+</div>
 
 すべての入力要素が欠けることなく応答に含まれているため、出力のスコアは1となります。
 
@@ -63,7 +71,9 @@ console.log(result);
 ```
 
 
-## 部分的カバレッジの例
+<div id="partial-coverage-example">
+  ## 部分的カバレッジの例
+</div>
 
 この例では、応答に入力要素はすべて含まれていますが、元のクエリにはなかった追加の内容も含まれています。
 
@@ -81,7 +91,9 @@ console.log(result);
 ```
 
 
-### 部分的カバレッジの出力
+<div id="partial-coverage-output">
+  ### 部分的カバレッジの出力
+</div>
 
 入力要素に欠落がないため、出力は高評価となります。ただし、応答には入力範囲を超える追加内容が含まれています。
 
@@ -108,7 +120,9 @@ console.log(result);
 ```
 
 
-## 最小限のカバレッジ例
+<div id="minimal-coverage-example">
+  ## 最小限のカバレッジ例
+</div>
 
 この例では、レスポンスには入力の要素の一部しか含まれていません。重要な用語が欠落したり改変されたりしており、その結果、カバレッジが低下しています。
 
@@ -126,7 +140,9 @@ console.log(result);
 ```
 
 
-### 最小限のカバレッジ出力
+<div id="minimal-coverage-output">
+  ### 最小限のカバレッジ出力
+</div>
 
 入力の要素が一つ以上欠けているため、出力の評価は低くなります。応答は一部で重なりがありますが、元の内容を完全には反映していません。
 
@@ -149,7 +165,9 @@ console.log(result);
 ```
 
 
-## メトリクスの設定
+<div id="metric-configuration">
+  ## メトリクスの設定
+</div>
 
 `CompletenessMetric` のインスタンスは、デフォルト設定で作成できます。追加の設定は不要です。
 
@@ -160,7 +178,9 @@ const metric = new CompletenessMetric();
 > 設定オプションの一覧は [CompletenessMetric](/reference/evals/completeness) を参照してください。
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `CompletenessMetric` は次の形式の結果を返します:
 
@@ -181,7 +201,9 @@ const metric = new CompletenessMetric();
 ```
 
 
-### 完全性スコア
+<div id="completeness-score">
+  ### 完全性スコア
+</div>
 
 0〜1の範囲の完全性スコア:
 
@@ -191,7 +213,9 @@ const metric = new CompletenessMetric();
 - **0.1–0.3**: ごく一部の入力要素しか該当せず、ほとんどが欠落している。
 - **0.0**: 応答に入力要素がまったく含まれていない。
 
-### 完全性に関する情報
+<div id="completeness-info">
+  ### 完全性に関する情報
+</div>
 
 スコアの説明。詳細は以下を含みます:
 

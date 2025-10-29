@@ -3,11 +3,15 @@ title: "リファレンス: Memory クラス | Memory | Mastra ドキュメン�
 description: "Mastra の `Memory` クラスに関するドキュメント。会話履歴の管理やスレッドベースのメッセージ保存を実現する堅牢なシステムを提供します。"
 ---
 
-# Memory クラス
+<div id="memory-class">
+  # Memory クラス
+</div>
 
 `Memory` クラスは、Mastra における会話履歴とスレッド単位のメッセージ保存を管理するための堅牢な仕組みを提供します。これにより、会話の永続化、セマンティック検索、効率的なメッセージの取得が可能になります。会話履歴の保存にはストレージプロバイダーの設定が必要で、セマンティックリコールを有効化する場合は、ベクトルストアとエンベッダーの用意も必要です。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
@@ -31,7 +35,9 @@ export const agent = new Agent({
 > エージェントで`workingMemory`を有効化するには、メインの Mastra インスタンスにストレージプロバイダーを設定する必要があります。詳細は[Mastra class](../core/mastra-class)を参照してください。
 
 
-## コンストラクターのパラメーター
+<div id="constructor-parameters">
+  ## コンストラクターのパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -72,7 +78,9 @@ export const agent = new Agent({
   ]}
 />
 
-### オプションパラメーター
+<div id="options-parameters">
+  ### オプションパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -112,7 +120,9 @@ export const agent = new Agent({
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -124,7 +134,9 @@ export const agent = new Agent({
   ]}
 />
 
-## 拡張使用例
+<div id="extended-usage-example">
+  ## 拡張使用例
+</div>
 
 ```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
@@ -162,7 +174,9 @@ export const agent = new Agent({
 ```
 
 
-## インデックス構成付きの PostgreSQL
+<div id="postgresql-with-index-configuration">
+  ## インデックス構成付きの PostgreSQL
+</div>
 
 ```typescript title="src/mastra/agents/pg-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
@@ -204,7 +218,9 @@ export const agent = new Agent({
 ```
 
 
-### 関連
+<div id="related">
+  ### 関連
+</div>
 
 - [Memory の概要](/docs/memory/overview)
 - [セマンティックリコール](/docs/memory/semantic-recall)

@@ -3,11 +3,15 @@ title: "リファレンス: Workflows（レガシー）API | Client SDK | Mastra
 description: client-js SDK を使用して、Mastra のレガシーな自動ワークフローと対話・実行する方法を学びます。
 ---
 
-# Workflows (Legacy) API
+<div id="workflows-legacy-api">
+  # Workflows (Legacy) API
+</div>
 
 Workflows (Legacy) API は、Mastra のレガシー自動化ワークフローと連携し、実行するためのメソッドを提供します。
 
-## すべてのレガシーワークフローの取得
+<div id="getting-all-legacy-workflows">
+  ## すべてのレガシーワークフローの取得
+</div>
 
 利用可能なレガシーワークフローの一覧を取得します。
 
@@ -16,7 +20,9 @@ const workflows = await mastraClient.getLegacyWorkflows();
 ```
 
 
-## 特定のレガシー ワークフローの操作
+<div id="working-with-a-specific-legacy-workflow">
+  ## 特定のレガシー ワークフローの操作
+</div>
 
 特定のレガシー ワークフローのインスタンスを取得します:
 
@@ -25,9 +31,13 @@ const workflow = mastraClient.getLegacyWorkflow("workflow-id");
 ```
 
 
-## 旧式のワークフロー メソッド
+<div id="legacy-workflow-methods">
+  ## 旧式のワークフロー メソッド
+</div>
 
-### レガシーワークフローの詳細を取得
+<div id="get-legacy-workflow-details">
+  ### レガシーワークフローの詳細を取得
+</div>
 
 レガシーワークフローの詳細情報を取得します。
 
@@ -36,7 +46,9 @@ const details = await workflow.details();
 ```
 
 
-### レガシー Workflow の実行を非同期で開始
+<div id="start-legacy-workflow-run-asynchronously">
+  ### レガシー Workflow の実行を非同期で開始
+</div>
 
 triggerData を使ってレガシー Workflow の実行を開始し、完了結果を待ちます。
 
@@ -53,7 +65,9 @@ const result = await workflow.startAsync({
 ```
 
 
-### レガシーワークフローの実行を非同期で再開
+<div id="resume-legacy-workflow-run-asynchronously">
+  ### レガシーワークフローの実行を非同期で再開
+</div>
 
 一時停止中のレガシー・ワークフローステップを再開し、最終的な実行結果が得られるまで待機します。
 
@@ -68,7 +82,9 @@ const result = await workflow.resumeAsync({
 ```
 
 
-### 旧ワークフローを監視する
+<div id="watch-legacy-workflow">
+  ### 旧ワークフローを監視する
+</div>
 
 旧ワークフローの遷移を監視する
 
@@ -105,7 +121,9 @@ try {
 ```
 
 
-### 旧ワークフローの再開
+<div id="resume-legacy-workflow">
+  ### 旧ワークフローの再開
+</div>
 
 旧ワークフローの実行を再開し、ステップの遷移を監視します
 
@@ -138,7 +156,9 @@ try {
 ```
 
 
-### 旧式ワークフローの実行結果
+<div id="legacy-workflow-run-result">
+  ### 旧式ワークフローの実行結果
+</div>
 
 旧式ワークフローの実行結果は次のとおりです:
 

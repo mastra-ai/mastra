@@ -3,18 +3,24 @@ title: "リファレンス: Agent.getTools() | Agents | Mastra ドキュメン�
 description: "Mastra のエージェントにおける `Agent.getTools()` メソッドのリファレンス。エージェントが利用可能なツールを取得します。"
 ---
 
-# Agent.getTools()
+<div id="agentgettools">
+  # Agent.getTools()
+</div>
 
 `.getTools()` メソッドは、エージェントに設定されたツールを取得し、それらが関数である場合は解決（評価）します。これらのツールによってエージェントの機能が拡張され、特定のアクションの実行や外部システムへのアクセスが可能になります。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 await agent.getTools();
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -28,7 +34,9 @@ await agent.getTools();
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -41,7 +49,9 @@ await agent.getTools();
   ]}
 />
 
-## 応用的な使用例
+<div id="extended-usage-example">
+  ## 応用的な使用例
+</div>
 
 ```typescript copy
 await agent.getTools({
@@ -50,7 +60,9 @@ await agent.getTools({
 ```
 
 
-### オプション引数
+<div id="options-parameters">
+  ### オプション引数
+</div>
 
 <PropertiesTable
   content={[
@@ -65,7 +77,9 @@ await agent.getTools({
   ]}
 />
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [エージェントでのツールの使用](/docs/agents/using-tools)
 - [ツールの作成](/docs/tools-mcp/overview)

@@ -3,11 +3,15 @@ title: "高度なツール活用 | Tools & MCP | Mastra Docs"
 description: このページでは、Mastra のツールにおける高度な機能（中断シグナルや Vercel AI SDK のツール形式との互換性など）について説明します。
 ---
 
-# 高度なツール活用
+<div id="advanced-tool-usage">
+  # 高度なツール活用
+</div>
 
 このページでは、Mastra でのツール利用に関する高度な手法や機能について説明します。
 
-## 中断シグナル
+<div id="abort-signals">
+  ## 中断シグナル
+</div>
 
 `generate()` または `stream()` を使ってエージェントとの対話を開始する際、`AbortSignal` を渡せます。Mastra は、このシグナルをその対話中に行われるすべてのツール実行へ自動的に転送します。
 
@@ -77,7 +81,9 @@ try {
 ```
 
 
-## AI SDK ツール形式
+<div id="ai-sdk-tool-format">
+  ## AI SDK ツール形式
+</div>
 
 Mastra は、Vercel AI SDK（`ai` パッケージ）で使用されているツール形式との互換性を保っています。`ai` パッケージの `tool` 関数でツールを定義し、Mastra の `createTool` で作成したツールとあわせて、Mastra エージェント内でそのまま使用できます。
 

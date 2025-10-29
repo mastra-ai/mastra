@@ -6,11 +6,15 @@ description: OpenAI の埋め込みと PGVector によるベクトルストレ�
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# 再ランキング結果
+<div id="re-ranking-results">
+  # 再ランキング結果
+</div>
 
 この例では、Mastra、OpenAI の埋め込み、PGVector（ベクトルストア）を用いて、再ランキング付きの Retrieval-Augmented Generation（RAG）システムを実装する方法を示します。
 
-## 概要
+<div id="overview">
+  ## 概要
+</div>
 
 このシステムは、Mastra と OpenAI を用いた再ランキング付きの RAG を実装しています。主な処理は次のとおりです:
 
@@ -20,9 +24,13 @@ import GithubLink from "@site/src/components/GithubLink";
 4. ベクトル類似度、意味的関連性、位置スコアを組み合わせ、Mastra の rerank 関数で結果を再ランキングする
 5. 初期結果と再ランキング後の結果を比較し、改善点を示す
 
-## セットアップ
+<div id="setup">
+  ## セットアップ
+</div>
 
-### 環境設定
+<div id="environment-setup">
+  ### 環境設定
+</div>
 
 環境変数を設定していることを確認してください:
 
@@ -32,7 +40,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
 
-### 依存関係
+<div id="dependencies">
+  ### 依存関係
+</div>
 
 次に、必要な依存関係をインポートします。
 
@@ -48,7 +58,9 @@ import { embedMany, embed } from "ai";
 ```
 
 
-## ドキュメント処理
+<div id="document-processing">
+  ## ドキュメント処理
+</div>
 
 ドキュメントを作成し、チャンクに分割して処理します:
 
@@ -70,7 +82,9 @@ const chunks = await doc1.chunk({
 ```
 
 
-## 埋め込みの作成と保存
+<div id="creating-and-storing-embeddings">
+  ## 埋め込みの作成と保存
+</div>
 
 チャンクごとに埋め込みを生成し、ベクターデータベースに保存します。
 
@@ -97,7 +111,9 @@ await pgVector.upsert({
 ```
 
 
-## ベクトル検索と再ランキング
+<div id="vector-search-and-re-ranking">
+  ## ベクトル検索と再ランキング
+</div>
 
 ベクトル検索を実行し、結果を再ランキングします。
 
@@ -143,7 +159,9 @@ const rerankedResults = await rerank({
 * `position`: 値が高いほど、結果の元の並び順を維持しやすくなります
 
 
-## 結果の比較
+<div id="comparing-results">
+  ## 結果の比較
+</div>
 
 初期結果と再ランク後の結果を両方表示して、改善を確認します:
 

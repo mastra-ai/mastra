@@ -8,11 +8,15 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 
-# Mastra の Voice
+<div id="voice-in-mastra">
+  # Mastra の Voice
+</div>
 
 Mastra の Voice システムは、音声インタラクション向けの統一インターフェースを提供し、アプリケーションでのテキスト読み上げ（TTS）、音声認識（STT）、およびリアルタイム音声変換（STS）機能を実現します。
 
-## エージェントに音声を追加する
+<div id="adding-voice-to-agents">
+  ## エージェントに音声を追加する
+</div>
 
 エージェントに音声機能を統合する方法は、[「エージェントに音声を追加する」](/docs/agents/adding-voice)のドキュメントをご参照ください。本セクションでは、単一および複数の音声プロバイダーの活用方法に加え、リアルタイムでのインタラクションについても解説します。
 
@@ -35,7 +39,9 @@ const voiceAgent = new Agent({
 次に、以下の音声機能を利用できます。
 
 
-### 音声合成（TTS）
+<div id="text-to-speech-tts">
+  ### 音声合成（TTS）
+</div>
 
 Mastra の TTS 機能を使って、エージェントの応答を自然な音声に変換できます。
 OpenAI、ElevenLabs など、複数のプロバイダーから選べます。
@@ -325,7 +331,9 @@ OpenAI、ElevenLabs など、複数のプロバイダーから選べます。
   </TabItem>
 </Tabs>
 
-### 音声認識（STT）
+<div id="speech-to-text-stt">
+  ### 音声認識（STT）
+</div>
 
 OpenAI、ElevenLabs などの各種プロバイダーを利用して、話し言葉をテキストに変換します。詳細な設定オプションについては、[音声認識](./speech-to-text)を参照してください。
 
@@ -541,7 +549,9 @@ OpenAI、ElevenLabs などの各種プロバイダーを利用して、話し言
   </TabItem>
 </Tabs>
 
-### Speech to Speech (STS)
+<div id="speech-to-speech-sts">
+  ### Speech to Speech (STS)
+</div>
 
 音声同士の会話体験を実現します。統合APIにより、ユーザーとAIエージェント間でリアルタイムの音声対話が可能になります。
 詳細な設定オプションや高度な機能については、[Speech to Speech](./speech-to-speech)をご覧ください。
@@ -632,7 +642,9 @@ Google Gemini Live の音声プロバイダーに関する詳細は、[Google Ge
   </TabItem>
 </Tabs>
 
-## 音声の設定
+<div id="voice-configuration">
+  ## 音声の設定
+</div>
 
 各音声プロバイダーは、さまざまなモデルやオプションで構成できます。以下に、サポートされているすべてのプロバイダーの詳細な設定項目を示します。
 
@@ -871,7 +883,9 @@ Google Gemini Live の音声プロバイダーに関する詳細は、[Google Ge
   </TabItem>
 </Tabs>
 
-### 複数の音声プロバイダーの利用
+<div id="using-multiple-voice-providers">
+  ### 複数の音声プロバイダーの利用
+</div>
 
 この例では、Mastra で 2 種類の音声プロバイダーを作成して使用する方法を示します。音声認識（STT）には OpenAI を、音声合成（TTS）には PlayAI を使用します。
 
@@ -925,7 +939,9 @@ playAudio(responseAudio);
 CompositeVoice の詳細は、[CompositeVoice リファレンス](/reference/voice/composite-voice)をご参照ください。
 
 
-## 参考情報
+<div id="more-resources">
+  ## 参考情報
+</div>
 
 - [CompositeVoice](/reference/voice/composite-voice)
 - [MastraVoice](/reference/voice/mastra-voice)

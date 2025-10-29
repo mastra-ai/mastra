@@ -3,11 +3,15 @@ title: "LangSmith Exporter | AI トレーシング | オブザーバビリティ
 description: "LLM の可観測性と評価のために、AI トレースを LangSmith に送信する"
 ---
 
-# LangSmith エクスポーター
+<div id="langsmith-exporter">
+  # LangSmith エクスポーター
+</div>
 
 [LangSmith](https://smith.langchain.com/) は、LangChain の LLM アプリケーションを監視・評価するためのプラットフォームです。LangSmith エクスポーターは AI のトレースを LangSmith に送信し、モデルの性能に関する洞察、デバッグ機能、評価ワークフローを提供します。
 
-## LangSmith を使うべきとき
+<div id="when-to-use-langsmith">
+  ## LangSmith を使うべきとき
+</div>
 
 LangSmith は次のような場合に最適です:
 
@@ -17,16 +21,22 @@ LangSmith は次のような場合に最適です:
 - **プロンプトのバージョン管理** - プロンプトのバリエーションの追跡と比較
 - **コラボレーション機能** - チーム用ワークスペースと共有プロジェクト
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash npm2yarn
 npm install @mastra/langsmith
 ```
 
 
-## 設定
+<div id="configuration">
+  ## 設定
+</div>
 
-### 前提条件
+<div id="prerequisites">
+  ### 前提条件
+</div>
 
 1. **LangSmith アカウント**: [smith.langchain.com](https://smith.langchain.com) で登録
 2. **API キー**: LangSmith の「Settings」→「API Keys」で API キーを作成
@@ -38,7 +48,9 @@ LANGSMITH_BASE_URL=https://api.smith.langchain.com  # セルフホスト環境�
 ```
 
 
-### 基本設定
+<div id="basic-setup">
+  ### 基本設定
+</div>
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -61,9 +73,13 @@ export const mastra = new Mastra({
 ```
 
 
-## 設定項目
+<div id="configuration-options">
+  ## 設定項目
+</div>
 
-### 完全な設定
+<div id="complete-configuration">
+  ### 完全な設定
+</div>
 
 ```typescript
 new LangSmithExporter({
@@ -86,7 +102,9 @@ new LangSmithExporter({
 ```
 
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [AI トレーシング概要](/docs/observability/ai-tracing/overview)
 - [LangSmith ドキュメント](https://docs.smith.langchain.com/)

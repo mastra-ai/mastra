@@ -3,11 +3,15 @@ title: "リファレンス: GraphRAG | RAG | Mastra ドキュメント"
 description: Mastra の GraphRAG クラスに関するドキュメント。取得拡張生成（RAG）におけるグラフベースの手法を実装しています。
 ---
 
-# GraphRAG
+<div id="graphrag">
+  # GraphRAG
+</div>
 
 `GraphRAG` クラスは、グラフベースの手法によるRAG（Retrieval-Augmented Generation）を実装します。ドキュメントのチャンクから、ノードをドキュメント、エッジを意味関係として表すナレッジグラフを構築し、直接的な類似度マッチングに加え、グラフ探索による関連コンテンツの発見を可能にします。
 
-## 基本的な使い方
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
 
 ```typescript
 import { GraphRAG } from "@mastra/rag";
@@ -30,7 +34,9 @@ const results = await graphRag.query({
 ```
 
 
-## コンストラクタのパラメータ
+<div id="constructor-parameters">
+  ## コンストラクタのパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -52,9 +58,13 @@ const results = await graphRag.query({
   ]}
 />
 
-## メソッド
+<div id="methods">
+  ## メソッド
+</div>
 
-### createGraph
+<div id="creategraph">
+  ### createGraph
+</div>
 
 ドキュメントのチャンクとその埋め込みから、ナレッジグラフを生成します。
 
@@ -63,7 +73,9 @@ createGraph(chunks: GraphChunk[], embeddings: GraphEmbedding[]): void
 ```
 
 
-#### パラメーター
+<div id="parameters">
+  #### パラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -82,7 +94,9 @@ createGraph(chunks: GraphChunk[], embeddings: GraphEmbedding[]): void
   ]}
 />
 
-### query
+<div id="query">
+  ### query
+</div>
 
 ベクトル類似度とグラフトラバーサルを組み合わせたグラフベース検索を実行します。
 
@@ -135,7 +149,9 @@ query({
   ]}
 />
 
-#### 戻り値
+<div id="returns">
+  #### 戻り値
+</div>
 
 各ノードに以下が含まれる、`RankedNode` オブジェクトの配列を返します:
 
@@ -164,7 +180,9 @@ query({
   ]}
 />
 
-## 上級の例
+<div id="advanced-example">
+  ## 上級の例
+</div>
 
 ```typescript
 const graphRag = new GraphRAG({
@@ -185,6 +203,8 @@ const results = await graphRag.query({
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [createGraphRAGTool](../tools/graph-rag-tool)

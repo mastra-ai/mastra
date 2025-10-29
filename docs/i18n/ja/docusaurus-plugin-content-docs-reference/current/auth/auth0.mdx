@@ -3,11 +3,15 @@ title: "リファレンス: MastraAuthAuth0 クラス | Auth | Mastra ドキュ�
 description: "Auth0 を用いて Mastra アプリケーションを認証する MastraAuthAuth0 クラスの API リファレンス。"
 ---
 
-# MastraAuthAuth0 クラス
+<div id="mastraauthauth0-class">
+  # MastraAuthAuth0 クラス
+</div>
 
 `MastraAuthAuth0` クラスは、Auth0 を用いて Mastra の認証を提供します。Auth0 が発行する JWT トークンで受信リクエストを検証し、`experimental_auth` オプションを通じて Mastra サーバーと統合します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
@@ -27,7 +31,9 @@ export const mastra = new Mastra({
 > **注:** `AUTH0_DOMAIN` と `AUTH0_AUDIENCE` という名前の環境変数が設定されていれば、コンストラクターのパラメーターは省略できます。その場合は、引数なしで `new MastraAuthAuth0()` を使用してください。
 
 
-## コンストラクターのパラメーター
+<div id="constructor-parameters">
+  ## コンストラクターのパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -64,7 +70,9 @@ export const mastra = new Mastra({
   ]}
 />
 
-## 環境変数
+<div id="environment-variables">
+  ## 環境変数
+</div>
 
 コンストラクターオプションが指定されていない場合、以下の環境変数が自動的に使用されます。
 
@@ -87,7 +95,9 @@ export const mastra = new Mastra({
   ]}
 />
 
-## デフォルトの認可動作
+<div id="default-authorization-behavior">
+  ## デフォルトの認可動作
+</div>
 
 デフォルトでは、`MastraAuthAuth0` は Auth0 の JWT トークンを検証し、認証済みのユーザー全員にアクセスを許可します:
 
@@ -99,7 +109,9 @@ export const mastra = new Mastra({
 
 すべての検証を通過した場合、ユーザーは認可済みと見なされます。カスタムの認可ロジック（例: ロールベースアクセス制御）を実装するには、カスタムの `authorizeUser` 関数を提供してください。
 
-## Auth0 のユーザー型
+<div id="auth0-user-type">
+  ## Auth0 のユーザー型
+</div>
 
 `authorizeUser` 関数で使用される `Auth0User` 型は、デコードされた JWT のペイロードに対応し、通常は次を含みます:
 
@@ -117,6 +129,8 @@ export const mastra = new Mastra({
 
 利用可能なプロパティの内容は、Auth0 の設定、要求するスコープ、および設定したカスタムクレームによって異なります。
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 [MastraAuthAuth0 クラス](/docs/auth/auth0)

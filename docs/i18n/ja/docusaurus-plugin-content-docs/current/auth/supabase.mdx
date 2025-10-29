@@ -7,11 +7,15 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 
-# MastraAuthSupabase クラス
+<div id="mastraauthsupabase-class">
+  # MastraAuthSupabase クラス
+</div>
 
 `MastraAuthSupabase` クラスは、Supabase Auth を用いて Mastra の認証を行います。Supabase の認証機構で受信リクエストを検証し、`experimental_auth` オプションを通じて Mastra サーバーと統合します。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 この例では Supabase Auth を使用します。`.env` ファイルに Supabase の認証情報を追加し、Supabase プロジェクトが正しく設定されていることを確認してください。
 
@@ -23,7 +27,9 @@ SUPABASE_ANON_KEY=your-anon-key
 > **注:** 適切なデータアクセス制御を行うため、Supabase の Row Level Security（RLS）設定を確認してください。
 
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 `MastraAuthSupabase` クラスを使用する前に、`@mastra/auth-supabase` パッケージをインストールしてください。
 
@@ -32,7 +38,9 @@ npm install @mastra/auth-supabase@latest
 ```
 
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript {2,7-9} title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
@@ -54,11 +62,15 @@ export const mastra = new Mastra({
 > 利用可能な設定オプションの一覧は、[MastraAuthSupabase](/reference/auth/supabase) の API リファレンスをご覧ください。
 
 
-## クライアント側のセットアップ
+<div id="client-side-setup">
+  ## クライアント側のセットアップ
+</div>
 
 Supabase 認証を使用する場合は、クライアント側で Supabase からアクセストークンを取得し、それを Mastra へのリクエストに渡す必要があります。
 
-### アクセストークンの取得
+<div id="retrieving-the-access-token">
+  ### アクセストークンの取得
+</div>
 
 Supabase クライアントを使ってユーザーを認証し、アクセストークンを取得します：
 
@@ -78,7 +90,9 @@ const accessToken = authTokenResponse.data?.session?.access_token;
 > OAuth やマジックリンクなど、その他の認証方法については [Supabase ドキュメント](https://supabase.com/docs/guides/auth)をご参照ください。
 
 
-## `MastraClient` の設定
+<div id="configuring-mastraclient">
+  ## `MastraClient` の設定
+</div>
 
 `experimental_auth` を有効化すると、`MastraClient` で送信するすべてのリクエストに、`Authorization` ヘッダーで有効な Supabase アクセストークンを含める必要があります。
 
@@ -98,7 +112,9 @@ export const mastraClient = new MastraClient({
 > さらに多くの設定オプションについては、[Mastra Client SDK](/docs/server-db/mastra-client) を参照してください。
 
 
-### 認証済みリクエストの送信
+<div id="making-authenticated-requests">
+  ### 認証済みリクエストの送信
+</div>
 
 `MastraClient` に Supabase のアクセス トークンを設定すると、認証済みリクエストを送信できます:
 

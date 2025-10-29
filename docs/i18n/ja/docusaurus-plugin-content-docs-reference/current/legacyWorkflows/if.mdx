@@ -3,13 +3,17 @@ title: "リファレンス: Workflow.if() | 旧式ワークフロー | Mastra �
 description: "Mastra のワークフローにおける `.if()` メソッドのドキュメント。指定した条件に基づいて条件分岐を作成します。"
 ---
 
-# Workflow.if()
+<div id="workflowif">
+  # Workflow.if()
+</div>
 
 > 実験的
 
 `.if()` メソッドはワークフロー内に条件分岐を作成し、指定した条件が真のときにのみステップを実行します。これにより、前のステップの結果に基づいてワークフローの経路を動的に切り替えられます。
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 ```typescript copy showLineNumbers
 workflow
@@ -25,7 +29,9 @@ workflow
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -39,9 +45,13 @@ workflow
   ]}
 />
 
-## 条件タイプ
+<div id="condition-types">
+  ## 条件タイプ
+</div>
 
-### 関数の条件
+<div id="function-condition">
+  ### 関数の条件
+</div>
 
 真偽値を返す関数を使用できます:
 
@@ -58,7 +68,9 @@ workflow
 ```
 
 
-### 参照条件
+<div id="reference-condition">
+  ### 参照条件
+</div>
 
 比較演算子を使って参照ベースの条件を利用できます。
 
@@ -75,7 +87,9 @@ workflow
 ```
 
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -87,7 +101,9 @@ workflow
   ]}
 />
 
-## エラー処理
+<div id="error-handling">
+  ## エラー処理
+</div>
 
 `if` メソッドは、直前のステップが定義されている必要があります。前段のステップなしに使用すると、エラーが発生します:
 
@@ -104,7 +120,9 @@ try {
 ```
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [else リファレンス](./else)
 - [then リファレンス](./then)

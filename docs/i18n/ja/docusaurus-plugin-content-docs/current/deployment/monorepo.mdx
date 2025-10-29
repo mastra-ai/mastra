@@ -3,11 +3,15 @@ title: "モノレポでのデプロイ | デプロイ | Mastra ドキュメン�
 description: モノレポ構成に含まれる Mastra アプリケーションのデプロイ方法を学びましょう
 ---
 
-# モノレポのデプロイ
+<div id="monorepo-deployment">
+  # モノレポのデプロイ
+</div>
 
 モノレポでの Mastra のデプロイは、スタンドアロンアプリケーションのデプロイと同様の方法で行えます。[クラウド](./cloud-providers/) や [サーバーレスプラットフォーム](./serverless-platforms/) の一部のプロバイダーでは追加要件がある場合もありますが、基本的なセットアップは同じです。
 
-## モノレポの例
+<div id="example-monorepo">
+  ## モノレポの例
+</div>
 
 この例では、Mastra アプリケーションは `apps/api` に配置されています。
 
@@ -30,7 +34,9 @@ package.json
 ```
 
 
-## 環境変数
+<div id="environment-variables">
+  ## 環境変数
+</div>
 
 `OPENAI_API_KEY` のような環境変数は、Mastra アプリケーションのルートディレクトリ `(apps/api)` にある `.env` ファイルに保存してください。例：
 
@@ -44,26 +50,34 @@ api/
 ```
 
 
-## デプロイ構成
+<div id="deployment-configuration">
+  ## デプロイ構成
+</div>
 
 下の画像は、[Mastra Cloud](../mastra-cloud/overview) にデプロイする際、プロジェクトのルートとして `apps/api` を選択する方法を示しています。プロバイダーによってインターフェースは異なる場合がありますが、設定内容は同じです。
 
 ![Deployment configuration](/img/monorepo/monorepo-mastra-cloud.jpg)
 
-## 依存関係の管理
+<div id="dependency-management">
+  ## 依存関係の管理
+</div>
 
 モノレポでは、バージョンの競合やビルドエラーを避けるために依存関係を一貫して保ちましょう。
 
 - すべてのパッケージが同じバージョンに解決されるよう、プロジェクトのルートで**単一のロックファイル**を使用する。
 - 重複を防ぐために、**共有ライブラリ**（Mastra や各種フレームワークなど）のバージョンを揃える。
 
-## デプロイ時の落とし穴
+<div id="deployment-pitfalls">
+  ## デプロイ時の落とし穴
+</div>
 
 モノレポで Mastra をデプロイする際に注意すべきよくある問題:
 
 - **誤ったプロジェクトルート**: 正しいパッケージ（例: `apps/api`）がデプロイ対象として選択されていることを確認してください。
 
-## バンドラーのオプション
+<div id="bundler-options">
+  ## バンドラーのオプション
+</div>
 
 `transpilePackages` を使用して、TypeScript のワークスペース内パッケージやライブラリをコンパイルします。各 `package.json` に記載されているとおりのパッケージ名を正確に列挙してください。実行時に解決される依存関係を除外するには `externals` を、読みやすいスタックトレースを出力するには `sourcemap` を使用します。
 
@@ -83,7 +97,9 @@ export const mastra = new Mastra({
 > そのほかの設定オプションについては、[Mastra Class](/reference/core/mastra-class) を参照してください。
 
 
-## サポート対象のモノレポ
+<div id="supported-monorepos">
+  ## サポート対象のモノレポ
+</div>
 
 Mastra は次に対応しています:
 

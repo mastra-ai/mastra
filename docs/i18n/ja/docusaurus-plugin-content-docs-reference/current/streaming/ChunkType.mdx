@@ -6,11 +6,15 @@ description: "Mastra のストリーミング応答で使用される ChunkType 
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
-# ChunkType
+<div id="chunktype">
+  # ChunkType
+</div>
 
 `ChunkType` 型は、エージェントのストリーミング応答で出力されるストリームチャンクの mastra 形式を定義します。
 
-## 基本プロパティ
+<div id="base-properties">
+  ## 基本プロパティ
+</div>
 
 すべてのチャンクには、次の基本プロパティが含まれます。
 
@@ -61,9 +65,13 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-## テキストチャンク
+<div id="text-chunks">
+  ## テキストチャンク
+</div>
 
-### text-start
+<div id="text-start">
+  ### text-start
+</div>
 
 テキスト生成の開始を示します。
 
@@ -100,7 +108,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### text-delta
+<div id="text-delta">
+  ### text-delta
+</div>
 
 生成中に逐次出力されるテキスト内容。
 
@@ -142,7 +152,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### text-end
+<div id="text-end">
+  ### text-end
+</div>
 
 テキスト生成の終了を示します。
 
@@ -179,9 +191,13 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-## 推論チャンク
+<div id="reasoning-chunks">
+  ## 推論チャンク
+</div>
 
-### reasoning-start
+<div id="reasoning-start">
+  ### reasoning-start
+</div>
 
 （推論対応モデルで）推論生成の開始を示します。
 
@@ -224,7 +240,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### reasoning-delta
+<div id="reasoning-delta">
+  ### reasoning-delta
+</div>
 
 生成中に逐次出力される推論テキスト。
 
@@ -266,7 +284,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### reasoning-end
+<div id="reasoning-end">
+  ### reasoning-end
+</div>
 
 推論生成の終了を示します。
 
@@ -309,7 +329,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### reasoning-signature
+<div id="reasoning-signature">
+  ### reasoning-signature
+</div>
 
 高度な推論をサポートするモデル（OpenAI の o1 シリーズなど）からの reasoning signature を含みます。これは、モデルの内部推論プロセスに関するメタデータ（例：推論の負荷やアプローチ）を表しますが、推論内容そのものは含みません。
 
@@ -353,9 +375,13 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-## ツールのチャンク
+<div id="tool-chunks">
+  ## ツールのチャンク
+</div>
 
-### tool-call
+<div id="tool-call">
+  ### tool-call
+</div>
 
 ツールが呼び出されています。
 
@@ -415,7 +441,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### tool-result
+<div id="tool-result">
+  ### tool-result
+</div>
 
 ツールの実行結果。
 
@@ -480,7 +508,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### tool-call-input-streaming-start
+<div id="tool-call-input-streaming-start">
+  ### tool-call-input-streaming-start
+</div>
 
 ツール呼び出し引数のストリーミング開始を示します。
 
@@ -534,7 +564,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### tool-call-delta
+<div id="tool-call-delta">
+  ### tool-call-delta
+</div>
 
 ストリーミング中に段階的に送られるツール呼び出し引数。
 
@@ -582,7 +614,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### tool-call-input-streaming-end
+<div id="tool-call-input-streaming-end">
+  ### tool-call-input-streaming-end
+</div>
 
 ツール呼び出し引数のストリーミングが終了したことを示します。
 
@@ -619,7 +653,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### tool-error
+<div id="tool-error">
+  ### tool-error
+</div>
 
 ツールの実行中にエラーが発生しました。
 
@@ -684,9 +720,13 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-## ソースとファイルのチャンク
+<div id="source-and-file-chunks">
+  ## ソースとファイルのチャンク
+</div>
 
-### source
+<div id="source">
+  ### source
+</div>
 
 コンテンツのソース情報を含みます。
 
@@ -747,7 +787,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### file
+<div id="file">
+  ### file
+</div>
 
 ファイルのデータを含みます。
 
@@ -795,9 +837,13 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-## 制御チャンク
+<div id="control-chunks">
+  ## 制御チャンク
+</div>
 
-### start
+<div id="start">
+  ### start
+</div>
 
 ストリーミングの開始を通知します。
 
@@ -828,7 +874,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### step-start
+<div id="step-start">
+  ### step-start
+</div>
 
 処理ステップの開始を示します。
 
@@ -871,7 +919,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### step-finish
+<div id="step-finish">
+  ### step-finish
+</div>
 
 処理ステップの完了を示します。
 
@@ -944,7 +994,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### raw
+<div id="raw">
+  ### raw
+</div>
 
 プロバイダーから提供される生データを含みます。
 
@@ -975,7 +1027,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### finish
+<div id="finish">
+  ### finish
+</div>
 
 ストリームは正常に完了しました。
 
@@ -1021,7 +1075,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### error
+<div id="error">
+  ### error
+</div>
 
 ストリーミング中にエラーが発生しました。
 
@@ -1052,7 +1108,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### abort
+<div id="abort">
+  ### abort
+</div>
 
 ストリームがアボートされました。
 
@@ -1083,9 +1141,13 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-## オブジェクトと出力チャンク
+<div id="object-and-output-chunks">
+  ## オブジェクトと出力チャンク
+</div>
 
-### object
+<div id="object">
+  ### object
+</div>
 
 定義済みスキーマを用いた出力生成時に発生します。指定された Zod または JSON スキーマに準拠する、部分的または完全な構造化データを含みます。このチャンクは、実行コンテキストによってはスキップされることがあり、構造化オブジェクトのストリーミング生成に使用されます。
 
@@ -1105,7 +1167,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### tool-output
+<div id="tool-output">
+  ### tool-output
+</div>
 
 エージェントやワークフローの実行結果を含み、特に使用状況の統計や完了イベントの追跡に用いられます。ネストされた実行コンテキストを提供するために、他のチャンクタイプ（finish チャンクなど）をラップすることがよくあります。
 
@@ -1137,7 +1201,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-### step-output
+<div id="step-output">
+  ### step-output
+</div>
 
 ワークフローステップ実行の出力を含み、主に利用状況の追跡やステップ完了イベントに使用されます。tool-output に似ていますが、個々のワークフローステップに特化しています。
 
@@ -1169,9 +1235,13 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-## メタデータと特殊チャンク
+<div id="metadata-and-special-chunks">
+  ## メタデータと特殊チャンク
+</div>
 
-### response-metadata
+<div id="response-metadata">
+  ### response-metadata
+</div>
 
 LLM プロバイダーの応答に関するメタデータを含みます。モデル ID、タイムスタンプ、応答ヘッダーなどの追加情報を提供するため、テキスト生成後に一部のプロバイダーによって出力されます。このチャンクは内部の状態管理に使用され、メッセージの組み立てには影響しません。
 
@@ -1209,7 +1279,9 @@ LLM プロバイダーの応答に関するメタデータを含みます。モ�
   ]}
 />
 
-### watch
+<div id="watch">
+  ### watch
+</div>
 
 エージェントの実行に関する監視・オブザーバビリティーデータを含みます。`stream()` が使用されるコンテキストに応じて、ワークフローの状態情報、実行の進捗、その他のランタイムの詳細が含まれる場合があります。
 
@@ -1254,7 +1326,9 @@ LLM プロバイダーの応答に関するメタデータを含みます。モ�
   ]}
 />
 
-### tripwire
+<div id="tripwire">
+  ### tripwire
+</div>
 
 出力プロセッサによってコンテンツがブロックされた結果、ストリームが強制的に終了されたときに発行されます。これは、有害または不適切なコンテンツの配信を防ぐための安全機構として機能します。
 
@@ -1287,7 +1361,9 @@ LLM プロバイダーの応答に関するメタデータを含みます。モ�
   ]}
 />
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 const stream = await agent.stream("Hello");
@@ -1323,7 +1399,9 @@ for await (const chunk of stream.fullStream) {
 ```
 
 
-## 関連する型
+<div id="related-types">
+  ## 関連する型
+</div>
 
 - [.stream()](./agents/stream) - これらのチャンクを出力するストリームを返すメソッド
 - [MastraModelOutput](./agents/MastraModelOutput) - これらのチャンクを出力するストリームオブジェクト

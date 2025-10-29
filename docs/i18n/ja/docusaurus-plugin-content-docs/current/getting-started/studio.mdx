@@ -9,7 +9,9 @@ import TabItem from "@theme/TabItem";
 import { VideoPlayer } from "@site/src/components/video-player";
 
 
-# Playground
+<div id="playground">
+  # Playground
+</div>
 
 Playground は、エージェントの構築とテストのためのインタラクティブな UI と、Mastra アプリケーションをローカルサービスとして公開する REST API を提供します。これにより、統合のことをすぐに気にせず開発を始められます。
 
@@ -19,7 +21,9 @@ Playground は、エージェントの構築とテストのためのインタラ
 
 <YouTube id="spGlcTEjuXY" startTime={126} />
 
-## プレイグラウンドを開始
+<div id="start-playground">
+  ## プレイグラウンドを開始
+</div>
 
 `create mastra` でアプリケーションを作成した場合は、`dev` スクリプトでローカル開発サーバーを起動します。`mastra dev` で直接実行することもできます。
 
@@ -46,11 +50,15 @@ Playground は、エージェントの構築とテストのためのインタラ
 - http://localhost:4111/ で Playground UI を開き、エージェントを対話的にテストします。
 - http://localhost:4111/swagger-ui にアクセスして、基盤となる REST API を確認・操作します。
 
-## Playground UI
+<div id="playground-ui">
+  ## Playground UI
+</div>
 
 Playground UI は、エージェントやワークフロー、ツールをテストし、各やり取りで内部で何が起きているかを正確に把握し、試しながら調整していけるインタラクティブな開発環境を提供します。
 
-### エージェント
+<div id="agents">
+  ### エージェント
+</div>
 
 エージェントと直接チャットし、[models](/models) を動的に切り替えたり、temperature や top-p などの設定を調整して、出力への影響を確かめられます。
 
@@ -58,7 +66,9 @@ Playground UI は、エージェントやワークフロー、ツールをテス
 
 エージェントとの対話では、推論の各ステップを追跡し、ツール呼び出しの出力を確認し、[observability](#observability) のトレースやログを見てレスポンスがどのように生成されるかを把握できます。さらに、[scorers](#scorers) を追加して、時間の経過に伴うレスポンス品質を測定・比較できます。
 
-### Workflows
+<div id="workflows">
+  ### Workflows
+</div>
 
 ワークフローをグラフとして可視化し、カスタム入力でステップごとに実行できます。実行中はインターフェースがリアルタイムで更新され、アクティブなステップと通過した経路が表示されます。
 
@@ -66,17 +76,23 @@ Playground UI は、エージェントやワークフロー、ツールをテス
 
 ワークフローの実行時には、ツールの呼び出しや生のJSON出力、処理中に発生した可能性のあるエラーを示す詳細なトレースも確認できます。
 
-### ツール
+<div id="tools">
+  ### ツール
+</div>
 
 ツールは単体で実行して挙動を確認しましょう。エージェントに割り当てる前にテストするか、問題が起きた場合は切り離してデバッグしてください。
 
 <VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406316/local-dev-agents-tools_100_fe1jdt.mp4" />
 
-### MCP Mastra インスタンスに接続されている MCP サーバーを一覧し、利用可能なツールを確認します。
+<div id="mcp-list-the-mcp-servers-attached-to-your-mastra-instance-and-explore-their">
+  ### MCP Mastra インスタンスに接続されている MCP サーバーを一覧し、利用可能なツールを確認します。
+</div>
 
 ![MCP Servers Playground](/img/local-dev/local-dev-mcp-server-playground.jpg)
 
-### 可観測性
+<div id="observability">
+  ### 可観測性
+</div>
 
 エージェントやワークフローを実行すると、Observability タブに、モデル呼び出し、ツール実行、ワークフローステップといった主要な AI 処理を強調表示するトレースが表示されます。これらのトレースをたどることで、データの流れ、処理にかかる時間、内部で何が起きているかを確認できます。
 
@@ -84,11 +100,15 @@ Playground UI は、エージェントやワークフロー、ツールをテス
 
 AI Tracing は低レベルなフレームワークの詳細を排して、トレースが要点に絞られ読みやすい状態を保ちます。
 
-### スコアラー
+<div id="scorers">
+  ### スコアラー
+</div>
 
 Scorers タブでは、エージェントのスコアラーが実行した結果が表示されます。メッセージがエージェントを通過すると、定義済みのスコアラーが各出力を非同期で評価し、その結果がここに表示されます。これにより、スコアラーがさまざまなやり取りにどのように反応するかを把握し、テストケース間での性能を比較し、改善点を特定できます。
 
-## REST API
+<div id="rest-api">
+  ## REST API
+</div>
 
 ローカル開発サーバーは完全な REST API ルートを公開しており、開発中にエージェント、ワークフロー、ツールとプログラムでやり取りできます。ローカル開発サーバーは [本番サーバー](/docs/server-db/production-server) とまったく同じ API ルートを使用しているため、Mastra サーバーをデプロイする予定がある場合に特に有用です。これにより、本番と同等の環境で開発・テストできます。
 
@@ -100,9 +120,13 @@ API を対話的に確認するには、http://localhost:4111/swagger-ui の Swa
 OpenAPI と Swagger のエンドポイントは、本番環境ではデフォルトで無効です。有効にするには、`server.build.openAPIDocs` と `server.build.swaggerUI` をそれぞれ `true` に設定してください。
 :::
 
-## 設定
+<div id="configuration">
+  ## 設定
+</div>
 
-### ポート
+<div id="port">
+  ### ポート
+</div>
 
 デフォルトでは、開発サーバーは http://localhost:4111 で起動します。Mastra サーバーの設定で `host` と `port` を変更できます。
 
@@ -118,7 +142,9 @@ export const mastra = new Mastra({
 ```
 
 
-### ローカル HTTPS
+<div id="local-https">
+  ### ローカル HTTPS
+</div>
 
 Mastra は、[`--https`](/reference/cli/mastra#--https) フラグによるローカル環境での HTTPS 開発をサポートしており、プロジェクト用の証明書を自動的に作成・管理します。`mastra dev --https` を実行すると、localhost（または設定済みのホスト）向けの秘密鍵と証明書が生成されます。証明書を独自に管理したい場合は、サーバー設定で任意の鍵と証明書ファイルを指定できます。
 
@@ -137,7 +163,9 @@ export const mastra = new Mastra({
 ```
 
 
-## 次のステップ
+<div id="next-steps">
+  ## 次のステップ
+</div>
 
 - Mastra が推奨する[プロジェクト構成](/docs/getting-started/project-structure)について学びましょう。
 - お好みのフロントエンドフレームワークと Mastra を連携しましょう—[Next.js](/docs/frameworks/web-frameworks/next-js)、[React](/docs/frameworks/web-frameworks/vite-react)、または [Astro](/docs/frameworks/web-frameworks/astro)。

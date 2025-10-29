@@ -3,13 +3,17 @@ title: "プロジェクト構成 | はじめに | Mastra ドキュメント"
 description: Mastra におけるフォルダやファイルの構成方法、ベストプラクティスおよび推奨構成を解説します。
 ---
 
-# プロジェクト構成
+<div id="project-structure">
+  # プロジェクト構成
+</div>
 
 `create mastra` コマンドで作成された新しい Mastra プロジェクトには、すぐに始められるよう、あらかじめ用意されたファイルとフォルダのセットが含まれています。
 
 Mastra はフレームワークですが、ファイルの整理や配置については**干渉しません**。CLI は多くのプロジェクトでうまく機能する妥当なデフォルト構成を提供しますが、ワークフローやチームの慣習に合わせて自由に調整できます。極端な話、望めばプロジェクト全体を1つのファイルで構築することも可能です。どのような構成を選ぶにせよ、一貫性を保つことで、コードの保守性と見通しのよさを確保しましょう。
 
-## デフォルトのプロジェクト構成
+<div id="default-project-structure">
+  ## デフォルトのプロジェクト構成
+</div>
 
 `create mastra` コマンドで作成されたプロジェクトの構成は次のとおりです：
 
@@ -35,7 +39,9 @@ src/
 :::
 
 
-### フォルダー
+<div id="folders">
+  ### フォルダー
+</div>
 
 フォルダーは、エージェント、ツール、ワークフローなど、エージェントのリソースを整理します。
 
@@ -49,7 +55,9 @@ src/
 | `src/mastra/scorers`   | （任意）時間経過に伴うエージェントのパフォーマンスを評価するスコアラーを定義します。                                                       |
 | `src/mastra/public`    | （任意）ビルド時に内容が `.build/output` ディレクトリへコピーされ、実行時に配信可能になります。                                             |
 
-### トップレベルのファイル
+<div id="top-level-files">
+  ### トップレベルのファイル
+</div>
 
 トップレベルのファイルは、Mastra プロジェクトの設定、ビルド方法、環境との接続を定義します。
 
@@ -60,7 +68,9 @@ src/
 | `package.json`        | プロジェクトのメタデータ、依存関係、利用可能な npm スクリプトを定義。                                              |
 | `tsconfig.json`       | パスエイリアス、コンパイラ設定、ビルド出力などの TypeScript オプションを設定。                                     |
 
-## 次のステップ
+<div id="next-steps">
+  ## 次のステップ
+</div>
 
 - [Mastra の機能](/docs#why-mastra)についてさらに詳しく読む
 - お使いのフロントエンドフレームワークと Mastra を統合する: [Next.js](/docs/frameworks/web-frameworks/next-js)、[React](/docs/frameworks/web-frameworks/vite-react)、または [Astro](/docs/frameworks/web-frameworks/astro)

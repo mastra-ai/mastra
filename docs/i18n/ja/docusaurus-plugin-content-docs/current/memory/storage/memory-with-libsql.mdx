@@ -3,11 +3,15 @@ title: "LibSQL を用いたメモリ | Memory | Mastra ドキュメント"
 description: LibSQL ストレージとベクター データベースのバックエンドを使って Mastra のメモリシステムを利用する方法の例。
 ---
 
-# LibSQL を用いたメモリ
+<div id="memory-with-libsql">
+  # LibSQL を用いたメモリ
+</div>
 
 この例では、Mastra のメモリシステムで LibSQL をストレージのバックエンドとして使用する方法を示します。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 この例では `openai` モデルを使用します。`.env` ファイルに `OPENAI_API_KEY` を追加してください。
 
@@ -22,7 +26,9 @@ npm install @mastra/libsql
 ```
 
 
-## エージェントにメモリを追加する
+<div id="adding-memory-to-an-agent">
+  ## エージェントにメモリを追加する
+</div>
 
 エージェントに LibSQL のメモリを追加するには、`Memory` クラスを使用し、`LibSQLStore` で新しい `storage` キーを作成します。`url` にはリモートのロケーション、またはローカルのファイルシステム上のリソースを指定できます。
 
@@ -49,7 +55,9 @@ export const libsqlAgent = new Agent({
 ```
 
 
-## fastembed を使ったローカル埋め込み
+<div id="local-embeddings-with-fastembed">
+  ## fastembed を使ったローカル埋め込み
+</div>
 
 埋め込みは、キーワードではなく意味に基づいて関連メッセージを検索するために、memory の `semanticRecall` が利用する数値ベクトルです。このセットアップでは、ベクトル埋め込みを生成するために `@mastra/fastembed` を使用します。
 
@@ -96,7 +104,9 @@ export const libsqlAgent = new Agent({
 ```
 
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 このリクエストでのリコール対象範囲を制御するには `memoryOptions` を使用します。`lastMessages: 5` を設定して直近メッセージに基づくリコールを絞り込み、`semanticRecall` を使って最も関連性の高い `topK: 3` 件のメッセージを取得し、各ヒットの前後コンテキストとして `messageRange: 2` 件の隣接メッセージを含めます。
 
@@ -139,6 +149,8 @@ for await (const chunk of stream.textStream) {
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [Calling Agents](/examples/agents/calling-agents)

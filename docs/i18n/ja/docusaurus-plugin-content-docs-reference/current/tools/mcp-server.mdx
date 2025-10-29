@@ -3,7 +3,9 @@ title: "リファレンス: MCPServer | Tools & MCP | Mastra ドキュメント"
 description: MCPServer の API リファレンス — Mastra のツールや機能を Model Context Protocol サーバーとして公開するクラス。
 ---
 
-# MCPServer
+<div id="mcpserver">
+  # MCPServer
+</div>
 
 `MCPServer` クラスは、既存の Mastra のツールやエージェントを Model Context Protocol（MCP）サーバーとして公開する機能を提供します。これにより、任意の MCP クライアント（Cursor、Windsurf、Claude Desktop など）がこれらの機能に接続し、エージェントで利用できるようになります。
 
@@ -11,7 +13,9 @@ description: MCPServer の API リファレンス — Mastra のツールや機�
 
 [stdio（サブプロセス）および SSE（HTTP）の MCP トランスポート](https://modelcontextprotocol.io/docs/concepts/transports) の両方をサポートしています。
 
-## コンストラクタ
+<div id="constructor">
+  ## コンストラクタ
+</div>
 
 新しい `MCPServer` を作成するには、サーバーの基本情報、提供するツール、そして必要に応じてツールとして公開するエージェントを指定します。
 
@@ -49,7 +53,9 @@ const server = new MCPServer({
 ```
 
 
-### 構成プロパティ
+<div id="configuration-properties">
+  ### 構成プロパティ
+</div>
 
 コンストラクタは、以下のプロパティを持つ `MCPServerConfig` オブジェクトを受け取ります:
 
@@ -159,7 +165,9 @@ const server = new MCPServer({
   ]}
 />
 
-## エージェントをツールとして公開する
+<div id="exposing-agents-as-tools">
+  ## エージェントをツールとして公開する
+</div>
 
 `MCPServer` の強力な機能のひとつは、Mastra エージェントを自動的に呼び出し可能なツールとして公開できることです。設定の `agents` プロパティにエージェントを指定すると次のようになります。
 
@@ -175,7 +183,9 @@ const server = new MCPServer({
 
 これにより、MCP クライアントは他のツールと同様に、自然言語のクエリでエージェントとやり取りできるようになります。
 
-### エージェントからツールへの変換
+<div id="agent-to-tool-conversion">
+  ### エージェントからツールへの変換
+</div>
 
 `agents` 構成プロパティでエージェントを指定すると、`MCPServer` は各エージェントに対応するツールを自動的に作成します。ツール名は `ask_<agentIdentifier>` で、`<agentIdentifier>` は `agents` オブジェクトで使用したキーです。
 
@@ -185,11 +195,15 @@ const server = new MCPServer({
 
 これにより、MCP を通じてエージェントの生成機能を素早く公開でき、クライアントはエージェントへ直接「質問」できるようになります。
 
-## メソッド
+<div id="methods">
+  ## メソッド
+</div>
 
 `MCPServer` インスタンスに対して呼び出し、動作を制御したり情報を取得したりできる関数です。
 
-### startStdio()
+<div id="startstdio">
+  ### startStdio()
+</div>
 
 標準入力・標準出力（stdio）で通信するサーバーを起動するには、このメソッドを使用します。コマンドラインのプログラムとしてサーバーを実行する場合によく使われます。
 
@@ -207,7 +221,9 @@ await server.startStdio();
 ```
 
 
-### startSSE()
+<div id="startsse">
+  ### startSSE()
+</div>
 
 このメソッドは、既存のウェブサーバーと MCP サーバーを統合し、通信に Server-Sent Events（SSE）を使用できるようにするためのものです。SSE 用またはメッセージ用のパスへのリクエストを受け取った際に、ウェブサーバー側のコードから呼び出してください。
 
@@ -283,7 +299,9 @@ httpServer.listen(PORT, () => {
 />
 
 
-### startHonoSSE()
+<div id="starthonosse">
+  ### startHonoSSE()
+</div>
 
 このメソッドは、既存のWebサーバーにMCPサーバーを統合し、通信にServer-Sent Events（SSE）を使えるようにします。SSE用またはメッセージ用のパスへのリクエストを受け取ったときに、Webサーバー側のコードから呼び出します。
 
@@ -359,7 +377,9 @@ httpServer.listen(PORT, () => {
 />
 
 
-### startHTTP()
+<div id="starthttp">
+  ### startHTTP()
+</div>
 
 このメソッドは、通信にストリーミング対応の HTTP を使うために、既存のWebサーバーとMCPサーバーを統合する際に役立ちます。WebサーバーがHTTPリクエストを受け取ったときに、その処理コードから呼び出します。
 
@@ -472,7 +492,9 @@ httpServer.listen(PORT, () => {
 />
 
 
-### close()
+<div id="close">
+  ### close()
+</div>
 
 このメソッドはサーバーを停止し、すべてのリソースを解放します。
 
@@ -481,7 +503,9 @@ async close(): Promise<void>
 ```
 
 
-### getServerInfo()
+<div id="getserverinfo">
+  ### getServerInfo()
+</div>
 
 このメソッドでサーバーの基本情報を確認できます。
 
@@ -490,7 +514,9 @@ getServerInfo(): ServerInfo
 ```
 
 
-### getServerDetail()
+<div id="getserverdetail">
+  ### getServerDetail()
+</div>
 
 このメソッドは、サーバー情報の詳細を取得できます。
 
@@ -499,7 +525,9 @@ getServerDetail(): ServerDetail
 ```
 
 
-### getToolListInfo()
+<div id="gettoollistinfo">
+  ### getToolListInfo()
+</div>
 
 このメソッドでは、サーバー作成時に設定されたツールの一覧を参照できます。読み取り専用のリストで、デバッグに有用です。
 
@@ -508,7 +536,9 @@ getToolListInfo(): ToolListInfo
 ```
 
 
-### getToolInfo()
+<div id="gettoolinfo">
+  ### getToolInfo()
+</div>
 
 このメソッドは、特定のツールの詳細情報を返します。
 
@@ -517,7 +547,9 @@ getToolInfo(toolName: string): ToolInfo
 ```
 
 
-### executeTool()
+<div id="executetool">
+  ### executeTool()
+</div>
 
 このメソッドは指定したツールを実行し、その結果を返します。
 
@@ -526,7 +558,9 @@ executeTool(toolName: string, input: any): Promise<any>
 ```
 
 
-### getStdioTransport()
+<div id="getstdiotransport">
+  ### getStdioTransport()
+</div>
 
 `startStdio()` でサーバーを起動した場合、stdio 通信を管理するオブジェクトを取得できます。これは主に内部的な確認やテストのために使用します。
 
@@ -535,7 +569,9 @@ getStdioTransport(): StdioServerTransport | undefined
 ```
 
 
-### getSseTransport()
+<div id="getssetransport">
+  ### getSseTransport()
+</div>
 
 サーバーを `startSSE()` で起動している場合、SSE 通信を管理するオブジェクトを取得できます。`getStdioTransport` と同様に、主に内部確認やテスト用途向けです。
 
@@ -544,7 +580,9 @@ getSseTransport(): SSEサーバートランスポート | undefined
 ```
 
 
-### getSseHonoTransport()
+<div id="getssehonotransport">
+  ### getSseHonoTransport()
+</div>
 
 サーバーを `startHonoSSE()` で起動した場合、SSE 通信を管理するオブジェクトを取得するために使用できます。`getSseTransport` と同様に、主に内部的な確認やテストのために使います。
 
@@ -553,7 +591,9 @@ getSseHonoTransport(): SSETransport | undefined
 ```
 
 
-### getStreamableHTTPTransport()
+<div id="getstreamablehttptransport">
+  ### getStreamableHTTPTransport()
+</div>
 
 `startHTTP()` でサーバーを起動した場合、HTTP 通信を管理するオブジェクトを取得するためにこれを使用できます。`getSseTransport` と同様、主に内部チェックやテストのために使用します。
 
@@ -562,7 +602,9 @@ getStreamableHTTPTransport(): StreamableHTTPServerTransport | undefined
 ```
 
 
-### tools()
+<div id="tools">
+  ### tools()
+</div>
 
 この MCP サーバーが提供する特定のツールを実行します。
 
@@ -597,9 +639,13 @@ async executeTool(
 />
 
 
-## リソースの扱い
+<div id="resource-handling">
+  ## リソースの扱い
+</div>
 
-### MCP リソースとは？
+<div id="what-are-mcp-resources">
+  ### MCP リソースとは？
+</div>
 
 リソースは Model Context Protocol（MCP）における基本的な概念で、サーバーがクライアントに対して読み取り可能なデータやコンテンツを公開し、LLM とのやり取りにおけるコンテキストとして利用できるようにするものです。これは、MCP サーバーが提供したいあらゆる種類のデータを表し、例えば次のようなものがあります:
 
@@ -621,7 +667,9 @@ async executeTool(
 
 より詳しい情報は、[Resources に関する公式 MCP ドキュメント](https://modelcontextprotocol.io/docs/concepts/resources)を参照してください。
 
-### `MCPServerResources` 型
+<div id="mcpserverresources-type">
+  ### `MCPServerResources` 型
+</div>
 
 `resources` オプションには `MCPServerResources` 型のオブジェクトを指定します。この型は、サーバーがリソース要求を処理するために使用するコールバック群を定義します。
 
@@ -694,11 +742,15 @@ const serverWithResources = new MCPServer({
 ```
 
 
-### リソース変更のクライアントへの通知
+<div id="notifying-clients-of-resource-changes">
+  ### リソース変更のクライアントへの通知
+</div>
 
 利用可能なリソースやその内容が変更された場合、サーバーは特定のリソースを購読している接続中のクライアントに通知できます。
 
-#### `server.resources.notifyUpdated({ uri: string })`
+<div id="serverresourcesnotifyupdated-uri-string">
+  #### `server.resources.notifyUpdated({ uri: string })`
+</div>
 
 特定のリソース（`uri` で識別される）の内容が更新されたときにこのメソッドを呼び出します。この URI を購読しているクライアントがいる場合、`notifications/resources/updated` メッセージが送信されます。
 
@@ -714,7 +766,9 @@ await serverWithResources.resources.notifyUpdated({ uri: "file://data.txt" });
 ```
 
 
-#### `server.resources.notifyListChanged()`
+<div id="serverresourcesnotifylistchanged">
+  #### `server.resources.notifyListChanged()`
+</div>
 
 利用可能なリソースの一覧に変更があったとき（例：リソースが追加・削除されたとき）に、このメソッドを呼び出します。これにより、クライアントに `notifications/resources/list_changed` メッセージが送信され、リソース一覧の再取得を促します。
 
@@ -730,15 +784,21 @@ await serverWithResources.resources.notifyListChanged();
 ```
 
 
-## プロンプトの取り扱い
+<div id="prompt-handling">
+  ## プロンプトの取り扱い
+</div>
 
-### MCPプロンプトとは？
+<div id="what-are-mcp-prompts">
+  ### MCPプロンプトとは？
+</div>
 
 プロンプトは、MCPサーバーがクライアントに公開する再利用可能なテンプレートまたはワークフローです。引数を受け取り、リソースのコンテキストを含め、バージョン管理をサポートし、LLMとのやり取りの標準化に利用できます。
 
 プロンプトは固有の名前（および任意のバージョン）で識別され、動的にも静的にもなり得ます。
 
-### `MCPServerPrompts` 型
+<div id="mcpserverprompts-type">
+  ### `MCPServerPrompts` 型
+</div>
 
 `prompts` オプションには、`MCPServerPrompts` 型のオブジェクトを指定します。この型は、サーバーがプロンプトリクエストを処理するために使用するコールバックを定義します。
 
@@ -829,11 +889,15 @@ const serverWithPrompts = new MCPServer({
 ```
 
 
-### プロンプト変更のクライアントへの通知
+<div id="notifying-clients-of-prompt-changes">
+  ### プロンプト変更のクライアントへの通知
+</div>
 
 利用可能なプロンプトに変更があった場合、サーバーは接続中のクライアントに通知できます。
 
-#### `server.prompts.notifyListChanged()`
+<div id="serverpromptsnotifylistchanged">
+  #### `server.prompts.notifyListChanged()`
+</div>
 
 利用可能なプロンプトの一覧に変更があった場合（例：プロンプトが追加・削除された場合）に、このメソッドを呼び出します。これにより、クライアントに `notifications/prompts/list_changed` メッセージが送信され、プロンプト一覧の再取得が促されます。
 
@@ -842,7 +906,9 @@ await serverWithPrompts.prompts.notifyListChanged();
 ```
 
 
-### プロンプト処理のベストプラクティス
+<div id="best-practices-for-prompt-handling">
+  ### プロンプト処理のベストプラクティス
+</div>
 
 - 明確で具体的なプロンプト名と説明を使用する。
 - `getPromptMessages` で必須引数をすべて検証する。
@@ -854,21 +920,29 @@ await serverWithPrompts.prompts.notifyListChanged();
 
 ---
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
 MCPServer のセットアップとデプロイの実践的な例については、[Deploying an MCPServer Example](/examples/agents/deploying-mcp-server) を参照してください。
 
 このページ冒頭の例では、ツールとエージェントの両方を用いて `MCPServer` をインスタンス化する方法も示しています。
 
-## エリシテーション
+<div id="elicitation">
+  ## エリシテーション
+</div>
 
-### Elicitation とは？
+<div id="what-is-elicitation">
+  ### Elicitation とは？
+</div>
 
 Elicitation は Model Context Protocol（MCP）の機能で、サーバーがユーザーに対して構造化された情報の提供を求められるようにするものです。これにより、サーバーが動的に追加データを収集できるインタラクティブなワークフローが実現します。
 
 `MCPServer` クラスには、Elicitation 機能が自動的に組み込まれています。ツールは `execute` 関数で、ユーザー入力を要求するための `elicitation.sendRequest()` メソッドを含む `options` パラメータを受け取ります。
 
-### ツール実行シグネチャ
+<div id="tool-execution-signature">
+  ### ツール実行シグネチャ
+</div>
 
 ツールが MCP サーバーのコンテキスト内で実行される場合、追加の `options` パラメータを受け取ります：
 
@@ -895,7 +969,9 @@ execute: async ({ context }, options) => {
 ```
 
 
-### Elicitation の仕組み
+<div id="how-elicitation-works">
+  ### Elicitation の仕組み
+</div>
 
 一般的なユースケースはツールの実行中です。ツールがユーザー入力を必要とする場合、ツールの実行オプションで提供される elicitation 機能を使用できます:
 
@@ -906,7 +982,9 @@ execute: async ({ context }, options) => {
 5. クライアントはレスポンスをサーバーに返送します
 6. ツールはレスポンスを受け取り、実行を続行します
 
-### ツールにおけるエリシテーションの活用
+<div id="using-elicitation-in-tools">
+  ### ツールにおけるエリシテーションの活用
+</div>
 
 以下は、エリシテーションを使ってユーザーの連絡先情報を収集するツールの例です。
 
@@ -982,7 +1060,9 @@ const server = new MCPServer({
 ```
 
 
-### 要求スキーマの定義
+<div id="elicitation-request-schema">
+  ### 要求スキーマの定義
+</div>
 
 `requestedSchema` は、プリミティブなプロパティのみを持つフラットなオブジェクトである必要があります。サポートされる型は次のとおりです：
 
@@ -1019,7 +1099,9 @@ const server = new MCPServer({
 ```
 
 
-### 応答アクション
+<div id="response-actions">
+  ### 応答アクション
+</div>
 
 ユーザーは、情報提示（エリシテーション）リクエストに対して次の3通りに応答できます:
 
@@ -1032,7 +1114,9 @@ const server = new MCPServer({
 
 ツールは、この3種類すべての応答タイプを適切に処理する必要があります。
 
-### セキュリティに関する注意事項
+<div id="security-considerations">
+  ### セキュリティに関する注意事項
+</div>
 
 - **パスワード、社会保障番号（SSN）、クレジットカード番号**などの機密情報を決して求めない
 - 提供されたスキーマに照らして、すべてのユーザー入力を検証する
@@ -1040,7 +1124,9 @@ const server = new MCPServer({
 - データ収集の目的を明確に説明する
 - ユーザーのプライバシーと設定・選好を尊重する
 
-### ツール実行 API
+<div id="tool-execution-api">
+  ### ツール実行 API
+</div>
 
 エリシテーション機能は、ツール実行時の `options` パラメータから利用できます。
 
@@ -1072,7 +1158,9 @@ type ElicitResult = {
 ```
 
 
-## 認証コンテキスト
+<div id="authentication-context">
+  ## 認証コンテキスト
+</div>
 
 HTTP ベースのトランスポートを使用する場合、ツールは `options.extra` からリクエストのメタデータにアクセスできます。
 
@@ -1112,7 +1200,9 @@ execute: async ({ context }, options) => {
 > ```
 
 
-## 関連情報
+<div id="related-information">
+  ## 関連情報
+</div>
 
 - Mastra で MCP サーバーに接続する方法については、[MCPClient のドキュメント](./mcp-client)をご覧ください。
 - Model Context Protocol について詳しくは、[@modelcontextprotocol/sdk のドキュメント](https://github.com/modelcontextprotocol/typescript-sdk)をご覧ください。

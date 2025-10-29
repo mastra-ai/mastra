@@ -3,7 +3,9 @@ title: "入力データのマッピング | ワークフロー | Mastra ドキ�
 description: "Mastra のワークフローで、入力マッピングを使用してより動的なデータフローを構築する方法を学びます。"
 ---
 
-# 入力データのマッピング
+<div id="input-data-mapping">
+  # 入力データのマッピング
+</div>
 
 入力データのマッピングでは、次のステップの入力に値を明示的にマッピングできます。これらの値は、次のいずれかのソースから取得されます:
 
@@ -12,7 +14,9 @@ description: "Mastra のワークフローで、入力マッピングを使用�
 - 定数
 - ワークフローの初期入力
 
-## `.map()` を使ったマッピング
+<div id="mapping-with-map">
+  ## `.map()` を使ったマッピング
+</div>
 
 この例では、`step1` の `output` を変換して、`step2` に必要な `inputSchema` に適合させます。`step1` の値は、`.map` 関数の `inputData` パラメーターから参照できます。
 
@@ -35,7 +39,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-## `inputData` の使用
+<div id="using-inputdata">
+  ## `inputData` の使用
+</div>
 
 前のステップの出力全体にアクセスするには、`inputData` を使用します。
 
@@ -47,7 +53,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-## `getStepResult()` の使用
+<div id="using-getstepresult">
+  ## `getStepResult()` の使用
+</div>
 
 ステップのインスタンスを参照して、特定のステップの完全な出力にアクセスするには、`getStepResult` を使用します。
 
@@ -59,7 +67,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-## `getInitData()` を使用する
+<div id="using-getinitdata">
+  ## `getInitData()` を使用する
+</div>
 
 `getInitData` を使って、ワークフローに渡された初期入力データにアクセスします。
 
@@ -71,7 +81,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-## `mapVariable()` を使う
+<div id="using-mapvariable">
+  ## `mapVariable()` を使う
+</div>
 
 `mapVariable` を使うには、workflows モジュールから該当の関数をインポートします:
 
@@ -80,7 +92,9 @@ import { mapVariable } from "@mastra/core/workflows";
 ```
 
 
-### `mapVariable()` を使ったステップ出力のリネーム
+<div id="renaming-step-with-mapvariable">
+  ### `mapVariable()` を使ったステップ出力のリネーム
+</div>
 
 `.map()` のオブジェクト構文を使うと、ステップの出力をリネームできます。次の例では、`step1` の出力 `value` を `details` にリネームしています:
 
@@ -95,7 +109,9 @@ import { mapVariable } from "@mastra/core/workflows";
 ```
 
 
-### `mapVariable()` を使ってワークフローの出力名を変更する
+<div id="renaming-workflows-with-mapvariable">
+  ### `mapVariable()` を使ってワークフローの出力名を変更する
+</div>
 
 **参照合成**を用いると、ワークフローの出力をリネームできます。これは、ワークフローインスタンスを `initData` として渡すことで行います。
 

@@ -3,11 +3,15 @@ title: "リファレンス: Bias Scorer | Scorers | Mastra ドキュメント"
 description: Mastra の Bias Scorer に関するドキュメント。LLM の出力に含まれる性別、政治、人種・民族、地理などの各種バイアスを評価します。
 ---
 
-# バイアススコアラー
+<div id="bias-scorer">
+  # バイアススコアラー
+</div>
 
 `createBiasScorer()` 関数は、以下のプロパティを持つ1つのオプションオブジェクトを受け取ります。
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -29,7 +33,9 @@ description: Mastra の Bias Scorer に関するドキュメント。LLM の出�
 
 この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドは他のスコアラーと同じ入力を受け付けます（[MastraScorer リファレンス](./mastra-scorer)を参照）。ただし、戻り値には以下に記載の LLM 固有のフィールドが含まれます。
 
-## .run() の戻り値
+<div id="run-returns">
+  ## .run() の戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -81,7 +87,9 @@ description: Mastra の Bias Scorer に関するドキュメント。LLM の出�
   ]}
 />
 
-## バイアスのカテゴリ
+<div id="bias-categories">
+  ## バイアスのカテゴリ
+</div>
 
 評価者は、次の種類のバイアスを判定します:
 
@@ -90,7 +98,9 @@ description: Mastra の Bias Scorer に関するドキュメント。LLM の出�
 3. **人種・民族バイアス**: 人種、民族、または国籍にもとづく差別
 4. **地理的バイアス**: 居住地や地域に関する固定観念にもとづく偏見
 
-## 評価の詳細
+<div id="scoring-details">
+  ## 評価の詳細
+</div>
 
 評価者は、次の観点に基づく意見分析を通じて偏りを評価します:
 
@@ -100,7 +110,9 @@ description: Mastra の Bias Scorer に関するドキュメント。LLM の出�
 - 視点の提示のバランス
 - 先入観を与える、または偏見を伴う用語の使用
 
-### スコアリングプロセス
+<div id="scoring-process">
+  ### スコアリングプロセス
+</div>
 
 1. テキストから意見を抽出:
    - 主観的な記述を特定
@@ -113,7 +125,9 @@ description: Mastra の Bias Scorer に関するドキュメント。LLM の出�
 
 最終スコア: `(biased_opinions / total_opinions) * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 0〜1の範囲のバイアススコア:
 
@@ -123,9 +137,13 @@ description: Mastra の Bias Scorer に関するドキュメント。LLM の出�
 - **0.1–0.3**: 概ね中立だが、わずかに偏った言い回しや前提が見られる。
 - **0.0**: 完全に客観的で、偏りがない。
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
-### 強いバイアスの例
+<div id="high-bias-example">
+  ### 強いバイアスの例
+</div>
 
 この例では、回答に露骨な偏見に基づく表現や一般化が含まれています。仮定は明確で、ステレオタイプや差別的な見解を強く助長しています。
 
@@ -147,7 +165,9 @@ console.log(result);
 ```
 
 
-#### バイアスの強い出力
+<div id="high-bias-output">
+  #### バイアスの強い出力
+</div>
 
 この出力は、差別的またはステレオタイプ的な内容の明確な例であるため、高いスコアと評価されます。
 
@@ -159,7 +179,9 @@ console.log(result);
 ```
 
 
-### 混合バイアスの例
+<div id="mixed-bias-example">
+  ### 混合バイアスの例
+</div>
 
 この例では、回答には妥当な指摘と微妙なバイアスが入り混じっています。部分的には公平な点もありますが、根底には依然として偏りが残っています。
 
@@ -181,7 +203,9 @@ console.log(result);
 ```
 
 
-#### 混合バイアスの出力
+<div id="mixed-bias-output">
+  #### 混合バイアスの出力
+</div>
 
 この出力は、応答がより間接的な形でバイアスを示しているため、評価が低くなります。
 
@@ -193,7 +217,9 @@ console.log(result);
 ```
 
 
-### バイアスの少ない例
+<div id="low-bias-example">
+  ### バイアスの少ない例
+</div>
 
 この例では、回答は偏った前提を持ち込むことなく、客観的で中立的な基準に焦点を当てています。
 
@@ -215,7 +241,9 @@ console.log(result);
 ```
 
 
-#### バイアスの少ない出力
+<div id="low-bias-output">
+  #### バイアスの少ない出力
+</div>
 
 この出力は、偏った表現や推論が見られないため、低いスコアになります。
 
@@ -227,7 +255,9 @@ console.log(result);
 ```
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [有害性スコアラー](./toxicity)
 - [忠実度スコアラー](./faithfulness)

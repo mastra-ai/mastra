@@ -3,7 +3,9 @@ title: "Express プロジェクトへの Mastra 統合 | Frameworks | Mastra Doc
 description: Express バックエンドに Mastra を統合するための手順ガイド。
 ---
 
-# Express プロジェクトに Mastra を統合する
+<div id="integrate-mastra-in-your-express-project">
+  # Express プロジェクトに Mastra を統合する
+</div>
 
 Mastra は Express と統合でき、次のことを簡単に実現できます:
 
@@ -15,13 +17,17 @@ Express から直接 Mastra を呼び出せるため、Express サーバーと�
 
 このガイドでは、必要な Mastra の依存関係をインストールし、サンプルのエージェントを作成し、Express の API ルートから Mastra を呼び出す方法を説明します。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 - TypeScript で構築された既存の Express アプリ
 - Node.js `v20.0` 以上
 - サポートされている[モデルプロバイダー](/models)の API キー
 
-## Mastra の追加
+<div id="adding-mastra">
+  ## Mastra の追加
+</div>
 
 まず、エージェントを実行するために必要な Mastra の依存関係をインストールします。本ガイドではモデルとして OpenAI を使用しますが、サポートされている任意の[モデルプロバイダー](/models)を利用できます。
 
@@ -112,7 +118,9 @@ export const mastra = new Mastra({
 これで Mastra のボイラープレートコードのセットアップが完了し、Express のルートへ統合する準備が整いました。
 
 
-## Express で Mastra を使う
+<div id="using-mastra-with-express">
+  ## Express で Mastra を使う
+</div>
 
 `city` クエリパラメータを受け取る `/api/weather` エンドポイントを作成します。`city` パラメータは、プロンプト経由で `weatherAgent` に渡されます。
 
@@ -190,7 +198,9 @@ http://localhost:3456/api/weather?city=London
 ```
 
 
-## エージェントサーバーの実行
+<div id="running-the-agent-server">
+  ## エージェントサーバーの実行
+</div>
 
 本番環境では、Express サーバーと並行して Mastra を動かす必要はありません。一方、開発時には、Mastra が提供する [ローカル開発環境](/docs/getting-started/studio) を使ってエージェントの改善やデバッグができます。
 

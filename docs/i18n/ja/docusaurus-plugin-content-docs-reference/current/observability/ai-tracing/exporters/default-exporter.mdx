@@ -6,11 +6,15 @@ description: DefaultExporter の API リファレンス
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
-# DefaultExporter
+<div id="defaultexporter">
+  # DefaultExporter
+</div>
 
 トレースを、Mastra で設定されたストレージに自動バッチ処理と再試行ロジックを用いて永続化します。
 
-## コンストラクタ
+<div id="constructor">
+  ## コンストラクタ
+</div>
 
 ```typescript
 new DefaultExporter(config?: BatchingConfig, logger?: IMastraLogger)
@@ -35,7 +39,9 @@ new DefaultExporter(config?: BatchingConfig, logger?: IMastraLogger)
 />
 
 
-## BatchingConfig（バッチ処理の設定）
+<div id="batchingconfig">
+  ## BatchingConfig（バッチ処理の設定）
+</div>
 
 ```typescript
 interface BatchingConfig {
@@ -60,27 +66,35 @@ interface BatchingConfig {
 ```
 
 
-## TracingStrategy（トレーシング戦略）
+<div id="tracingstrategy">
+  ## TracingStrategy（トレーシング戦略）
+</div>
 
 ```typescript
 type TracingStrategy = "realtime" | "batch-with-updates" | "insert-only";
 ```
 
 
-### 戦略の動作
+<div id="strategy-behaviors">
+  ### 戦略の動作
+</div>
 
 - **realtime**: 各イベントを即時にストレージへ永続化する
 - **batch-with-updates**: 作成と更新を別々にバッチ化し、順序どおりに適用する
 - **insert-only**: SPAN_ENDED イベントのみ処理し、更新は無視する
 
-## プロパティ
+<div id="properties">
+  ## プロパティ
+</div>
 
 ```typescript
 readonly name = 'tracing-default-exporter';
 ```
 
 
-## 方法
+<div id="methods">
+  ## 方法
+</div>
 
 ### &#95;&#95;registerMastra
 
@@ -91,7 +105,9 @@ __registerMastra(mastra: Mastra): void
 Mastra インスタンスを登録します。Mastra の生成後に自動的に呼び出されます。
 
 
-### 初期化
+<div id="init">
+  ### 初期化
+</div>
 
 ```typescript
 init(): void
@@ -100,7 +116,9 @@ init(): void
 依存関係の準備が整い次第、エクスポーターを初期化します。ストレージの機能に応じてトレーシング戦略を決定します。
 
 
-### exportEvent
+<div id="exportevent">
+  ### exportEvent
+</div>
 
 ```typescript
 async exportEvent(event: AITracingEvent): Promise<void>
@@ -120,7 +138,9 @@ async exportEvent(event: AITracingEvent): Promise<void>
 />
 
 
-### シャットダウン
+<div id="shutdown">
+  ### シャットダウン
+</div>
 
 ```typescript
 async shutdown(): Promise<void>
@@ -129,7 +149,9 @@ async shutdown(): Promise<void>
 残っているバッファリング済みのイベントをフラッシュして、クリーンアップを行います。
 
 
-## 戦略の自動選択
+<div id="automatic-strategy-selection">
+  ## 戦略の自動選択
+</div>
 
 `strategy: 'auto'`（デフォルト）の場合、エクスポーターはストレージアダプターに対応機能を問い合わせます。
 
@@ -150,9 +172,13 @@ interface AITracingStrategy {
 3. ユーザー指定の戦略がサポートされていない場合は、警告を記録する
 
 
-## バッチ処理の動作
+<div id="batching-behavior">
+  ## バッチ処理の動作
+</div>
 
-### フラッシュのトリガー
+<div id="flush-triggers">
+  ### フラッシュのトリガー
+</div>
 
 次のいずれかの条件を満たすと、バッファはフラッシュされます:
 
@@ -161,7 +187,9 @@ interface AITracingStrategy {
 - バッファサイズが `maxBufferSize` に達した場合（緊急フラッシュ）
 - `shutdown()` が呼び出された場合
 
-### リトライロジック
+<div id="retry-logic">
+  ### リトライロジック
+</div>
 
 失敗したフラッシュは指数バックオフで再試行されます：
 
@@ -169,7 +197,9 @@ interface AITracingStrategy {
 - 最大試行回数：`maxRetries`
 - すべての再試行が失敗した場合、バッチは破棄されます
 
-### 順不同の処理
+<div id="out-of-order-handling">
+  ### 順不同の処理
+</div>
 
 `batch-with-updates` 戦略の場合:
 
@@ -178,7 +208,9 @@ interface AITracingStrategy {
 - 順不同のイベントに対して警告をログに記録する
 - 更新の順序を保つためにシーケンス番号を維持する
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 ```typescript
 import { DefaultExporter } from "@mastra/core/ai-tracing";
@@ -195,21 +227,29 @@ const customExporter = new DefaultExporter({
 ```
 
 
-## 関連項目
+<div id="see-also">
+  ## 関連項目
+</div>
 
-### ドキュメント
+<div id="documentation">
+  ### ドキュメント
+</div>
 
 - [AI トレーシング概要](/docs/observability/ai-tracing/overview) - 公式ガイド
 - [エクスポーター](/docs/observability/ai-tracing/overview#exporters) - エクスポーターの概念
 
-### その他のエクスポーター
+<div id="other-exporters">
+  ### その他のエクスポーター
+</div>
 
 - [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud
 - [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter) - デバッグ出力
 - [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse との統合
 - [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust との統合
 
-### 参考
+<div id="reference">
+  ### 参考
+</div>
 
 - [Configuration](/reference/observability/ai-tracing/configuration) - 設定項目
 - [Interfaces](/reference/observability/ai-tracing/interfaces) - インターフェース定義

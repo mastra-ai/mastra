@@ -3,11 +3,15 @@ title: "リファレンス: voice.listen() | Voice | Mastra ドキュメント"
 description: "すべての Mastra の音声プロバイダーで利用できる listen() メソッドのドキュメント。音声をテキストに変換します。"
 ---
 
-# voice.listen()
+<div id="voicelisten">
+  # voice.listen()
+</div>
 
 `listen()` メソッドは、すべての Mastra の音声プロバイダーで利用可能な基本機能で、音声をテキストに変換します。音声ストリームを入力として受け取り、書き起こし結果のテキストを返します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { OpenAIVoice } from "@mastra/voice-openai";
@@ -43,7 +47,9 @@ const transcriptWithOptions = await voice.listen(audioStream, {
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -63,7 +69,9 @@ const transcriptWithOptions = await voice.listen(audioStream, {
   ]}
 />
 
-## 戻り値
+<div id="return-value">
+  ## 戻り値
+</div>
 
 次のいずれかを返します:
 
@@ -71,11 +79,15 @@ const transcriptWithOptions = await voice.listen(audioStream, {
 - `Promise<NodeJS.ReadableStream>`: 書き起こしテキストのストリームに解決される Promise（ストリーミング書き起こし用）
 - `Promise<void>`: テキストを直接返さずに 'writing' イベントを発行するリアルタイムプロバイダー向け
 
-## プロバイダー固有のオプション
+<div id="provider-specific-options">
+  ## プロバイダー固有のオプション
+</div>
 
 各音声プロバイダーは、実装に特有の追加オプションをサポートしている場合があります。以下に例をいくつか示します：
 
-### OpenAI
+<div id="openai">
+  ### OpenAI
+</div>
 
 <PropertiesTable
   content={[
@@ -101,7 +113,9 @@ const transcriptWithOptions = await voice.listen(audioStream, {
   ]}
 />
 
-### Google
+<div id="google">
+  ### Google
+</div>
 
 <PropertiesTable
   content={[
@@ -123,7 +137,9 @@ const transcriptWithOptions = await voice.listen(audioStream, {
   ]}
 />
 
-### Deepgram
+<div id="deepgram">
+  ### Deepgram
+</div>
 
 <PropertiesTable
   content={[
@@ -144,7 +160,9 @@ const transcriptWithOptions = await voice.listen(audioStream, {
   ]}
 />
 
-## リアルタイム音声プロバイダー
+<div id="realtime-voice-providers">
+  ## リアルタイム音声プロバイダー
+</div>
 
 `OpenAIRealtimeVoice` のようなリアルタイム音声プロバイダーを使用する場合、`listen()` メソッドの挙動は次のように異なります:
 
@@ -169,7 +187,9 @@ await voice.listen(microphoneStream);
 ```
 
 
-## CompositeVoice と併用する場合
+<div id="using-with-compositevoice">
+  ## CompositeVoice と併用する場合
+</div>
 
 `CompositeVoice` を使用すると、`listen()` メソッドは設定されたリスニングプロバイダーに委譲されます。
 
@@ -188,7 +208,9 @@ const transcript = await voice.listen(audioStream);
 ```
 
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - すべての音声プロバイダーが音声認識（音声→テキスト）機能をサポートしているわけではありません（例：PlayAI、Speechify）
 - `listen()` の動作はプロバイダーによって多少異なりますが、いずれの実装も同じ基本的なインターフェースに準拠しています
@@ -197,7 +219,9 @@ const transcript = await voice.listen(audioStream);
 - 一部のプロバイダーはストリーミング文字起こしに対応しており、書き起こしと同時にテキストが返されます
 - パフォーマンスを最適化するには、使用が終わったら音声ストリームを閉じる（または終了する）ことを検討してください
 
-## 関連メソッド
+<div id="related-methods">
+  ## 関連メソッド
+</div>
 
 - [voice.speak()](./voice.speak) - テキストを音声に変換する
 - [voice.send()](./voice.send) - 音声データをリアルタイムで音声プロバイダーに送信する

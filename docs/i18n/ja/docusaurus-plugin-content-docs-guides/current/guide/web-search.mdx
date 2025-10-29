@@ -9,20 +9,26 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 
-# ウェブ検索ができるエージェントの構築
+<div id="building-an-agent-that-can-search-the-web">
+  # ウェブ検索ができるエージェントの構築
+</div>
 
 ウェブ検索エージェントを構築する際には、主に次の2つの方針が考えられます。
 
 1. **LLMのネイティブ検索ツールを使う**: 一部の言語モデルには、そのまま使える統合型のウェブ検索機能が備わっています。
 2. **カスタム検索ツールを実装する**: 検索プロバイダーのAPIと独自に連携し、クエリの処理と結果の取得を行います。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 - Node.js `v20.0` 以降がインストールされていること
 - 対応する[Model Provider](/models)の API キー
 - 既存の Mastra プロジェクト（新規プロジェクトのセットアップは[インストールガイド](/docs/getting-started/installation)を参照）
 
-## ネイティブ検索ツールを使う
+<div id="using-native-search-tools">
+  ## ネイティブ検索ツールを使う
+</div>
 
 一部の LLM プロバイダーには、追加の API 連携なしでそのまま使える組み込みのウェブ検索機能があります。OpenAI の GPT-4o-mini と Google の Gemini 2.5 Flash は、いずれも生成中にモデルが呼び出せるネイティブ検索ツールを提供しています。
 
@@ -156,7 +162,9 @@ Playground で「Search Agent」に移動し、次のように質問してくだ
 
 </Steps>
 
-## Search API の使用
+<div id="using-search-apis">
+  ## Search API の使用
+</div>
 
 検索動作をより細かく制御するには、外部の検索 API をカスタムツールとして統合できます。[Exa](https://exa.ai/) は AI アプリケーション向けに特化した検索エンジンで、セマンティック検索、設定可能なフィルター（カテゴリ、ドメイン、日付範囲）、およびページ全文の取得機能を提供します。検索 API は Mastra のツールでラップされ、入力スキーマ、出力形式、実行ロジックを定義します。
 

@@ -3,18 +3,24 @@ title: "リファレンス: Agent.getVoice() | Agents | Mastra ドキュメン�
 description: "Mastra のエージェントにおける `Agent.getVoice()` メソッドのドキュメント。音声機能に使用する音声プロバイダーを取得します。"
 ---
 
-# Agent.getVoice()
+<div id="agentgetvoice">
+  # Agent.getVoice()
+</div>
 
 `.getVoice()` メソッドは、エージェントに設定された音声プロバイダーを取得し、それが関数であれば実体化（解決）します。テキスト読み上げ（TTS）や音声認識（STT）などの音声機能にアクセスする際に使用されます。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 await agent.getVoice();
 ```
 
 
-## パラメーター
+<div id="parameters">
+  ## パラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -28,7 +34,9 @@ await agent.getVoice();
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -41,7 +49,9 @@ await agent.getVoice();
   ]}
 />
 
-## 応用的な使用例
+<div id="extended-usage-example">
+  ## 応用的な使用例
+</div>
 
 ```typescript copy
 await agent.getVoice({
@@ -50,7 +60,9 @@ await agent.getVoice({
 ```
 
 
-### オプションパラメータ
+<div id="options-parameters">
+  ### オプションパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -65,7 +77,9 @@ await agent.getVoice({
   ]}
 />
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [エージェントに音声を追加する](/docs/agents/adding-voice)
 - [音声プロバイダー](../voice/mastra-voice)

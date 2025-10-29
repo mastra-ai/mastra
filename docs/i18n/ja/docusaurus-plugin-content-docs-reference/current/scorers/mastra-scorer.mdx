@@ -3,13 +3,17 @@ title: "リファレンス: MastraScorer | スコアラー | Mastra ドキュメ
 description: Mastra の MastraScorer 基底クラスに関するドキュメント。すべてのカスタムおよび組み込みスコアラーの基盤となるクラスです。
 ---
 
-# MastraScorer
+<div id="mastrascorer">
+  # MastraScorer
+</div>
 
 `MastraScorer` クラスは、Mastra におけるすべてのスコアラーの基底クラスです。入力と出力のペアを評価するための標準的な `.run()` メソッドを提供し、preprocess → analyze → generateScore → generateReason の実行フローによるマルチステップのスコアリングをサポートします。
 
 **注:** 多くのユーザーは、スコアラーのインスタンスを作成する際は [`createScorer`](./create-scorer) を使用してください。`MastraScorer` を直接インスタンス化することは推奨されません。
 
-## MastraScorer インスタンスの取得方法
+<div id="how-to-get-a-mastrascorer-instance">
+  ## MastraScorer インスタンスの取得方法
+</div>
 
 `MastraScorer` インスタンスは、`createScorer` ファクトリ関数で作成できます。
 
@@ -26,7 +30,9 @@ const scorer = createScorer({
 ```
 
 
-## .run() メソッド
+<div id="run-method">
+  ## .run() メソッド
+</div>
 
 `.run()` メソッドは、scorer を実行して入出力ペアを評価するための主要な方法です。定義した手順（preprocess → analyze → generateScore → generateReason）に沿ってデータを処理し、スコア、根拠、および中間結果を含む包括的な結果オブジェクトを返します。
 
@@ -42,7 +48,9 @@ const result = await scorer.run({
 ```
 
 
-## .run() の入力
+<div id="run-input">
+  ## .run() の入力
+</div>
 
 <PropertiesTable
   content={[
@@ -83,7 +91,9 @@ const result = await scorer.run({
   ]}
 />
 
-## .run() の戻り値
+<div id="run-returns">
+  ## .run() の戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -136,7 +146,9 @@ const result = await scorer.run({
   ]}
 />
 
-## ステップ実行フロー
+<div id="step-execution-flow">
+  ## ステップ実行フロー
+</div>
 
 `.run()` を呼び出すと、MastraScorer は以下の順序で定義されたステップを実行します：
 
@@ -147,7 +159,9 @@ const result = await scorer.run({
 
 各ステップは直前のステップの結果を受け取り、複雑な評価パイプラインを構築できるようにします。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 const scorer = createScorer({
@@ -184,7 +198,9 @@ console.log(result.reason); // "スコア: 1.0。応答は12単語です。"
 ```
 
 
-## 統合
+<div id="integration">
+  ## 統合
+</div>
 
 MastraScorer のインスタンスは、エージェントやワークフローの各ステップで使用できます。
 

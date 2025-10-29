@@ -3,15 +3,21 @@ title: "リファレンス: Arize AX | オブザーバビリティ | Mastra ド�
 description: Mastra と Arize AX の統合方法に関するドキュメント。LLM アプリケーションの監視と評価を行う包括的な AI オブザーバビリティ プラットフォームです。
 ---
 
-# Arize AX
+<div id="arize-ax">
+  # Arize AX
+</div>
 
 Arize AX は、本番環境で稼働する LLM アプリケーションの監視・評価・改善に特化して設計された、包括的な AI 可観測性プラットフォームです。
 
-## 設定
+<div id="configuration">
+  ## 設定
+</div>
 
 Mastra で Arize AX を使うには、環境変数を利用するか、Mastra の設定で直接構成できます。
 
-### 環境変数の使用
+<div id="using-environment-variables">
+  ### 環境変数の使用
+</div>
 
 次の環境変数を設定します:
 
@@ -21,12 +27,16 @@ ARIZE_API_KEY="your-api-key"
 ```
 
 
-### 資格情報の取得
+<div id="getting-your-credentials">
+  ### 資格情報の取得
+</div>
 
 1. [app.arize.com](https://app.arize.com) で Arize AX アカウントに登録する
 2. スペースの設定に進み、Space ID と API Key を確認する
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 まず、Mastra 向けの OpenInference のインストルメンテーションパッケージをインストールします。
 
@@ -35,7 +45,9 @@ npm install @arizeai/openinference-mastra
 ```
 
 
-## 実装
+<div id="implementation">
+  ## 実装
+</div>
 
 OpenTelemetry と併用して Arize AX を使うように Mastra を設定する手順は次のとおりです：
 
@@ -67,7 +79,9 @@ export const mastra = new Mastra({
 ```
 
 
-## 自動的にトレースされる内容
+<div id="what-gets-automatically-traced">
+  ## 自動的にトレースされる内容
+</div>
 
 Mastra の包括的なトレースでは、以下が記録されます:
 
@@ -79,6 +93,8 @@ Mastra の包括的なトレースでは、以下が記録されます:
 
 すべてのトレースは OpenTelemetry の標準に準拠しており、モデルパラメータ、トークン使用量、実行時間、エラーの詳細などの関連メタデータを含みます。
 
-## ダッシュボード
+<div id="dashboard">
+  ## ダッシュボード
+</div>
 
 設定が完了すると、[app.arize.com](https://app.arize.com) の Arize AX ダッシュボードでトレースとアナリティクスを確認できます

@@ -3,11 +3,15 @@ title: "リファレンス: run.watch() | 旧式ワークフロー | Mastra ド�
 description: ワークフローで使用する `.watch()` メソッドのドキュメント。ワークフロー実行の状態を監視します。
 ---
 
-# run.watch()
+<div id="runwatch">
+  # run.watch()
+</div>
 
 `.watch()` 関数は、mastra の実行（run）の状態変化を購読し、実行の進捗を監視して状態更新に応答できるようにします。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { LegacyWorkflow } from "@mastra/core/workflows/legacy";
@@ -34,7 +38,9 @@ await run.start({
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -47,7 +53,9 @@ await run.start({
   ]}
 />
 
-### LegacyWorkflowState のプロパティ
+<div id="legacyworkflowstate-properties">
+  ### LegacyWorkflowState のプロパティ
+</div>
 
 <PropertiesTable
   content={[
@@ -78,7 +86,9 @@ await run.start({
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -90,7 +100,9 @@ await run.start({
   ]}
 />
 
-## 追加例
+<div id="additional-examples">
+  ## 追加例
+</div>
 
 特定のステップの完了を監視する:
 
@@ -120,7 +132,9 @@ run.watch(({ results, activePaths }) => {
 ```
 
 
-### 関連
+<div id="related">
+  ### 関連
+</div>
 
 - [ワークフローの作成](./createRun)
 - [ステップの設定](./step-class)

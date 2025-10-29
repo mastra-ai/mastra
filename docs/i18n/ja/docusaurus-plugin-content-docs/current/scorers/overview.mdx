@@ -3,7 +3,9 @@ title: "Scorers の概要 | Scorers | Mastra ドキュメント"
 description: Mastra における Scorers の概要。AI の出力を評価し、パフォーマンスを測定するための機能について解説します。
 ---
 
-# Scorers の概要
+<div id="scorers-overview">
+  # Scorers の概要
+</div>
 
 従来のソフトウェアテストには明確な合否条件がありますが、AI の出力は非決定的で、同じ入力でも変わり得ます。**Scorers** は、エージェントの品質を定量的に測る指標を提供することで、このギャップを埋めます。
 
@@ -11,7 +13,9 @@ Scorers は、モデル採点・ルールベース・統計的手法を用いて
 
 Scorers はクラウド上で実行でき、リアルタイムに結果を取得できます。さらに、Scorers を CI/CD パイプラインに組み込むことで、エージェントを継続的にテストおよび監視できます。
 
-## スコアラーの種類
+<div id="types-of-scorers">
+  ## スコアラーの種類
+</div>
 
 スコアラーには目的ごとにさまざまな種類があります。一般的なタイプは次のとおりです。
 
@@ -19,7 +23,9 @@ Scorers はクラウド上で実行でき、リアルタイムに結果を取得
 2. **分類スコアラー**: 事前に定義されたカテゴリに基づいてデータを分類する際の精度を測定する
 3. **プロンプトエンジニアリング用スコアラー**: さまざまな指示や入力形式が与える影響を検証する
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 Mastra のスコアラー機能にアクセスするには、`@mastra/evals` パッケージをインストールしてください。
 
@@ -28,11 +34,15 @@ npm install @mastra/evals@latest
 ```
 
 
-## ライブ評価
+<div id="live-evaluations">
+  ## ライブ評価
+</div>
 
 **ライブ評価**では、エージェントやワークフローの稼働中に、AIの出力をリアルタイムで自動採点できます。評価を手動やバッチで実行するのではなく、スコアラーがAIシステムと並行して非同期に動作し、継続的に品質を監視します。
 
-### エージェントにスコアラーを追加する
+<div id="adding-scorers-to-agents">
+  ### エージェントにスコアラーを追加する
+</div>
 
 エージェントに組み込みのスコアラーを追加して、出力を自動評価できます。利用可能なオプションは、[組み込みスコアラーの一覧](/docs/scorers/off-the-shelf-scorers)をご覧ください。
 
@@ -60,7 +70,9 @@ export const evaluatedAgent = new Agent({
 ```
 
 
-### ワークフローのステップにスコアラーを追加する
+<div id="adding-scorers-to-workflow-steps">
+  ### ワークフローのステップにスコアラーを追加する
+</div>
 
 プロセス内の特定のポイントで出力を評価できるよう、各ワークフローのステップにスコアラーを追加することもできます。
 
@@ -88,7 +100,9 @@ export const contentWorkflow = createWorkflow({ ... })
 ```
 
 
-### ライブ評価の仕組み
+<div id="how-live-evaluations-work">
+  ### ライブ評価の仕組み
+</div>
 
 **非同期実行**: ライブ評価はバックグラウンドで実行され、エージェントの応答やワークフローの実行を妨げません。これにより、監視しながらもAIシステムのパフォーマンスを維持できます。
 
@@ -101,7 +115,9 @@ export const contentWorkflow = createWorkflow({ ... })
 
 **自動保存**: すべての採点結果は、設定済みデータベース内の `mastra_scorers` テーブルに自動的に保存され、経時的なパフォーマンスの傾向を分析できます。
 
-## トレースの評価
+<div id="trace-evaluations">
+  ## トレースの評価
+</div>
 
 ライブ評価に加え、スコアラーを使ってエージェントの対話やワークフローから得られた過去のトレースを評価できます。これは、過去のパフォーマンスの分析、問題のデバッグ、バッチ評価の実行に特に有用です。
 
@@ -113,7 +129,9 @@ export const contentWorkflow = createWorkflow({ ... })
 
 :::
 
-### Playground でトレースを採点する
+<div id="scoring-traces-with-the-playground">
+  ### Playground でトレースを採点する
+</div>
 
 トレースを採点するには、まず Mastra インスタンスにスコアラーを登録する必要があります。
 
@@ -130,13 +148,17 @@ const mastra = new Mastra({
 登録が完了すると、Observability セクションの Mastra Playground でトレースに対して対話的にスコアを付けられます。これにより、過去のトレースにスコアラーを実行するための使いやすいインターフェースが提供されます。
 
 
-## スコアラーをローカルでテストする
+<div id="testing-scorers-locally">
+  ## スコアラーをローカルでテストする
+</div>
 
 Mastra にはスコアラーをテストできる CLI コマンド `mastra dev` が用意されています。Playground にはスコアラー用のセクションがあり、個々のスコアラーをテスト入力に対して実行し、結果の詳細を確認できます。
 
 詳しくは、[ローカル開発用 Playground](/docs/getting-started/studio) のドキュメントをご覧ください。
 
-## 次のステップ
+<div id="next-steps">
+  ## 次のステップ
+</div>
 
 - [Creating Custom Scorers](/docs/scorers/custom-scorers) ガイドで独自のスコアラーの作成方法を学ぶ
 - [Off-the-shelf Scorers](/docs/scorers/off-the-shelf-scorers) セクションで組み込みスコアラーを確認する

@@ -3,7 +3,9 @@ title: "リファレンス: Amazon S3 Vectors ストア | Vectors | Mastra ド�
 description: Mastra の S3Vectors クラスに関するドキュメント。Amazon S3 Vectors（プレビュー）を利用したベクトル検索を提供します。
 ---
 
-# Amazon S3 Vectors ストア
+<div id="amazon-s3-vectors-store">
+  # Amazon S3 Vectors ストア
+</div>
 
 > ⚠️ Amazon S3 Vectors はプレビューサービスです。
 > プレビュー機能は予告なく変更または削除される場合があり、AWS の SLA の対象外です。
@@ -12,14 +14,18 @@ description: Mastra の S3Vectors クラスに関するドキュメント。Amaz
 
 `S3Vectors` クラスは、[Amazon S3 Vectors（プレビュー）](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors.html) を用いたベクトル検索を提供します。ベクトルは**ベクトルバケット**に保存され、**ベクトルインデックス**で類似検索が実行され、JSON ベースのメタデータフィルターが使用されます。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/s3vectors
 ```
 
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy showLineNumbers
 import { S3Vectors } from "@mastra/s3vectors";
@@ -72,7 +78,9 @@ await store.disconnect();
 ```
 
 
-## コンストラクターのオプション
+<div id="constructor-options">
+  ## コンストラクターのオプション
+</div>
 
 <PropertiesTable
   content={[
@@ -97,9 +105,13 @@ await store.disconnect();
   ]}
 />
 
-## メソッド
+<div id="methods">
+  ## メソッド
+</div>
 
-### createIndex()
+<div id="createindex">
+  ### createIndex()
+</div>
 
 設定済みのベクターバケットに新しいベクターインデックスを作成します。インデックスが既に存在する場合は、呼び出し時にスキーマを検証し、処理は行われません（既存のメトリックと次元は保持されます）。
 
@@ -127,7 +139,9 @@ await store.disconnect();
   ]}
 />
 
-### upsert()
+<div id="upsert">
+  ### upsert()
+</div>
 
 ベクターを追加または置換します（レコード全体の put）。`ids` が指定されていない場合は UUID が生成されます。
 
@@ -158,7 +172,9 @@ await store.disconnect();
   ]}
 />
 
-### query()
+<div id="query">
+  ### query()
+</div>
 
 オプションのメタデータフィルタで最近傍を検索します。
 
@@ -200,7 +216,9 @@ await store.disconnect();
 
 > **スコアリング:** 結果には `score = 1/(1 + distance)` が含まれます。これは距離の順位を保ったまま、スコアが高いほど良いことを示します。
 
-### describeIndex()
+<div id="describeindex">
+  ### describeIndex()
+</div>
 
 インデックスに関する情報を返します。
 
@@ -225,7 +243,9 @@ interface IndexStats {
 ```
 
 
-### deleteIndex()
+<div id="deleteindex">
+  ### deleteIndex()
+</div>
 
 インデックスとそのデータを削除します。
 
@@ -239,13 +259,17 @@ interface IndexStats {
   ]}
 />
 
-### listIndexes()
+<div id="listindexes">
+  ### listIndexes()
+</div>
 
 設定されたベクターバケット内のすべてのインデックスを一覧します。
 
 Returns: `Promise<string[]>`
 
-### updateVector()
+<div id="updatevector">
+  ### updateVector()
+</div>
 
 インデックス内の特定のIDに対して、ベクトルまたはメタデータを更新します。
 
@@ -281,7 +305,9 @@ Returns: `Promise<string[]>`
   ]}
 />
 
-### deleteVector()
+<div id="deletevector">
+  ### deleteVector()
+</div>
 
 指定した ID のベクトルを削除します。
 
@@ -300,11 +326,15 @@ Returns: `Promise<string[]>`
   ]}
 />
 
-### disconnect()
+<div id="disconnect">
+  ### disconnect()
+</div>
 
 ソケットを解放するために、基礎となる AWS SDK の HTTP ハンドラーをクローズします。
 
-## 応答の種類
+<div id="response-types">
+  ## 応答の種類
+</div>
 
 クエリ結果は次の形式で返されます。
 
@@ -318,7 +348,9 @@ interface QueryResult {
 ```
 
 
-## フィルター構文
+<div id="filter-syntax">
+  ## フィルター構文
+</div>
 
 S3 Vectors は演算子と値型の厳密なサブセットのみをサポートします。Mastra フィルター変換器は以下を行います:
 
@@ -360,7 +392,9 @@ S3 Vectors は演算子と値型の厳密なサブセットのみをサポート
 > **フィルター不可のキー:** インデックス作成時に `nonFilterableMetadataKeys` を設定すると、それらのキーは保存されますが、フィルターで**使用することはできません**。
 
 
-## エラーハンドリング
+<div id="error-handling">
+  ## エラーハンドリング
+</div>
 
 ストアは、キャッチ可能な型付きエラーをスローします。
 
@@ -379,7 +413,9 @@ try {
 ```
 
 
-## 環境変数
+<div id="environment-variables">
+  ## 環境変数
+</div>
 
 アプリを組み込む際によく使われる環境変数:
 
@@ -387,7 +423,9 @@ try {
 - `AWS_REGION`: S3 Vectors バケットの AWS リージョン。
 - **AWS 資格情報**: 標準の AWS SDK プロバイダー・チェーン（`AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、`AWS_PROFILE` など）経由。
 
-## ベストプラクティス
+<div id="best-practices">
+  ## ベストプラクティス
+</div>
 
 - 埋め込みモデルに合わせてメトリック（`cosine` または `euclidean`）を選択してください。`dotproduct` はサポートされていません。
 - **フィルタ可能**なメタデータは小さく、かつ構造化（string/number/boolean）して保ちましょう。大きなテキスト（例：`content`）は**フィルタ不可**として保存します。
@@ -395,6 +433,8 @@ try {
 - ホットパスでの `describeIndex()` 呼び出しは避けてください。`count` はページングされた `ListVectors` によって計算されます（**O(n)**）。
 - 生のベクトルが必要な場合にのみ `includeVector: true` を使用してください。
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [メタデータフィルター](../rag/metadata-filters)

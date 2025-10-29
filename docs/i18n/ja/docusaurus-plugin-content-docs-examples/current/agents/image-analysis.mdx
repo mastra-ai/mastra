@@ -6,11 +6,15 @@ description: Unsplash の画像を分析し、物体の特定や種の判別、�
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# 画像解析
+<div id="image-analysis">
+  # 画像解析
+</div>
 
 AI エージェントは、テキストの指示とあわせて視覚コンテンツを処理することで、画像を分析し理解できます。この機能により、エージェントは物体の特定、シーンの説明、画像に関する質問への回答、さらには複雑な視覚的推論タスクの実行が可能になります。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 * [Unsplash](https://unsplash.com/documentation#creating-a-developer-account) の開発者アカウント、アプリケーション、API キー
 * OpenAI の API キー
@@ -23,7 +27,9 @@ UNSPLASH_ACCESS_KEY=<your-unsplash-access-key>
 ```
 
 
-## エージェントの作成
+<div id="creating-an-agent">
+  ## エージェントの作成
+</div>
 
 画像を解析して物体を認識し、シーンを記述し、視覚コンテンツに関する質問に回答するシンプルなエージェントを作成します。
 
@@ -45,7 +51,9 @@ export const imageAnalysisAgent = new Agent({
 > 設定オプションの一覧は [Agent](/reference/agents/agent) を参照してください。
 
 
-## エージェントの登録
+<div id="registering-an-agent">
+  ## エージェントの登録
+</div>
 
 エージェントを使用するには、メインの Mastra インスタンスに登録します。
 
@@ -61,7 +69,9 @@ export const mastra = new Mastra({
 ```
 
 
-## 関数の作成
+<div id="creating-a-function">
+  ## 関数の作成
+</div>
 
 この関数は、分析のためにエージェントへ渡す Unsplash のランダムな画像を取得します。
 
@@ -89,7 +99,9 @@ export const getRandomImage = async (): Promise<string> => {
 ```
 
 
-## 使用例
+<div id="example-usage">
+  ## 使用例
+</div>
 
 `getAgent()` を使ってエージェントの参照を取得し、プロンプトとともに `generate()` を呼び出します。`content` 配列を用意し、画像の `type`、`imageUrl`、`mimeType`、そしてエージェントがどのように応答すべきかを示す明確な指示を含めてください。
 
@@ -125,6 +137,8 @@ console.log(response.text);
 <GithubLink outdated={true} marginTop="mt-16" link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/bird-checker" />
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [エージェントの呼び出し](./calling-agents)

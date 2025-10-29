@@ -3,11 +3,15 @@ title: "リファレンス: MastraAuthWorkos クラス | 認証 | Mastra ドキ�
 description: "WorkOS 認証を用いて Mastra アプリケーションの認証を行う MastraAuthWorkos クラスの API リファレンス。"
 ---
 
-# MastraAuthWorkos クラス
+<div id="mastraauthworkos-class">
+  # MastraAuthWorkos クラス
+</div>
 
 `MastraAuthWorkos` クラスは、WorkOS を用いて Mastra の認証を提供します。WorkOS のアクセストークンで受信リクエストを検証し、`experimental_auth` オプションを介して Mastra サーバーと統合します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
@@ -27,7 +31,9 @@ export const mastra = new Mastra({
 > **注:** 適切に名前が付けられた環境変数（`WORKOS_API_KEY` と `WORKOS_CLIENT_ID`）が設定されている場合は、コンストラクターのパラメーターを省略できます。その場合は、引数なしで `new MastraAuthWorkos()` を呼び出すだけで問題ありません。
 
 
-## コンストラクターのパラメーター
+<div id="constructor-parameters">
+  ## コンストラクターのパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -64,7 +70,9 @@ export const mastra = new Mastra({
   ]}
 />
 
-## 環境変数
+<div id="environment-variables">
+  ## 環境変数
+</div>
 
 コンストラクタのオプションが指定されていない場合、次の環境変数が自動的に使用されます。
 
@@ -87,7 +95,9 @@ export const mastra = new Mastra({
   ]}
 />
 
-## デフォルトの認可動作
+<div id="default-authorization-behavior">
+  ## デフォルトの認可動作
+</div>
 
 デフォルトでは、`MastraAuthWorkos` は管理者アクセスを判定するロールベースの認可を実装します。
 
@@ -102,7 +112,9 @@ export const mastra = new Mastra({
 
 カスタムの認可ロジック（例: 認証済みユーザー全員を許可、特定のロールの確認、独自のビジネスロジックの実装）を用いるには、`authorizeUser` 関数をカスタマイズして提供してください。
 
-## WorkOS ユーザータイプ
+<div id="workos-user-type">
+  ## WorkOS ユーザータイプ
+</div>
 
 `authorizeUser` 関数で使用される `WorkosUser` 型は、WorkOS が返す JWT トークンのペイロードに対応します。WorkOS では管理者がカスタムの JWT テンプレートを設定できるため、具体的な構造は設定によって異なる場合があります。ユーザーオブジェクトの例は次のとおりです：
 
@@ -129,6 +141,8 @@ export const mastra = new Mastra({
 `urn:myapp:` プレフィックスの付いたプロパティは、WorkOS の JWT テンプレートで構成されたカスタムクレームです。標準の JWT クレームには `sub`（ユーザー ID）、`iss`（発行者）、`exp`（有効期限）があり、WorkOS 固有のクレームとして `org_id`、`role`、`roles` などがあります。
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 [MastraAuthWorkos クラス](/docs/auth/workos)

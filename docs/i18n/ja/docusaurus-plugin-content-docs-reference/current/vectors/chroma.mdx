@@ -3,7 +3,9 @@ title: "リファレンス: Chroma Vector Store | ベクトル | Mastra ドキ�
 description: ChromaDB を用いたベクトル検索を提供する、Mastra の ChromaVector クラスに関するドキュメントです。
 ---
 
-# Chroma ベクターストア
+<div id="chroma-vector-store">
+  # Chroma ベクターストア
+</div>
 
 ChromaVector クラスは、オープンソースの埋め込みデータベースである [Chroma](https://docs.trychroma.com/docs/overview/getting-started) を用いたベクター検索を提供します。
 メタデータによるフィルタリングやハイブリッド検索に対応し、高効率なベクター検索を実現します。
@@ -18,7 +20,9 @@ Chroma Cloud は、サーバーレスのベクター検索と全文検索を提�
 
 :::
 
-## コンストラクターのオプション
+<div id="constructor-options">
+  ## コンストラクターのオプション
+</div>
 
 <PropertiesTable
   content={[
@@ -77,7 +81,9 @@ Chroma Cloud は、サーバーレスのベクター検索と全文検索を提�
   ]}
 />
 
-## Chroma サーバーの実行
+<div id="running-a-chroma-server">
+  ## Chroma サーバーの実行
+</div>
 
 Chroma Cloud のユーザーであれば、`ChromaVector` コンストラクターに API キー、テナント、データベース名を指定するだけです。
 
@@ -89,9 +95,13 @@ Chroma Cloud のユーザーであれば、`ChromaVector` コンストラクタ�
 - 公式の Chroma イメージを使用して [Docker](https://docs.trychroma.com/guides/deploy/docker) 上で実行する。
 - お好みのプロバイダー上に独自の Chroma サーバーをデプロイする。Chroma では [AWS](https://docs.trychroma.com/guides/deploy/aws)、[Azure](https://docs.trychroma.com/guides/deploy/azure)、[GCP](https://docs.trychroma.com/guides/deploy/gcp) 向けのサンプルテンプレートを提供しています。
 
-## メソッド
+<div id="methods">
+  ## メソッド
+</div>
 
-### createIndex()
+<div id="createindex">
+  ### createIndex()
+</div>
 
 <PropertiesTable
   content={[
@@ -115,7 +125,9 @@ Chroma Cloud のユーザーであれば、`ChromaVector` コンストラクタ�
   ]}
 />
 
-### forkIndex()
+<div id="forkindex">
+  ### forkIndex()
+</div>
 
 注意: フォークは Chroma Cloud で、または独自の OSS の**分散** Chroma をデプロイしている場合にのみサポートされます。
 
@@ -136,7 +148,9 @@ Chroma Cloud のユーザーであれば、`ChromaVector` コンストラクタ�
   ]}
 />
 
-### upsert()
+<div id="upsert">
+  ### upsert()
+</div>
 
 <PropertiesTable
   content={[
@@ -172,7 +186,9 @@ Chroma Cloud のユーザーであれば、`ChromaVector` コンストラクタ�
   ]}
 />
 
-### query()
+<div id="query">
+  ### query()
+</div>
 
 `queryVector` を使用してインデックスを照会します。`queryVector` からの距離が近い順に、意味的に類似したレコードの配列を返します。各レコードの構造は次のとおりです:
 
@@ -230,7 +246,9 @@ Chroma Cloud のユーザーであれば、`ChromaVector` コンストラクタ�
 />
 
 
-### get()
+<div id="get">
+  ### get()
+</div>
 
 ID、メタデータ、ドキュメントフィルターを指定して Chroma のインデックスからレコードを取得します。次の形式のレコード配列を返します：
 
@@ -297,11 +315,15 @@ ID、メタデータ、ドキュメントフィルターを指定して Chroma �
 />
 
 
-### listIndexes()
+<div id="listindexes">
+  ### listIndexes()
+</div>
 
 インデックス名の配列（文字列）を返します。
 
-### describeIndex()
+<div id="describeindex">
+  ### describeIndex()
+</div>
 
 <PropertiesTable
   content={[
@@ -324,7 +346,9 @@ interface IndexStats {
 ```
 
 
-### deleteIndex()
+<div id="deleteindex">
+  ### deleteIndex()
+</div>
 
 <PropertiesTable
   content={[
@@ -336,7 +360,9 @@ interface IndexStats {
   ]}
 />
 
-### updateVector()
+<div id="updatevector">
+  ### updateVector()
+</div>
 
 <PropertiesTable
   content={[
@@ -377,7 +403,9 @@ interface IndexStats {
   ]}
 />
 
-### deleteVector()
+<div id="deletevector">
+  ### deleteVector()
+</div>
 
 <PropertiesTable
   content={[
@@ -394,7 +422,9 @@ interface IndexStats {
   ]}
 />
 
-## レスポンスの種類
+<div id="response-types">
+  ## レスポンスの種類
+</div>
 
 クエリ結果は次の形式で返されます：
 
@@ -409,7 +439,9 @@ interface QueryResult {
 ```
 
 
-## エラー処理
+<div id="error-handling">
+  ## エラー処理
+</div>
 
 ストアは型付きのエラーをスローし、捕捉できます：
 
@@ -428,6 +460,8 @@ try {
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [メタデータフィルター](../rag/metadata-filters)

@@ -6,12 +6,16 @@ description: Mastra で RAG システムを実装し、LLM による処理で情
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# 情報密度の最適化
+<div id="optimizing-information-density">
+  # 情報密度の最適化
+</div>
 
 この例では、Mastra、OpenAI の埋め込み、そしてベクトル保存に PGVector を用いて、Retrieval-Augmented Generation（RAG）システムを実装する方法を示します。
 このシステムでは、エージェントが初期チャンクを整形して情報密度を高め、重複データを除去します。
 
-## 概要
+<div id="overview">
+  ## 概要
+</div>
 
 このシステムは Mastra と OpenAI を用いて RAG を実装し、LLM ベースの処理で情報密度を最適化します。主な処理は次のとおりです:
 
@@ -28,9 +32,13 @@ import GithubLink from "@site/src/components/GithubLink";
    - 最適化済みデータでベクターストアを更新
 6. 同じクエリを再実行し、応答品質の向上を検証
 
-## セットアップ
+<div id="setup">
+  ## セットアップ
+</div>
 
-### 環境設定
+<div id="environment-setup">
+  ### 環境設定
+</div>
 
 環境変数を設定していることを確認してください：
 
@@ -40,7 +48,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
 
-### 依存関係
+<div id="dependencies">
+  ### 依存関係
+</div>
 
 次に、必要な依存関係をインポートします。
 
@@ -58,9 +68,13 @@ import { embedMany } from "ai";
 ```
 
 
-## ツールの作成
+<div id="tool-creation">
+  ## ツールの作成
+</div>
 
-### ベクタークエリツール
+<div id="vector-query-tool">
+  ### ベクタークエリツール
+</div>
 
 @mastra/rag からインポートした createVectorQueryTool を使うと、ベクターデータベースを照会するツールを作成できます。
 
@@ -73,7 +87,9 @@ const vectorQueryTool = createVectorQueryTool({
 ```
 
 
-### ドキュメントチャンク化ツール
+<div id="document-chunker-tool">
+  ### ドキュメントチャンク化ツール
+</div>
 
 @mastra/rag からインポートした createDocumentChunkerTool を使用すると、ドキュメントをチャンクに分割し、そのチャンクをエージェントに送信するツールを作成できます。
 
@@ -92,7 +108,9 @@ const documentChunkerTool = createDocumentChunkerTool({
 ```
 
 
-## エージェントの設定
+<div id="agent-configuration">
+  ## エージェントの設定
+</div>
 
 問い合わせとクレンジングの両方に対応できる単一の Mastra エージェントを設定します:
 
@@ -114,7 +132,9 @@ const ragAgent = new Agent({
 ```
 
 
-## PgVector と Mastra のインスタンス化
+<div id="instantiate-pgvector-and-mastra">
+  ## PgVector と Mastra のインスタンス化
+</div>
 
 以下のコンポーネントを用いて、PgVector と Mastra をインスタンス化します:
 
@@ -131,7 +151,9 @@ const agent = mastra.getAgent("ragAgent");
 ```
 
 
-## 文書処理
+<div id="document-processing">
+  ## 文書処理
+</div>
 
 最初のドキュメントを分割し、埋め込みを作成します：
 
@@ -162,7 +184,9 @@ await vectorStore.upsert({
 ```
 
 
-## 初期クエリ
+<div id="initial-query">
+  ## 初期クエリ
+</div>
 
 まずは生データに対してクエリを実行して、ベースラインを確認しましょう:
 
@@ -175,7 +199,9 @@ console.log("レスポンス:", originalResponse.text);
 ```
 
 
-## データ最適化
+<div id="data-optimization">
+  ## データ最適化
+</div>
 
 初期結果を確認したうえで、品質向上のためにデータをクレンジングできます。
 
@@ -212,7 +238,9 @@ await vectorStore.upsert({
 ```
 
 
-## 最適化済みクエリ
+<div id="optimized-query">
+  ## 最適化済みクエリ
+</div>
 
 クリーンアップ後にデータを再度クエリし、応答に違いがあるか確認します。
 

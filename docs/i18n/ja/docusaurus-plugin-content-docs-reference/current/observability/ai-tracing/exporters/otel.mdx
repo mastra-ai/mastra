@@ -6,7 +6,9 @@ description: AI トレース用の OpenTelemetry エクスポーター
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
-# OtelExporter
+<div id="otelexporter">
+  # OtelExporter
+</div>
 
 :::warning
 
@@ -16,14 +18,18 @@ OtelExporter は現在**実験的**です。API や設定オプションは今�
 
 標準化された GenAI のセマンティック規約に基づき、OpenTelemetry 互換のオブザーバビリティプラットフォームへ AI のトレーシングデータを送信します。
 
-## コンストラクタ
+<div id="constructor">
+  ## コンストラクタ
+</div>
 
 ```typescript
 new OtelExporter(config: OtelExporterConfig)
 ```
 
 
-## OtelExporterConfig
+<div id="otelexporterconfig">
+  ## OtelExporterConfig
+</div>
 
 ```typescript
 interface OtelExporterConfig {
@@ -71,9 +77,13 @@ interface OtelExporterConfig {
 />
 
 
-## プロバイダーの設定
+<div id="provider-configurations">
+  ## プロバイダーの設定
+</div>
 
-### Dash0設定
+<div id="dash0config">
+  ### Dash0設定
+</div>
 
 ```typescript
 interface Dash0Config {
@@ -108,7 +118,9 @@ interface Dash0Config {
 />
 
 
-### SignozConfig
+<div id="signozconfig">
+  ### SignozConfig
+</div>
 
 ```typescript
 interface SignozConfig {
@@ -142,7 +154,9 @@ interface SignozConfig {
 />
 
 
-### New Relic 設定
+<div id="newrelicconfig">
+  ### New Relic 設定
+</div>
 
 ```typescript
 interface NewRelicConfig {
@@ -170,7 +184,9 @@ interface NewRelicConfig {
 />
 
 
-### Traceloop の設定
+<div id="traceloopconfig">
+  ### Traceloop の設定
+</div>
 
 ```typescript
 interface TraceloopConfig {
@@ -205,7 +221,9 @@ interface TraceloopConfig {
 />
 
 
-### LaminarConfig
+<div id="laminarconfig">
+  ### LaminarConfig
+</div>
 
 ```typescript
 interface LaminarConfig {
@@ -239,7 +257,9 @@ interface LaminarConfig {
 />
 
 
-### CustomConfig
+<div id="customconfig">
+  ### CustomConfig
+</div>
 
 ```typescript
 interface CustomConfig {
@@ -273,9 +293,13 @@ interface CustomConfig {
 />
 
 
-## 方法
+<div id="methods">
+  ## 方法
+</div>
 
-### exportEvent
+<div id="exportevent">
+  ### exportEvent
+</div>
 
 ```typescript
 async exportEvent(event: AITracingEvent): Promise<void>
@@ -284,7 +308,9 @@ async exportEvent(event: AITracingEvent): Promise<void>
 設定された OTEL バックエンドにトレースイベントをエクスポートします。
 
 
-### シャットダウン
+<div id="shutdown">
+  ### シャットダウン
+</div>
 
 ```typescript
 async shutdown(): Promise<void>
@@ -293,9 +319,13 @@ async shutdown(): Promise<void>
 未送信のトレースをフラッシュし、エクスポーターをシャットダウンします。
 
 
-## 使い方の例
+<div id="usage-examples">
+  ## 使い方の例
+</div>
 
-### 基本的な使用方法
+<div id="basic-usage">
+  ### 基本的な使用方法
+</div>
 
 ```typescript
 import { OtelExporter } from "@mastra/otel-exporter";
@@ -311,7 +341,9 @@ const exporter = new OtelExporter({
 ```
 
 
-### カスタムエンドポイントの使用
+<div id="with-custom-endpoint">
+  ### カスタムエンドポイントの使用
+</div>
 
 ```typescript
 const exporter = new OtelExporter({
@@ -330,25 +362,33 @@ const exporter = new OtelExporter({
 ```
 
 
-## スパンのマッピング
+<div id="span-mapping">
+  ## スパンのマッピング
+</div>
 
 エクスポーターは、GenAI のセマンティック規約に従って、Mastra AI のスパンを OpenTelemetry のスパンへマッピングします。
 
-### スパン名
+<div id="span-names">
+  ### スパン名
+</div>
 
 - `MODEL_GENERATION` → `chat {model}` または `tool_selection {model}`
 - `TOOL_CALL` → `tool.execute {tool_name}`
 - `AGENT_RUN` → `agent.{agent_id}`
 - `WORKFLOW_RUN` → `workflow.{workflow_id}`
 
-### Span の種類
+<div id="span-kinds">
+  ### Span の種類
+</div>
 
 - ルートエージェント/ワークフローのスパン → `SERVER`
 - LLM 呼び出し → `CLIENT`
 - ツール呼び出し → `INTERNAL` または `CLIENT`
 - ワークフローのステップ → `INTERNAL`
 
-### 属性
+<div id="attributes">
+  ### 属性
+</div>
 
 エクスポーターは標準の OTEL GenAI 属性にマッピングされます：
 
@@ -362,7 +402,9 @@ const exporter = new OtelExporter({
 | `maxOutputTokens`                   | `gen_ai.request.max_tokens`      |
 | `finishReason`                      | `gen_ai.response.finish_reasons` |
 
-## プロトコル要件
+<div id="protocol-requirements">
+  ## プロトコル要件
+</div>
 
 プロバイダーによって必要な OTEL エクスポーターのパッケージが異なります：
 
@@ -373,7 +415,9 @@ const exporter = new OtelExporter({
 | HTTP/JSON     | `@opentelemetry/exporter-trace-otlp-http`  | Traceloop, Custom          |
 | Zipkin        | `@opentelemetry/exporter-zipkin`           | Zipkin コレクター          |
 
-## 親子関係
+<div id="parent-child-relationships">
+  ## 親子関係
+</div>
 
 エクスポーターは Mastra の AI トレーシングにおけるスパン階層を保持します:
 

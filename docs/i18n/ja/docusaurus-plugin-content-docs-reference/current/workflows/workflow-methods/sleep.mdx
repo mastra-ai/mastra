@@ -3,18 +3,24 @@ title: "リファレンス: Workflow.sleep() | Workflows | Mastra ドキュメ�
 description: ワークフローにおける `Workflow.sleep()` メソッドのリファレンス。指定したミリ秒間、実行を一時停止します。
 ---
 
-# Workflow.sleep()
+<div id="workflowsleep">
+  # Workflow.sleep()
+</div>
 
 `.sleep()` メソッドは、指定したミリ秒間、実行を一時停止します。固定の数値、または遅延を動的に決定するためのコールバック関数を受け取ります。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 workflow.sleep(5000);
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -28,7 +34,9 @@ workflow.sleep(5000);
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -40,7 +48,9 @@ workflow.sleep(5000);
   ]}
 />
 
-## 拡張された使用例
+<div id="extended-usage-example">
+  ## 拡張された使用例
+</div>
 
 ```typescript showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -59,6 +69,8 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [一時停止と再開](/docs/workflows/suspend-and-resume#sleep--events)

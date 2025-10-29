@@ -6,9 +6,13 @@ description: Span のインターフェース、メソッド、ライフサイ�
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
-# span
+<div id="span">
+  # span
+</div>
 
-## BaseSpan
+<div id="basespan">
+  ## BaseSpan
+</div>
 
 すべてのスパン型に共通する基本インターフェース。
 
@@ -59,7 +63,9 @@ interface BaseSpan<TType extends AISpanType> {
 ```
 
 
-## AISpan
+<div id="aispan">
+  ## AISpan
+</div>
 
 トレース用途で内部的に使用される AI Span インターフェース。BaseSpan を拡張し、ライフサイクル関連のメソッドとプロパティを備えます。
 
@@ -77,7 +83,9 @@ interface AISpan<TType extends AISpanType> extends BaseSpan<TType> {
 ```
 
 
-### プロパティ
+<div id="properties">
+  ### プロパティ
+</div>
 
 ```typescript
 /** スパンがトレースのルートスパンの場合、TRUEを返します */
@@ -94,9 +102,13 @@ exportSpan(includeInternalSpans?: boolean): ExportedAISpan<TType> | undefined
 ```
 
 
-### メソッド
+<div id="methods">
+  ### メソッド
+</div>
 
-#### 終了
+<div id="end">
+  #### 終了
+</div>
 
 ```typescript
 end(options?: EndSpanOptions<TType>): void
@@ -128,7 +140,9 @@ end(options?: EndSpanOptions<TType>): void
 />
 
 
-#### エラー
+<div id="error">
+  #### エラー
+</div>
 
 ```typescript
 error(options: ErrorSpanOptions<TType>): void
@@ -166,7 +180,9 @@ error(options: ErrorSpanOptions<TType>): void
 />
 
 
-#### 更新
+<div id="update">
+  #### 更新
+</div>
 
 ```typescript
 update(options: UpdateSpanOptions<TType>): void
@@ -204,7 +220,9 @@ update(options: UpdateSpanOptions<TType>): void
 />
 
 
-#### createChildSpan
+<div id="createchildspan">
+  #### createChildSpan
+</div>
 
 ```typescript
 createChildSpan<TChildType extends AISpanType>(
@@ -250,7 +268,9 @@ createChildSpan<TChildType extends AISpanType>(
 />
 
 
-#### createEventSpan
+<div id="createeventspan">
+  #### createEventSpan
+</div>
 
 ```typescript
 createEventSpan<TChildType extends AISpanType>(
@@ -302,7 +322,9 @@ createEventSpan<TChildType extends AISpanType>(
 />
 
 
-## ExportedAISpan
+<div id="exportedaispan">
+  ## ExportedAISpan
+</div>
 
 エクスポーターのトレースに使用される Exported AI Span インターフェース。メソッドや循環参照を持たない AISpan の軽量版です。
 
@@ -317,11 +339,15 @@ interface ExportedAISpan<TType extends AISpanType> extends BaseSpan<TType> {
 ```
 
 
-## スパンのライフサイクルイベント
+<div id="span-lifecycle-events">
+  ## スパンのライフサイクルイベント
+</div>
 
 スパンのライフサイクル中に発生するイベント。
 
-### AITracingEventType
+<div id="aitracingeventtype">
+  ### AITracingEventType
+</div>
 
 ```typescript
 enum AITracingEventType {
@@ -337,7 +363,9 @@ enum AITracingEventType {
 ```
 
 
-### AITracingEvent
+<div id="aitracingevent">
+  ### AITracingEvent
+</div>
 
 ```typescript
 type AITracingEvent =
@@ -349,9 +377,13 @@ type AITracingEvent =
 エクスポーターは、これらのイベントを受け取り、トレースデータを処理して観測可能性プラットフォームに送信します。
 
 
-## 共用体型
+<div id="union-types">
+  ## 共用体型
+</div>
 
-### AnyAISpan
+<div id="anyaispan">
+  ### AnyAISpan
+</div>
 
 ```typescript
 type AnyAISpan = AISpan<keyof AISpanTypeMap>;
@@ -360,7 +392,9 @@ type AnyAISpan = AISpan<keyof AISpanTypeMap>;
 あらゆるスパン型を扱う必要がある場合のためのユニオン型。
 
 
-### AnyExportedAISpan
+<div id="anyexportedaispan">
+  ### AnyExportedAISpan
+</div>
 
 ```typescript
 type AnyExportedAISpan = ExportedAISpan<keyof AISpanTypeMap>;
@@ -369,20 +403,28 @@ type AnyExportedAISpan = ExportedAISpan<keyof AISpanTypeMap>;
 エクスポートされた任意の span 型を扱う必要がある場合のためのユニオン型。
 
 
-## 関連項目
+<div id="see-also">
+  ## 関連項目
+</div>
 
-### ドキュメント
+<div id="documentation">
+  ### ドキュメント
+</div>
 
 - [AI トレーシングの概要](/docs/observability/ai-tracing/overview) - 概念と使い方
 - [子スパンの作成](/docs/observability/ai-tracing/overview#creating-child-spans) - 実用例
 - [トレース ID の取得](/docs/observability/ai-tracing/overview#retrieving-trace-ids) - トレース ID の活用
 
-### 参考
+<div id="reference">
+  ### 参考
+</div>
 
 - [AITracing クラス](/reference/observability/ai-tracing/) - トレーシングの中核となるクラス
 - [インターフェース](/reference/observability/ai-tracing/interfaces) - 型の完全なリファレンス
 - [設定](/reference/observability/ai-tracing/configuration) - 設定項目
 
-### 例
+<div id="examples">
+  ### 例
+</div>
 
 - [Basic AI Tracing](/examples/observability/basic-ai-tracing) - スパンの取り扱い

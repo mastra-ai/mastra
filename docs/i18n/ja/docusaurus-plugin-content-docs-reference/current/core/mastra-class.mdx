@@ -3,7 +3,9 @@ title: "リファレンス: Mastra クラス | Core | Mastra ドキュメント"
 description: "Mastra の `Mastra` クラスに関するドキュメント。エージェント、ワークフロー、MCP サーバー、およびサーバー エンドポイントを管理するための中核的なエントリポイント（入口）です。"
 ---
 
-# Mastra クラス
+<div id="mastra-class">
+  # Mastra クラス
+</div>
 
 `Mastra` クラスは、あらゆる Mastra アプリケーションの中核となるオーケストレーターで、エージェント、ワークフロー、ストレージ、ログ記録、テレメトリーなどを管理します。通常、アプリケーション全体を統括するために `Mastra` のインスタンスは 1 つだけ作成します。
 
@@ -12,7 +14,9 @@ description: "Mastra の `Mastra` クラスに関するドキュメント。エ�
 - **integrations** を登録すると、**agents**、**workflows**、**tools** から利用できるようになります。
 - **tools** は `Mastra` に直接登録するのではなく、エージェントに関連付けられ、自動的に検出されます。
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core/mastra";
@@ -35,7 +39,9 @@ export const mastra = new Mastra({
 ```
 
 
-## コンストラクターのパラメーター
+<div id="constructor-parameters">
+  ## コンストラクターのパラメーター
+</div>
 
 <PropertiesTable
   content={[

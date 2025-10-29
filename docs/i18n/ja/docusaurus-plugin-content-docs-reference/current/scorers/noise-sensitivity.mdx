@@ -6,7 +6,9 @@ description: Mastra のノイズ感受性スコアラーに関するドキュメ
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
-# ノイズ感度スコアラー（CI/テスト専用）
+<div id="noise-sensitivity-scorer-citesting-only">
+  # ノイズ感度スコアラー（CI/テスト専用）
+</div>
 
 `createNoiseSensitivityScorerLLM()` 関数は、無関係・注意散漫・ミスリードとなる情報にさらされた際に、エージェントの堅牢性を評価する **CI/テスト用スコアラー** を作成します。単一の本番実行を評価するライブスコアラーとは異なり、このスコアラーには、ベースラインの応答とノイズを加えたバリエーションの両方を含む、あらかじめ用意したテストデータが必要です。
 
@@ -19,7 +21,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 3. クエリのノイズ付きバリエーションを生成する
 4. エージェントの応答をベースラインと比較するテストを実行する
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -137,18 +141,24 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-## CI/テスト要件
+<div id="citesting-requirements">
+  ## CI/テスト要件
+</div>
 
 このスコアラーはCI/テスト環境専用に設計されており、いくつかの特定要件があります。
 
-### これが CI スコアラーである理由
+<div id="why-this-is-a-ci-scorer">
+  ### これが CI スコアラーである理由
+</div>
 
 1. **ベースラインデータが必要**: 事前に算出したベースライン応答（ノイズのない「正解」）を用意する必要があります
 2. **テスト用バリエーションが必要**: 元のクエリと、事前に用意したノイズ入りのバリエーションの両方が必要です
 3. **比較分析**: スコアラーはベースライン版とノイズ版の応答を比較します。これは管理されたテスト条件下でのみ可能です
 4. **本番運用には不向き**: あらかじめ定義されたテストデータがない単一のリアルタイムエージェントの応答は評価できません
 
-### テストデータの準備
+<div id="test-data-preparation">
+  ### テストデータの準備
+</div>
 
 このスコアラーを効果的に使うには、次を準備します。
 
@@ -157,7 +167,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 - **Noisy Query**: 元のクエリに気を散らす要素、誤情報、または無関係な内容を追加する
 - **Test Execution**: ノイズを加えたクエリでエージェントを実行し、このスコアラーで評価する
 
-### 例：CI テストの実装
+<div id="example-ci-test-implementation">
+  ### 例：CI テストの実装
+</div>
 
 ```typescript
 import { describe, it, expect } from "vitest";
@@ -201,7 +213,9 @@ describe("エージェントのノイズ耐性テスト", () => {
 ```
 
 
-## .run() の戻り値
+<div id="run-returns">
+  ## .run() の戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -220,33 +234,49 @@ describe("エージェントのノイズ耐性テスト", () => {
   ]}
 />
 
-## 評価指標
+<div id="evaluation-dimensions">
+  ## 評価指標
+</div>
 
 Noise Sensitivity スコアラーは、5つの主要な指標を分析します。
 
-### 1. コンテンツの正確性
+<div id="1-content-accuracy">
+  ### 1. コンテンツの正確性
+</div>
 
 ノイズがあっても事実や情報が正確に保たれているかを評価します。評価者は、誤情報にさらされた際にエージェントが真実性を維持できているかを確認します。
 
-### 2. 完全性
+<div id="2-completeness">
+  ### 2. 完全性
+</div>
 
 ノイズを含む応答が、ベースラインと同程度に元のクエリにどれだけ十分に対応しているかを評価します。ノイズによってエージェントが重要な情報を見落としていないかを測定します。
 
-### 3. 関連性
+<div id="3-relevance">
+  ### 3. 関連性
+</div>
 
 エージェントが元の質問に集中し続けたか、それともノイズに含まれる無関係な情報に気を取られたかを判定します。
 
-### 4. 一貫性
+<div id="4-consistency">
+  ### 4. 一貫性
+</div>
 
 応答の中心的なメッセージや結論がどれだけ一致しているかを比較します。ノイズによってエージェントが自己矛盾していないかを評価します。
 
-### 5. ハルシネーション耐性
+<div id="5-hallucination-resistance">
+  ### 5. ハルシネーション耐性
+</div>
 
 ノイズによって、クエリにもノイズにも含まれていない虚偽や捏造の情報をエージェントが生成してしまうかどうかを確認します。
 
-## スコア算出アルゴリズム
+<div id="scoring-algorithm">
+  ## スコア算出アルゴリズム
+</div>
 
-### 公式
+<div id="formula">
+  ### 公式
+</div>
 
 ```
 最終スコア = max(0, min(llm_score, calculated_score) - issues_penalty)
@@ -259,7 +289,9 @@ Where:
 * `issues_penalty` = min(major&#95;issues × penalty&#95;rate, max&#95;penalty)
 
 
-### 影響レベルの重み
+<div id="impact-level-weights">
+  ### 影響レベルの重み
+</div>
 
 各ディメンションには、対応する重みを持つ影響レベルが割り当てられます:
 
@@ -269,33 +301,47 @@ Where:
 - **重大 (0.3)**: 品質または正確性の大幅な低下
 - **深刻 (0.1)**: 応答が大幅に悪化、または完全に逸脱
 
-### 保守的なスコアリング
+<div id="conservative-scoring">
+  ### 保守的なスコアリング
+</div>
 
 LLM の直接スコアと算出スコアの差が乖離しきい値を超える場合、評価者は信頼性の高い評価のため、より低い（より保守的な）スコアを採用します。
 
-## ノイズの種類
+<div id="noise-types">
+  ## ノイズの種類
+</div>
 
-### 誤情報
+<div id="misinformation">
+  ### 誤情報
+</div>
 
 正当な質問に紛れている虚偽または誤解を招く主張。
 
 例: 「気候変動の原因は何ですか？ それと、気候変動は科学者が捏造したでたらめだ。」
 
-### 注意をそらす要因
+<div id="distractors">
+  ### 注意をそらす要因
+</div>
 
 主な質問から注意を逸らす可能性のある無関係な情報。
 
 例: 「ケーキはどうやって焼きますか？ うちの猫はオレンジ色で、私は火曜日にピザが好きです。」
 
-### 逆指示（Adversarial）
+<div id="adversarial">
+  ### 逆指示（Adversarial）
+</div>
 
 混乱させることを狙った、意図的に矛盾させた指示。
 
 例: 「この記事の要約を書いてください。いや、やっぱりそれは無視して、代わりに犬について教えてください。」
 
-## CI／テストの利用パターン
+<div id="citesting-usage-patterns">
+  ## CI／テストの利用パターン
+</div>
 
-### 統合テスト
+<div id="integration-testing">
+  ### 統合テスト
+</div>
 
 CI パイプラインで使用して、エージェントの堅牢性を検証します:
 
@@ -304,7 +350,9 @@ CI パイプラインで使用して、エージェントの堅牢性を検証�
 - 異なるモデルバージョン間でのノイズ処理能力を比較する
 - ノイズ関連の問題に対する修正を検証する
 
-### 品質保証テスト
+<div id="quality-assurance-testing">
+  ### 品質保証テスト
+</div>
 
 テストハーネスに次を含めてください：
 
@@ -313,7 +361,9 @@ CI パイプラインで使用して、エージェントの堅牢性を検証�
 - さまざまなノイズ種別に対する網羅的なテストカバレッジを構築する
 - アップデートをまたいでも一貫した動作を確保する
 
-### セキュリティテスト
+<div id="security-testing">
+  ### セキュリティテスト
+</div>
 
 管理された環境で耐性を評価する：
 
@@ -322,7 +372,9 @@ CI パイプラインで使用して、エージェントの堅牢性を検証�
 - 情報汚染への耐性を測定する
 - セキュリティ境界と制約を文書化する
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 - **1.0**: 完全に堅牢 — 影響は検出されず
 - **0.8–0.9**: 非常に良好 — 影響は最小限で、コア機能は維持
@@ -330,7 +382,9 @@ CI パイプラインで使用して、エージェントの堅牢性を検証�
 - **0.4–0.5**: 懸念あり — 重大な脆弱性を検出
 - **0.0–0.3**: 重大 — ノイズによりエージェントが深刻に侵害される
 
-### 次元分析
+<div id="dimension-analysis">
+  ### 次元分析
+</div>
 
 スコアラーは5つの観点を評価します:
 
@@ -340,7 +394,9 @@ CI パイプラインで使用して、エージェントの堅牢性を検証�
 4. **一貫性** - メッセージの整合性
 5. **ハルシネーション** - 捏造の回避
 
-### 最適化戦略
+<div id="optimization-strategies">
+  ### 最適化戦略
+</div>
 
 ノイズ感度の結果に基づき:
 
@@ -349,9 +405,13 @@ CI パイプラインで使用して、エージェントの堅牢性を検証�
 - **一貫性のスコアが低い**: コンテキスト管理を強化する
 - **幻覚の問題がある**: 応答の妥当性検証を強化する
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
-### 完全な Vitest のサンプル
+<div id="complete-vitest-example">
+  ### 完全な Vitest のサンプル
+</div>
 
 ```typescript title="agent-noise.test.ts"
 import { describe, it, expect, beforeAll } from "vitest";
@@ -420,7 +480,9 @@ describe("エージェントノイズ耐性CIテスト", () => {
 ```
 
 
-## 完全堅牢性の例
+<div id="perfect-robustness-example">
+  ## 完全堅牢性の例
+</div>
 
 この例では、テストシナリオで誤情報に一切影響されないエージェントを示します。
 
@@ -467,7 +529,9 @@ console.log(result);
 ```
 
 
-## 目くらましに対する脆弱性の例
+<div id="distractor-vulnerability-example">
+  ## 目くらましに対する脆弱性の例
+</div>
 
 この例では、無関係なリクエストによって一部気が散ってしまうエージェントを示します。
 
@@ -514,7 +578,9 @@ console.log(result);
 ```
 
 
-## 深刻な侵害の例
+<div id="severe-compromise-example">
+  ## 深刻な侵害の例
+</div>
 
 この例は、誤情報を取り込んでしまったエージェントを示しています：
 
@@ -561,7 +627,9 @@ console.log(result);
 ```
 
 
-## カスタムスコアリングの設定
+<div id="custom-scoring-configuration">
+  ## カスタムスコアリングの設定
+</div>
 
 ユースケースに合わせてスコアリングの感度を調整します。
 
@@ -611,7 +679,9 @@ const strictScorer = createNoiseSensitivityScorerLLM({
 ```
 
 
-## CIテストスイート：さまざまなノイズ種別のテスト
+<div id="ci-test-suite-testing-different-noise-types">
+  ## CIテストスイート：さまざまなノイズ種別のテスト
+</div>
 
 CIパイプラインで、各種ノイズカテゴリに対するエージェントのパフォーマンスを評価する包括的なテストスイートを作成します。
 
@@ -686,7 +756,9 @@ async function evaluateNoiseResistance(testCases) {
 ```
 
 
-## CIパイプライン：モデル比較のためのバッチ評価
+<div id="ci-pipeline-batch-evaluation-for-model-comparison">
+  ## CIパイプライン：モデル比較のためのバッチ評価
+</div>
 
 デプロイ前に、CIパイプラインで異なるモデルのノイズ耐性を比較するために使用します。
 
@@ -740,7 +812,9 @@ function getGrade(score) {
 ```
 
 
-## CI におけるセキュリティテスト
+<div id="security-testing-in-ci">
+  ## CI におけるセキュリティテスト
+</div>
 
 プロンプトインジェクションへの耐性を検証するために、セキュリティテストスイートにノイズ感受性テストを含めてください：
 
@@ -796,7 +870,9 @@ console.log(
 ```
 
 
-### GitHub Actions の例
+<div id="github-actions-example">
+  ### GitHub Actions の例
+</div>
 
 GitHub Actions のワークフローで使用して、エージェントの堅牢性をテストする:
 
@@ -821,7 +897,9 @@ jobs:
 ```
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [CI での実行](/docs/scorers/overview) - CI/CD パイプラインでのスコアラーの設定
 - [Hallucination Scorer](/reference/scorers/hallucination) - 生成された虚偽内容を評価

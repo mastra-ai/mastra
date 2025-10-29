@@ -7,13 +7,17 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 
-# RAGシステムにおける検索（リトリーバル）
+<div id="retrieval-in-rag-systems">
+  # RAGシステムにおける検索（リトリーバル）
+</div>
 
 埋め込みを保存した後は、ユーザーのクエリに答えるために、関連するチャンクを取り出す必要があります。
 
 Mastraはセマンティック検索、フィルタリング、再ランキングに対応し、柔軟な検索（リトリーバル）オプションを提供します。
 
-## 取得の仕組み
+<div id="how-retrieval-works">
+  ## 取得の仕組み
+</div>
 
 1. ユーザーのクエリは、ドキュメント埋め込みに使用したのと同じモデルで埋め込みに変換されます
 2. この埋め込みを、ベクトル類似度を用いて保存済みの埋め込みと比較します
@@ -23,7 +27,9 @@ Mastraはセマンティック検索、フィルタリング、再ランキン�
 - 関連性向上のための再ランク付け
 - ナレッジグラフを用いた処理
 
-## 基本的な検索（リトリーバル）
+<div id="basic-retrieval">
+  ## 基本的な検索（リトリーバル）
+</div>
 
 最も簡単な方法は、セマンティック検索をそのまま使うやり方です。この手法では、ベクトルの類似度を用いて、クエリと意味的に近いチャンクを見つけます。
 
@@ -73,9 +79,13 @@ console.log(results);
 基本的なリトリーバル手法の使い方については、[Retrieve Results](/examples/rag/query/retrieve-results) の例をご覧ください。
 
 
-## 高度な検索オプション
+<div id="advanced-retrieval-options">
+  ## 高度な検索オプション
+</div>
 
-### メタデータフィルタリング
+<div id="metadata-filtering">
+  ### メタデータフィルタリング
+</div>
 
 メタデータフィールドに基づいて結果をフィルターし、検索範囲を絞り込みます。これは、異なるソースや時期、特定の属性を持つドキュメントがある場合に有用です。Mastra は、サポートされているすべてのベクトルストアで機能する、MongoDB 風の統一クエリ構文を提供します。
 
@@ -150,7 +160,9 @@ const results = await pgVector.query({
 メタデータフィルタリングの使用例は、[Hybrid Vector Search](/examples/rag/query/hybrid-vector-search) を参照してください。
 
 
-### ベクタークエリツール
+<div id="vector-query-tool">
+  ### ベクタークエリツール
+</div>
 
 エージェントにベクターデータベースへ直接クエリさせたい場合があります。ベクタークエリツールを使うと、エージェントが取得方針の判断を担い、ユーザーのニーズに対する理解に基づいて、セマンティック検索に加えて任意のフィルタリングやリランキングを組み合わせられます。
 
@@ -171,7 +183,9 @@ const vectorQueryTool = createVectorQueryTool({
 * 文脈に応じて複数の取得戦略を組み合わせたいとき
 
 
-#### データベース固有の設定
+<div id="database-specific-configurations">
+  #### データベース固有の設定
+</div>
 
 Vector Query Tool は、各種ベクターストアの独自機能や最適化を活用できるデータベース固有の設定をサポートしています。
 
@@ -267,7 +281,9 @@ await pineconeQueryTool.execute({
 詳細な設定オプションや高度な活用方法については、[Vector Query Tool リファレンス](/reference/tools/vector-query-tool)を参照してください。
 
 
-### ベクターストアのプロンプト
+<div id="vector-store-prompts">
+  ### ベクターストアのプロンプト
+</div>
 
 ベクターストアのプロンプトは、各ベクターデータベース実装におけるクエリパターンとフィルタリング機能を定義します。
 フィルタリングを実装する際には、各ベクターストア実装で有効な演算子や構文を明示するために、これらのプロンプトをエージェントの指示に含める必要があります。
@@ -461,7 +477,9 @@ await pineconeQueryTool.execute({
   </TabItem>
 </Tabs>
 
-### リランキング
+<div id="re-ranking">
+  ### リランキング
+</div>
 
 初期のベクトル類似度検索では、微妙な関連性を見落とすことがあります。リランキングは計算コストは高いものの、より高精度なアルゴリズムで、次の点で結果を向上させます:
 
@@ -518,7 +536,9 @@ const relevanceProvider = new ZeroEntropyRelevanceScorer("zerank-1");
 再ランキングの使い方の例は、examples セクションの「Re-ranking Results」を参照してください。
 
 
-### グラフベースの検索
+<div id="graph-based-retrieval">
+  ### グラフベースの検索
+</div>
 
 複雑な関係性を持つドキュメントでは、グラフベースの検索によってチャンク間の関連をたどれます。これは次のような場合に役立ちます:
 

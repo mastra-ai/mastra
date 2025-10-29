@@ -3,13 +3,17 @@ title: "リファレンス: LangSmith | Observability | Mastra ドキュメン�
 description: Mastra と LangSmith の連携方法に関するドキュメント。Mastra は、LLM アプリケーションのデバッグ、テスト、評価、監視を行うためのプラットフォームです。
 ---
 
-# LangSmith
+<div id="langsmith">
+  # LangSmith
+</div>
 
 LangSmith は、LLM アプリケーションのデバッグ、テスト、評価、監視のための LangChain のプラットフォームです。
 
 > **注**: 現時点では、この統合はアプリケーション内の AI 関連のコールのみをトレースします。その他の種類の処理はテレメトリデータに含まれません。
 
-## 設定
+<div id="configuration">
+  ## 設定
+</div>
 
 Mastra で LangSmith を使用するには、以下の環境変数を設定してください。
 
@@ -21,7 +25,9 @@ LANGSMITH_PROJECT=your-project-name
 ```
 
 
-## 実装
+<div id="implementation">
+  ## 実装
+</div>
 
 Mastra を LangSmith で使えるように設定する手順は次のとおりです。
 
@@ -43,7 +49,9 @@ export const mastra = new Mastra({
 ```
 
 
-## ダッシュボード
+<div id="dashboard">
+  ## ダッシュボード
+</div>
 
 LangSmith ダッシュボードからトレースと分析にアクセスできます: [smith.langchain.com](https://smith.langchain.com)
 

@@ -7,11 +7,15 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 
-# ベクトルデータベースへの埋め込みの保存
+<div id="storing-embeddings-in-a-vector-database">
+  # ベクトルデータベースへの埋め込みの保存
+</div>
 
 埋め込みを生成したら、ベクトル類似検索をサポートするデータベースに保存する必要があります。Mastra は、さまざまなベクトルデータベースに対して埋め込みの保存や検索を一貫した方法で行えるインターフェースを提供します。
 
-## 対応データベース
+<div id="supported-databases">
+  ## 対応データベース
+</div>
 
 <Tabs>
   <TabItem value="MongoDB" label="MongoDB">
@@ -310,11 +314,15 @@ import TabItem from "@theme/TabItem";
   </TabItem>
 </Tabs>
 
-## ベクターストレージの使用
+<div id="using-vector-storage">
+  ## ベクターストレージの使用
+</div>
 
 初期化が完了すると、すべてのベクターストアでインデックスの作成、埋め込みのアップサート、クエリの実行に同一のインターフェースを利用できます。
 
-### インデックスの作成
+<div id="creating-indexes">
+  ### インデックスの作成
+</div>
 
 埋め込みを保存する前に、使用する埋め込みモデルに合わせた次元数でインデックスを作成する必要があります。
 
@@ -335,7 +343,9 @@ await store.createIndex({
 > **重要**: インデックスの次元数は作成後に変更できません。別のモデルを使用する場合は、インデックスを削除し、新しい次元数で再作成してください。
 
 
-### データベースの命名ルール
+<div id="naming-rules-for-databases">
+  ### データベースの命名ルール
+</div>
 
 各ベクターデータベースは、互換性を確保し、競合を防ぐために、インデックスやコレクションに特定の命名規則を設けています。
 
@@ -466,7 +476,9 @@ await store.createIndex({
   </TabItem>
 </Tabs>
 
-### 埋め込みのアップサート
+<div id="upserting-embeddings">
+  ### 埋め込みのアップサート
+</div>
 
 インデックスを作成したら、基本的なメタデータとともに埋め込みを保存（アップサート）できます。
 
@@ -492,7 +504,9 @@ await store.upsert({
 さまざまなベクトルストアでの埋め込みのアップサートの具体的な例については、[Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) ガイドを参照してください。
 
 
-## メタデータの追加
+<div id="adding-metadata">
+  ## メタデータの追加
+</div>
 
 ベクターストアは、フィルタリングや整理のために、リッチなメタデータ（JSONでシリアライズ可能な任意のフィールド）をサポートします。メタデータは固定スキーマなしで保存されるため、想定外のクエリ結果を避けるには、フィールド名を一貫して使用してください。
 
@@ -531,7 +545,9 @@ await store.upsert({
 * コンテンツの新鮮さを追跡できるよう、タイムスタンプ（例: &#39;createdAt&#39;, &#39;lastUpdated&#39;）を追加すること
 
 
-## ベストプラクティス
+<div id="best-practices">
+  ## ベストプラクティス
+</div>
 
 - 一括挿入の前にインデックスを作成する
 - 大量挿入にはバッチ処理を使用する（`upsert` メソッドは自動でバッチ処理を行います）

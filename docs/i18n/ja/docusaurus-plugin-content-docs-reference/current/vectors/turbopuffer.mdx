@@ -3,11 +3,15 @@ title: "リファレンス: Turbopuffer ベクターストア | ベクター | M
 description: Turbopuffer を Mastra と統合するためのドキュメント。効率的な類似検索を実現する高性能ベクターデータベース。
 ---
 
-# Turbopuffer ベクターストア
+<div id="turbopuffer-vector-store">
+  # Turbopuffer ベクターストア
+</div>
 
 TurbopufferVector クラスは、RAG アプリケーション向けに最適化された高性能ベクターデータベースである [Turbopuffer](https://turbopuffer.com/) を用いて、ベクトル検索を提供します。Turbopuffer は、高度なフィルタリング機能と効率的なストレージ管理を備え、ベクトル類似度の高速検索を実現します。
 
-## コンストラクターオプション
+<div id="constructor-options">
+  ## コンストラクターオプション
+</div>
 
 <PropertiesTable
   content={[
@@ -65,9 +69,13 @@ TurbopufferVector クラスは、RAG アプリケーション向けに最適化�
   ]}
 />
 
-## メソッド
+<div id="methods">
+  ## メソッド
+</div>
 
-### createIndex()
+<div id="createindex">
+  ### createIndex()
+</div>
 
 <PropertiesTable
   content={[
@@ -91,7 +99,9 @@ TurbopufferVector クラスは、RAG アプリケーション向けに最適化�
   ]}
 />
 
-### upsert()
+<div id="upsert">
+  ### upsert()
+</div>
 
 <PropertiesTable
   content={[
@@ -115,7 +125,9 @@ TurbopufferVector クラスは、RAG アプリケーション向けに最適化�
   ]}
 />
 
-### query()
+<div id="query">
+  ### query()
+</div>
 
 <PropertiesTable
   content={[
@@ -152,11 +164,15 @@ TurbopufferVector クラスは、RAG アプリケーション向けに最適化�
   ]}
 />
 
-### listIndexes()
+<div id="listindexes">
+  ### listIndexes()
+</div>
 
 インデックス名を文字列の配列で返します。
 
-### describeIndex()
+<div id="describeindex">
+  ### describeIndex()
+</div>
 
 <PropertiesTable
   content={[
@@ -179,7 +195,9 @@ interface IndexStats {
 ```
 
 
-### deleteIndex()
+<div id="deleteindex">
+  ### deleteIndex()
+</div>
 
 <PropertiesTable
   content={[
@@ -191,7 +209,9 @@ interface IndexStats {
   ]}
 />
 
-## レスポンスタイプ
+<div id="response-types">
+  ## レスポンスタイプ
+</div>
 
 クエリ結果は次の形式で返されます：
 
@@ -205,7 +225,9 @@ interface QueryResult {
 ```
 
 
-## スキーマ設定
+<div id="schema-configuration">
+  ## スキーマ設定
+</div>
 
 `schemaConfigForIndex` オプションを使うと、各インデックスに対して明示的なスキーマを定義できます。
 
@@ -229,7 +251,9 @@ schemaConfigForIndex: (indexName: string) => {
 ```
 
 
-## エラー処理
+<div id="error-handling">
+  ## エラー処理
+</div>
 
 ストアは型付きのエラーをスローし、捕捉できます。
 
@@ -248,6 +272,8 @@ try {
 ```
 
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [メタデータ フィルター](../rag/metadata-filters)

@@ -3,20 +3,28 @@ title: "リファレンス: LanceDB ストレージ | Storage | Mastra ドキュ
 description: Mastra における LanceDB ストレージ実装のドキュメントです。
 ---
 
-# LanceDB Storage
+<div id="lancedb-storage">
+  # LanceDB Storage
+</div>
 
 LanceDB のストレージ実装は、LanceDB データベースシステムを用いて、高性能なストレージソリューションを提供します。このシステムは、従来型のデータストレージとベクトル処理の双方に優れています。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash
 npm install @mastra/lance
 ```
 
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
-### ストレージの基本的な使い方
+<div id="basic-storage-usage">
+  ### ストレージの基本的な使い方
+</div>
 
 ```typescript copy showLineNumbers
 import { LanceStorage } from "@mastra/lance";
@@ -34,9 +42,13 @@ const storage = await LanceStorage.create("my-storage", "s3://bucket/db", {
 ```
 
 
-## パラメーター
+<div id="parameters">
+  ## パラメーター
+</div>
 
-### LanceStorage.create()
+<div id="lancestoragecreate">
+  ### LanceStorage.create()
+</div>
 
 <PropertiesTable
   content={[
@@ -63,9 +75,13 @@ const storage = await LanceStorage.create("my-storage", "s3://bucket/db", {
   ]}
 />
 
-## 追記
+<div id="additional-notes">
+  ## 追記
+</div>
 
-### スキーマ管理
+<div id="schema-management">
+  ### スキーマ管理
+</div>
 
 LanceStorage の実装は、スキーマの作成と更新を自動的に行います。Mastra のスキーマ型を Apache Arrow のデータ型にマッピングし、LanceDB の内部で使用します:
 
@@ -75,7 +91,9 @@ LanceStorage の実装は、スキーマの作成と更新を自動的に行い�
 - `jsonb`, `json` → Utf8（シリアライズされた文字列）
 - `binary` → Binary
 
-### デプロイ方法
+<div id="deployment-options">
+  ### デプロイ方法
+</div>
 
 LanceDB のストレージは、さまざまなデプロイシナリオに合わせて設定できます:
 
@@ -92,7 +110,9 @@ LanceDB のストレージは、さまざまなデプロイシナリオに合わ
   s3://bucket/db
   ```
 
-### テーブル管理
+<div id="table-management">
+  ### テーブル管理
+</div>
 
 LanceStorage はテーブル管理のためのメソッドを提供します:
 

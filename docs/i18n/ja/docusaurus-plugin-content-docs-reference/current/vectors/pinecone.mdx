@@ -3,12 +3,16 @@ title: "リファレンス: Pinecone ベクターストア | ベクター | Mast
 description: Mastra の PineconeVector クラスに関するドキュメント。Pinecone のベクターデータベースへのインターフェースを提供します。
 ---
 
-# Pinecone ベクトルストア
+<div id="pinecone-vector-store">
+  # Pinecone ベクトルストア
+</div>
 
 PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクトルデータベースへのインターフェースを提供します。
 ハイブリッド検索、メタデータフィルタリング、名前空間の管理といった機能を備え、リアルタイムでのベクトル検索を実現します。
 
-## コンストラクターのオプション
+<div id="constructor-options">
+  ## コンストラクターのオプション
+</div>
 
 <PropertiesTable
   content={[
@@ -25,9 +29,13 @@ PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクト�
   ]}
 />
 
-## メソッド
+<div id="methods">
+  ## メソッド
+</div>
 
-### createIndex()
+<div id="createindex">
+  ### createIndex()
+</div>
 
 <PropertiesTable
   content={[
@@ -52,7 +60,9 @@ PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクト�
   ]}
 />
 
-### upsert()
+<div id="upsert">
+  ### upsert()
+</div>
 
 <PropertiesTable
   content={[
@@ -95,7 +105,9 @@ PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクト�
   ]}
 />
 
-### query()
+<div id="query">
+  ### query()
+</div>
 
 <PropertiesTable
   content={[
@@ -146,11 +158,15 @@ PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクト�
   ]}
 />
 
-### listIndexes()
+<div id="listindexes">
+  ### listIndexes()
+</div>
 
 インデックス名を文字列の配列として返します。
 
-### describeIndex()
+<div id="describeindex">
+  ### describeIndex()
+</div>
 
 <PropertiesTable
   content={[
@@ -173,7 +189,9 @@ interface IndexStats {
 ```
 
 
-### deleteIndex()
+<div id="deleteindex">
+  ### deleteIndex()
+</div>
 
 <PropertiesTable
   content={[
@@ -185,7 +203,9 @@ interface IndexStats {
   ]}
 />
 
-### updateVector()
+<div id="updatevector">
+  ### updateVector()
+</div>
 
 <PropertiesTable
   content={[
@@ -219,7 +239,9 @@ interface IndexStats {
   ]}
 />
 
-### deleteVector()
+<div id="deletevector">
+  ### deleteVector()
+</div>
 
 <PropertiesTable
   content={[
@@ -236,7 +258,9 @@ interface IndexStats {
   ]}
 />
 
-## レスポンスの種類
+<div id="response-types">
+  ## レスポンスの種類
+</div>
 
 クエリ結果は次の形式で返されます：
 
@@ -250,7 +274,9 @@ interface QueryResult {
 ```
 
 
-## エラー処理
+<div id="error-handling">
+  ## エラー処理
+</div>
 
 ストアは、キャッチできる型付きエラーをスローします：
 
@@ -269,14 +295,18 @@ try {
 ```
 
 
-### 環境変数
+<div id="environment-variables">
+  ### 環境変数
+</div>
 
 必須の環境変数:
 
 - `PINECONE_API_KEY`: Pinecone の API キー
 - `PINECONE_ENVIRONMENT`: Pinecone の環境（例: 'us-west1-gcp'）
 
-## ハイブリッド検索
+<div id="hybrid-search">
+  ## ハイブリッド検索
+</div>
 
 Pinecone は密ベクトルと疎ベクトルを組み合わせてハイブリッド検索をサポートします。ハイブリッド検索を使用するには:
 
@@ -284,6 +314,8 @@ Pinecone は密ベクトルと疎ベクトルを組み合わせてハイブリ�
 2. upsert 時に `sparseVectors` パラメータで疎ベクトルを指定する
 3. query 時に `sparseVector` パラメータで疎ベクトルを指定する
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [メタデータフィルター](../rag/metadata-filters)

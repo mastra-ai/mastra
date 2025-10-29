@@ -6,12 +6,16 @@ description: RAG システムで Mastra のエージェントを用いて、ド�
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# エージェント主導のメタデータフィルタリング
+<div id="agent-driven-metadata-filtering">
+  # エージェント主導のメタデータフィルタリング
+</div>
 
 この例では、Mastra、OpenAI の埋め込み表現、そしてベクトルストレージとしての PGVector を用いて、Retrieval-Augmented Generation（RAG）システムを実装する方法を示します。
 このシステムでは、エージェントがユーザーのクエリからメタデータフィルタを生成し、ベクトルストア内で関連するチャンクを検索することで、返却される結果を絞り込みます。
 
-## 概要
+<div id="overview">
+  ## 概要
+</div>
 
 このシステムは、Mastra と OpenAI を用いてメタデータのフィルタリングを実装しています。主な処理は次のとおりです:
 
@@ -28,9 +32,13 @@ import GithubLink from "@site/src/components/GithubLink";
 - ベクトルクエリツールを用いて最も関連性の高い情報を見つける
 - フィルタ後の結果に基づいて文脈に沿った応答を生成する
 
-## セットアップ
+<div id="setup">
+  ## セットアップ
+</div>
 
-### 環境のセットアップ
+<div id="environment-setup">
+  ### 環境のセットアップ
+</div>
 
 環境変数が設定されていることを確認してください：
 
@@ -40,7 +48,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
 
-### 依存関係
+<div id="dependencies">
+  ### 依存関係
+</div>
 
 次に、必要な依存関係をインポートします。
 
@@ -54,7 +64,9 @@ import { embedMany } from "ai";
 ```
 
 
-## ベクタークエリツールの作成
+<div id="vector-query-tool-creation">
+  ## ベクタークエリツールの作成
+</div>
 
 @mastra/rag からインポートした createVectorQueryTool を使うと、メタデータのフィルタリングに対応したツールを作成できます。各ベクターストアには、サポートされるフィルター演算子と構文を定義する固有のプロンプトがあります。
 
@@ -76,7 +88,9 @@ const vectorQueryTool = createVectorQueryTool({
 * 複雑なクエリの例
 
 
-## ドキュメント処理
+<div id="document-processing">
+  ## ドキュメント処理
+</div>
 
 ドキュメントを作成し、メタデータ付きのチャンクに分割して処理します：
 
@@ -97,7 +111,9 @@ const chunks = await doc.chunk({
 ```
 
 
-### チャンクをメタデータに変換する
+<div id="transform-chunks-into-metadata">
+  ### チャンクをメタデータに変換する
+</div>
 
 フィルタ可能なメタデータにチャンクを変換します：
 
@@ -116,7 +132,9 @@ const chunkMetadata = chunks?.map((chunk: any, index: number) => ({
 ```
 
 
-## エージェントの構成
+<div id="agent-configuration">
+  ## エージェントの構成
+</div>
 
 エージェントは、ユーザーのクエリを理解し、適切なメタデータフィルターに変換できるよう構成されています。
 
@@ -164,7 +182,9 @@ export const ragAgent = new Agent({
 > 注: ベクターストアごとに固有のプロンプトが用意されています。詳しくは [Vector Store Prompts](/docs/rag/retrieval#vector-store-prompts) を参照してください。
 
 
-## PgVector と Mastra を初期化する
+<div id="instantiate-pgvector-and-mastra">
+  ## PgVector と Mastra を初期化する
+</div>
 
 次のコンポーネントを使って PgVector と Mastra を初期化します:
 
@@ -181,7 +201,9 @@ const agent = mastra.getAgent("ragAgent");
 ```
 
 
-## 埋め込みの作成と保存
+<div id="creating-and-storing-embeddings">
+  ## 埋め込みの作成と保存
+</div>
 
 埋め込みを生成し、メタデータとともに保存します:
 
@@ -208,7 +230,9 @@ await vectorStore.upsert({
 `upsert` 操作は、ベクトル埋め込みと関連するメタデータの両方を保存し、セマンティック検索とメタデータによるフィルタリングを組み合わせた検索を可能にします。
 
 
-## メタデータベースのクエリ
+<div id="metadata-based-querying">
+  ## メタデータベースのクエリ
+</div>
 
 メタデータのフィルターを使って、さまざまなクエリを試してみましょう：
 

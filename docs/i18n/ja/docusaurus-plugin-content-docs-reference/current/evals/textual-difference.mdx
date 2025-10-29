@@ -3,7 +3,9 @@ title: "リファレンス: TextualDifferenceMetric | Evals | Mastra ドキュ�
 description: Mastra の Textual Difference Metric に関するドキュメント。シーケンス照合により、文字列間のテキストの差異を測定します。
 ---
 
-# TextualDifferenceMetric
+<div id="textualdifferencemetric">
+  # TextualDifferenceMetric
+</div>
 
 :::info Scorers
 このドキュメントはレガシーの evals API を参照しています。最新のスコアラー機能については [Scorers](/docs/scorers/overview) をご覧ください。
@@ -11,7 +13,9 @@ description: Mastra の Textual Difference Metric に関するドキュメント
 
 `TextualDifferenceMetric` クラスは、シーケンスマッチングを用いて2つの文字列間のテキスト上の差異を測定します。あるテキストを別のテキストに変換するために必要な操作数を含む、変更点に関する詳細情報を提供します。
 
-## 基本的な使い方
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
 
 ```typescript
 import { TextualDifferenceMetric } from "@mastra/evals/nlp";
@@ -28,7 +32,9 @@ console.log(result.info); // 変更点の詳細な指標
 ```
 
 
-## measure() のパラメータ
+<div id="measure-parameters">
+  ## measure() のパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -47,7 +53,9 @@ console.log(result.info); // 変更点の詳細な指標
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -108,7 +116,9 @@ console.log(result.info); // 変更点の詳細な指標
   ]}
 />
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 このメトリックは次の指標を計算します:
 
@@ -117,7 +127,9 @@ console.log(result.info); // 変更点の詳細な指標
 - **長さ差**: テキスト長の正規化差
 - **信頼度**: 長さ差に反比例
 
-### スコアリングの流れ
+<div id="scoring-process">
+  ### スコアリングの流れ
+</div>
 
 1. テキスト差分の分析:
    - 入力と出力のシーケンスを照合
@@ -131,7 +143,9 @@ console.log(result.info); // 変更点の詳細な指標
 
 最終スコア: `(similarity_ratio * confidence) * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 （範囲は0、デフォルトは0〜1）
 
@@ -141,7 +155,9 @@ console.log(result.info); // 変更点の詳細な指標
 - 0.1〜0.3: 大きな相違 — 大幅な修正が必要
 - 0.0: 完全に異なるテキスト
 
-## 分析付きの例
+<div id="example-with-analysis">
+  ## 分析付きの例
+</div>
 
 ```typescript
 import { TextualDifferenceMetric } from "@mastra/evals/nlp";
@@ -166,7 +182,9 @@ const result = await metric.measure(
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [コンテンツ類似度メトリクス](./content-similarity)
 - [完全性メトリクス](./completeness)

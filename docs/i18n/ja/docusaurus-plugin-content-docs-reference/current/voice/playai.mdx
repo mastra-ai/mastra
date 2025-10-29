@@ -3,11 +3,15 @@ title: "リファレンス: PlayAI | Voice | Mastra ドキュメント"
 description: "PlayAI の音声実装（テキスト読み上げ）のドキュメント。"
 ---
 
-# PlayAI
+<div id="playai">
+  # PlayAI
+</div>
 
 Mastra の PlayAI 音声実装は、PlayAI の API を用いてテキスト読み上げ（テキスト音声合成）機能を提供します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { PlayAIVoice } from "@mastra/voice-playai";
@@ -33,7 +37,9 @@ const audioStream = await voice.speak("Hello, world!", {
 ```
 
 
-## コンストラクターのパラメータ
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -54,7 +60,9 @@ const audioStream = await voice.speak("Hello, world!", {
   ]}
 />
 
-### PlayAIConfig
+<div id="playaiconfig">
+  ### PlayAIConfig
+</div>
 
 <PropertiesTable
   content={[
@@ -82,9 +90,13 @@ const audioStream = await voice.speak("Hello, world!", {
   ]}
 />
 
-## 手法
+<div id="methods">
+  ## 手法
+</div>
 
-### speak()
+<div id="speak">
+  ### speak()
+</div>
 
 設定済みの音声モデルと声を使って、テキストを音声に変換します。
 
@@ -109,7 +121,9 @@ const audioStream = await voice.speak("Hello, world!", {
 
 戻り値: `Promise<NodeJS.ReadableStream>`。
 
-### getSpeakers()
+<div id="getspeakers">
+  ### getSpeakers()
+</div>
 
 利用可能な音声オプションの配列を返します。各項目には次が含まれます:
 
@@ -154,11 +168,15 @@ const audioStream = await voice.speak("Hello, world!", {
   ]}
 />
 
-### listen()
+<div id="listen">
+  ### listen()
+</div>
 
 このメソッドはPlayAIではサポートされておらず、エラーを送出します。PlayAIは音声認識（speech-to-text）機能を提供していません。
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - PlayAI の認証には、API キーとユーザー ID の両方が必要です
 - 本サービスは 2 種類のモデル「PlayDialog」と「Play3.0-mini」を提供しています

@@ -6,11 +6,15 @@ description: ConsoleExporter のAPIリファレンス
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
-# ConsoleExporter
+<div id="consoleexporter">
+  # ConsoleExporter
+</div>
 
 デバッグや開発時のトレースイベントをコンソールに出力します。
 
-## コンストラクタ
+<div id="constructor">
+  ## コンストラクタ
+</div>
 
 ```typescript
 new ConsoleExporter(logger?: IMastraLogger)
@@ -29,16 +33,22 @@ new ConsoleExporter(logger?: IMastraLogger)
 />
 
 
-## プロパティ
+<div id="properties">
+  ## プロパティ
+</div>
 
 ```typescript
 readonly name = 'tracing-console-exporter';
 ```
 
 
-## 方法
+<div id="methods">
+  ## 方法
+</div>
 
-### exportEvent
+<div id="exportevent">
+  ### exportEvent
+</div>
 
 ```typescript
 async exportEvent(event: AITracingEvent): Promise<void>
@@ -58,7 +68,9 @@ async exportEvent(event: AITracingEvent): Promise<void>
 />
 
 
-### シャットダウン
+<div id="shutdown">
+  ### シャットダウン
+</div>
 
 ```typescript
 async shutdown(): Promise<void>
@@ -67,7 +79,9 @@ async shutdown(): Promise<void>
 シャットダウンメッセージを記録します。
 
 
-## 出力形式
+<div id="output-format">
+  ## 出力形式
+</div>
 
 エクスポーターはイベントの種類に応じて、異なる形式で出力します。
 
@@ -118,7 +132,9 @@ async shutdown(): Promise<void>
 ```
 
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 ```typescript
 import { ConsoleExporter } from "@mastra/core/ai-tracing";
@@ -133,7 +149,9 @@ const exporterWithLogger = new ConsoleExporter(customLogger);
 ```
 
 
-## 実装の詳細
+<div id="implementation-details">
+  ## 実装の詳細
+</div>
 
 - 属性を2スペースインデントのJSONとして整形
 - スパンの継続時間をミリ秒単位で計算して表示
@@ -141,21 +159,29 @@ const exporterWithLogger = new ConsoleExporter(customLogger);
 - 未実装のイベントタイプを警告として記録
 - イベント間に80文字幅の区切り線を使用
 
-## 参照
+<div id="see-also">
+  ## 参照
+</div>
 
-### ドキュメント
+<div id="documentation">
+  ### ドキュメント
+</div>
 
 - [AI トレーシングの概要](/docs/observability/ai-tracing/overview) - 総合ガイド
 - [エクスポーター](/docs/observability/ai-tracing/overview#exporters) - エクスポーターの概念
 
-### その他のエクスポーター
+<div id="other-exporters">
+  ### その他のエクスポーター
+</div>
 
 - [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - ストレージへの永続化
 - [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud
 - [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse との統合
 - [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust との統合
 
-### 参考資料
+<div id="reference">
+  ### 参考資料
+</div>
 
 - [Configuration](/reference/observability/ai-tracing/configuration) - 設定項目
 - [Interfaces](/reference/observability/ai-tracing/interfaces) - 型定義

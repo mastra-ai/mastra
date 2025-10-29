@@ -7,11 +7,15 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 
-# MastraJwtAuth クラス
+<div id="mastrajwtauth-class">
+  # MastraJwtAuth クラス
+</div>
 
 `MastraJwtAuth` クラスは、JSON Web Token（JWT）を用いた Mastra 向けの軽量な認証機構を提供します。共有シークレットに基づいて受信リクエストを検証し、`experimental_auth` オプションを使って Mastra サーバーと連携します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 `MastraJwtAuth` クラスを使用する前に、`@mastra/auth` パッケージをインストールする必要があります。
 
@@ -20,7 +24,9 @@ npm install @mastra/auth@latest
 ```
 
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript {2,7-9} title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
@@ -39,7 +45,9 @@ export const mastra = new Mastra({
 > 利用可能なすべての構成オプションについては、[MastraJwtAuth](/reference/auth/jwt) の API リファレンスをご参照ください。
 
 
-## `MastraClient` の構成
+<div id="configuring-mastraclient">
+  ## `MastraClient` の構成
+</div>
 
 `experimental_auth` が有効な場合、`MastraClient` で行うすべてのリクエストには、`Authorization` ヘッダーに有効な JWT を含める必要があります。
 
@@ -57,7 +65,9 @@ export const mastraClient = new MastraClient({
 > 追加の設定オプションについては、[Mastra Client SDK](/docs/server-db/mastra-client) を参照してください。
 
 
-### 認証リクエストの送信
+<div id="making-authenticated-requests">
+  ### 認証リクエストの送信
+</div>
 
 `MastraClient` を設定したら、フロントエンドアプリから認証済みリクエストを送信するか、手早いローカルテストには `curl` を使えます。
 
@@ -94,7 +104,9 @@ export const mastraClient = new MastraClient({
   </TabItem>
 </Tabs>
 
-## JWT の作成
+<div id="creating-a-jwt">
+  ## JWT の作成
+</div>
 
 Mastra サーバーへのリクエストを認証するには、`MASTRA_JWT_SECRET` で署名された有効な JSON Web Token（JWT）が必要です。
 

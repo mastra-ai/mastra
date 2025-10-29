@@ -6,11 +6,15 @@ description: Mastra の Prompt Alignment Scorer に関するドキュメント�
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
-# プロンプト整合性スコアラー
+<div id="prompt-alignment-scorer">
+  # プロンプト整合性スコアラー
+</div>
 
 `createPromptAlignmentScorerLLM()` 関数は、エージェントの応答がユーザーのプロンプトにどれほど整合しているかを、意図の把握、要件の満たし具合、応答の網羅性、形式の妥当性といった複数の観点から評価するスコアラーを作成します。
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -45,7 +49,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-## .run() の戻り値
+<div id="run-returns">
+  ## .run() の戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -103,9 +109,13 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 ```
 
 
-## スコア詳細
+<div id="scoring-details">
+  ## スコア詳細
+</div>
 
-### スコアラーの設定
+<div id="scorer-configuration">
+  ### スコアラーの設定
+</div>
 
 スコアリングのニーズに合わせて、`scale` パラメータや評価モードを調整することで、Prompt Alignment Scorer をカスタマイズできます。
 
@@ -120,11 +130,15 @@ const scorer = createPromptAlignmentScorerLLM({
 ```
 
 
-### 多次元分析
+<div id="multi-dimensional-analysis">
+  ### 多次元分析
+</div>
 
 Prompt Alignment は、評価モードに応じて変化する重み付きスコアリングを用いて、4つの主要な側面から応答を評価します：
 
-#### ユーザーモード（'user'）
+<div id="user-mode-user">
+  #### ユーザーモード（'user'）
+</div>
 
 ユーザーのプロンプトへの適合性のみを評価します：
 
@@ -133,7 +147,9 @@ Prompt Alignment は、評価モードに応じて変化する重み付きスコ
 3. **完全性**（重み20%）- 応答がユーザーのニーズに対して十分に網羅的か
 4. **応答の適切性**（重み10%）- 形式やトーンがユーザーの期待に合致しているか
 
-#### システムモード（'system'）
+<div id="system-mode-system">
+  #### システムモード（'system'）
+</div>
 
 システムガイドラインへの準拠のみを評価します：
 
@@ -142,7 +158,9 @@ Prompt Alignment は、評価モードに応じて変化する重み付きスコ
 3. **完全性**（重み15%）- 応答がすべてのシステムルールに従っているか
 4. **応答の適切性**（重み15%）- 形式とトーンがシステム仕様に合致しているか
 
-#### 両方モード（'both' - デフォルト）
+<div id="both-mode-both-default">
+  #### 両方モード（'both' - デフォルト）
+</div>
 
 ユーザーとシステムのアラインメントの双方を評価して統合します:
 
@@ -150,7 +168,9 @@ Prompt Alignment は、評価モードに応じて変化する重み付きスコ
 - **システムコンプライアンス**: 最終スコアの30%（システムモードの重みを使用）
 - ユーザー満足度とシステム遵守の両立をバランスよく評価
 
-### スコア算定式
+<div id="scoring-formula">
+  ### スコア算定式
+</div>
 
 **ユーザーモード:**
 
@@ -184,7 +204,9 @@ Prompt Alignment は、評価モードに応じて変化する重み付きスコ
 * **Both Mode**: 70/30 の配分により、システム順守を保ちつつユーザーのニーズを主に優先
 
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 - **0.9–1.0** = すべての側面で卓越した整合
 - **0.8–0.9** = わずかな不足はあるが、整合は非常に良好
@@ -193,7 +215,9 @@ Prompt Alignment は、評価モードに応じて変化する重み付きスコ
 - **0.4–0.6** = 重大な問題を伴う不十分な整合
 - **0.0–0.4** = 非常に不十分で、回答がプロンプトに十分に対応できていない
 
-### 各モードを使うタイミング
+<div id="when-to-use-each-mode">
+  ### 各モードを使うタイミング
+</div>
 
 **User Mode (`'user'`)** - 次の場合に使用:
 
@@ -216,9 +240,13 @@ Prompt Alignment は、評価モードに応じて変化する重み付きスコ
 - ユーザーとシステム双方の要件が重要となる本番環境での監視
 - プロンプトとレスポンスの整合性を総合的に評価する
 
-## よくある使い方
+<div id="common-use-cases">
+  ## よくある使い方
+</div>
 
-### コード生成の評価
+<div id="code-generation-evaluation">
+  ### コード生成の評価
+</div>
 
 次の用途の評価に最適:
 
@@ -236,7 +264,9 @@ const codePrompt =
 ```
 
 
-### 指示追従評価
+<div id="instruction-following-assessment">
+  ### 指示追従評価
+</div>
 
 最適な用途:
 
@@ -253,7 +283,9 @@ const taskPrompt =
 ```
 
 
-### コンテンツ形式の検証
+<div id="content-format-validation">
+  ### コンテンツ形式の検証
+</div>
 
 用途:
 
@@ -270,7 +302,9 @@ const formatPrompt =
 ```
 
 
-### エージェント応答品質
+<div id="agent-response-quality">
+  ### エージェント応答品質
+</div>
 
 AIエージェントがユーザーの指示にどの程度従っているかを測定します。
 
@@ -304,7 +338,9 @@ const result = await scorer.run(agentRun);
 ```
 
 
-### プロンプトエンジニアリングの最適化
+<div id="prompt-engineering-optimization">
+  ### プロンプトエンジニアリングの最適化
+</div>
 
 整合性を高めるために、さまざまなプロンプトをテストしましょう：
 
@@ -323,7 +359,9 @@ for (const prompt of prompts) {
 ```
 
 
-### マルチエージェント・システムの評価
+<div id="multi-agent-system-evaluation">
+  ### マルチエージェント・システムの評価
+</div>
 
 異なるエージェントやモデルを比較する：
 
@@ -343,9 +381,13 @@ for (const agent of agents) {
 ```
 
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
-### 基本設定
+<div id="basic-configuration">
+  ### 基本設定
+</div>
 
 ```typescript
 import { createPromptAlignmentScorerLLM } from "@mastra/evals";
@@ -377,7 +419,9 @@ const result = await scorer.run({
 ```
 
 
-### カスタム設定の例
+<div id="custom-configuration-examples">
+  ### カスタム設定の例
+</div>
 
 ```typescript
 // スケールと評価モードを設定
@@ -406,7 +450,9 @@ const result = await scorer.run(testRun);
 ```
 
 
-### フォーマット別評価
+<div id="format-specific-evaluation">
+  ### フォーマット別評価
+</div>
 
 ```typescript
 // 箇条書き形式の評価
@@ -426,7 +472,9 @@ const result = await scorer.run({
 ```
 
 
-### 適合度の高い優れた例
+<div id="excellent-alignment-example">
+  ### 適合度の高い優れた例
+</div>
 
 この例では、回答がユーザーのプロンプトに的確に対応し、すべての要件を満たしています。
 
@@ -464,7 +512,9 @@ console.log(result);
 ```
 
 
-### 優れた整合出力
+<div id="excellent-alignment-output">
+  ### 優れた整合出力
+</div>
 
 この出力は、意図を的確に捉え、すべての要件を満たし、適切な形式で表現されているため、高い評価を得ます。
 
@@ -476,7 +526,9 @@ console.log(result);
 ```
 
 
-### 部分的な整合の例
+<div id="partial-alignment-example">
+  ### 部分的な整合の例
+</div>
 
 この例では、返答は核心的な意図には応えているものの、いくつかの要件を満たしていなかったり、書式に問題があります。
 
@@ -507,7 +559,9 @@ console.log(result);
 ```
 
 
-#### 部分的アラインメントの出力
+<div id="partial-alignment-output">
+  #### 部分的アラインメントの出力
+</div>
 
 内容自体は正確ですが、要求された形式（箇条書き）に従っていないため、出力のスコアは低くなります。
 
@@ -519,7 +573,9 @@ console.log(result);
 ```
 
 
-### 不十分な整合の例
+<div id="poor-alignment-example">
+  ### 不十分な整合の例
+</div>
 
 この例では、回答がユーザーの具体的な要件に応えていません。
 
@@ -553,7 +609,9 @@ console.log(result);
 ```
 
 
-### アラインメントが不十分な出力
+<div id="poor-alignment-output">
+  ### アラインメントが不十分な出力
+</div>
 
 この出力は要件を一部しか満たしておらず、検証やエラー処理、ドキュメントが不足しているため、評価が低くなっています。
 
@@ -565,9 +623,13 @@ console.log(result);
 ```
 
 
-### 評価モードのサンプル
+<div id="evaluation-mode-examples">
+  ### 評価モードのサンプル
+</div>
 
-#### ユーザーモード - ユーザープロンプトのみに注目
+<div id="user-mode-focus-on-user-prompt-only">
+  #### ユーザーモード - ユーザープロンプトのみに注目
+</div>
 
 システムの指示は考慮せず、応答がユーザーの要望にどれだけ適切に対応しているかを評価します。
 
@@ -600,7 +662,9 @@ const result = await scorer.run({
 ```
 
 
-#### システムモード - システムガイドラインのみにフォーカス
+<div id="system-mode-focus-on-system-guidelines-only">
+  #### システムモード - システムガイドラインのみにフォーカス
+</div>
 
 システムの行動ガイドラインおよび制約への遵守状況を評価します。
 
@@ -634,7 +698,9 @@ const result = await scorer.run({
 ```
 
 
-#### 両方モード - 統合評価（デフォルト）
+<div id="both-mode-combined-evaluation-default">
+  #### 両方モード - 統合評価（デフォルト）
+</div>
 
 ユーザーの意図の達成度とシステムのコンプライアンスの両方を、重み付きスコア（ユーザー70%、システム30%）で評価します。
 
@@ -673,7 +739,9 @@ const result = await scorer.run({
 ```
 
 
-## 他のスコアラーとの比較
+<div id="comparison-with-other-scorers">
+  ## 他のスコアラーとの比較
+</div>
 
 | 側面           | プロンプト整合性                         | 回答の関連性                 | 忠実性                           |
 | -------------- | ---------------------------------------- | ---------------------------- | -------------------------------- |
@@ -682,7 +750,9 @@ const result = await scorer.run({
 | **ユースケース** | 一般的なプロンプト追従                 | 情報検索                     | RAG／コンテキストベースのシステム |
 | **次元**       | 重み付けされた4つの次元                  | 単一の関連性次元             | 単一の忠実性次元                 |
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [Answer Relevancy Scorer](/reference/scorers/answer-relevancy) - クエリと回答の関連性を評価
 - [Faithfulness Scorer](/reference/scorers/faithfulness) - コンテキストへの忠実性を評価

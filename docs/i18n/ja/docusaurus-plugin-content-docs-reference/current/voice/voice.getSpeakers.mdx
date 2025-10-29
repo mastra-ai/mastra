@@ -7,11 +7,15 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 
-# voice.getSpeakers()
+<div id="voicegetspeakers">
+  # voice.getSpeakers()
+</div>
 
 `getSpeakers()` メソッドは、音声プロバイダーから利用可能な音声オプション（話者）の一覧を取得します。これにより、アプリケーションはユーザーに音声の選択肢を提示したり、用途に応じて最適な音声をプログラムで選択したりできます。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { OpenAIVoice } from "@mastra/voice-openai";
@@ -40,11 +44,15 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 このメソッドはパラメータを受け取りません。
 
-## 戻り値
+<div id="return-value">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -57,7 +65,9 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
   ]}
 />
 
-## プロバイダー固有のメタデータ
+<div id="provider-specific-metadata">
+  ## プロバイダー固有のメタデータ
+</div>
 
 音声プロバイダーによって、提供される音声のメタデータは異なります。
 
@@ -284,7 +294,9 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
   </TabItem>
 </Tabs>
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - 利用可能な音声はプロバイダーによって大きく異なります
 - 一部のプロバイダーでは、音声の全リストを取得するには認証が必要な場合があります

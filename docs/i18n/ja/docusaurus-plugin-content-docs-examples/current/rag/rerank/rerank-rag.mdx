@@ -6,11 +6,15 @@ description: OpenAI の埋め込みと PGVector を用いたベクトル保存�
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# ツールを使った再ランキング結果
+<div id="re-ranking-results-with-tools">
+  # ツールを使った再ランキング結果
+</div>
 
 この例では、Mastra のベクタークエリツールを使い、OpenAI の埋め込みと PGVector（ベクター保存）を組み合わせて、再ランキング対応の Retrieval-Augmented Generation（RAG）システムを実装する方法を示します。
 
-## 概要
+<div id="overview">
+  ## 概要
+</div>
 
 このシステムは、Mastra と OpenAI を用いて再ランキング付きの RAG を実装しています。主な処理は次のとおりです:
 
@@ -21,9 +25,13 @@ import GithubLink from "@site/src/components/GithubLink";
 5. クエリに基づいて関連チャンクを取得し、再ランキングする
 6. Mastra エージェントで文脈に応じた応答を生成する
 
-## セットアップ
+<div id="setup">
+  ## セットアップ
+</div>
 
-### 環境設定
+<div id="environment-setup">
+  ### 環境設定
+</div>
 
 環境変数を必ず設定してください：
 
@@ -33,7 +41,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
 
-### 依存関係
+<div id="dependencies">
+  ### 依存関係
+</div>
 
 次に、必要な依存パッケージをインポートします。
 
@@ -51,7 +61,9 @@ import { embedMany } from "ai";
 ```
 
 
-## リランキング対応ベクタークエリツールの作成
+<div id="vector-query-tool-creation-with-re-ranking">
+  ## リランキング対応ベクタークエリツールの作成
+</div>
 
 @mastra/rag からインポートした createVectorQueryTool を使うと、ベクターデータベースにクエリを投げ、結果をリランキングするツールを作成できます。
 
@@ -70,7 +82,9 @@ const vectorQueryTool = createVectorQueryTool({
 ```
 
 
-## エージェントの設定
+<div id="agent-configuration">
+  ## エージェントの設定
+</div>
 
 応答を処理する Mastra エージェントをセットアップします。
 
@@ -88,7 +102,9 @@ export const ragAgent = new Agent({
 ```
 
 
-## PgVector と Mastra のインスタンス化
+<div id="instantiate-pgvector-and-mastra">
+  ## PgVector と Mastra のインスタンス化
+</div>
 
 次のコンポーネントを使って、PgVector と Mastra をインスタンス化します:
 
@@ -106,7 +122,9 @@ const agent = mastra.getAgent("ragAgent");
 ```
 
 
-## ドキュメント処理
+<div id="document-processing">
+  ## ドキュメント処理
+</div>
 
 ドキュメントを作成し、チャンクに分割して処理します:
 
@@ -141,7 +159,9 @@ const chunks = await doc1.chunk({
 ```
 
 
-## 埋め込みの作成と保存
+<div id="creating-and-storing-embeddings">
+  ## 埋め込みの作成と保存
+</div>
 
 チャンクごとに埋め込みを生成し、ベクトルデータベースに保存します。
 
@@ -165,7 +185,9 @@ await vectorStore.upsert({
 ```
 
 
-## リランキングを使ったクエリ実行
+<div id="querying-with-re-ranking">
+  ## リランキングを使ったクエリ実行
+</div>
 
 リランキングが結果にどう影響するかを確かめるため、いろいろなクエリを試してみてください。
 

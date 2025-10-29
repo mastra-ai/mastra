@@ -3,11 +3,15 @@ title: "リファレンス: Sarvam | Voice | Mastra ドキュメント"
 description: "Sarvam クラスのドキュメント。テキスト読み上げ（text-to-speech）および音声認識（speech-to-text）機能を提供します。"
 ---
 
-# Sarvam
+<div id="sarvam">
+  # Sarvam
+</div>
 
 Mastra の SarvamVoice クラスは、Sarvam AI のモデルを用いて、テキスト読み上げ（TTS）と音声からテキストへの変換（STT）の機能を提供します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { SarvamVoice } from "@mastra/voice-sarvam";
@@ -51,13 +55,19 @@ const text = await voice.listen(audioStream, {
 ```
 
 
-### Sarvam API ドキュメント —
+<div id="sarvam-api-docs">
+  ### Sarvam API ドキュメント —
+</div>
 
 https://docs.sarvam.ai/api-reference-docs/endpoints/text-to-speech
 
-## 設定
+<div id="configuration">
+  ## 設定
+</div>
 
-### コンストラクターのオプション
+<div id="constructor-options">
+  ### コンストラクターのオプション
+</div>
 
 <PropertiesTable
   content={[
@@ -86,7 +96,9 @@ https://docs.sarvam.ai/api-reference-docs/endpoints/text-to-speech
   ]}
 />
 
-### SarvamVoiceConfig
+<div id="sarvamvoiceconfig">
+  ### SarvamVoiceConfig
+</div>
 
 <PropertiesTable
   content={[
@@ -161,7 +173,9 @@ https://docs.sarvam.ai/api-reference-docs/endpoints/text-to-speech
   ]}
 />
 
-### SarvamListenOptions
+<div id="sarvamlistenoptions">
+  ### SarvamListenOptions
+</div>
 
 <PropertiesTable
   content={[
@@ -197,9 +211,13 @@ https://docs.sarvam.ai/api-reference-docs/endpoints/text-to-speech
   ]}
 />
 
-## 方法
+<div id="methods">
+  ## 方法
+</div>
 
-### speak()
+<div id="speak">
+  ### speak()
+</div>
 
 Sarvam のテキスト読み上げ（Text-to-Speech）モデルを使って、テキストを音声に変換します。
 
@@ -223,7 +241,9 @@ Sarvam のテキスト読み上げ（Text-to-Speech）モデルを使って、�
 
 戻り値: `Promise<NodeJS.ReadableStream>`
 
-### listen()
+<div id="listen">
+  ### listen()
+</div>
 
 Sarvam の音声認識モデルで音声をテキスト化します。
 
@@ -246,13 +266,17 @@ Sarvam の音声認識モデルで音声をテキスト化します。
 
 戻り値: `Promise<string>`
 
-### getSpeakers()
+<div id="getspeakers">
+  ### getSpeakers()
+</div>
 
 利用可能な音声の選択肢の配列を返します。
 
 戻り値: `Promise<Array<{voiceId: SarvamVoiceId}>>`
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - APIキーはコンストラクターのオプション、または `SARVAM_API_KEY` 環境変数で指定できます
 - APIキーが指定されていない場合、コンストラクターはエラーをスローします

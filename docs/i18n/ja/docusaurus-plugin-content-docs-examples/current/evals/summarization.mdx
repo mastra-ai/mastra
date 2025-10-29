@@ -3,7 +3,9 @@ title: "例：要約の評価 | Evals | Mastra Docs"
 description: 事実関係の正確さを保ちながら、LLM が生成した要約が内容をどれだけ適切に捉えているかを、Summarization 指標で評価する例。
 ---
 
-# 要約の評価
+<div id="summarization-evaluation">
+  # 要約の評価
+</div>
 
 :::note
 Scorers API は現在ベータ版です。改良を進めており、皆さまからのフィードバックを歓迎します。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までお寄せください。
@@ -11,14 +13,18 @@ Scorers API は現在ベータ版です。改良を進めており、皆さま�
 
 `SummarizationMetric` を使用すると、応答がソースの要点をどれだけ的確に捉え、事実関係を維持しているかを評価できます。この指標は `query` と `response` を受け取り、スコアと、理由・アラインメントスコア・カバレッジスコアを含む `info` オブジェクトを返します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/evals
 ```
 
 
-## 正確な要約の例
+<div id="accurate-summary-example">
+  ## 正確な要約の例
+</div>
 
 この例では、要約が元の文書の重要な事実をすべて正確に保持しつつ、表現も忠実に再現しています。スコアは、完全な網羅性と事実関係の完全な一致の両方を反映しています。
 
@@ -37,7 +43,9 @@ const result = await metric.measure(query, response);
 ```
 
 
-### 正確な要約の出力
+<div id="accurate-summary-output">
+  ### 正確な要約の出力
+</div>
 
 高スコアは、要約が入力の重要な要点を過不足なく捉え、誤りを生じていないことを示します。`info` フィールドは、完全な整合性と網羅性を確認します。
 
@@ -53,7 +61,9 @@ const result = await metric.measure(query, response);
 ```
 
 
-## 部分的な要約の例
+<div id="partial-summary-example">
+  ## 部分的な要約の例
+</div>
 
 この例では、要約は事実関係としては正確ですが、元の内容のいくつかの重要な点が欠けています。スコアは、整合性は高い一方で、網羅性が不十分であることを反映しています。
 
@@ -74,7 +84,9 @@ console.log(result);
 ```
 
 
-### 部分的な要約出力
+<div id="partial-summary-output">
+  ### 部分的な要約出力
+</div>
 
 この要約は、入力の重要な情報が欠けているため、評価は中程度にとどまっています。`info` フィールドは事実関係の整合性を確認している一方で、内容のカバレッジに不足があることを指摘しています。
 
@@ -90,7 +102,9 @@ console.log(result);
 ```
 
 
-## 不正確な要約の例
+<div id="inaccurate-summary-example">
+  ## 不正確な要約の例
+</div>
 
 この例では、要約に事実誤りが含まれており、元の内容の重要な点を誤って伝えています。情報の一部が部分的に触れられていても、スコアは整合性の低さを反映しています。
 
@@ -111,7 +125,9 @@ console.log(result);
 ```
 
 
-### 不正確な要約出力
+<div id="inaccurate-summary-output">
+  ### 不正確な要約出力
+</div>
 
 この要約は、事実関係の誤りや入力との不整合により、低評価となります。`info` フィールドでは、どの点が誤っていたか、また要約が元のソースからどのように逸脱していたかが説明されています。
 
@@ -127,7 +143,9 @@ console.log(result);
 ```
 
 
-## メトリクスの設定
+<div id="metric-configuration">
+  ## メトリクスの設定
+</div>
 
 モデルを指定するだけで `SummarizationMetric` インスタンスを作成できます。追加の設定は不要です。
 
@@ -138,7 +156,9 @@ const metric = new SummarizationMetric(openai("gpt-4o-mini"));
 > 設定オプションの全一覧は [SummarizationMetric](/reference/evals/summarization) を参照してください。
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `SummarizationMetric` は次の形の結果を返します：
 
@@ -154,7 +174,9 @@ const metric = new SummarizationMetric(openai("gpt-4o-mini"));
 ```
 
 
-### 要約スコア
+<div id="summarization-score">
+  ### 要約スコア
+</div>
 
 要約スコアは 0〜1 の範囲です:
 
@@ -164,7 +186,9 @@ const metric = new SummarizationMetric(openai("gpt-4o-mini"));
 - **0.1–0.3**: 弱い要約 – 重大な抜けや誤りがある。
 - **0.0**: 失敗した要約 – ほとんど不正確、または重要な内容が欠けている。
 
-### 要約に関する情報
+<div id="summarization-info">
+  ### 要約に関する情報
+</div>
 
 スコアの説明（以下を含む）:
 

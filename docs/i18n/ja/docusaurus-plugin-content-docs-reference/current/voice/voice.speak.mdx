@@ -3,11 +3,15 @@ title: "リファレンス: voice.speak() | Voice | Mastra ドキュメント"
 description: "すべての Mastra の音声プロバイダーで利用できる speak() メソッドのドキュメント。テキストを音声に変換します。"
 ---
 
-# voice.speak()
+<div id="voicespeak">
+  # voice.speak()
+</div>
 
 `speak()` メソッドは、すべての Mastra 音声プロバイダーで利用できる中核的な機能で、テキストを音声に変換します。テキストを入力として受け取り、再生や保存が可能な音声ストリームを返します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { OpenAIVoice } from "@mastra/voice-openai";
@@ -33,7 +37,9 @@ const audioStreamFromTextStream = await voice.speak(textStream);
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -60,18 +66,24 @@ const audioStreamFromTextStream = await voice.speak(textStream);
   ]}
 />
 
-## 返り値
+<div id="return-value">
+  ## 返り値
+</div>
 
 `Promise<NodeJS.ReadableStream | void>` を返します。内訳は以下のとおりです。
 
 - `NodeJS.ReadableStream`: 再生や保存が可能な音声データのストリーム
 - `void`: 音声を直接返すのではなく、イベント経由で音声を出力するリアルタイム音声プロバイダーを使用している場合
 
-## プロバイダー固有のオプション
+<div id="provider-specific-options">
+  ## プロバイダー固有のオプション
+</div>
 
 各音声プロバイダーは、その実装に固有の追加オプションをサポートしている場合があります。以下はいくつかの例です。
 
-### OpenAI
+<div id="openai">
+  ### OpenAI
+</div>
 
 <PropertiesTable
   content={[
@@ -86,7 +98,9 @@ const audioStreamFromTextStream = await voice.speak(textStream);
   ]}
 />
 
-### ElevenLabs
+<div id="elevenlabs">
+  ### ElevenLabs
+</div>
 
 <PropertiesTable
   content={[
@@ -108,7 +122,9 @@ const audioStreamFromTextStream = await voice.speak(textStream);
   ]}
 />
 
-### Google
+<div id="google">
+  ### Google
+</div>
 
 <PropertiesTable
   content={[
@@ -129,7 +145,9 @@ const audioStreamFromTextStream = await voice.speak(textStream);
   ]}
 />
 
-### Murf
+<div id="murf">
+  ### Murf
+</div>
 
 <PropertiesTable
   content={[
@@ -154,7 +172,9 @@ const audioStreamFromTextStream = await voice.speak(textStream);
   ]}
 />
 
-## リアルタイム音声プロバイダー
+<div id="realtime-voice-providers">
+  ## リアルタイム音声プロバイダー
+</div>
 
 `OpenAIRealtimeVoice` のようなリアルタイム音声プロバイダーを使用する場合、`speak()` メソッドの挙動は次のように異なります：
 
@@ -183,7 +203,9 @@ await voice.speak("こんにちは、これはリアルタイム音声です！"
 ```
 
 
-## CompositeVoice と併用する場合
+<div id="using-with-compositevoice">
+  ## CompositeVoice と併用する場合
+</div>
 
 `CompositeVoice` を使用する際は、`speak()` メソッドが設定された発話プロバイダーに処理を委譲します。
 
@@ -200,7 +222,9 @@ const audioStream = await voice.speak("こんにちは、世界！");
 ```
 
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - `speak()` の挙動はプロバイダーによって多少異なる場合がありますが、すべての実装は同一の基本インターフェースに準拠しています。
 - リアルタイムの音声プロバイダーを使用する場合、このメソッドは音声ストリームを直接返さず、代わりに「speaking」イベントを発行することがあります。

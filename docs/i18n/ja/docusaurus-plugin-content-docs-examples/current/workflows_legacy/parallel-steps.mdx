@@ -6,11 +6,15 @@ description: ワークフロー内で複数の独立したタスクを並列実�
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# ステップを用いた並列実行
+<div id="parallel-execution-with-steps">
+  # ステップを用いた並列実行
+</div>
 
 AIアプリケーションを構築する際は、効率を高めるために、複数の独立したタスクを同時に処理する必要が生じることがよくあります。
 
-## 制御フローダイアグラム
+<div id="control-flow-diagram">
+  ## 制御フローダイアグラム
+</div>
 
 この例では、各ブランチが独自のデータフローと依存関係を扱いながら、手順を並列に実行するワークフローの構成方法を示します。
 
@@ -22,7 +26,9 @@ AIアプリケーションを構築する際は、効率を高めるために、
   width={600}
 />
 
-## ステップの作成
+<div id="creating-the-steps">
+  ## ステップの作成
+</div>
 
 まずはステップを作成し、ワークフローを初期化しましょう。
 
@@ -75,7 +81,9 @@ const myWorkflow = new LegacyWorkflow({
 ```
 
 
-## ステップのチェーンと並列化
+<div id="chaining-and-parallelizing-steps">
+  ## ステップのチェーンと並列化
+</div>
 
 これでワークフローにステップを追加できます。`.then()` メソッドはステップをチェーンするために使われ、`.step()` メソッドはステップをワークフローに追加するために使われる点に注意してください。
 
@@ -109,7 +117,9 @@ const result = await start({ triggerData: { inputValue: 3 } });
 />
 
 
-## ワークフロー（レガシー）
+<div id="workflows-legacy">
+  ## ワークフロー（レガシー）
+</div>
 
 以下のリンクは、レガシーワークフローに関するサンプルドキュメントです：
 

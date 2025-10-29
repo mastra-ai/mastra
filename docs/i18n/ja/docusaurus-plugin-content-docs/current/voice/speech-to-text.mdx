@@ -3,12 +3,16 @@ title: "Speech-to-Text (STT) | Voice | Mastra ドキュメント"
 description: Mastra の Speech-to-Text 機能の概要。設定方法、使い方、音声プロバイダーとの連携について解説します。
 ---
 
-# 音声認識（STT）
+<div id="speech-to-text-stt">
+  # 音声認識（STT）
+</div>
 
 Mastra の音声認識（STT）は、複数のサービスプロバイダーに対応し、音声入力をテキストに変換するための標準化インターフェースを提供します。
 STT は、人間の音声に反応する音声対応アプリケーションの構築を支援し、ハンズフリー操作、障害のあるユーザーのアクセシビリティ向上、より自然な人間とコンピューターのインターフェースを実現します。
 
-## 設定
+<div id="configuration">
+  ## 設定
+</div>
 
 Mastra で STT を利用するには、音声プロバイダーを初期化する際に `listeningModel` を指定します。これには次のようなパラメータが含まれます:
 
@@ -31,7 +35,9 @@ const voice = new OpenAIVoice();
 ```
 
 
-## 利用可能なプロバイダー
+<div id="available-providers">
+  ## 利用可能なプロバイダー
+</div>
 
 Mastra は複数の Speech-to-Text プロバイダーをサポートしており、それぞれに固有の機能と強みがあります。
 
@@ -50,7 +56,9 @@ pnpm add @mastra/voice-openai  # OpenAI の例
 ```
 
 
-## Listen メソッドの使用
+<div id="using-the-listen-method">
+  ## Listen メソッドの使用
+</div>
 
 STT の主要なメソッドは `listen()` で、音声をテキストに変換します。使い方は次のとおりです：
 

@@ -42,7 +42,9 @@ for await (const chunk of stream) {
 ```
 
 
-## モデル
+<div id="models">
+  ## モデル
+</div>
 
 <ProviderModelsTable
   models={[
@@ -337,9 +339,13 @@ for await (const chunk of stream) {
 ]}
 />
 
-## 詳細設定
+<div id="advanced-configuration">
+  ## 詳細設定
+</div>
 
-### カスタムヘッダー
+<div id="custom-headers">
+  ### カスタムヘッダー
+</div>
 
 ```typescript
 const agent = new Agent({
@@ -355,7 +361,9 @@ const agent = new Agent({
 ```
 
 
-### 動的モデル選択
+<div id="dynamic-model-selection">
+  ### 動的モデル選択
+</div>
 
 ```typescript
 const agent = new Agent({
@@ -370,7 +378,9 @@ const agent = new Agent({
 ```
 
 
-## プロバイダーオプション
+<div id="provider-options">
+  ## プロバイダーオプション
+</div>
 
 Google は、`providerOptions` パラメーターで次のプロバイダー固有のオプションをサポートします。
 
@@ -385,7 +395,9 @@ const response = await agent.generate("Hello!", {
 ```
 
 
-### 利用可能なオプション
+<div id="available-options">
+  ### 利用可能なオプション
+</div>
 
 <PropertiesTable
   content={[
@@ -452,7 +464,9 @@ const response = await agent.generate("Hello!", {
 ]}
 />
 
-## プロバイダーを直接インストール
+<div id="direct-provider-installation">
+  ## プロバイダーを直接インストール
+</div>
 
 このプロバイダーは、スタンドアロンのパッケージとして直接インストールでき、Mastra のモデルルーター用の文字列の代わりに使用できます。詳しくは[パッケージのドキュメント](https://www.npmjs.com/package/@ai-sdk/google)をご覧ください。
 

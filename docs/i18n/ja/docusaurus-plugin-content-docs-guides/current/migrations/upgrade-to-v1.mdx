@@ -3,7 +3,9 @@ title: "移行: Mastra v1 へのアップグレード | 移行ガイド"
 description: "Mastra の v1 未満のバージョンにおける破壊的変更への対応を含むアップグレード方法を解説します。"
 ---
 
-# Mastra v1 へのアップグレード
+<div id="upgrade-to-mastra-v1">
+  # Mastra v1 へのアップグレード
+</div>
 
 このガイドでは、Mastra の v1 以前のバージョンにおける破壊的変更への対応方法と、Mastra v1 へのアップグレード手順を学べます。
 
@@ -17,7 +19,9 @@ description: "Mastra の v1 未満のバージョンにおける破壊的変更�
 
 :::
 
-## v0.23 への移行（未リリース）
+<div id="migrate-to-v023-unreleased">
+  ## v0.23 への移行（未リリース）
+</div>
 
 :::note
 
@@ -25,7 +29,9 @@ description: "Mastra の v1 未満のバージョンにおける破壊的変更�
 
 :::
 
-### 変更点: スレッドタイトルの生成場所とデフォルト
+<div id="changed-thread-title-generation-location-and-default">
+  ### 変更点: スレッドタイトルの生成場所とデフォルト
+</div>
 
 **破壊的変更:**
 
@@ -103,7 +109,9 @@ const agent = new Agent({
 ```
 
 
-### 変更: メモリのデフォルト設定
+<div id="changed-memory-default-settings">
+  ### 変更: メモリのデフォルト設定
+</div>
 
 RAG の研究に基づき、semantic recall のデフォルト設定を最適化しました:
 
@@ -132,7 +140,9 @@ const agent = new Agent({
 セマンティックリコールを使用していない場合（デフォルトで無効）、変更は必要ありません。
 
 
-### Agent クラス
+<div id="agent-class">
+  ### Agent クラス
+</div>
 
 - `generateVNext()` メソッドは削除されました。代わりに `generate()` を使用してください。
 - `streamVNext()` メソッドは削除されました。代わりに `stream()` を使用してください。
@@ -148,7 +158,9 @@ const agent = new Agent({
 - `getDefaultStreamOptions()` → `getDefaultStreamOptionsLegacy()`
 - `getDefaultVNextStreamOptions()` → `getDefaultStreamOptions()`
 
-#### 出力オプション
+<div id="output-options">
+  #### 出力オプション
+</div>
 
 * `generate()` と `stream()` のオプションから、非推奨の `output` フィールドを削除しました。代わりに `structuredOutput.schema` を使用してください:
 
@@ -171,7 +183,9 @@ const result = await agent.generate(messages, {
 ```
 
 
-#### Abort Signal
+<div id="abort-signal">
+  #### Abort Signal
+</div>
 
 * `modelSettings.abortSignal` は削除されました。代わりにトップレベルの `abortSignal` オプションを使用してください：
 
@@ -194,7 +208,9 @@ const result = await agent.stream(messages, {
 ```
 
 
-#### MCP ツール
+<div id="mcp-tools">
+  #### MCP ツール
+</div>
 
 * トップレベルの引数から `elicitation` と `extra` を削除しました。代わりに `mcp` プロパティを使用してください。
 
@@ -234,14 +250,20 @@ export const accountBalance = createTool({
 ```
 
 
-#### 入力プロセッサ
+<div id="input-processors">
+  #### 入力プロセッサ
+</div>
 
 - `@mastra/core/agent/input-processors` のエクスポートは削除されました。現在は `@mastra/core/processors` から利用できます。
 - `InputProcessor` 型は廃止され、`processInput` 関数を実装する `Processor` に置き換えられました。
 
-## v0.22 へのアップグレード
+<div id="migrate-to-v022">
+  ## v0.22 へのアップグレード
+</div>
 
-### 変更点: メモリスコープのデフォルト
+<div id="changed-memory-scope-defaults">
+  ### 変更点: メモリスコープのデフォルト
+</div>
 
 `@mastra/memory` - `0.16.0`
 `@mastra/core` - `0.22.0`
@@ -294,11 +316,15 @@ const memory = new Memory({
 新しいデフォルトの動作を採用する場合、`scope: 'resource'` の明示的な宣言は不要になったため、任意で削除できます。
 
 
-### 非推奨: `format: "aisdk"`
+<div id="deprecated-format-aisdk">
+  ### 非推奨: `format: "aisdk"`
+</div>
 
 `stream()`／`generate()` メソッドの `format: "aisdk"` オプションは非推奨です。代わりに `@mastra/ai-sdk` パッケージを使用してください。詳細は [Vercel AI SDK の使用方法ドキュメント](/docs/frameworks/agentic-uis/ai-sdk)をご覧ください。
 
-### 削除: MCP クラス
+<div id="removed-mcp-classes">
+  ### 削除: MCP クラス
+</div>
 
 `@mastra/mcp` - `0.14.0`
 
@@ -306,7 +332,9 @@ const memory = new Memory({
 - `MCPConfigurationOptions` 型を削除しました。代わりに [`MCPClientOptions`](/reference/tools/mcp-client#mcpclientoptions) 型を使用してください。API は同一です。
 - `MCPConfiguration` クラスを削除しました。代わりに [`MCPClient`](/reference/tools/mcp-client) クラスを使用してください。
 
-### 変更点: CLI フラグおよびコマンドの削除
+<div id="removed-cli-flags-commands">
+  ### 変更点: CLI フラグおよびコマンドの削除
+</div>
 
 `mastra` - `0.17.0`
 
@@ -314,11 +342,15 @@ const memory = new Memory({
 - `mastra build` コマンドから `--env` フラグを削除しました。ビルド成果物をカスタム環境で起動する場合は、代わりに `mastra start --env <env>` を使用してください。
 - `mastra dev` から `--port` フラグを削除しました。代わりに `new Mastra()` クラスで `server.port` を設定してください。
 
-## v0.21 への移行
+<div id="migrate-to-v021">
+  ## v0.21 への移行
+</div>
 
 変更は不要です。
 
-## v0.20 への移行
+<div id="migrate-to-v020">
+  ## v0.20 への移行
+</div>
 
 - [VNext から Standard APIs へ](./vnext-to-standard-apis)
 - [AgentNetwork から .network() へ](./agentnetwork)

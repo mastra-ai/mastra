@@ -6,7 +6,9 @@ description: Mastra の Context Precision Scorer に関するドキュメント�
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
-# コンテキスト精度スコアラー
+<div id="context-precision-scorer">
+  # コンテキスト精度スコアラー
+</div>
 
 `createContextPrecisionScorer()` 関数は、期待される出力の生成に対して、取得したコンテキスト断片がどれほど関連性が高く、どの程度うまく配置されているかを評価するスコアラーを作成します。これは、関連するコンテキストをシーケンスの早い位置に配置するシステムを高く評価するために、**Mean Average Precision (MAP)** を用います。
 
@@ -28,7 +30,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 - トークン予算の制約
 - マルチステップの推論タスク
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -70,7 +74,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 **注**: `context` または `contextExtractor` のいずれかを指定する必要があります。両方が指定された場合は、`contextExtractor` が優先されます。
 
-## .run() の戻り値
+<div id="run-returns">
+  ## .run() の戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -89,9 +95,13 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
   ]}
 />
 
-## スコアの詳細
+<div id="scoring-details">
+  ## スコアの詳細
+</div>
 
-### 平均適合率（MAP）
+<div id="mean-average-precision-map">
+  ### 平均適合率（MAP）
+</div>
 
 Context Precision は、関連性と順位の両面を評価するために**平均適合率**を用います：
 
@@ -100,7 +110,9 @@ Context Precision は、関連性と順位の両面を評価するために**平
 3. **平均適合率**: 上記の適合率をすべて合計し、関連アイテムの総数で割る
 4. **最終スコア**: スケール係数を掛けて、小数点以下2桁に丸める
 
-### スコア算定式
+<div id="scoring-formula">
+  ### スコア算定式
+</div>
 
 ```
 MAP = (Σ 適合率@k) / R
@@ -112,7 +124,9 @@ MAP = (Σ 適合率@k) / R
 ```
 
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 - **0.9-1.0**: 精度が非常に高い - 関連するコンテキストがシーケンスの早い段階に揃っている
 - **0.7-0.8**: 精度が良好 - 関連するコンテキストの大半が適切に配置されている
@@ -120,7 +134,9 @@ MAP = (Σ 適合率@k) / R
 - **0.1-0.3**: 精度が低い - 関連するコンテキストが少ない、または位置が不適切
 - **0.0**: 関連するコンテキストが見つからない
 
-### 理由の分析
+<div id="reason-analysis">
+  ### 理由の分析
+</div>
 
 reason フィールドでは次の点を説明します:
 
@@ -128,7 +144,9 @@ reason フィールドでは次の点を説明します:
 - 位置づけが MAP の計算にどのような影響を与えたか
 - 評価で用いられた具体的な関連性の基準
 
-### 最適化のヒント
+<div id="optimization-insights">
+  ### 最適化のヒント
+</div>
 
 結果を活用して次を行う:
 
@@ -137,7 +155,9 @@ reason フィールドでは次の点を説明します:
 - **チャンクサイズを調整**: コンテキストの詳細度と関連性の精度のバランスを取る
 - **埋め込みを評価**: より良い検索のために異なる埋め込みモデルを試す
 
-### 計算例
+<div id="example-calculation">
+  ### 計算例
+</div>
 
 与えられたコンテキスト: `[relevant, irrelevant, relevant, irrelevant]`
 
@@ -148,9 +168,13 @@ reason フィールドでは次の点を説明します:
 
 MAP = (1.0 + 0.67) / 2 = 0.835 ≈ **0.83**
 
-## スコアラーの設定
+<div id="scorer-configuration">
+  ## スコアラーの設定
+</div>
 
-### 動的コンテキスト抽出
+<div id="dynamic-context-extraction">
+  ### 動的コンテキスト抽出
+</div>
 
 ```typescript
 const scorer = createContextPrecisionScorer({
@@ -170,7 +194,9 @@ const scorer = createContextPrecisionScorer({
 ```
 
 
-### 大きな文脈での評価
+<div id="large-context-evaluation">
+  ### 大きな文脈での評価
+</div>
 
 ```typescript
 const scorer = createContextPrecisionScorer({
@@ -190,9 +216,13 @@ const scorer = createContextPrecisionScorer({
 ```
 
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
-### 高精度の例
+<div id="high-precision-example">
+  ### 高精度の例
+</div>
 
 この例は、必要な文脈が冒頭で揃っている、完璧なコンテキスト精度を示しています。
 
@@ -240,7 +270,9 @@ console.log(result);
 ```
 
 
-### 混合精度の例
+<div id="mixed-precision-example">
+  ### 混合精度の例
+</div>
 
 この例は、関連する文脈と無関係な文脈の両方を含む、ほどほどの精度を示しています。
 
@@ -290,7 +322,9 @@ console.log(result);
 ```
 
 
-### 低精度の例
+<div id="low-precision-example">
+  ### 低精度の例
+</div>
 
 この例は、文脈の大半が無関係で、コンテキスト精度が低いことを示しています。
 
@@ -340,7 +374,9 @@ console.log(result);
 ```
 
 
-## コンテキスト関連性との比較
+<div id="comparison-with-context-relevance">
+  ## コンテキスト関連性との比較
+</div>
 
 ニーズに合ったスコアラーを選びましょう:
 
@@ -352,7 +388,9 @@ console.log(result);
 | **使用状況の追跡**      | ✓ 利用状況を追跡          | ✗ 対象外                    |
 | **位置感度**            | ✗ 位置に非依存            | ✓ 早期の配置を評価          |
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [Answer Relevancy Scorer](/reference/scorers/answer-relevancy) - 回答が質問に適切に対応しているかを評価します
 - [Faithfulness Scorer](/reference/scorers/faithfulness) - 回答が文脈に基づいている度合いを測定します

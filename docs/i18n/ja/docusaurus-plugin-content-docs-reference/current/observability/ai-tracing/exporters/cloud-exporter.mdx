@@ -6,11 +6,15 @@ description: CloudExporter のAPIリファレンス
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
-# CloudExporter
+<div id="cloudexporter">
+  # CloudExporter
+</div>
 
 トレースを Mastra Cloud に送信し、オンラインでの可視化と監視を可能にします。
 
-## コンストラクタ
+<div id="constructor">
+  ## コンストラクタ
+</div>
 
 ```typescript
 new CloudExporter(config?: CloudExporterConfig)
@@ -28,7 +32,9 @@ new CloudExporter(config?: CloudExporterConfig)
 />
 
 
-## CloudExporterConfig
+<div id="cloudexporterconfig">
+  ## CloudExporterConfig
+</div>
 
 ```typescript
 interface CloudExporterConfig {
@@ -53,23 +59,31 @@ interface CloudExporterConfig {
 ```
 
 
-## 環境変数
+<div id="environment-variables">
+  ## 環境変数
+</div>
 
 エクスポーターは、設定で指定されていない場合、次の環境変数を読み込みます:
 
 - `MASTRA_CLOUD_ACCESS_TOKEN` - 認証用アクセストークン
 - `MASTRA_CLOUD_AI_TRACES_ENDPOINT` - カスタムエンドポイント（既定: `https://api.mastra.ai/ai/spans/publish`）
 
-## プロパティ
+<div id="properties">
+  ## プロパティ
+</div>
 
 ```typescript
 readonly name = 'mastra-cloud-ai-tracing-exporter';
 ```
 
 
-## 方法
+<div id="methods">
+  ## 方法
+</div>
 
-### exportEvent
+<div id="exportevent">
+  ### exportEvent
+</div>
 
 ```typescript
 async exportEvent(event: AITracingEvent): Promise<void>
@@ -89,7 +103,9 @@ async exportEvent(event: AITracingEvent): Promise<void>
 />
 
 
-### シャットダウン
+<div id="shutdown">
+  ### シャットダウン
+</div>
 
 ```typescript
 async shutdown(): Promise<void>
@@ -98,16 +114,22 @@ async shutdown(): Promise<void>
 残りのイベントをフラッシュして、クリーンアップを実行します。
 
 
-## 挙動
+<div id="behavior">
+  ## 挙動
+</div>
 
-### 認証
+<div id="authentication">
+  ### 認証
+</div>
 
 設定または環境変数でアクセストークンが提供されない場合、エクスポーターは次の動作を行います:
 
 - サインアップ方法に関する情報付きの警告をログに記録する
 - no-op として動作する（すべてのイベントを破棄する）
 
-### バッチ処理
+<div id="batching">
+  ### バッチ処理
+</div>
 
 エクスポーターはネットワークを効率的に利用するため、スパンをバッチ化します:
 
@@ -115,19 +137,25 @@ async shutdown(): Promise<void>
 - バッチ内の最初のスパンから `maxBatchWaitMs` が経過するとフラッシュします
 - `shutdown()` 時にフラッシュします
 
-### エラー処理
+<div id="error-handling">
+  ### エラー処理
+</div>
 
 - `maxRetries` 回の試行まで指数バックオフでリトライ
 - すべてのリトライに失敗した場合、バッチを破棄
 - エラーを記録しつつ、新規イベントの処理は継続
 
-### イベント処理
+<div id="event-processing">
+  ### イベント処理
+</div>
 
 - `SPAN_ENDED` イベントのみを処理
 - `SPAN_STARTED` および `SPAN_UPDATED` イベントは無視
 - スパンを MastraCloudSpanRecord 形式に整形
 
-## MastraCloudSpanRecord
+<div id="mastracloudspanrecord">
+  ## MastraCloudSpanRecord
+</div>
 
 クラウドスパンの内部フォーマット:
 
@@ -152,7 +180,9 @@ interface MastraCloudSpanRecord {
 ```
 
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 ```typescript
 import { CloudExporter } from "@mastra/core/ai-tracing";
@@ -169,21 +199,29 @@ const customExporter = new CloudExporter({
 ```
 
 
-## 関連情報
+<div id="see-also">
+  ## 関連情報
+</div>
 
-### ドキュメント
+<div id="documentation">
+  ### ドキュメント
+</div>
 
 - [AI Tracing 概要](/docs/observability/ai-tracing/overview) - 総合ガイド
 - [エクスポーター](/docs/observability/ai-tracing/overview#exporters) - エクスポーターの概念
 
-### その他のエクスポーター
+<div id="other-exporters">
+  ### その他のエクスポーター
+</div>
 
 - [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - ストレージへの永続化
 - [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter) - デバッグ出力
 - [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse との連携
 - [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust との連携
 
-### 参考資料
+<div id="reference">
+  ### 参考資料
+</div>
 
 - [Configuration](/reference/observability/ai-tracing/configuration) - 設定項目
 - [Interfaces](/reference/observability/ai-tracing/interfaces) - インターフェース定義

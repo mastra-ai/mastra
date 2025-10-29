@@ -3,7 +3,9 @@ title: "Guardrails | Agents | Mastra ドキュメント"
 description: "入力・出力プロセッサを使ってガードレールを実装し、AI とのやり取りを安全かつ適切に制御する方法を学びます。"
 ---
 
-# ガードレール
+<div id="guardrails">
+  # ガードレール
+</div>
 
 エージェントはプロセッサを使って、入力と出力にガードレールを適用します。プロセッサは各インタラクションの前後に実行され、ユーザーとエージェントの間を行き交う情報をレビュー、変換、またはブロックする手段を提供します。
 
@@ -14,11 +16,15 @@ description: "入力・出力プロセッサを使ってガードレールを実
 
 一部のプロセッサは_ハイブリッド_で、ロジックをどこに適用するかに応じて `inputProcessors` または `outputProcessors` のいずれにも使用できます。
 
-## プロセッサを使うタイミング
+<div id="when-to-use-processors">
+  ## プロセッサを使うタイミング
+</div>
 
 コンテンツのモデレーション、プロンプトインジェクションの防止、レスポンスのサニタイズ、メッセージ変換、その他のセキュリティ関連の制御にプロセッサを使用します。Mastra には、一般的なユースケース向けの入力用・出力用の組み込みプロセッサがいくつか用意されています。
 
-## エージェントにプロセッサを追加する
+<div id="adding-processors-to-an-agent">
+  ## エージェントにプロセッサを追加する
+</div>
 
 対象のプロセッサクラスをインポートしてインスタンス化し、`inputProcessors` または `outputProcessors` オプションを使ってエージェントの設定に渡します。
 
@@ -44,11 +50,15 @@ export const moderatedAgent = new Agent({
 ```
 
 
-## 入力プロセッサ
+<div id="input-processors">
+  ## 入力プロセッサ
+</div>
 
 入力プロセッサは、ユーザーのメッセージが言語モデルに届く前に適用されます。正規化、検証、コンテンツのモデレーション、プロンプトインジェクションの検出、セキュリティチェックに役立ちます。
 
-### ユーザーメッセージの正規化
+<div id="normalizing-user-messages">
+  ### ユーザーメッセージの正規化
+</div>
 
 `UnicodeNormalizer` は、Unicode 文字の統一、空白の標準化、問題のある記号の除去によってユーザー入力を整形・正規化する入力プロセッサで、LLM がユーザーメッセージをより的確に理解できるようにします。
 
@@ -69,7 +79,9 @@ export const normalizedAgent = new Agent({
 > 設定オプションの一覧は [UnicodeNormalizer](/reference/processors/unicode-normalizer) をご覧ください。
 
 
-### プロンプトインジェクションの防止
+<div id="preventing-prompt-injection">
+  ### プロンプトインジェクションの防止
+</div>
 
 `PromptInjectionDetector` は、ユーザーからのメッセージに含まれるプロンプトインジェクション、ジェイルブレイク（jailbreak）の試み、システムの指示上書きパターンをスキャンする入力プロセッサです。LLM を用いてリスクのある入力を分類し、モデルに届く前にブロックしたり書き換えたりできます。
 
@@ -92,7 +104,9 @@ export const secureAgent = new Agent({
 > 設定オプションの一覧は [PromptInjectionDetector](/reference/processors/prompt-injection-detector) を参照してください。
 
 
-### 言語の検出と翻訳
+<div id="detecting-and-translating-language">
+  ### 言語の検出と翻訳
+</div>
 
 `LanguageDetector` は、ユーザーのメッセージの言語を検出して指定の言語へ翻訳する入力プロセッサで、一貫したやり取りを保ちながら多言語対応を可能にします。LLM を用いて言語を判別し、翻訳を行います。
 
@@ -115,11 +129,15 @@ export const multilingualAgent = new Agent({
 > 設定オプションの一覧については、[LanguageDetector](/reference/processors/language-detector)を参照してください。
 
 
-## 出力プロセッサ
+<div id="output-processors">
+  ## 出力プロセッサ
+</div>
 
 出力プロセッサは、言語モデルが応答を生成した後、ユーザーに返す前の段階で適用されます。応答の最適化、モデレーション、変換、安全対策の適用に役立ちます。
 
-### ストリーミング出力のバッチ処理
+<div id="batching-streamed-output">
+  ### ストリーミング出力のバッチ処理
+</div>
 
 `BatchPartsProcessor` は、クライアントに送出する前に複数のストリーム片をまとめる出力プロセッサです。これにより、小さなチャンクをより大きなバッチに集約してネットワークのオーバーヘッドを抑え、ユーザー体験を向上させます。
 
@@ -141,7 +159,9 @@ export const batchedAgent = new Agent({
 > 設定オプションの全一覧は [BatchPartsProcessor](/reference/processors/batch-parts-processor) を参照してください。
 
 
-### トークン使用量の制限
+<div id="limiting-token-usage">
+  ### トークン使用量の制限
+</div>
 
 `TokenLimiterProcessor` は、モデルの応答に含まれるトークン数を制限する出力プロセッサです。上限を超えた場合にメッセージを切り詰める、またはブロックすることで、コストやパフォーマンスの管理に役立ちます。
 
@@ -163,7 +183,9 @@ export const limitedAgent = new Agent({
 > 設定オプションの一覧については、[TokenLimiterProcessor](/reference/processors/token-limiter-processor)を参照してください。
 
 
-### システムプロンプトのスクラビング
+<div id="scrubbing-system-prompts">
+  ### システムプロンプトのスクラビング
+</div>
 
 `SystemPromptScrubber` は、モデルの応答からシステムプロンプトやその他の内部指示を検出してマスキング（編集）する出力プロセッサです。これにより、セキュリティリスクにつながり得るプロンプト内容や設定の詳細が意図せず開示されるのを防ぎます。設定された検出タイプに基づき、LLM を用いて機密内容を識別・マスキングします。
 
@@ -189,11 +211,15 @@ const scrubbedAgent = new Agent({
 > すべての設定オプションについては、[SystemPromptScrubber](/reference/processors/system-prompt-scrubber) を参照してください。
 
 
-## ハイブリッドプロセッサ
+<div id="hybrid-processors">
+  ## ハイブリッドプロセッサ
+</div>
 
 ハイブリッドプロセッサは、言語モデルにメッセージを送る前、またはユーザーに応答を返す前のいずれかで適用できます。コンテンツのモデレーションや PII のマスキングなどのタスクに有用です。
 
-### 入力と出力のモデレーション
+<div id="moderating-input-and-output">
+  ### 入力と出力のモデレーション
+</div>
 
 `ModerationProcessor` は、ヘイト、嫌がらせ、暴力などの各カテゴリにわたる不適切または有害なコンテンツを検出するハイブリッド型のプロセッサです。適用箇所に応じて、ユーザー入力またはモデル出力のどちらかをモデレートできます。LLM を用いてメッセージを分類し、設定に基づいてブロックまたは書き換えを行います。
 
@@ -221,7 +247,9 @@ export const moderatedAgent = new Agent({
 > 設定オプションの全一覧は [ModerationProcessor](/reference/processors/moderation-processor) を参照してください。
 
 
-### PII の検出とマスキング
+<div id="detecting-and-redacting-pii">
+  ### PII の検出とマスキング
+</div>
 
 `PIIDetector` は、メールアドレス、電話番号、クレジットカード番号などの個人を特定できる情報を検出して削除するハイブリッド型プロセッサーです。適用先に応じて、ユーザー入力またはモデル出力のどちらかをマスキングできます。設定した検出タイプに基づいて機微情報を特定するために、LLM を使用します。
 
@@ -251,7 +279,9 @@ export const privateAgent = new Agent({
 > 設定オプションの全一覧は、[PIIDetector](/reference/processors/pii-detector)を参照してください。
 
 
-## 複数のプロセッサの適用
+<div id="applying-multiple-processors">
+  ## 複数のプロセッサの適用
+</div>
 
 `inputProcessors` または `outputProcessors` 配列に列挙することで、複数のプロセッサを適用できます。これらは順番に実行され、各プロセッサは直前のプロセッサの出力を受け取ります。
 
@@ -291,7 +321,9 @@ export const testAgent = new Agent({
 ```
 
 
-## プロセッサの戦略
+<div id="processor-strategies">
+  ## プロセッサの戦略
+</div>
 
 多くの組み込みプロセッサは、フラグが付いた入力または出力をどのように処理するかを制御する `strategy` パラメータをサポートしています。使用できる値には `block`、`warn`、`detect`、`redact` などがあります。
 
@@ -312,13 +344,17 @@ export const privateAgent = new Agent({
 ```
 
 
-### ブロックされたリクエストの扱い方
+<div id="handling-blocked-requests">
+  ### ブロックされたリクエストの扱い方
+</div>
 
 プロセッサがリクエストをブロックしても、エージェントはエラーをスローせずに正常終了としてレスポンスを返します。ブロックされたリクエストに対応するには、レスポンス内の `tripwire` または `tripwireReason` を確認してください。
 
 たとえば、エージェントが `strategy: "block"` を指定した `PIIDetector` を使用しており、リクエストにクレジットカード番号が含まれている場合、そのリクエストはブロックされ、レスポンスには `tripwireReason` が含まれます。
 
-#### `.generate()` の使用例
+<div id="generate-example">
+  #### `.generate()` の使用例
+</div>
 
 ```typescript {3-4, } showLineNumbers
 const result = await agent.generate(
@@ -330,7 +366,9 @@ console.error(result.tripwireReason);
 ```
 
 
-#### `.stream()` の使用例
+<div id="stream-example">
+  #### `.stream()` の使用例
+</div>
 
 ```typescript {4-5} showLineNumbers
 const stream = await agent.stream(
@@ -351,7 +389,9 @@ PII が検出されました。種類: クレジットカード
 ```
 
 
-## カスタムプロセッサ
+<div id="custom-processors">
+  ## カスタムプロセッサ
+</div>
 
 標準のプロセッサで要件を満たせない場合は、`Processor` クラスを拡張して独自のプロセッサを作成できます。
 

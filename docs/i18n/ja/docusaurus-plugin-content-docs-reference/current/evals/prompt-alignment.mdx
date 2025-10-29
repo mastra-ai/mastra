@@ -3,7 +3,9 @@ title: "リファレンス: PromptAlignmentMetric | Evals | Mastra ドキュメ�
 description: Mastra における Prompt Alignment Metric のドキュメント。LLM の出力がプロンプトの指示にどの程度従っているかを評価します。
 ---
 
-# PromptAlignmentMetric
+<div id="promptalignmentmetric">
+  # PromptAlignmentMetric
+</div>
 
 :::info Scorers
 このドキュメントはレガシーの evals API を対象としています。最新の Scorers の機能については [Scorers](/docs/scorers/overview) を参照してください。
@@ -11,7 +13,9 @@ description: Mastra における Prompt Alignment Metric のドキュメント�
 
 `PromptAlignmentMetric` クラスは、LLM の出力が与えられたプロンプトの指示にどれだけ厳密に従っているかを評価します。各指示が正確に守られているかを判定するジャッジ方式を採用し、逸脱があった場合にはその理由を詳細に示します。
 
-## 基本的な使い方
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -41,7 +45,9 @@ console.log(result.info.reason); // スコアの説明
 ```
 
 
-## コンストラクターのパラメーター
+<div id="constructor-parameters">
+  ## コンストラクターのパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -61,7 +67,9 @@ console.log(result.info.reason); // スコアの説明
   ]}
 />
 
-### PromptAlignmentOptions
+<div id="promptalignmentoptions">
+  ### PromptAlignmentOptions
+</div>
 
 <PropertiesTable
   content={[
@@ -81,7 +89,9 @@ console.log(result.info.reason); // スコアの説明
   ]}
 />
 
-## measure() のパラメータ
+<div id="measure-parameters">
+  ## measure() のパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -100,7 +110,9 @@ console.log(result.info.reason); // スコアの説明
   ]}
 />
 
-## 返り値
+<div id="returns">
+  ## 返り値
+</div>
 
 <PropertiesTable
   content={[
@@ -131,7 +143,9 @@ console.log(result.info.reason); // スコアの説明
   ]}
 />
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 この指標は、以下の観点から指示への整合性を評価します:
 
@@ -140,7 +154,9 @@ console.log(result.info.reason); // スコアの説明
 - すべての判定に対する詳細な根拠の提示
 - 適用対象の指示に基づく比例配点
 
-### 命令の判定
+<div id="instruction-verdicts">
+  ### 命令の判定
+</div>
 
 各命令には次のいずれかの判定が付与されます：
 
@@ -148,7 +164,9 @@ console.log(result.info.reason); // スコアの説明
 - "no": 命令は適用可能だが、満たされていない、または一部のみ満たされている
 - "n/a": 命令は当該文脈には適用されない
 
-### スコアリング手順
+<div id="scoring-process">
+  ### スコアリング手順
+</div>
 
 1. 指示の適用可否を評価:
    - 各指示が文脈に適用できるかを判定
@@ -167,7 +185,9 @@ console.log(result.info.reason); // スコアの説明
 
 最終スコア: `(followed_instructions / applicable_instructions) * scale`
 
-### 重要な考慮事項
+<div id="important-considerations">
+  ### 重要な考慮事項
+</div>
 
 - 空の出力:
   - すべての書式指示は適用対象とみなす
@@ -179,7 +199,9 @@ console.log(result.info.reason); // スコアの説明
   - まったく別のドメインに対してのみ使用する
   - 最終スコアの算出には影響しない
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 （スケールは0から。デフォルトは0〜1）
 
@@ -189,7 +211,9 @@ console.log(result.info.reason); // スコアの説明
 - 0.1-0.3: 該当する指示の遵守は限定的
 - 0.0: 該当する指示をまったく遵守していない
 
-## 解説付きの例
+<div id="example-with-analysis">
+  ## 解説付きの例
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -242,7 +266,9 @@ const result2 = await metric.measure(
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [回答の関連性メトリクス](./answer-relevancy)
 - [キーワード網羅性メトリクス](./keyword-coverage)

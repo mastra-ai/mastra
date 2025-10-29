@@ -3,11 +3,15 @@ title: "リファレンス: MDocument | RAG | Mastra ドキュメント"
 description: Mastra の MDocument クラスに関するドキュメント。ドキュメントの処理とチャンク分割を扱います。
 ---
 
-# MDocument
+<div id="mdocument">
+  # MDocument
+</div>
 
 MDocument クラスは、RAG アプリケーション向けにドキュメントを処理します。主要なメソッドは `.chunk()` と `.extractMetadata()` です。
 
-## コンストラクター
+<div id="constructor">
+  ## コンストラクター
+</div>
 
 <PropertiesTable
   content={[
@@ -25,9 +29,13 @@ MDocument クラスは、RAG アプリケーション向けにドキュメント
   ]}
 />
 
-## スタティックメソッド
+<div id="static-methods">
+  ## スタティックメソッド
+</div>
 
-### fromText()
+<div id="fromtext">
+  ### fromText()
+</div>
 
 プレーンテキストの内容からドキュメントを作成します。
 
@@ -36,7 +44,9 @@ static fromText(text: string, metadata?: Record<string, any>): MDocument
 ```
 
 
-### fromHTML()
+<div id="fromhtml">
+  ### fromHTML()
+</div>
 
 HTMLの内容からドキュメントを作成します。
 
@@ -45,7 +55,9 @@ static fromHTML(html: string, metadata?: Record<string, any>): MDocument
 ```
 
 
-### fromMarkdown()
+<div id="frommarkdown">
+  ### fromMarkdown()
+</div>
 
 Markdown コンテンツからドキュメントを生成します。
 
@@ -54,7 +66,9 @@ static fromMarkdown(markdown: string, metadata?: Record<string, any>): MDocument
 ```
 
 
-### fromJSON()
+<div id="fromjson">
+  ### fromJSON()
+</div>
 
 JSONの内容からドキュメントを作成します。
 
@@ -63,9 +77,13 @@ static fromJSON(json: string, metadata?: Record<string, any>): MDocument
 ```
 
 
-## インスタンス メソッド
+<div id="instance-methods">
+  ## インスタンス メソッド
+</div>
 
-### chunk()
+<div id="chunk">
+  ### chunk()
+</div>
 
 ドキュメントをチャンクに分割し、必要に応じてメタデータも抽出します。
 
@@ -76,7 +94,9 @@ async chunk(params?: ChunkParams): Promise<Chunk[]>
 詳細なオプションについては、[chunk() リファレンス](./chunk)を参照してください。
 
 
-### getDocs()
+<div id="getdocs">
+  ### getDocs()
+</div>
 
 処理済みドキュメントチャンクの配列を返します。
 
@@ -85,7 +105,9 @@ getDocs(): Chunk[]
 ```
 
 
-### getText()
+<div id="gettext">
+  ### getText()
+</div>
 
 チャンクからテキスト文字列の配列を返します。
 
@@ -94,7 +116,9 @@ getText(): string[]
 ```
 
 
-### getMetadata()
+<div id="getmetadata">
+  ### getMetadata()
+</div>
 
 チャンクからメタデータオブジェクトの配列を返します。
 
@@ -103,7 +127,9 @@ getMetadata(): Record<string, any>[]
 ```
 
 
-### extractMetadata()
+<div id="extractmetadata">
+  ### extractMetadata()
+</div>
 
 指定した抽出器を使ってメタデータを抽出します。詳しくは [ExtractParams リファレンス](./extract-params) を参照してください。
 
@@ -112,7 +138,9 @@ async extractMetadata(params: ExtractParams): Promise<MDocument>
 ```
 
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
 ```typescript
 import { MDocument } from "@mastra/rag";

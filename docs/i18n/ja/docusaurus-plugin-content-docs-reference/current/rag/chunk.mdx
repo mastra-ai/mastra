@@ -3,11 +3,15 @@ title: "リファレンス: .chunk() | RAG | Mastra ドキュメント"
 description: Mastra における chunk 関数のドキュメント。さまざまな手法を用いてドキュメントを小さなセグメントに分割します。
 ---
 
-# リファレンス: .chunk()
+<div id="reference-chunk">
+  # リファレンス: .chunk()
+</div>
 
 `.chunk()` 関数は、さまざまな戦略やオプションを用いてドキュメントを小さなセグメントに分割します。
 
-## 例
+<div id="example">
+  ## 例
+</div>
 
 ```typescript
 import { MDocument } from "@mastra/rag";
@@ -41,7 +45,9 @@ const chunksWithMetadata = await doc.chunk({
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 以下のパラメータは、すべてのチャンク化戦略で利用できます。
 **重要:** 各戦略では、用途に応じてこれらのパラメータの一部のみが使用されます。
@@ -116,7 +122,9 @@ const chunksWithMetadata = await doc.chunk({
 
 `extract` パラメータの詳細は [ExtractParams リファレンス](/reference/rag/extract-params) を参照してください。
 
-## 戦略固有のオプション
+<div id="strategy-specific-options">
+  ## 戦略固有のオプション
+</div>
 
 戦略固有のオプションは、strategy パラメータと同じ階層のトップレベルパラメータとして渡します。例:
 
@@ -185,7 +193,9 @@ const chunks = await doc.chunk({
 以下に記載のオプションは、設定オブジェクトのトップレベルに直接渡され、別個の options オブジェクト内にネストされることはありません。
 
 
-### 文字列
+<div id="character">
+  ### 文字列
+</div>
 
 <PropertiesTable
   content={[
@@ -206,7 +216,9 @@ const chunks = await doc.chunk({
   ]}
 />
 
-### 再帰
+<div id="recursive">
+  ### 再帰
+</div>
 
 <PropertiesTable
   content={[
@@ -234,7 +246,9 @@ const chunks = await doc.chunk({
   ]}
 />
 
-### 文単位
+<div id="sentence">
+  ### 文単位
+</div>
 
 <PropertiesTable
   content={[
@@ -286,7 +300,9 @@ const chunks = await doc.chunk({
   ]}
 />
 
-### HTML
+<div id="html">
+  ### HTML
+</div>
 
 <PropertiesTable
   content={[
@@ -313,7 +329,9 @@ const chunks = await doc.chunk({
 
 **重要:** HTML 戦略を使用する場合、一般的なオプションはすべて無視されます。見出しベースの分割には `headers` を、セクションベースの分割には `sections` を使用してください。両方を同時に指定した場合は `sections` が無視されます。
 
-### Markdown
+<div id="markdown">
+  ### Markdown
+</div>
 
 <PropertiesTable
   content={[
@@ -340,7 +358,9 @@ const chunks = await doc.chunk({
 
 **重要:** `headers` オプションを使用すると、Markdown 戦略はすべての一般オプションを無視し、コンテンツは Markdown の見出し構造に基づいて分割されます。Markdown でサイズ基準のチャンク分割を使うには、`headers` パラメータを省略してください。
 
-### セマンティックMarkdown
+<div id="semantic-markdown">
+  ### セマンティックMarkdown
+</div>
 
 <PropertiesTable
   content={[
@@ -385,7 +405,9 @@ const chunks = await doc.chunk({
   ]}
 />
 
-### トークン
+<div id="token">
+  ### トークン
+</div>
 
 <PropertiesTable
   content={[
@@ -418,7 +440,9 @@ const chunks = await doc.chunk({
   ]}
 />
 
-### JSON
+<div id="json">
+  ### JSON
+</div>
 
 <PropertiesTable
   content={[
@@ -448,11 +472,15 @@ const chunks = await doc.chunk({
   ]}
 />
 
-### Latex
+<div id="latex">
+  ### Latex
+</div>
 
 Latex戦略は、上記の一般的なチャンク化オプションのみを使用します。数学・学術文書向けに最適化された、LaTeXに対応した分割を提供します。
 
-## 戻り値
+<div id="return-value">
+  ## 戻り値
+</div>
 
 チャンク化されたドキュメントを含む `MDocument` インスタンスを返します。各チャンクには次の内容が含まれます：
 

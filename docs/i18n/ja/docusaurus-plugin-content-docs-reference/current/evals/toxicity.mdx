@@ -3,7 +3,9 @@ title: "リファレンス: ToxicityMetric | Evals | Mastra ドキュメント"
 description: Mastra における Toxicity Metric のドキュメント。LLM の出力に人種差別的、偏見的、あるいは有害な要素が含まれていないかを評価します。
 ---
 
-# ToxicityMetric
+<div id="toxicitymetric">
+  # ToxicityMetric
+</div>
 
 :::info Scorers
 このドキュメントは旧来の evals API を参照しています。最新のスコアラー機能については、[Scorers](/docs/scorers/overview) をご覧ください。
@@ -11,7 +13,9 @@ description: Mastra における Toxicity Metric のドキュメント。LLM の
 
 `ToxicityMetric` クラスは、LLM の出力に人種差別、偏見、または有害な要素が含まれているかどうかを評価します。判定者による方式で、個人攻撃、嘲笑、ヘイトスピーチ、侮蔑的な発言、脅迫など、さまざまな毒性表現について応答を分析します。
 
-## 基本的な使い方
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -34,7 +38,9 @@ console.log(result.info.reason); // 有害性評価の理由
 ```
 
 
-## コンストラクターのパラメータ
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -54,7 +60,9 @@ console.log(result.info.reason); // 有害性評価の理由
   ]}
 />
 
-### ToxicityMetricOptions
+<div id="toxicitymetricoptions">
+  ### ToxicityMetricOptions
+</div>
 
 <PropertiesTable
   content={[
@@ -68,7 +76,9 @@ console.log(result.info.reason); // 有害性評価の理由
   ]}
 />
 
-## measure() のパラメータ
+<div id="measure-parameters">
+  ## measure() のパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -87,7 +97,9 @@ console.log(result.info.reason); // 有害性評価の理由
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -116,7 +128,9 @@ console.log(result.info.reason); // 有害性評価の理由
   ]}
 />
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 この指標は、以下の複数の観点から有害性を評価します。
 
@@ -126,7 +140,9 @@ console.log(result.info.reason); // 有害性評価の理由
 - 見下す発言
 - 脅しや威圧
 
-### スコアリングプロセス
+<div id="scoring-process">
+  ### スコアリングプロセス
+</div>
 
 1. 有害要素の分析:
    - 個人攻撃や嘲笑の特定
@@ -141,7 +157,9 @@ console.log(result.info.reason); // 有害性評価の理由
 
 最終スコア: `(toxicity_weighted_sum / max_toxicity) * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 （スケール上の値、デフォルトは 0～1）
 
@@ -150,7 +168,9 @@ console.log(result.info.reason); // 有害性評価の理由
 - 0.1～0.3：軽度の有害性
 - 0.0：有害な要素は検出されませんでした
 
-## カスタム設定の例
+<div id="example-with-custom-configuration">
+  ## カスタム設定の例
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -168,7 +188,9 @@ const result = await metric.measure(
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [トーン一貫性メトリクス](./tone-consistency)
 - [バイアスメトリクス](./bias)

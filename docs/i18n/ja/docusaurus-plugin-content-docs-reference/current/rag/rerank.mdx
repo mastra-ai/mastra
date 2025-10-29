@@ -3,7 +3,9 @@ title: "リファレンス: rerank() | RAG | Mastra ドキュメント"
 description: Mastra の rerank 関数に関するドキュメント。ベクトル検索結果に対する高度な再ランク付け機能を提供します。
 ---
 
-# rerank()
+<div id="rerank">
+  # rerank()
+</div>
 
 `rerank()` 関数は、セマンティック関連性、ベクトル類似度、位置ベースのスコアリングを組み合わせて、ベクトル検索結果を高度に再ランキングします。
 
@@ -17,7 +19,9 @@ function rerank(
 ```
 
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -41,7 +45,9 @@ const rerankedResults = await rerank(
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -76,7 +82,9 @@ rerank 関数は Vercel AI SDK の任意の LanguageModel を受け付けます�
 
 > 注: 再ランク付け時にセマンティックスコアリングを正しく機能させるには、各結果の `metadata.text` フィールドにテキストコンテンツを含める必要があります。
 
-### RerankerFunctionOptions
+<div id="rerankerfunctionoptions">
+  ### RerankerFunctionOptions
+</div>
 
 <PropertiesTable
   content={[
@@ -138,7 +146,9 @@ rerank 関数は Vercel AI SDK の任意の LanguageModel を受け付けます�
   ]}
 />
 
-## 返り値
+<div id="returns">
+  ## 返り値
+</div>
 
 この関数は `RerankResult` オブジェクトの配列を返します:
 
@@ -162,7 +172,9 @@ rerank 関数は Vercel AI SDK の任意の LanguageModel を受け付けます�
   ]}
 />
 
-### ScoringDetails
+<div id="scoringdetails">
+  ### ScoringDetails
+</div>
 
 <PropertiesTable
   content={[
@@ -210,6 +222,8 @@ rerank 関数は Vercel AI SDK の任意の LanguageModel を受け付けます�
   ]}
 />
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [createVectorQueryTool](../tools/vector-query-tool)

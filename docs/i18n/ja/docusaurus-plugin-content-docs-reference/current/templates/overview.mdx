@@ -3,7 +3,9 @@ title: "リファレンス：LLM プロバイダーの API キー（1 つ以上�
 description: "Mastra テンプレートの作成、利用、貢献に関する完全ガイド"
 ---
 
-# 概要
+<div id="overview">
+  # 概要
+</div>
 
 このリファレンスでは、既存テンプレートの使い方、自作方法、コミュニティエコシステムへの貢献方法など、Mastra テンプレートに関する包括的な情報を提供します。
 
@@ -14,9 +16,13 @@ Mastra のテンプレートは、特定のユースケースやパターンを�
 - **学習リソース** - 実装例を通じて Mastra のパターンを学習
 - **クイックスタート** - ゼロからの構築よりも素早くプロジェクトを立ち上げ
 
-## テンプレートを使う
+<div id="using-templates">
+  ## テンプレートを使う
+</div>
 
-### インストール
+<div id="installation">
+  ### インストール
+</div>
 
 `create-mastra` コマンドでテンプレートをインストールします:
 
@@ -27,7 +33,9 @@ npx create-mastra@latest --template <テンプレート名>
 これにより、必要なコードと設定がすべて含まれた完全なプロジェクトが作成されます。
 
 
-### セットアップ手順
+<div id="setup-process">
+  ### セットアップ手順
+</div>
 
 インストール後:
 
@@ -57,17 +65,25 @@ npx create-mastra@latest --template <テンプレート名>
    npm run dev
    ```
 
-### テンプレートの構成
+<div id="template-structure">
+  ### テンプレートの構成
+</div>
 
 すべてのテンプレートは、以下の標準的な構成に従います。
 
-## テンプレートの作成
+<div id="creating-templates">
+  ## テンプレートの作成
+</div>
 
-### 要件
+<div id="requirements">
+  ### 要件
+</div>
 
 テンプレートは次の技術要件を満たす必要があります：
 
-#### プロジェクト構成
+<div id="project-structure">
+  #### プロジェクト構成
+</div>
 
 - **Mastra のコード配置**: すべての Mastra のコードは `src/mastra/` ディレクトリ内に配置してください
 - **コンポーネントの構成**:
@@ -76,7 +92,9 @@ npx create-mastra@latest --template <テンプレート名>
   - Workflows: `src/mastra/workflows/`
   - メイン設定: `src/mastra/index.ts`
 
-#### TypeScript の設定
+<div id="typescript-configuration">
+  #### TypeScript の設定
+</div>
 
 標準の Mastra の TypeScript 設定を使用してください：
 
@@ -98,7 +116,9 @@ npx create-mastra@latest --template <テンプレート名>
 ```
 
 
-#### 環境設定
+<div id="environment-configuration">
+  #### 環境設定
+</div>
 
 必要なすべての環境変数を記載した `.env.example` ファイルを含めてください:
 
@@ -113,9 +133,13 @@ OTHER_SERVICE_API_KEY=your_api_key_here
 ```
 
 
-### コーディング規約
+<div id="code-standards">
+  ### コーディング規約
+</div>
 
-#### LLM プロバイダー
+<div id="llm-provider">
+  #### LLM プロバイダー
+</div>
 
 テンプレートには、OpenAI、Anthropic、または Google のモデルプロバイダーの利用を推奨します。ユースケースに最も適したプロバイダーを選んでください。
 
@@ -134,7 +158,9 @@ const agent = new Agent({
 ```
 
 
-#### 互換性要件
+<div id="compatibility-requirements">
+  #### 互換性要件
+</div>
 
 テンプレートは次の条件を満たす必要があります:
 
@@ -145,9 +171,13 @@ const agent = new Agent({
 - **Node.js 互換** - Node.js 18 以上をサポート
 - **ESM モジュール** - ES モジュールを使用（package.json の `"type": "module"`）
 
-### ドキュメントの要件
+<div id="documentation-requirements">
+  ### ドキュメントの要件
+</div>
 
-#### README の構成
+<div id="readme-structure">
+  #### README の構成
+</div>
 
 すべてのテンプレートには、内容が充実した README を必ず含めてください：
 
@@ -183,7 +213,9 @@ const agent = new Agent({
 ```
 
 
-#### コードコメント
+<div id="code-comments">
+  #### コードコメント
+</div>
 
 次の点を分かりやすく説明するコメントを含めてください:
 
@@ -192,7 +224,9 @@ const agent = new Agent({
 - 設定オプションとその効果
 - 具体的な使用パターンの例
 
-### 品質基準
+<div id="quality-standards">
+  ### 品質基準
+</div>
 
 テンプレートは次を満たしている必要があります:
 

@@ -6,7 +6,9 @@ description: Mastra でのベクター検索を強化するために、PGVector 
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# ハイブリッドベクター検索
+<div id="hybrid-vector-search">
+  # ハイブリッドベクター検索
+</div>
 
 ベクトル類似検索とメタデータフィルタを組み合わせることで、より正確かつ効率的なハイブリッド検索を実現できます。
 この手法は次の要素を組み合わせます:
@@ -16,7 +18,9 @@ import GithubLink from "@site/src/components/GithubLink";
 
 この例では、Mastra と PGVector を用いたハイブリッドベクター検索の使い方を示します。
 
-## 概要
+<div id="overview">
+  ## 概要
+</div>
 
 このシステムは、Mastra と PGVector を用いたフィルタ付きベクトル検索を実装しています。次のことを行います。
 
@@ -28,9 +32,13 @@ import GithubLink from "@site/src/components/GithubLink";
 >
 > 埋め込みの作成と保存方法については、[Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) ガイドを参照してください。
 
-## セットアップ
+<div id="setup">
+  ## セットアップ
+</div>
 
-### 環境のセットアップ
+<div id="environment-setup">
+  ### 環境のセットアップ
+</div>
 
 環境変数が設定されていることを確認してください：
 
@@ -40,7 +48,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
 
-### 依存関係
+<div id="dependencies">
+  ### 依存関係
+</div>
 
 必要な依存関係をインポートします：
 
@@ -51,7 +61,9 @@ import { openai } from "@ai-sdk/openai";
 ```
 
 
-## ベクターストアの初期化
+<div id="vector-store-initialization">
+  ## ベクターストアの初期化
+</div>
 
 接続文字列を使って PgVector を初期化します:
 
@@ -62,9 +74,13 @@ const pgVector = new PgVector({
 ```
 
 
-## 使い方の例
+<div id="example-usage">
+  ## 使い方の例
+</div>
 
-### メタデータの値で絞り込む
+<div id="filter-by-metadata-value">
+  ### メタデータの値で絞り込む
+</div>
 
 ```typescript copy showLineNumbers{6} title="src/index.ts"
 // クエリの埋め込みを作成

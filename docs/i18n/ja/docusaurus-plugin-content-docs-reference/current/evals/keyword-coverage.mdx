@@ -3,7 +3,9 @@ title: "リファレンス：KeywordCoverageMetric | Evals | Mastra ドキュメ
 description: Mastra の Keyword Coverage Metric に関するドキュメント。入力の重要なキーワードが LLM の出力でどの程度カバーされているかを評価します。
 ---
 
-# KeywordCoverageMetric
+<div id="keywordcoveragemetric">
+  # KeywordCoverageMetric
+</div>
 
 :::info Scorers
 このドキュメントはレガシーの evals API を対象としています。最新のスコアラー機能については、[Scorers](/docs/scorers/overview) を参照してください。
@@ -11,7 +13,9 @@ description: Mastra の Keyword Coverage Metric に関するドキュメント�
 
 `KeywordCoverageMetric` クラスは、LLM の出力が入力の重要なキーワードをどの程度カバーしているかを評価します。一般的な語やストップワードを無視し、キーワードの有無や一致状況を分析します。
 
-## 基本的な使い方
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
 
 ```typescript
 import { KeywordCoverageMetric } from "@mastra/evals/nlp";
@@ -28,7 +32,9 @@ console.log(result.info); // キーワードカバレッジに関する詳細な
 ```
 
 
-## measure() のパラメータ
+<div id="measure-parameters">
+  ## measure() のパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -47,7 +53,9 @@ console.log(result.info); // キーワードカバレッジに関する詳細な
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -87,7 +95,9 @@ console.log(result.info); // キーワードカバレッジに関する詳細な
   ]}
 />
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 このメトリックは、以下の機能でキーワードを照合し、キーワードの網羅性を評価します。
 
@@ -96,7 +106,9 @@ console.log(result.info); // キーワードカバレッジに関する詳細な
 - 語形変化への対応
 - 技術用語や複合語の特別な処理
 
-### スコアリングプロセス
+<div id="scoring-process">
+  ### スコアリングプロセス
+</div>
 
 1. 入力と出力のキーワードを処理します:
    - 一般的な語やストップワードを除外
@@ -110,7 +122,9 @@ console.log(result.info); // キーワードカバレッジに関する詳細な
 
 最終スコア: `(matched_keywords / total_keywords) * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 （スケールは0から、デフォルトは0～1）
 
@@ -120,7 +134,9 @@ console.log(result.info); // キーワードカバレッジに関する詳細な
 - 0.1～0.3: 多くのキーワードが欠けている不十分な網羅
 - 0.0: キーワードの一致なし
 
-## 事例と解説
+<div id="examples-with-analysis">
+  ## 事例と解説
+</div>
 
 ```typescript
 import { KeywordCoverageMetric } from "@mastra/evals/nlp";
@@ -168,7 +184,9 @@ const result3 = await metric.measure(
 ```
 
 
-## 特殊ケース
+<div id="special-cases">
+  ## 特殊ケース
+</div>
 
 このメトリクスはいくつかの特殊ケースを扱います:
 
@@ -178,7 +196,9 @@ const result3 = await metric.measure(
 - 大文字小文字の違い: "JavaScript" は "javascript" と一致する
 - 一般的な語: 有意なキーワードに集中するため、スコアリングでは無視する
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [完全性メトリクス](./completeness)
 - [内容類似度メトリクス](./content-similarity)

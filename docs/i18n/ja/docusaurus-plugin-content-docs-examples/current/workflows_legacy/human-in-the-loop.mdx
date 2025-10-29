@@ -6,11 +6,15 @@ description: 人の介入ポイントを設けたレガシーなワークフロ�
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# Human in the Loop Workflow (Legacy)
+<div id="human-in-the-loop-workflow-legacy">
+  # Human in the Loop Workflow (Legacy)
+</div>
 
 Human-in-the-loop ワークフローは、特定のポイントで実行を一時停止し、ユーザー入力の収集や意思決定、人間の判断が必要なアクションの実行を行えるようにします。この例では、人による介入ポイントを含むレガシー版ワークフローの作成方法を示します。
 
-## 仕組み
+<div id="how-it-works">
+  ## 仕組み
+</div>
 
 1. ワークフローのステップは、必要に応じて人間の意思決定者向けのコンテキストを含むペイロードを添えて、`suspend()` 関数で実行を**一時停止**できます。
 2. ワークフローが**再開**されると、人間からの入力は `resume()` の `context` パラメータとして渡されます。
@@ -19,7 +23,9 @@ Human-in-the-loop ワークフローは、特定のポイントで実行を一�
 
 このパターンにより、自動化されたワークフローにおいて、安全で型チェックされた人による介入が可能になります。
 
-## Inquirer を使った対話型ターミナルの例
+<div id="interactive-terminal-example-using-inquirer">
+  ## Inquirer を使った対話型ターミナルの例
+</div>
 
 この例では、ワークフローの一時停止中にターミナルから直接ユーザー入力を収集するために [Inquirer](https://www.npmjs.com/package/@inquirer/prompts) ライブラリを使う方法を示し、真にインタラクティブなヒューマン・イン・ザ・ループ体験を実現します。
 
@@ -314,7 +320,9 @@ runRecommendationWorkflow().catch(console.error);
 ```
 
 
-## 複数のユーザー入力を伴う高度な例
+<div id="advanced-example-with-multiple-user-inputs">
+  ## 複数のユーザー入力を伴う高度な例
+</div>
 
 この例は、コンテンツモデレーションシステムなどで、複数の人による介入が必要となる、より複雑なワークフローを示しています。
 
@@ -625,7 +633,9 @@ runModerationDemo().catch(console.error);
 ```
 
 
-## 重要な概念
+<div id="key-concepts">
+  ## 重要な概念
+</div>
 
 1. **サスペンドポイント** - ステップの execute 内で `suspend()` 関数を使用して、ワークフローの実行を一時停止します。
 
@@ -736,7 +746,9 @@ Human-in-the-loop ワークフローは、自動化と人間の判断を組み�
 />
 
 
-## ワークフロー（レガシー）
+<div id="workflows-legacy">
+  ## ワークフロー（レガシー）
+</div>
 
 以下のリンクは、レガシー版ワークフローの例を示すドキュメントです：
 

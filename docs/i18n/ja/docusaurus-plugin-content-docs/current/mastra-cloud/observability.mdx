@@ -6,13 +6,17 @@ description: Mastra Cloud のデプロイにおける監視・デバッグツー
 import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
 
 
-# トレーシングとログを理解する
+<div id="understanding-tracing-and-logs">
+  # トレーシングとログを理解する
+</div>
 
 Mastra Cloud は、本番環境でのアプリケーションの挙動を監視できるよう、実行データを取得します。
 
 <MastraCloudCallout />
 
-## ログ
+<div id="logs">
+  ## ログ
+</div>
 
 アプリケーションの挙動をデバッグおよび監視するための詳細なログは、ダッシュボードの[Logs](/docs/mastra-cloud/dashboard#logs)ページで確認できます。
 
@@ -22,11 +26,15 @@ Mastra Cloud は、本番環境でのアプリケーションの挙動を監視�
 
 各ログエントリには、重大度レベルと、エージェント、ワークフロー、またはストレージのアクティビティを示す詳細なメッセージが含まれます。
 
-## トレース
+<div id="traces">
+  ## トレース
+</div>
 
 [logger](/docs/observability/logging) を使用するか、[対応プロバイダー](/reference/observability/otel-tracing/providers/) のいずれかで [telemetry](/docs/observability/ai-tracing/overview) を有効化することで、エージェントとワークフローの両方で、より詳細なトレースを利用できます。
 
-### エージェント
+<div id="agents">
+  ### エージェント
+</div>
 
 [logger](/docs/observability/logging) を有効にすると、Agents Playground の **Traces** セクションでエージェントの詳細な出力を確認できます。
 
@@ -36,7 +44,9 @@ Mastra Cloud は、本番環境でのアプリケーションの挙動を監視�
 
 生成時にエージェントへ渡されるツールは、`convertTools` によって標準化されます。これには、クライアント側のツール、メモリツール、ワークフローで公開されるツールの取得が含まれます。
 
-### ワークフロー
+<div id="workflows">
+  ### ワークフロー
+</div>
 
 [logger](/docs/observability/logging) を有効化すると、Workflows Playground の **Traces** セクションでワークフローの詳細な出力を確認できます。
 
@@ -46,7 +56,9 @@ Mastra Cloud は、本番環境でのアプリケーションの挙動を監視�
 
 ワークフローは `createWorkflow` で作成し、ステップ、メタデータ、ツールを設定します。入力とオプションを渡して `runWorkflow` で実行できます。
 
-## 次のステップ
+<div id="next-steps">
+  ## 次のステップ
+</div>
 
 - [ロギング](/docs/observability/logging)
 - [トレーシング](/docs/observability/ai-tracing/overview)

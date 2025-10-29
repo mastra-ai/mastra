@@ -3,11 +3,15 @@ title: "リファレンス: PromptInjectionDetector | プロセッサ | Mastra �
 description: "Mastra の PromptInjectionDetector に関するドキュメント。ユーザー入力に対するプロンプトインジェクション試行を検出します。"
 ---
 
-# PromptInjectionDetector
+<div id="promptinjectiondetector">
+  # PromptInjectionDetector
+</div>
 
 `PromptInjectionDetector` は、メッセージが言語モデルに送信される前に、プロンプトインジェクション攻撃、ジェイルブレイク、システム改ざんの試みを検出・防止するための**入力プロセッサ**です。このプロセッサは、さまざまな種類のインジェクション試行を識別し、正当なユーザー意図を保ちつつ攻撃を無力化するためのコンテンツの書き換えを含む柔軟な対処戦略を提供することで、セキュリティの維持に寄与します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 import { openai } from "@ai-sdk/openai";
@@ -22,7 +26,9 @@ const processor = new PromptInjectionDetector({
 ```
 
 
-## コンストラクターの引数
+<div id="constructor-parameters">
+  ## コンストラクターの引数
+</div>
 
 <PropertiesTable
   content={[
@@ -35,7 +41,9 @@ const processor = new PromptInjectionDetector({
   ]}
 />
 
-### オプション
+<div id="options">
+  ### オプション
+</div>
 
 <PropertiesTable
   content={[
@@ -89,7 +97,9 @@ const processor = new PromptInjectionDetector({
   ]}
 />
 
-## 返り値
+<div id="returns">
+  ## 返り値
+</div>
 
 <PropertiesTable
   content={[
@@ -109,7 +119,9 @@ const processor = new PromptInjectionDetector({
   ]}
 />
 
-## 拡張された使用例
+<div id="extended-usage-example">
+  ## 拡張された使用例
+</div>
 
 ```typescript title="src/mastra/agents/secure-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -135,6 +147,8 @@ export const agent = new Agent({
 ```
 
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [入力プロセッサー](/docs/agents/guardrails)

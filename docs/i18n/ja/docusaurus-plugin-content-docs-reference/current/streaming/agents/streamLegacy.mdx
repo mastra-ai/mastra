@@ -3,7 +3,9 @@ title: "リファレンス: Agent.streamLegacy()（旧式） | ストリーミ�
 description: "Mastra エージェントにおける旧式の `Agent.streamLegacy()` メソッドのドキュメント。このメソッドは非推奨で、今後のバージョンで削除されます。"
 ---
 
-# Agent.streamLegacy() (旧式)
+<div id="agentstreamlegacy-legacy">
+  # Agent.streamLegacy() (旧式)
+</div>
 
 :::warning
 
@@ -13,14 +15,18 @@ description: "Mastra エージェントにおける旧式の `Agent.streamLegacy
 
 `.streamLegacy()` メソッドは、エージェントのストリーミング API の旧式バージョンで、V1 モデルのエージェントからの応答をリアルタイムにストリーミングするために使用されます。このメソッドは、メッセージと任意のストリーミングオプションを受け取ります。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 await agent.streamLegacy("エージェント用メッセージ");
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -39,7 +45,9 @@ await agent.streamLegacy("エージェント用メッセージ");
   ]}
 />
 
-### オプションパラメータ
+<div id="options-parameters">
+  ### オプションパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -463,7 +471,9 @@ await agent.streamLegacy("エージェント用メッセージ");
 ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -532,7 +542,9 @@ await agent.streamLegacy("エージェント用メッセージ");
   ]}
 />
 
-## 拡張された使用例
+<div id="extended-usage-example">
+  ## 拡張された使用例
+</div>
 
 ```typescript showLineNumbers copy
 await agent.streamLegacy("エージェントへのメッセージ", {
@@ -547,7 +559,9 @@ await agent.streamLegacy("エージェントへのメッセージ", {
 ```
 
 
-## 新しい API への移行
+<div id="migration-to-new-api">
+  ## 新しい API への移行
+</div>
 
 :::info
 
@@ -555,9 +569,13 @@ await agent.streamLegacy("エージェントへのメッセージ", {
 
 :::
 
-### 迅速な移行の例
+<div id="quick-migration-example">
+  ### 迅速な移行の例
+</div>
 
-#### 以前（レガシー）
+<div id="before-legacy">
+  #### 以前（レガシー）
+</div>
 
 ```typescript
 const result = await agent.streamLegacy("message", {
@@ -568,7 +586,9 @@ const result = await agent.streamLegacy("message", {
 ```
 
 
-#### 以降（新しい API）
+<div id="after-new-api">
+  #### 以降（新しい API）
+</div>
 
 ```typescript
 const result = await agent.stream("message", {
@@ -581,7 +601,9 @@ const result = await agent.stream("message", {
 ```
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [移行ガイド](../../../guides/migrations/vnext-to-standard-apis)
 - [新しい .stream() メソッド](./stream)

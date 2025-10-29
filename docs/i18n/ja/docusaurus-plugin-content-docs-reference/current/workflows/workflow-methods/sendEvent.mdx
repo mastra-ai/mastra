@@ -3,18 +3,24 @@ title: "リファレンス: Workflow.sendEvent() | Workflows | Mastra ドキュ�
 description: ワークフローの `Workflow.sendEvent()` メソッドに関するドキュメント。イベントが送信されると、実行が再開されます。
 ---
 
-# Workflow.sendEvent()
+<div id="workflowsendevent">
+  # Workflow.sendEvent()
+</div>
 
 `.sendEvent()` は、イベントの送信によって処理が再開されます。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 run.sendEvent("event-name", { value: "data" });
 ```
 
 
-## パラメーター
+<div id="parameters">
+  ## パラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -33,7 +39,9 @@ run.sendEvent("event-name", { value: "data" });
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -45,7 +53,9 @@ run.sendEvent("event-name", { value: "data" });
   ]}
 />
 
-## 発展的な使用例
+<div id="extended-usage-example">
+  ## 発展的な使用例
+</div>
 
 ```typescript showLineNumbers copy
 import { mastra } from "./mastra";
@@ -66,7 +76,9 @@ setTimeout(() => {
 > この例では、`await run.start()` を直接使用しないでください。ワークフローが待機状態に入るまでイベントの送信がブロックされてしまいます。
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [.waitForEvent()](./waitForEvent)
 - [一時停止と再開](/docs/workflows/suspend-and-resume#sleep--events)

@@ -3,11 +3,15 @@ title: "リファレンス: getScorerByName() | Core | Mastra Docs"
 description: "Mastra における `getScorerByName()` メソッドのドキュメント。登録キーではなく、name プロパティに基づいてスコアラーを取得します。"
 ---
 
-# getScorerByName()
+<div id="getscorerbyname">
+  # getScorerByName()
+</div>
 
 `getScorerByName()` メソッドは、登録キーではなく `name` プロパティで検索してスコアラーを取得します。Mastra インスタンスでの登録名は分からないが表示名は分かっている場合に便利です。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { mastra } from "./mastra";
@@ -28,7 +32,9 @@ await weatherAgent.generate("ローマの天気はどうですか", {
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -42,7 +48,9 @@ await weatherAgent.generate("ローマの天気はどうですか", {
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -55,7 +63,9 @@ await weatherAgent.generate("ローマの天気はどうですか", {
   ]}
 />
 
-## エラーハンドリング
+<div id="error-handling">
+  ## エラーハンドリング
+</div>
 
 このメソッドは次の場合に `MastraError` をスローします:
 
@@ -73,7 +83,9 @@ try {
 ```
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [getScorer()](../../reference/core/getScorer) - 登録キーでスコアラーを取得
 - [getScorers()](../../reference/core/getScorers) - 登録済みのスコアラーをすべて取得

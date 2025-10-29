@@ -3,11 +3,15 @@ title: "リファレンス: Hallucination Scorer | Scorers | Mastra ドキュメ
 description: Mastra の Hallucination Scorer に関するドキュメント。提供されたコンテキストとの矛盾を特定することで、LLM 出力の事実的正確性を評価します。
 ---
 
-# ハルシネーションスコアラー
+<div id="hallucination-scorer">
+  # ハルシネーションスコアラー
+</div>
 
 `createHallucinationScorer()` 関数は、提供されたコンテキストと出力を照合し、LLM が事実に基づく情報を生成しているかを評価します。このスコアラーは、コンテキストと出力の間の直接的な矛盾を特定することで、ハルシネーションを測定します。
 
-## パラメーター
+<div id="parameters">
+  ## パラメーター
+</div>
 
 `createHallucinationScorer()` 関数は、次のプロパティを持つ単一のオプションオブジェクトを受け取ります。
 
@@ -32,7 +36,9 @@ description: Mastra の Hallucination Scorer に関するドキュメント。�
 
 この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドは他のスコアラーと同じ入力を受け付けます（[MastraScorer リファレンス](./mastra-scorer)を参照）。ただし、戻り値には以下に記載の LLM 固有のフィールドが含まれます。
 
-## .run() の戻り値
+<div id="run-returns">
+  ## .run() の戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -84,11 +90,15 @@ description: Mastra の Hallucination Scorer に関するドキュメント。�
   ]}
 />
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 評価者は、矛盾の検出と根拠のない主張の分析を通じて、ハルシネーションを評価します。
 
-### スコアリングプロセス
+<div id="scoring-process">
+  ### スコアリングプロセス
+</div>
 
 1. 事実内容を分析:
    - コンテキストから記述（ステートメント）を抽出
@@ -107,7 +117,9 @@ description: Mastra の Hallucination Scorer に関するドキュメント。�
 
 最終スコア: `(hallucinated_statements / total_statements) * scale`
 
-### 重要な考慮事項
+<div id="important-considerations">
+  ### 重要な考慮事項
+</div>
 
 - コンテキストにない主張はハルシネーションとして扱う
 - 主観的な主張は、明示的な裏付けがない限りハルシネーションとみなす
@@ -119,7 +131,9 @@ description: Mastra の Hallucination Scorer に関するドキュメント。�
   - 文脈に基づく近似
   - 明示的な精度の指標
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 ハルシネーション・スコアは 0 から 1 の範囲です。
 
@@ -131,9 +145,13 @@ description: Mastra の Hallucination Scorer に関するドキュメント。�
 
 **注:** このスコアはハルシネーションの程度を示します。スコアが低いほど、与えられたコンテキストとの事実整合性が高いことを意味します。
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
-### ハルシネーションなしの例
+<div id="no-hallucination-example">
+  ### ハルシネーションなしの例
+</div>
 
 この例では、回答は提供されたコンテキストと完全に一致しています。すべての主張は事実に基づいて正しく、出典となる資料によって直接裏付けられており、ハルシネーションスコアは低くなります。
 
@@ -160,7 +178,9 @@ console.log(result);
 ```
 
 
-#### 幻覚出力なし
+<div id="no-hallucination-output">
+  #### 幻覚出力なし
+</div>
 
 矛盾がないため、応答のスコアは0となります。すべての記述は文脈と整合しており、新たな情報や捏造された情報は含まれていません。
 
@@ -172,7 +192,9 @@ console.log(result);
 ```
 
 
-### 混合ハルシネーションの例
+<div id="mixed-hallucination-example">
+  ### 混合ハルシネーションの例
+</div>
 
 この例では、応答に正確な主張と不正確な主張が混在しています。いくつかの詳細は文脈と一致する一方で、誇張された数値や誤った場所など、文脈に明確に反するものもあります。こうした矛盾により、ハルシネーションスコアが上がります。
 
@@ -200,7 +222,9 @@ console.log(result);
 ```
 
 
-#### 混在型ハルシネーションの出力
+<div id="mixed-hallucination-output">
+  #### 混在型ハルシネーションの出力
+</div>
 
 Scorer は、応答の一部が文脈と矛盾しているため、中程度のスコアを付与します。正しい事実も含まれている一方で、不正確または捏造された内容もあり、全体としての信頼性が損なわれます。
 
@@ -212,7 +236,9 @@ Scorer は、応答の一部が文脈と矛盾しているため、中程度の�
 ```
 
 
-### 完全なハルシネーションの例
+<div id="complete-hallucination-example">
+  ### 完全なハルシネーションの例
+</div>
 
 この例では、回答がコンテキスト内のあらゆる重要な事実と矛盾しています。どの主張も裏付けが取れず、示された詳細はすべて事実に反しています。
 
@@ -240,7 +266,9 @@ console.log(result);
 ```
 
 
-#### 完全な幻覚出力
+<div id="complete-hallucination-output">
+  #### 完全な幻覚出力
+</div>
 
 Scorer は、回答中のあらゆる記述が文脈と矛盾しているため、スコアを1と付与します。詳細は全体的に捏造されているか、不正確です。
 
@@ -252,7 +280,9 @@ Scorer は、回答中のあらゆる記述が文脈と矛盾しているため�
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [忠実性スコアラー](./faithfulness)
 - [回答関連性スコアラー](./answer-relevancy)

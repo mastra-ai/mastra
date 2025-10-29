@@ -3,11 +3,15 @@ title: "リファレンス: Agent.generate() | Agents | Mastra ドキュメン�
 description: "Mastra のエージェントにおける `Agent.generate()` メソッドのドキュメント。拡張された機能により、ストリーミングせずに応答を生成できます。"
 ---
 
-# Agent.generate()
+<div id="agentgenerate">
+  # Agent.generate()
+</div>
 
 `.generate()` メソッドは、エージェントによる非ストリーミングでの応答生成を可能にし、拡張された機能と柔軟な出力形式を提供します。メッセージと任意の生成オプションを受け取り、Mastra のネイティブ形式と AI SDK v5 互換形式の両方をサポートします。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 // デフォルトのMastra形式
@@ -26,7 +30,9 @@ const aiSdkResult = await agent.generate("エージェントへのメッセー�
 :::
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -45,7 +51,9 @@ const aiSdkResult = await agent.generate("エージェントへのメッセー�
   ]}
 />
 
-### 設定
+<div id="options">
+  ### 設定
+</div>
 
 <PropertiesTable
   content={[
@@ -661,7 +669,9 @@ const aiSdkResult = await agent.generate("エージェントへのメッセー�
 ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[

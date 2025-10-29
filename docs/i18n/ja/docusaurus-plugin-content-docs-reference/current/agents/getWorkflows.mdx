@@ -3,18 +3,24 @@ title: "リファレンス: Agent.getWorkflows() | Agents | Mastra ドキュメ�
 description: "Mastra のエージェントにおける `Agent.getWorkflows()` メソッドのドキュメント。エージェントが実行可能なワークフローを取得します。"
 ---
 
-# Agent.getWorkflows()
+<div id="agentgetworkflows">
+  # Agent.getWorkflows()
+</div>
 
 `.getWorkflows()` メソッドは、エージェントに設定されたワークフローを取得し、それらが関数の場合は評価して解決します。これらのワークフローによって、エージェントは定義された実行パスに従い、複雑な複数ステップの処理を実行できます。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 await agent.getWorkflows();
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -28,7 +34,9 @@ await agent.getWorkflows();
   ]}
 />
 
-## 返り値
+<div id="returns">
+  ## 返り値
+</div>
 
 <PropertiesTable
   content={[
@@ -41,7 +49,9 @@ await agent.getWorkflows();
   ]}
 />
 
-## 拡張された使用例
+<div id="extended-usage-example">
+  ## 拡張された使用例
+</div>
 
 ```typescript copy
 await agent.getWorkflows({
@@ -50,7 +60,9 @@ await agent.getWorkflows({
 ```
 
 
-### オプションパラメータ
+<div id="options-parameters">
+  ### オプションパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -65,7 +77,9 @@ await agent.getWorkflows({
   ]}
 />
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [エージェントの概要](/docs/agents/overview)
 - [ワークフローの概要](/docs/workflows/overview)

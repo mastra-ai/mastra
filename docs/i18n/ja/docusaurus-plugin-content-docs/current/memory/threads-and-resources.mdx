@@ -3,7 +3,9 @@ title: "メモリのスレッドとリソース | Memory | Mastra Docs"
 description: "Mastra のメモリシステムが、作業メモリ、会話履歴、セマンティックリコールによってどのように機能するかを学びます。"
 ---
 
-# メモリのスレッドとリソース
+<div id="memory-threads-and-resources">
+  # メモリのスレッドとリソース
+</div>
 
 Mastra はメモリをスレッドとして整理します。スレッドは関連するやり取りをまとめた記録で、次の2つの識別子を使用します。
 
@@ -30,7 +32,9 @@ const stream = await agent.stream("エージェントへのメッセージ", {
 > Mastra Playground は `thread` と `resource` の ID を自動的に設定します。独自のアプリケーションでは、各 `.generate()` または `.stream()` の呼び出しごとに手動で指定する必要があります。
 
 
-### スレッドタイトルの生成
+<div id="thread-title-generation">
+  ### スレッドタイトルの生成
+</div>
 
 Mastra は、ユーザーの最初のメッセージに基づいて、わかりやすいスレッドタイトルを自動生成できます。この機能はデフォルトで無効です。`generateTitle` を `true` に設定して有効にしてください。これにより整理しやすくなり、UI で会話を表示しやすくなります。
 
@@ -47,7 +51,9 @@ export const testAgent = new Agent({
 > タイトル生成は、エージェントの応答後に非同期で実行され、応答時間には影響しません。詳細と例については、[完全な設定リファレンス](/reference/memory/memory-class)をご覧ください。
 
 
-#### タイトル生成の最適化
+<div id="optimizing-title-generation">
+  #### タイトル生成の最適化
+</div>
 
 タイトルはデフォルトでエージェントのモデルによって生成されます。コストや挙動を最適化するには、より小さな `model` とカスタムの `instructions` を指定してください。これにより、タイトル生成をメインの会話ロジックから切り離せます。
 
@@ -69,7 +75,9 @@ export const testAgent = new Agent({
 ```
 
 
-#### 動的なモデル選択と指示
+<div id="dynamic-model-selection-and-instructions">
+  #### 動的なモデル選択と指示
+</div>
 
 `model` と `instructions` に関数を渡すことで、スレッドタイトルの生成を動的に設定できます。これらの関数は `runtimeContext` オブジェクトを受け取り、ユーザー固有の値に応じてタイトル生成を調整できます。
 

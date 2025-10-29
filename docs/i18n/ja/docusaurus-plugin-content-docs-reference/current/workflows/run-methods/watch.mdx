@@ -3,11 +3,15 @@ title: "リファレンス: Run.watch() | Workflows | Mastra ドキュメント"
 description: ワークフロー内の `Run.watch()` メソッドに関するドキュメント。ワークフロー実行を監視できます。
 ---
 
-# Run.watch()
+<div id="runwatch">
+  # Run.watch()
+</div>
 
 `.watch()` メソッドは、ワークフロー実行の進行状況を監視し、各ステップのステータスをリアルタイムで更新します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
@@ -20,7 +24,9 @@ const result = await run.start({ inputData: { value: "初期データ" } });
 ```
 
 
-## パラメーター
+<div id="parameters">
+  ## パラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -42,7 +48,9 @@ const result = await run.start({ inputData: { value: "初期データ" } });
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -55,7 +63,9 @@ const result = await run.start({ inputData: { value: "初期データ" } });
   ]}
 />
 
-## 発展的な使用例
+<div id="extended-usage-example">
+  ## 発展的な使用例
+</div>
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
@@ -68,7 +78,9 @@ const result = await run.start({ inputData: { value: "初期データ" } });
 ```
 
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [Workflows の概要](/docs/workflows/overview#running-workflows)
 - [Workflow.createRunAsync()](../workflow-methods/create-run)

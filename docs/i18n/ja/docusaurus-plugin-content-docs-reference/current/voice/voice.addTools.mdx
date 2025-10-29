@@ -3,11 +3,15 @@ title: "リファレンス: voice.addTools() | Voice | Mastra ドキュメント
 description: "音声プロバイダーで利用可能な addTools() メソッドのドキュメント。音声モデルに関数呼び出し機能を付与します。"
 ---
 
-# voice.addTools()
+<div id="voiceaddtools">
+  # voice.addTools()
+</div>
 
 `addTools()` メソッドは、モデルがリアルタイムの対話中に呼び出せるツール（関数）を音声プロバイダーに追加します。これにより、音声アシスタントは情報検索、計算、外部システムとの連携といった処理を実行できるようになります。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
@@ -54,7 +58,9 @@ await voice.connect();
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <br />
 
@@ -70,11 +76,15 @@ await voice.connect();
   ]}
 />
 
-## 戻り値
+<div id="return-value">
+  ## 戻り値
+</div>
 
 このメソッドは値を返さない。
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - ツールは、name、description、input schema、execute function を備えた Mastra のツール形式に従う必要があります
 - このメソッドは主に、function calling をサポートするリアルタイム音声プロバイダーで使用されます

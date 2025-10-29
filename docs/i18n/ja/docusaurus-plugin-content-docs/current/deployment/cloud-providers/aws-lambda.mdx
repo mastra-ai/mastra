@@ -7,7 +7,9 @@ import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
 
-# AWS Lambda
+<div id="aws-lambda">
+  # AWS Lambda
+</div>
 
 Docker コンテナと AWS Lambda Web Adapter を使用して、Mastra アプリケーションを AWS Lambda にデプロイします。
 この方法により、自動スケーリングに対応したコンテナ化された Lambda 関数として Mastra サーバーを実行できます。
@@ -19,7 +21,9 @@ Docker コンテナと AWS Lambda Web Adapter を使用して、Mastra アプリ
 [クイックスタートガイド](/docs/getting-started/installation)を参照してください
 :::
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 AWS Lambda にデプロイする前に、次を準備してください:
 
@@ -28,7 +32,9 @@ AWS Lambda にデプロイする前に、次を準備してください:
 - Lambda、ECR、IAM に対して適切な権限を持つ AWS アカウント
 - 適切なメモリーストレージを設定した Mastra アプリケーション
 
-## メモリ設定
+<div id="memory-configuration">
+  ## メモリ設定
+</div>
 
 :::note
 AWS Lambda は一時的なファイルシステムを使用しており、
@@ -38,7 +44,9 @@ AWS Lambda は一時的なファイルシステムを使用しており、
 
 Lambda 関数ではファイルシステムのストレージに制約があります。Mastra アプリケーションは、インメモリまたは外部ストレージプロバイダを使用するように構成してください。
 
-### オプション 1: メモリ内（最も簡単）
+<div id="option-1-in-memory-simplest">
+  ### オプション 1: メモリ内（最も簡単）
+</div>
 
 ```typescript title="src/mastra/index.ts" copy showLineNumbers
 import { LibSQLStore } from "@mastra/libsql";
@@ -49,7 +57,9 @@ const storage = new LibSQLStore({
 ```
 
 
-### オプション 2: 外部ストレージプロバイダー
+<div id="option-2-external-storage-providers">
+  ### オプション 2: 外部ストレージプロバイダー
+</div>
 
 Lambda の呼び出し間でメモリを永続化するには、Turso と組み合わせた `LibSQLStore` や、`PostgreStore` などの外部ストレージプロバイダーを使用します:
 
@@ -65,7 +75,9 @@ const storage = new LibSQLStore({
 メモリの設定オプションについて詳しくは、[メモリに関するドキュメント](/docs/memory/overview)をご覧ください。
 
 
-## Dockerfile の作成
+<div id="creating-a-dockerfile">
+  ## Dockerfile の作成
+</div>
 
 Mastra プロジェクトのルートディレクトリに `Dockerfile` を作成します。
 
@@ -96,7 +108,9 @@ CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/in
 ```
 
 
-## ビルドとデプロイ
+<div id="building-and-deploying">
+  ## ビルドとデプロイ
+</div>
 
 <Steps>
 
@@ -209,7 +223,9 @@ Lambda 関数の設定で環境変数を追加します:
 
 </Steps>
 
-## デプロイのテスト
+<div id="testing-your-deployment">
+  ## デプロイのテスト
+</div>
 
 デプロイが完了したら、Lambda 関数をテストします。
 
@@ -219,7 +235,9 @@ Lambda 関数の設定で環境変数を追加します:
 
 利用可能な API エンドポイントの詳細は、[サーバーのドキュメント](/docs/deployment/server-deployment)を参照してください。
 
-## クライアントの接続
+<div id="connecting-your-client">
+  ## クライアントの接続
+</div>
 
 クライアントアプリケーションを更新し、Lambda 関数の URL を使用するようにします。
 
@@ -232,9 +250,13 @@ const mastraClient = new MastraClient({
 ```
 
 
-## トラブルシューティング
+<div id="troubleshooting">
+  ## トラブルシューティング
+</div>
 
-### 関数のタイムアウトエラー
+<div id="function-timeout-errors">
+  ### 関数のタイムアウトエラー
+</div>
 
 Lambda 関数がタイムアウトする場合:
 
@@ -242,7 +264,9 @@ Lambda 関数がタイムアウトする場合:
 - コールドスタートを短縮するように Mastra アプリケーションを最適化する
 - パフォーマンスを安定させるためにプロビジョンド同時実行の利用を検討する
 
-### メモリに関する問題
+<div id="memory-issues">
+  ### メモリに関する問題
+</div>
 
 メモリ関連のエラーが発生した場合は、次の対処を行ってください。
 
@@ -250,7 +274,9 @@ Lambda 関数がタイムアウトする場合:
 - CloudWatch Logs でメモリ使用状況を監視する
 - アプリケーションのメモリ使用量を最適化する
 
-### CORS の問題
+<div id="cors-issues">
+  ### CORS の問題
+</div>
 
 エンドポイントにはアクセス時に CORS エラーが出るが、ホームページでは発生しない場合:
 
@@ -258,7 +284,9 @@ Lambda 関数がタイムアウトする場合:
 - Lambda Function URL の CORS 設定を確認する
 - クライアントが正しい URL にリクエストしていることを確認する
 
-### コンテナイメージに関する問題
+<div id="container-image-issues">
+  ### コンテナイメージに関する問題
+</div>
 
 Lambda 関数の起動に失敗する場合:
 
@@ -267,29 +295,39 @@ Lambda 関数の起動に失敗する場合:
 - コンテナの起動エラーについて CloudWatch Logs を確認する
 - Lambda Web Adapter がコンテナに正しくインストールされていることを確認する
 
-## 本番運用の考慮事項
+<div id="production-considerations">
+  ## 本番運用の考慮事項
+</div>
 
 本番環境へのデプロイ時には、次の点を検討してください：
 
-### セキュリティ
+<div id="security">
+  ### セキュリティ
+</div>
 
 - CORS の許可元は信頼できるドメインに限定する
 - 他の AWS サービスへの安全なアクセスには AWS IAM ロールを使用する
 - 機密性の高い環境変数は AWS Secrets Manager または Parameter Store に保存する
 
-### 監視
+<div id="monitoring">
+  ### 監視
+</div>
 
 - Lambda 関数の CloudWatch モニタリングを有効にする
 - エラーやパフォーマンスメトリクス向けに CloudWatch アラームを設定する
 - 分散トレーシングには AWS X-Ray を使用する
 
-### スケーリング
+<div id="scaling">
+  ### スケーリング
+</div>
 
 - 予測可能なパフォーマンスのためにプロビジョンドコンカレンシーを設定する
 - 同時実行数を監視し、必要に応じて上限を調整する
 - より複雑なルーティングが必要な場合は Application Load Balancer の利用を検討する
 
-## 次のステップ
+<div id="next-steps">
+  ## 次のステップ
+</div>
 
 - [Mastra クライアント SDK](/reference/client-js/mastra-client)
 - [AWS Lambda ドキュメント](https://docs.aws.amazon.com/lambda/)

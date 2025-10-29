@@ -3,23 +3,31 @@ title: "リファレンス: Couchbase Vector Store | Vectors | Mastra ドキュ�
 description: Mastra の CouchbaseVector クラスのドキュメント。Couchbase Vector Search を使ったベクトル検索を提供します。
 ---
 
-# Couchbase ベクターストア
+<div id="couchbase-vector-store">
+  # Couchbase ベクターストア
+</div>
 
 `CouchbaseVector` クラスは、[Couchbase Vector Search](https://docs.couchbase.com/server/current/vector-search/vector-search.html) を利用してベクトル検索を実現します。これにより、Couchbase のコレクション内で効率的な類似検索とメタデータによるフィルタリングを行えます。
 
-## 必要条件
+<div id="requirements">
+  ## 必要条件
+</div>
 
 - **Couchbase Server 7.6.4 以降** または互換の Capella クラスター
 - Couchbase のデプロイで **Search Service が有効** になっていること
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/couchbase
 ```
 
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy showLineNumbers
 import { CouchbaseVector } from "@mastra/couchbase";
@@ -35,7 +43,9 @@ const store = new CouchbaseVector({
 ```
 
 
-## コンストラクターのオプション
+<div id="constructor-options">
+  ## コンストラクターのオプション
+</div>
 
 <PropertiesTable
   content={[
@@ -78,9 +88,13 @@ const store = new CouchbaseVector({
   ]}
 />
 
-## 方法
+<div id="methods">
+  ## 方法
+</div>
 
-### createIndex()
+<div id="createindex">
+  ### createIndex()
+</div>
 
 Couchbase に新しいベクターインデックスを作成します。
 
@@ -108,7 +122,9 @@ Couchbase に新しいベクターインデックスを作成します。
   ]}
 />
 
-### upsert()
+<div id="upsert">
+  ### upsert()
+</div>
 
 コレクション内のベクトルとそのメタデータを追加または更新します。
 
@@ -141,7 +157,9 @@ Couchbase に新しいベクターインデックスを作成します。
   ]}
 />
 
-### query()
+<div id="query">
+  ### query()
+</div>
 
 類似ベクトルを検索します。
 
@@ -189,7 +207,9 @@ Couchbase に新しいベクターインデックスを作成します。
   ]}
 />
 
-### describeIndex()
+<div id="describeindex">
+  ### describeIndex()
+</div>
 
 インデックスに関する情報を返します。
 
@@ -214,7 +234,9 @@ interface IndexStats {
 ```
 
 
-### deleteIndex()
+<div id="deleteindex">
+  ### deleteIndex()
+</div>
 
 インデックスとそのデータをすべて削除します。
 
@@ -228,13 +250,17 @@ interface IndexStats {
   ]}
 />
 
-### listIndexes()
+<div id="listindexes">
+  ### listIndexes()
+</div>
 
 Couchbase バケット内のすべてのベクターインデックスを一覧します。
 
 Returns: `Promise<string[]>`
 
-### updateVector()
+<div id="updatevector">
+  ### updateVector()
+</div>
 
 指定したIDのベクターエントリを、新しいベクターデータやメタデータで更新します。
 
@@ -270,7 +296,9 @@ Returns: `Promise<string[]>`
   ]}
 />
 
-### deleteVector()
+<div id="deletevector">
+  ### deleteVector()
+</div>
 
 指定した ID のベクターエントリをインデックスから削除します。
 
@@ -289,11 +317,15 @@ Returns: `Promise<string[]>`
   ]}
 />
 
-### disconnect()
+<div id="disconnect">
+  ### disconnect()
+</div>
 
 Couchbase クライアントの接続を閉じます。ストアの使用が完了したら呼び出してください。
 
-## レスポンスタイプ
+<div id="response-types">
+  ## レスポンスタイプ
+</div>
 
 クエリ結果は次の形式で返されます：
 
@@ -307,7 +339,9 @@ interface QueryResult {
 ```
 
 
-## エラー処理
+<div id="error-handling">
+  ## エラー処理
+</div>
 
 ストアはキャッチ可能な型付きエラーをスローします：
 
@@ -332,19 +366,25 @@ try {
 ```
 
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - **インデックス削除に関する注意:** Search インデックスを削除しても、関連する Couchbase コレクション内のベクターやドキュメントは削除されません。明示的に削除しない限り、データは残ります。
 - **必要な権限:** Couchbase ユーザーは、対象コレクションへの接続、ドキュメントの読み書き（`kv` ロール）、および Search インデックスの管理（該当するバケット/スコープ上の `search_admin` ロール）の権限を持っている必要があります。
 - **インデックス定義の詳細とドキュメント構造:** `createIndex` メソッドは、`embedding` フィールド（タイプ `vector`）と `content` フィールド（タイプ `text`）をインデックス化する Search インデックス定義を作成し、指定された `scopeName.collectionName` 内のドキュメントを対象にします。各ドキュメントは `embedding` フィールドにベクターを、`metadata` フィールドにメタデータを格納します。`metadata` に `text` プロパティが含まれる場合、その値はトップレベルの `content` フィールドにもコピーされ、テキスト検索用にインデックス化されます。
 - **レプリケーションと耐久性:** データの耐久性のために、Couchbase の組み込みのレプリケーションおよび永続化機能の利用を検討してください。効率的な検索を維持するため、インデックス統計を定期的に監視してください。
 
-## 制限事項
+<div id="limitations">
+  ## 制限事項
+</div>
 
 - インデックス作成の遅延により、作成直後のクエリには影響が出る可能性があります。
 - 取り込み時にベクトル次元は厳密には強制されません（次元の不一致はクエリ時にエラーになります）。
 - ベクトルの挿入やインデックスの更新は最終的整合性モデルです。書き込み直後に強い整合性は保証されません。
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [メタデータフィルター](../rag/metadata-filters)

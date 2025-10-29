@@ -6,18 +6,24 @@ description: AI トレース用の Langfuse エクスポーター
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
-# LangfuseExporter
+<div id="langfuseexporter">
+  # LangfuseExporter
+</div>
 
 可観測性のために AI のトレーシングデータを Langfuse に送信します。
 
-## コンストラクタ
+<div id="constructor">
+  ## コンストラクタ
+</div>
 
 ```typescript
 new LangfuseExporter(config: LangfuseExporterConfig)
 ```
 
 
-## Langfuseエクスポーター設定
+<div id="langfuseexporterconfig">
+  ## Langfuseエクスポーター設定
+</div>
 
 ```typescript
 interface LangfuseExporterConfig {
@@ -72,9 +78,13 @@ interface LangfuseExporterConfig {
 />
 
 
-## 方法
+<div id="methods">
+  ## 方法
+</div>
 
-### exportEvent
+<div id="exportevent">
+  ### exportEvent
+</div>
 
 ```typescript
 async exportEvent(event: AITracingEvent): Promise<void>
@@ -83,7 +93,9 @@ async exportEvent(event: AITracingEvent): Promise<void>
 トレーシングイベントを Langfuse にエクスポートします。
 
 
-### export
+<div id="export">
+  ### export
+</div>
 
 ```typescript
 async export(spans: ReadOnlyAISpan[]): Promise<void>
@@ -92,7 +104,9 @@ async export(spans: ReadOnlyAISpan[]): Promise<void>
 スパンをバッチ形式でLangfuseにエクスポートします。
 
 
-### シャットダウン
+<div id="shutdown">
+  ### シャットダウン
+</div>
 
 ```typescript
 async shutdown(): Promise<void>
@@ -101,7 +115,9 @@ async shutdown(): Promise<void>
 保留中のデータを書き出してから、クライアントをシャットダウンします。
 
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 ```typescript
 import { LangfuseExporter } from "@mastra/langfuse";
@@ -115,7 +131,9 @@ const exporter = new LangfuseExporter({
 ```
 
 
-## スパンのマッピング
+<div id="span-mapping">
+  ## スパンのマッピング
+</div>
 
 - ルートスパン → Langfuse のトレース
 - `MODEL_GENERATION` スパン → Langfuse のジェネレーション

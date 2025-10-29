@@ -3,11 +3,15 @@ title: "リファレンス: voice.close() | Voice | Mastra ドキュメント"
 description: "音声プロバイダーで利用可能な close() メソッドのドキュメント。リアルタイム音声サービスから切断します。"
 ---
 
-# voice.close()
+<div id="voiceclose">
+  # voice.close()
+</div>
 
 `close()` メソッドは、リアルタイム音声サービスから切断し、リソースを解放します。これは、音声セッションを正しく終了し、リソースリークを防ぐうえで重要です。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
@@ -40,15 +44,21 @@ setTimeout(() => {
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 このメソッドに引数はありません。
 
-## 戻り値
+<div id="return-value">
+  ## 戻り値
+</div>
 
 このメソッドは値を返しません。
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - リアルタイム音声セッションを終了したら、リソースを解放するために必ず `close()` を呼び出してください
 - `close()` を呼び出した後に新しいセッションを開始する場合は、あらためて `connect()` を呼び出す必要があります

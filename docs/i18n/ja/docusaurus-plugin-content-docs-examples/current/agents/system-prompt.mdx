@@ -6,13 +6,17 @@ description: システムプロンプトで性格や能力を定義して AI エ
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# システムプロンプトの変更
+<div id="changing-the-system-prompt">
+  # システムプロンプトの変更
+</div>
 
 エージェントを作成する際、`instructions` はその振る舞いの基本的なルールを定義します。エージェントの役割や性格、全体的な方針を定め、すべてのやり取りで一貫して適用されます。元の `instructions` を変更せずに、特定のリクエストでエージェントの応答に影響を与えるために、`.generate()` に `system` プロンプトを渡すことができます。
 
 この例では、`system` プロンプトを使ってエージェントの文体をハリー・ポッターのさまざまなキャラクター風に切り替え、コア設定を変えずに同じエージェントがスタイルを柔軟に適応できることを示します。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 この例では `openai` モデルを使用します。`.env` ファイルに `OPENAI_API_KEY` を追加してください。
 
@@ -21,7 +25,9 @@ OPENAI_API_KEY=<your-api-key>
 ```
 
 
-## エージェントの作成
+<div id="creating-an-agent">
+  ## エージェントの作成
+</div>
 
 エージェントを定義し、`instructions` を指定します。これはデフォルトの動作を定め、実行時にシステムプロンプトが与えられていない場合の応答方法を記述します。
 
@@ -43,7 +49,9 @@ export const harryPotterAgent = new Agent({
 > 構成オプションの一覧については、[Agent](/reference/agents/agent) を参照してください。
 
 
-## エージェントの登録
+<div id="registering-an-agent">
+  ## エージェントの登録
+</div>
 
 エージェントを使用するには、メインの Mastra インスタンスに登録してください。
 
@@ -59,7 +67,9 @@ export const mastra = new Mastra({
 ```
 
 
-## 既定のキャラクター応答
+<div id="default-character-response">
+  ## 既定のキャラクター応答
+</div>
 
 `getAgent()` を使ってエージェントを取得し、プロンプトを渡して `generate()` を呼び出します。手順で定義されているとおり、キャラクターが指定されていない場合、このエージェントは Harry Potter の声を既定として使用します。
 
@@ -78,7 +88,9 @@ console.log(response.text);
 ```
 
 
-### キャラクターの声を切り替える
+<div id="changing-the-character-voice">
+  ### キャラクターの声を切り替える
+</div>
 
 実行時に別の system prompt を指定すると、エージェントの声を別のキャラクターに切り替えられます。これにより、元の指示はそのままに、そのリクエストに対するエージェントの応答の仕方だけが変わります。
 
@@ -106,6 +118,8 @@ console.log(response.text);
 <GithubLink outdated={true} marginTop="mt-16" link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/system-prompt" />
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [エージェントの呼び出し](./calling-agents)

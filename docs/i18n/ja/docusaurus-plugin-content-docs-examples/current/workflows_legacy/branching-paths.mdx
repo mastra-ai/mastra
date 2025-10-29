@@ -6,11 +6,15 @@ description: 中間結果に応じて分岐するレガシー版ワークフロ�
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# 分岐するパス
+<div id="branching-paths">
+  # 分岐するパス
+</div>
 
 データを処理する際には、中間結果に応じて異なる処理を行う必要がよくあります。この例では、レガシーなワークフローを作成し、複数のパスに分岐させる方法を示します。各パスでは、直前のステップの出力に基づいて異なる手順を実行します。
 
-## 制御フロー図
+<div id="control-flow-diagram">
+  ## 制御フロー図
+</div>
 
 この例では、前のステップの出力に基づいて各パスが異なるステップを実行する、分岐して別々の経路に進む従来型ワークフローの作成方法を示します。
 
@@ -21,7 +25,9 @@ import GithubLink from "@site/src/components/GithubLink";
   alt="分岐経路を持つワークフローを示す図"
 />
 
-## ステップの作成
+<div id="creating-the-steps">
+  ## ステップの作成
+</div>
 
 まずは、ステップを作成してワークフローを初期化しましょう。
 
@@ -104,7 +110,9 @@ const myWorkflow = new LegacyWorkflow({
 ```
 
 
-## 分岐パスとステップの連結
+<div id="branching-paths-and-chaining-steps">
+  ## 分岐パスとステップの連結
+</div>
 
 それでは、分岐パスを持つレガシーなワークフローを設定し、複合的な `.after([])` 構文でそれらをマージしていきましょう。
 
@@ -133,7 +141,9 @@ console.log(result.steps.finalStep.output.summary);
 ```
 
 
-## 高度なブランチとマージ
+<div id="advanced-branching-and-merging">
+  ## 高度なブランチとマージ
+</div>
 
 複数のブランチやマージポイントを使って、より複雑なワークフローを作成できます。
 
@@ -245,7 +255,9 @@ complexWorkflow
 `
 
 
-## ワークフロー（レガシー）
+<div id="workflows-legacy">
+  ## ワークフロー（レガシー）
+</div>
 
 以下のリンクでは、レガシー版ワークフローのサンプルドキュメントを参照できます。
 

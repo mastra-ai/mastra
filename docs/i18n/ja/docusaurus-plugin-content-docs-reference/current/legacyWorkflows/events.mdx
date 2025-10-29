@@ -3,11 +3,15 @@ title: "リファレンス: イベント駆動型ワークフロー | 旧ワー�
 description: "Mastra で afterEvent と resumeWithEvent メソッドを使用して、イベント駆動型ワークフローを作成する方法を学びます。"
 ---
 
-# イベント駆動型ワークフロー
+<div id="event-driven-workflows">
+  # イベント駆動型ワークフロー
+</div>
 
 Mastra は、`afterEvent` と `resumeWithEvent` メソッドを通じてイベント駆動型ワークフローをネイティブにサポートします。これらのメソッドにより、特定のイベントの発生を待つ間に実行を一時停止し、イベントデータが利用可能になった時点で再開するワークフローを作成できます。
 
-## 概要
+<div id="overview">
+  ## 概要
+</div>
 
 イベント駆動型ワークフローは、次のようなシナリオで有用です：
 
@@ -16,7 +20,9 @@ Mastra は、`afterEvent` と `resumeWithEvent` メソッドを通じてイベ�
 - 非同期処理を連携・調整する必要がある場合
 - 長時間実行される処理を複数のサービス間で分割して実行する必要がある場合
 
-## イベントの定義
+<div id="defining-events">
+  ## イベントの定義
+</div>
 
 イベント駆動のメソッドを使う前に、ワークフロー構成で、ワークフローが受け取る（待ち受ける）イベントを定義しておく必要があります。
 
@@ -50,26 +56,36 @@ const workflow = new LegacyWorkflow({
 各イベントには、イベント発生時に想定されるデータの構造を定義するスキーマと名前が必要です。
 
 
-## afterEvent()
+<div id="afterevent">
+  ## afterEvent()
+</div>
 
 `afterEvent` メソッドは、特定のイベントが発生するまで自動的に待機する、ワークフロー内の中断ポイントを作成します。
 
-### 構文
+<div id="syntax">
+  ### 構文
+</div>
 
 ```typescript
 workflow.afterEvent(eventName: string): LegacyWorkflow
 ```
 
 
-### パラメータ
+<div id="parameters">
+  ### パラメータ
+</div>
 
 - `eventName`: 待機するイベント名（ワークフローの `events` 設定で定義されている必要があります）
 
-### 戻り値
+<div id="return-value">
+  ### 戻り値
+</div>
 
 メソッドチェーンのためにワークフローインスタンスを返します。
 
-### 仕組み
+<div id="how-it-works">
+  ### 仕組み
+</div>
 
 `afterEvent` が呼び出されると、Mastra は次の処理を行います:
 
@@ -77,7 +93,9 @@ workflow.afterEvent(eventName: string): LegacyWorkflow
 2. このステップをワークフロー実行を自動的に一時停止するように設定する
 3. イベント受信後の継続ポイントを設定する
 
-### 使い方の例
+<div id="usage-example">
+  ### 使い方の例
+</div>
 
 ```typescript
 workflow
@@ -89,27 +107,37 @@ workflow
 ```
 
 
-## resumeWithEvent()
+<div id="resumewithevent">
+  ## resumeWithEvent()
+</div>
 
 `resumeWithEvent` メソッドは、特定のイベントのデータを渡して、一時停止中のワークフローを再開します。
 
-### 構文
+<div id="syntax">
+  ### 構文
+</div>
 
 ```typescript
 run.resumeWithEvent(eventName: string, data: any): Promise<LegacyWorkflowRunResult>
 ```
 
 
-### パラメータ
+<div id="parameters">
+  ### パラメータ
+</div>
 
 - `eventName`: トリガーされるイベントの名前
 - `data`: イベントデータ（このイベント用に定義されたスキーマに準拠している必要があります）
 
-### 戻り値
+<div id="return-value">
+  ### 戻り値
+</div>
 
 再開後のワークフローの実行結果で解決される Promise を返します。
 
-### 仕組み
+<div id="how-it-works">
+  ### 仕組み
+</div>
 
 `resumeWithEvent` が呼び出されると、Mastra は次の処理を行います：
 
@@ -119,7 +147,9 @@ run.resumeWithEvent(eventName: string, data: any): Promise<LegacyWorkflowRunResu
 4. 該当イベントのステップから実行を再開する
 5. 以降のステップでワークフローの実行を継続する
 
-### 使い方の例
+<div id="usage-example">
+  ### 使い方の例
+</div>
 
 ```typescript
 // ワークフロー実行を作成する
@@ -139,7 +169,9 @@ console.log(result.results);
 ```
 
 
-## イベントデータへのアクセス
+<div id="accessing-event-data">
+  ## イベントデータへのアクセス
+</div>
 
 ワークフローがイベントデータとともに再開されると、そのデータはステップコンテキストの `context.inputData.resumedEvent` で参照できます:
 
@@ -159,7 +191,9 @@ const processApprovalStep = new LegacyStep({
 ```
 
 
-## 複数のイベント
+<div id="multiple-events">
+  ## 複数のイベント
+</div>
 
 ワークフローの各所で、複数の異なるイベントを待機するように設定できます。
 
@@ -176,7 +210,9 @@ workflow
 複数のイベントの一時停止ポイントがあるワークフローを再開する場合は、現在の一時停止ポイントに対応する正しいイベント名とデータを指定する必要があります。
 
 
-## 実践例
+<div id="practical-example">
+  ## 実践例
+</div>
 
 この例では、承認とドキュメントのアップロードの両方を必要とする完全なワークフローを示します。
 
@@ -261,7 +297,9 @@ export { requestWorkflow };
 ```
 
 
-### 例題ワークフローの実行
+<div id="running-the-example-workflow">
+  ### 例題ワークフローの実行
+</div>
 
 ```typescript
 import { requestWorkflow } from "./workflows";
@@ -295,7 +333,9 @@ runWorkflow().catch(console.error);
 ```
 
 
-## ベストプラクティス
+<div id="best-practices">
+  ## ベストプラクティス
+</div>
 
 1. **明確なイベントスキーマを定義する**: Zod を用いて、イベントデータ検証用の厳密なスキーマを作成する
 2. **説明的なイベント名を使う**: 目的が一目で分かるイベント名を選ぶ
@@ -304,7 +344,9 @@ runWorkflow().catch(console.error);
 5. **タイムアウトを考慮する**: 発生しない可能性のあるイベントにはタイムアウト機構を実装する
 6. **イベントをドキュメント化する**: 他の開発者向けに、ワークフローが依存するイベントを明確に記述する
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [ワークフローのサスペンドと再開](/docs/workflows-legacy/suspend-and-resume)
 - [Workflow クラス リファレンス](./workflow)

@@ -6,21 +6,29 @@ description: Mastraでドキュメントからメタデータを抽出・活用�
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# メタデータ抽出
+<div id="metadata-extraction">
+  # メタデータ抽出
+</div>
 
 この例では、Mastra のドキュメント処理機能を使って、ドキュメントからメタデータを抽出し、活用する方法を紹介します。
 抽出したメタデータは、ドキュメントの整理やフィルタリング、RAG システムにおける検索の高度化に活用できます。
 
-## 概要
+<div id="overview">
+  ## 概要
+</div>
 
 このシステムは、次の2つの方法でメタデータ抽出を示します。
 
 1. ドキュメントからの直接的なメタデータ抽出
 2. チャンク分割とメタデータ抽出の併用
 
-## セットアップ
+<div id="setup">
+  ## セットアップ
+</div>
 
-### 依存関係
+<div id="dependencies">
+  ### 依存関係
+</div>
 
 必要な依存モジュールをインポートします：
 
@@ -29,7 +37,9 @@ import { MDocument } from "@mastra/rag";
 ```
 
 
-## ドキュメントの作成
+<div id="document-creation">
+  ## ドキュメントの作成
+</div>
 
 テキスト内容からドキュメントを作成します：
 
@@ -50,7 +60,9 @@ const doc = MDocument.fromText(`タイトル: 定期的な運動のメリット
 ```
 
 
-## 1. メタデータの直接抽出
+<div id="1-direct-metadata-extraction">
+  ## 1. メタデータの直接抽出
+</div>
 
 ドキュメントからメタデータを直接抽出します：
 
@@ -80,7 +92,9 @@ console.log("抽出されたメタデータ:", meta);
 ```
 
 
-## 2. メタデータ付きチャンク化
+<div id="2-chunking-with-metadata">
+  ## 2. メタデータ付きチャンク化
+</div>
 
 ドキュメントのチャンク化とメタデータ抽出を組み合わせます。
 

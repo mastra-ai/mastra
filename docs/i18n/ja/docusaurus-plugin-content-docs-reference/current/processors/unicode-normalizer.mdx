@@ -3,11 +3,15 @@ title: "リファレンス: UnicodeNormalizer | プロセッサ | Mastra ドキ�
 description: "Mastra の UnicodeNormalizer に関するドキュメント。Unicode テキストを正規化し、表記を一貫させ、問題の原因となり得る文字を除去します。"
 ---
 
-# UnicodeNormalizer
+<div id="unicodenormalizer">
+  # UnicodeNormalizer
+</div>
 
 `UnicodeNormalizer` は、Unicode テキストを正規化し、メッセージを言語モデルに送信する前に書式の一貫性を保ち、問題になり得る文字を除去するための**入力プロセッサ**です。このプロセッサは、さまざまな Unicode 表現の統一、制御文字の削除、空白の整形の標準化を行うことで、テキスト品質の維持に貢献します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 import { UnicodeNormalizer } from "@mastra/core/processors";
@@ -19,7 +23,9 @@ const processor = new UnicodeNormalizer({
 ```
 
 
-## コンストラクターの引数
+<div id="constructor-parameters">
+  ## コンストラクターの引数
+</div>
 
 <PropertiesTable
   content={[
@@ -32,7 +38,9 @@ const processor = new UnicodeNormalizer({
   ]}
 />
 
-### オプション
+<div id="options">
+  ### オプション
+</div>
 
 <PropertiesTable
   content={[
@@ -70,7 +78,9 @@ const processor = new UnicodeNormalizer({
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -89,7 +99,9 @@ const processor = new UnicodeNormalizer({
   ]}
 />
 
-## 応用例
+<div id="extended-usage-example">
+  ## 応用例
+</div>
 
 ```typescript title="src/mastra/agents/normalized-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -112,6 +124,8 @@ export const agent = new Agent({
 ```
 
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [入力プロセッサ](/docs/agents/guardrails)

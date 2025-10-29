@@ -3,11 +3,15 @@ title: "リファレンス: Agent.stream() | ストリーミング | Mastra ド�
 description: "Mastra のエージェントにおける `Agent.stream()` メソッドのドキュメント。強化された機能により、応答をリアルタイムにストリーミングできます。"
 ---
 
-# Agent.stream()
+<div id="agentstream">
+  # Agent.stream()
+</div>
 
 `.stream()` メソッドは、拡張された機能と柔軟なフォーマットにより、エージェントの応答をリアルタイムでストリーミングできるようにします。このメソッドはメッセージと任意のストリーミングオプションを受け取り、Mastra のネイティブ形式と AI SDK v5 互換の両方に対応した次世代のストリーミング体験を提供します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```ts title="index.ts" copy
 // デフォルトのMastra形式
@@ -26,7 +30,9 @@ const aiSdkStream = await agent.stream("message for agent", {
 :::
 
 
-## パラメーター
+<div id="parameters">
+  ## パラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -45,7 +51,9 @@ const aiSdkStream = await agent.stream("message for agent", {
   ]}
 />
 
-### 設定
+<div id="options">
+  ### 設定
+</div>
 
 <PropertiesTable
   content={[
@@ -670,7 +678,9 @@ const aiSdkStream = await agent.stream("message for agent", {
 ]}
 />
 
-## 返り値
+<div id="returns">
+  ## 返り値
+</div>
 
 <PropertiesTable
   content={[
@@ -690,9 +700,13 @@ const aiSdkStream = await agent.stream("message for agent", {
   ]}
 />
 
-## 応用的な使用例
+<div id="extended-usage-example">
+  ## 応用的な使用例
+</div>
 
-### Mastra フォーマット（デフォルト）
+<div id="mastra-format-default">
+  ### Mastra フォーマット（デフォルト）
+</div>
 
 ```ts title="index.ts" showLineNumbers copy
 import { stepCountIs } from "ai-v5";
@@ -714,7 +728,9 @@ const fullText = await stream.text;
 ```
 
 
-### AI SDK v5 のフォーマット
+<div id="ai-sdk-v5-format">
+  ### AI SDK v5 のフォーマット
+</div>
 
 ```ts title="index.ts" showLineNumbers copy
 import { stepCountIs } from "ai-v5";
@@ -739,7 +755,9 @@ return stream.toUIMessageStreamResponse();
 ```
 
 
-### コールバックの使用
+<div id="using-callbacks">
+  ### コールバックの使用
+</div>
 
 すべてのコールバック関数がトップレベルのプロパティとして利用可能になり、API をよりシンプルに扱えるようになりました。
 
@@ -769,7 +787,9 @@ for await (const chunk of stream.textStream) {
 ```
 
 
-### オプションを使った高度な例
+<div id="advanced-example-with-options">
+  ### オプションを使った高度な例
+</div>
 
 ```ts title="index.ts" showLineNumbers copy
 import { z } from "zod";
@@ -804,7 +824,9 @@ await agent.stream("エージェントへのメッセージ", {
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [応答の生成](/docs/agents/overview#generating-responses)
 - [応答のストリーミング](/docs/agents/overview#generating-responses)

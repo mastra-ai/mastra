@@ -6,11 +6,15 @@ description: Mastra のワークフロー機能を活用し、RAG システム�
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# ワークフローによる構造化推論
+<div id="structured-reasoning-with-workflows">
+  # ワークフローによる構造化推論
+</div>
 
 この例では、Mastra、OpenAIの埋め込み、PGVectorによるベクトルストレージを用いてRAG（Retrieval-Augmented Generation）システムを実装する方法を示し、定義されたワークフローを通じた構造化推論に重点を置いて解説します。
 
-## 概要
+<div id="overview">
+  ## 概要
+</div>
 
 このシステムは、定義済みワークフローに基づく chain-of-thought プロンプトを用いて、Mastra と OpenAI による RAG を実装します。機能は次のとおりです。
 
@@ -21,9 +25,13 @@ import GithubLink from "@site/src/components/GithubLink";
 5. 埋め込みを作成し、PostgreSQL に保存する
 6. ワークフローの各ステップを通じて応答を生成する
 
-## セットアップ
+<div id="setup">
+  ## セットアップ
+</div>
 
-### 環境の設定
+<div id="environment-setup">
+  ### 環境の設定
+</div>
 
 環境変数が設定されていることを確認してください：
 
@@ -33,7 +41,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
 
-### 依存関係
+<div id="dependencies">
+  ### 依存関係
+</div>
 
 必要な依存パッケージをインポートします:
 
@@ -49,7 +59,9 @@ import { z } from "zod";
 ```
 
 
-## ワークフローの定義
+<div id="workflow-definition">
+  ## ワークフローの定義
+</div>
 
 まず、トリガーのスキーマとともにワークフローを定義します。
 
@@ -63,7 +75,9 @@ export const ragWorkflow = new Workflow({
 ```
 
 
-## ベクトルクエリツールの作成
+<div id="vector-query-tool-creation">
+  ## ベクトルクエリツールの作成
+</div>
 
 ベクトルデータベースを照会するためのツールを作成します：
 
@@ -76,7 +90,9 @@ const vectorQueryTool = createVectorQueryTool({
 ```
 
 
-## エージェント設定
+<div id="agent-configuration">
+  ## エージェント設定
+</div>
 
 Mastra エージェントを設定します：
 
@@ -92,11 +108,15 @@ export const ragAgent = new Agent({
 ```
 
 
-## ワークフローのステップ
+<div id="workflow-steps">
+  ## ワークフローのステップ
+</div>
 
 このワークフローは、思考の連鎖をたどるために複数のステップに分かれています。
 
-### 1. コンテキスト分析のステップ
+<div id="1-context-analysis-step">
+  ### 1. コンテキスト分析のステップ
+</div>
 
 ```typescript copy showLineNumbers{32} title="index.ts"
 const analyzeContext = new Step({
@@ -121,7 +141,9 @@ const analyzeContext = new Step({
 ```
 
 
-### 2. 思考の分解ステップ
+<div id="2-thought-breakdown-step">
+  ### 2. 思考の分解ステップ
+</div>
 
 ```typescript copy showLineNumbers{54} title="index.ts"
 const breakdownThoughts = new Step({
@@ -152,7 +174,9 @@ const breakdownThoughts = new Step({
 ```
 
 
-### 3. 接続手順
+<div id="3-connection-step">
+  ### 3. 接続手順
+</div>
 
 ```typescript copy showLineNumbers{80} title="index.ts"
 const connectPieces = new Step({
@@ -182,7 +206,9 @@ const connectPieces = new Step({
 ```
 
 
-### 4. 結論のステップ
+<div id="4-conclusion-step">
+  ### 4. 結論のステップ
+</div>
 
 ```typescript copy showLineNumbers{105} title="index.ts"
 const drawConclusions = new Step({
@@ -212,7 +238,9 @@ const drawConclusions = new Step({
 ```
 
 
-### 5. 最終回答のステップ
+<div id="5-final-answer-step">
+  ### 5. 最終回答のステップ
+</div>
 
 ```typescript copy showLineNumbers{130} title="index.ts"
 const finalAnswer = new Step({
@@ -247,7 +275,9 @@ const finalAnswer = new Step({
 ```
 
 
-## ワークフローの構成
+<div id="workflow-configuration">
+  ## ワークフローの構成
+</div>
 
 ワークフロー内のすべてのステップをつなげます。
 
@@ -263,7 +293,9 @@ ragWorkflow.commit();
 ```
 
 
-## PgVector と Mastra をインスタンス化する
+<div id="instantiate-pgvector-and-mastra">
+  ## PgVector と Mastra をインスタンス化する
+</div>
 
 すべてのコンポーネントを含めて PgVector と Mastra をインスタンス化します:
 
@@ -280,7 +312,9 @@ export const mastra = new Mastra({
 ```
 
 
-## ドキュメント処理
+<div id="document-processing">
+  ## ドキュメント処理
+</div>
 
 ドキュメントを処理してチャンクに分割します：
 
@@ -298,7 +332,9 @@ const chunks = await doc.chunk({
 ```
 
 
-## 埋め込みの作成と保存
+<div id="embedding-creation-and-storage">
+  ## 埋め込みの作成と保存
+</div>
 
 埋め込みを生成して保存する:
 
@@ -321,7 +357,9 @@ await vectorStore.upsert({
 ```
 
 
-## ワークフローの実行
+<div id="workflow-execution">
+  ## ワークフローの実行
+</div>
 
 クエリでワークフローを実行する方法は次のとおりです：
 

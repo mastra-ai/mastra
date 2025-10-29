@@ -3,11 +3,15 @@ title: "リファレンス: Upstash Vector Store | ベクター | Mastra ドキ�
 description: Mastra における UpstashVector クラスのドキュメント。Upstash Vector を使用したベクター検索を提供します。
 ---
 
-# Upstash Vector Store
+<div id="upstash-vector-store">
+  # Upstash Vector Store
+</div>
 
 UpstashVector クラスは、メタデータによるフィルタリング機能やハイブリッド検索に対応した、サーバーレスのベクターデータベースサービスである [Upstash Vector](https://upstash.com/vector) を用いてベクター検索を提供します。
 
-## コンストラクターのオプション
+<div id="constructor-options">
+  ## コンストラクターのオプション
+</div>
 
 <PropertiesTable
   content={[
@@ -24,9 +28,13 @@ UpstashVector クラスは、メタデータによるフィルタリング機能
   ]}
 />
 
-## メソッド
+<div id="methods">
+  ## メソッド
+</div>
 
-### createIndex()
+<div id="createindex">
+  ### createIndex()
+</div>
 
 Note: このメソッドは Upstash では実行されません。インデックスは自動的に作成されます。
 
@@ -52,7 +60,9 @@ Note: このメソッドは Upstash では実行されません。インデッ�
   ]}
 />
 
-### upsert()
+<div id="upsert">
+  ### upsert()
+</div>
 
 <PropertiesTable
   content={[
@@ -88,7 +98,9 @@ Note: このメソッドは Upstash では実行されません。インデッ�
   ]}
 />
 
-### query()
+<div id="query">
+  ### query()
+</div>
 
 <PropertiesTable
   content={[
@@ -146,11 +158,15 @@ Note: このメソッドは Upstash では実行されません。インデッ�
   ]}
 />
 
-### listIndexes()
+<div id="listindexes">
+  ### listIndexes()
+</div>
 
 インデックス名（名前空間）を文字列の配列で返します。
 
-### describeIndex()
+<div id="describeindex">
+  ### describeIndex()
+</div>
 
 <PropertiesTable
   content={[
@@ -173,7 +189,9 @@ interface IndexStats {
 ```
 
 
-### deleteIndex()
+<div id="deleteindex">
+  ### deleteIndex()
+</div>
 
 <PropertiesTable
   content={[
@@ -185,7 +203,9 @@ interface IndexStats {
   ]}
 />
 
-### updateVector()
+<div id="updatevector">
+  ### updateVector()
+</div>
 
 <PropertiesTable
   content={[
@@ -214,7 +234,9 @@ interface IndexStats {
 - `sparseVector`（任意）: ハイブリッドインデックス向けの `indices` と `values` 配列を持つ sparse vector オブジェクト。
 - `metadata`（任意）: メタデータのキー・値ペアのレコード。
 
-### deleteVector()
+<div id="deletevector">
+  ### deleteVector()
+</div>
 
 <PropertiesTable
   content={[
@@ -233,11 +255,15 @@ interface IndexStats {
 
 指定したインデックスから、IDを指定してアイテムの削除を試みます。削除に失敗した場合はエラーメッセージをログ出力します。
 
-## ハイブリッドベクター検索
+<div id="hybrid-vector-search">
+  ## ハイブリッドベクター検索
+</div>
 
 Upstash Vector は、関連性と精度を高めるために、セマンティック検索（密ベクトル）とキーワードベースの検索（疎ベクトル）を組み合わせたハイブリッド検索をサポートしています。
 
-### ハイブリッドの基本的な使い方
+<div id="basic-hybrid-usage">
+  ### ハイブリッドの基本的な使い方
+</div>
 
 ```typescript copy
 import { UpstashVector } from "@mastra/upstash";
@@ -274,7 +300,9 @@ const results = await vectorStore.query({
 ```
 
 
-### 高度なハイブリッド検索オプション
+<div id="advanced-hybrid-search-options">
+  ### 高度なハイブリッド検索オプション
+</div>
 
 ```typescript copy
 import { FusionAlgorithm, QueryMode } from "@upstash/vector";
@@ -307,7 +335,9 @@ const sparseResults = await vectorStore.query({
 ```
 
 
-### ハイブリッドベクターの更新
+<div id="updating-hybrid-vectors">
+  ### ハイブリッドベクターの更新
+</div>
 
 ```typescript copy
 // 密ベクトルと疎ベクトルの両方を更新
@@ -323,7 +353,9 @@ await vectorStore.updateVector({
 ```
 
 
-## レスポンスの種類
+<div id="response-types">
+  ## レスポンスの種類
+</div>
 
 クエリ結果は次の形式で返されます：
 
@@ -337,7 +369,9 @@ interface QueryResult {
 ```
 
 
-## エラーハンドリング
+<div id="error-handling">
+  ## エラーハンドリング
+</div>
 
 ストアは型付きエラーをスローし、捕捉できます：
 
@@ -356,13 +390,17 @@ try {
 ```
 
 
-## 環境変数
+<div id="environment-variables">
+  ## 環境変数
+</div>
 
 必須の環境変数:
 
 - `UPSTASH_VECTOR_URL`: Upstash Vector データベースのURL
 - `UPSTASH_VECTOR_TOKEN`: Upstash Vector のAPIトークン
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [メタデータフィルター](../rag/metadata-filters)

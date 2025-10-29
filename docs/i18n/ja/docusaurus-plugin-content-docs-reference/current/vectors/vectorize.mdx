@@ -3,11 +3,15 @@ title: "リファレンス: Cloudflare Vector Store | Vectors | Mastra ドキュ
 description: Mastra の CloudflareVector クラスに関するドキュメント。Cloudflare Vectorize を使用したベクトル検索を提供します。
 ---
 
-# Cloudflare ベクターストア
+<div id="cloudflare-vector-store">
+  # Cloudflare ベクターストア
+</div>
 
 CloudflareVector クラスは、Cloudflare のエッジネットワークに統合されたベクターデータベースサービスである [Cloudflare Vectorize](https://developers.cloudflare.com/vectorize/) を使って、ベクトル検索機能を提供します。
 
-## コンストラクターのオプション
+<div id="constructor-options">
+  ## コンストラクターのオプション
+</div>
 
 <PropertiesTable
   content={[
@@ -24,9 +28,13 @@ CloudflareVector クラスは、Cloudflare のエッジネットワークに統�
   ]}
 />
 
-## メソッド
+<div id="methods">
+  ## メソッド
+</div>
 
-### createIndex()
+<div id="createindex">
+  ### createIndex()
+</div>
 
 <PropertiesTable
   content={[
@@ -51,7 +59,9 @@ CloudflareVector クラスは、Cloudflare のエッジネットワークに統�
   ]}
 />
 
-### upsert()
+<div id="upsert">
+  ### upsert()
+</div>
 
 <PropertiesTable
   content={[
@@ -80,7 +90,9 @@ CloudflareVector クラスは、Cloudflare のエッジネットワークに統�
   ]}
 />
 
-### query()
+<div id="query">
+  ### query()
+</div>
 
 <PropertiesTable
   content={[
@@ -117,11 +129,15 @@ CloudflareVector クラスは、Cloudflare のエッジネットワークに統�
   ]}
 />
 
-### listIndexes()
+<div id="listindexes">
+  ### listIndexes()
+</div>
 
 インデックス名の文字列配列を返します。
 
-### describeIndex()
+<div id="describeindex">
+  ### describeIndex()
+</div>
 
 <PropertiesTable
   content={[
@@ -144,7 +160,9 @@ interface IndexStats {
 ```
 
 
-### deleteIndex()
+<div id="deleteindex">
+  ### deleteIndex()
+</div>
 
 <PropertiesTable
   content={[
@@ -156,7 +174,9 @@ interface IndexStats {
   ]}
 />
 
-### createMetadataIndex()
+<div id="createmetadataindex">
+  ### createMetadataIndex()
+</div>
 
 フィルタリングを可能にするために、メタデータフィールドにインデックスを作成します。
 
@@ -180,7 +200,9 @@ interface IndexStats {
   ]}
 />
 
-### deleteMetadataIndex()
+<div id="deletemetadataindex">
+  ### deleteMetadataIndex()
+</div>
 
 メタデータフィールドのインデックスを削除します。
 
@@ -199,7 +221,9 @@ interface IndexStats {
   ]}
 />
 
-### listMetadataIndexes()
+<div id="listmetadataindexes">
+  ### listMetadataIndexes()
+</div>
 
 インデックスに定義されたすべてのメタデータフィールド索引を一覧します。
 
@@ -213,7 +237,9 @@ interface IndexStats {
   ]}
 />
 
-### updateVector()
+<div id="updatevector">
+  ### updateVector()
+</div>
 
 インデックス内の特定のIDに対して、ベクトルまたはメタデータを更新します。
 
@@ -237,7 +263,9 @@ interface IndexStats {
   ]}
 />
 
-### deleteVector()
+<div id="deletevector">
+  ### deleteVector()
+</div>
 
 インデックス内の特定のIDに対応するベクターとその関連メタデータを削除します。
 
@@ -256,7 +284,9 @@ interface IndexStats {
   ]}
 />
 
-## レスポンスの種類
+<div id="response-types">
+  ## レスポンスの種類
+</div>
 
 クエリ結果は次の形式で返されます：
 
@@ -270,7 +300,9 @@ interface QueryResult {
 ```
 
 
-## エラー処理
+<div id="error-handling">
+  ## エラー処理
+</div>
 
 ストアは型付きエラーをスローし、キャッチできます：
 
@@ -289,13 +321,17 @@ try {
 ```
 
 
-## 環境変数
+<div id="environment-variables">
+  ## 環境変数
+</div>
 
 必須の環境変数:
 
 - `CLOUDFLARE_ACCOUNT_ID`: Cloudflare アカウント ID
 - `CLOUDFLARE_API_TOKEN`: Vectorize 権限を持つ Cloudflare の API トークン
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [メタデータフィルター](../rag/metadata-filters)

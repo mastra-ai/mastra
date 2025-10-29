@@ -7,17 +7,23 @@ import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
 
-# エージェントのメモリ
+<div id="agent-memory">
+  # エージェントのメモリ
+</div>
 
 エージェントは、やり取りの間でコンテキストを維持するためにメモリを使用します。LLM はステートレスで呼び出し間の情報を保持しないため、エージェントには会話履歴を追跡し、関連情報を思い出すためのメモリが必要です。
 
 Mastra のエージェントは会話履歴を保存するように設定でき、最近のコンテキストを維持するための[ワーキングメモリ](../memory/working-memory)や、意味に基づいて過去のメッセージを検索・取得するための[セマンティックリコール](../memory/semantic-recall)をオプションで利用できます。
 
-## メモリを使用するタイミング
+<div id="when-to-use-memory">
+  ## メモリを使用するタイミング
+</div>
 
 エージェントが、過去のやり取りを参照するマルチターンの会話を維持したり、同一セッション内で以前に示されたユーザーの好みや事実を想起したり、会話スレッドの中で時間をかけて文脈を構築したりする必要がある場合は、メモリを使用します。各やり取りが独立している単発（シングルターン）のリクエストでは、メモリは使用しないでください。
 
-## メモリの設定
+<div id="setting-up-memory">
+  ## メモリの設定
+</div>
 
 Mastraでメモリを有効化するには、ストレージプロバイダーとあわせて `@mastra/memory` パッケージをインストールします。
 
@@ -26,11 +32,15 @@ npm install @mastra/memory@latest @mastra/libsql@latest
 ```
 
 
-## ストレージプロバイダー
+<div id="storage-providers">
+  ## ストレージプロバイダー
+</div>
 
 Memory では、ユーザーのメッセージやエージェントの応答を含む会話履歴を保持するために、ストレージプロバイダーが必要です。利用可能なプロバイダーや Mastra におけるストレージの仕組みについて詳しくは、[Storage](/docs/server-db/storage) のドキュメントをご覧ください。
 
-## メモリの構成
+<div id="configuring-memory">
+  ## メモリの構成
+</div>
 
 <Steps>
   <StepItem>
@@ -98,7 +108,9 @@ export const memoryAgent = new Agent({
 ```
 
 
-## 会話履歴
+<div id="conversation-history">
+  ## 会話履歴
+</div>
 
 エージェント呼び出し中の会話履歴を追跡するために、`resource` と `thread` の両方を含む `memory` オブジェクトを指定してください。
 
@@ -133,7 +145,9 @@ const response = await memoryAgent.generate("私の好きな色は何ですか?"
 メモリの詳細については、[メモリ](../memory/overview) ドキュメントをご覧ください。
 
 
-## `RuntimeContext` の使用
+<div id="using-runtimecontext">
+  ## `RuntimeContext` の使用
+</div>
 
 [RuntimeContext](/docs/server-db/runtime-context) を使うと、リクエストごとの値にアクセスできます。これにより、リクエストのコンテキストに応じて、メモリやストレージの構成を条件付きで切り替えられます。
 
@@ -167,7 +181,9 @@ export const memoryAgent = new Agent({
 :::
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [ワーキングメモリ](../memory/working-memory)
 - [セマンティックリコール](../memory/semantic-recall)

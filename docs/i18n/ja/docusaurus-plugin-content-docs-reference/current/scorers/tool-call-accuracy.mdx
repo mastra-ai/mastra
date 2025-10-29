@@ -3,16 +3,22 @@ title: "リファレンス: ツール呼び出し精度スコアラー | スコ�
 description: Mastra におけるツール呼び出し精度スコアラーのドキュメント。利用可能な選択肢の中から、LLM の出力が適切なツールを呼び出しているかを評価します。
 ---
 
-# ツール呼び出し精度スコアラー
+<div id="tool-call-accuracy-scorers">
+  # ツール呼び出し精度スコアラー
+</div>
 
 Mastra は、LLM が利用可能な選択肢の中から適切なツールを選べているかを評価するために、次の 2 種類のツール呼び出し精度スコアラーを提供します:
 
 1. **コードベースのスコアラー** - 厳密なツール一致に基づく決定的評価
 2. **LLM ベースのスコアラー** - AI による適合性のセマンティック評価
 
-## スコアリング手法の選び方
+<div id="choosing-between-scorers">
+  ## スコアリング手法の選び方
+</div>
 
-### 次のような場合は Code-Based Scorer を使用:
+<div id="use-the-code-based-scorer-when">
+  ### 次のような場合は Code-Based Scorer を使用:
+</div>
 
 - **決定的で再現性のある**結果が必要なとき
 - **ツールの完全一致**を検証したいとき
@@ -20,7 +26,9 @@ Mastra は、LLM が利用可能な選択肢の中から適切なツールを選
 - 速度とコストを重視する（LLM 呼び出しなし）とき
 - 自動テストを実行しているとき
 
-### 次のような場合は LLM ベースのスコアラーを使用してください:
+<div id="use-the-llm-based-scorer-when">
+  ### 次のような場合は LLM ベースのスコアラーを使用してください:
+</div>
 
 - 適切性を**意味レベルで理解**する必要がある
 - ツールの選択が**文脈や意図**に左右される
@@ -28,11 +36,15 @@ Mastra は、LLM が利用可能な選択肢の中から適切なツールを選
 - スコアリングの判断についての**説明**が必要
 - **本番環境でのエージェントの挙動**を評価している
 
-## コードベースのツール呼び出し精度スコアラー
+<div id="code-based-tool-call-accuracy-scorer">
+  ## コードベースのツール呼び出し精度スコアラー
+</div>
 
 `@mastra/evals/scorers/code` の `createToolCallAccuracyScorerCode()` 関数は、ツールの完全一致に基づく決定的な二値スコアリングを提供し、厳密モードと寛容モードの両方に対応するほか、ツール呼び出し順序の検証もサポートします。
 
-### パラメーター
+<div id="parameters">
+  ### パラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -63,31 +75,41 @@ Mastra は、LLM が利用可能な選択肢の中から適切なツールを選
 
 この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドとその入出力の詳細は [MastraScorer のリファレンス](./mastra-scorer)を参照してください。
 
-### 評価モード
+<div id="evaluation-modes">
+  ### 評価モード
+</div>
 
 コードベースのスコアラーは、2つの明確に異なるモードで動作します。
 
-#### 単一ツールモード
+<div id="single-tool-mode">
+  #### 単一ツールモード
+</div>
 
 `expectedToolOrder` が指定されていない場合、スコアラーは単一ツールの選択を評価します:
 
 - **標準モード (strictMode: false)**: 他のツールが呼び出されていても、期待されるツールが呼び出されていれば `1` を返します
 - **厳格モード (strictMode: true)**: 正確に1つのツールのみが呼び出され、そのツールが期待されるツールと一致する場合にのみ `1` を返します
 
-#### 呼び出し順チェックモード
+<div id="order-checking-mode">
+  #### 呼び出し順チェックモード
+</div>
 
 `expectedToolOrder` が指定されている場合、スコアラーはツールの呼び出し順序を検証します:
 
 - **厳密な順序（strictMode: true）**: 追加のツールなしで、指定された順序どおりに呼び出す必要があります
 - **柔軟な順序（strictMode: false）**: 期待されるツールが相対的な順序を保っていればよい（追加のツールは許可）
 
-## コードベースのスコアリング詳細
+<div id="code-based-scoring-details">
+  ## コードベースのスコアリング詳細
+</div>
 
 - **バイナリスコア**: 常に 0 または 1 を返す
 - **決定的**: 同じ入力なら常に同じ出力になる
 - **高速**: 外部 API への呼び出しなし
 
-### コードベースのスコアラーオプション
+<div id="code-based-scorer-options">
+  ### コードベースのスコアラーオプション
+</div>
 
 ```typescript showLineNumbers copy
 // 標準モード - 期待されるツールが呼び出されれば合格
@@ -111,7 +133,9 @@ const strictOrderScorer = createCodeScorer({
 ```
 
 
-### コードベースのスコアリング結果
+<div id="code-based-scorer-results">
+  ### コードベースのスコアリング結果
+</div>
 
 ```typescript
 {
@@ -131,11 +155,15 @@ const strictOrderScorer = createCodeScorer({
 ```
 
 
-## コードベースのスコアラーの例
+<div id="code-based-scorer-examples">
+  ## コードベースのスコアラーの例
+</div>
 
 コードベースのスコアラーは、ツールの完全一致に基づいて、決定的な二値スコア（0または1）を付与します。
 
-### 適切なツールの選定
+<div id="correct-tool-selection">
+  ### 適切なツールの選定
+</div>
 
 ```typescript title="src/example-correct-tool.ts" showLineNumbers copy
 const scorer = createToolCallAccuracyScorerCode({
@@ -176,7 +204,9 @@ console.log(result.preprocessStepResult?.correctToolCalled); // true
 ```
 
 
-### 厳密モードでの評価
+<div id="strict-mode-evaluation">
+  ### 厳密モードでの評価
+</div>
 
 ツールがちょうど1つだけ呼び出された場合にのみ合格します：
 
@@ -216,7 +246,9 @@ console.log(result.score); // 0 - 複数のツールが呼び出されたため�
 ```
 
 
-### ツールの呼び出し順序の検証
+<div id="tool-order-validation">
+  ### ツールの呼び出し順序の検証
+</div>
 
 ツールが所定の順序で呼び出されているかを検証します:
 
@@ -256,7 +288,9 @@ console.log(result.score); // 1 - 正しい順序
 ```
 
 
-### 柔軟な順序モード
+<div id="flexible-order-mode">
+  ### 柔軟な順序モード
+</div>
 
 期待されるツールの相対的な順序が保たれている限り、追加のツールを許可します。
 
@@ -303,7 +337,9 @@ console.log(result.score); // 1 - auth-toolがfetch-toolより前に来ている
 ```
 
 
-## LLM ベースのツール呼び出し適合性スコアラー
+<div id="llm-based-tool-call-accuracy-scorer">
+  ## LLM ベースのツール呼び出し適合性スコアラー
+</div>
 
 `@mastra/evals/scorers/llm` の `createToolCallAccuracyScorerLLM()` 関数は、LLM を用いて、エージェントが呼び出したツールがユーザーのリクエストに適しているかを評価し、厳密な一致ではなく意味的な評価を行います。
 
@@ -327,7 +363,9 @@ console.log(result.score); // 1 - auth-toolがfetch-toolより前に来ている
   ]}
 />
 
-### 機能
+<div id="features">
+  ### 機能
+</div>
 
 LLM ベースのスコアラーは次の機能を提供します:
 
@@ -337,20 +375,26 @@ LLM ベースのスコアラーは次の機能を提供します:
 - **未使用ツールの検出**: 本来呼び出すべきだったツールを特定する
 - **推論の提示**: スコアリング判断の根拠を説明する
 
-### 評価プロセス
+<div id="evaluation-process">
+  ### 評価プロセス
+</div>
 
 1. **ツール呼び出しの抽出**: エージェントの出力で言及されたツールを特定する
 2. **適切性の分析**: 各ツールがユーザーのリクエストに適合しているか評価する
 3. **スコアの生成**: 適切な呼び出し数と総呼び出し数に基づいてスコアを算出する
 4. **根拠の生成**: 人間が読みやすい説明を提示する
 
-## LLMベースのスコアリングの詳細
+<div id="llm-based-scoring-details">
+  ## LLMベースのスコアリングの詳細
+</div>
 
 - **小数スコア**: 0.0〜1.0の値を返します
 - **コンテキスト対応**: ユーザーの意図や妥当性を考慮します
 - **説明可能**: スコアの理由を提示します
 
-### LLM ベースのスコアリングのオプション
+<div id="llm-based-scorer-options">
+  ### LLM ベースのスコアリングのオプション
+</div>
 
 ```typescript showLineNumbers copy
 // 基本設定
@@ -370,7 +414,9 @@ const customModelScorer = createLLMScorer({
 ```
 
 
-### LLMベースのスコアラー結果
+<div id="llm-based-scorer-results">
+  ### LLMベースのスコアラー結果
+</div>
 
 ```typescript
 {
@@ -389,11 +435,15 @@ const customModelScorer = createLLMScorer({
 ```
 
 
-## LLMベースのスコアリング例
+<div id="llm-based-scorer-examples">
+  ## LLMベースのスコアリング例
+</div>
 
 LLMベースのスコアラーは、ユーザーのリクエストに対して選択されたツールが適切かどうかをAIで評価します。
 
-### 基本的なLLMの評価
+<div id="basic-llm-evaluation">
+  ### 基本的なLLMの評価
+</div>
 
 ```typescript title="src/example-llm-basic.ts" showLineNumbers copy
 const llmScorer = createToolCallAccuracyScorerLLM({
@@ -447,7 +497,9 @@ console.log(result.reason); // "エージェントは、ユーザーの天気情
 ```
 
 
-### 不適切なツール使用への対応
+<div id="handling-inappropriate-tool-usage">
+  ### 不適切なツール使用への対応
+</div>
 
 ```typescript title="src/example-llm-inappropriate.ts" showLineNumbers copy
 const inputMessages = [
@@ -483,7 +535,9 @@ console.log(result.reason); // "直接的な天気クエリに対してはweathe
 ```
 
 
-### 確認・説明の要求を評価する
+<div id="evaluating-clarification-requests">
+  ### 確認・説明の要求を評価する
+</div>
 
 LLM のスコアラーは、エージェントが適切に確認や説明を求めた場合、それを正しく認識します。
 
@@ -516,7 +570,9 @@ console.log(result.reason); // "エージェントは不十分な情報でツー
 ```
 
 
-## スコアラー同士の比較
+<div id="comparing-both-scorers">
+  ## スコアラー同士の比較
+</div>
 
 同じデータに対して両方のスコアラーを使用する例を次に示します：
 
@@ -575,7 +631,9 @@ console.log("LLM Reason:", llmResult.reason); // search-toolがあまり適切�
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [Answer Relevancy Scorer](./answer-relevancy)
 - [Completeness Scorer](./completeness)

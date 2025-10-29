@@ -3,11 +3,15 @@ title: "リファレンス: voice.updateConfig() | Voice | Mastra Docs"
 description: "音声プロバイダーの構成を実行時に更新するために、各音声プロバイダーで利用できる updateConfig() メソッドのドキュメント。"
 ---
 
-# voice.updateConfig()
+<div id="voiceupdateconfig">
+  # voice.updateConfig()
+</div>
 
 `updateConfig()` メソッドは、実行時にボイスプロバイダーの設定を更新できます。新しいインスタンスを作成せずに、音声設定や API キー、その他のプロバイダー固有のオプションを変更するのに役立ちます。
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
@@ -39,7 +43,9 @@ await voice.speak("新しい声でこんにちは！");
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <br />
 
@@ -55,15 +61,21 @@ await voice.speak("新しい声でこんにちは！");
   ]}
 />
 
-## 戻り値
+<div id="return-value">
+  ## 戻り値
+</div>
 
 このメソッドは値を返しません。
 
-## 設定オプション
+<div id="configuration-options">
+  ## 設定オプション
+</div>
 
 対応している設定オプションは音声プロバイダーによって異なります。
 
-### OpenAI Realtime
+<div id="openai-realtime">
+  ### OpenAI Realtime
+</div>
 
 <br />
 
@@ -86,7 +98,9 @@ await voice.speak("新しい声でこんにちは！");
   ]}
 />
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - 既定の実装では、プロバイダーがこのメソッドをサポートしていない場合に警告を記録します
 - 設定の更新は通常、進行中の処理ではなく、次以降の処理に適用されます

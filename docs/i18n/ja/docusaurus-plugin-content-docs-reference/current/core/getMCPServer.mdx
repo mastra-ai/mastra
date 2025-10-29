@@ -3,18 +3,24 @@ title: "リファレンス: Mastra.getMCPServer() | Core | Mastra ドキュメ�
 description: "Mastra の `Mastra.getMCPServer()` メソッドのドキュメント。ID と任意のバージョンを指定して、特定の MCP サーバーインスタンスを取得します。"
 ---
 
-# Mastra.getMCPServer()
+<div id="mastragetmcpserver">
+  # Mastra.getMCPServer()
+</div>
 
 `.getMCPServer()` メソッドは、論理 ID と任意のバージョンを指定して、特定の MCP サーバーインスタンスを取得するために使用します。バージョンが指定されている場合は、その論理 ID とバージョンに完全一致するサーバーを検索します。バージョンが指定されていない場合は、指定された論理 ID を持つサーバーのうち、最も新しい releaseDate を持つものを返します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 mastra.getMCPServer("1.2.0");
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -34,7 +40,9 @@ mastra.getMCPServer("1.2.0");
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -47,7 +55,9 @@ mastra.getMCPServer("1.2.0");
   ]}
 />
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [MCP の概要](/docs/tools-mcp/mcp-overview)
 - [MCP サーバーリファレンス](/reference/tools/mcp-server)

@@ -3,18 +3,24 @@ title: "リファレンス: Workflow.sleepUntil() | Workflows | Mastra ドキュ
 description: ワークフローで使用する `Workflow.sleepUntil()` メソッドのドキュメント。指定した日時まで実行を一時停止します。
 ---
 
-# Workflow.sleepUntil()
+<div id="workflowsleepuntil">
+  # Workflow.sleepUntil()
+</div>
 
 `.sleepUntil()` メソッドは、指定した日時まで実行を一時停止します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 workflow.sleepUntil(new Date(Date.now() + 5000));
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -28,7 +34,9 @@ workflow.sleepUntil(new Date(Date.now() + 5000));
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -40,7 +48,9 @@ workflow.sleepUntil(new Date(Date.now() + 5000));
   ]}
 />
 
-## さらに発展した使用例
+<div id="extended-usage-example">
+  ## さらに発展した使用例
+</div>
 
 ```typescript showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -59,6 +69,8 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [一時停止と再開](/docs/workflows/suspend-and-resume#sleep--events)

@@ -3,7 +3,9 @@ title: "リファレンス: ContextPositionMetric | Evals | Mastra ドキュメ�
 description: Mastra における Context Position Metric のドキュメント。クエリや出力との関連性に基づいて、コンテキストノードの配置順を評価します。
 ---
 
-# ContextPositionMetric
+<div id="contextpositionmetric">
+  # ContextPositionMetric
+</div>
 
 :::info Scorers
 このドキュメントはレガシーの evals API を参照しています。最新のスコアラー機能については [Scorers](/docs/scorers/overview) をご覧ください。
@@ -11,7 +13,9 @@ description: Mastra における Context Position Metric のドキュメント�
 
 `ContextPositionMetric` クラスは、クエリおよび出力との関連性に基づいて、コンテキストノードの並び順がどれだけ適切かを評価します。位置に重みを付けたスコアリングを用い、最も関連性の高いコンテキストがシーケンスの前方に現れることの重要性を強調します。
 
-## 基本の使い方
+<div id="basic-usage">
+  ## 基本の使い方
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -38,7 +42,9 @@ console.log(result.info.reason); // スコアの説明
 ```
 
 
-## コンストラクターのパラメータ
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -58,7 +64,9 @@ console.log(result.info.reason); // スコアの説明
   ]}
 />
 
-### ContextPositionMetricOptions
+<div id="contextpositionmetricoptions">
+  ### ContextPositionMetricOptions
+</div>
 
 <PropertiesTable
   content={[
@@ -78,7 +86,9 @@ console.log(result.info.reason); // スコアの説明
   ]}
 />
 
-## measure() のパラメータ
+<div id="measure-parameters">
+  ## measure() のパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -97,7 +107,9 @@ console.log(result.info.reason); // スコアの説明
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -126,11 +138,15 @@ console.log(result.info.reason); // スコアの説明
   ]}
 />
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 この指標は、二値の関連性評価と位置に基づく重み付けを用いて、コンテキストの位置付けを評価します。
 
-### スコアリングプロセス
+<div id="scoring-process">
+  ### スコアリングプロセス
+</div>
 
 1. コンテキスト適合性を評価:
    - 各要素に二択の判定（yes/no）を付与
@@ -144,7 +160,9 @@ console.log(result.info.reason); // スコアの説明
 
 最終スコア: `(weighted_sum / max_possible_sum) * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 （スケールは0から、デフォルトは0〜1）
 
@@ -154,7 +172,9 @@ console.log(result.info.reason); // スコアの説明
 - 0.1〜0.3: やや不十分 - 関連するコンテキストが主に後半にある
 - 0.0: 並びが不適切 - 関連するコンテキストが末尾にある、または欠落している
 
-## 例と解説
+<div id="example-with-analysis">
+  ## 例と解説
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -190,7 +210,9 @@ const result = await metric.measure(
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [コンテキスト精度メトリクス](./context-precision)
 - [回答関連性メトリクス](./answer-relevancy)

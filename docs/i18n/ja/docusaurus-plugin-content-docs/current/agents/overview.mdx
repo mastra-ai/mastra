@@ -9,7 +9,9 @@ import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
 
-# エージェントの使い方
+<div id="using-agents">
+  # エージェントの使い方
+</div>
 
 エージェントは、LLM と各種ツールを活用してオープンエンドなタスクを解決します。目標を踏まえて推論し、使うツールを選び、会話の記憶を保持し、モデルが最終回答を出すか任意の停止条件を満たすまで内部で反復します。エージェントは、UI での表示やプログラムによる処理に適した構造化レスポンスを生成します。エージェントを直接利用するほか、ワークフローやエージェントネットワークに組み込むこともできます。
 
@@ -21,7 +23,9 @@ import StepItem from "@site/src/components/StepItem";
 
 :::
 
-## エージェントのセットアップ
+<div id="setting-up-agents">
+  ## エージェントのセットアップ
+</div>
 
 <Tabs>
   <TabItem value="mastra-model-router" label="Model router">
@@ -120,7 +124,9 @@ export const testAgent = new Agent({
   </TabItem>
 </Tabs>
 
-### インストラクション形式
+<div id="instruction-formats">
+  ### インストラクション形式
+</div>
 
 インストラクションは、エージェントの振る舞い、人格、能力を定義します。
 これは、エージェントの中核となるアイデンティティと専門性を確立するシステムレベルのプロンプトです。
@@ -146,7 +152,9 @@ instructions: [
 ```
 
 
-### プロバイダー固有のオプション
+<div id="provider-specific-options">
+  ### プロバイダー固有のオプション
+</div>
 
 各モデルプロバイダーでは、プロンプトのキャッシュや推論設定など、いくつかの異なるオプションも利用できます。これらを管理するために `providerOptions` フラグを用意しています。`providerOptions` はインストラクション単位で設定でき、システムインストラクション／プロンプトごとに異なるキャッシュ戦略を指定できます。
 
@@ -166,7 +174,9 @@ instructions: {
 > 詳細は[Agent リファレンス ドキュメント](/reference/agents/agent)をご覧ください。
 
 
-### エージェントの登録
+<div id="registering-an-agent">
+  ### エージェントの登録
+</div>
 
 アプリケーション全体で利用できるように、Mastra のインスタンスにエージェントを登録します。登録後は、ワークフロー、ツール、ほかのエージェントから呼び出すことができ、メモリ、ログ、可観測性機能などの共有リソースにアクセスできます。
 
@@ -181,7 +191,9 @@ export const mastra = new Mastra({
 ```
 
 
-## エージェントの参照
+<div id="referencing-an-agent">
+  ## エージェントの参照
+</div>
 
 ワークフローのステップ、ツール、Mastra Client、またはコマンドラインからエージェントを呼び出せます。セットアップに応じて、`mastra` または `mastraClient` インスタンスで `.getAgent()` を呼び出して、参照を取得します。
 
@@ -198,7 +210,9 @@ const testAgent = mastra.getAgent("testAgent");
 :::
 
 
-## 応答の生成
+<div id="generating-responses">
+  ## 応答の生成
+</div>
 
 エージェントは2通りの方法で結果を返せます。返却前に出力を最後まで生成するか、トークンをリアルタイムでストリーミングするかです。ユースケースに合った方法を選びましょう。短い社内向けの応答やデバッグには「生成」を、エンドユーザーにできるだけ早く画面表示を届けるには「ストリーミング」を使います。
 
@@ -244,7 +258,9 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-### `onFinish()` を使った完了処理
+<div id="completion-using-onfinish">
+  ### `onFinish()` を使った完了処理
+</div>
 
 ストリーミング時、`onFinish()` コールバックは LLM が応答の生成を終え、すべてのツール実行が完了した後に呼び出されます。
 最終的な `text`、実行の `steps`、`finishReason`、トークンの `usage` 統計など、監視やログに有用なメタデータを提供します。
@@ -266,11 +282,15 @@ for await (const chunk of stream.textStream) {
 
 > 詳しくは [.generate()](/reference/agents/generate) または [.stream()](/reference/streaming/agents/stream) を参照してください。
 
-## 構造化出力
+<div id="structured-output">
+  ## 構造化出力
+</div>
 
 エージェントは、期待する出力を [Zod](https://zod.dev/) または [JSON Schema](https://json-schema.org/) で定義することで、構造化された型安全なデータを返せます。TypeScript のサポートと開発体験の観点からは Zod を推奨します。パース済みの結果は `response.object` で参照でき、検証済みかつ型付けされたデータをそのまま扱えます。
 
-### Zod を使用する
+<div id="using-zod">
+  ### Zod を使用する
+</div>
 
 [Zod](https://zod.dev/) を使って `output` のスキーマを定義します:
 
@@ -302,7 +322,9 @@ console.log(response.object);
 ```
 
 
-### ツール呼び出しを使用する
+<div id="with-tool-calling">
+  ### ツール呼び出しを使用する
+</div>
 
 `model` プロパティを設定して、エージェントがツール呼び出しを伴うマルチステップの LLM 呼び出しを実行できるようにします。
 
@@ -336,7 +358,9 @@ console.log(response.toolResults);
 ```
 
 
-### レスポンス形式
+<div id="response-format">
+  ### レスポンス形式
+</div>
 
 デフォルトでは、`structuredOutput` はスキーマをモデルプロバイダーに渡すために `response_format` を使用します。モデルプロバイダーが `response_format` をネイティブにサポートしていない場合、エラーが発生するか、期待した結果が得られない可能性があります。同じモデルを使い続ける場合は、`jsonPromptInjection` を使ってレスポンス形式を経由せず、システムプロンプトを挿入してモデルに構造化出力を返すよう促してください。
 
@@ -369,7 +393,9 @@ console.log(response.object);
 ```
 
 
-## 画像の取り扱い
+<div id="working-with-images">
+  ## 画像の取り扱い
+</div>
 
 エージェントは、画像内の視覚情報とテキストの両方を処理して、画像を分析・説明できます。画像解析を有効にするには、`content` 配列に `type: 'image'` と画像のURLを含むオブジェクトを渡します。画像コンテンツとテキストプロンプトを組み合わせて、エージェントの分析を誘導することもできます。
 
@@ -397,7 +423,9 @@ console.log(response.text);
 ツールの作成と設定に関する詳しいガイドは、[Tools Overview](../tools-mcp/overview)ページをご覧ください。
 
 
-### `maxSteps` の使用
+<div id="using-maxsteps">
+  ### `maxSteps` の使用
+</div>
 
 `maxSteps` パラメータは、エージェントが行える連続した LLM 呼び出しの最大回数を制御します。各ステップには、応答の生成、ツールの呼び出しの実行、結果の処理が含まれます。ステップ数を制限することで、無限ループの回避、レイテンシの低減、ツールを用いるエージェントにおけるトークン使用量の抑制に役立ちます。既定値は 1 ですが、増やせます。
 
@@ -410,7 +438,9 @@ console.log(response.text);
 ```
 
 
-### `onStepFinish` の使用
+<div id="using-onstepfinish">
+  ### `onStepFinish` の使用
+</div>
 
 `onStepFinish` コールバックを使うと、複数ステップの処理の進行状況を監視できます。デバッグやユーザーへの進捗報告に便利です。
 
@@ -425,7 +455,9 @@ const response = await testAgent.generate("今日の予定を整理して", {
 ```
 
 
-## ツールの使用
+<div id="using-tools">
+  ## ツールの使用
+</div>
 
 エージェントはツールを使うことで単なる言語生成を超え、外部のAPIやサービスと構造化されたやり取りが行えます。ツールにより、エージェントはデータにアクセスし、明確に定義された操作を信頼性高く、再現性のある形で実行できます。
 
@@ -439,7 +471,9 @@ export const testAgent = new Agent({
 > 詳細は[Using Tools](./using-tools)をご参照ください。
 
 
-## `RuntimeContext` の使用
+<div id="using-runtimecontext">
+  ## `RuntimeContext` の使用
+</div>
 
 `RuntimeContext` を使うと、リクエストごとの値にアクセスできます。これにより、リクエストのコンテキストに応じて動作を条件付きで調整できます。
 
@@ -463,11 +497,15 @@ export const testAgent = new Agent({
 > 詳しくは、[Runtime Context](/docs/server-db/runtime-context)をご覧ください。
 
 
-## Mastra Playground でのテスト
+<div id="testing-with-mastra-playground">
+  ## Mastra Playground でのテスト
+</div>
 
 Mastra の [Playground](/docs/getting-started/studio) を使って、さまざまなメッセージでエージェントをテストし、ツールの呼び出しと応答を確認し、エージェントの動作をデバッグします。
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [ツールの使用](./using-tools)
 - [エージェントメモリ](./agent-memory)

@@ -3,18 +3,24 @@ title: "リファレンス: Memory.deleteMessages() | Memory | Mastra ドキュ�
 description: "Mastra の `Memory.deleteMessages()` メソッドに関するドキュメント。ID を指定して複数のメッセージを削除します。"
 ---
 
-# Memory.deleteMessages()
+<div id="memorydeletemessages">
+  # Memory.deleteMessages()
+</div>
 
 `.deleteMessages()` メソッドは、複数のメッセージを ID で削除します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 await memory?.deleteMessages(["671ae63f-3a91-4082-a907-fe7de78e10ec"]);
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -27,7 +33,9 @@ await memory?.deleteMessages(["671ae63f-3a91-4082-a907-fe7de78e10ec"]);
   ]}
 />
 
-## 返り値
+<div id="returns">
+  ## 返り値
+</div>
 
 <PropertiesTable
   content={[
@@ -39,7 +47,9 @@ await memory?.deleteMessages(["671ae63f-3a91-4082-a907-fe7de78e10ec"]);
   ]}
 />
 
-## 応用的な使用例
+<div id="extended-usage-example">
+  ## 応用的な使用例
+</div>
 
 ```typescript title="src/test-memory.ts" showLineNumbers copy
 import { mastra } from "./mastra";
@@ -57,7 +67,9 @@ await memory?.deleteMessages([...messageIds]);
 ```
 
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [Memory クラス リファレンス](/reference/memory/memory-class)
 - [query](/reference/memory/query)

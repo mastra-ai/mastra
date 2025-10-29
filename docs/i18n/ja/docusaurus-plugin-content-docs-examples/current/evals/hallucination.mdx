@@ -3,7 +3,9 @@ title: "例: 幻覚評価 | Evals | Mastra ドキュメント"
 description: 応答内の事実矛盾を評価するために「Hallucination」指標を用いる例。
 ---
 
-# 幻覚評価
+<div id="hallucination-evaluation">
+  # 幻覚評価
+</div>
 
 :::note
 Scorers API は現在ベータ版です。改善に積極的に取り組んでおり、皆さまのフィードバックを歓迎します。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までお寄せください。
@@ -11,14 +13,18 @@ Scorers API は現在ベータ版です。改善に積極的に取り組んで�
 
 `HallucinationMetric` を使用して、応答が提供されたコンテキストのいずれかの部分と矛盾していないかを評価します。このメトリックは `query` と `response` を受け取り、スコアと理由を含む `info` オブジェクトを返します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/evals
 ```
 
 
-## 幻覚なしの例
+<div id="no-hallucination-example">
+  ## 幻覚なしの例
+</div>
 
 この例では、回答は提供された文脈と完全に整合しています。すべての主張は事実に即して正しく、元資料によって直接裏付けられているため、幻覚スコアは低くなります。
 
@@ -44,7 +50,9 @@ console.log(result);
 ```
 
 
-### 幻覚のない出力
+<div id="no-hallucination-output">
+  ### 幻覚のない出力
+</div>
 
 矛盾がないため、応答のスコアは0になります。すべての記述は文脈と整合しており、新たな情報や捏造された情報は含まれていません。
 
@@ -58,7 +66,9 @@ console.log(result);
 ```
 
 
-## 混合型ハルシネーションの例
+<div id="mixed-hallucination-example">
+  ## 混合型ハルシネーションの例
+</div>
 
 この例では、応答には正確な主張と不正確な主張が混在しています。いくつかの詳細は文脈に合致している一方で、数値の水増しや誤った場所の記載など、文脈と明確に矛盾するものもあります。これらの矛盾により、ハルシネーションスコアが上昇します。
 
@@ -85,7 +95,9 @@ console.log(result);
 ```
 
 
-### 混在したハルシネーション出力
+<div id="mixed-hallucination-output">
+  ### 混在したハルシネーション出力
+</div>
 
 この評価指標は、応答の一部が文脈と矛盾しているため、中程度のスコアを付与します。いくつかの事実は正しい一方で、他は不正確または捏造であり、全体としての信頼性を損ないます。
 
@@ -99,7 +111,9 @@ console.log(result);
 ```
 
 
-## 典型的なハルシネーションの例
+<div id="complete-hallucination-example">
+  ## 典型的なハルシネーションの例
+</div>
 
 この例では、応答が文脈中のあらゆる重要な事実と矛盾しています。いずれの主張も検証できず、提示された詳細はすべて事実と異なります。
 
@@ -125,7 +139,9 @@ console.log(result);
 ```
 
 
-### 完全な幻覚出力
+<div id="complete-hallucination-output">
+  ### 完全な幻覚出力
+</div>
 
 この指標はスコアを1とします。レスポンス内のすべての記述がコンテキストと矛盾しているためです。詳細は全般的に捏造されているか、不正確です。
 
@@ -139,7 +155,9 @@ console.log(result);
 ```
 
 
-## メトリクスの構成
+<div id="metric-configuration">
+  ## メトリクスの構成
+</div>
 
 事実に基づくソース資料を表す `context` 配列を指定して、`HallucinationMetric` インスタンスを作成できます。最大スコアを設定するための `scale` など、任意のパラメータを追加で構成することもできます。
 
@@ -153,7 +171,9 @@ const metric = new HallucinationMetric(openai("gpt-4o-mini"), {
 > 設定オプションの一覧については、[HallucinationMetric](/reference/evals/hallucination)を参照してください。
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `HallucinationMetric` は以下の形式で結果を返します：
 
@@ -167,7 +187,9 @@ const metric = new HallucinationMetric(openai("gpt-4o-mini"), {
 ```
 
 
-### 幻覚スコア
+<div id="hallucination-score">
+  ### 幻覚スコア
+</div>
 
 0〜1の範囲の幻覚スコア:
 
@@ -177,7 +199,9 @@ const metric = new HallucinationMetric(openai("gpt-4o-mini"), {
 - **0.7–0.8**: 高度の幻覚 — 多くの矛盾がある。
 - **0.9–1.0**: 完全な幻覚 — ほとんど、またはすべての主張が文脈と矛盾する。
 
-### 幻覚（Hallucination）情報
+<div id="hallucination-info">
+  ### 幻覚（Hallucination）情報
+</div>
 
 スコアの説明。内容には次が含まれます:
 

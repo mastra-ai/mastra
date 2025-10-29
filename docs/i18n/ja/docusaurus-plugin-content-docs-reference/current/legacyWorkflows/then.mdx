@@ -3,18 +3,24 @@ title: "リファレンス: Workflow.then() | レガシー ワークフロー | 
 description: ワークフローにおける`.then()`メソッドのリファレンス。ステップ間に順次的な依存関係を作成します。
 ---
 
-# Workflow.then()
+<div id="workflowthen">
+  # Workflow.then()
+</div>
 
 `.then()` メソッドはワークフローのステップ間に順序的な依存関係を作り、ステップが所定の順序で実行されるようにします。
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 ```typescript
 workflow.step(stepOne).then(stepTwo).then(stepThree);
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -28,7 +34,9 @@ workflow.step(stepOne).then(stepTwo).then(stepThree);
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -40,7 +48,9 @@ workflow.step(stepOne).then(stepTwo).then(stepThree);
   ]}
 />
 
-## 検証
+<div id="validation">
+  ## 検証
+</div>
 
 `then` を使用する場合:
 
@@ -48,7 +58,9 @@ workflow.step(stepOne).then(stepTwo).then(stepThree);
 - ステップ同士で循環依存を作ってはいけません
 - 各ステップは直列のチェーン内で一度しか登場できません
 
-## エラー処理
+<div id="error-handling">
+  ## エラー処理
+</div>
 
 ```typescript
 try {
@@ -66,7 +78,9 @@ try {
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [step リファレンス](./step-class)
 - [after リファレンス](./after)

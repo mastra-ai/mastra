@@ -3,11 +3,15 @@ title: "Postgres を使ったメモリ | Memory | Mastra ドキュメント"
 description: PostgreSQL のストレージとベクトル機能を活用して Mastra のメモリシステムを使う方法の例。
 ---
 
-# PostgreSQL を使ったメモリ
+<div id="memory-with-postgres">
+  # PostgreSQL を使ったメモリ
+</div>
 
 この例では、Mastra のメモリシステムで PostgreSQL をストレージのバックエンドとして使用する方法を紹介します。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 この例では `openai` モデルを使用し、`pgvector` 拡張機能を備えた PostgreSQL データベースが必要です。`.env` ファイルに次を追加してください：
 
@@ -23,7 +27,9 @@ npm install @mastra/pg
 ```
 
 
-## エージェントにメモリを追加する
+<div id="adding-memory-to-an-agent">
+  ## エージェントにメモリを追加する
+</div>
 
 エージェントに PostgreSQL のメモリ機能を追加するには、`Memory` クラスを使用し、`PostgresStore` を用いて新しい `storage` キーを作成します。`connectionString` には、リモートの接続先またはローカルのデータベース接続を指定できます。
 
@@ -50,7 +56,9 @@ export const pgAgent = new Agent({
 ```
 
 
-## fastembed を使ったローカル埋め込み
+<div id="local-embeddings-with-fastembed">
+  ## fastembed を使ったローカル埋め込み
+</div>
 
 埋め込みは、memory の `semanticRecall` が（キーワードではなく）意味に基づいて関連メッセージを取得するために用いる数値ベクトルです。このセットアップでは、`@mastra/fastembed` を使ってベクトル埋め込みを生成します。
 
@@ -94,7 +102,9 @@ export const pgAgent = new Agent({
 ```
 
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 このリクエストでのリコール範囲には `memoryOptions` を使用します。`lastMessages: 5` を設定して直近のメッセージに基づくリコールを制限し、`semanticRecall` を使って関連性の高いメッセージを `topK: 3` 件取得し、各一致の前後の文脈として `messageRange: 2` 件の隣接メッセージを含めます。
 
@@ -137,6 +147,8 @@ for await (const chunk of stream.textStream) {
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [エージェントの呼び出し](/examples/agents/calling-agents)

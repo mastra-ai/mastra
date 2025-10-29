@@ -3,13 +3,17 @@ title: "Logging | Observability | Mastra ドキュメント"
 description: Mastra におけるロギングの活用方法を学び、実行状況を監視し、アプリケーションの挙動を把握し、AI アプリケーションの精度を高めましょう。
 ---
 
-# ロギング
+<div id="logging">
+  # ロギング
+</div>
 
 Mastra のロギングシステムは、関数の実行状況、入力データ、出力レスポンスを構造化された形式で記録します。
 
 Mastra Cloud にデプロイした場合、ログは [Logs](../mastra-cloud/observability) ページに表示されます。セルフホストやカスタム環境では、設定したトランスポートに応じて、ログをファイルや外部サービスへ出力できます。
 
-## PinoLogger
+<div id="pinologger">
+  ## PinoLogger
+</div>
 
 CLI を使って[新しい Mastra プロジェクトを初期化](../getting-started/installation)すると、`PinoLogger` はデフォルトで含まれます。
 
@@ -29,11 +33,15 @@ export const mastra = new Mastra({
 > 使用可能な設定オプションの詳細は、[PinoLogger](/reference/observability/logging/pino-logger) の API リファレンスを参照してください。
 
 
-## ワークフローやツールからのロギング
+<div id="logging-from-workflows-and-tools">
+  ## ワークフローやツールからのロギング
+</div>
 
 Mastra では、ワークフローの各ステップやツール内で利用できる `mastra.getLogger()` メソッドを通じて、ロガーインスタンスにアクセスできます。ロガーは標準的な重要度レベルである `debug`、`info`、`warn`、`error` をサポートします。
 
-### ワークフローステップからのロギング
+<div id="logging-from-workflow-steps">
+  ### ワークフローステップからのロギング
+</div>
 
 ワークフローステップ内では、`execute` 関数の `mastra` パラメーター経由でロガーにアクセスできます。これにより、そのステップの実行に関するメッセージをログ出力できます。
 
@@ -60,7 +68,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-### ツールからのログ出力
+<div id="logging-from-tools">
+  ### ツールからのログ出力
+</div>
 
 同様に、ツールは `mastra` パラメータを通じてロガーインスタンスにアクセスできます。これを使って、実行中のツール固有の処理をログに記録します。
 
@@ -82,7 +92,9 @@ export const testTool = createTool({
 ```
 
 
-## 追加データを伴うロギング
+<div id="logging-with-additional-data">
+  ## 追加データを伴うロギング
+</div>
 
 Logger のメソッドは、追加データ用の任意の第2引数を受け取ります。これはオブジェクト、文字列、数値など、あらゆる値を指定できます。
 

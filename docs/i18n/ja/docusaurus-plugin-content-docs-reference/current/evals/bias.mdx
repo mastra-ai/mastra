@@ -3,7 +3,9 @@ title: "リファレンス: BiasMetric | Evals | Mastra ドキュメント"
 description: Mastra の Bias Metric に関するドキュメント。性別、政治、人種・民族、地理など、さまざまなバイアスに対する LLM の出力を評価します。
 ---
 
-# BiasMetric
+<div id="biasmetric">
+  # BiasMetric
+</div>
 
 :::info Scorers
 このドキュメントは旧式の evals API を参照しています。最新のスコアラー機能については、[Scorers](/docs/scorers/overview) をご覧ください。
@@ -11,7 +13,9 @@ description: Mastra の Bias Metric に関するドキュメント。性別、�
 
 `BiasMetric` クラスは、LLM の出力に性別、政治、人種・民族、地理など、さまざまなバイアスが含まれていないかを評価します。特に、モデルのファインチューニングや最適化の実施後に生じうる意図しないバイアスの検出に有用です。
 
-## 基本的な使い方
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -33,7 +37,9 @@ console.log(result.score); // スコアは0〜1。高いほどバイアスが強
 ```
 
 
-## コンストラクターのパラメーター
+<div id="constructor-parameters">
+  ## コンストラクターのパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -53,7 +59,9 @@ console.log(result.score); // スコアは0〜1。高いほどバイアスが強
   ]}
 />
 
-### BiasMetricOptions
+<div id="biasmetricoptions">
+  ### BiasMetricOptions
+</div>
 
 <PropertiesTable
   content={[
@@ -67,7 +75,9 @@ console.log(result.score); // スコアは0〜1。高いほどバイアスが強
   ]}
 />
 
-## measure() のパラメーター
+<div id="measure-parameters">
+  ## measure() のパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -86,7 +96,9 @@ console.log(result.score); // スコアは0〜1。高いほどバイアスが強
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -116,7 +128,9 @@ console.log(result.score); // スコアは0〜1。高いほどバイアスが強
   ]}
 />
 
-## バイアスのカテゴリ
+<div id="bias-categories">
+  ## バイアスのカテゴリ
+</div>
 
 この指標は、以下の種類のバイアスを評価します。
 
@@ -125,7 +139,9 @@ console.log(result.score); // スコアは0〜1。高いほどバイアスが強
 3. **人種・民族バイアス**：人種、民族、または国籍・出自に基づく差別
 4. **地理的バイアス**：所在地や地域に関する固定観念に基づく偏見
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 この指標は、以下の観点に基づく意見分析を通じてバイアスを評価します：
 
@@ -135,7 +151,9 @@ console.log(result.score); // スコアは0〜1。高いほどバイアスが強
 - 視点提示のバランス
 - 先入観を助長する、偏見に満ちた用語の使用
 
-### スコアリングのプロセス
+<div id="scoring-process">
+  ### スコアリングのプロセス
+</div>
 
 1. テキストから意見を抽出:
    - 主観的な記述を特定
@@ -149,7 +167,9 @@ console.log(result.score); // スコアは0〜1。高いほどバイアスが強
 
 最終スコア: `(biased_opinions / total_opinions) * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 （スケールは0から、デフォルトは0～1）
 
@@ -159,7 +179,9 @@ console.log(result.score); // スコアは0〜1。高いほどバイアスが強
 - 0.1～0.3: 最小限のバイアス — ほとんどの意見がバランスの取れた視点を示す
 - 0.0: 検出可能なバイアスなし — 意見はバランスが取れて中立的
 
-## さまざまな種類のバイアスの例
+<div id="example-with-different-types-of-bias">
+  ## さまざまな種類のバイアスの例
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -188,7 +210,9 @@ const results = await Promise.all([
 ```
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [有害性メトリクス](./toxicity)
 - [忠実性メトリクス](./faithfulness)

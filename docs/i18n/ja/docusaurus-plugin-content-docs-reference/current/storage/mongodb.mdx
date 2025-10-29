@@ -3,18 +3,24 @@ title: "リファレンス: MongoDB ストレージ | ストレージ | Mastra �
 description: Mastra における MongoDB ストレージ実装のドキュメント。
 ---
 
-# MongoDB ストレージ
+<div id="mongodb-storage">
+  # MongoDB ストレージ
+</div>
 
 MongoDB ストレージ実装は、MongoDB データベースを用いて、ドキュメント保存とベクトル操作の両方をサポートするスケーラブルなストレージソリューションを提供します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/mongodb@latest
 ```
 
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 Docker での MongoDB Atlas Local か、Atlas Search を有効にした MongoDB Atlas Cloud インスタンスを用意してください。MongoDB 7.0 以上を推奨します。
 
@@ -28,7 +34,9 @@ const storage = new MongoDBStore({
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -55,7 +63,9 @@ const storage = new MongoDBStore({
   ]}
 />
 
-## コンストラクターの例
+<div id="constructor-examples">
+  ## コンストラクターの例
+</div>
 
 `MongoDBStore` は次の方法でインスタンス化できます：
 
@@ -82,9 +92,13 @@ const store2 = new MongoDBStore({
 ```
 
 
-## 追記事項
+<div id="additional-notes">
+  ## 追記事項
+</div>
 
-### コレクション管理
+<div id="collection-management">
+  ### コレクション管理
+</div>
 
 ストレージの実装は、コレクションの作成と管理を自動的に行います。以下のコレクションが作成されます:
 
@@ -96,11 +110,15 @@ const store2 = new MongoDBStore({
 - `mastra_scorers`: スコアリングおよび評価データを保存
 - `mastra_resources`: リソースのワーキングメモリーデータを保存
 
-## ベクター検索機能
+<div id="vector-search-capabilities">
+  ## ベクター検索機能
+</div>
 
 MongoDB のストレージには、AI アプリケーション向けの組み込みのベクター検索機能が備わっています。
 
-### ベクトル索引の作成
+<div id="vector-index-creation">
+  ### ベクトル索引の作成
+</div>
 
 ```typescript copy
 import { MongoDBVector } from "@mastra/mongodb";
@@ -118,7 +136,9 @@ await vectorStore.createIndex({
 ```
 
 
-### ベクトルの演算
+<div id="vector-operations">
+  ### ベクトルの演算
+</div>
 
 ```typescript copy
 // メタデータ付きでベクトルを保存

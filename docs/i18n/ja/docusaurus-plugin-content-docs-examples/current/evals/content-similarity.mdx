@@ -3,7 +3,9 @@ title: "例: コンテンツ類似度の評価 | Evals | Mastra ドキュメン�
 description: コンテンツ類似度メトリクスを用いて、コンテンツ間のテキスト類似度を評価する例。
 ---
 
-# コンテンツ類似度の評価
+<div id="content-similarity-evaluation">
+  # コンテンツ類似度の評価
+</div>
 
 :::note
 Scorers API は現在ベータ版です。改善に鋭意取り組んでおり、皆さまのフィードバックを歓迎します。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までお寄せください。
@@ -11,14 +13,18 @@ Scorers API は現在ベータ版です。改善に鋭意取り組んでおり�
 
 `ContentSimilarityMetric` を使うと、コンテンツの重なりに基づいて、レスポンスが参照とどの程度似ているかを評価できます。メトリクスは `query` と `response` を受け取り、スコアと、類似度の値を含む `info` オブジェクトを返します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/evals
 ```
 
 
-## 高い類似度の例
+<div id="high-similarity-example">
+  ## 高い類似度の例
+</div>
 
 この例では、応答は構造と意味の両面でクエリと非常に近いものになっています。時制や表現のわずかな違いは、全体的な類似度に大きく影響しません。
 
@@ -36,7 +42,9 @@ console.log(result);
 ```
 
 
-### 類似度が高い出力
+<div id="high-similarity-output">
+  ### 類似度が高い出力
+</div>
 
 この出力は、クエリの意図と内容をほぼそのまま保ち、表現上の変更がごくわずかであるため、高いスコアを得ます。
 
@@ -50,7 +58,9 @@ console.log(result);
 ```
 
 
-## 中程度の類似性の例
+<div id="moderate-similarity-example">
+  ## 中程度の類似性の例
+</div>
 
 この例では、応答はクエリと概念面での重なりはあるものの、構造や表現が異なります。主要な要素は残っている一方で、言い回しには中程度の変化が加えられています。
 
@@ -68,7 +78,9 @@ console.log(result);
 ```
 
 
-### 中程度の類似度の出力
+<div id="moderate-similarity-output">
+  ### 中程度の類似度の出力
+</div>
 
 この出力は、クエリの大意は捉えているものの、表現の違いが一定程度あるため全体の類似度が下がり、結果として中程度のスコアとなります。
 
@@ -82,7 +94,9 @@ console.log(result);
 ```
 
 
-## 類似度が低い例
+<div id="low-similarity-example">
+  ## 類似度が低い例
+</div>
 
 この例では、応答とクエリは文法構造こそ似ていますが、意味的には無関係です。共通する内容の重なりはほとんど、あるいはまったくありません。
 
@@ -100,7 +114,9 @@ console.log(result);
 ```
 
 
-### 類似性の低い出力
+<div id="low-similarity-output">
+  ### 類似性の低い出力
+</div>
 
 この出力は、応答がクエリの内容や意図と一致していないため、低い評価となります。
 
@@ -114,7 +130,9 @@ console.log(result);
 ```
 
 
-## メトリクスの設定
+<div id="metric-configuration">
+  ## メトリクスの設定
+</div>
 
 `ContentSimilarityMetric` のインスタンスはデフォルト設定で作成できます。追加の設定は不要です。
 
@@ -125,7 +143,9 @@ const metric = new ContentSimilarityMetric();
 > 設定オプションの全一覧は [ContentSimilarityMetric](/reference/evals/content-similarity) を参照してください。
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `ContentSimilarityMetric` は次の形式の結果を返します：
 
@@ -139,7 +159,9 @@ const metric = new ContentSimilarityMetric();
 ```
 
 
-### 類似度スコア
+<div id="similarity-score">
+  ### 類似度スコア
+</div>
 
 0〜1 の範囲の類似度スコア:
 
@@ -149,7 +171,9 @@ const metric = new ContentSimilarityMetric();
 - **0.1〜0.3**: 低い類似度 – 共通する要素や意味が少ない。
 - **0.0**: 類似なし – まったく異なるコンテンツ。
 
-### 類似度情報
+<div id="similarity-info">
+  ### 類似度情報
+</div>
 
 スコアの説明（以下の詳細を含む）:
 

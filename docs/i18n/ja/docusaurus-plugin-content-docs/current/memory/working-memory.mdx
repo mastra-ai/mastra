@@ -6,7 +6,9 @@ description: "Mastra でワーキングメモリを設定し、持続的なユ�
 import Youtube from "@site/src/components/YouTube-player";
 
 
-# ワーキングメモリ
+<div id="working-memory">
+  # ワーキングメモリ
+</div>
 
 [conversation history](/docs/memory/conversation-history) や [semantic recall](./semantic-recall) が会話内容の記憶を助ける一方で、ワーキングメモリはエージェントが複数のやり取りにわたってユーザーに関する情報を持続的に保持できるようにします。
 
@@ -21,7 +23,9 @@ import Youtube from "@site/src/components/YouTube-player";
 
 **重要:** スコープを切り替えると、エージェントは他方のスコープのメモリを参照できません。スレッドスコープのメモリはリソーススコープのメモリと完全に分離されています。
 
-## クイックスタート
+<div id="quick-start">
+  ## クイックスタート
+</div>
 
 作業メモリを備えたエージェントをセットアップする最小構成の例は次のとおりです：
 
@@ -46,17 +50,23 @@ const agent = new Agent({
 ```
 
 
-## 仕組み
+<div id="how-it-works">
+  ## 仕組み
+</div>
 
 Working memory は、エージェントが時間の経過に応じて更新し、常に必要となる情報を蓄積しておける Markdown テキストのブロックです。
 
 <YouTube id="UMy_JHLf1n8" />
 
-## メモリの永続スコープ
+<div id="memory-persistence-scopes">
+  ## メモリの永続スコープ
+</div>
 
 ワーキングメモリは2種類のスコープで動作し、会話をまたいだメモリの保持方法を選択できます。
 
-### リソーススコープのメモリ（デフォルト）
+<div id="resource-scoped-memory-default">
+  ### リソーススコープのメモリ（デフォルト）
+</div>
 
 デフォルトでは、同一ユーザー（resourceId）のすべての会話スレッド間でワーキングメモリが保持され、ユーザーのメモリが永続化されます。
 
@@ -86,7 +96,9 @@ const memory = new Memory({
 * 学習者の進捗を記録・追跡する教育アプリ
 
 
-### エージェントでの使い方
+<div id="usage-with-agents">
+  ### エージェントでの使い方
+</div>
 
 リソーススコープのメモリを使用する場合は、`resourceId` パラメータを必ず渡してください。
 
@@ -99,7 +111,9 @@ const response = await agent.generate("Hello!", {
 ```
 
 
-### スレッドスコープのメモリ
+<div id="thread-scoped-memory">
+  ### スレッドスコープのメモリ
+</div>
 
 スレッドスコープのメモリは、作業用メモリを各会話スレッドごとに分離します。各スレッドは、自身の独立したメモリを保持します。
 
@@ -127,17 +141,23 @@ const memory = new Memory({
 * 各スレッドに作業用メモリが必要だが、スレッド自体は短命で相互に関連しないワークフロー
 
 
-## ストレージアダプターのサポート
+<div id="storage-adapter-support">
+  ## ストレージアダプターのサポート
+</div>
 
 リソーススコープのワーキングメモリには、`mastra_resources` テーブルに対応した専用のストレージアダプターが必要です。
 
-### ✅ 対応ストレージアダプター
+<div id="supported-storage-adapters">
+  ### ✅ 対応ストレージアダプター
+</div>
 
 - **LibSQL** (`@mastra/libsql`)
 - **PostgreSQL** (`@mastra/pg`)
 - **Upstash** (`@mastra/upstash`)
 
-## カスタムテンプレート
+<div id="custom-templates">
+  ## カスタムテンプレート
+</div>
 
 テンプレートは、エージェントが作業メモリでどの情報を追跡・更新するかを指示します。テンプレートが指定されていない場合はデフォルトのテンプレートが使用されますが、通常はエージェントの特定のユースケースに合わせてカスタムテンプレートを定義し、最も関連性の高い情報を確実に記憶できるようにすることをお勧めします。
 
@@ -178,7 +198,9 @@ const memory = new Memory({
 ```
 
 
-## 効果的なテンプレート設計
+<div id="designing-effective-templates">
+  ## 効果的なテンプレート設計
+</div>
 
 よく構造化されたテンプレートは、エージェントが情報を解釈・更新しやすい状態を保ちます。テンプレートは、アシスタントに常に最新化してほしい簡潔なフォームとして扱いましょう。
 
@@ -190,7 +212,9 @@ const memory = new Memory({
   `- Name: [First name or nickname]` や `- Address (short):` のようなガイダンスを含めましょう。
 - **`instructions` に更新ルールを明記する。** テンプレートのどの部分をいつ埋めるか、またはクリアするかを、エージェントの `instructions` フィールドで直接指示できます。
 
-### 代替テンプレートスタイル
+<div id="alternative-template-styles">
+  ### 代替テンプレートスタイル
+</div>
 
 必要な項目が少ない場合は、より短い単一ブロックを使用します:
 
@@ -219,13 +243,17 @@ const paragraphMemory = new Memory({
 ```
 
 
-## 構造化ワーキングメモリ
+<div id="structured-working-memory">
+  ## 構造化ワーキングメモリ
+</div>
 
 ワーキングメモリは、Markdown テンプレートの代わりに構造化スキーマで定義することもできます。これにより、追跡すべきフィールドや型を [Zod](https://zod.dev/) のスキーマで正確に指定できます。スキーマを使用すると、エージェントはスキーマに準拠した JSON オブジェクトとしてワーキングメモリを表示・更新します。
 
 **重要:** `template` と `schema` のどちらか一方を指定し、両方を同時には指定しないでください。
 
-### 例：スキーマベースの作業記憶
+<div id="example-schema-based-working-memory">
+  ### 例：スキーマベースの作業記憶
+</div>
 
 ```typescript
 import { z } from "zod";
@@ -271,13 +299,17 @@ const memory = new Memory({
 ```
 
 
-## Template と Schema の選択
+<div id="choosing-between-template-and-schema">
+  ## Template と Schema の選択
+</div>
 
 - エージェントに、ユーザープロファイルやスクラッチパッドなどの自由形式テキストとしてメモリを保持させたい場合は、**template**（Markdown）を使用します。
 - 検証可能で、JSON としてプログラムからアクセスできる構造化された型安全なデータが必要な場合は、**schema** を使用します。
 - 同時に有効にできるのは一方のみです。`template` と `schema` を同時に設定することはサポートされていません。
 
-## 例: マルチステップのリテンション
+<div id="example-multi-step-retention">
+  ## 例: マルチステップのリテンション
+</div>
 
 以下は、短いユーザーとの会話の中で `User Profile` テンプレートがどのように更新されるかを簡略化して示したものです。
 
@@ -310,11 +342,15 @@ const memory = new Memory({
 期待どおりに作業メモリが更新されない場合は、エージェントの `instructions` 設定に、このテンプレートを「どのように」「いつ」使用するかに関するシステム指示を追加できます。
 
 
-## 初期ワーキングメモリの設定
+<div id="setting-initial-working-memory">
+  ## 初期ワーキングメモリの設定
+</div>
 
 エージェントは通常 `updateWorkingMemory` ツールでワーキングメモリを更新しますが、スレッドの作成や更新時に、プログラムで初期ワーキングメモリを設定することもできます。これは、ユーザーデータ（名前、好み、その他の情報など）を毎回のリクエストで渡さなくてもエージェントが利用できるようにあらかじめ組み込むのに役立ちます。
 
-### スレッドのメタデータでワーキングメモリを設定する
+<div id="setting-working-memory-via-thread-metadata">
+  ### スレッドのメタデータでワーキングメモリを設定する
+</div>
 
 スレッドを作成する際は、メタデータの `workingMemory` キーで初期ワーキングメモリを指定できます。
 
@@ -344,7 +380,9 @@ await agent.generate("私の血液型は何ですか?", {
 ```
 
 
-### 作業メモリをプログラムから更新する
+<div id="updating-working-memory-programmatically">
+  ### 作業メモリをプログラムから更新する
+</div>
 
 既存のスレッドの作業メモリも更新できます。
 
@@ -367,7 +405,9 @@ await memory.updateThread({
 ```
 
 
-### メモリを直接更新する
+<div id="direct-memory-update">
+  ### メモリを直接更新する
+</div>
 
 別の方法として、`updateWorkingMemory` メソッドを直接使用します。
 
@@ -380,7 +420,9 @@ await memory.updateWorkingMemory({
 ```
 
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
 - [テンプレートを用いたワーキングメモリ](/examples/memory/working-memory-template)
 - [スキーマを用いたワーキングメモリ](/examples/memory/working-memory-schema)

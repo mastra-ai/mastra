@@ -3,7 +3,9 @@ title: "リファレンス: Upstash Storage | Storage | Mastra ドキュメン�
 description: Mastra における Upstash Storage 実装のドキュメントです。
 ---
 
-# Upstash Storage
+<div id="upstash-storage">
+  # Upstash Storage
+</div>
 
 Upstash のストレージ実装は、Upstash の Redis 互換キー値ストアを用いた、サーバーレスに適したストレージソリューションを提供します。
 
@@ -13,14 +15,18 @@ Upstash のストレージ実装は、Upstash の Redis 互換キー値ストア
 
 :::
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/upstash@latest
 ```
 
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 ```typescript copy showLineNumbers
 import { UpstashStore } from "@mastra/upstash";
@@ -32,7 +38,9 @@ const storage = new UpstashStore({
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -58,9 +66,13 @@ const storage = new UpstashStore({
   ]}
 />
 
-## 追記
+<div id="additional-notes">
+  ## 追記
+</div>
 
-### キー構造
+<div id="key-structure">
+  ### キー構造
+</div>
 
 Upstash のストレージ実装はキー値型の構造を採用しています:
 
@@ -68,7 +80,9 @@ Upstash のストレージ実装はキー値型の構造を採用しています
 - メッセージ用キー: `{prefix}message:{messageId}`
 - メタデータ用キー: `{prefix}metadata:{entityId}`
 
-### サーバーレスの利点
+<div id="serverless-benefits">
+  ### サーバーレスの利点
+</div>
 
 Upstash Storage はサーバーレス環境でのデプロイに特に適しています：
 
@@ -77,7 +91,9 @@ Upstash Storage はサーバーレス環境でのデプロイに特に適して�
 - グローバルレプリケーションに対応
 - エッジ対応
 
-### データ永続化
+<div id="data-persistence">
+  ### データ永続化
+</div>
 
 Upstash は次を提供します:
 
@@ -85,7 +101,9 @@ Upstash は次を提供します:
 - 時点復旧（Point-in-Time Recovery）
 - リージョン間レプリケーションのオプション
 
-### パフォーマンスに関する考慮事項
+<div id="performance-considerations">
+  ### パフォーマンスに関する考慮事項
+</div>
 
 最適なパフォーマンスのために：
 

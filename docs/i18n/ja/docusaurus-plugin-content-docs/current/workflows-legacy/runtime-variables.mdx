@@ -5,11 +5,15 @@ sidebar_label: "実行時／動的変数"
 description: Mastra の依存性注入システムを使って、ワークフローやステップに実行時の設定を提供する方法を学びます。
 ---
 
-# ワークフロー実行時変数（レガシー）
+<div id="workflow-runtime-variables-legacy">
+  # ワークフロー実行時変数（レガシー）
+</div>
 
 Mastra には強力な依存性注入システムがあり、実行時変数を用いてワークフローやステップを構成できます。この機能は、ランタイムの設定に基づいて動作を調整できる、柔軟で再利用可能なワークフローを作成するうえで不可欠です。
 
-## 概要
+<div id="overview">
+  ## 概要
+</div>
 
 依存性注入システムを使用すると、次のことが可能になります:
 
@@ -18,7 +22,9 @@ Mastra には強力な依存性注入システムがあり、実行時変数を�
 3. 基盤となるコードを変更せずに、ワークフローの挙動を調整する
 4. 同一ワークフロー内の複数のステップ間で設定を共有する
 
-## 基本的な使い方
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
 
 ```typescript
 const myWorkflow = mastra.legacy_getWorkflow("myWorkflow");
@@ -40,7 +46,9 @@ await start({
 ```
 
 
-## REST API での使用
+<div id="using-with-rest-api">
+  ## REST API での使用
+</div>
 
 HTTP ヘッダーから乗数値を動的に設定する方法は次のとおりです。
 
@@ -80,7 +88,9 @@ export const mastra = new Mastra({
 ```
 
 
-## 変数を使ったステップの作成
+<div id="creating-steps-with-variables">
+  ## 変数を使ったステップの作成
+</div>
 
 ステップは runtimeContext の変数にアクセスでき、workflow の runtimeContext の型に従う必要があります。
 
@@ -129,7 +139,9 @@ const stepOne = new LegacyStep({
 ```
 
 
-## エラーハンドリング
+<div id="error-handling">
+  ## エラーハンドリング
+</div>
 
 ワークフローでランタイム変数を扱う際は、想定されるエラーへの対処が重要です:
 
@@ -151,7 +163,9 @@ if (typeof multiplier !== "number" || multiplier <= 0) {
 ```
 
 
-## ベストプラクティス
+<div id="best-practices">
+  ## ベストプラクティス
+</div>
 
 1. **型の安全性**: runtimeContext とステップの入出力には、常に適切な型を定義する
 2. **バリデーション**: 使用前に、すべての入力と runtimeContext の変数を検証する

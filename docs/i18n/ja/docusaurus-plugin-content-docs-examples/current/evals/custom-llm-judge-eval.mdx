@@ -3,7 +3,9 @@ title: "例: 審判としての LLM による評価 | Evals | Mastra ドキュ�
 description: カスタムの LLM ベースの評価指標を作成する例。
 ---
 
-# 判定者としての LLM 評価
+<div id="llm-as-a-judge-evaluation">
+  # 判定者としての LLM 評価
+</div>
 
 :::note
 Scorers API は現在ベータ版です。改善に鋭意取り組んでおり、皆さまからのフィードバックをお待ちしています。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までお寄せください。
@@ -11,14 +13,18 @@ Scorers API は現在ベータ版です。改善に鋭意取り組んでおり�
 
 この例では、世界の実在する国を判定するためのカスタム LLM ベースの評価指標を作成する方法を示します。指標は `query` と `response` を受け取り、応答がクエリにどれだけ正確に一致しているかに基づいてスコアと理由を返します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/evals
 ```
 
 
-## カスタム eval を作成する
+<div id="create-a-custom-eval">
+  ## カスタム eval を作成する
+</div>
 
 Mastra のカスタム eval では、構造化されたプロンプトと評価基準に基づき、LLM を用いて応答の品質を判定できます。これは次の4つの中核コンポーネントで構成されます:
 
@@ -94,15 +100,21 @@ export class WorldCountryMetric extends Metric {
 ```
 
 
-### 評価手順
+<div id="eval-instructions">
+  ### 評価手順
+</div>
 
 審査者の役割を定め、LLM が回答をどのように評価すべきかの基準と期待値を示します。
 
-### 評価プロンプト
+<div id="eval-prompt">
+  ### 評価プロンプト
+</div>
 
 `query` と `response` を使って一貫性のある評価用プロンプトを構築し、LLM が `score` と構造化された `info` オブジェクトを返すよう促します。
 
-### Eval judge
+<div id="eval-judge">
+  ### Eval judge
+</div>
 
 `MastraAgentJudge` を拡張して、プロンプトの生成とスコアリングを管理します。
 
@@ -110,11 +122,15 @@ export class WorldCountryMetric extends Metric {
 - `evaluate()` はプロンプトを LLM に送信し、Zod スキーマで出力を検証します。
 - 数値の `score` とカスタマイズ可能な `info` オブジェクトを含む `MetricResult` を返します。
 
-### 評価メトリック
+<div id="eval-metric">
+  ### 評価メトリック
+</div>
 
 Mastra の `Metric` クラスを拡張し、評価の主要なエントリポイントとして機能します。ジャッジを用いて `measure()` で結果を算出して返します。
 
-## 高度にカスタマイズされた例
+<div id="high-custom-example">
+  ## 高度にカスタマイズされた例
+</div>
 
 この例は、応答と評価基準の間に強い整合があることを示しています。評価指標は高得点を付与し、出力が期待に合致している理由を説明するための裏付けとなる詳細を含んでいます。
 
@@ -133,7 +149,9 @@ console.log(result);
 ```
 
 
-### カスタム出力（高評価）
+<div id="high-custom-output">
+  ### カスタム出力（高評価）
+</div>
 
 この出力は、回答内容がジャッジの求める要件に完全に合致しているため、高いスコアを獲得します。`info` オブジェクトは、そのスコアが付与された理由を理解するうえで有用な文脈を提供します。
 
@@ -149,7 +167,9 @@ console.log(result);
 ```
 
 
-## 部分的なカスタム例
+<div id="partial-custom-example">
+  ## 部分的なカスタム例
+</div>
 
 この例では、レスポンスに正しい要素と誤った要素が混在しています。メトリクスはそれを反映して中程度のスコアを返し、何が正しく、何が欠けていたのかを説明する詳細を提供します。
 
@@ -168,7 +188,9 @@ console.log(result);
 ```
 
 
-### 部分的なカスタム出力
+<div id="partial-custom-output">
+  ### 部分的なカスタム出力
+</div>
 
 このスコアは、レスポンスに基準を満たす有効な項目と満たさない無効な項目が混在しているため、部分的な成功を示しています。`info` フィールドには、一致した点と一致しなかった点の内訳が示されています。
 
@@ -184,7 +206,9 @@ console.log(result);
 ```
 
 
-## カスタムの低評価例
+<div id="low-custom-example">
+  ## カスタムの低評価例
+</div>
 
 この例では、応答が評価基準をまったく満たしていません。想定される要素が一つも含まれていないため、指標は低いスコアを返します。
 
@@ -203,7 +227,9 @@ console.log(result);
 ```
 
 
-### カスタム出力が低い
+<div id="low-custom-output">
+  ### カスタム出力が低い
+</div>
 
 スコアは0です。これは、応答に必要な要素がまったく含まれていないためです。`info` フィールドは結果の説明と、そうなった原因となる不足点の一覧を示します。
 
@@ -219,7 +245,9 @@ console.log(result);
 ```
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `WorldCountryMetric` は、次の形式の結果を返します。
 
@@ -235,7 +263,9 @@ console.log(result);
 ```
 
 
-### カスタムスコア
+<div id="custom-score">
+  ### カスタムスコア
+</div>
 
 0〜1のスコア:
 
@@ -245,7 +275,9 @@ console.log(result);
 - **0.1–0.3**: 応答の大半が誤り、または無関係な項目で占められている。
 - **0.0**: 評価基準に照らして有効な内容がまったく含まれていない。
 
-### カスタム情報
+<div id="custom-info">
+  ### カスタム情報
+</div>
 
 スコアの説明で、次の内容を含みます:
 

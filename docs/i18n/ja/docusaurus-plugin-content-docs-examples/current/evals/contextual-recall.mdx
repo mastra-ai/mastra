@@ -3,7 +3,9 @@ title: "例: 文脈リコール評価 | Evals | Mastra Docs"
 description: 文脈リコール指標を用いて、回答がどの程度文脈情報を取り入れているかを評価する例。
 ---
 
-# コンテキスト想起評価
+<div id="contextual-recall-evaluation">
+  # コンテキスト想起評価
+</div>
 
 :::note
 Scorers API は現在ベータ版です。改善に積極的に取り組んでおり、皆さまからのフィードバックを歓迎します。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までお寄せください。
@@ -11,14 +13,18 @@ Scorers API は現在ベータ版です。改善に積極的に取り組んで�
 
 `ContextualRecallMetric` を使用して、提供されたコンテキストの関連情報が応答にどれだけ適切に反映されているかを評価します。本メトリクスは `query` と `response` を受け取り、スコアと理由を含む `info` オブジェクトを返します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/evals
 ```
 
 
-## 高リコールの例
+<div id="high-recall-example">
+  ## 高リコールの例
+</div>
 
 この例では、応答にコンテキストの情報がすべて含まれています。各要素が正確に再現されて出力に反映されており、リコールスコアは満点になります。
 
@@ -44,7 +50,9 @@ console.log(result);
 ```
 
 
-### 高リコールの出力
+<div id="high-recall-output">
+  ### 高リコールの出力
+</div>
 
 回答にすべてのコンテキスト要素が含まれているため、この出力は満点となります。コンテキストで言及された各機能が正確に想起・統合されており、欠落や余分な情報はありません。
 
@@ -58,7 +66,9 @@ console.log(result);
 ```
 
 
-## 混在リコールの例
+<div id="mixed-recall-example">
+  ## 混在リコールの例
+</div>
 
 この例では、応答にいくつかの文脈要素が含まれている一方で、無関係な内容も混在しています。不要な情報が含まれることで、全体のリコールスコアが下がります。
 
@@ -85,7 +95,9 @@ console.log(result);
 ```
 
 
-### 混在リコールの出力
+<div id="mixed-recall-output">
+  ### 混在リコールの出力
+</div>
 
 この出力は、中程度のスコアです。関連するコンテキストの記述が1つ含まれている一方で、元のコンテキストに支えられていない無関係な内容も含まれているためです。
 
@@ -99,7 +111,9 @@ console.log(result);
 ```
 
 
-## リコールが低い例
+<div id="low-recall-example">
+  ## リコールが低い例
+</div>
 
 この例では、応答に関連する文脈がほとんど、もしくはまったく含まれていません。応答の情報の大半が根拠に欠けているため、リコールスコアが低くなります。
 
@@ -125,7 +139,9 @@ console.log(result);
 ```
 
 
-### リコールの低い出力
+<div id="low-recall-output">
+  ### リコールの低い出力
+</div>
 
 この出力は、コンテキストにない情報を含み、提供された詳細を無視しているため、低いスコアとなります。どのコンテキスト項目も回答に反映されていません。
 
@@ -139,7 +155,9 @@ console.log(result);
 ```
 
 
-## メトリクスの設定
+<div id="metric-configuration">
+  ## メトリクスの設定
+</div>
 
 応答に関連する背景情報を表す `context` 配列を指定して、`ContextualRecallMetric` のインスタンスを作成できます。スコアの範囲を定義する `scale` などの任意パラメータも設定できます。
 
@@ -153,7 +171,9 @@ const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
 > 設定オプションの一覧は [ContextualRecallMetric](/reference/evals/contextual-recall) を参照してください。
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `ContextualRecallMetric` は次の形式の結果を返します:
 
@@ -167,7 +187,9 @@ const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
 ```
 
 
-### リコールスコア
+<div id="recall-score">
+  ### リコールスコア
+</div>
 
 リコールスコアは 0 から 1 の範囲です:
 
@@ -177,7 +199,9 @@ const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
 - **0.1–0.3**: 低い再現 – わずかなコンテキスト情報のみ使用。
 - **0.0**: 再現なし – コンテキスト情報は未使用。
 
-### リコール情報
+<div id="recall-info">
+  ### リコール情報
+</div>
 
 スコアの説明（以下の詳細を含む）:
 

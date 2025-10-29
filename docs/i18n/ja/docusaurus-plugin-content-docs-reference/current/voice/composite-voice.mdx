@@ -3,13 +3,17 @@ title: "リファレンス: CompositeVoice | Voice | Mastra ドキュメント"
 description: "複数の音声プロバイダーを組み合わせて、柔軟な音声合成および音声認識を実現する CompositeVoice クラスのドキュメント。"
 ---
 
-# CompositeVoice
+<div id="compositevoice">
+  # CompositeVoice
+</div>
 
 CompositeVoice クラスは、テキスト読み上げ（text-to-speech）と音声認識（speech-to-text）の各処理で、異なる音声プロバイダーを組み合わせて利用できるようにします。これは、処理ごとに最適なプロバイダーを使い分けたい場合に特に有用です。たとえば、speech-to-text には OpenAI を、text-to-speech には PlayAI を用いる、といった構成が可能です。
 
 CompositeVoice は、柔軟な音声機能を提供するために Agent クラス内で内部的に使用されています。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { CompositeVoice } from "@mastra/core/voice";
@@ -34,7 +38,9 @@ const audio = await voice.speak("こんにちは、世界！");
 ```
 
 
-## コンストラクターのパラメータ
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -59,9 +65,13 @@ const audio = await voice.speak("こんにちは、世界！");
   ]}
 />
 
-## 方法
+<div id="methods">
+  ## 方法
+</div>
 
-### speak()
+<div id="speak">
+  ### speak()
+</div>
 
 設定済みの音声合成プロバイダーを使って、テキストを音声に変換します。
 
@@ -88,7 +98,9 @@ Notes:
 - options は設定済みの音声合成プロバイダーにそのまま渡されます
 - 音声データのストリームを返します
 
-### listen()
+<div id="listen">
+  ### listen()
+</div>
 
 設定済みのリスニングプロバイダーを使用して音声をテキストに変換します。
 
@@ -115,7 +127,9 @@ Notes:
 - オプションは設定済みのリスニングプロバイダーにそのまま渡されます
 - プロバイダーによっては、文字列または音声認識結果（文字起こし）をストリームで返します
 
-### getSpeakers()
+<div id="getspeakers">
+  ### getSpeakers()
+</div>
 
 音声プロバイダーから利用可能なボイスの一覧を返します。各ノードには次が含まれます:
 

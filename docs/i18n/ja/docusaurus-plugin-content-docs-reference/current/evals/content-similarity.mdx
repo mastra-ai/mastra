@@ -3,7 +3,9 @@ title: "リファレンス: ContentSimilarityMetric | Evals | Mastra ドキュ�
 description: Mastra における Content Similarity Metric のドキュメント。文字列間のテキストの類似度を測定し、一致度スコアを提供します。
 ---
 
-# ContentSimilarityMetric
+<div id="contentsimilaritymetric">
+  # ContentSimilarityMetric
+</div>
 
 :::info Scorers
 このドキュメントは旧式の evals API を参照しています。最新のスコアラー機能については、[Scorers](/docs/scorers/overview) をご覧ください。
@@ -11,7 +13,9 @@ description: Mastra における Content Similarity Metric のドキュメント
 
 `ContentSimilarityMetric` クラスは、2 つの文字列のテキスト類似度を測定し、どの程度一致しているかを示すスコアを返します。大文字・小文字の区別や空白の扱いに関する設定可能なオプションをサポートしています。
 
-## 基本的な使い方
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
 
 ```typescript
 import { ContentSimilarityMetric } from "@mastra/evals/nlp";
@@ -28,7 +32,9 @@ console.log(result.info); // 類似度に関する詳細なメトリクス
 ```
 
 
-## コンストラクターの引数
+<div id="constructor-parameters">
+  ## コンストラクターの引数
+</div>
 
 <PropertiesTable
   content={[
@@ -42,7 +48,9 @@ console.log(result.info); // 類似度に関する詳細なメトリクス
   ]}
 />
 
-### ContentSimilarityOptions
+<div id="contentsimilarityoptions">
+  ### ContentSimilarityOptions
+</div>
 
 <PropertiesTable
   content={[
@@ -63,7 +71,9 @@ console.log(result.info); // 類似度に関する詳細なメトリクス
   ]}
 />
 
-## measure() のパラメーター
+<div id="measure-parameters">
+  ## measure() のパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -82,7 +92,9 @@ console.log(result.info); // 類似度に関する詳細なメトリクス
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -112,11 +124,15 @@ console.log(result.info); // 類似度に関する詳細なメトリクス
   ]}
 />
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 この指標は、文字単位のマッチングと設定可能なテキスト正規化により、テキストの類似性を評価します。
 
-### スコアリングのプロセス
+<div id="scoring-process">
+  ### スコアリングのプロセス
+</div>
 
 1. テキストの正規化:
    - 大文字・小文字の統一（ignoreCase: true の場合）
@@ -130,7 +146,9 @@ console.log(result.info); // 類似度に関する詳細なメトリクス
 
 最終スコア: `similarity_value * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 （スケールは0から。デフォルトは0〜1）
 
@@ -140,7 +158,9 @@ console.log(result.info); // 類似度に関する詳細なメトリクス
 - 0.1〜0.3: 低い類似度 - 一致パターンが少ない
 - 0.0: 類似なし - まったく異なるテキスト
 
-## さまざまなオプションを使った例
+<div id="example-with-different-options">
+  ## さまざまなオプションを使った例
+</div>
 
 ```typescript
 import { ContentSimilarityMetric } from "@mastra/evals/nlp";
@@ -178,7 +198,9 @@ const result2 = await strictWhitespaceMetric.measure(
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [完全性メトリクス](./completeness)
 - [テキスト差分メトリクス](./textual-difference)

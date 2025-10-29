@@ -3,7 +3,9 @@ title: "メモリ概要 | メモリ | Mastra ドキュメント"
 description: "Mastra のメモリシステムが、作業メモリ、会話履歴、セマンティックリコールを用いてどのように機能するかを学びます。"
 ---
 
-# メモリの概要
+<div id="memory-overview">
+  # メモリの概要
+</div>
 
 Mastra のメモリは、関連情報を言語モデルのコンテキストウィンドウに要約して取り込むことで、エージェントが会話全体を通じてコンテキストを管理できるようにします。
 
@@ -11,7 +13,9 @@ Mastra は 3 種類のメモリをサポートします：ワーキングメモ�
 
 Mastra のメモリシステムは、[storage providers](#memory-storage-adapters) を使用して、アプリケーションの再起動をまたいで会話スレッド、メッセージ、ワーキングメモリを永続化します。
 
-## はじめに
+<div id="getting-started">
+  ## はじめに
+</div>
 
 まず、必要な依存関係をインストールします。
 
@@ -48,7 +52,9 @@ export const testAgent = new Agent({
 そのメモリインスタンスには、ワーキングメモリ、会話履歴、セマンティックリコール用の設定オプションがあります。
 
 
-## メモリの種類
+<div id="different-types-of-memory">
+  ## メモリの種類
+</div>
 
 Mastra は3種類のメモリをサポートします：ワーキングメモリ、会話履歴、セマンティックリコール。
 
@@ -60,11 +66,15 @@ Mastra は3種類のメモリをサポートします：ワーキングメモリ
 
 Mastra はこれらすべてのメモリタイプを単一のコンテキストウィンドウに統合します。合計がモデルのトークン上限を超える場合は、[メモリプロセッサ](./memory-processors) を使って、モデルに送信する前にメッセージを要約・削減またはフィルタリングしてください。
 
-## スレッドとリソースによるメモリのスコープ設定
+<div id="scoping-memory-with-threads-and-resources">
+  ## スレッドとリソースによるメモリのスコープ設定
+</div>
 
 すべてのメモリタイプはデフォルトで[リソーススコープ](./working-memory#resource-scoped-memory-default)であり、同一ユーザーまたはエンティティの全会話にわたって保持されます。[スレッドスコープ](./working-memory#thread-scoped-memory)の設定にすると、メモリは単一の会話スレッド内に限定されます。
 
-## メモリストレージアダプター
+<div id="memory-storage-adapters">
+  ## メモリストレージアダプター
+</div>
 
 会話間で情報を永続化して再利用するには、メモリにストレージアダプターが必要です。
 
@@ -72,11 +82,15 @@ Mastra はこれらすべてのメモリタイプを単一のコンテキスト�
 
 LibSQL はファイルベースまたはインメモリで動作するため導入が容易で、プレイグラウンドとの相性も良いため、デフォルトで採用しています。
 
-## 専用ストレージ
+<div id="dedicated-storage">
+  ## 専用ストレージ
+</div>
 
 エージェントごとに専用のストレージを設定でき、タスクや会話、記憶した情報をエージェント間で分離して保持できます。
 
-### エージェントにストレージを追加する
+<div id="adding-storage-to-agents">
+  ### エージェントにストレージを追加する
+</div>
 
 エージェントに専用ストレージを割り当てるには、必要な依存関係をインストールしてインポートし、`Memory` コンストラクターに `storage` インスタンスを渡します。
 
@@ -98,7 +112,9 @@ export const testAgent = new Agent({
 ```
 
 
-## 取得されたメッセージの表示
+<div id="viewing-retrieved-messages">
+  ## 取得されたメッセージの表示
+</div>
 
 Mastra のデプロイでトレーシングが有効になっており、メモリが `lastMessages` や/または `semanticRecall` で構成されている場合、エージェントのトレース出力には、コンテキスト用に取得されたすべてのメッセージ—直近の会話履歴と、semantic recall によって想起されたメッセージ—が表示されます。
 
@@ -106,13 +122,17 @@ Mastra のデプロイでトレーシングが有効になっており、メモ�
 
 トレーシングの有効化と設定の詳細については、[AI Tracing](../observability/ai-tracing/overview) を参照してください。
 
-## LibSQL を使ったローカル開発
+<div id="local-development-with-libsql">
+  ## LibSQL を使ったローカル開発
+</div>
 
 `LibSQLStore` を使ったローカル開発では、VS Code の [SQLite Viewer](https://marketplace.visualstudio.com/items?itemName=qwtel.sqlite-viewer) 拡張機能で保存されたメモリを確認できます。
 
 ![SQLite Viewer](/img/memory/memory-sqlite-viewer.jpg)
 
-## 次のステップ
+<div id="next-steps">
+  ## 次のステップ
+</div>
 
 コア概念を理解したら、[semantic recall](./semantic-recall) に進み、Mastra エージェントに RAG メモリを追加する方法を学びましょう。
 

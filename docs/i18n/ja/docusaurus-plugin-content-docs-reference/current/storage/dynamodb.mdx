@@ -3,11 +3,15 @@ title: "リファレンス: DynamoDB ストレージ | Storage | Mastra ドキ�
 description: "Mastra における DynamoDB ストレージ実装のドキュメント。ElectroDB を使用したシングルテーブル設計を採用。"
 ---
 
-# DynamoDB ストレージ
+<div id="dynamodb-storage">
+  # DynamoDB ストレージ
+</div>
 
 DynamoDB のストレージ実装は、[ElectroDB](https://electrodb.dev/) を用いたシングルテーブル設計パターンを活用し、Mastra 向けにスケーラブルで高性能な NoSQL データベースソリューションを提供します。
 
-## 機能
+<div id="features">
+  ## 機能
+</div>
 
 - Mastraのあらゆるストレージ要件に対応する効率的な単一テーブル設計
 - 型安全なDynamoDBアクセスを実現するElectroDBベース
@@ -16,7 +20,9 @@ DynamoDB のストレージ実装は、[ElectroDB](https://electrodb.dev/) を�
 - Thread、Message、Trace、Eval、Workflowの各データを保存
 - サーバーレス環境向けに最適化
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/dynamodb@latest
@@ -27,15 +33,21 @@ yarn add @mastra/dynamodb@latest
 ```
 
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 このパッケージを使用する前に、プライマリキーとグローバルセカンダリインデックス（GSI）を含む特定の構成を備えた DynamoDB テーブルを作成する必要があります。このアダプターは、DynamoDB テーブルおよびその GSI が外部でプロビジョニングされていることを前提とします。
 
 AWS CloudFormation または AWS CDK を使用してテーブルをセットアップするための詳細な手順は、[TABLE_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md) に記載されています。先に進む前に、その手順どおりにテーブルが構成されていることを確認してください。
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
-### 基本的な使い方
+<div id="basic-usage">
+  ### 基本的な使い方
+</div>
 
 ```typescript copy showLineNumbers
 import { Memory } from "@mastra/memory";
@@ -62,7 +74,9 @@ const memory = new Memory({
 ```
 
 
-### DynamoDB Local を使ったローカル開発
+<div id="local-development-with-dynamodb-local">
+  ### DynamoDB Local を使ったローカル開発
+</div>
 
 ローカル開発には、[DynamoDB Local](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html) を使用できます。
 
@@ -92,7 +106,9 @@ const memory = new Memory({
 
     ローカルの DynamoDB インスタンスでも、テーブルおよび GSI は作成する必要があります。たとえば、ローカルエンドポイントを指定した AWS CLI を使用します。
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -132,7 +148,9 @@ const memory = new Memory({
   ]}
 />
 
-## AWS IAM 権限
+<div id="aws-iam-permissions">
+  ## AWS IAM 権限
+</div>
 
 コードを実行する IAM ロールまたはユーザーには、指定した DynamoDB テーブルとそのインデックスに対して操作するための適切な権限が必要です。以下はサンプルのポリシーです。`${YOUR_TABLE_NAME}` を実際のテーブル名に、`${YOUR_AWS_REGION}` と `${YOUR_AWS_ACCOUNT_ID}` を適切な値に置き換えてください。
 
@@ -163,7 +181,9 @@ const memory = new Memory({
 ```
 
 
-## 重要な考慮事項
+<div id="key-considerations">
+  ## 重要な考慮事項
+</div>
 
 アーキテクチャの詳細に入る前に、DynamoDB ストレージアダプターを扱う際は次のポイントを押さえてください。
 
@@ -172,7 +192,9 @@ const memory = new Memory({
 - **GSI の理解:** `TABLE_SETUP.md` に記載の GSI 構成を理解しておくことは、データ取得や想定されるクエリパターンを把握するうえで重要です。
 - **ElectroDB:** このアダプターは DynamoDB とのやり取りに ElectroDB を用い、生の DynamoDB 操作に対する抽象化レイヤーと型安全性を提供します。
 
-## アーキテクチャ上のアプローチ
+<div id="architectural-approach">
+  ## アーキテクチャ上のアプローチ
+</div>
 
 このストレージアダプターは、DynamoDB で一般的かつ推奨されるアプローチである [ElectroDB](https://electrodb.dev/) を活用した**シングルテーブルデザインパターン**を採用しています。これは、通常は複数テーブルを用い、各テーブルを特定のエンティティ（threads、messages など）に割り当てるリレーショナルデータベース用アダプター（`@mastra/pg` や `@mastra/libsql` など）とはアーキテクチャが異なります。
 
@@ -182,13 +204,17 @@ const memory = new Memory({
 - **テーブルの外部管理:** コードからテーブル作成用のヘルパー関数を提供するアダプターとは異なり、このアダプターは、使用前に**DynamoDB テーブルと関連する Global Secondary Index（GSI）が外部でプロビジョニングされていることを前提**とします。AWS CloudFormation や CDK などのツールを用いた詳細な手順については [TABLE_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md) を参照してください。アダプターは既存のテーブル構造とのやり取りのみに専念します。
 - **インターフェースによる一貫性:** 基盤となるストレージモデルは異なりますが、このアダプターは他のアダプターと同じ `MastraStorage` インターフェースに準拠しており、Mastra の `Memory` コンポーネント内で相互に置き換えて利用できます。
 
-### 単一テーブルにおける Mastra データ
+<div id="mastra-data-in-the-single-table">
+  ### 単一テーブルにおける Mastra データ
+</div>
 
 単一の DynamoDB テーブル内では、Threads、Messages、Traces、Evals、Workflows などの異なる Mastra のデータエンティティを ElectroDB によって管理・区別します。ElectroDB は各エンティティタイプごとに、固有のキー構造と属性を含むモデルを定義します。これにより、アダプターは同一テーブル内で多様なデータ型を効率的に保存・取得できます。
 
 たとえば、`Thread` アイテムは `THREAD#<threadId>` のようなプライマリキーを持ち、同じスレッドに属する `Message` アイテムはパーティションキーに `THREAD#<threadId>`、ソートキーに `MESSAGE#<messageId>` を用いる場合があります。`TABLE_SETUP.md` に詳述されている Global Secondary Indexes (GSI) は、スレッド内のすべてのメッセージ取得や特定のワークフローに関連するトレースのクエリなど、これらのエンティティ間で共通するアクセスパターンを支えるよう戦略的に設計されています。
 
-### シングルテーブル設計の利点
+<div id="advantages-of-single-table-design">
+  ### シングルテーブル設計の利点
+</div>
 
 この実装では、ElectroDB を用いたシングルテーブル設計パターンを採用しており、DynamoDB の文脈で次の利点があります:
 

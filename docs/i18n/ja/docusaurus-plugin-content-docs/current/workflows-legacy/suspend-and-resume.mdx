@@ -5,7 +5,9 @@ sidebar_label: "一時停止と再開"
 description: "Mastra のレガシー版ワークフローでは、外部からの入力やリソースを待つ間、実行を一時停止し、再開できます。"
 ---
 
-# ワークフローにおけるサスペンドと再開（レガシー）
+<div id="suspend-and-resume-in-workflows-legacy">
+  # ワークフローにおけるサスペンドと再開（レガシー）
+</div>
 
 複雑なワークフローは、外部からの入力やリソースを待つ間、実行を一時停止する必要があることがよくあります。
 
@@ -14,7 +16,9 @@ Mastra のサスペンドと再開機能を使うと、任意のステップで�
 
 ワークフローのスナップショットをストレージ（デフォルトでは LibSQL）に保存することで、セッション、デプロイ、サーバー再起動をまたいでもワークフローの状態が恒久的に保持されます。こうした永続性は、外部の入力やリソースを待っている間に、数分、数時間、あるいは数日にわたってサスペンドされたままになり得るワークフローにとって極めて重要です。
 
-## Suspend/Resume を使うタイミング
+<div id="when-to-use-suspendresume">
+  ## Suspend/Resume を使うタイミング
+</div>
 
 ワークフローを一時停止する一般的なケースには次のようなものがあります：
 
@@ -24,7 +28,9 @@ Mastra のサスペンドと再開機能を使うと、任意のステップで�
 - コストの高い処理に対してレート制限（スロットリング）を適用する
 - 外部トリガーを伴うイベント駆動型のプロセスを扱う
 
-## 基本的なサスペンドの例
+<div id="basic-suspend-example">
+  ## 基本的なサスペンドの例
+</div>
 
 値が低すぎるとサスペンドし、より高い値が与えられると再開する、シンプルなワークフローの例です。
 
@@ -53,11 +59,15 @@ const stepTwo = new LegacyStep({
 ```
 
 
-## Async/Await ベースのフロー
+<div id="asyncawait-based-flow">
+  ## Async/Await ベースのフロー
+</div>
 
 Mastra のサスペンド／リジューム機構は、サスペンドポイントを含む複雑なワークフローを直感的に実装できる async/await パターンに基づいています。コードの構造は実行フローを自然に反映します。
 
-### 仕組み
+<div id="how-it-works">
+  ### 仕組み
+</div>
 
 1. ステップの実行関数は、引数として `suspend` 関数を受け取ります
 2. `await suspend()` を呼び出すと、その時点でワークフローが一時停止します
@@ -65,7 +75,9 @@ Mastra のサスペンド／リジューム機構は、サスペンドポイン�
 4. 後で、適切な引数を指定して `workflow.resume()` を呼び出すことで、ワークフローを再開できます
 5. 実行は `suspend()` の呼び出し直後の位置から再開されます
 
-### 複数のサスペンドポイントがある例
+<div id="example-with-multiple-suspension-points">
+  ### 複数のサスペンドポイントがある例
+</div>
 
 複数のステップでサスペンド可能なワークフローの例を次に示します：
 
@@ -120,7 +132,9 @@ export const mastra = new Mastra({
 ```
 
 
-### ワークフローの開始と再開
+<div id="starting-and-resuming-the-workflow">
+  ### ワークフローの開始と再開
+</div>
 
 ```typescript
 // ワークフローを取得してランを作成する
@@ -165,11 +179,15 @@ if (improveResponseStepResult?.status === "suspended") {
 ```
 
 
-## イベントベースの一時停止と再開
+<div id="event-based-suspension-and-resumption">
+  ## イベントベースの一時停止と再開
+</div>
 
 手動でステップを一時停止する方法に加え、Mastra は `afterEvent` メソッドによってイベントベースの一時停止を提供します。これにより、ワークフローは自動的に一時停止し、処理を続行する前に特定のイベントの発生を待機できます。
 
-### afterEvent と resumeWithEvent の使用
+<div id="using-afterevent-and-resumewithevent">
+  ### afterEvent と resumeWithEvent の使用
+</div>
 
 `afterEvent` メソッドは、特定のイベントが発生するまで待機するワークフロー内のサスペンドポイントを自動的に作成します。イベントが発生したら、`resumeWithEvent` を使って、そのイベントのデータを渡しつつワークフローを再開できます。
 
@@ -179,7 +197,9 @@ if (improveResponseStepResult?.status === "suspended") {
 2. `afterEvent` を使って、そのイベントを待機するサスペンドポイントを作成する
 3. イベントが発生したら、イベント名とデータを指定して `resumeWithEvent` を呼び出す
 
-### 例: イベントベースのワークフロー
+<div id="example-event-based-workflow">
+  ### 例: イベントベースのワークフロー
+</div>
 
 ```typescript
 // ステップを定義
@@ -228,7 +248,9 @@ approvalWorkflow
 ```
 
 
-### イベント駆動型ワークフローの実行
+<div id="running-an-event-based-workflow">
+  ### イベント駆動型ワークフローの実行
+</div>
 
 ```typescript
 // ワークフローを取得
@@ -264,7 +286,9 @@ console.log("イベントデータでワークフローを再開しました:", 
 ```
 
 
-### イベントベースのワークフローに関する重要ポイント
+<div id="key-points-about-event-based-workflows">
+  ### イベントベースのワークフローに関する重要ポイント
+</div>
 
 - `suspend()` 関数は、一時停止時の状態に保存されるペイロードオブジェクトを任意で受け取れる
 - `await suspend()` の後に続くコードは、そのステップが再開されるまで実行されない
@@ -280,11 +304,15 @@ console.log("イベントデータでワークフローを再開しました:", 
 - イベントデータは、そのイベント用に定義されたスキーマで検証される
 - イベントデータはコンテキスト上で `inputData.resumedEvent` として参照できる
 
-## サスペンドと再開のためのストレージ
+<div id="storage-for-suspend-and-resume">
+  ## サスペンドと再開のためのストレージ
+</div>
 
 ワークフローが `await suspend()` を使用してサスペンドされると、Mastra はワークフローの状態全体を自動的にストレージへ永続化します。これは、長期間サスペンドされる可能性のあるワークフローに不可欠であり、アプリケーションの再起動やサーバーインスタンス間をまたいでも状態が保持されることを保証します。
 
-### 既定のストレージ: LibSQL
+<div id="default-storage-libsql">
+  ### 既定のストレージ: LibSQL
+</div>
 
 Mastra は既定で、ストレージエンジンとして LibSQL を使用します。
 
@@ -309,9 +337,13 @@ LibSQL のストレージは、次のモードで構成できます:
 * リモートデータベース（本番用）: `libsql://your-database.turso.io` のような URL
 
 
-### 代替のストレージオプション
+<div id="alternative-storage-options">
+  ### 代替のストレージオプション
+</div>
 
-#### Upstash（Redis 互換）
+<div id="upstash-redis-compatible">
+  #### Upstash（Redis 互換）
+</div>
 
 Redis を採用するサーバーレスアプリケーションや環境向け：
 
@@ -332,14 +364,18 @@ const mastra = new Mastra({
 ```
 
 
-### ストレージに関する考慮事項
+<div id="storage-considerations">
+  ### ストレージに関する考慮事項
+</div>
 
 - すべてのストレージオプションは、サスペンドと再開の機能を同等にサポートします
 - サスペンド時にワークフローの状態は自動的にシリアライズされ、保存されます
 - ストレージでサスペンド／再開を機能させるための追加設定は不要です
 - インフラ、スケーリング要件、既存のテクノロジースタックに合わせてストレージオプションを選択してください
 
-## 監視と再開
+<div id="watching-and-resuming">
+  ## 監視と再開
+</div>
 
 サスペンドされたワークフローを扱うには、各実行のワークフロー状態を監視するには `watch` メソッドを、処理を再開するには `resume` を使用します。
 
@@ -369,7 +405,9 @@ await start({ triggerData: { inputValue: 45 } });
 ```
 
 
-### イベント駆動型ワークフローの監視と再開
+<div id="watching-and-resuming-event-based-workflows">
+  ### イベント駆動型ワークフローの監視と再開
+</div>
 
 イベント駆動型のワークフローでも、同じ監視パターンを使用できます。
 
@@ -399,7 +437,9 @@ await start({ triggerData: { requestId: "auto-123" } });
 ```
 
 
-## さらに読む
+<div id="further-reading">
+  ## さらに読む
+</div>
 
 suspend と resume の内部動作をより深く理解するには:
 
@@ -408,7 +448,9 @@ suspend と resume の内部動作をより深く理解するには:
 - [制御フローガイド](./control-flow) - 高度なワークフロー制御パターン
 - [イベント駆動型ワークフロー](/reference/legacyWorkflows/events) - イベントベースのワークフローに関する詳細リファレンス
 
-## 関連リソース
+<div id="related-resources">
+  ## 関連リソース
+</div>
 
 - 完成した動作例は「[Suspend and Resume の例](/examples/workflows_legacy/suspend-and-resume)」をご覧ください
 - suspend/resume の API の詳細は「[Step Class リファレンス](/reference/legacyWorkflows/step-class)」を参照してください

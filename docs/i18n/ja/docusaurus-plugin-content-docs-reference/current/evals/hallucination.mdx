@@ -3,7 +3,9 @@ title: "リファレンス: HallucinationMetric | Evals | Mastra ドキュメン
 description: Mastra の Hallucination Metric に関するドキュメント。提供されたコンテキストとの矛盾を検出することで、LLM の出力が事実に即しているかを評価します。
 ---
 
-# HallucinationMetric
+<div id="hallucinationmetric">
+  # HallucinationMetric
+</div>
 
 :::info Scorers
 このドキュメントはレガシーの evals API を参照しています。最新のスコアラー機能については、[Scorers](/docs/scorers/overview) をご覧ください。
@@ -11,7 +13,9 @@ description: Mastra の Hallucination Metric に関するドキュメント。�
 
 `HallucinationMetric` は、提供されたコンテキストとモデル出力を比較し、LLM が事実に基づく正確な情報を生成しているかを評価します。この指標は、コンテキストと出力の間に存在する明確な矛盾を特定することで、ハルシネーションを測定します。
 
-## 基本的な使い方
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -46,7 +50,9 @@ console.log(result.info.reason); // スコアの根拠
 ```
 
 
-## コンストラクターのパラメータ
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -65,7 +71,9 @@ console.log(result.info.reason); // スコアの根拠
   ]}
 />
 
-### HallucinationMetricOptions
+<div id="hallucinationmetricoptions">
+  ### HallucinationMetricOptions
+</div>
 
 <PropertiesTable
   content={[
@@ -85,7 +93,9 @@ console.log(result.info.reason); // スコアの根拠
   ]}
 />
 
-## measure() のパラメータ
+<div id="measure-parameters">
+  ## measure() のパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -104,7 +114,9 @@ console.log(result.info.reason); // スコアの根拠
   ]}
 />
 
-## 返り値
+<div id="returns">
+  ## 返り値
+</div>
 
 <PropertiesTable
   content={[
@@ -134,11 +146,15 @@ console.log(result.info.reason); // スコアの根拠
   ]}
 />
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 このメトリクスは、矛盾の検出と根拠のない主張の分析を通じて、ハルシネーションを評価します。
 
-### スコアリングプロセス
+<div id="scoring-process">
+  ### スコアリングプロセス
+</div>
 
 1. 事実内容を分析:
    - 文脈から記述（ステートメント）を抽出
@@ -159,7 +175,9 @@ console.log(result.info.reason); // スコアの根拠
 
 最終スコア: `(hallucinated_statements / total_statements) * scale`
 
-### 重要な留意事項
+<div id="important-considerations">
+  ### 重要な留意事項
+</div>
 
 - 文脈に存在しない主張はハルシネーションとして扱う
 - 主観的な主張は、明示的な裏付けがない限りハルシネーションとみなす
@@ -171,7 +189,9 @@ console.log(result.info.reason); // スコアの根拠
   - 文脈に基づく近似
   - 明示的な精度の指示
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 （0 からのスケール、既定は 0〜1）
 
@@ -183,7 +203,9 @@ console.log(result.info.reason); // スコアの根拠
 
 **注:** スコアはハルシネーションの度合いを表します。スコアが低いほど、提示されたコンテキストとの事実整合性が高いことを示します
 
-## 分析付きのサンプル
+<div id="example-with-analysis">
+  ## 分析付きのサンプル
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -219,7 +241,9 @@ const result = await metric.measure({
 ```
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [忠実度メトリクス](./faithfulness)
 - [回答関連性メトリクス](./answer-relevancy)

@@ -3,18 +3,24 @@ title: "リファレンス: Cloudflare Storage | Storage | Mastra ドキュメ�
 description: Mastra における Cloudflare KV ストレージ実装のドキュメント
 ---
 
-# Cloudflare Storage
+<div id="cloudflare-storage">
+  # Cloudflare Storage
+</div>
 
 Cloudflare KV ストレージ実装は、Cloudflare Workers KV を使用して、グローバルに分散したサーバーレスのキー値ストアを提供します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/cloudflare@latest
 ```
 
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 ```typescript copy showLineNumbers
 import { CloudflareStore } from "@mastra/cloudflare";
@@ -38,7 +44,9 @@ const storageRest = new CloudflareStore({
 ```
 
 
-## パラメーター
+<div id="parameters">
+  ## パラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -77,9 +85,13 @@ const storageRest = new CloudflareStore({
   ]}
 />
 
-#### 追記
+<div id="additional-notes">
+  #### 追記
+</div>
 
-### スキーマ管理
+<div id="schema-management">
+  ### スキーマ管理
+</div>
 
 ストレージ実装はスキーマの作成と更新を自動で行います。次のテーブルが作成されます：
 
@@ -87,11 +99,15 @@ const storageRest = new CloudflareStore({
 - `messages`: 個々のメッセージを格納
 - `metadata`: スレッドおよびメッセージの追加メタデータを格納
 
-### 一貫性と伝播
+<div id="consistency-propagation">
+  ### 一貫性と伝播
+</div>
 
 Cloudflare KV は最終的整合性型のストアであり、書き込み後もすべてのリージョンでデータが直ちに利用可能になるとは限りません。
 
-### キー構造と名前空間
+<div id="key-structure-namespacing">
+  ### キー構造と名前空間
+</div>
 
 Cloudflare KV のキーは、設定可能なプレフィックスとテーブル固有の形式（例: `threads:threadId`）の組み合わせで構成されます。
 Workers へのデプロイでは、`keyPrefix` を使用して同一名前空間内のデータを分離します。REST API でのデプロイでは、`namespacePrefix` を使用して、環境やアプリケーション間で名前空間全体を切り分けます。

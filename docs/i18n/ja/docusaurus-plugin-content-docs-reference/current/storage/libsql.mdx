@@ -3,18 +3,24 @@ title: "リファレンス: LibSQL ストレージ | ストレージ | Mastra �
 description: Mastra における LibSQL ストレージ実装のドキュメント。
 ---
 
-# LibSQL ストレージ
+<div id="libsql-storage">
+  # LibSQL ストレージ
+</div>
 
 LibSQL のストレージ実装は、インメモリでも永続的なデータベースとしても動作する、SQLite 互換のストレージソリューションを提供します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/libsql@latest
 ```
 
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 ```typescript copy showLineNumbers
 import { LibSQLStore } from "@mastra/libsql";
@@ -31,7 +37,9 @@ const storage = new LibSQLStore({
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -51,9 +59,13 @@ const storage = new LibSQLStore({
   ]}
 />
 
-## 追記
+<div id="additional-notes">
+  ## 追記
+</div>
 
-### インメモリ vs 永続ストレージ
+<div id="in-memory-vs-persistent-storage">
+  ### インメモリ vs 永続ストレージ
+</div>
 
 ファイル設定（`file:storage.db`）は次の用途に便利です：
 
@@ -63,7 +75,9 @@ const storage = new LibSQLStore({
 
 本番環境では、永続的なデータベースのURLを使用してください：`libsql://your-database.turso.io`
 
-### スキーマ管理
+<div id="schema-management">
+  ### スキーマ管理
+</div>
 
 ストレージ実装はスキーマの作成と更新を自動的に行います。次のテーブルを作成します:
 

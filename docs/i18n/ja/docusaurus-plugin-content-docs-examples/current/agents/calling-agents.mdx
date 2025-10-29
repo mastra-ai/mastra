@@ -3,13 +3,17 @@ title: "例: エージェントの呼び出し | Agents | Mastra ドキュメン
 description: エージェントの呼び出し方法の例。
 ---
 
-# エージェントの呼び出し
+<div id="calling-agents">
+  # エージェントの呼び出し
+</div>
 
 Mastra で作成したエージェントとやり取りする方法はいくつかあります。以下では、ワークフローのステップ、ツール、[Mastra Client SDK](/docs/server-db/mastra-client)、そしてローカルで素早くテストするためのコマンドラインを使ってエージェントを呼び出す例を紹介します。
 
 このページでは、[システムプロンプトの変更](./system-prompt)の例で説明した `harryPotterAgent` の呼び出し方法を示します。
 
-## ワークフローステップから
+<div id="from-a-workflow-step">
+  ## ワークフローステップから
+</div>
 
 `mastra` インスタンスは、ワークフローステップの `execute` 関数に引数として渡されます。`getAgent()` を使って登録済みのエージェントにアクセスできます。このメソッドでエージェントを取得し、プロンプトを渡して `generate()` を呼び出してください。
 
@@ -37,7 +41,9 @@ export const testWorkflow = createWorkflow({
 ```
 
 
-## ツールから
+<div id="from-a-tool">
+  ## ツールから
+</div>
 
 `mastra` インスタンスは、ツールの `execute` 関数内で使用できます。`getAgent()` を使って登録済みのエージェントを取得し、プロンプトを渡して `generate()` を呼び出します。
 
@@ -59,7 +65,9 @@ export const testTool = createTool({
 ```
 
 
-## Mastra クライアントから
+<div id="from-mastra-client">
+  ## Mastra クライアントから
+</div>
 
 `mastraClient` インスタンスは、登録済みのエージェントにアクセスできます。`getAgent()` でエージェントを取得し、role と content のペアからなる `messages` 配列を含むオブジェクトを渡して `generate()` を呼び出します。
 
@@ -82,7 +90,9 @@ console.log(response.text);
 > 詳細は [Mastra Client SDK](/docs/server-db/mastra-client) をご覧ください。
 
 
-### スクリプトを実行する
+<div id="run-the-script">
+  ### スクリプトを実行する
+</div>
 
 このスクリプトは次のコマンドでコマンドラインから実行します:
 
@@ -91,7 +101,9 @@ npx tsx src/test-agent.ts
 ```
 
 
-## HTTP または curl を使う
+<div id="using-http-or-curl">
+  ## HTTP または curl を使う
+</div>
 
 登録済みのエージェントとは、Mastra アプリケーションの `/generate` エンドポイントに `POST` リクエストを送信してやり取りできます。`messages` 配列には role/content のペアを含めてください。
 
@@ -109,7 +121,9 @@ curl -X POST http://localhost:4111/api/agents/harryPotterAgent/generate \
 ```
 
 
-## 実行例
+<div id="example-output">
+  ## 実行例
+</div>
 
 ```text
 まあ、選ばなきゃならないなら、グリフィンドールの談話室かな。

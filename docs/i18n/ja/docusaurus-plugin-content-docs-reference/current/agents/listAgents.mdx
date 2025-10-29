@@ -3,18 +3,24 @@ title: "リファレンス: Agent.listAgents() | エージェント | Mastra ド
 description: "Mastra のエージェントにおける `Agent.listAgents()` メソッドのドキュメント。エージェントがアクセスできるサブエージェントを取得します。"
 ---
 
-# Agent.listAgents()
+<div id="agentlistagents">
+  # Agent.listAgents()
+</div>
 
 `.listAgents()` メソッドは、エージェントに設定されたサブエージェントを取得し、それらが関数である場合は評価して実体化します。これらのサブエージェントにより、エージェントは他のエージェントへアクセスし、複雑な処理を実行できます。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 await agent.listAgents();
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -28,7 +34,9 @@ await agent.listAgents();
   ]}
 />
 
-## 返り値
+<div id="returns">
+  ## 返り値
+</div>
 
 <PropertiesTable
   content={[
@@ -41,7 +49,9 @@ await agent.listAgents();
   ]}
 />
 
-## 使い方の拡張例
+<div id="extended-usage-example">
+  ## 使い方の拡張例
+</div>
 
 ```typescript copy
 import { RuntimeContext } from "@mastra/core/runtime-context";
@@ -52,7 +62,9 @@ await agent.listAgents({
 ```
 
 
-### オプションのパラメーター
+<div id="options-parameters">
+  ### オプションのパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -67,6 +79,8 @@ await agent.listAgents({
   ]}
 />
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [Agents の概要](/docs/agents/overview)

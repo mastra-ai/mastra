@@ -4,11 +4,15 @@ description: Mastra アプリケーションのパッケージングとデプロ
 asIndexPage: true
 ---
 
-# Deployer
+<div id="deployer">
+  # Deployer
+</div>
 
 Deployer は、コードのパッケージング、環境ファイルの管理、Hono フレームワークによるアプリケーションの提供を通じて、スタンドアロンの Mastra アプリケーションのデプロイを担います。具体的な実装では、対象となるデプロイ先ごとに deploy メソッドを定義する必要があります。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { Deployer } from "@mastra/deployer";
@@ -34,9 +38,13 @@ class CustomDeployer extends Deployer {
 ```
 
 
-## パラメーター
+<div id="parameters">
+  ## パラメーター
+</div>
 
-### コンストラクターのパラメータ
+<div id="constructor-parameters">
+  ### コンストラクターのパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -55,7 +63,9 @@ class CustomDeployer extends Deployer {
   ]}
 />
 
-### deploy のパラメータ
+<div id="deploy-parameters">
+  ### deploy のパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -69,7 +79,9 @@ class CustomDeployer extends Deployer {
   ]}
 />
 
-## メソッド
+<div id="methods">
+  ## メソッド
+</div>
 
 <PropertiesTable
   content={[
@@ -88,7 +100,9 @@ class CustomDeployer extends Deployer {
   ]}
 />
 
-## Bundler から継承されたメソッド
+<div id="inherited-methods-from-bundler">
+  ## Bundler から継承されたメソッド
+</div>
 
 Deployer クラスは、Bundler クラスから次の主要なメソッドを継承します。
 
@@ -121,9 +135,13 @@ Deployer クラスは、Bundler クラスから次の主要なメソッドを継
   ]}
 />
 
-## 重要な概念
+<div id="core-concepts">
+  ## 重要な概念
+</div>
 
-### デプロイライフサイクル
+<div id="deployment-lifecycle">
+  ### デプロイライフサイクル
+</div>
 
 Deployer 抽象クラスは、体系的なデプロイライフサイクルを実装します。
 
@@ -133,7 +151,9 @@ Deployer 抽象クラスは、体系的なデプロイライフサイクルを�
 4. **バンドル**: `_bundle` メソッド（Bundler からの継承）はアプリケーションコードとその依存関係をパッケージ化します。
 5. **デプロイ**: 抽象メソッド `deploy` は、実際のデプロイ処理を行うためにサブクラスで実装されます。
 
-### 環境ファイル管理
+<div id="environment-file-management">
+  ### 環境ファイル管理
+</div>
 
 Deployer クラスには、`getEnvFiles` メソッドによる環境ファイル管理の組み込みサポートがあります。このメソッドは次の処理を行います:
 
@@ -158,7 +178,9 @@ getEnvFiles(): Promise<string[]> {
 ```
 
 
-### バンドルとデプロイの関係
+<div id="bundling-and-deployment-relationship">
+  ### バンドルとデプロイの関係
+</div>
 
 Deployer クラスは Bundler クラスを継承し、バンドルとデプロイの関係を明確に示します:
 

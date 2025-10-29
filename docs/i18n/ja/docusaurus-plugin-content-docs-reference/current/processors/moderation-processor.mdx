@@ -3,11 +3,15 @@ title: "リファレンス: ModerationProcessor | Processors | Mastra ドキュ�
 description: "Mastra の ModerationProcessor に関するドキュメント。LLM を用いて複数のカテゴリにわたる不適切なコンテンツを検出し、コンテンツのモデレーションを提供します。"
 ---
 
-# ModerationProcessor
+<div id="moderationprocessor">
+  # ModerationProcessor
+</div>
 
 `ModerationProcessor` は、LLM を用いて複数カテゴリにわたる不適切なコンテンツを検出するコンテンツモデレーションを提供し、入力処理と出力処理の双方で使用できる**ハイブリッドプロセッサ**です。このプロセッサは、設定可能なモデレーションカテゴリに基づいてメッセージを評価し、フラグ付けされたコンテンツに対する柔軟な対応戦略により、コンテンツの安全性維持を支援します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 import { openai } from "@ai-sdk/openai";
@@ -22,7 +26,9 @@ const processor = new ModerationProcessor({
 ```
 
 
-## コンストラクターのパラメータ
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -35,7 +41,9 @@ const processor = new ModerationProcessor({
   ]}
 />
 
-### オプション
+<div id="options">
+  ### オプション
+</div>
 
 <PropertiesTable
   content={[
@@ -97,7 +105,9 @@ const processor = new ModerationProcessor({
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -124,7 +134,9 @@ const processor = new ModerationProcessor({
   ]}
 />
 
-## 拡張された使用例
+<div id="extended-usage-example">
+  ## 拡張された使用例
+</div>
 
 ```typescript title="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -150,7 +162,9 @@ export const agent = new Agent({
 ```
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [入力プロセッサ](/docs/agents/guardrails)
 - [出力プロセッサ](/docs/agents/guardrails)

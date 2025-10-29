@@ -3,7 +3,9 @@ title: "リファレンス: FaithfulnessMetric 参照 | Evals | Mastra ドキュ
 description: Mastra における Faithfulness Metric のドキュメント。提供されたコンテキストに照らして、LLM の出力がどれだけ事実に即しているかを評価します。
 ---
 
-# FaithfulnessMetric リファレンス
+<div id="faithfulnessmetric-reference">
+  # FaithfulnessMetric リファレンス
+</div>
 
 :::info Scorers
 このドキュメントは旧式の evals API を参照しています。最新のスコアラー機能については [Scorers](/docs/scorers/overview) をご覧ください。
@@ -11,7 +13,9 @@ description: Mastra における Faithfulness Metric のドキュメント。提
 
 Mastra の `FaithfulnessMetric` は、提供されたコンテキストに照らして LLM の出力がどれだけ事実に基づいているかを評価します。出力から主張を抽出し、それらをコンテキストと突き合わせて検証することで、RAG パイプラインの応答の信頼性を測るうえで不可欠な指標です。
 
-## 基本的な使い方
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -37,7 +41,9 @@ console.log(result.info.reason); // "すべての記述はコンテキストに�
 ```
 
 
-## コンストラクターのパラメーター
+<div id="constructor-parameters">
+  ## コンストラクターのパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -56,7 +62,9 @@ console.log(result.info.reason); // "すべての記述はコンテキストに�
   ]}
 />
 
-### FaithfulnessMetricOptions
+<div id="faithfulnessmetricoptions">
+  ### FaithfulnessMetricOptions
+</div>
 
 <PropertiesTable
   content={[
@@ -78,7 +86,9 @@ console.log(result.info.reason); // "すべての記述はコンテキストに�
   ]}
 />
 
-## measure() のパラメータ
+<div id="measure-parameters">
+  ## measure() のパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -97,7 +107,9 @@ console.log(result.info.reason); // "すべての記述はコンテキストに�
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -128,11 +140,15 @@ console.log(result.info.reason); // "すべての記述はコンテキストに�
   ]}
 />
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 この指標は、与えられたコンテキストに照らして主張を検証し、その結果に基づいて忠実性を評価します。
 
-### 採点プロセス
+<div id="scoring-process">
+  ### 採点プロセス
+</div>
 
 1. 主張とコンテキストを分析:
    - すべての主張（事実・推測）を抽出
@@ -149,7 +165,9 @@ console.log(result.info.reason); // "すべての記述はコンテキストに�
 
 最終スコア: `(supported_claims / total_claims) * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 （スケールは0から。デフォルトは0〜1）
 
@@ -159,7 +177,9 @@ console.log(result.info.reason); // "すべての記述はコンテキストに�
 - 0.1〜0.3: 裏付けは限定的で、矛盾が多い
 - 0.0: 裏付けられた主張はない
 
-## 応用例
+<div id="advanced-example">
+  ## 応用例
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -194,7 +214,9 @@ const result = await metric.measure(
 ```
 
 
-### 関連項目
+<div id="related">
+  ### 関連項目
+</div>
 
 - [回答関連性メトリック](./answer-relevancy)
 - [幻覚（ハルシネーション）メトリック](./hallucination)

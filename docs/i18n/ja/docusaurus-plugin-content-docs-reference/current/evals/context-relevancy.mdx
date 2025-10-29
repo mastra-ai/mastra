@@ -3,7 +3,9 @@ title: "リファレンス: ContextRelevancyMetric | Evals | Mastra ドキュメ
 description: RAG パイプラインで取得したコンテキストの妥当性（関連性）を評価する Context Relevancy Metric のドキュメント。
 ---
 
-# ContextRelevancyMetric
+<div id="contextrelevancymetric">
+  # ContextRelevancyMetric
+</div>
 
 :::info Scorers
 このドキュメントはレガシーの evals API を参照しています。最新のスコアラー機能については [Scorers](/docs/scorers/overview) をご覧ください。
@@ -11,7 +13,9 @@ description: RAG パイプラインで取得したコンテキストの妥当性
 
 `ContextRelevancyMetric` クラスは、RAG（Retrieval-Augmented Generation）パイプラインにおけるリトリーバーの品質を、取得されたコンテキストが入力クエリにどれだけ関連しているかで評価します。LLM ベースの評価システムを用い、まずコンテキストから記述（ステートメント）を抽出し、その後それらの入力に対する関連性を判定します。
 
-## 基本的な使い方
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -39,7 +43,9 @@ console.log(result.info.reason); // 関連性評価の説明
 ```
 
 
-## コンストラクターのパラメータ
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -59,7 +65,9 @@ console.log(result.info.reason); // 関連性評価の説明
   ]}
 />
 
-### ContextRelevancyMetricOptions
+<div id="contextrelevancymetricoptions">
+  ### ContextRelevancyMetricOptions
+</div>
 
 <PropertiesTable
   content={[
@@ -80,7 +88,9 @@ console.log(result.info.reason); // 関連性評価の説明
   ]}
 />
 
-## measure() のパラメータ
+<div id="measure-parameters">
+  ## measure() のパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -99,7 +109,9 @@ console.log(result.info.reason); // 関連性評価の説明
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -128,11 +140,15 @@ console.log(result.info.reason); // 関連性評価の説明
   ]}
 />
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 この指標は、取得したコンテキストがクエリにどれほど適合しているかを、二値の関連性分類で評価します。
 
-### スコアリング手順
+<div id="scoring-process">
+  ### スコアリング手順
+</div>
 
 1. コンテキストから文を抽出:
    - コンテキストを意味のある単位に分割
@@ -145,7 +161,9 @@ console.log(result.info.reason); // 関連性評価の説明
 
 最終スコア: `(relevant_statements / total_statements) * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 （スケールは0から、既定は0〜1）
 
@@ -155,7 +173,9 @@ console.log(result.info.reason); // 関連性評価の説明
 - 0.1〜0.3: 低い関連性 - ほとんどが無関係なコンテキスト
 - 0.0: 関連なし - 完全に無関係なコンテキスト
 
-## カスタム設定の例
+<div id="example-with-custom-configuration">
+  ## カスタム設定の例
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -191,7 +211,9 @@ const result = await metric.measure(
 ```
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [コンテキスト リコール指標](./contextual-recall)
 - [コンテキスト精度指標](./context-precision)

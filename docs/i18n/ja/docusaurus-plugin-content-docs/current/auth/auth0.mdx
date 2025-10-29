@@ -7,11 +7,15 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 
-# MastraAuthAuth0 クラス
+<div id="mastraauthauth0-class">
+  # MastraAuthAuth0 クラス
+</div>
 
 `MastraAuthAuth0` クラスは、Auth0 を用いて Mastra の認証を提供します。Auth0 が発行した JWT トークンで受信リクエストを検証し、`experimental_auth` オプションを使用して Mastra サーバーと連携します。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 この例では Auth0 認証を使用します。次を実施してください:
 
@@ -30,7 +34,9 @@ AUTH0_AUDIENCE=your-api-identifier
 > 詳細なセットアップ手順は、使用しているプラットフォーム向けの [Auth0 クイックスタート](https://auth0.com/docs/quickstarts) を参照してください。
 
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 `MastraAuthAuth0` クラスを使用する前に、`@mastra/auth-auth0` パッケージをインストールする必要があります。
 
@@ -39,9 +45,13 @@ npm install @mastra/auth-auth0@latest
 ```
 
 
-## 使用例
+<div id="usage-examples">
+  ## 使用例
+</div>
 
-### 環境変数を使った基本的な使い方
+<div id="basic-usage-with-environment-variables">
+  ### 環境変数を使った基本的な使い方
+</div>
 
 ```typescript {2,7} title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
@@ -56,7 +66,9 @@ export const mastra = new Mastra({
 ```
 
 
-### カスタム設定
+<div id="custom-configuration">
+  ### カスタム設定
+</div>
 
 ```typescript {2,7-10} title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
@@ -74,9 +86,13 @@ export const mastra = new Mastra({
 ```
 
 
-## 構成
+<div id="configuration">
+  ## 構成
+</div>
 
-### ユーザー認可
+<div id="user-authorization">
+  ### ユーザー認可
+</div>
 
 デフォルトでは、`MastraAuthAuth0` は指定した audience に対して有効な Auth0 トークンを持つ、認証済みのすべてのユーザーを許可します。トークン検証では次の点を確認します:
 
@@ -101,11 +117,15 @@ const auth0Provider = new MastraAuthAuth0({
 > 利用可能なすべての設定オプションについては、[MastraAuthAuth0](/reference/auth/auth0) の API リファレンスを参照してください。
 
 
-## クライアント側のセットアップ
+<div id="client-side-setup">
+  ## クライアント側のセットアップ
+</div>
 
 Auth0 認証を使用する場合は、Auth0 React SDK を設定し、ユーザーを認証して、Mastra へのリクエストに渡すためのアクセストークンを取得する必要があります。
 
-### Auth0 React SDK のセットアップ
+<div id="setting-up-auth0-react-sdk">
+  ### Auth0 React SDK のセットアップ
+</div>
 
 まず、アプリケーションに Auth0 React SDK をインストールして設定します：
 
@@ -137,7 +157,9 @@ export default Auth0ProviderWithHistory;
 ```
 
 
-### アクセス トークンの取得
+<div id="retrieving-access-tokens">
+  ### アクセス トークンの取得
+</div>
 
 Auth0 React SDK を使ってユーザーを認証し、アクセス トークンを取得します:
 
@@ -159,7 +181,9 @@ export const useAuth0Token = () => {
 > その他の認証方法や設定オプションについては、[Auth0 React SDK のドキュメント](https://auth0.com/docs/libraries/auth0-react)を参照してください。
 
 
-## `MastraClient` の設定
+<div id="configuring-mastraclient">
+  ## `MastraClient` の設定
+</div>
 
 `experimental_auth` が有効な場合、`MastraClient` で行うすべてのリクエストには、`Authorization` ヘッダーに有効な Auth0 のアクセストークンを含める必要があります。
 
@@ -181,7 +205,9 @@ export const createMastraClient = (accessToken: string) => {
 > 設定の詳細については [Mastra Client SDK](/docs/server-db/mastra-client) を参照してください。
 
 
-### 認証付きリクエストの送信
+<div id="making-authenticated-requests">
+  ### 認証付きリクエストの送信
+</div>
 
 `MastraClient` に Auth0 のアクセストークンを設定すると、認証付きリクエストを送信できます。
 

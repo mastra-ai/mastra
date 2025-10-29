@@ -3,11 +3,15 @@ title: "リファレンス: OpenAI | Voice | Mastra Docs"
 description: "OpenAIVoice クラスのドキュメント。テキスト読み上げ（Text-to-Speech）と音声認識（Speech-to-Text）の機能を提供します。"
 ---
 
-# OpenAI
+<div id="openai">
+  # OpenAI
+</div>
 
 Mastra の OpenAIVoice クラスは、OpenAI のモデルを用いて、テキスト読み上げ（Text-to-Speech）と音声テキスト化（Speech-to-Text）の機能を提供します。
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 ```typescript
 import { OpenAIVoice } from "@mastra/voice-openai";
@@ -41,9 +45,13 @@ const text = await voice.listen(audioStream, {
 ```
 
 
-## 設定
+<div id="configuration">
+  ## 設定
+</div>
 
-### コンストラクターのオプション
+<div id="constructor-options">
+  ### コンストラクターのオプション
+</div>
 
 <PropertiesTable
   content={[
@@ -71,7 +79,9 @@ const text = await voice.listen(audioStream, {
   ]}
 />
 
-### OpenAIConfig
+<div id="openaiconfig">
+  ### OpenAIConfig
+</div>
 
 <PropertiesTable
   content={[
@@ -91,9 +101,13 @@ const text = await voice.listen(audioStream, {
   ]}
 />
 
-## メソッド
+<div id="methods">
+  ## メソッド
+</div>
 
-### speak()
+<div id="speak">
+  ### speak()
+</div>
 
 OpenAI のテキスト読み上げ（text-to-speech）モデルを使用して、テキストを音声に変換します。
 
@@ -124,7 +138,9 @@ OpenAI のテキスト読み上げ（text-to-speech）モデルを使用して�
 
 戻り値: `Promise<NodeJS.ReadableStream>`
 
-### listen()
+<div id="listen">
+  ### listen()
+</div>
 
 OpenAI の Whisper モデルで音声をテキスト化します。
 
@@ -148,7 +164,9 @@ OpenAI の Whisper モデルで音声をテキスト化します。
 
 戻り値: `Promise<string>`
 
-### getSpeakers()
+<div id="getspeakers">
+  ### getSpeakers()
+</div>
 
 利用可能な音声オプションの配列を返します。各ノードには次が含まれます：
 
@@ -163,7 +181,9 @@ OpenAI の Whisper モデルで音声をテキスト化します。
   ]}
 />
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - APIキーはコンストラクターのオプション、または `OPENAI_API_KEY` 環境変数で指定できます
 - `tts-1-hd` モデルはより高品質な音声を生成しますが、処理時間が長くなる場合があります

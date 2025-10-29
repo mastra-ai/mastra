@@ -3,18 +3,24 @@ title: "リファレンス: Memory.query() | Memory | Mastra Docs"
 description: "Mastra の `Memory.query()` メソッドに関するドキュメント。ページネーション、フィルター、セマンティック検索に対応し、特定のスレッドからメッセージを取得します。"
 ---
 
-# Memory.query()
+<div id="memoryquery">
+  # Memory.query()
+</div>
 
 `.query()` メソッドは、ページネーション、フィルタリング、セマンティック検索に対応し、特定のスレッドからメッセージを取得します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 await memory?.query({ threadId: "user-123" });
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -55,7 +61,9 @@ await memory?.query({ threadId: "user-123" });
   ]}
 />
 
-### selectBy のパラメータ
+<div id="selectby-parameters">
+  ### selectBy のパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -90,7 +98,9 @@ await memory?.query({ threadId: "user-123" });
   ]}
 />
 
-### threadConfig のパラメータ
+<div id="threadconfig-parameters">
+  ### threadConfig のパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -130,7 +140,9 @@ await memory?.query({ threadId: "user-123" });
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -148,7 +160,9 @@ await memory?.query({ threadId: "user-123" });
   ]}
 />
 
-## 拡張的な使用例
+<div id="extended-usage-example">
+  ## 拡張的な使用例
+</div>
 
 ```typescript title="src/test-memory.ts" showLineNumbers copy
 import { mastra } from "./mastra";
@@ -182,7 +196,9 @@ console.log(uiMessages);
 ```
 
 
-### 関連項目
+<div id="related">
+  ### 関連項目
+</div>
 
 - [Memory クラスリファレンス](/reference/memory/memory-class)
 - [Memory の概要](/docs/memory/overview)

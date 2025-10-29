@@ -3,18 +3,24 @@ title: "リファレンス: Cloudflare D1 Storage | Storage | Mastra ドキュ�
 description: Mastra における Cloudflare D1 の SQL ストレージ実装に関するドキュメント。
 ---
 
-# Cloudflare D1 ストレージ
+<div id="cloudflare-d1-storage">
+  # Cloudflare D1 ストレージ
+</div>
 
 Cloudflare D1 ストレージの実装は、Cloudflare D1 を用いたサーバーレスの SQL データベースソリューションを提供し、リレーショナルな操作とトランザクション整合性をサポートします。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash
 npm install @mastra/cloudflare-d1@latest
 ```
 
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 ```typescript copy showLineNumbers
 import { D1Store } from "@mastra/cloudflare-d1";
@@ -49,7 +55,9 @@ database_id = "db-id"
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -87,9 +95,13 @@ database_id = "db-id"
   ]}
 />
 
-## 追記
+<div id="additional-notes">
+  ## 追記
+</div>
 
-### スキーマ管理
+<div id="schema-management">
+  ### スキーマ管理
+</div>
 
 ストレージ実装はスキーマの作成と更新を自動的に行います。以下のテーブルを作成します:
 
@@ -97,10 +109,14 @@ database_id = "db-id"
 - `messages`: 個々のメッセージを保存
 - `metadata`: スレッドとメッセージに関する追加のメタデータを保存
 
-### トランザクションと一貫性
+<div id="transactions-consistency">
+  ### トランザクションと一貫性
+</div>
 
 Cloudflare D1 は、単一行の操作に対してトランザクションの保証を提供します。これは、複数の操作を「すべて成功するか、すべて失敗するか」という不可分の作業単位として実行できることを意味します。
 
-### テーブル作成とマイグレーション
+<div id="table-creation-migrations">
+  ### テーブル作成とマイグレーション
+</div>
 
 テーブルはストレージの初期化時に自動的に作成されます（`tablePrefix` オプションを使えば、環境ごとに分離できます）。ただし、列の追加、データ型の変更、インデックスの変更といった高度なスキーマ変更には、データ損失を避けるための慎重な計画と手動でのマイグレーションが必要です。

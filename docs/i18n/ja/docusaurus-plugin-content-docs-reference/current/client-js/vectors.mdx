@@ -3,11 +3,15 @@ title: "リファレンス: Vectors API | Client SDK | Mastra ドキュメント
 description: client-js SDK を使って、Mastra でセマンティック検索や類似度マッチングに用いるベクトル埋め込みの扱い方を学びます。
 ---
 
-# Vectors API
+<div id="vectors-api">
+  # Vectors API
+</div>
 
 Vectors API は、Mastra におけるセマンティック検索や類似度マッチングのためのベクトル埋め込みを扱うためのメソッドを提供します。
 
-## ベクトルの扱い方
+<div id="working-with-vectors">
+  ## ベクトルの扱い方
+</div>
 
 ベクトルストアのインスタンスを取得します:
 
@@ -16,9 +20,13 @@ const vector = mastraClient.getVector("vector-name");
 ```
 
 
-## ベクトルメソッド
+<div id="vector-methods">
+  ## ベクトルメソッド
+</div>
 
-### ベクターインデックスの詳細を取得
+<div id="get-vector-index-details">
+  ### ベクターインデックスの詳細を取得
+</div>
 
 特定のベクターインデックスの情報を取得します。
 
@@ -27,7 +35,9 @@ const details = await vector.details("index-name");
 ```
 
 
-### ベクターインデックスの作成
+<div id="create-vector-index">
+  ### ベクターインデックスの作成
+</div>
 
 新しいベクターインデックスを作成します。
 
@@ -40,7 +50,9 @@ const result = await vector.createIndex({
 ```
 
 
-### ベクトルのアップサート
+<div id="upsert-vectors">
+  ### ベクトルのアップサート
+</div>
 
 インデックスにベクトルを追加または更新します：
 
@@ -57,7 +69,9 @@ const ids = await vector.upsert({
 ```
 
 
-### クエリベクトル
+<div id="query-vectors">
+  ### クエリベクトル
+</div>
 
 類似するベクトルを検索:
 
@@ -72,7 +86,9 @@ const results = await vector.query({
 ```
 
 
-### すべてのインデックスを取得
+<div id="get-all-indexes">
+  ### すべてのインデックスを取得
+</div>
 
 利用可能なインデックスをすべて一覧表示します：
 
@@ -81,7 +97,9 @@ const indexes = await vector.getIndexes();
 ```
 
 
-### インデックスの削除
+<div id="delete-index">
+  ### インデックスの削除
+</div>
 
 ベクターインデックスを削除するには:
 

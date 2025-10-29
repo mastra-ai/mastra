@@ -3,41 +3,59 @@ title: "リファレンス: CLI コマンド | CLI | Mastra ドキュメント"
 description: プロジェクトの開発・ビルド・起動に用いる Mastra CLI のドキュメント。
 ---
 
-# CLI コマンド
+<div id="cli-commands">
+  # CLI コマンド
+</div>
 
 Mastra が提供するコマンドラインインターフェース（CLI）を使って、Mastra プロジェクトの開発、ビルド、起動を行えます。
 
-## `mastra dev`
+<div id="mastra-dev">
+  ## `mastra dev`
+</div>
 
 [ローカル開発用プレイグラウンド](/docs/getting-started/studio)と、エージェント・ツール・ワークフロー向けのRESTエンドポイントを公開するサーバーを起動します。`mastra dev` の実行中は、[http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) にアクセスして、利用可能なエンドポイントの一覧と概要を確認できます。
 
 [サーバーの設定](/docs/getting-started/studio#configuration)も行えます。
 
-### フラグ
+<div id="flags">
+  ### フラグ
+</div>
 
 このコマンドは[共通フラグ][common-flags]に加え、次の追加フラグを受け付けます:
 
-#### `--https`
+<div id="https">
+  #### `--https`
+</div>
 
 ローカルの HTTPS サポートを有効にします。[詳細はこちら](/docs/getting-started/studio#local-https)。
 
-#### `--inspect`
+<div id="inspect">
+  #### `--inspect`
+</div>
 
 開発サーバーをインスペクトモードで起動します。デバッグに便利です。`--inspect-brk` と同時には使用できません。
 
-#### `--inspect-brk`
+<div id="inspect-brk">
+  #### `--inspect-brk`
+</div>
 
 開発サーバーをインスペクトモードで起動し、スクリプトの先頭で一時停止します。これは `--inspect` と同時には使用できません。
 
-#### `--custom-args`
+<div id="custom-args">
+  #### `--custom-args`
+</div>
 
 開発サーバーに渡すカスタム引数をカンマ区切りで指定します。例えば Node.js プロセスに引数（`--experimental-transform-types` など）を渡せます。
 
-### 設定
+<div id="configs">
+  ### 設定
+</div>
 
 `mastra dev` の動作を変更するために、特定の環境変数を設定できます。
 
-#### ビルドキャッシュを無効にする
+<div id="disable-build-caching">
+  #### ビルドキャッシュを無効にする
+</div>
 
 `.mastra/` 配下のキャッシュ済みアセットを使用せず、完全な再ビルドを強制するには `MASTRA_DEV_NO_CACHE=1` を設定します。
 
@@ -59,7 +77,9 @@ MASTRA_CONCURRENCY=4 mastra dev
 未設定のままにすると、CLI がそのマシンに適した妥当なデフォルトを選択します。
 
 
-#### カスタムプロバイダーのエンドポイント
+<div id="custom-provider-endpoints">
+  #### カスタムプロバイダーのエンドポイント
+</div>
 
 Vercel AI SDK がサポートするプロバイダーを利用する場合、ベース URL を設定すると、リクエストをプロキシや社内ゲートウェイ経由にリダイレクトできます。OpenAI の場合：
 
@@ -80,7 +100,9 @@ mastra dev
 これらは AI SDK によって引き継がれ、`openai()` や `anthropic()` のどの呼び出しでも利用できます。
 
 
-## `mastra build`
+<div id="mastra-build">
+  ## `mastra build`
+</div>
 
 `mastra build` コマンドは、Mastra プロジェクトを本番運用向けの Hono サーバーにバンドルします。[Hono](https://hono.dev/) は軽量で型安全な Web フレームワークで、ミドルウェアに対応しつつ、Mastra エージェントを HTTP エンドポイントとして簡単にデプロイできます。
 
@@ -92,11 +114,15 @@ mastra dev
 
 [common flags][common-flags] を受け付けます。
 
-### 設定
+<div id="configs">
+  ### 設定
+</div>
 
 `mastra build` の動作を変更するために、特定の環境変数を設定できます。
 
-#### 並列実行数を制限する
+<div id="limit-parallelism">
+  #### 並列実行数を制限する
+</div>
 
 CI やリソースに制約のある環境で実行する場合は、`MASTRA_CONCURRENCY` を設定して、一度に実行する高負荷タスクの数に上限を設けられます。
 
@@ -105,7 +131,9 @@ MASTRA_CONCURRENCY=2 mastra build
 ```
 
 
-## `mastra start`
+<div id="mastra-start">
+  ## `mastra start`
+</div>
 
 :::info
 
@@ -115,31 +143,43 @@ MASTRA_CONCURRENCY=2 mastra build
 
 本番モードでビルド済みの Mastra アプリケーションを配信するローカルサーバーを起動します。既定で [OTEL Tracing](/docs/observability/ai-tracing/overview) が有効化されています。
 
-### フラグ
+<div id="flags">
+  ### フラグ
+</div>
 
 このコマンドは[共通フラグ][common-flags]に加え、次の追加フラグを受け付けます:
 
-#### `--dir`
+<div id="dir">
+  #### `--dir`
+</div>
 
 ビルド済みの Mastra の出力ディレクトリへのパス。既定値は `.mastra/output` です。
 
-#### `--no-telemetry`
+<div id="no-telemetry">
+  #### `--no-telemetry`
+</div>
 
 [OTEL Tracing](/docs/observability/ai-tracing/overview) を無効にします。
 
-## `mastra lint`
+<div id="mastra-lint">
+  ## `mastra lint`
+</div>
 
 `mastra lint` コマンドは、Mastra プロジェクトの構成とコードを検証し、ベストプラクティスに準拠し、エラーがないことを確認します。
 
 [共通フラグ][common-flags] を受け付けます。
 
-## `mastra scorers`
+<div id="mastra-scorers">
+  ## `mastra scorers`
+</div>
 
 `mastra scorers` コマンドは、AI 生成出力の品質・正確性・パフォーマンスを測定する評価用スコアラーの管理機能を提供します。
 
 詳しくは [Scorers overview](/docs/scorers/overview) をご覧ください。
 
-### `add`
+<div id="add">
+  ### `add`
+</div>
 
 プロジェクトに新しいスコアラーを追加します。対話型のプロンプトを使用できます:
 
@@ -156,51 +196,75 @@ mastra scorers add answer-relevancy
 [`list`](#list) コマンドで正しい ID を取得します。
 
 
-### `list`
+<div id="list">
+  ### `list`
+</div>
 
 利用可能なスコアラーのテンプレートをすべて一覧表示します。`add` コマンドではその ID を使用します。
 
-## `mastra init`
+<div id="mastra-init">
+  ## `mastra init`
+</div>
 
 `mastra init` コマンドは、既存のプロジェクトに Mastra を初期設定します。新規プロジェクトを一から作成することなく、必要なフォルダや設定を自動生成（スキャフォールディング）するために使用します。
 
-### フラグ
+<div id="flags">
+  ### フラグ
+</div>
 
 このコマンドでは、以下の追加フラグを使用できます:
 
-#### `--default`
+<div id="default">
+  #### `--default`
+</div>
 
 OpenAI を使用して `src` 配下にファイルを作成します。さらに `src/mastra` フォルダにサンプルコードを配置します。
 
-#### `--dir`
+<div id="dir">
+  #### `--dir`
+</div>
 
 Mastra のファイルを保存するディレクトリ。既定値は `src`。
 
-#### `--components`
+<div id="components">
+  #### `--components`
+</div>
 
 追加するコンポーネントをカンマで区切ったリスト。各コンポーネントごとに新しいフォルダが作成されます。選択肢: `"agents" | "tools" | "workflows" | "scorers"`。既定値は `['agents', 'tools', 'workflows']` です。
 
-#### `--llm`
+<div id="llm">
+  #### `--llm`
+</div>
 
 デフォルトのモデルプロバイダー。選択可能: `"openai" | "anthropic" | "groq" | "google" | "cerebras" | "mistral"`。
 
-#### `--llm-api-key`
+<div id="llm-api-key">
+  #### `--llm-api-key`
+</div>
 
 選択したモデルプロバイダーの API キー。環境変数ファイル（`.env`）に書き込まれます。
 
-#### `--example`
+<div id="example">
+  #### `--example`
+</div>
 
 有効にすると、サンプルコードがコンポーネントの一覧に出力されます（例: エージェントのサンプルコード）。
 
-#### `--no-example`
+<div id="no-example">
+  #### `--no-example`
+</div>
 
 サンプルコードを含めません。`--default` フラグ使用時に便利です。
 
-#### `--mcp`
+<div id="mcp">
+  #### `--mcp`
+</div>
 
 Mastra の MCP サーバーを使用してコードエディタを設定します。選択肢: `"cursor" | "cursor-global" | "windsurf" | "vscode"`。
 
-## 共通のフラグ
+<div id="common-flags">
+  ## 共通のフラグ
+</div>
 
 ### `--dir`
 
@@ -208,43 +272,59 @@ Mastra の MCP サーバーを使用してコードエディタを設定しま�
 
 Mastra フォルダーへのパス。既定値は `src/mastra` です。
 
-### `--debug`
+<div id="debug">
+  ### `--debug`
+</div>
 
 **利用可能:** `dev`, `build`
 
 Mastra の内部処理に関する詳細ログを有効にします。既定値は `false` です。
 
-### `--env`
+<div id="env">
+  ### `--env`
+</div>
 
 **利用可能:** `dev`, `start`
 
 含めるカスタム環境変数ファイル。既定では `.env.development`、`.env.local`、`.env` を読み込みます。
 
-### `--root`
+<div id="root">
+  ### `--root`
+</div>
 
 **利用可能なモード:** `dev`, `build`, `lint`
 
 ルートディレクトリへのパス。既定値は `process.cwd()` です。
 
-### `--tools`
+<div id="tools">
+  ### `--tools`
+</div>
 
 **利用可能:** `dev`, `build`, `lint`
 
 含めるツールのパスをカンマ区切りで指定します。既定値は `src/mastra/tools` です。
 
-## グローバルフラグ
+<div id="global-flags">
+  ## グローバルフラグ
+</div>
 
 これらのフラグを使用して、`mastra` CLI の情報を確認できます。
 
-### `--version`
+<div id="version">
+  ### `--version`
+</div>
 
 Mastra CLI のバージョンを表示して終了します。
 
-### `--help`
+<div id="help">
+  ### `--help`
+</div>
 
 ヘルプメッセージを表示して終了します。
 
-## テレメトリー
+<div id="telemetry">
+  ## テレメトリー
+</div>
 
 デフォルトでは、Mastra は OS、Mastra のバージョン、Node.js のバージョンなど、プロジェクトに関する匿名の情報を収集します。何が収集されるかは、[ソースコード](https://github.com/mastra-ai/mastra/blob/main/packages/cli/src/analytics/index.ts)をご覧ください。
 

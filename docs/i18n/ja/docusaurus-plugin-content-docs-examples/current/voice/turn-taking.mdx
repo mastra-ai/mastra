@@ -6,11 +6,15 @@ description: Mastraを使って、発言交代の会話フローを持つマル�
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# ターン制のAIディベート
+<div id="ai-debate-with-turn-taking">
+  # ターン制のAIディベート
+</div>
 
 以下のコードスニペットは、Mastra を使ってターン制のマルチエージェント会話システムを実装する方法を示します。この例では、2体のAIエージェント（楽観主義者と懐疑論者）が、ユーザー提供のトピックについて議論し、互いの主張に順番に応答していくディベートを行います。
 
-## 音声機能を備えたエージェントの作成
+<div id="creating-agents-with-voice-capabilities">
+  ## 音声機能を備えたエージェントの作成
+</div>
 
 まず、個性と音声機能がそれぞれ異なる2体のエージェントを作成します。
 
@@ -41,7 +45,9 @@ export const skepticAgent = new Agent({
 ```
 
 
-## Mastra でのエージェント登録
+<div id="registering-the-agents-with-mastra">
+  ## Mastra でのエージェント登録
+</div>
 
 次に、両方のエージェントをお使いの Mastra インスタンスに登録します。
 
@@ -63,7 +69,9 @@ export const mastra = new Mastra({
 ```
 
 
-## 討論における発言順の管理
+<div id="managing-turn-taking-in-the-debate">
+  ## 討論における発言順の管理
+</div>
 
 この例では、エージェント間の発言の順番を制御し、各エージェントが直前のエージェントの発言に応答するようにする方法を示します。
 
@@ -209,7 +217,9 @@ export async function runDebate(topic: string, turns: number = 3) {
 ```
 
 
-## コマンドラインからディベートを実行する
+<div id="running-the-debate-from-the-command-line">
+  ## コマンドラインからディベートを実行する
+</div>
 
 コマンドラインからディベートを実行するための簡単なスクリプトは次のとおりです：
 
@@ -266,7 +276,9 @@ main().catch((error) => {
 ```
 
 
-## 討論用のWebインターフェースを作成する
+<div id="creating-a-web-interface-for-the-debate">
+  ## 討論用のWebインターフェースを作成する
+</div>
 
 Webアプリ向けに、ユーザーが討論を開始し、エージェントの応答を聞けるシンプルな Next.js コンポーネントを作成できます。
 

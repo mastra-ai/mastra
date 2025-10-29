@@ -3,11 +3,15 @@ title: "リファレンス: Memory.getThreadsByResourceIdPaginated() | Memory | 
 description: "Mastra の `Memory.getThreadsByResourceIdPaginated()` メソッドに関するドキュメント。特定のリソース ID に関連するスレッドをページネーション対応で取得します。"
 ---
 
-# Memory.getThreadsByResourceIdPaginated()
+<div id="memorygetthreadsbyresourceidpaginated">
+  # Memory.getThreadsByResourceIdPaginated()
+</div>
 
 `.getThreadsByResourceIdPaginated()` メソッドは、特定のリソース ID に紐づくスレッドをページネーション付きで取得します。
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 ```typescript copy
 await memory.getThreadsByResourceIdPaginated({
@@ -18,7 +22,9 @@ await memory.getThreadsByResourceIdPaginated({
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -55,7 +61,9 @@ await memory.getThreadsByResourceIdPaginated({
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -68,7 +76,9 @@ await memory.getThreadsByResourceIdPaginated({
   ]}
 />
 
-## さらに踏み込んだ使用例
+<div id="extended-usage-example">
+  ## さらに踏み込んだ使用例
+</div>
 
 ```typescript title="src/test-memory.ts" showLineNumbers copy
 import { mastra } from "./mastra";
@@ -103,7 +113,9 @@ while (hasMorePages) {
 ```
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [Memory クラス リファレンス](/reference/memory/memory-class)
 - [getThreadsByResourceId](/reference/memory/getThreadsByResourceId) - ページネーションなしの版

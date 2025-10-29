@@ -7,11 +7,15 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 
-# createVectorQueryTool()
+<div id="createvectorquerytool">
+  # createVectorQueryTool()
+</div>
 
 `createVectorQueryTool()` 関数は、ベクターストアに対するセマンティック検索用のツールを作成します。フィルタ、リランキング、データベース固有の設定に対応し、さまざまなベクターストアのバックエンドと統合できます。
 
-## 基本的な使い方
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -25,7 +29,9 @@ const queryTool = createVectorQueryTool({
 ```
 
 
-## パラメーター
+<div id="parameters">
+  ## パラメーター
+</div>
 
 :::note
 
@@ -119,7 +125,9 @@ const queryTool = createVectorQueryTool({
   ]}
 />
 
-### DatabaseConfig
+<div id="databaseconfig">
+  ### DatabaseConfig
+</div>
 
 `DatabaseConfig` 型では、クエリ操作に自動適用されるデータベース固有の設定を指定できます。これにより、各種ベクターストアが提供する独自の機能や最適化を活用できます。
 
@@ -212,7 +220,9 @@ const queryTool = createVectorQueryTool({
   ]}
 />
 
-### RerankConfig
+<div id="rerankconfig">
+  ### RerankConfig
+</div>
 
 <PropertiesTable
   content={[
@@ -252,7 +262,9 @@ const queryTool = createVectorQueryTool({
   ]}
 />
 
-## 返り値
+<div id="returns">
+  ## 返り値
+</div>
 
 このツールは、次のプロパティを持つオブジェクトを返します:
 
@@ -272,7 +284,9 @@ const queryTool = createVectorQueryTool({
   ]}
 />
 
-### QueryResult オブジェクトの構成
+<div id="queryresult-object-structure">
+  ### QueryResult オブジェクトの構成
+</div>
 
 ```typescript
 {
@@ -285,7 +299,9 @@ const queryTool = createVectorQueryTool({
 ```
 
 
-## 既定のツールの説明
+<div id="default-tool-description">
+  ## 既定のツールの説明
+</div>
 
 既定の説明は次の点に重点を置いています：
 
@@ -293,11 +309,15 @@ const queryTool = createVectorQueryTool({
 - ユーザーの質問に回答すること
 - 事実ベースの内容を取得すること
 
-## 結果の処理
+<div id="result-handling">
+  ## 結果の処理
+</div>
 
 このツールはユーザーのクエリに応じて返す結果数を決定し、既定では10件を返します。必要に応じてクエリの要件に合わせて調整できます。
 
-## フィルターを使った例
+<div id="example-with-filters">
+  ## フィルターを使った例
+</div>
 
 ```typescript
 const queryTool = createVectorQueryTool({
@@ -329,7 +349,9 @@ const queryTool = createVectorQueryTool({
 エージェント駆動のフィルタリングの動作例については、[Agent-Driven Metadata Filtering](/examples/rag/usage/filter-rag) を参照してください。
 
 
-## リランクの例
+<div id="example-with-reranking">
+  ## リランクの例
+</div>
 
 ```typescript
 const queryTool = createVectorQueryTool({
@@ -360,7 +382,9 @@ const queryTool = createVectorQueryTool({
 リランカーは初回のベクトル検索結果を処理し、関連性を最適化した並べ替え済みのリストを返します。
 
 
-## カスタム説明の例
+<div id="example-with-custom-description">
+  ## カスタム説明の例
+</div>
 
 ```typescript
 const queryTool = createVectorQueryTool({
@@ -375,7 +399,9 @@ const queryTool = createVectorQueryTool({
 この例では、情報検索という本来の目的を保ちながら、特定のユースケースに合わせてツールの説明をカスタマイズする方法を示します。
 
 
-## データベース別の設定例
+<div id="database-specific-configuration-examples">
+  ## データベース別の設定例
+</div>
 
 `databaseConfig` パラメータを使うと、各ベクターデータベース固有の機能や最適化を活用できます。これらの設定はクエリ実行時に自動適用されます。
 
@@ -494,7 +520,9 @@ const queryTool = createVectorQueryTool({
   </TabItem>
 </Tabs>
 
-### 実行時の構成オーバーライド
+<div id="runtime-configuration-override">
+  ### 実行時の構成オーバーライド
+</div>
 
 さまざまなシナリオに対応するため、実行時にデータベース構成を上書きできます。
 
@@ -532,7 +560,9 @@ const response = await agent.generate("デプロイに関する情報を検索",
 * リクエスト単位での異なるフィルタリング戦略の適用
 
 
-## 例：ランタイムコンテキストの利用
+<div id="example-using-runtime-context">
+  ## 例：ランタイムコンテキストの利用
+</div>
 
 ```typescript
 const queryTool = createVectorQueryTool({
@@ -575,7 +605,9 @@ const response = await agent.generate(
 * [Tool Runtime Context](/docs/tools-mcp/overview#using-runtimecontext)
 
 
-## Mastra サーバーなしでの利用
+<div id="usage-without-a-mastra-server">
+  ## Mastra サーバーなしでの利用
+</div>
 
 このツールは、クエリに一致するドキュメントを取得するために単体で利用できます。
 
@@ -606,7 +638,9 @@ console.log(queryResult.sources);
 ```
 
 
-## ツールの詳細
+<div id="tool-details">
+  ## ツールの詳細
+</div>
 
 このツールは次のように作成されます：
 
@@ -614,7 +648,9 @@ console.log(queryResult.sources);
 - **入力スキーマ**: queryText と filter のオブジェクトが必要
 - **出力スキーマ**: relevantContext の文字列を返す
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [rerank()](../rag/rerank)
 - [createGraphRAGTool](./graph-rag-tool)

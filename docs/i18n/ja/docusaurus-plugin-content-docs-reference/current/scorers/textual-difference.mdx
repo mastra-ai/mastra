@@ -3,17 +3,23 @@ title: "リファレンス: テキスト差分スコアラー | Scorers | Mastra
 description: Mastra の Textual Difference Scorer に関するドキュメント。シーケンスマッチングを用いて、文字列間のテキスト差分を測定します。
 ---
 
-# テキスト差分スコアラー
+<div id="textual-difference-scorer">
+  # テキスト差分スコアラー
+</div>
 
 `createTextualDifferenceScorer()` 関数は、シーケンスマッチングを用いて2つの文字列間のテキスト差分を測定します。片方のテキストをもう一方へ変換するのに必要な操作数など、変更点に関する詳細な情報を提供します。
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 `createTextualDifferenceScorer()` 関数にはオプションはありません。
 
 この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドとその入出力の詳細については、[MastraScorer リファレンス](./mastra-scorer)を参照してください。
 
-## .run() の戻り値
+<div id="run-returns">
+  ## .run() の戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -52,7 +58,9 @@ description: Mastra の Textual Difference Scorer に関するドキュメント
 ```
 
 
-## スコアの詳細
+<div id="scoring-details">
+  ## スコアの詳細
+</div>
 
 スコアリングは以下の指標を算出します:
 
@@ -61,7 +69,9 @@ description: Mastra の Textual Difference Scorer に関するドキュメント
 - **長さの差**: テキスト長の正規化された差分
 - **信頼度**: 長さの差に反比例する指標
 
-### スコアリングプロセス
+<div id="scoring-process">
+  ### スコアリングプロセス
+</div>
 
 1. テキスト差分の分析:
    - 入力と出力のシーケンスを照合
@@ -74,7 +84,9 @@ description: Mastra の Textual Difference Scorer に関するドキュメント
 
 最終スコア: `(similarity_ratio * confidence) * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 0～1の範囲のテキスト差異スコア:
 
@@ -84,9 +96,13 @@ description: Mastra の Textual Difference Scorer に関するドキュメント
 - **0.1–0.3**: 大きな差異 — 大幅な修正が必要。
 - **0.0**: 完全に異なるテキスト。
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
-### 差異なしの例
+<div id="no-differences-example">
+  ### 差異なしの例
+</div>
 
 この例では、テキストはまったく同一です。スコアリングツールは完全一致として判定し、満点を与え、変更は検出されません。
 
@@ -108,7 +124,9 @@ console.log("分析ステップ結果:", result.analyzeStepResult);
 ```
 
 
-#### 差分はありません
+<div id="no-differences-output">
+  #### 差分はありません
+</div>
 
 スコアラーは高スコアを返し、テキストが同一であることを示します。詳細情報でも変更はなく、長さの差もないことが確認されています。
 
@@ -125,7 +143,9 @@ console.log("分析ステップ結果:", result.analyzeStepResult);
 ```
 
 
-### 些細な差異の例
+<div id="minor-differences-example">
+  ### 些細な差異の例
+</div>
 
 この例では、テキストにわずかな違いがあります。スコアラーはこれらの小さな差異を検出し、類似度は中程度というスコアを返します。
 
@@ -147,7 +167,9 @@ console.log("分析ステップ結果:", result.analyzeStepResult);
 ```
 
 
-#### 軽微な差分の出力
+<div id="minor-differences-output">
+  #### 軽微な差分の出力
+</div>
 
 スコアラーは、テキスト間の小さな違いを反映して中程度のスコアを返します。詳細情報には、変更数と確認された長さの差が含まれます。
 
@@ -164,7 +186,9 @@ console.log("分析ステップ結果:", result.analyzeStepResult);
 ```
 
 
-### 大きな差異の例
+<div id="major-differences-example">
+  ### 大きな差異の例
+</div>
 
 この例では、テキスト間に大きな相違があります。スコアラーは大幅な変更を検出し、低い類似度スコアを返します。
 
@@ -186,7 +210,9 @@ console.log("分析ステップ結果:", result.analyzeStepResult);
 ```
 
 
-#### 主要な差分の出力
+<div id="major-differences-output">
+  #### 主要な差分の出力
+</div>
 
 テキスト間に大きな差異があるため、スコアラーは低いスコアを返します。詳細な `analyzeStepResult` には多数の変更点と、長さに顕著な違いが示されています。
 
@@ -203,7 +229,9 @@ console.log("分析ステップ結果:", result.analyzeStepResult);
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [コンテンツ類似度スコアラー](./content-similarity)
 - [完全性スコアラー](./completeness)

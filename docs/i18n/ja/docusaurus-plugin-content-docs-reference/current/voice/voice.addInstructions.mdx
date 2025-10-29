@@ -3,11 +3,15 @@ title: "リファレンス: voice.addInstructions() | Voice | Mastra ドキュ�
 description: "音声プロバイダーで利用可能な addInstructions() メソッドのドキュメント。音声モデルの動作を制御するための指示を追加します。"
 ---
 
-# voice.addInstructions()
+<div id="voiceaddinstructions">
+  # voice.addInstructions()
+</div>
 
 `addInstructions()` メソッドは、リアルタイムのやり取りにおけるモデルの振る舞いを導く指示を音声プロバイダーに付与します。これは、会話全体でコンテキストを保持するリアルタイム音声プロバイダーに特に有用です。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
@@ -45,7 +49,9 @@ await voice.connect();
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <br />
 
@@ -60,11 +66,15 @@ await voice.connect();
   ]}
 />
 
-## 戻り値
+<div id="return-value">
+  ## 戻り値
+</div>
 
 このメソッドは値を返しません。
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - 指示は、明確で具体的で、音声でのやり取りに関係しているほど効果的です
 - このメソッドは、会話コンテキストを維持するリアルタイム音声プロバイダーで主に使用されます

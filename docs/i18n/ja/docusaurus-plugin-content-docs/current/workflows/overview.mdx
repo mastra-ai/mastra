@@ -7,19 +7,25 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 
-# Workflows の概要
+<div id="workflows-overview">
+  # Workflows の概要
+</div>
 
 Workflows は、単一のエージェントの推論に頼るのではなく、明確で構造化された手順で複雑なタスクの一連の流れを定義できるようにします。これにより、タスクの分割方法、タスク間のデータの受け渡し、どのタイミングで何を実行するかまでを完全に制御できます。
 
 ![Workflows の概要](/img/workflows/workflows-overview.jpg)
 
-## ワークフローを使うタイミング
+<div id="when-to-use-workflows">
+  ## ワークフローを使うタイミング
+</div>
 
 ワークフローは、事前に明確に定義され、決まった実行順序で複数のステップを踏むタスクに適しています。ステップ間でのデータの流れや変換、各段階でどのプリミティブを呼び出すかまで、きめ細かく制御できます。
 
 > **📹 視聴**: → ワークフローの概要とエージェントとの比較 [YouTube（7分）](https://youtu.be/0jg2g3sNvgw)
 
-## 中核原則
+<div id="core-principles">
+  ## 中核原則
+</div>
 
 Mastra のワークフローは次の原則で動作します:
 
@@ -27,7 +33,9 @@ Mastra のワークフローは次の原則で動作します:
 - `createWorkflow` で**ステップ**を組み合わせ、実行フローを定義する。
 - **ワークフロー**を実行して処理全体を動かし、一時停止・再開・ストリーミング結果を標準でサポートする。
 
-## ワークフローステップの作成
+<div id="creating-a-workflow-step">
+  ## ワークフローステップの作成
+</div>
 
 ステップはワークフローの基本的な構成要素です。受け取るデータと返すデータを定義するために、`inputSchema` と `outputSchema` を指定して `createStep()` でステップを作成します。
 
@@ -57,11 +65,15 @@ const step1 = createStep({
 > 設定項目の全一覧は [Step クラス](/reference/workflows/step) を参照してください。
 
 
-### エージェントとツールの使用
+<div id="using-agents-and-tools">
+  ### エージェントとツールの使用
+</div>
 
 ワークフローの各ステップでは、登録済みのエージェントを呼び出したり、ツールを直接インポートして実行したりすることもできます。詳しくは [Agents and Tools](./agents-and-tools) ページをご覧ください。
 
-## ワークフローの作成
+<div id="creating-a-workflow">
+  ## ワークフローの作成
+</div>
 
 受け取るデータと返すデータを定義するために、`inputSchema` と `outputSchema` を指定して `createWorkflow()` でワークフローを作成します。`.then()` でステップを追加し、最後に `.commit()` でワークフローを確定します。
 
@@ -88,11 +100,15 @@ export const testWorkflow = createWorkflow({
 > すべての設定オプションの一覧については、[Workflow Class](/reference/workflows/workflow) を参照してください。
 
 
-### 制御フローを理解する
+<div id="understanding-control-flow">
+  ### 制御フローを理解する
+</div>
 
 ワークフローは複数の方法で構成できます。選択した方法によって、各ステップのスキーマの構成が異なります。詳しくは [Control Flow](./control-flow) のページをご覧ください。
 
-#### ワークフローのステップを構成する
+<div id="composing-workflow-steps">
+  #### ワークフローのステップを構成する
+</div>
 
 `.then()` を使用すると、ステップは順番に実行されます。各ステップの `inputSchema` は直前のステップの `outputSchema` と一致している必要があります。最後のステップの `outputSchema` は、エンドツーエンドの型安全性を確保するために、ワークフローの `outputSchema` と一致している必要があります。
 
@@ -132,7 +148,9 @@ export const testWorkflow = createWorkflow({
 ```
 
 
-### ワークフローの登録
+<div id="registering-a-workflow">
+  ### ワークフローの登録
+</div>
 
 アプリケーション全体で利用できるように、Mastra インスタンスにワークフローを登録します。登録後は、エージェントやツールから呼び出せるようになり、ログやオブザーバビリティ機能などの共有リソースにもアクセスできます。
 
@@ -147,7 +165,9 @@ export const mastra = new Mastra({
 ```
 
 
-## ワークフローの参照
+<div id="referencing-a-workflow">
+  ## ワークフローの参照
+</div>
 
 エージェント、ツール、Mastra Client、またはコマンドラインからワークフローを実行できます。セットアップに応じて、`mastra` もしくは `mastraClient` のインスタンスで `.getWorkflow()` を呼び出して、ワークフローの参照を取得します。
 
@@ -164,7 +184,9 @@ const testWorkflow = mastra.getWorkflow("testWorkflow");
 > 詳しくは、[Running Workflows](/examples/workflows_legacy/creating-a-workflow) をご覧ください。
 
 
-## ワークフローの実行
+<div id="running-workflows">
+  ## ワークフローの実行
+</div>
 
 ワークフローは2つのモードで実行できます。start はすべてのステップが完了するまで待って結果を返し、stream は実行中にイベントを発行します。ユースケースに合わせて選択してください。最終結果だけが必要なら start、進行状況を監視したり各ステップ完了時にアクションをトリガーしたい場合は stream を使います。
 
@@ -207,7 +229,9 @@ for await (const chunk of result.stream) {
   </TabItem>
 </Tabs>
 
-## ワークフローの出力
+<div id="workflow-output">
+  ## ワークフローの出力
+</div>
 
 ワークフローの出力には、各ステップの入出力を含む実行の全ライフサイクルが表示されます。各ステップのステータス、ワークフロー全体のステータス、最終結果も含まれます。これにより、データがワークフロー内をどのように流れ、各ステップが何を生成し、最終的にどのように完了したかを明確に把握できます。
 
@@ -245,7 +269,9 @@ for await (const chunk of result.stream) {
 ```
 
 
-## `RuntimeContext` の使用
+<div id="using-runtimecontext">
+  ## `RuntimeContext` の使用
+</div>
 
 [RuntimeContext](/docs/server-db/runtime-context) を使うと、リクエストごとの値にアクセスできます。これにより、リクエストの状況に応じて動作を条件付きで調整できます。
 
@@ -269,11 +295,15 @@ const step1 = createStep({
 > 詳細については、[Runtime Context](/docs/server-db/runtime-context)を参照してください。
 
 
-## Mastra Playground でのテスト
+<div id="testing-with-mastra-playground">
+  ## Mastra Playground でのテスト
+</div>
 
 Mastra の [Playground](/docs/getting-started/studio) を使うと、さまざまな入力でワークフローを手軽に実行し、実行ライフサイクルを可視化し、各ステップの入出力を確認し、ワークフローの各要素をより詳しく確認できます。
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 ワークフローの詳細については、実践的な例を用いて中核概念を解説する[Workflow Guide](/guides/guide/ai-recruiter)をご覧ください。
 
@@ -282,6 +312,8 @@ Mastra の [Playground](/docs/getting-started/studio) を使うと、さまざ�
 - [Inngest のワークフロー例](/examples/workflows/inngest-workflow)
 - [Suspend and Resume のワークフロー例](/examples/workflows_legacy/human-in-the-loop)
 
-## ワークフロー（レガシー）
+<div id="workflows-legacy">
+  ## ワークフロー（レガシー）
+</div>
 
 レガシー版ワークフローのドキュメントは、[Workflows (Legacy)](../workflows-legacy/overview)をご参照ください。

@@ -3,17 +3,23 @@ title: "リファレンス: Tone Consistency Scorer | Scorers | Mastra ドキュ
 description: Mastra の Tone Consistency Scorer に関するドキュメント。テキストの感情的なトーンとセンチメントの一貫性を評価します。
 ---
 
-# トーン一貫性スコアラー
+<div id="tone-consistency-scorer">
+  # トーン一貫性スコアラー
+</div>
 
 `createToneScorer()` 関数は、テキストの感情的なトーンと感情表現の一貫性を評価します。入力と出力のペア間でトーンを比較するモードと、単一のテキスト内のトーンの安定性を分析するモードの2つで動作します。
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 `createToneScorer()` 関数にはオプションはありません。
 
 この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドおよびその入出力の詳細は、[MastraScorer リファレンス](./mastra-scorer)を参照してください。
 
-## .run() の戻り値
+<div id="run-returns">
+  ## .run() の戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -53,11 +59,15 @@ description: Mastra の Tone Consistency Scorer に関するドキュメント�
 ```
 
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 評価者は、トーンパターンの分析とモード別のスコアリングにより、感情の一貫性を評価します。
 
-### スコアリングプロセス
+<div id="scoring-process">
+  ### スコアリングプロセス
+</div>
 
 1. トーンパターンを分析:
    - センチメントの特徴量を抽出
@@ -75,7 +85,9 @@ description: Mastra の Tone Consistency Scorer に関するドキュメント�
 
 最終スコア: `mode_specific_score * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 （スケールは0から、既定は0～1）
 
@@ -85,7 +97,9 @@ description: Mastra の Tone Consistency Scorer に関するドキュメント�
 - 0.1～0.3：大きなトーン変化を伴う低い一貫性
 - 0.0：一貫性なし（まったく異なるトーン）
 
-### analyzeStepResult
+<div id="analyzestepresult">
+  ### analyzeStepResult
+</div>
 
 トーン指標を含むオブジェクト:
 
@@ -95,9 +109,13 @@ description: Mastra の Tone Consistency Scorer に関するドキュメント�
 - **avgSentiment**: 文ごとのセンチメントの平均（安定性モード）。
 - **sentimentVariance**: 文間におけるセンチメントの分散（安定性モード）。
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
-### ポジティブなトーンの例
+<div id="positive-tone-example">
+  ### ポジティブなトーンの例
+</div>
 
 この例では、テキストは同様にポジティブなトーンを示しています。スコアラーはトーンの一致度を評価し、その結果、高いスコアとなります。
 
@@ -119,7 +137,9 @@ console.log("分析ステップ結果:", result.analyzeStepResult);
 ```
 
 
-#### ポジティブなトーンの出力
+<div id="positive-tone-output">
+  #### ポジティブなトーンの出力
+</div>
 
 スコアラーは、強いセンチメント整合性を反映した高いスコアを返します。`analyzeStepResult` フィールドには、センチメントの値とその差分が含まれます。
 
@@ -135,7 +155,9 @@ console.log("分析ステップ結果:", result.analyzeStepResult);
 ```
 
 
-### 安定したトーンの例
+<div id="stable-tone-example">
+  ### 安定したトーンの例
+</div>
 
 この例では、空のレスポンスを渡してテキスト内のトーンの一貫性を分析します。これによりスコアラーは、単一の入力テキストにおける感情の安定性を評価し、テキスト全体でトーンがどれほど均一かを示すスコアを返します。
 
@@ -157,7 +179,9 @@ console.log("分析ステップの結果:", result.analyzeStepResult);
 ```
 
 
-#### 安定したトーン出力
+<div id="stable-tone-output">
+  #### 安定したトーン出力
+</div>
 
 スコアラーは、入力テキスト全体で感情が一貫していることを示す高いスコアを返します。`analyzeStepResult` フィールドには平均感情と感情の分散が含まれ、トーンの安定性を反映します。
 
@@ -172,7 +196,9 @@ console.log("分析ステップの結果:", result.analyzeStepResult);
 ```
 
 
-### トーンが混在する例
+<div id="mixed-tone-example">
+  ### トーンが混在する例
+</div>
 
 この例では、入力と応答の感情的なトーンが異なります。評価者はこうした違いを捉え、一貫性スコアを低く評価します。
 
@@ -196,7 +222,9 @@ console.log("分析ステップ結果:", result.analyzeStepResult);
 ```
 
 
-#### トーンが混在した出力
+<div id="mixed-tone-output">
+  #### トーンが混在した出力
+</div>
 
 感情トーンに顕著な差があるため、scorer は低いスコアを返します。`analyzeStepResult` フィールドは、感情の値とそれらの変動幅を示します。
 
@@ -212,7 +240,9 @@ console.log("分析ステップ結果:", result.analyzeStepResult);
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [コンテンツ類似度スコアラー](./content-similarity)
 - [有害性スコアラー](./toxicity)

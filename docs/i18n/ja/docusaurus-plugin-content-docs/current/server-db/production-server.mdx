@@ -3,11 +3,15 @@ title: "Mastra 本番環境サーバーの構築 | サーバー & DB | Mastra �
 description: "API や CORS などのカスタム設定を用いて、本番運用向けの Mastra サーバーを構成しデプロイする方法を解説します"
 ---
 
-# Mastra の本番サーバーを作成する
+<div id="create-a-mastra-production-server">
+  # Mastra の本番サーバーを作成する
+</div>
 
 Mastra アプリケーションを本番環境にデプロイすると、エージェントやワークフロー、その他の機能を API エンドポイントとして提供する HTTP サーバーとして動作します。このページでは、本番環境向けにサーバーを設定およびカスタマイズする方法を説明します。
 
-## サーバーアーキテクチャ
+<div id="server-architecture">
+  ## サーバーアーキテクチャ
+</div>
 
 Mastra は基盤となる HTTP サーバーフレームワークとして [Hono](https://hono.dev) を使用しています。`mastra build` で Mastra アプリケーションをビルドすると、`.mastra` ディレクトリに Hono ベースの HTTP サーバーが生成されます。
 
@@ -24,7 +28,9 @@ Mastra は基盤となる HTTP サーバーフレームワークとして [Hono]
 追加のサーバー機能の追加方法については、[Middleware](/docs/server-db/middleware) および
 [Custom API Routes](/docs/server-db/custom-api-routes) の各ページを参照してください。
 
-## サーバー設定
+<div id="server-configuration">
+  ## サーバー設定
+</div>
 
 Mastra インスタンスでサーバーの `port` と `timeout` を設定できます。
 
@@ -43,7 +49,9 @@ export const mastra = new Mastra({
 `method` オプションには `"GET"`、`"POST"`、`"PUT"`、`"DELETE"`、または `"ALL"` を指定できます。`"ALL"` を使用すると、パスに一致する任意の HTTP メソッドでハンドラーが呼び出されます。
 
 
-## TypeScript の設定
+<div id="typescript-configuration">
+  ## TypeScript の設定
+</div>
 
 Mastra では、最新の Node.js バージョンに対応した `module` と `moduleResolution` の値が必要です。`CommonJS` や `node` といった旧来の設定は Mastra のパッケージと互換性がなく、モジュール解決エラーの原因になります。
 
@@ -67,7 +75,9 @@ Mastra では、最新の Node.js バージョンに対応した `module` と `m
 > この TypeScript 設定は、Mastra プロジェクト向けに、モダンなモジュール解決と厳密な型チェックを採用して最適化されています。
 
 
-## CORS 設定
+<div id="cors-configuration">
+  ## CORS 設定
+</div>
 
 Mastra では、サーバーの CORS（クロスオリジンリソースシェアリング）設定を構成できます。
 

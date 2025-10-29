@@ -3,11 +3,15 @@ title: "Arize Exporter | AI トレーシング | 可観測性 | Mastra ドキュ
 description: "OpenTelemetry と OpenInference を使って、AI トレースを Arize Phoenix または Arize AX に送信する"
 ---
 
-# Arize エクスポーター
+<div id="arize-exporter">
+  # Arize エクスポーター
+</div>
 
 [Arize](https://arize.com/) は、[Phoenix](https://phoenix.arize.com/)（オープンソース）および [Arize AX](https://arize.com/generative-ai/)（エンタープライズ）を通じて AI アプリケーション向けの可観測性プラットフォームを提供します。Arize エクスポーターは、OpenTelemetry と [OpenInference](https://github.com/Arize-ai/openinference/tree/main/spec) のセマンティック規約に従って AI のトレースを送信し、OpenInference をサポートする任意の OpenTelemetry プラットフォームと互換性があります。
 
-## Arize を使う場面
+<div id="when-to-use-arize">
+  ## Arize を使う場面
+</div>
 
 Arize は次のような場合に最適です:
 
@@ -17,20 +21,28 @@ Arize は次のような場合に最適です:
 - **包括的な AI 可観測性** - LLM のトレース、埋め込み、リトリーバル分析
 - **オープンソースの選択肢** - Phoenix によるフル機能のローカルデプロイ
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash npm2yarn
 npm install @mastra/arize
 ```
 
 
-## 設定
+<div id="configuration">
+  ## 設定
+</div>
 
-### Phoenix のセットアップ
+<div id="phoenix-setup">
+  ### Phoenix のセットアップ
+</div>
 
 Phoenix は、セルフホストで運用することも、Phoenix Cloud を通じて利用することもできる、オープンソースのオブザーバビリティ・プラットフォームです。
 
-#### 前提条件
+<div id="prerequisites">
+  #### 前提条件
+</div>
 
 1. **Phoenix インスタンス**: Docker でデプロイするか、[Phoenix Cloud](https://app.phoenix.arize.com/login) に登録する
 2. **エンドポイント**: Phoenix のエンドポイント URL（末尾が `/v1/traces`）
@@ -85,11 +97,15 @@ docker run --pull=always -d --name arize-phoenix -p 6006:6006 \
 :::
 
 
-### Arize AX のセットアップ
+<div id="arize-ax-setup">
+  ### Arize AX のセットアップ
+</div>
 
 Arize AX は、運用中の AI システム向けに高度な機能を備えたエンタープライズ向けオブザーバビリティ・プラットフォームです。
 
-#### 前提条件
+<div id="prerequisites">
+  #### 前提条件
+</div>
 
 1. **Arize AX アカウント**: [app.arize.com](https://app.arize.com/) で登録
 2. **スペース ID**: 組織のスペース識別子
@@ -103,7 +119,9 @@ ARIZE_PROJECT_NAME=mastra-service  # 任意
 ```
 
 
-#### 基本的なセットアップ
+<div id="basic-setup">
+  #### 基本的なセットアップ
+</div>
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -128,11 +146,15 @@ export const mastra = new Mastra({
 ```
 
 
-## 設定オプション
+<div id="configuration-options">
+  ## 設定オプション
+</div>
 
 Arize エクスポーターは、OpenTelemetry の動作をきめ細かく調整するための高度な設定をサポートしています。
 
-### 完全な構成
+<div id="complete-configuration">
+  ### 完全な構成
+</div>
 
 ```typescript
 new ArizeExporter({
@@ -165,7 +187,9 @@ new ArizeExporter({
 ```
 
 
-### バッチ処理オプション
+<div id="batch-processing-options">
+  ### バッチ処理オプション
+</div>
 
 トレースのバッチ化とエクスポート方法を制御します。
 
@@ -181,7 +205,9 @@ new ArizeExporter({
 ```
 
 
-### リソース属性
+<div id="resource-attributes">
+  ### リソース属性
+</div>
 
 エクスポートされるすべてのスパンにカスタム属性を追加します:
 
@@ -198,11 +224,15 @@ new ArizeExporter({
 ```
 
 
-## OpenInference セマンティック規約
+<div id="openinference-semantic-conventions">
+  ## OpenInference セマンティック規約
+</div>
 
 このエクスポーターは、生成 AI アプリケーション向けの [OpenInference セマンティック規約](https://github.com/Arize-ai/openinference/tree/main/spec) に準拠して実装されており、さまざまなオブザーバビリティプラットフォーム間で統一されたトレース構造を提供します。
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [AI トレースの概要](/docs/observability/ai-tracing/overview)
 - [Phoenix ドキュメント](https://docs.arize.com/phoenix)

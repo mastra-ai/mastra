@@ -3,13 +3,19 @@ title: "リファレンス: .after() | 旧式ワークフロー | Mastra ドキ�
 description: レガシー版ワークフローにおける `after()` メソッドのドキュメント。分岐や経路のマージを可能にします。
 ---
 
-# .after()
+<div id="after">
+  # .after()
+</div>
 
 `.after()` メソッドは、ワークフローのステップ間に明示的な依存関係を定義し、実行時の分岐やマージ（統合）を可能にします。
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
-### 基本的なブランチ運用
+<div id="basic-branching">
+  ### 基本的なブランチ運用
+</div>
 
 ```typescript
 workflow
@@ -20,7 +26,9 @@ workflow
 ```
 
 
-### 複数ブランチのマージ
+<div id="merging-multiple-branches">
+  ### 複数ブランチのマージ
+</div>
 
 ```typescript
 workflow
@@ -33,7 +41,9 @@ workflow
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -47,7 +57,9 @@ workflow
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -59,9 +71,13 @@ workflow
   ]}
 />
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
-### 単一依存関係
+<div id="single-dependency">
+  ### 単一依存関係
+</div>
 
 ```typescript
 workflow
@@ -72,7 +88,9 @@ workflow
 ```
 
 
-### 複数の依存関係（ブランチの統合）
+<div id="multiple-dependencies-merging-branches">
+  ### 複数の依存関係（ブランチの統合）
+</div>
 
 ```typescript
 workflow
@@ -85,7 +103,9 @@ workflow
 ```
 
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [Branching Paths の例](/examples/workflows_legacy/branching-paths)
 - [Workflow クラスリファレンス](./workflow)

@@ -3,7 +3,9 @@ title: "リファレンス: AnswerRelevancyMetric | Evals | Mastra ドキュメ�
 description: Mastra における Answer Relevancy Metric のドキュメント。LLM の出力が入力クエリにどれだけ適切に対応しているかを評価します。
 ---
 
-# AnswerRelevancyMetric
+<div id="answerrelevancymetric">
+  # AnswerRelevancyMetric
+</div>
 
 :::info Scorers
 このドキュメントは旧来の evals API について説明しています。最新のスコアラー機能については [Scorers](/docs/scorers/overview) をご確認ください。
@@ -11,7 +13,9 @@ description: Mastra における Answer Relevancy Metric のドキュメント�
 
 `AnswerRelevancyMetric` クラスは、LLM の出力が入力クエリにどの程度適切に回答・対応しているかを評価します。判定者による評価方式で関連性を判定し、詳細なスコアと理由付けを提供します。
 
-## 基本的な使用方法
+<div id="basic-usage">
+  ## 基本的な使用方法
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -35,7 +39,9 @@ console.log(result.info.reason); // スコアの根拠
 ```
 
 
-## コンストラクターのパラメーター
+<div id="constructor-parameters">
+  ## コンストラクターのパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -55,7 +61,9 @@ console.log(result.info.reason); // スコアの根拠
   ]}
 />
 
-### AnswerRelevancyMetricOptions
+<div id="answerrelevancymetricoptions">
+  ### AnswerRelevancyMetricOptions
+</div>
 
 <PropertiesTable
   content={[
@@ -76,7 +84,9 @@ console.log(result.info.reason); // スコアの根拠
   ]}
 />
 
-## measure() のパラメータ
+<div id="measure-parameters">
+  ## measure() のパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -95,7 +105,9 @@ console.log(result.info.reason); // スコアの根拠
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -124,11 +136,15 @@ console.log(result.info.reason); // スコアの根拠
   ]}
 />
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 この指標は、網羅性、正確性、詳細さを考慮し、クエリと回答の整合性に基づいて関連性を評価します。
 
-### スコアリング手順
+<div id="scoring-process">
+  ### スコアリング手順
+</div>
 
 1. ステートメント分析:
    - 文脈を保ちながら、出力を意味のあるステートメントに分割する
@@ -141,7 +157,9 @@ console.log(result.info.reason); // スコアの根拠
 
 最終スコア: `((direct + uncertainty * partial) / total_statements) * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 （範囲は0から。既定は0～1）
 
@@ -151,7 +169,9 @@ console.log(result.info.reason); // スコアの根拠
 - 0.1～0.3: 低い適合度 — 重大な問題あり
 - 0.0: 無関係 — 誤りまたは的外れ
 
-## カスタム構成の例
+<div id="example-with-custom-configuration">
+  ## カスタム構成の例
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -184,7 +204,9 @@ const result = await metric.measure(
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [プロンプト整合性メトリクス](./prompt-alignment)
 - [コンテキスト精度メトリクス](./context-precision)

@@ -3,7 +3,9 @@ title: "例：バイアス評価 | Evals | Mastra Docs"
 description: さまざまな種類のバイアスに対する応答を、Bias 指標を用いて評価する例。
 ---
 
-# バイアス評価
+<div id="bias-evaluation">
+  # バイアス評価
+</div>
 
 :::note
 Scorers API は現在ベータ版です。改良に積極的に取り組んでおり、皆さまのフィードバックを歓迎します。ご質問や機能のご要望は [Discord](https://discord.gg/mastra) までお寄せください。
@@ -11,14 +13,18 @@ Scorers API は現在ベータ版です。改良に積極的に取り組んで�
 
 `BiasMetric` を使用して、応答に偏った言い回し、ステレオタイプ、不公平な一般化が含まれていないかを評価します。このメトリクスは `query` と `response` を受け取り、スコアと理由を含む `info` オブジェクトを返します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/evals
 ```
 
 
-## 強いバイアスの例
+<div id="high-bias-example">
+  ## 強いバイアスの例
+</div>
 
 この例では、応答に露骨な偏見的な表現や一般化が含まれています。前提が明示的で、ステレオタイプや差別的な見解を強く助長しています。
 
@@ -38,7 +44,9 @@ console.log(result);
 ```
 
 
-### バイアスの強い出力
+<div id="high-bias-output">
+  ### バイアスの強い出力
+</div>
 
 この出力は、差別的またはステレオタイプに基づく内容の明確な例であるため、高いスコアが付与されています。
 
@@ -52,7 +60,9 @@ console.log(result);
 ```
 
 
-## バイアスが混在する例
+<div id="mixed-bias-example">
+  ## バイアスが混在する例
+</div>
 
 この例では、回答には妥当な指摘と微妙なバイアスが混ざっています。部分的には公平でも、根底にはなおバイアスが残っています。
 
@@ -72,7 +82,9 @@ console.log(result);
 ```
 
 
-### 間接的なバイアスの出力
+<div id="mixed-bias-output">
+  ### 間接的なバイアスの出力
+</div>
 
 この出力は、応答がより間接的な形でバイアスを示しているため、スコアが低くなります。
 
@@ -86,7 +98,9 @@ console.log(result);
 ```
 
 
-## バイアスが低い例
+<div id="low-bias-example">
+  ## バイアスが低い例
+</div>
 
 この例では、回答は偏った仮定を持ち込まず、客観的かつ中立的な基準に焦点を当てています。
 
@@ -106,7 +120,9 @@ console.log(result);
 ```
 
 
-### バイアスの少ない出力
+<div id="low-bias-output">
+  ### バイアスの少ない出力
+</div>
 
 この出力は、偏った言語や推論が見られないため、低評価となります。
 
@@ -120,7 +136,9 @@ console.log(result);
 ```
 
 
-## メトリクスの設定
+<div id="metric-configuration">
+  ## メトリクスの設定
+</div>
 
 任意のパラメーターを設定することで、`BiasMetric` が応答をどのように採点するかを調整できます。たとえば、`scale` はこのメトリクスが返すスコアの最大値を設定します。
 
@@ -133,7 +151,9 @@ const metric = new BiasMetric(openai("gpt-4o-mini"), {
 > 設定オプションの詳細な一覧は [BiasMetric](/reference/evals/bias) を参照してください。
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `BiasMetric` は次の形式の結果を返します:
 
@@ -147,7 +167,9 @@ const metric = new BiasMetric(openai("gpt-4o-mini"), {
 ```
 
 
-### バイアススコア
+<div id="bias-score">
+  ### バイアススコア
+</div>
 
 バイアススコアは 0 から 1 の範囲です:
 
@@ -157,7 +179,9 @@ const metric = new BiasMetric(openai("gpt-4o-mini"), {
 - **0.1–0.3**: 概ね中立だが、軽微な偏った言い回しや前提が見られる。
 - **0.0**: 完全に客観的で、バイアスがない。
 
-### バイアス情報
+<div id="bias-info">
+  ### バイアス情報
+</div>
 
 スコアの説明。詳細には次の内容が含まれます：
 

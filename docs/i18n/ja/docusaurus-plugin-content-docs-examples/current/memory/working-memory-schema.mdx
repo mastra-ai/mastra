@@ -11,7 +11,9 @@ description: Zod スキーマを使ってワーキングメモリのデータを
 
 この例では、ワーキングメモリ用スキーマを使って ToDo リストを管理する方法を示します。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 この例では `openai` モデルを使用します。`OPENAI_API_KEY` を `.env` ファイルに追加してください。
 
@@ -26,11 +28,15 @@ npm install @mastra/libsql
 ```
 
 
-## エージェントにメモリを追加する
+<div id="adding-memory-to-an-agent">
+  ## エージェントにメモリを追加する
+</div>
 
 エージェントに LibSQL のメモリを追加するには、`Memory` クラスを使用し、`LibSQLStore` を用いて `storage` インスタンスを渡します。`url` はリモートの場所またはローカルファイルを指すことができます。
 
-### `schema` を用いたワーキングメモリ
+<div id="working-memory-with-schema">
+  ### `schema` を用いたワーキングメモリ
+</div>
 
 `workingMemory.enabled` を `true` に設定してワーキングメモリを有効にします。これにより、エージェントはやり取りの間で構造化された情報を保持できます。
 
@@ -84,11 +90,15 @@ export const workingMemorySchemaAgent = new Agent({
 ```
 
 
-## 使用例
+<div id="usage-examples">
+  ## 使用例
+</div>
 
 この例では、構造化情報を管理するためにワーキングメモリのスキーマを用いるエージェントとのやり取り方法を示します。エージェントは、同一スレッド内での複数回の対話にわたり、ToDo リストを更新し、永続化します。
 
-### `.stream()` を使ったレスポンスのストリーミング
+<div id="streaming-a-response-using-stream">
+  ### `.stream()` を使ったレスポンスのストリーミング
+</div>
 
 この例では、新しいタスクを含むメッセージをエージェントに送信します。レスポンスはストリーミングされ、更新された To-Do リストが含まれます。
 
@@ -118,7 +128,9 @@ for await (const chunk of stream.textStream) {
 ```
 
 
-### `.generate()` を使ってレスポンスを生成する
+<div id="generating-a-response-using-generate">
+  ### `.generate()` を使ってレスポンスを生成する
+</div>
 
 この例では、新しいタスクを含むメッセージをエージェントに送信します。レスポンスは1つのメッセージとして返され、更新済みのToDoリストが含まれます。
 
@@ -146,7 +158,9 @@ console.log(response.text);
 ```
 
 
-## 出力例
+<div id="example-output">
+  ## 出力例
+</div>
 
 この出力は、zod スキーマで定義された構造に従って、エージェントが更新済みの todo リストをどのように整形して返すかを示しています。
 
@@ -164,7 +178,9 @@ console.log(response.text);
 ```
 
 
-## ストレージオブジェクトの例
+<div id="example-storage-object">
+  ## ストレージオブジェクトの例
+</div>
 
 Working memory はデータを `.json` 形式で保存します。以下のような内容になります：
 
@@ -193,7 +209,9 @@ Working memory はデータを `.json` 形式で保存します。以下のよ�
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [エージェントの参照](/docs/agents/overview#referencing-an-agent)
 - [エージェントのメモリ](/docs/agents/agent-memory)

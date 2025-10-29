@@ -3,11 +3,15 @@ title: "例: MongoDB を用いたメモリ | Memory | Mastra Docs"
 description: Mastra のメモリシステムを MongoDB のストレージとベクター機能で利用する方法の例。
 ---
 
-# MongoDB を使ったメモリー
+<div id="memory-with-mongodb">
+  # MongoDB を使ったメモリー
+</div>
 
 この例では、Mastra のメモリーシステムで MongoDB をストレージのバックエンドとして使う方法を紹介します。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 この例では `openai` モデルを使用し、MongoDB データベースが必要です。`.env` ファイルに次を追加してください：
 
@@ -24,7 +28,9 @@ npm install @mastra/mongodb
 ```
 
 
-## エージェントにメモリを追加する
+<div id="adding-memory-to-an-agent">
+  ## エージェントにメモリを追加する
+</div>
 
 エージェントに MongoDB のメモリを追加するには、`Memory` クラスを使用し、`MongoDBStore` で新しい `storage` キーを作成します。設定は、ローカルおよびリモートの MongoDB インスタンスの両方をサポートしています。
 
@@ -54,7 +60,9 @@ export const mongodbAgent = new Agent({
 ```
 
 
-## MongoDB でのベクトル埋め込み
+<div id="vector-embeddings-with-mongodb">
+  ## MongoDB でのベクトル埋め込み
+</div>
 
 Embedding は数値ベクトルで、memory の `semanticRecall` によって（キーワードではなく）意味に基づいて関連メッセージを取得するために使用されます。
 
@@ -106,7 +114,9 @@ export const mongodbAgent = new Agent({
 ```
 
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 このリクエストの参照対象を絞り込むには `memoryOptions` を使用します。`lastMessages: 5` を設定して直近メッセージに基づく参照を制限し、`semanticRecall` を使って、各一致の前後の文脈として `messageRange: 2` の隣接メッセージを含めながら、最も関連性の高い `topK: 3` 件のメッセージを取得します。
 
@@ -149,6 +159,8 @@ for await (const chunk of stream.textStream) {
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [エージェントの呼び出し](/docs/agents/overview)

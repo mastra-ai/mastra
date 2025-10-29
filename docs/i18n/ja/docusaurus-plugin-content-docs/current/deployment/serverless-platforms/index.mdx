@@ -3,7 +3,9 @@ title: "サーバーレスへのデプロイ | デプロイ | Mastra ドキュ�
 description: "プラットフォーム固有のデプロイヤーまたは標準の HTTP サーバーを使って Mastra アプリケーションをビルドし、デプロイする"
 ---
 
-# サーバーレスへのデプロイ
+<div id="serverless-deployment">
+  # サーバーレスへのデプロイ
+</div>
 
 スタンドアロンの Mastra アプリケーションは、次のデプロイヤーパッケージのいずれかを使用して、主要なサーバーレスプラットフォームにデプロイできます：
 
@@ -15,7 +17,9 @@ description: "プラットフォーム固有のデプロイヤーまたは標準
 
 自己ホストの Node.js サーバーにデプロイする場合は、[Creating A Mastra Server](/docs/deployment/server-deployment) ガイドをご覧ください。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 始める前に、次のものを用意してください:
 
@@ -24,7 +28,9 @@ description: "プラットフォーム固有のデプロイヤーまたは標準
   - 選択したプラットフォームのアカウント
   - 必要な API キーまたは認証情報
 
-## LibSQLStore
+<div id="libsqlstore">
+  ## LibSQLStore
+</div>
 
 `LibSQLStore` はローカルファイルシステムに書き込みますが、サーバーレス環境は性質上エフェメラルであるため対応していません。Vercel、Netlify、Cloudflare などのプラットフォームにデプロイする場合は、`LibSQLStore` の使用を必ずすべて削除してください。
 

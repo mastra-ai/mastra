@@ -3,11 +3,15 @@ title: "リファレンス: Run クラス | ワークフロー | Mastra ドキ�
 description: Mastra の Run クラスに関するドキュメント。Run クラスはワークフローの実行インスタンスを表します。
 ---
 
-# Run クラス
+<div id="run-class">
+  # Run クラス
+</div>
 
 `Run` クラスはワークフローの実行インスタンスを表し、開始、再開、ストリーミング、監視を行うためのメソッドを提供します。
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
@@ -24,7 +28,9 @@ if (result.status === "suspended") {
 ```
 
 
-## 実行メソッド
+<div id="run-methods">
+  ## 実行メソッド
+</div>
 
 <PropertiesTable
   content={[
@@ -67,7 +73,9 @@ if (result.status === "suspended") {
   ]}
 />
 
-## 実行ステータス
+<div id="run-status">
+  ## 実行ステータス
+</div>
 
 ワークフロー実行の`status`は、現在の実行状態を示します。取りうる値は次のとおりです。
 
@@ -94,7 +102,9 @@ if (result.status === "suspended") {
   ]}
 />
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [Run.start()](./run-methods/start)
 - [Run.resume()](./run-methods/resume)

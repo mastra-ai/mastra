@@ -3,7 +3,9 @@ title: "リファレンス: Workflow クラス | レガシー ワークフロー
 description: Mastra の Workflow クラスに関するドキュメント。条件分岐やデータ検証を伴う複雑な処理フローのために、ステートマシンを作成できます。
 ---
 
-# Workflow クラス
+<div id="workflow-class">
+  # Workflow クラス
+</div>
 
 Workflow クラスは、条件分岐やデータ検証を伴う複雑な処理の流れに対して、ステートマシンを作成できます。
 
@@ -14,9 +16,13 @@ const workflow = new LegacyWorkflow({ name: "my-workflow" });
 ```
 
 
-## API リファレンス
+<div id="api-reference">
+  ## API リファレンス
+</div>
 
-### コンストラクタ
+<div id="constructor">
+  ### コンストラクタ
+</div>
 
 <PropertiesTable
   content={[
@@ -44,21 +50,31 @@ const workflow = new LegacyWorkflow({ name: "my-workflow" });
   ]}
 />
 
-### コアメソッド
+<div id="core-methods">
+  ### コアメソッド
+</div>
 
-#### `step()`
+<div id="step">
+  #### `step()`
+</div>
 
 ワークフローに[Step](./step-class)を追加し、他のステップへの遷移も定義します。チェーン呼び出しのためにワークフローインスタンスを返します。[ステップの詳細](./step-class)。
 
-#### `commit()`
+<div id="commit">
+  #### `commit()`
+</div>
 
 ワークフロー構成を検証して確定します。すべてのステップを追加した後に必ず呼び出してください。
 
-#### `execute()`
+<div id="execute">
+  #### `execute()`
+</div>
 
 必要に応じてトリガー用データを指定してワークフローを実行します。型は [トリガースキーマ](./workflow#trigger-schemas)に基づきます。
 
-## トリガースキーマ
+<div id="trigger-schemas">
+  ## トリガースキーマ
+</div>
 
 トリガースキーマは、Zod を使用してワークフローに渡される初期データを検証します。
 
@@ -81,11 +97,15 @@ const workflow = new LegacyWorkflow({
 * ワークフローの入力用の TypeScript 型を提供します
 
 
-## 検証
+<div id="validation">
+  ## 検証
+</div>
 
 ワークフローの検証は、主に次の2つのタイミングで行われます：
 
-### 1. コミット時
+<div id="1-at-commit-time">
+  ### 1. コミット時
+</div>
 
 `.commit()` を呼び出すと、ワークフローは次の内容を検証します：
 
@@ -103,7 +123,9 @@ workflow
 * 重複したステップID
 
 
-### 2. 実行時
+<div id="2-during-execution">
+  ### 2. 実行時
+</div>
 
 `start()` を呼び出すと、次の内容を検証します:
 
@@ -128,7 +150,9 @@ await start({
 * 必須の変数が存在すること
 
 
-## ワークフローのステータス
+<div id="workflow-status">
+  ## ワークフローのステータス
+</div>
 
 ワークフローのステータスは、現在の実行状態を示します。取り得る値は次のとおりです。
 
@@ -162,7 +186,9 @@ await start({
   ]}
 />
 
-### 例: さまざまなステータスの処理
+<div id="example-handling-different-statuses">
+  ### 例: さまざまなステータスの処理
+</div>
 
 ```typescript showLineNumbers copy
 const { runId, start, watch } = workflow.createRun();
@@ -185,7 +211,9 @@ await start({ triggerData: data });
 ```
 
 
-## エラー処理
+<div id="error-handling">
+  ## エラー処理
+</div>
 
 ```ts showLineNumbers copy
 try {
@@ -201,7 +229,9 @@ try {
 ```
 
 
-## ステップ間でのコンテキストの受け渡し
+<div id="passing-context-between-steps">
+  ## ステップ間でのコンテキストの受け渡し
+</div>
 
 ステップは、コンテキストオブジェクトを介してワークフロー内の前のステップのデータにアクセスできます。各ステップは、これまでに実行されたすべての前のステップで蓄積されたコンテキストを受け取ります。
 
@@ -233,7 +263,9 @@ The context object:
 * データの一貫性を保つためにイミュータブル（不変）です
 
 
-## 関連ドキュメント
+<div id="related-documentation">
+  ## 関連ドキュメント
+</div>
 
 - [Step](./step-class)
 - [.then()](./then)

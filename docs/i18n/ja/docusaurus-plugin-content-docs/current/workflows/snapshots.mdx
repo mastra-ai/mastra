@@ -3,7 +3,9 @@ title: "スナップショット | ワークフロー | Mastra ドキュメン�
 description: "Mastra のスナップショットでワークフローの実行状態を保存・再開する方法を学びましょう"
 ---
 
-# スナップショット
+<div id="snapshots">
+  # スナップショット
+</div>
 
 Mastra において、スナップショットは特定時点のワークフローの完全な実行状態をシリアライズ可能な形で表したものです。スナップショットには、以下を含む、ワークフローを中断したまさにその地点から再開するために必要なすべての情報が含まれます。
 
@@ -16,7 +18,9 @@ Mastra において、スナップショットは特定時点のワークフロ�
 
 スナップショットは、ワークフローが一時停止される際に Mastra によって自動的に作成・管理され、設定済みのストレージシステムに永続化されます。
 
-## サスペンドと再開におけるスナップショットの役割
+<div id="the-role-of-snapshots-in-suspend-and-resume">
+  ## サスペンドと再開におけるスナップショットの役割
+</div>
 
 スナップショットは、Mastra のサスペンド／再開機能を支える中核的な仕組みです。ワークフローステップが `await suspend()` を呼び出すと：
 
@@ -29,7 +33,9 @@ Mastra において、スナップショットは特定時点のワークフロ�
 
 この仕組みにより、ヒューマン・イン・ザ・ループのワークフローの実装、レート制限への対処、外部リソースの待機、長時間の一時停止を伴う複雑な分岐ワークフローの実装が可能になります。
 
-## スナップショットの構成
+<div id="snapshot-anatomy">
+  ## スナップショットの構成
+</div>
 
 各スナップショットには、`runId`、入力、ステップのステータス（`success`、`suspended` など）、サスペンド時および再開時のペイロード、最終的な出力が含まれます。これにより、実行を再開する際に完全なコンテキストを利用できます。
 
@@ -83,7 +89,9 @@ Mastra において、スナップショットは特定時点のワークフロ�
 ```
 
 
-## スナップショットの保存と取得方法
+<div id="how-snapshots-are-saved-and-retrieved">
+  ## スナップショットの保存と取得方法
+</div>
 
 スナップショットは、設定済みのストレージシステムに保存されます。既定では LibSQL を使用しますが、Upstash や PostgreSQL を利用するように設定することも可能です。各スナップショットは `workflow_snapshots` テーブルに保存され、ワークフローの `runId` によって識別されます。
 
@@ -93,7 +101,9 @@ Mastra において、スナップショットは特定時点のワークフロ�
 - [Upstash Storage](/reference/storage/upstash)
 - [PostgreSQL Storage](/reference/storage/postgresql)
 
-### スナップショットの保存
+<div id="saving-snapshots">
+  ### スナップショットの保存
+</div>
 
 ワークフローが一時停止されると、Mastra は次の手順でワークフローのスナップショットを自動的に永続化します:
 
@@ -103,7 +113,9 @@ Mastra において、スナップショットは特定時点のワークフロ�
 4. スナップショットはシリアライズされ、設定されたデータベースの `workflow_snapshots` テーブルに保存される
 5. 保存レコードにはワークフロー名、実行 ID、シリアライズされたスナップショットが含まれる
 
-### スナップショットの取得
+<div id="retrieving-snapshots">
+  ### スナップショットの取得
+</div>
 
 ワークフローが再開されると、Mastra は次の手順で永続化されたスナップショットを取得します。
 
@@ -125,11 +137,15 @@ console.log(snapshot);
 ```
 
 
-## スナップショットのストレージオプション
+<div id="storage-options-for-snapshots">
+  ## スナップショットのストレージオプション
+</div>
 
 スナップショットは、`Mastra` クラスで設定された `storage` インスタンスによって永続化されます。このストレージ層は、そのインスタンスに登録されたすべてのワークフローで共有されます。Mastra は、さまざまな環境で柔軟に対応できるよう、複数のストレージオプションをサポートしています。
 
-### LibSQL `@mastra/libsql`
+<div id="libsql-mastralibsql">
+  ### LibSQL `@mastra/libsql`
+</div>
 
 この例では、LibSQL のスナップショットの使い方を示します。
 
@@ -146,7 +162,9 @@ export const mastra = new Mastra({
 ```
 
 
-### Upstash `@mastra/upstash`
+<div id="upstash-mastraupstash">
+  ### Upstash `@mastra/upstash`
+</div>
 
 この例では、Upstash でスナップショットを使う方法を紹介します。
 
@@ -164,7 +182,9 @@ export const mastra = new Mastra({
 ```
 
 
-### Postgres `@mastra/pg`
+<div id="postgres-mastrapg">
+  ### Postgres `@mastra/pg`
+</div>
 
 この例では、PostgreSQL でスナップショットを利用する方法を紹介します。
 
@@ -181,7 +201,9 @@ export const mastra = new Mastra({
 ```
 
 
-## ベストプラクティス
+<div id="best-practices">
+  ## ベストプラクティス
+</div>
 
 1. **シリアライズ可能であることを確保する**: スナップショットに含める必要があるデータはすべて、シリアライズ可能（JSON に変換可能）でなければなりません。
 2. **スナップショットのサイズを最小化する**: 大きなデータオブジェクトをワークフローのコンテキストに直接保存するのは避けましょう。代わりに、それらへの参照（ID など）を保存し、必要に応じてデータを取得します。
@@ -189,7 +211,9 @@ export const mastra = new Mastra({
 4. **適切な監視を設定する**: 特に長時間実行されるものについては、保留中のワークフローを監視し、確実に再開されるようにしてください。
 5. **ストレージのスケーリングを検討する**: 多数の保留中のワークフローを抱えるアプリケーションでは、ストレージソリューションが適切にスケールしていることを確認してください。
 
-## カスタムスナップショットメタデータ
+<div id="custom-snapshot-metadata">
+  ## カスタムスナップショットメタデータ
+</div>
 
 `suspendSchema` を定義すると、ワークフローを一時停止する際にカスタムメタデータを添付できます。このメタデータはスナップショットに保存され、ワークフローの再開時に利用できます。
 
@@ -239,7 +263,9 @@ const approvalStep = createStep({
 ```
 
 
-### レジュメデータの提供
+<div id="providing-resume-data">
+  ### レジュメデータの提供
+</div>
 
 一時停止中のステップを再開する際に、構造化された入力を渡すには `resumeData` を使用します。これはステップの `resumeSchema` に適合している必要があります。
 
@@ -268,7 +294,9 @@ if (result.status === "suspended") {
 ```
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [一時停止と再開](/docs/workflows/suspend-and-resume)
 - [ヒューマン・イン・ザ・ループの例](/examples/workflows_legacy/human-in-the-loop)

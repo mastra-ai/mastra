@@ -5,11 +5,15 @@ sidebar_label: "変数"
 description: "Mastra のワークフローで、ワークフロー変数を使ってステップ間のデータをマッピングし、動的なデータフローを構築する方法を学びます。"
 ---
 
-# ワークフロー変数によるデータマッピング
+<div id="data-mapping-with-workflow-variables">
+  # ワークフロー変数によるデータマッピング
+</div>
 
 Mastra のワークフロー変数は、ステップ間でのデータマッピングを可能にする強力な仕組みで、動的なデータフローを構築し、あるステップから別のステップへ情報を受け渡せます。
 
-## ワークフロー変数を理解する
+<div id="understanding-workflow-variables">
+  ## ワークフロー変数を理解する
+</div>
 
 Mastra のワークフローにおいて、変数は次のような用途に使われます:
 
@@ -18,9 +22,13 @@ Mastra のワークフローにおいて、変数は次のような用途に使�
 - ステップの出力内にあるネストしたプロパティへアクセスする
 - より柔軟で再利用しやすいワークフローステップを作成する
 
-## データのマッピングに変数を使う
+<div id="using-variables-for-data-mapping">
+  ## データのマッピングに変数を使う
+</div>
 
-### 基本的な変数マッピング
+<div id="basic-variable-mapping">
+  ### 基本的な変数マッピング
+</div>
 
 ワークフローにステップを追加する際、`variables` プロパティを使用してステップ間でデータをマッピングできます。
 
@@ -56,7 +64,9 @@ export const mastra = new Mastra({
 ```
 
 
-### ネストされたプロパティへのアクセス
+<div id="accessing-nested-properties">
+  ### ネストされたプロパティへのアクセス
+</div>
 
 `path` フィールドでドット記法を使ってネストされたプロパティにアクセスできます。
 
@@ -73,7 +83,9 @@ workflow
 ```
 
 
-### オブジェクト全体のマッピング
+<div id="mapping-entire-objects">
+  ### オブジェクト全体のマッピング
+</div>
 
 パスに `.` を使うことで、オブジェクト全体をマッピングできます。
 
@@ -89,7 +101,9 @@ workflow
 ```
 
 
-### ループ内の変数
+<div id="variables-in-loops">
+  ### ループ内の変数
+</div>
 
 変数は `while` や `until` ループにも渡せます。これは、各反復間や外部のステップからデータを受け渡すのに便利です。
 
@@ -133,7 +147,9 @@ workflow.step(incrementStep).while(
 ```
 
 
-## 変数の解決
+<div id="variable-resolution">
+  ## 変数の解決
+</div>
 
 ワークフローの実行時、Mastra は変数を次の手順で解決します:
 
@@ -142,9 +158,13 @@ workflow.step(incrementStep).while(
 3. `path` を使って指定されたプロパティに移動する
 4. 解決した値をターゲットステップのコンテキスト内の `inputData` プロパティとして挿入する
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
-### トリガーデータのマッピング
+<div id="mapping-from-trigger-data">
+  ### トリガーデータのマッピング
+</div>
 
 この例では、ワークフローのトリガーからステップにデータをマッピングする方法を示します。
 
@@ -190,7 +210,9 @@ export const mastra = new Mastra({
 ```
 
 
-### ステップ間のマッピング
+<div id="mapping-between-steps">
+  ### ステップ間のマッピング
+</div>
 
 この例では、あるステップから別のステップへデータをマッピングする方法を示します。
 
@@ -255,7 +277,9 @@ export const mastra = new Mastra({
 ```
 
 
-## 型安全性
+<div id="type-safety">
+  ## 型安全性
+</div>
 
 Mastra は、TypeScript 使用時の変数マッピングに型安全性を提供します。
 
@@ -306,7 +330,9 @@ export const mastra = new Mastra({
 ```
 
 
-## ベストプラクティス
+<div id="best-practices">
+  ## ベストプラクティス
+</div>
 
 1. **入力と出力を検証する**: データの整合性を確保するために `inputSchema` と `outputSchema` を使用する。
 
@@ -314,7 +340,9 @@ export const mastra = new Mastra({
 
 3. **デフォルト値を検討する**: マッピングされたデータが未定義の場合に備えて適切に処理する。
 
-## 直接コンテキストアクセスとの比較
+<div id="comparison-with-direct-context-access">
+  ## 直接コンテキストアクセスとの比較
+</div>
 
 `context.steps` を使って前のステップの結果に直接アクセスすることも可能ですが、変数マッピングを使用すると次の利点があります:
 

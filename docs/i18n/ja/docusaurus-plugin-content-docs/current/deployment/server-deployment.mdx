@@ -3,11 +3,15 @@ title: "Mastra サーバーのデプロイ | デプロイ | Mastra ドキュメ�
 description: "ビルド設定とデプロイ方法を使って Mastra サーバーをデプロイする手順を学びます。"
 ---
 
-# Mastra サーバーをデプロイする
+<div id="deploy-a-mastra-server">
+  # Mastra サーバーをデプロイする
+</div>
 
 Mastra は標準的な Node.js サーバーとして動作し、さまざまな環境にデプロイできます。
 
-## デフォルトのプロジェクト構成
+<div id="default-project-structure">
+  ## デフォルトのプロジェクト構成
+</div>
 
 [はじめにガイド](/docs/getting-started/installation)では、すぐに開発を始められるよう、妥当なデフォルト設定を備えたプロジェクトのひな型を作成します。デフォルトでは、CLI はアプリケーションのファイルを `src/mastra/` ディレクトリ配下に整理し、次のような構成になります。
 
@@ -23,7 +27,9 @@ tsconfig.json
 ```
 
 
-## ビルド
+<div id="building">
+  ## ビルド
+</div>
 
 `mastra build` コマンドでビルドを開始します。
 
@@ -32,7 +38,9 @@ mastra build
 ```
 
 
-### 入力ディレクトリのカスタマイズ
+<div id="customizing-the-input-directory">
+  ### 入力ディレクトリのカスタマイズ
+</div>
 
 Mastra のファイルが別の場所にある場合は、`--dir` フラグを使って場所を指定します。`--dir` フラグは、エントリポイントとなるファイル（`index.ts` または `index.js`）と関連ディレクトリをどこで探すかを Mastra に指示します。
 
@@ -41,7 +49,9 @@ mastra build --dir ./my-project/mastra
 ```
 
 
-## ビルドプロセス
+<div id="build-process">
+  ## ビルドプロセス
+</div>
 
 ビルドプロセスは次の手順で進みます:
 
@@ -53,7 +63,9 @@ mastra build --dir ./my-project/mastra
 4. **コードのバンドル**: 最適化のために、Rollup を用いてツリーシェイキングとソースマップを有効化します。
 5. **サーバーの生成**: デプロイ可能な [Hono](https://hono.dev) 製の HTTP サーバーを作成します。
 
-### ビルド出力の構成
+<div id="build-output-structure">
+  ### ビルド出力の構成
+</div>
 
 ビルド後、Mastra は以下の構成を持つ `.mastra/` ディレクトリを作成します。
 
@@ -64,11 +76,15 @@ mastra build --dir ./my-project/mastra
 ```
 
 
-### `public` フォルダー
+<div id="public-folder">
+  ### `public` フォルダー
+</div>
 
 `src/mastra` に `public` フォルダーが存在する場合、ビルド時にその内容は `.build/output` ディレクトリにコピーされます。
 
-## サーバーの実行
+<div id="running-the-server">
+  ## サーバーの実行
+</div>
 
 HTTP サーバーを起動する:
 
@@ -77,7 +93,9 @@ node .mastra/output/index.mjs
 ```
 
 
-## テレメトリーを有効にする
+<div id="enable-telemetry">
+  ## テレメトリーを有効にする
+</div>
 
 テレメトリーとオブザーバビリティを有効にするには、instrumentation ファイルを読み込みます:
 

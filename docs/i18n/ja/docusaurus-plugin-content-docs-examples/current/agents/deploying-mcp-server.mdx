@@ -6,11 +6,15 @@ description: stdio トランスポートを使って Mastra の MCPServer をセ
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# 例: MCPServer のデプロイ
+<div id="example-deploying-an-mcpserver">
+  # 例: MCPServer のデプロイ
+</div>
 
 この例では、stdio トランスポートを使って基本的な Mastra MCPServer をセットアップし、ビルドして、NPM への公開などのデプロイ準備を行う方法を説明します。
 
-## 依存関係をインストール
+<div id="install-dependencies">
+  ## 依存関係をインストール
+</div>
 
 必要なパッケージをインストールします：
 
@@ -19,7 +23,9 @@ pnpm add @mastra/mcp @mastra/core tsup
 ```
 
 
-## MCP サーバーをセットアップする
+<div id="set-up-mcp-server">
+  ## MCP サーバーをセットアップする
+</div>
 
 1. 例として、stdio サーバー用のファイルを `/src/mastra/stdio.ts` に作成します。
 
@@ -62,7 +68,9 @@ pnpm add @mastra/mcp @mastra/core tsup
    これによりサーバーコードがコンパイルされ、出力ファイルが実行可能になります。
 
 
-## NPM へのデプロイ
+<div id="deploying-to-npm">
+  ## NPM へのデプロイ
+</div>
 
 `npx` 経由または依存関係として、他の人（や自分自身）が MCP サーバーを利用できるようにするには、NPM に公開します。
 
@@ -76,7 +84,9 @@ pnpm add @mastra/mcp @mastra/core tsup
 
     パッケージの公開に関する詳細は、[NPM ドキュメント](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages)を参照してください。
 
-## デプロイ済みの MCP サーバーを使用する
+<div id="use-the-deployed-mcp-server">
+  ## デプロイ済みの MCP サーバーを使用する
+</div>
 
 公開が完了すると、`MCPClient` はパッケージを実行するコマンドを指定して、あなたの MCP サーバーを利用できます。Claude Desktop、Cursor、Windsurf など、他の MCP クライアントを使うことも可能です。
 

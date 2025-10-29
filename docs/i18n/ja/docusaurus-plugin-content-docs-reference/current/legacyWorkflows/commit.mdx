@@ -3,18 +3,24 @@ title: "リファレンス: Workflow.commit() | レガシー ワークフロー 
 description: ワークフローにおける`.commit()`メソッドのドキュメント。現在のステップ構成でワークフロー・マシンを再初期化します。
 ---
 
-# Workflow.commit()
+<div id="workflowcommit">
+  # Workflow.commit()
+</div>
 
 `.commit()` メソッドは、現在のステップ構成を用いてワークフローのステートマシンを再初期化します。
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 ```typescript
 workflow.step(stepA).then(stepB).commit();
 ```
 
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -26,7 +32,9 @@ workflow.step(stepA).then(stepB).commit();
   ]}
 />
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [Branching Paths の例](/examples/workflows_legacy/branching-paths)
 - [Workflow クラスリファレンス](./workflow)

@@ -8,19 +8,25 @@ import StepItem from "@site/src/components/StepItem";
 import YouTube from "@site/src/components/YouTube-player";
 
 
-# AI株式エージェントの作成
+<div id="building-an-ai-stock-agent">
+  # AI株式エージェントの作成
+</div>
 
 このガイドでは、指定した銘柄の前日の終値を取得するシンプルなエージェントを作成します。ツールの作り方、エージェントへの組み込み方、そしてエージェントを使って株価を取得する方法を学びます。
 
 <YouTube id="rIaZ4l7y9wo" />
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 - Node.js `v20.0` 以降がインストールされていること
 - 対応する[モデルプロバイダー](/models)の API キー
 - 既存の Mastra プロジェクト（新規プロジェクトの作成は[インストールガイド](/docs/getting-started/installation)に従って設定してください）
 
-## エージェントの作成
+<div id="creating-the-agent">
+  ## エージェントの作成
+</div>
 
 Mastra でエージェントを作成するには、まず `Agent` クラスで定義し、その後 Mastra に登録します。
 
@@ -61,7 +67,9 @@ export const mastra = new Mastra({
 
 </Steps>
 
-## 株価ツールの作成
+<div id="creating-the-stock-price-tool">
+  ## 株価ツールの作成
+</div>
 
 現時点では、Stock Agent は最新の株価を把握していません。これを解消するため、ツールを作成してエージェントに追加します。
 
@@ -124,7 +132,9 @@ export const stockAgent = new Agent({
 
 </Steps>
 
-## エージェントサーバーの実行
+<div id="running-the-agent-server">
+  ## エージェントサーバーの実行
+</div>
 
 Mastra の API を通じてエージェントとやり取りする方法を学びましょう。
 

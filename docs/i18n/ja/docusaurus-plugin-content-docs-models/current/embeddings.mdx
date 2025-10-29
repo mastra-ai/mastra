@@ -5,11 +5,15 @@ sidebar_label: "埋め込み"
 description: "Mastra のモデルルーター経由で埋め込みモデルを利用し、セマンティック検索や RAG に活用します。"
 ---
 
-# 埋め込みモデル
+<div id="embedding-models">
+  # 埋め込みモデル
+</div>
 
 Mastra のモデルルーターは、言語モデルと同様に `provider/model` という文字列形式で埋め込みモデルを利用できます。これにより、TypeScript のオートコンプリートに対応した、チャットモデルと埋め込みモデルの両方に共通のインターフェースが提供されます。
 
-## クイックスタートガイド
+<div id="quick-start">
+  ## クイックスタートガイド
+</div>
 
 ```typescript
 import { ModelRouterEmbeddingModel } from "@mastra/core";
@@ -26,9 +30,13 @@ const { embeddings } = await embedMany({
 ```
 
 
-## 対応しているモデル
+<div id="supported-models">
+  ## 対応しているモデル
+</div>
 
-### OpenAI
+<div id="openai">
+  ### OpenAI
+</div>
 
 * `text-embedding-3-small` - 1536次元、最大トークン数8191
 * `text-embedding-3-large` - 3072次元、最大トークン数8191
@@ -39,7 +47,9 @@ const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
 ```
 
 
-### Google
+<div id="google">
+  ### Google
+</div>
 
 * `gemini-embedding-001` - 768 次元（推奨）、最大 2048 トークン
 * `text-embedding-004` - 768 次元、最大 3072 トークン
@@ -49,7 +59,9 @@ const embedder = new ModelRouterEmbeddingModel("google/gemini-embedding-001");
 ```
 
 
-## 認証
+<div id="authentication">
+  ## 認証
+</div>
 
 モデルルーターは環境変数から API キーを自動検出します：
 
@@ -63,7 +75,9 @@ GOOGLE_GENERATIVE_AI_API_KEY=...
 ```
 
 
-## カスタムプロバイダー
+<div id="custom-providers">
+  ## カスタムプロバイダー
+</div>
 
 カスタムのURLを使って、OpenAI互換の埋め込みエンドポイントを利用できます。
 
@@ -79,7 +93,9 @@ const embedder = new ModelRouterEmbeddingModel({
 ```
 
 
-## メモリとの併用
+<div id="usage-with-memory">
+  ## メモリとの併用
+</div>
 
 埋め込みモデルルーターは、Mastraのメモリシステムとスムーズに統合されます。
 
@@ -108,7 +124,9 @@ const agent = new Agent({
 :::
 
 
-## RAG での利用
+<div id="usage-with-rag">
+  ## RAG での利用
+</div>
 
 ドキュメントの分割と検索には埋め込みモデルを使用します。
 
@@ -135,7 +153,9 @@ await vectorStore.upsert(
 ```
 
 
-## TypeScript サポート
+<div id="typescript-support">
+  ## TypeScript サポート
+</div>
 
 モデルルーターは、埋め込みモデル ID に対して完全な TypeScript のオートコンプリートを提供します。
 
@@ -150,7 +170,9 @@ const embedder = new ModelRouterEmbeddingModel(modelId);
 ```
 
 
-## エラー処理
+<div id="error-handling">
+  ## エラー処理
+</div>
 
 モデルルーターは作成時に、プロバイダー ID とモデル ID を検証します。
 
@@ -178,7 +200,9 @@ try {
 ```
 
 
-## 次のステップ
+<div id="next-steps">
+  ## 次のステップ
+</div>
 
 - [Memory & Semantic Recall](/docs/memory/semantic-recall) - 埋め込みでエージェントの記憶機能を実装
 - [RAG & Chunking](/docs/rag/chunking-and-embedding) - 検索拡張生成（RAG）システムを構築

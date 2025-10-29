@@ -3,11 +3,15 @@ title: "リファレンス: Embed | RAG | Mastra ドキュメント"
 description: Mastra における AI SDK を利用した埋め込み機能のドキュメント。
 ---
 
-# 埋め込み
+<div id="embed">
+  # 埋め込み
+</div>
 
 Mastra は AI SDK の `embed` と `embedMany` 関数を使ってテキスト入力のベクトル埋め込みを生成し、類似度検索や RAG ワークフローを実現します。
 
-## 単一の埋め込み
+<div id="single-embedding">
+  ## 単一の埋め込み
+</div>
 
 `embed` 関数は、1 つのテキスト入力に対してベクトル埋め込みを生成します。
 
@@ -22,7 +26,9 @@ const result = await embed({
 ```
 
 
-### パラメータ
+<div id="parameters">
+  ### パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -61,7 +67,9 @@ const result = await embed({
   ]}
 />
 
-### 戻り値
+<div id="return-value">
+  ### 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -73,7 +81,9 @@ const result = await embed({
   ]}
 />
 
-## 複数の埋め込み
+<div id="multiple-embeddings">
+  ## 複数の埋め込み
+</div>
 
 複数のテキストを一度にエンベッドするには、`embedMany` 関数を使用します。
 
@@ -88,7 +98,9 @@ const result = await embedMany({
 ```
 
 
-### パラメータ
+<div id="parameters">
+  ### パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -127,7 +139,9 @@ const result = await embedMany({
   ]}
 />
 
-### 戻り値
+<div id="return-value">
+  ### 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -140,7 +154,9 @@ const result = await embedMany({
   ]}
 />
 
-## 使い方の例
+<div id="example-usage">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { embed, embedMany } from "ai";

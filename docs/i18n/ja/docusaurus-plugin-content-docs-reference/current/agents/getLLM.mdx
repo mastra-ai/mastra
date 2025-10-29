@@ -3,18 +3,24 @@ title: "リファレンス: Agent.getLLM() | Agents | Mastra ドキュメント"
 description: "Mastra のエージェントにおける `Agent.getLLM()` メソッドのリファレンス。言語モデルのインスタンスを取得します。"
 ---
 
-# Agent.getLLM()
+<div id="agentgetllm">
+  # Agent.getLLM()
+</div>
 
 `.getLLM()` メソッドは、エージェントに設定された言語モデルのインスタンスを取得し、それが関数として指定されている場合は評価して解決します。このメソッドにより、エージェントの機能を支える基盤の LLM にアクセスできます。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 await agent.getLLM();
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -29,7 +35,9 @@ await agent.getLLM();
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -42,7 +50,9 @@ await agent.getLLM();
   ]}
 />
 
-## 応用的な使用例
+<div id="extended-usage-example">
+  ## 応用的な使用例
+</div>
 
 ```typescript copy
 await agent.getLLM({
@@ -52,7 +62,9 @@ await agent.getLLM({
 ```
 
 
-### オプションパラメーター
+<div id="options-parameters">
+  ### オプションパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -74,7 +86,9 @@ await agent.getLLM({
   ]}
 />
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [Agents の概要](/docs/agents/overview)
 - [ランタイムコンテキスト](/docs/server-db/runtime-context)

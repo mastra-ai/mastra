@@ -3,11 +3,15 @@ title: "Inngest ワークフロー | ワークフロー | Mastra ドキュメン
 description: "Inngest ワークフローを使うと、Mastra のワークフローを Inngest 上で実行できます"
 ---
 
-# Inngest ワークフロー
+<div id="inngest-workflow">
+  # Inngest ワークフロー
+</div>
 
 [Inngest](https://www.inngest.com/docs) は、インフラの管理なしにバックグラウンドワークフローを構築し、実行できる開発者向けプラットフォームです。
 
-## Inngest と Mastra が連携する仕組み
+<div id="how-inngest-works-with-mastra">
+  ## Inngest と Mastra が連携する仕組み
+</div>
 
 Inngest と Mastra は、ワークフローのモデルをそろえる形で統合されています。Inngest はロジックをステップで構成された関数として整理し、Mastra のワークフローは `createWorkflow` と `createStep` で定義され、このパラダイムにそのまま対応します。各 Mastra ワークフローは固有の識別子を持つ Inngest の関数となり、ワークフロー内の各ステップは Inngest のステップに対応づけられます。
 
@@ -17,18 +21,24 @@ Inngest と Mastra は、ワークフローのモデルをそろえる形で統�
 
 リアルタイム監視、サスペンド/レジューム、ステップ単位のオブザーバビリティは、Inngest の publish-subscribe システムとダッシュボードによって実現されます。各ステップの実行時には、その状態と出力が Mastra のストレージで追跡され、必要に応じて再開できます。
 
-## セットアップ
+<div id="setup">
+  ## セットアップ
+</div>
 
 ```sh
 npm install @mastra/inngest @mastra/core @mastra/deployer
 ```
 
 
-## Inngest ワークフローの構築
+<div id="building-an-inngest-workflow">
+  ## Inngest ワークフローの構築
+</div>
 
 このガイドでは、Inngest と Mastra を使ってワークフローを作成する方法を、値が 10 に達するまでカウントを増やすカウンターアプリの例で紹介します。
 
-### Inngest の初期化
+<div id="inngest-initialization">
+  ### Inngest の初期化
+</div>
 
 Mastra 互換のワークフロー用ヘルパーを取得するために、Inngest との統合を初期化します。createWorkflow と createStep 関数は、Mastra および Inngest と互換性のあるワークフローおよびステップのオブジェクトを作成するために使用します。
 
@@ -59,7 +69,9 @@ export const inngest = new Inngest({
 ```
 
 
-### ステップの作成
+<div id="creating-steps">
+  ### ステップの作成
+</div>
 
 ワークフローを構成する各ステップを定義します。
 
@@ -87,7 +99,9 @@ const incrementStep = createStep({
 ```
 
 
-### ワークフローの作成
+<div id="creating-the-workflow">
+  ### ワークフローの作成
+</div>
 
 `dountil` ループパターンを使って、手順をワークフローに組み立てます。createWorkflow 関数は、inngest サーバー上で呼び出し可能な関数を作成します。
 
@@ -109,7 +123,9 @@ export { workflow as incrementWorkflow };
 ```
 
 
-### Mastra インスタンスの設定とワークフローの実行
+<div id="configuring-the-mastra-instance-and-executing-the-workflow">
+  ### Mastra インスタンスの設定とワークフローの実行
+</div>
 
 ワークフローを Mastra に登録し、Inngest の API エンドポイントを構成します:
 
@@ -160,7 +176,9 @@ export const mastra = new Mastra({
 ```
 
 
-### ワークフローをローカルで実行する
+<div id="running-the-workflow-locally">
+  ### ワークフローをローカルで実行する
+</div>
 
 > **前提条件:**
 >
@@ -212,7 +230,9 @@ docker run --rm -p 8288:8288 \
   ![Inngest Function Run](/img/inngest-runs-dashboard.png)
 
 
-### 本番環境でワークフローを実行する
+<div id="running-the-workflow-in-production">
+  ### 本番環境でワークフローを実行する
+</div>
 
 > **前提条件:**
 >
@@ -290,11 +310,15 @@ vercel --prod
   ![Inngest Function Run](/img/inngest-runs-dashboard-prod.png)
 
 
-## 高度な使い方: カスタム Inngest 関数の追加
+<div id="advanced-usage-adding-custom-inngest-functions">
+  ## 高度な使い方: カスタム Inngest 関数の追加
+</div>
 
 `inngestServe` の任意パラメータである `functions` を使用すると、Mastra のワークフローと並行して追加の Inngest 関数を提供できます。
 
-### カスタム関数の作成
+<div id="creating-custom-functions">
+  ### カスタム関数の作成
+</div>
 
 まずは、カスタムの Inngest 関数を作成します。
 
@@ -324,7 +348,9 @@ export const customWebhookFunction = inngest.createFunction(
 ```
 
 
-### ワークフローでカスタム関数を提供する
+<div id="serving-custom-functions-with-workflows">
+  ### ワークフローでカスタム関数を提供する
+</div>
 
 カスタム関数を含めるように、Mastra の設定を更新します：
 
@@ -361,7 +387,9 @@ export const mastra = new Mastra({
 ```
 
 
-### 関数の登録
+<div id="function-registration">
+  ### 関数の登録
+</div>
 
 カスタム関数を含める場合:
 

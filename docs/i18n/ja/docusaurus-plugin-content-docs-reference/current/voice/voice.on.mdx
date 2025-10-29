@@ -3,11 +3,15 @@ title: "リファレンス: voice.on() | Voice | Mastra ドキュメント"
 description: "音声プロバイダーで利用可能な on() メソッドのドキュメント。音声イベントに対するイベントリスナーを登録します。"
 ---
 
-# voice.on()
+<div id="voiceon">
+  # voice.on()
+</div>
 
 `on()` メソッドは、各種の音声イベントに対するイベントリスナーを登録します。これは、書き起こしテキストや音声応答、その他の状態変化をイベントで通知するリアルタイムの音声プロバイダーにおいて、特に重要です。
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
@@ -52,7 +56,9 @@ voice.on("error", ({ message, code, details }) => {
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <br />
 
@@ -75,11 +81,15 @@ voice.on("error", ({ message, code, details }) => {
   ]}
 />
 
-## 戻り値
+<div id="return-value">
+  ## 戻り値
+</div>
 
 このメソッドは値を返しません。
 
-## イベント
+<div id="events">
+  ## イベント
+</div>
 
 イベントとそのペイロード構造の網羅的な一覧については、[Voice Events](./voice.events) ドキュメントを参照してください。
 
@@ -94,7 +104,9 @@ voice.on("error", ({ message, code, details }) => {
 
 音声プロバイダーによって、サポートされるイベントの種類やペイロード構造は異なる場合があります。
 
-## CompositeVoice での使用
+<div id="using-with-compositevoice">
+  ## CompositeVoice での使用
+</div>
 
 `CompositeVoice` を使用する場合、`on()` メソッドは設定されたリアルタイムプロバイダーに委譲されます。
 
@@ -124,7 +136,9 @@ voice.on("speaker", (stream) => {
 ```
 
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - このメソッドは、イベントベースの通信をサポートするリアルタイム音声プロバイダーで主に使用されます
 - イベントをサポートしない音声プロバイダーで呼び出された場合は、警告をログに出力して何もしません

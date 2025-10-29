@@ -3,7 +3,9 @@ title: "例: トーン一貫性の評価 | Evals | Mastra Docs"
 description: テキストの感情トーンのパターンと感情の一貫性を評価するために、Tone Consistency 指標を用いる例。
 ---
 
-# トーン一貫性の評価
+<div id="tone-consistency-evaluation">
+  # トーン一貫性の評価
+</div>
 
 :::note
 Scorers API は現在ベータ版です。改善に継続的に取り組んでおり、皆さまのフィードバックを歓迎します。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までお寄せください。
@@ -11,14 +13,18 @@ Scorers API は現在ベータ版です。改善に継続的に取り組んで�
 
 `ToneConsistencyMetric` を使用して、テキストにおける感情トーンのパターンとセンチメントの一貫性を評価します。メトリクスは `query` と `response` を受け取り、スコアと、センチメントスコアおよびその差分を含む `info` オブジェクトを返します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/evals
 ```
 
 
-## ポジティブなトーンの例
+<div id="positive-tone-example">
+  ## ポジティブなトーンの例
+</div>
 
 この例では、テキストはいずれも似たような前向きなトーンを示しています。指標はトーンの一致度を測定し、その結果として高いスコアが得られます。
 
@@ -36,7 +42,9 @@ console.log(result);
 ```
 
 
-### ポジティブなトーンの出力
+<div id="positive-tone-output">
+  ### ポジティブなトーンの出力
+</div>
 
 この指標は、感情の整合性が高いことを示す高スコアを返します。`info` フィールドには、感情値とその差分が含まれます。
 
@@ -52,7 +60,9 @@ console.log(result);
 ```
 
 
-## 安定したトーンの例
+<div id="stable-tone-example">
+  ## 安定したトーンの例
+</div>
 
 この例では、空のレスポンスを渡してテキスト内のトーンの一貫性を分析します。これにより、メトリクスは単一の入力テキストにおける感情の安定性を評価し、全体を通してトーンがどれだけ均一かを示すスコアが得られます。
 
@@ -70,7 +80,9 @@ console.log(result);
 ```
 
 
-### 安定したトーンの出力
+<div id="stable-tone-output">
+  ### 安定したトーンの出力
+</div>
 
 この指標は高いスコアを返し、入力テキスト全体で感情が一貫していることを示します。`info` フィールドには平均感情値と感情分散が含まれ、トーンの安定性を反映します。
 
@@ -85,7 +97,9 @@ console.log(result);
 ```
 
 
-## トーンが混在する例
+<div id="mixed-tone-example">
+  ## トーンが混在する例
+</div>
 
 この例では、入力と応答の感情トーンが異なります。メトリクスはこうした差異を検出し、一貫性スコアを低めに評価します。
 
@@ -105,7 +119,9 @@ console.log(result);
 ```
 
 
-### トーンが混在した出力
+<div id="mixed-tone-output">
+  ### トーンが混在した出力
+</div>
 
 感情トーンに顕著な差があるため、このメトリクスは低いスコアを返します。`info` フィールドには、各感情の値とそれらの変動の度合いが示されます。
 
@@ -121,7 +137,9 @@ console.log(result);
 ```
 
 
-## メトリックの設定
+<div id="metric-configuration">
+  ## メトリックの設定
+</div>
 
 `ToneConsistencyMetric` インスタンスはデフォルト設定のまま作成できます。追加の設定は不要です。
 
@@ -132,7 +150,9 @@ const metric = new ToneConsistencyMetric();
 > 設定オプションの一覧については、[ToneConsistencyMetric](/reference/evals/tone-consistency) を参照してください。
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `ToneConsistencyMetric` は次の形式の結果を返します:
 
@@ -150,7 +170,9 @@ const metric = new ToneConsistencyMetric();
 ```
 
 
-### トーンの一貫性スコア
+<div id="tone-consistency-score">
+  ### トーンの一貫性スコア
+</div>
 
 トーンの一貫性スコアは 0 から 1 の範囲です:
 
@@ -159,7 +181,9 @@ const metric = new ToneConsistencyMetric();
 - **0.4–0.5**: トーンにばらつきがある。
 - **0.0–0.3**: トーンが相反している。
 
-### 口調の一貫性に関する情報
+<div id="tone-consistency-info">
+  ### 口調の一貫性に関する情報
+</div>
 
 スコアの説明。詳細は以下を含みます：
 

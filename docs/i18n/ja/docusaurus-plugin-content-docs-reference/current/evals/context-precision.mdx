@@ -3,7 +3,9 @@ title: "リファレンス: ContextPrecisionMetric | Evals | Mastra ドキュメ
 description: Mastra における Context Precision Metric のドキュメント。期待される出力を生成するために、取得したコンテキストノードの関連性と精度を評価します。
 ---
 
-# ContextPrecisionMetric
+<div id="contextprecisionmetric">
+  # ContextPrecisionMetric
+</div>
 
 :::info Scorers
 このドキュメントはレガシーの evals API に関するものです。最新のスコアラー機能については [Scorers](/docs/scorers/overview) を参照してください。
@@ -11,7 +13,9 @@ description: Mastra における Context Precision Metric のドキュメント�
 
 `ContextPrecisionMetric` クラスは、期待される出力の生成に対して、取得したコンテキストノードがどれだけ関連性が高く、精度が高いかを評価します。各コンテキスト要素の寄与度を判定ベースで分析し、位置に応じた重み付けスコアを提供します。
 
-## 基本的な使い方
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -38,7 +42,9 @@ console.log(result.info.reason); // スコアの説明
 ```
 
 
-## コンストラクターのパラメーター
+<div id="constructor-parameters">
+  ## コンストラクターのパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -58,7 +64,9 @@ console.log(result.info.reason); // スコアの説明
   ]}
 />
 
-### ContextPrecisionMetricOptions
+<div id="contextprecisionmetricoptions">
+  ### ContextPrecisionMetricOptions
+</div>
 
 <PropertiesTable
   content={[
@@ -78,7 +86,9 @@ console.log(result.info.reason); // スコアの説明
   ]}
 />
 
-## measure() のパラメーター
+<div id="measure-parameters">
+  ## measure() のパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -97,7 +107,9 @@ console.log(result.info.reason); // スコアの説明
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -126,11 +138,15 @@ console.log(result.info.reason); // スコアの説明
   ]}
 />
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 このメトリクスは、二値の関連性判定と Mean Average Precision（MAP） に基づくスコアリングで、コンテキストの適合度を評価します。
 
-### スコアリングプロセス
+<div id="scoring-process">
+  ### スコアリングプロセス
+</div>
 
 1. 二値の関連度スコアを付与:
    - 関連コンテキスト: 1
@@ -143,7 +159,9 @@ console.log(result.info.reason); // スコアの説明
 
 最終スコア: `Mean Average Precision * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 （スケールは0から。デフォルトは0〜1）
 
@@ -153,7 +171,9 @@ console.log(result.info.reason); // スコアの説明
 - 0.1〜0.3: 関連性が限定的、または順序が不十分
 - 0.0: 関連する文脈がない
 
-## 分析付きの例
+<div id="example-with-analysis">
+  ## 分析付きの例
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -189,7 +209,9 @@ const result = await metric.measure(
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [回答の関連性メトリクス](./answer-relevancy)
 - [コンテキスト位置メトリクス](./context-position)

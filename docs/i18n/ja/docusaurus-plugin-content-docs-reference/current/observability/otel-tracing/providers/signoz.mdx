@@ -3,11 +3,15 @@ title: "リファレンス: SigNoz | オブザーバビリティ | Mastra ドキ
 description: オープンソースの APM／オブザーバビリティ基盤である SigNoz を Mastra と統合するためのドキュメント。OpenTelemetry を用いてフルスタック監視を提供します。
 ---
 
-# SigNoz
+<div id="signoz">
+  # SigNoz
+</div>
 
 SigNozは、OpenTelemetryを活用してフルスタックの監視機能を提供する、オープンソースのAPM兼オブザーバビリティプラットフォームです。
 
-## 設定
+<div id="configuration">
+  ## 設定
+</div>
 
 Mastra で SigNoz を使用するには、以下の環境変数を設定してください:
 
@@ -17,7 +21,9 @@ OTEL_EXPORTER_OTLP_HEADERS=signoz-ingestion-key=your_signoz_token
 ```
 
 
-## 実装
+<div id="implementation">
+  ## 実装
+</div>
 
 Mastra を SigNoz で使用するための設定方法は次のとおりです：
 
@@ -37,6 +43,8 @@ export const mastra = new Mastra({
 ```
 
 
-## ダッシュボード
+<div id="dashboard">
+  ## ダッシュボード
+</div>
 
 [signoz.io](https://signoz.io/) から SigNoz のダッシュボードにアクセスできます

@@ -10,7 +10,9 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 
-# MastraStorage
+<div id="mastrastorage">
+  # MastraStorage
+</div>
 
 `MastraStorage` は、次の内容を管理するための統一インターフェースを提供します：
 
@@ -27,7 +29,9 @@ import TabItem from "@theme/TabItem";
 
 Mastra には複数のストレージプロバイダーがあり、相互に置き換えて使用できます。たとえば、開発では libsql を、本番では postgres を使っても、どちらでもコードは同様に動作します。
 
-## 設定
+<div id="configuration">
+  ## 設定
+</div>
 
 Mastra では、デフォルトのストレージオプションを設定できます。
 
@@ -45,7 +49,9 @@ const mastra = new Mastra({
 `storage` 設定を指定しない場合、Mastra はアプリケーションの再起動やデプロイ後もデータを保持しません。ローカルでのテスト以外のデプロイでは、`Mastra` 側、または `new Memory()` 内で直接、独自のストレージ設定を用意してください。
 
 
-## データ スキーマ
+<div id="data-schema">
+  ## データ スキーマ
+</div>
 
 <Tabs>
   <TabItem value="メッセージ" label="メッセージ">
@@ -477,7 +483,9 @@ constraints: [{ type: "nullable", value: false }]
   </TabItem>
 </Tabs>
 
-### メッセージの照会
+<div id="querying-messages">
+  ### メッセージの照会
+</div>
 
 メッセージは内部的に V2 形式で保存されており、概ね AI SDK の `UIMessage` 形式に相当します。`getMessages` を使ってメッセージを取得する際は、出力形式を指定できます。後方互換性のため、既定は `v1` です。
 
@@ -506,7 +514,9 @@ const messagesV2 = await mastra
 ```
 
 
-## ストレージプロバイダー
+<div id="storage-providers">
+  ## ストレージプロバイダー
+</div>
 
 Mastra は次のプロバイダーをサポートしています：
 

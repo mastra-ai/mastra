@@ -3,11 +3,15 @@ title: "リファレンス: createTool() | Tools & MCP | Mastra ドキュメン�
 description: Mastra の `createTool()` 関数に関するドキュメント。エージェント向けのカスタムツールを定義するために使用します。
 ---
 
-# createTool()
+<div id="createtool">
+  # createTool()
+</div>
 
 `createTool()` 関数は、Mastra エージェントが実行できるカスタムツールを定義するために使用します。ツールを用いることで、エージェントは外部システムとの連携、計算の実行、特定データへのアクセスなどの能力を拡張できます。
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 ```typescript title="src/mastra/tools/reverse-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
@@ -34,7 +38,9 @@ export const tool = createTool({
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -118,7 +124,9 @@ export const tool = createTool({
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 `createTool()` 関数は `Tool` オブジェクトを返します。
 
@@ -133,7 +141,9 @@ export const tool = createTool({
   ]}
 />
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [ツール概要](/docs/tools-mcp/overview)
 - [エージェントでのツール利用](/docs/agents/using-tools)

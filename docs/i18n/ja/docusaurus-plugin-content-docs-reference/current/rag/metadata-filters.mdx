@@ -3,11 +3,15 @@ title: "リファレンス: メタデータフィルタ | RAG | Mastra ドキュ
 description: さまざまなベクトルストアにおけるベクトル検索結果に対して、精密なクエリを可能にする Mastra のメタデータフィルタ機能に関するドキュメント。
 ---
 
-# メタデータフィルター
+<div id="metadata-filters">
+  # メタデータフィルター
+</div>
 
 Mastra は、MongoDB/Sift のクエリ構文に基づく、すべてのベクトルストアで共通のメタデータフィルタリング構文を提供します。各ベクトルストアは、これらのフィルターを自分たちのネイティブ形式に変換します。
 
-## 基本例
+<div id="basic-example">
+  ## 基本例
+</div>
 
 ```typescript
 import { PgVector } from "@mastra/pg";
@@ -27,7 +31,9 @@ const results = await store.query({
 ```
 
 
-## サポート対象の演算子
+<div id="supported-operators">
+  ## サポート対象の演算子
+</div>
 
 <OperatorsTable
   title="基本比較"
@@ -198,7 +204,9 @@ const results = await store.query({
   ]}
 />
 
-## 共通のルールと制約
+<div id="common-rules-and-restrictions">
+  ## 共通のルールと制約
+</div>
 
 1. フィールド名について:
    - ネストされたフィールドを参照する場合を除き、ドット (.) を含めない
@@ -234,21 +242,29 @@ const results = await store.query({
    - 有効: `{ "$and": [{ "field": { "$gt": 100 } }] }`
    - 無効: `{ "$and": [{ "$gt": 100 }] }`
 
-## ストア別の注意事項
+<div id="store-specific-notes">
+  ## ストア別の注意事項
+</div>
 
-### Astra
+<div id="astra">
+  ### Astra
+</div>
 
 - ネストされたフィールドのクエリはドット記法でサポートされています
 - 配列フィールドはメタデータで明示的に配列として定義する必要があります
 - メタデータの値は大文字・小文字を区別します
 
-### ChromaDB
+<div id="chromadb">
+  ### ChromaDB
+</div>
 
 - フィルターは、メタデータ内に対象フィールドが存在する結果のみを返します
 - 空のメタデータフィールドはフィルター結果に含まれません
 - 否定条件で一致させるにはメタデータフィールドが存在している必要があります（例：フィールドが欠落しているドキュメントには $ne は一致しません）
 
-### Cloudflare Vectorize
+<div id="cloudflare-vectorize">
+  ### Cloudflare Vectorize
+</div>
 
 - フィルタリングを使用する前に、メタデータのインデックス作成が明示的に必要
 - フィルタリング対象のフィールドをインデックスするには `createMetadataIndex()` を使用
@@ -261,7 +277,9 @@ const results = await store.query({
 - 新しいメタデータインデックスを作成した後、フィルタリング結果に含めるにはベクターを再アップサートする必要がある
 - 範囲クエリは、非常に大規模なデータセット（約 1,000 万ベクター超）では精度が低下する場合がある
 
-### LibSQL
+<div id="libsql">
+  ### LibSQL
+</div>
 
 - ドット記法でネストされたオブジェクトへのクエリをサポート
 - 配列フィールドは、有効な JSON 配列であることを検証
@@ -269,7 +287,9 @@ const results = await store.query({
 - 条件内の空配列を適切に処理
 - メタデータは効率的なクエリのために JSONB 列に保存
 
-### PgVector
+<div id="pgvector">
+  ### PgVector
+</div>
 
 - PostgreSQL のネイティブな JSON クエリ機能を完全にサポート
 - ネイティブの配列関数による配列操作の高効率な処理
@@ -277,7 +297,9 @@ const results = await store.query({
 - ネストされたフィールドのクエリは内部的に PostgreSQL の JSON パス構文を使用
 - メタデータは効率的なインデックス化のため JSONB 列に保存
 
-### Pinecone
+<div id="pinecone">
+  ### Pinecone
+</div>
 
 - メタデータのフィールド名は最大512文字までです
 - 数値は±1e38の範囲内である必要があります
@@ -285,7 +307,9 @@ const results = await store.query({
 - ネストされたオブジェクトはドット表記でフラット化されます
 - メタデータの更新はメタデータオブジェクト全体を置き換えます
 
-### Qdrant
+<div id="qdrant">
+  ### Qdrant
+</div>
 
 - 入れ子条件を含む高度なフィルタリングをサポート
 - フィルタリングには、Payload（メタデータ）フィールドを明示的にインデックス化する必要がある
@@ -294,7 +318,9 @@ const results = await store.query({
 - ベクトルに特化したフィルタリング機能
 - 日時値は RFC 3339 形式である必要がある
 
-### Upstash
+<div id="upstash">
+  ### Upstash
+</div>
 
 - メタデータフィールドのキーは最大512文字まで
 - クエリのサイズに制限あり（大きな IN 句は避ける）
@@ -303,7 +329,9 @@ const results = await store.query({
 - 文字列比較は大文字・小文字を区別
 - メタデータの更新はアトミックに実行される
 
-### MongoDB
+<div id="mongodb">
+  ### MongoDB
+</div>
 
 - メタデータフィルタ用の MongoDB/Sift クエリ構文を完全にサポート
 - 標準的な比較、配列、論理、要素演算子をすべてサポート
@@ -313,11 +341,15 @@ const results = await store.query({
 - フィルタのサイズや複雑さに人工的な制限はなし（MongoDB のクエリ制限の範囲内）
 - パフォーマンス最適化のため、メタデータフィールドへのインデックス作成を推奨
 
-### Couchbase
+<div id="couchbase">
+  ### Couchbase
+</div>
 
 - 現在、メタデータフィルターには対応していません。フィルタリングは、結果取得後にクライアント側で行うか、より複雑なクエリの場合は Couchbase SDK の Search 機能を直接使用して行ってください。
 
-### Amazon S3 ベクター
+<div id="amazon-s3-vectors">
+  ### Amazon S3 ベクター
+</div>
 
 - 等値比較の値はプリミティブ（string/number/boolean）でなければなりません。`null`/`undefined`、配列、オブジェクト、Date は等値比較では使用できません。範囲演算子は number または Date を受け付けます（Date はエポック ms に正規化されます）。
 - `$in`/`$nin` は非空のプリミティブ配列が必要です。Date 要素は許可され、エポック ms に正規化されます。配列の等値比較はサポートされません。
@@ -331,7 +363,9 @@ const results = await store.query({
 - ベクターごとのフィルタ可能メタデータ: 最大 2 KB
 - ベクターインデックスごとのフィルタ不可メタデータキー: 最大 10
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [Astra](/reference/vectors/astra)
 - [Chroma](/reference/vectors/chroma)

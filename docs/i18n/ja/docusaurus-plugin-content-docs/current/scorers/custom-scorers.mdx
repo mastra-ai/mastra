@@ -2,11 +2,15 @@
 title: "カスタムスコアラー | スコアラー | Mastra ドキュメント"
 ---
 
-# カスタムスコアラー
+<div id="custom-scorers">
+  # カスタムスコアラー
+</div>
 
 Mastra は統一的な `createScorer` ファクトリを提供しており、各ステップで JavaScript 関数または LLM ベースのプロンプトオブジェクトを用いてカスタム評価ロジックを構築できます。この柔軟性により、評価パイプラインの各部分に最適なアプローチを選択できます。
 
-### 四段階パイプライン
+<div id="the-four-step-pipeline">
+  ### 四段階パイプライン
+</div>
 
 Mastra のすべてのスコアラーは、一貫した四段階の評価パイプラインに従います。
 
@@ -17,7 +21,9 @@ Mastra のすべてのスコアラーは、一貫した四段階の評価パイ�
 
 各ステップでは、**関数** または **プロンプトオブジェクト**（LLM ベースの評価）のいずれかを使用でき、必要に応じて決定的なアルゴリズムと AI による判断を組み合わせる柔軟性があります。
 
-### 関数 vs プロンプトオブジェクト
+<div id="functions-vs-prompt-objects">
+  ### 関数 vs プロンプトオブジェクト
+</div>
 
 **関数** は、決定的なロジックに JavaScript を用います。次の用途に最適です:
 
@@ -35,7 +41,9 @@ Mastra のすべてのスコアラーは、一貫した四段階の評価パイ�
 
 1 つのスコアラー内で両方のアプローチを組み合わせられます。たとえば、前処理には関数を使い、品質の分析には LLM を使うといった方法です。
 
-### スコアラーの初期化
+<div id="initializing-a-scorer">
+  ### スコアラーの初期化
+</div>
 
 すべてのスコアラーは `createScorer` ファクトリ関数から始まります。これは名前と説明を必須とし、必要に応じて型仕様とジャッジ設定を指定できます。
 
@@ -61,7 +69,9 @@ const glutenCheckerScorer = createScorer({
 ジャッジの設定は、いずれかのステップでプロンプトオブジェクトを使用する場合にのみ必要です。各ステップは、独自のジャッジ設定でこのデフォルト設定を上書きできます。
 
 
-#### エージェント評価のためのエージェントタイプ
+<div id="agent-type-for-agent-evaluation">
+  #### エージェント評価のためのエージェントタイプ
+</div>
 
 型安全性を確保し、ライブエージェントのスコアリングとトレーススコアリングの両方に対応するため、エージェント評価用のスコアラーを作成する際は `type: 'agent'` を使用してください。これにより、同じスコアラーをエージェントに対してもトレースに対しても使用できます。
 
@@ -76,9 +86,13 @@ const myScorer = createScorer({
 ```
 
 
-### 手順ごとの詳細解説
+<div id="step-by-step-breakdown">
+  ### 手順ごとの詳細解説
+</div>
 
-#### preprocess ステップ（オプション）
+<div id="preprocess-step-optional">
+  #### preprocess ステップ（オプション）
+</div>
 
 特定の要素の抽出、コンテンツのフィルタリング、複雑なデータ構造の変換などが必要な場合に、入出力データを準備します。
 
@@ -121,7 +135,9 @@ const glutenCheckerScorer = createScorer(...)
 **データフロー：** 結果は後続のステップで `results.preprocessStepResult` として参照できます
 
 
-#### analyze ステップ（任意）
+<div id="analyze-step-optional">
+  #### analyze ステップ（任意）
+</div>
 
 スコア決定に役立つ洞察を得るための主要な評価分析を実行します。
 
@@ -172,7 +188,9 @@ const glutenCheckerScorer = createScorer({...})
 **データフロー:** 結果は後続のステップで `results.analyzeStepResult` として参照できます
 
 
-#### generateScore ステップ（必須）
+<div id="generatescore-step-required">
+  #### generateScore ステップ（必須）
+</div>
 
 分析結果を数値スコアに変換します。パイプラインで必須となる唯一のステップです。
 
@@ -196,7 +214,9 @@ const glutenCheckerScorer = createScorer({...})
 **データフロー:** スコアは `generateReason` で `score` パラメータとして参照できます
 
 
-#### generateReason ステップ（任意）
+<div id="generatereason-step-optional">
+  #### generateReason ステップ（任意）
+</div>
 
 スコアの理由を人間が読みやすい形で生成します。デバッグ、透明性の確保、ユーザーへのフィードバックに役立ちます。
 
@@ -237,7 +257,9 @@ const glutenCheckerScorer = createScorer({...})
 ```
 
 
-## 例: カスタムスコアラーの作成
+<div id="example-create-a-custom-scorer">
+  ## 例: カスタムスコアラーの作成
+</div>
 
 Mastra のカスタムスコアラーは、`createScorer` を使い、次の4つのコアコンポーネントで構成されます:
 
@@ -339,7 +361,9 @@ export const glutenCheckerScorer = createScorer({
 ```
 
 
-### ジャッジの設定
+<div id="judge-configuration">
+  ### ジャッジの設定
+</div>
 
 LLMモデルを構成し、その役割をドメインの専門家として定義します。
 
@@ -351,7 +375,9 @@ judge: {
 ```
 
 
-### 解析ステップ
+<div id="analysis-step">
+  ### 解析ステップ
+</div>
 
 LLM が入力をどう分析し、どのような構造化された出力を返すかを定義します。
 
@@ -376,7 +402,9 @@ LLM が入力をどう分析し、どのような構造化された出力を返�
 * 入力内容に応じて動的なプロンプトを生成する
 
 
-### スコアの生成
+<div id="score-generation">
+  ### スコアの生成
+</div>
 
 LLM の構造化された分析結果を数値スコアに変換します。
 
@@ -389,7 +417,9 @@ LLM の構造化された分析結果を数値スコアに変換します。
 スコア生成関数は分析結果を受け取り、ビジネスロジックを適用してスコアを算出します。今回の場合、LLM がレシピがグルテンフリーかどうかを直接判定するため、その真偽値を用います。グルテンフリーなら 1、グルテンを含むなら 0 とします。
 
 
-### 理由生成
+<div id="reason-generation">
+  ### 理由生成
+</div>
 
 別の LLM 呼び出しを使って、スコアの根拠を人間にわかりやすく説明します。
 
@@ -423,7 +453,9 @@ console.log('理由:', result.reason);
 ````
 
 
-### 高グルテン不使用の高出力
+<div id="high-gluten-free-output">
+  ### 高グルテン不使用の高出力
+</div>
 
 ```typescript
 {
@@ -437,7 +469,9 @@ console.log('理由:', result.reason);
 ```
 
 
-## グルテンの部分的な例
+<div id="partial-gluten-example">
+  ## グルテンの部分的な例
+</div>
 
 ```typescript title="src/example-partial-gluten.ts" showLineNumbers copy
 const result = await glutenCheckerScorer.run({
@@ -451,7 +485,9 @@ console.log("理由：", result.reason);
 ```
 
 
-### グルテンの部分的な出力
+<div id="partial-gluten-output">
+  ### グルテンの部分的な出力
+</div>
 
 ```typescript
 {
@@ -465,7 +501,9 @@ console.log("理由：", result.reason);
 ```
 
 
-## 低グルテンの例
+<div id="low-gluten-free-example">
+  ## 低グルテンの例
+</div>
 
 ```typescript title="src/example-low-gluten-free.ts" showLineNumbers copy
 const result = await glutenCheckerScorer.run({
@@ -479,7 +517,9 @@ console.log("理由:", result.reason);
 ```
 
 
-### 低グルテンの出力
+<div id="low-gluten-free-output">
+  ### 低グルテンの出力
+</div>
 
 ```typescript
 {

@@ -3,7 +3,9 @@ title: "例：Faithfulness 評価 | Evals | Mastra Docs"
 description: コンテキストに照らして、応答の事実的正確性を評価するために Faithfulness 指標を用いる例。
 ---
 
-# 忠実性の評価
+<div id="faithfulness-evaluation">
+  # 忠実性の評価
+</div>
 
 :::note
 Scorers API は現在ベータ版です。継続的に改良を進めており、皆さまからのフィードバックをお待ちしています。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までお寄せください。
@@ -11,14 +13,18 @@ Scorers API は現在ベータ版です。継続的に改良を進めており�
 
 `FaithfulnessMetric` を使用すると、応答が提供されたコンテキストに裏付けられているかを評価できます。メトリックは `query` と `response` を受け取り、スコアと、その理由を含む `info` オブジェクトを返します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/evals
 ```
 
 
-## 高忠実度の例
+<div id="high-faithfulness-example">
+  ## 高忠実度の例
+</div>
 
 この例では、応答はコンテキストと緊密に合致しています。出力内の各記述は検証可能で、提供されたコンテキストの各エントリに裏付けられており、高いスコアにつながります。
 
@@ -44,7 +50,9 @@ console.log(result);
 ```
 
 
-### 高い忠実度の出力
+<div id="high-faithfulness-output">
+  ### 高い忠実度の出力
+</div>
 
 この出力は、示されているすべての情報が文脈に直接たどれるため、スコア1となります。欠落や矛盾はありません。
 
@@ -58,7 +66,9 @@ console.log(result);
 ```
 
 
-## 忠実性が混在する例
+<div id="mixed-faithfulness-example">
+  ## 忠実性が混在する例
+</div>
 
 この例では、サポートされている主張とサポートされていない主張が混在しています。回答の一部は文脈によって裏付けられていますが、他の部分はソース資料にない新たな情報を持ち込みます。
 
@@ -84,7 +94,9 @@ console.log(result);
 ```
 
 
-### 忠実性が混在した出力
+<div id="mixed-faithfulness-output">
+  ### 忠実性が混在した出力
+</div>
 
 検証可能なのが応答の一部にとどまるため、スコアは低くなります。いくつかの主張は文脈と一致する一方、他は未確認または範囲外であり、全体としての忠実性を損なっています。
 
@@ -98,7 +110,9 @@ console.log(result);
 ```
 
 
-## 忠実性の低い例
+<div id="low-faithfulness-example">
+  ## 忠実性の低い例
+</div>
 
 この例では、回答が文脈と真っ向から矛盾しています。どの主張にも根拠がなく、いくつかは提示された事実と食い違っています。
 
@@ -124,7 +138,9 @@ console.log(result);
 ```
 
 
-### 忠実度の低い出力
+<div id="low-faithfulness-output">
+  ### 忠実度の低い出力
+</div>
 
 各主張が不正確、または文脈と矛盾しているため、スコアは0になります。
 
@@ -138,7 +154,9 @@ console.log(result);
 ```
 
 
-## メトリックの設定
+<div id="metric-configuration">
+  ## メトリックの設定
+</div>
 
 評価の事実上の根拠となる資料を定義する `context` 配列を指定して、`FaithfulnessMetric` インスタンスを作成できます。最大スコアを制御するために、`scale` などのオプションパラメータを設定することも可能です。
 
@@ -152,7 +170,9 @@ const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
 > 設定オプションの一覧は、[FaithfulnessMetric](/reference/evals/faithfulness) を参照してください。
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `FaithfulnessMetric` は次の形式で結果を返します:
 
@@ -166,7 +186,9 @@ const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
 ```
 
 
-### 忠実性スコア
+<div id="faithfulness-score">
+  ### 忠実性スコア
+</div>
 
 0～1の範囲の忠実性スコア:
 
@@ -176,7 +198,9 @@ const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
 - **0.1–0.3**: 内容の大半が不正確、または裏付けがない。
 - **0.0**: すべての記述が誤り、または文脈と矛盾している。
 
-### 忠実性に関する情報
+<div id="faithfulness-info">
+  ### 忠実性に関する情報
+</div>
 
 スコアの説明。以下の詳細を含みます:
 

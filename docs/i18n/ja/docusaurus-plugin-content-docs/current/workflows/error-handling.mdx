@@ -3,11 +3,15 @@ title: "エラー処理 | ワークフロー | Mastra ドキュメント"
 description: "Mastra のワークフローで、ステップの再試行、条件分岐、監視を活用したエラー処理方法を学びます。"
 ---
 
-# エラーハンドリング
+<div id="error-handling">
+  # エラーハンドリング
+</div>
 
 Mastra には、一時的なエラーで失敗したワークフローやステップを対象にした再試行機構が組み込まれています。これは、外部サービスや一時的に利用不能となる可能性のあるリソースとやり取りするステップで特に有用です。
 
-## ワークフローレベルでの `retryConfig` の使用
+<div id="workflow-level-using-retryconfig">
+  ## ワークフローレベルでの `retryConfig` の使用
+</div>
 
 ワークフローレベルでリトライを設定でき、ワークフロー内のすべてのステップに適用されます。
 
@@ -29,7 +33,9 @@ export const testWorkflow = createWorkflow({
 ```
 
 
-## `retries` を使用したステップ単位の設定
+<div id="step-level-using-retries">
+  ## `retries` を使用したステップ単位の設定
+</div>
 
 各ステップごとに `retries` プロパティでリトライを設定できます。これにより、そのステップに限りワークフロー全体のリトライ設定が上書きされます。
 
@@ -55,7 +61,9 @@ const step1 = createStep({
 ```
 
 
-## 条件分岐
+<div id="conditional-branching">
+  ## 条件分岐
+</div>
 
 条件ロジックを使って、前のステップの成否に応じた代替のワークフロー経路を作成できます。
 
@@ -99,7 +107,9 @@ export const testWorkflow = createWorkflow({
 ```
 
 
-## 前のステップの結果を確認する
+<div id="check-previous-step-results">
+  ## 前のステップの結果を確認する
+</div>
 
 `getStepResult()` を使って、前のステップの結果を確認します。
 
@@ -123,7 +133,9 @@ const step2 = createStep({
 ```
 
 
-## `bail()` で早期終了する
+<div id="exiting-early-with-bail">
+  ## `bail()` で早期終了する
+</div>
 
 ステップ内で `bail()` を使うと、成功として早期終了できます。指定したペイロードがステップの出力として返され、ワークフローの実行が終了します。
 
@@ -146,7 +158,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-## `Error()` で早期終了する
+<div id="exiting-early-with-error">
+  ## `Error()` で早期終了する
+</div>
 
 エラーで終了するには、ステップ内で `throw new Error()` を使用します。
 
@@ -169,7 +183,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-## `watch()` でエラーを監視する
+<div id="monitor-errors-with-watch">
+  ## `watch()` でエラーを監視する
+</div>
 
 `watch` メソッドを使って、ワークフローのエラーを監視できます。
 
@@ -211,7 +227,9 @@ for await (const chunk of stream.stream) {
 ```
 
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [制御フロー](./control-flow)
 - [条件分岐](./control-flow#conditional-logic-with-branch)

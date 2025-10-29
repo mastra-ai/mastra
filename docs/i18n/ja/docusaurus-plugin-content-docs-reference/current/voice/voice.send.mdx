@@ -3,11 +3,15 @@ title: "リファレンス：voice.send() | Voice | Mastra ドキュメント"
 description: "リアルタイム音声プロバイダーで利用可能な send() メソッドのドキュメント。音声データをストリーミングして連続処理を行います。"
 ---
 
-# voice.send()
+<div id="voicesend">
+  # voice.send()
+</div>
 
 `send()` メソッドは、音声データをリアルタイムに音声プロバイダーへストリーミングし、継続的に処理します。音声同士のリアルタイム会話に不可欠で、マイク入力をAIサービスに直接送信できます。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
@@ -52,7 +56,9 @@ await voice.send(audioBuffer);
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <br />
 
@@ -68,11 +74,15 @@ await voice.send(audioBuffer);
   ]}
 />
 
-## 戻り値
+<div id="return-value">
+  ## 戻り値
+</div>
 
 音声データが音声プロバイダーに受け入れられると解決される `Promise<void>` を返します。
 
-## 注意
+<div id="notes">
+  ## 注意
+</div>
 
 - このメソッドは、音声同士のやり取り（speech-to-speech）に対応したリアルタイム音声プロバイダーでのみ実装されています
 - この機能に非対応の音声プロバイダーで呼び出すと、警告をログ出力して即座に処理を完了します

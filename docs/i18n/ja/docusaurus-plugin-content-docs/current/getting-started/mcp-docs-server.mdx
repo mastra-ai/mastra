@@ -6,7 +6,9 @@ description: "IDE で Mastra MCP ドキュメントサーバーを使い、IDE �
 import Youtube from "@site/src/components/YouTube-player";
 
 
-# Mastra Docs Server
+<div id="mastra-docs-server">
+  # Mastra Docs Server
+</div>
 
 `@mastra/mcp-docs-server` パッケージは、[Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro) を介して、ドキュメント、コード例、ブログ記事、チェンジログなどを含む Mastra の包括的なナレッジベースへ直接アクセスできるようにします。Cursor、Windsurf、Cline、Claude Code、Codex など、MCP をサポートするあらゆるツールで利用できます。
 
@@ -16,13 +18,19 @@ import Youtube from "@site/src/components/YouTube-player";
 
 <YouTube id="vciV57lF0og" />
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
-### create-mastra
+<div id="create-mastra">
+  ### create-mastra
+</div>
 
 対話型の[create-mastra](/reference/cli/create-mastra)ウィザードで、MCP のステップにて使用するツールを選択してください。
 
-### 手動セットアップ
+<div id="manual-setup">
+  ### 手動セットアップ
+</div>
 
 以下に特定の手順が記載されていないツールでも、共通のJSON設定でMCPサーバーを追加できる場合があります。
 
@@ -39,7 +47,9 @@ import Youtube from "@site/src/components/YouTube-player";
 ```
 
 
-### Claude Code CLI
+<div id="claude-code-cli">
+  ### Claude Code CLI
+</div>
 
 ターミナルで次のコマンドを実行してインストールします:
 
@@ -50,7 +60,9 @@ claude mcp add mastra -- npx -y @mastra/mcp-docs-server
 [Claude Code での MCP サーバー活用に関する詳細](https://docs.claude.com/en/docs/claude-code/mcp)
 
 
-### OpenAI Codex CLI
+<div id="openai-codex-cli">
+  ### OpenAI Codex CLI
+</div>
 
 1. ターミナルから登録します:
 
@@ -62,7 +74,9 @@ claude mcp add mastra -- npx -y @mastra/mcp-docs-server
 
 [OpenAI Codex での MCP サーバーの使い方について詳しくはこちら](https://developers.openai.com/codex/mcp)
 
-### Cursor
+<div id="cursor">
+  ### Cursor
+</div>
 
 以下のボタンをクリックしてインストールしてください：
 
@@ -78,7 +92,9 @@ claude mcp add mastra -- npx -y @mastra/mcp-docs-server
 
 [Cursor での MCP サーバーの使用方法の詳細](https://cursor.com/de/docs/context/mcp)
 
-### Visual Studio Code
+<div id="visual-studio-code">
+  ### Visual Studio Code
+</div>
 
 1. ワークスペースに `.vscode/mcp.json` ファイルを作成します
 2. 次の設定を追加します:
@@ -128,7 +144,9 @@ MCP サーバーを起動したら、Copilot ペインのツール ボタンを�
 
 [Visual Studio Code で MCP サーバーを使用する方法の詳細](https://code.visualstudio.com/docs/copilot/customization/mcp-servers)
 
-### Windsurf
+<div id="windsurf">
+  ### Windsurf
+</div>
 
 1. エディタで `~/.codeium/windsurf/mcp_config.json` を開く
 2. 次の設定を追加します:
@@ -148,7 +166,9 @@ MCP サーバーを起動したら、Copilot ペインのツール ボタンを�
 
 [Windsurf での MCP サーバーの使用方法について詳しくはこちら](https://docs.windsurf.com/windsurf/cascade/mcp#mcp-config-json)
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 設定が完了したら、Mastra について質問したり、操作を指示したりできます。これらの操作では、Mastra の MCP サーバーから常に最新の情報が取得されます。
 
@@ -171,7 +191,9 @@ MCP サーバーを起動したら、Copilot ペインのツール ボタンを�
 - 「Mastra のワーキングメモリはどう動作し、`[task]` を行うためにどう使えばいいですか？期待どおりに動いていないようです。」
 - 「新しいワークフロー機能を見ました。内容を説明したうえで、`[workflow]` をそれらを使うように更新してください。」
 
-### トラブルシューティング
+<div id="troubleshooting">
+  ### トラブルシューティング
+</div>
 
 1. **サーバーが起動しない**
    - [npx](https://docs.npmjs.com/cli/v11/commands/npx) がインストールされ、正常に動作していることを確認してください。

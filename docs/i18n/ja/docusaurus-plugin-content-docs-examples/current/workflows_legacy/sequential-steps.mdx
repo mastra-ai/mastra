@@ -6,11 +6,15 @@ description: Mastra を使用してレガシー版ワークフローのステッ
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# 逐次ステップのレガシーワークフロー
+<div id="workflow-legacy-with-sequential-steps">
+  # 逐次ステップのレガシーワークフロー
+</div>
 
 ワークフローは、特定の順序で順番に連結して実行できます。
 
-## 制御フローダイアグラム
+<div id="control-flow-diagram">
+  ## 制御フローダイアグラム
+</div>
 
 この例では、`then` メソッドを使ってワークフローのステップをチェーンし、連続するステップ間でデータを受け渡しつつ、順に実行する方法を示します。
 
@@ -22,7 +26,9 @@ import GithubLink from "@site/src/components/GithubLink";
   width={600}
 />
 
-## 手順の作成
+<div id="creating-the-steps">
+  ## 手順の作成
+</div>
 
 まずは手順を作成し、ワークフローを初期化しましょう。
 
@@ -69,7 +75,9 @@ const myWorkflow = new LegacyWorkflow({
 ```
 
 
-## ステップをつなげてワークフローを実行する
+<div id="chaining-the-steps-and-executing-the-workflow">
+  ## ステップをつなげてワークフローを実行する
+</div>
 
 では、ステップをつないでいきましょう。
 
@@ -101,7 +109,9 @@ const res = await start({ triggerData: { inputValue: 90 } });
 />
 
 
-## ワークフロー（レガシー）
+<div id="workflows-legacy">
+  ## ワークフロー（レガシー）
+</div>
 
 以下のリンクは、レガシー版ワークフローの例を示すドキュメントです:
 

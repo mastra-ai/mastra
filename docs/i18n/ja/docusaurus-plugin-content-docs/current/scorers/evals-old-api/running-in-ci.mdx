@@ -3,7 +3,9 @@ title: "CIでEvalsを実行する | スコアラー | Mastraドキュメント"
 description: "CI/CDパイプラインでMastraのEvalsを実行し、時間の経過とともにエージェントの品質を監視する方法を学びます。"
 ---
 
-# CI で Evals を実行する
+<div id="running-evals-in-ci">
+  # CI で Evals を実行する
+</div>
 
 :::info Scorers
 このドキュメントはレガシーの Evals API を参照しています。最新の Scorer 機能については、[Scorers](/docs/scorers/overview) をご覧ください。
@@ -11,7 +13,9 @@ description: "CI/CDパイプラインでMastraのEvalsを実行し、時間の�
 
 CI パイプラインで Evals を実行することで、時間の経過に伴うエージェントの品質を測定するための定量的な指標を提供し、このギャップの解消に役立ちます。
 
-## CI 連携のセットアップ
+<div id="setting-up-ci-integration">
+  ## CI 連携のセットアップ
+</div>
 
 ESM モジュールに対応した任意のテストフレームワークを利用できます。たとえば、CI/CD パイプラインで eval を実行する際に、[Vitest](https://vitest.dev/)、[Jest](https://jestjs.io/)、または [Mocha](https://mochajs.org/) を使用できます。
 
@@ -34,9 +38,13 @@ describe("My Agent", () => {
 `eval` の結果を取得するには、テストフレームワークで `testSetup` と `globalSetup` のスクリプトを設定する必要があります。これにより、これらの結果を mastra のダッシュボードに表示できるようになります。
 
 
-## フレームワーク構成
+<div id="framework-configuration">
+  ## フレームワーク構成
+</div>
 
-### Vitest のセットアップ
+<div id="vitest-setup">
+  ### Vitest のセットアップ
+</div>
 
 CI/CD パイプラインで eval を実行するには、次のファイルをプロジェクトに追加してください。
 
@@ -69,7 +77,9 @@ export default defineConfig({
 ```
 
 
-## ストレージ設定
+<div id="storage-configuration">
+  ## ストレージ設定
+</div>
 
 Mastra Storage に評価結果を保存し、Mastra ダッシュボードで結果を確認するには:
 

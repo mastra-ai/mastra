@@ -3,11 +3,15 @@ title: "リファレンス: Speechify | Voice | Mastra Docs"
 description: "Speechify の音声実装に関するドキュメント。テキスト読み上げ機能を提供します。"
 ---
 
-# Speechify
+<div id="speechify">
+  # Speechify
+</div>
 
 Mastra における Speechify の音声機能実装は、Speechify の API を利用してテキスト読み上げ（TTS）機能を提供します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { SpeechifyVoice } from "@mastra/voice-speechify";
@@ -31,7 +35,9 @@ const audioStream = await voice.speak("Hello, world!", {
 ```
 
 
-## コンストラクターの引数
+<div id="constructor-parameters">
+  ## コンストラクターの引数
+</div>
 
 <PropertiesTable
   content={[
@@ -52,7 +58,9 @@ const audioStream = await voice.speak("Hello, world!", {
   ]}
 />
 
-### SpeechifyConfig
+<div id="speechifyconfig">
+  ### SpeechifyConfig
+</div>
 
 <PropertiesTable
   content={[
@@ -73,9 +81,13 @@ const audioStream = await voice.speak("Hello, world!", {
   ]}
 />
 
-## 手法
+<div id="methods">
+  ## 手法
+</div>
 
-### speak()
+<div id="speak">
+  ### speak()
+</div>
 
 設定済みの音声モデルとボイスで、テキストを音声に変換します。
 
@@ -107,7 +119,9 @@ const audioStream = await voice.speak("Hello, world!", {
 
 戻り値: `Promise<NodeJS.ReadableStream>`
 
-### getSpeakers()
+<div id="getspeakers">
+  ### getSpeakers()
+</div>
 
 利用可能な音声オプションの配列を返します。各要素には次が含まれます:
 
@@ -136,11 +150,15 @@ const audioStream = await voice.speak("Hello, world!", {
   ]}
 />
 
-### listen()
+<div id="listen">
+  ### listen()
+</div>
 
 このメソッドはSpeechifyではサポートされておらず、エラーを発生させます。Speechifyは音声認識（speech-to-text）機能を提供していません。
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - Speechify の認証には API キーが必要です
 - 既定のモデルは「simba-english」です

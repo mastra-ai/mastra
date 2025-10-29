@@ -3,13 +3,19 @@ title: "リファレンス: MastraAuthFirebase クラス | Auth | Mastra ドキ�
 description: "Firebase Authentication を用いて Mastra アプリケーションを認証する MastraAuthFirebase クラスの API リファレンス。"
 ---
 
-# MastraAuthFirebase クラス
+<div id="mastraauthfirebase-class">
+  # MastraAuthFirebase クラス
+</div>
 
 `MastraAuthFirebase` クラスは、Firebase Authentication を用いて Mastra の認証を提供します。Firebase ID トークンで受信リクエストを検証し、`experimental_auth` オプションを介して Mastra サーバーと統合します。
 
-## 使い方の例
+<div id="usage-examples">
+  ## 使い方の例
+</div>
 
-### 環境変数を使った基本的な使い方
+<div id="basic-usage-with-environment-variables">
+  ### 環境変数を使った基本的な使い方
+</div>
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
@@ -25,7 +31,9 @@ export const mastra = new Mastra({
 ```
 
 
-### カスタム設定
+<div id="custom-configuration">
+  ### カスタム設定
+</div>
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
@@ -43,7 +51,9 @@ export const mastra = new Mastra({
 ```
 
 
-## コンストラクターのパラメータ
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -81,7 +91,9 @@ export const mastra = new Mastra({
   ]}
 />
 
-## 環境変数
+<div id="environment-variables">
+  ## 環境変数
+</div>
 
 コンストラクターのオプションが指定されていない場合、次の環境変数が自動的に使用されます。
 
@@ -111,7 +123,9 @@ export const mastra = new Mastra({
   ]}
 />
 
-## デフォルトの認可動作
+<div id="default-authorization-behavior">
+  ## デフォルトの認可動作
+</div>
 
 デフォルトでは、`MastraAuthFirebase` は Firestore を使用してユーザーのアクセスを管理します:
 
@@ -120,7 +134,9 @@ export const mastra = new Mastra({
 3. ドキュメントが存在すればユーザーは認可され、存在しなければアクセスは拒否される
 4. 使用する Firestore データベースは、`databaseId` パラメータまたは環境変数によって決定される
 
-## Firebase ユーザー型
+<div id="firebase-user-type">
+  ## Firebase ユーザー型
+</div>
 
 `authorizeUser` 関数で使用される `FirebaseUser` 型は、Firebase の `DecodedIdToken` インターフェースに対応しており、次の情報を含みます:
 
@@ -132,6 +148,8 @@ export const mastra = new Mastra({
 - `auth_time`: ユーザーが認証した日時
 - その他の標準的な JWT クレーム
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 [MastraAuthFirebase クラス](/docs/auth/firebase)

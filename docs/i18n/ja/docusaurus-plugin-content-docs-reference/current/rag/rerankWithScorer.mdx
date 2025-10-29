@@ -3,7 +3,9 @@ title: "リファレンス: rerankWithScorer() | RAG | Mastra ドキュメント
 description: Mastra における rerank 関数のドキュメント。ベクトル検索結果に対する高度な再ランク付け機能を提供します。
 ---
 
-# rerankWithScorer()
+<div id="rerankwithscorer">
+  # rerankWithScorer()
+</div>
 
 `rerankWithScorer()` 関数は、セマンティック関連性、ベクトル類似度、位置情報に基づくスコアリングを組み合わせることで、ベクトル検索結果を高度に再ランキングします。
 
@@ -17,7 +19,9 @@ function rerankWithScorer({
 ```
 
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -41,7 +45,9 @@ const rerankedResults = await rerank({
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -76,7 +82,9 @@ const rerankedResults = await rerank({
 
 > 注: 再ランク付け時にセマンティック・スコアリングを正しく機能させるには、各結果の `metadata.text` フィールドにテキスト本文が含まれている必要があります。
 
-### RerankerFunctionOptions
+<div id="rerankerfunctionoptions">
+  ### RerankerFunctionOptions
+</div>
 
 <PropertiesTable
   content={[
@@ -138,7 +146,9 @@ const rerankedResults = await rerank({
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 この関数は `RerankResult` オブジェクトの配列を返します。
 
@@ -162,7 +172,9 @@ const rerankedResults = await rerank({
   ]}
 />
 
-### ScoringDetails
+<div id="scoringdetails">
+  ### ScoringDetails
+</div>
 
 <PropertiesTable
   content={[
@@ -210,6 +222,8 @@ const rerankedResults = await rerank({
   ]}
 />
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [createVectorQueryTool](../tools/vector-query-tool)

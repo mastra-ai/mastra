@@ -3,11 +3,15 @@ title: "リファレンス: voice.off() | Voice | Mastra ドキュメント"
 description: "voice プロバイダーで利用可能な off() メソッドのドキュメント。音声イベントのリスナーを解除します。"
 ---
 
-# voice.off()
+<div id="voiceoff">
+  # voice.off()
+</div>
 
 `off()` メソッドは、`on()` メソッドで登録したイベントリスナーを解除します。これは、リアルタイム音声機能を備えた長時間稼働のアプリケーションで、リソースのクリーンアップやメモリリークの防止に特に有用です。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
@@ -41,7 +45,9 @@ voice.off("writing", writingCallback);
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <br />
 
@@ -63,11 +69,15 @@ voice.off("writing", writingCallback);
   ]}
 />
 
-## 戻り値
+<div id="return-value">
+  ## 戻り値
+</div>
 
 このメソッドは値を返しません。
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - `off()` に渡すコールバックは、`on()` に渡したものと同一の関数参照である必要があります
 - コールバックが見つからない場合、このメソッドは何も行いません

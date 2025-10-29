@@ -3,11 +3,15 @@ title: "リファレンス: Workflow.execute() | 旧ワークフロー | Mastra 
 description: "Mastra のワークフローにおける `.execute()` メソッドのドキュメント。ワークフローの各ステップを実行し、結果を返します。"
 ---
 
-# Workflow.execute()
+<div id="workflowexecute">
+  # Workflow.execute()
+</div>
 
 指定されたトリガー データを使用してワークフローを実行し、結果を返します。実行前にワークフローをコミットしておく必要があります。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 const workflow = new LegacyWorkflow({
@@ -25,7 +29,9 @@ const result = await workflow.execute({
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -52,7 +58,9 @@ const result = await workflow.execute({
   ]}
 />
 
-## 返り値
+<div id="returns">
+  ## 返り値
+</div>
 
 <PropertiesTable
   content={[
@@ -81,7 +89,9 @@ const result = await workflow.execute({
   ]}
 />
 
-## 追加の例
+<div id="additional-examples">
+  ## 追加の例
+</div>
 
 実行するラン ID:
 
@@ -105,7 +115,9 @@ if (status === "COMPLETED") {
 ```
 
 
-### 関連情報
+<div id="related">
+  ### 関連情報
+</div>
 
 - [Workflow.createRun()](./createRun)
 - [Workflow.commit()](./commit)

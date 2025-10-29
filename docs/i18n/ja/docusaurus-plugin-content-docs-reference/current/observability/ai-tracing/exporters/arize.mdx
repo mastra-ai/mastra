@@ -6,18 +6,24 @@ description: OpenInference を用いた AI トレーシング向け Arize エク
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
-# ArizeExporter
+<div id="arizeexporter">
+  # ArizeExporter
+</div>
 
 AI のトレーシングデータを、Arize Phoenix、Arize AX、または OpenInference のセマンティック規約に準拠した任意の OpenTelemetry 互換のオブザーバビリティプラットフォームへ送信します。
 
-## コンストラクタ
+<div id="constructor">
+  ## コンストラクタ
+</div>
 
 ```typescript
 new ArizeExporter(config: ArizeExporterConfig)
 ```
 
 
-## ArizeExporterConfig
+<div id="arizeexporterconfig">
+  ## ArizeExporterConfig
+</div>
 
 ```typescript
 interface ArizeExporterConfig {
@@ -104,9 +110,13 @@ interface ArizeExporterConfig {
 />
 
 
-## 方法
+<div id="methods">
+  ## 方法
+</div>
 
-### exportEvent
+<div id="exportevent">
+  ### exportEvent
+</div>
 
 ```typescript
 async exportEvent(event: AITracingEvent): Promise<void>
@@ -115,7 +125,9 @@ async exportEvent(event: AITracingEvent): Promise<void>
 設定されたエンドポイントにトレースイベントをエクスポートします。
 
 
-### export
+<div id="export">
+  ### export
+</div>
 
 ```typescript
 async export(spans: ReadOnlyAISpan[]): Promise<void>
@@ -124,7 +136,9 @@ async export(spans: ReadOnlyAISpan[]): Promise<void>
 OpenTelemetry を使用し、OpenInference のセマンティック規約に従ってスパンをバッチでエクスポートします。
 
 
-### シャットダウン
+<div id="shutdown">
+  ### シャットダウン
+</div>
 
 ```typescript
 async shutdown(): Promise<void>
@@ -133,9 +147,13 @@ async shutdown(): Promise<void>
 未処理のデータをフラッシュし、クライアントをシャットダウンします。
 
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
-### Phoenix の構成
+<div id="phoenix-configuration">
+  ### Phoenix の構成
+</div>
 
 ```typescript
 import { ArizeExporter } from "@mastra/arize";
@@ -148,7 +166,9 @@ const exporter = new ArizeExporter({
 ```
 
 
-### Arize AX の設定
+<div id="arize-ax-configuration">
+  ### Arize AX の設定
+</div>
 
 ```typescript
 import { ArizeExporter } from "@mastra/arize";
@@ -161,11 +181,15 @@ const exporter = new ArizeExporter({
 ```
 
 
-## OpenInference セマンティック規約
+<div id="openinference-semantic-conventions">
+  ## OpenInference セマンティック規約
+</div>
 
 ArizeExporter は、生成 AI アプリケーション向けに [OpenInference セマンティック規約](https://github.com/Arize-ai/openinference/tree/main/spec) を実装し、さまざまなオブザーバビリティプラットフォーム間で標準化されたトレース構造を提供します。
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [ArizeExporter のドキュメント](/docs/observability/ai-tracing/exporters/arize)
 - [Phoenix のドキュメント](https://docs.arize.com/phoenix)

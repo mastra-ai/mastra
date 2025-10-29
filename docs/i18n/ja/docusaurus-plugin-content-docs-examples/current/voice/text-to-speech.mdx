@@ -6,11 +6,15 @@ description: Mastra を使用して音声合成アプリケーションを作成
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# インタラクティブストーリージェネレーター
+<div id="interactive-story-generator">
+  # インタラクティブストーリージェネレーター
+</div>
 
 以下のコードスニペットは、Next.js を使用し、Mastra を別バックエンドとして統合したインタラクティブなストーリー生成アプリでの Text-to-Speech（TTS）機能の実装例です。この例では、Mastra の client-js SDK を用いて Mastra のバックエンドへ接続する方法を示します。Next.js との統合の詳細は、[Integrate with Next.js](/docs/frameworks/web-frameworks/next-js) をご参照ください。
 
-## TTS 機能を備えたエージェントの作成
+<div id="creating-an-agent-with-tts-capabilities">
+  ## TTS 機能を備えたエージェントの作成
+</div>
 
 次の例では、バックエンドで TTS 機能を持つストーリー生成エージェントを設定する方法を示します。
 
@@ -34,7 +38,9 @@ export const storyTellerAgent = new Agent({
 ```
 
 
-## Mastra へのエージェントの登録
+<div id="registering-the-agent-with-mastra">
+  ## Mastra へのエージェントの登録
+</div>
 
 次のスニペットは、Mastra インスタンスにエージェントを登録する方法を示しています:
 
@@ -53,7 +59,9 @@ export const mastra = new Mastra({
 ```
 
 
-## フロントエンドから Mastra に接続する
+<div id="connecting-to-mastra-from-the-frontend">
+  ## フロントエンドから Mastra に接続する
+</div>
 
 ここでは Mastra Client SDK を使って Mastra サーバーとやり取りします。Mastra Client SDK の詳細は[ドキュメント](/docs/server-db/mastra-client)をご覧ください。
 
@@ -66,7 +74,9 @@ export const mastraClient = new MastraClient({
 ```
 
 
-## 物語コンテンツの生成と音声への変換
+<div id="generating-story-content-and-converting-to-speech">
+  ## 物語コンテンツの生成と音声への変換
+</div>
 
 この例では、Mastra エージェントへの参照を取得し、ユーザー入力に基づいて物語コンテンツを生成し、そのコンテンツを音声に変換する方法を紹介します。
 
@@ -113,7 +123,9 @@ const handleInitialSubmit = async (formData: FormData) => {
 ```
 
 
-## 音声の再生
+<div id="playing-the-audio">
+  ## 音声の再生
+</div>
 
 このスニペットは、新しい音声データを監視し、テキスト読み上げの音声再生を行う方法を示します。音声を受信すると、コードは音声のBlobからブラウザで再生可能なURLを生成し、それを audio 要素に設定して、自動再生を試みます。
 

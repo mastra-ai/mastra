@@ -3,11 +3,15 @@ title: "例：ワークフロー変数によるデータマッピング（レガ
 description: "Mastra のワークフローで、ステップ間のデータをマッピングするためにワークフロー変数を使う方法を学びます。"
 ---
 
-# ワークフロー変数によるデータマッピング（レガシー）
+<div id="data-mapping-with-workflow-variables-legacy">
+  # ワークフロー変数によるデータマッピング（レガシー）
+</div>
 
 この例では、Mastra のワークフローにおいて、ステップ間でデータをマッピングするためにワークフロー変数を使用する方法を示します。
 
-## ユースケース: ユーザー登録プロセス
+<div id="use-case-user-registration-process">
+  ## ユースケース: ユーザー登録プロセス
+</div>
 
 この例では、次の処理を行うシンプルなユーザー登録ワークフローを構築します:
 
@@ -15,7 +19,9 @@ description: "Mastra のワークフローで、ステップ間のデータを�
 1. ユーザーデータを整える
 1. ユーザープロフィールを作成する
 
-## 実装
+<div id="implementation">
+  ## 実装
+</div>
 
 ```typescript showLineNumbers title="src/mastra/workflows/user-registration.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
@@ -175,7 +181,9 @@ export default registrationWorkflow;
 ```
 
 
-## この例の使い方
+<div id="how-to-use-this-example">
+  ## この例の使い方
+</div>
 
 1. 上記のとおりにファイルを作成する
 2. Mastra インスタンスにワークフローを登録する
@@ -192,7 +200,9 @@ curl --location 'http://localhost:4111/api/workflows/user-registration/start-asy
 ```
 
 
-## 重要なポイント
+<div id="key-takeaways">
+  ## 重要なポイント
+</div>
 
 この例では、ワークフロー変数に関する重要な概念をいくつか示します:
 
@@ -208,7 +218,9 @@ curl --location 'http://localhost:4111/api/workflows/user-registration/start-asy
 
 ワークフロー変数の詳細については、[Workflow Variables のドキュメント](/docs/workflows-legacy/variables)を参照してください。
 
-## ワークフロー（レガシー）
+<div id="workflows-legacy">
+  ## ワークフロー（レガシー）
+</div>
 
 以下のリンクは、レガシー版ワークフローの例を解説するドキュメントです：
 

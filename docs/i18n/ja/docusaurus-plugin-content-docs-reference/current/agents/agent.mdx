@@ -3,13 +3,19 @@ title: "リファレンス: Agent クラス | Agents | Mastra ドキュメント
 description: "Mastra の `Agent` クラスに関するドキュメント。多様な機能を備えた AI エージェントを作成するための基盤を提供します。"
 ---
 
-# Agent Class
+<div id="agent-class">
+  # Agent Class
+</div>
 
 `Agent` クラスは、Mastra で AI エージェントを作成するための基盤となるクラスです。応答の生成、やり取りのストリーミング、音声機能の取り扱いのためのメソッドを提供します。
 
-## 使い方の例
+<div id="usage-examples">
+  ## 使い方の例
+</div>
 
-### 文字列に関する基本的な指示
+<div id="basic-string-instructions">
+  ### 文字列に関する基本的な指示
+</div>
 
 ```typescript title="src/mastra/agents/string-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -44,7 +50,9 @@ export const agent3 = new Agent({
 ```
 
 
-### 単一の CoreSystemMessage
+<div id="single-coresystemmessage">
+  ### 単一の CoreSystemMessage
+</div>
 
 `providerOptions` などのプロバイダー固有の設定に関する追加プロパティにアクセスするには、CoreSystemMessage 形式を使用します:
 
@@ -69,7 +77,9 @@ export const agent = new Agent({
 ```
 
 
-### 複数のCoreSystemMessage
+<div id="multiple-coresystemmessages">
+  ### 複数のCoreSystemMessage
+</div>
 
 ```typescript title="src/mastra/agents/multi-message-agent.ts" showLineNumbers copy
 import { anthropic } from "@ai-sdk/anthropic";
@@ -99,7 +109,9 @@ export const agent = new Agent({
 ```
 
 
-## コンストラクターの引数
+<div id="constructor-parameters">
+  ## コンストラクターの引数
+</div>
 
 <PropertiesTable
   content={[
@@ -226,7 +238,9 @@ export const agent = new Agent({
 ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -238,7 +252,9 @@ export const agent = new Agent({
   ]}
 />
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [Agents 概要](/docs/agents/overview)
 - [Agents の呼び出し](/examples/agents/calling-agents)

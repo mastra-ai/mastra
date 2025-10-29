@@ -3,11 +3,15 @@ title: "リファレンス: Answer Similarity Scorer | Scorers | Mastra ドキ�
 description: Mastra の Answer Similarity Scorer に関するドキュメント。CI/CD テストのために、エージェントの出力を正解（グラウンドトゥルース）の回答と照合します。
 ---
 
-# Answer Similarity Scorer
+<div id="answer-similarity-scorer">
+  # Answer Similarity Scorer
+</div>
 
 `createAnswerSimilarityScorer()` 関数は、エージェントの出力が正解（ground truth）の回答とどれだけ近いかを評価するスコアラーを作成します。このスコアラーは、期待される回答が定義されており、時間経過にわたる一貫性を担保したい CI/CD テストのシナリオ向けに特化して設計されています。
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -27,7 +31,9 @@ description: Mastra の Answer Similarity Scorer に関するドキュメント�
   ]}
 />
 
-### AnswerSimilarityOptions
+<div id="answersimilarityoptions">
+  ### AnswerSimilarityOptions
+</div>
 
 <PropertiesTable
   content={[
@@ -88,7 +94,9 @@ description: Mastra の Answer Similarity Scorer に関するドキュメント�
 
 この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドは他のスコアラーと同じ入力を受け付けます（[MastraScorer リファレンス](./mastra-scorer)を参照）が、実行オブジェクトで正解データ（ground truth）の提供が必須です。
 
-## .run() の戻り値
+<div id="run-returns">
+  ## .run() の戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -138,7 +146,9 @@ description: Mastra の Answer Similarity Scorer に関するドキュメント�
   ]}
 />
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 スコアラーは次の複数ステップで評価を行います:
 
@@ -149,9 +159,13 @@ description: Mastra の Answer Similarity Scorer に関するドキュメント�
 
 スコア計算: `max(0, base_score - contradiction_penalty - missing_penalty - extra_info_penalty) × scale`
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
-### runExperiment での使用方法
+<div id="usage-with-runexperiment">
+  ### runExperiment での使用方法
+</div>
 
 このスコアリング機能は、CI/CD テストで `runExperiment` と組み合わせて使うことを想定して設計されています。
 
@@ -180,7 +194,9 @@ await runExperiment({
 ```
 
 
-### 完全一致の例
+<div id="perfect-similarity-example">
+  ### 完全一致の例
+</div>
 
 この例では、エージェントの出力は意味の上でグラウンドトゥルースと完全に一致しています。
 
@@ -206,7 +222,9 @@ console.log(result.scores);
 ```
 
 
-#### 完全一致の出力
+<div id="perfect-similarity-output">
+  #### 完全一致の出力
+</div>
 
 エージェントの回答と正解が一致しているため、この出力は満点となります。
 
@@ -220,7 +238,9 @@ console.log(result.scores);
 ```
 
 
-### 高いセマンティック類似性の例
+<div id="high-semantic-similarity-example">
+  ### 高いセマンティック類似性の例
+</div>
 
 この例では、エージェントは表現こそ異なるものの、グラウンドトゥルースと同じ情報を提示します。
 
@@ -246,7 +266,9 @@ console.log(result.scores);
 ```
 
 
-#### セマンティック類似度が高い出力
+<div id="high-semantic-similarity-output">
+  #### セマンティック類似度が高い出力
+</div>
 
 同等の意味で同じ情報を伝えているため、この出力は高いスコアを獲得します。
 
@@ -260,7 +282,9 @@ console.log(result.scores);
 ```
 
 
-### 部分的な類似の例
+<div id="partial-similarity-example">
+  ### 部分的な類似の例
+</div>
 
 この例では、エージェントの応答は一部正しいものの、重要な情報が欠けています。
 
@@ -286,7 +310,9 @@ console.log(result.scores);
 ```
 
 
-#### 部分的な類似度の出力
+<div id="partial-similarity-output">
+  #### 部分的な類似度の出力
+</div>
 
 いくつかの正しい情報は含まれているものの不完全なため、この出力の評価は中程度です。
 
@@ -300,7 +326,9 @@ console.log(result.scores);
 ```
 
 
-### 矛盾の例
+<div id="contradiction-example">
+  ### 矛盾の例
+</div>
 
 この例では、エージェントが事実と異なる情報を提示しており、実際の事実と矛盾しています。
 
@@ -326,7 +354,9 @@ console.log(result.scores);
 ```
 
 
-#### 矛盾のある出力
+<div id="contradiction-output">
+  #### 矛盾のある出力
+</div>
 
 事実に反する情報が含まれているため、この出力のスコアは非常に低くなります。
 
@@ -340,7 +370,9 @@ console.log(result.scores);
 ```
 
 
-### CI/CD 連携の例
+<div id="cicd-integration-example">
+  ### CI/CD 連携の例
+</div>
 
 テストスイートで scorer を使用して、時間経過によるエージェントの一貫性を維持します：
 
@@ -401,7 +433,9 @@ describe("エージェント一貫性テスト", () => {
 ```
 
 
-### カスタム設定の例
+<div id="custom-configuration-example">
+  ### カスタム設定の例
+</div>
 
 特定のユースケースに合わせてスコアラーの動作をカスタマイズします：
 

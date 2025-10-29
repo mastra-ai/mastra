@@ -3,18 +3,24 @@ title: "リファレンス: Agent.getDefaultStreamOptions() | Agents | Mastra �
 description: "Mastra のエージェントにおける `Agent.getDefaultStreamOptions()` メソッドのドキュメント。ストリーム呼び出しで使用される既定のオプションを取得します。"
 ---
 
-# Agent.getDefaultStreamOptions()
+<div id="agentgetdefaultstreamoptions">
+  # Agent.getDefaultStreamOptions()
+</div>
 
 Agent には、メモリ使用量、出力形式、反復ステップに関するデフォルトのストリーミングオプションを設定できます。`.getDefaultStreamOptions()` メソッドは、これらのデフォルトを返し、関数である場合は評価して解決します。これらのオプションは、上書きされない限りすべての `stream()` 呼び出しに適用され、Agent の未確認のデフォルトを確認するのに役立ちます。
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 ```typescript copy
 await agent.getDefaultStreamOptions();
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -28,7 +34,9 @@ await agent.getDefaultStreamOptions();
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -41,7 +49,9 @@ await agent.getDefaultStreamOptions();
   ]}
 />
 
-## 拡張された使用例
+<div id="extended-usage-example">
+  ## 拡張された使用例
+</div>
 
 ```typescript copy
 await agent.getDefaultStreamOptions({
@@ -50,7 +60,9 @@ await agent.getDefaultStreamOptions({
 ```
 
 
-### オプション引数
+<div id="options-parameters">
+  ### オプション引数
+</div>
 
 <PropertiesTable
   content={[
@@ -65,7 +77,9 @@ await agent.getDefaultStreamOptions({
   ]}
 />
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [エージェントによるストリーミング](/docs/streaming/overview#streaming-with-agents)
 - [ランタイムコンテキスト](/docs/server-db/runtime-context)

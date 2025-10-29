@@ -3,7 +3,9 @@ title: "クラウドプロバイダー | デプロイ | Mastra ドキュメン�
 description: "Mastra アプリを主要なクラウドプロバイダーにデプロイする。"
 ---
 
-# クラウドプロバイダー
+<div id="cloud-providers">
+  # クラウドプロバイダー
+</div>
 
 スタンドアロンの Mastra アプリケーションは主要なクラウドプロバイダーにデプロイできます。詳しくは、次のガイドをご覧ください：
 
@@ -14,7 +16,9 @@ description: "Mastra アプリを主要なクラウドプロバイダーにデ�
 
 自己ホストの Node.js サーバーとしてデプロイする場合は、[Mastra サーバーの作成](/docs/deployment/server-deployment) ガイドをご参照ください。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 クラウドプロバイダーにデプロイする前に、次を用意してください:
 
@@ -24,7 +28,9 @@ description: "Mastra アプリを主要なクラウドプロバイダーにデ�
 - ドメイン名管理へのアクセス（SSL および HTTPS 用）
 - サーバー構築の基本知識（例：Nginx、環境変数）
 
-## LibSQLStore
+<div id="libsqlstore">
+  ## LibSQLStore
+</div>
 
 `LibSQLStore` はローカルのファイルシステムに書き込みますが、エフェメラルな（揮発的な）ファイルシステムを使用するクラウド環境ではサポートされていません。**AWS Lambda**、**Azure App Services**、**Digital Ocean App Platform** などのプラットフォームにデプロイする場合は、`LibSQLStore` の使用を**必ずすべて削除**してください。
 

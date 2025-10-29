@@ -3,18 +3,24 @@ title: "リファレンス: Agent.getScorers() | Agents | Mastra Docs"
 description: "Mastra のエージェントにおける `Agent.getScorers()` メソッドのリファレンス。スコアリング設定を取得します。"
 ---
 
-# Agent.getScorers()
+<div id="agentgetscorers">
+  # Agent.getScorers()
+</div>
 
 `.getScorers()` メソッドは、エージェントに設定されたスコアリング構成を取得し、それが関数の場合は評価（解決）します。このメソッドにより、エージェントの応答やパフォーマンスを評価するために使用されるスコアリングシステムにアクセスできます。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 await agent.getScorers();
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -28,7 +34,9 @@ await agent.getScorers();
   ]}
 />
 
-## 返り値
+<div id="returns">
+  ## 返り値
+</div>
 
 <PropertiesTable
   content={[
@@ -41,7 +49,9 @@ await agent.getScorers();
   ]}
 />
 
-## 応用例（拡張）
+<div id="extended-usage-example">
+  ## 応用例（拡張）
+</div>
 
 ```typescript copy
 await agent.getScorers({
@@ -50,7 +60,9 @@ await agent.getScorers({
 ```
 
 
-### オプションパラメータ
+<div id="options-parameters">
+  ### オプションパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -65,7 +77,9 @@ await agent.getScorers({
   ]}
 />
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [エージェントの概要](/docs/agents/overview)
 - [ランタイムコンテキスト](/docs/server-db/runtime-context)

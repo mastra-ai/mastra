@@ -3,7 +3,9 @@ title: "Mastra における RAG（Retrieval-Augmented Generation） | RAG | Mast
 description: Mastra における Retrieval-Augmented Generation（RAG）の概要。関連するコンテキストを用いて LLM の出力を向上させる機能について解説します。
 ---
 
-# Mastra における RAG（Retrieval-Augmented Generation）
+<div id="rag-retrieval-augmented-generation-in-mastra">
+  # Mastra における RAG（Retrieval-Augmented Generation）
+</div>
 
 Mastra の RAG は、独自のデータソースから関連するコンテキストを取り込むことで LLM の出力を強化し、精度を高め、実データに裏打ちされた回答を実現します。
 
@@ -14,7 +16,9 @@ Mastra の RAG システムは以下を提供します:
 - 最適な検索を実現するチャンク分割と埋め込み戦略
 - 埋め込みおよび検索性能の可視化・トラッキング
 
-## 例
+<div id="example">
+  ## 例
+</div>
 
 RAG を実装するには、ドキュメントをチャンクに分割して処理し、埋め込みを作成してベクターデータベースに保存し、クエリ時に関連するコンテキストを取得します。
 
@@ -63,15 +67,21 @@ console.log("類似チャンク:", results);
 この例では、ドキュメントの初期化、チャンクの作成、埋め込みの生成と保存、そして類似コンテンツの検索という基本的な流れを示します。
 
 
-## ドキュメント処理
+<div id="document-processing">
+  ## ドキュメント処理
+</div>
 
 RAG の基本的な構成要素はドキュメント処理です。ドキュメントは、さまざまな手法（再帰的分割、スライディングウィンドウ など）でチャンク化し、メタデータで拡充できます。詳しくは [チャンク化と埋め込み](./chunking-and-embedding) を参照してください。
 
-## ベクター ストレージ
+<div id="vector-storage">
+  ## ベクター ストレージ
+</div>
 
 Mastra は、埋め込みの永続化と類似検索のために、pgvector、Pinecone、Qdrant、MongoDB など複数のベクター ストアをサポートしています。詳しくは[ベクター データベースのドキュメント](./vector-databases)をご覧ください。
 
-## 可観測性とデバッグ
+<div id="observability-and-debugging">
+  ## 可観測性とデバッグ
+</div>
 
 Mastra の RAG システムには、リトリーバル・パイプラインの最適化に役立つ可観測性機能が備わっています：
 
@@ -82,7 +92,9 @@ Mastra の RAG システムには、リトリーバル・パイプラインの�
 
 詳細は [OTEL Tracing](/docs/observability/otel-tracing) のドキュメントをご覧ください。
 
-## 参考情報
+<div id="more-resources">
+  ## 参考情報
+</div>
 
 - [Chain-of-Thought RAG の例](/examples/rag/usage/cot-rag)
 - [RAG の全例](../../examples/)（多様なチャンク分割戦略、埋め込みモデル、ベクトルストアを含む）

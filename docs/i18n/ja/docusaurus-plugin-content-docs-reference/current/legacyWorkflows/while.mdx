@@ -3,18 +3,24 @@ title: "リファレンス: Workflow.while() | レガシー ワークフロー |
 description: "Mastra のワークフローにおける `.while()` メソッドのドキュメント。指定した条件が真であるあいだ、ステップを繰り返します。"
 ---
 
-# Workflow.while()
+<div id="workflowwhile">
+  # Workflow.while()
+</div>
 
 `.while()` メソッドは、指定した条件が真である間、ステップを繰り返します。これにより、条件が偽になるまで指定したステップを実行し続けるループが作成されます。
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 ```typescript
 workflow.step(incrementStep).while(condition, incrementStep).then(finalStep);
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -34,9 +40,13 @@ workflow.step(incrementStep).while(condition, incrementStep).then(finalStep);
   ]}
 />
 
-## 条件タイプ
+<div id="condition-types">
+  ## 条件タイプ
+</div>
 
-### 関数による条件指定
+<div id="function-condition">
+  ### 関数による条件指定
+</div>
 
 真偽値を返す関数を使うことができます。
 
@@ -51,7 +61,9 @@ workflow
 ```
 
 
-### 参照条件
+<div id="reference-condition">
+  ### 参照条件
+</div>
 
 比較演算子を使った参照ベースの条件を使用できます。
 
@@ -69,7 +81,9 @@ workflow
 ```
 
 
-## 比較演算子
+<div id="comparison-operators">
+  ## 比較演算子
+</div>
 
 参照ベースの条件を使用する場合、次の比較演算子を使えます：
 
@@ -82,7 +96,9 @@ workflow
 | `$lt`  | より小さい           | `{ $lt: 20 }` |
 | `$lte` | 以下                 | `{ $lte: 15 }`|
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -94,7 +110,9 @@ workflow
   ]}
 />
 
-## 例
+<div id="example">
+  ## 例
+</div>
 
 ```typescript
 import { LegacyWorkflow, LegacyStep } from "@mastra/core/workflows/legacy";
@@ -165,7 +183,9 @@ const result = await run.start({
 ```
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [.until()](./until) - 条件が真になるまでループする
 - [制御フローガイド](/docs/workflows-legacy/control-flow)

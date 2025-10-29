@@ -3,7 +3,9 @@ title: "例: Answer Relevancy の評価 | Evals | Mastra Docs"
 description: クエリに対する応答の妥当性を Answer Relevancy 指標で評価する例。
 ---
 
-# 回答の関連性評価
+<div id="answer-relevancy-evaluation">
+  # 回答の関連性評価
+</div>
 
 :::note
 Scorers APIは現在ベータ版です。改良を進めており、皆さまからのフィードバックをお待ちしています。ご質問や機能リクエストは[Discord](https://discord.gg/mastra)でご連絡ください。
@@ -11,14 +13,18 @@ Scorers APIは現在ベータ版です。改良を進めており、皆さまか
 
 `AnswerRelevancyMetric` を使用して、回答が元のクエリにどれだけ関連しているかを評価します。このメトリックは `query` と `response` を受け取り、スコアと理由を含む `info` オブジェクトを返します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/evals
 ```
 
 
-## 関連性が高い例
+<div id="high-relevancy-example">
+  ## 関連性が高い例
+</div>
 
 この例では、回答が入力クエリに対して、具体的で関連性の高い情報を用いて的確に応えています。
 
@@ -38,7 +44,9 @@ console.log(result);
 ```
 
 
-### 関連性の高い出力
+<div id="high-relevancy-output">
+  ### 関連性の高い出力
+</div>
 
 この出力は、無関係な情報を含めずに問いに正確に答えているため、高いスコアを獲得します。
 
@@ -52,7 +60,9 @@ console.log(result);
 ```
 
 
-## 関連性が部分的な例
+<div id="partial-relevancy-example">
+  ## 関連性が部分的な例
+</div>
 
 この例では、応答はクエリの一部には答えているものの、直接は関係のない情報も含まれています。
 
@@ -72,7 +82,9 @@ console.log(result);
 ```
 
 
-### 部分的に関連する出力
+<div id="partial-relevancy-output">
+  ### 部分的に関連する出力
+</div>
 
 この出力はクエリに一部しか答えていないため、スコアが低くなります。関連情報は含まれているものの、無関係な詳細が全体の関連性を損ねています。
 
@@ -86,7 +98,9 @@ console.log(result);
 ```
 
 
-## 関連性が低い例
+<div id="low-relevancy-example">
+  ## 関連性が低い例
+</div>
 
 この例では、応答が問い合わせに対応しておらず、まったく無関係な情報が含まれています。
 
@@ -106,7 +120,9 @@ console.log(result);
 ```
 
 
-### 関連性の低い出力
+<div id="low-relevancy-output">
+  ### 関連性の低い出力
+</div>
 
 この出力は、クエリに回答しておらず、関連する情報も提供していないため、スコアは0となります。
 
@@ -120,7 +136,9 @@ console.log(result);
 ```
 
 
-## メトリクスの設定
+<div id="metric-configuration">
+  ## メトリクスの設定
+</div>
 
 オプションのパラメーターを調整することで、`AnswerRelevancyMetric` がスコアをどのように計算するかをカスタマイズできます。たとえば、`uncertaintyWeight` は不確実な応答にどれだけ重み付けするかを制御し、`scale` は到達可能な最大スコアを設定します。
 
@@ -134,7 +152,9 @@ const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"), {
 > 構成オプションの一覧については、[AnswerRelevancyMetric](/reference/evals/answer-relevancy) を参照してください。
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `AnswerRelevancyMetric` は次の形式の結果を返します:
 
@@ -148,7 +168,9 @@ const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"), {
 ```
 
 
-### 関連性スコア
+<div id="relevancy-score">
+  ### 関連性スコア
+</div>
 
 0 から 1 の間の関連性スコア:
 
@@ -158,7 +180,9 @@ const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"), {
 - **0.1–0.3**: 回答は関連する内容が最小限で、クエリの意図を大きく外している。
 - **0.0**: 回答は完全に無関係で、クエリに答えていない。
 
-### 関連性に関する情報
+<div id="relevancy-info">
+  ### 関連性に関する情報
+</div>
 
 スコアの説明（以下の詳細を含む）:
 

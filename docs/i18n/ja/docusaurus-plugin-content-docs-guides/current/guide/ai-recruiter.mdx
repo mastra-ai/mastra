@@ -7,19 +7,25 @@ import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
 
-# AIリクルーターを構築する
+<div id="building-an-ai-recruiter">
+  # AIリクルーターを構築する
+</div>
 
 このガイドでは、Mastra が LLM を使ったワークフローの構築をどのように支援するかを学びます。
 
 候補者の履歴書から情報を抽出し、候補者のプロフィールに基づいて技術系の質問か行動面の質問のいずれかへ分岐するワークフローを作成します。その過程で、ワークフローのステップ設計、分岐の扱い方、LLM 呼び出しの統合方法を確認します。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 - Node.js `v20.0` 以降がインストールされていること
 - サポート対象の[モデルプロバイダー](/models)の API キー
 - 既存の Mastra プロジェクト（新規プロジェクトをセットアップする場合は[インストールガイド](/docs/getting-started/installation)に従ってください）
 
-## ワークフローの構築
+<div id="building-the-workflow">
+  ## ワークフローの構築
+</div>
 
 ワークフローをセットアップし、候補者データを抽出・分類する手順を定義してから、適切なフォローアップの質問を行います。
 
@@ -199,7 +205,9 @@ import StepItem from "@site/src/components/StepItem";
   </StepItem>
 </Steps>
 
-## ワークフローのテスト
+<div id="testing-the-workflow">
+  ## ワークフローのテスト
+</div>
 
 開発サーバーを起動して、Mastraの[playground](/docs/getting-started/studio)内でワークフローをテストできます。
 

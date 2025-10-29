@@ -3,7 +3,9 @@ title: "例: 有害性評価 | Evals | Mastra Docs"
 description: 有害なコンテンツや攻撃的な言語に対する応答を評価するために、Toxicityメトリクスを用いる例。
 ---
 
-# 有害性の評価
+<div id="toxicity-evaluation">
+  # 有害性の評価
+</div>
 
 :::note
 Scorers API は現在ベータ版です。改善を進めており、皆さまのフィードバックを歓迎します。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までお寄せください。
@@ -11,14 +13,18 @@ Scorers API は現在ベータ版です。改善を進めており、皆さま�
 
 `ToxicityMetric` を使うと、個人攻撃、嘲笑、ヘイトスピーチなど、さまざまな有害コンテンツに該当する応答を評価できます。メトリクスは `query` と `response` を受け取り、スコアと、その理由を含む `info` オブジェクトを返します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/evals
 ```
 
 
-## 高い有害性の例
+<div id="high-toxicity-example">
+  ## 高い有害性の例
+</div>
 
 この例では、回答に露骨な個人攻撃や有害な表現が含まれており、有害性スコアが高くなっています。
 
@@ -38,7 +44,9 @@ console.log(result);
 ```
 
 
-### 毒性の高い出力
+<div id="high-toxicity-output">
+  ### 毒性の高い出力
+</div>
 
 この指標は、深刻な有害コンテンツを示す高いスコアを返します。`reason` フィールドには、個人攻撃、差別的・侮蔑的な表現、有害な一般化が含まれていることが記されています。
 
@@ -52,7 +60,9 @@ console.log(result);
 ```
 
 
-## 有害性が混在する例
+<div id="mixed-toxicity-example">
+  ## 有害性が混在する例
+</div>
 
 この例では、回答に有害な要素とプロフェッショナルな要素が併存しています。指標は問題のある表現を特定しつつ、建設的なフィードバックを評価し、結果として有害性スコアは中程度となります。
 
@@ -72,7 +82,9 @@ console.log(result);
 ```
 
 
-### 混在した有害性の出力
+<div id="mixed-toxicity-output">
+  ### 混在した有害性の出力
+</div>
 
 この指標は、ぞんざいな言い回しと専門的なフィードバックが併存していることを反映した中程度のスコアを返します。`reason` フィールドは、応答に有害な要素と建設的な要素の双方が含まれている理由を説明します。
 
@@ -86,7 +98,9 @@ console.log(result);
 ```
 
 
-## 有害性のない例
+<div id="no-toxicity-example">
+  ## 有害性のない例
+</div>
 
 この例では、応答はプロフェッショナルで建設的であり、有害または攻撃的な表現は検出されませんでした。
 
@@ -106,7 +120,9 @@ console.log(result);
 ```
 
 
-### 有害性のない出力
+<div id="no-toxicity-output">
+  ### 有害性のない出力
+</div>
 
 この指標は、応答に有害な内容が含まれていないことを示す低スコアを返します。`reason` フィールドは、フィードバックがプロフェッショナルで敬意あるものであることを裏付けます。
 
@@ -120,7 +136,9 @@ console.log(result);
 ```
 
 
-## メトリクスの設定
+<div id="metric-configuration">
+  ## メトリクスの設定
+</div>
 
 スコア範囲を指定する `scale` などの任意パラメータを用いて、`ToxicityMetric` インスタンスを作成できます。
 
@@ -133,7 +151,9 @@ const metric = new ToxicityMetric(openai("gpt-4o-mini"), {
 > 構成オプションの詳細な一覧は [ToxicityMetric](/reference/evals/toxicity) を参照してください。
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `ToxicityMetric` は次の形の結果を返します:
 
@@ -147,7 +167,9 @@ const metric = new ToxicityMetric(openai("gpt-4o-mini"), {
 ```
 
 
-### 毒性スコア
+<div id="toxicity-score">
+  ### 毒性スコア
+</div>
 
 毒性スコアは 0 から 1 の範囲です:
 
@@ -156,7 +178,9 @@ const metric = new ToxicityMetric(openai("gpt-4o-mini"), {
 - **0.1–0.3**: 毒性が低い。
 - **0.0**: 有害要素は検出されませんでした。
 
-### 有害性に関する情報
+<div id="toxicity-info">
+  ### 有害性に関する情報
+</div>
 
 スコアの説明（以下を含む）:
 

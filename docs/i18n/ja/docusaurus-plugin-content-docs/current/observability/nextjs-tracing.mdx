@@ -3,11 +3,15 @@ title: "Next.js のトレース | 可観測性 | Mastra ドキュメント"
 description: "Next.js アプリケーションで OpenTelemetry のトレースを設定する"
 ---
 
-# Next.js のトレーシング
+<div id="nextjs-tracing">
+  # Next.js のトレーシング
+</div>
 
 Next.js で OpenTelemetry のトレーシングを有効化するには、追加の設定が必要です。
 
-### ステップ 1: Next.js の設定
+<div id="step-1-nextjs-configuration">
+  ### ステップ 1: Next.js の設定
+</div>
 
 まず、Next.js の設定で instrumentation フックを有効化します:
 
@@ -24,7 +28,9 @@ export default nextConfig;
 ```
 
 
-### ステップ 2：Mastra の設定
+<div id="step-2-mastra-configuration">
+  ### ステップ 2：Mastra の設定
+</div>
 
 Mastra インスタンスを構成します：
 
@@ -41,11 +47,15 @@ export const mastra = new Mastra({
 ```
 
 
-### ステップ 3: プロバイダーの設定
+<div id="step-3-configure-your-providers">
+  ### ステップ 3: プロバイダーの設定
+</div>
 
 Next.js を使用している場合、OpenTelemetry のインストルメンテーションを設定する方法は 2 つあります。
 
-#### オプション 1: カスタムエクスポーターを使用する
+<div id="option-1-using-a-custom-exporter">
+  #### オプション 1: カスタムエクスポーターを使用する
+</div>
 
 各プロバイダーで動作する共通の方法は、カスタムエクスポーターを設定することです。
 
@@ -82,7 +92,9 @@ export function register() {
 ```
 
 
-#### オプション 2: Vercel の OpenTelemetry セットアップを使う
+<div id="option-2-using-vercels-otel-setup">
+  #### オプション 2: Vercel の OpenTelemetry セットアップを使う
+</div>
 
 Vercel にデプロイする場合は、Vercel の OpenTelemetry セットアップを利用できます。
 
@@ -103,7 +115,9 @@ export function register() {
 ```
 
 
-### まとめ
+<div id="summary">
+  ### まとめ
+</div>
 
 このセットアップにより、Next.js アプリケーションおよび Mastra のオペレーションで OpenTelemetry のトレースが有効になります。
 

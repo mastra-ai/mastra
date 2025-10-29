@@ -3,7 +3,9 @@ title: "ミドルウェア | サーバーとDB | Mastraドキュメント"
 description: "リクエストを横取りするカスタムミドルウェア関数を適用します。"
 ---
 
-# ミドルウェア
+<div id="middleware">
+  # ミドルウェア
+</div>
 
 Mastra サーバーでは、API のルートハンドラーが呼び出される前後にカスタムミドルウェア関数を実行できます。これは、認証、ログ、リクエスト固有のコンテキストの注入、CORS ヘッダーの付与などに役立ちます。
 
@@ -59,9 +61,13 @@ registerApiRoute("/my-custom-route", {
 ***
 
 
-## よくある例
+<div id="common-examples">
+  ## よくある例
+</div>
 
-### 認証
+<div id="authentication">
+  ### 認証
+</div>
 
 ```typescript copy
 {
@@ -79,7 +85,9 @@ registerApiRoute("/my-custom-route", {
 ```
 
 
-### CORS 対応
+<div id="cors-support">
+  ### CORS 対応
+</div>
 
 ```typescript copy
 {
@@ -104,7 +112,9 @@ registerApiRoute("/my-custom-route", {
 ```
 
 
-### リクエストの記録
+<div id="request-logging">
+  ### リクエストの記録
+</div>
 
 ```typescript copy
 {
@@ -118,7 +128,9 @@ registerApiRoute("/my-custom-route", {
 ```
 
 
-### 特殊な Mastra ヘッダー
+<div id="special-mastra-headers">
+  ### 特殊な Mastra ヘッダー
+</div>
 
 Mastra Cloud やカスタムクライアントと統合する際、以下のヘッダーは
 ミドルウェアで参照して動作を調整できます:
@@ -144,7 +156,9 @@ Mastra Cloud やカスタムクライアントと統合する際、以下のヘ�
 * `x-mastra-dev-playground`: ローカルのプレイグラウンドから発生したリクエスト
 
 
-### `runtimeContext` の設定
+<div id="setting-runtimecontext">
+  ### `runtimeContext` の設定
+</div>
 
 サーバーミドルウェアでリクエストから情報を抽出し、`runtimeContext` を動的に設定できます。次の例では、Cloudflare の `CF-IPCountry` ヘッダーに基づいて `temperature-unit` を設定し、レスポンスがユーザーのロケールに合うようにしています。
 
@@ -174,6 +188,8 @@ export const mastra = new Mastra({
 ```
 
 
-# 関連情報
+<div id="related">
+  # 関連情報
+</div>
 
 - [Runtime Context](./runtime-context)

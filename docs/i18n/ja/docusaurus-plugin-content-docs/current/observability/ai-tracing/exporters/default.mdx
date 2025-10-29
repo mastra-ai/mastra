@@ -3,11 +3,15 @@ title: "デフォルトエクスポーター | AI トレーシング | 可観測
 description: "開発・デバッグ用途にトレースをローカル保存する"
 ---
 
-# デフォルトエクスポーター
+<div id="default-exporter">
+  # デフォルトエクスポーター
+</div>
 
 `DefaultExporter` はトレースを設定済みのストレージバックエンドに保存し、Mastra Playground から参照できるようにします。デフォルトのオブザーバビリティ構成を使用している場合は自動的に有効になり、外部サービスは不要です。
 
-## DefaultExporter を使うべきとき
+<div id="when-to-use-defaultexporter">
+  ## DefaultExporter を使うべきとき
+</div>
 
 DefaultExporter は次の用途に最適です:
 
@@ -16,14 +20,20 @@ DefaultExporter は次の用途に最適です:
 - **依存関係なし** - 外部サービスは不要
 - **Playground との統合** - Mastra Playground の UI でトレースを表示
 
-## 設定
+<div id="configuration">
+  ## 設定
+</div>
 
-### 前提条件
+<div id="prerequisites">
+  ### 前提条件
+</div>
 
 1. **ストレージバックエンド**: ストレージプロバイダー（LibSQL、PostgreSQL など）を設定する
 2. **Mastra Playground**: ローカルでトレースを確認できるようインストールする
 
-### 基本的な設定
+<div id="basic-setup">
+  ### 基本的な設定
+</div>
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -46,7 +56,9 @@ export const mastra = new Mastra({
 ```
 
 
-### 自動設定
+<div id="automatic-configuration">
+  ### 自動設定
+</div>
 
 デフォルトのオブザーバビリティ設定を使用する場合、DefaultExporter が自動的に含まれます。
 
@@ -62,9 +74,13 @@ export const mastra = new Mastra({
 ```
 
 
-## トレースの閲覧
+<div id="viewing-traces">
+  ## トレースの閲覧
+</div>
 
-### Mastra Playground
+<div id="mastra-playground">
+  ### Mastra Playground
+</div>
 
 ローカルのPlaygroundからトレースにアクセスします：
 
@@ -73,11 +89,15 @@ export const mastra = new Mastra({
 3. ローカルのトレースをフィルタリング・検索する
 4. スパンの詳細を確認する
 
-## トレース戦略
+<div id="tracing-strategies">
+  ## トレース戦略
+</div>
 
 DefaultExporter は、利用しているストレージプロバイダーに応じて、最適なトレース戦略を自動的に選択します。必要に応じて、この選択を手動で上書きすることも可能です。
 
-### 利用可能な戦略
+<div id="available-strategies">
+  ### 利用可能な戦略
+</div>
 
 | 戦略                   | 説明                                         | ユースケース                 |
 | ---------------------- | -------------------------------------------- | ---------------------------- |
@@ -85,7 +105,9 @@ DefaultExporter は、利用しているストレージプロバイダーに応�
 | **batch-with-updates** | イベントをバッファし、ライフサイクル全体に対応したバッチ書き込みを行う | 低トラフィックの本番環境     |
 | **insert-only**        | 完了したスパンのみを処理し、更新は無視する   | 高トラフィックの本番環境     |
 
-### ストラテジー設定
+<div id="strategy-configuration">
+  ### ストラテジー設定
+</div>
 
 ```typescript
 new DefaultExporter({
@@ -101,7 +123,9 @@ new DefaultExporter({
 ```
 
 
-## ストレージプロバイダーのサポート
+<div id="storage-provider-support">
+  ## ストレージプロバイダーのサポート
+</div>
 
 ストレージプロバイダーによって対応するトレーシング戦略は異なります。
 
@@ -112,15 +136,21 @@ strategy を `'auto'` に設定すると、`DefaultExporter` がストレージ�
 | **[LibSQL](/reference/storage/libsql)**          | batch-with-updates   | realtime, batch-with-updates, insert-only   | 既定のストレージ。開発に適しています |
 | **[PostgreSQL](/reference/storage/postgresql)**  | batch-with-updates   | batch-with-updates, insert-only             | 本番環境に推奨                        |
 
-### 戦略のメリット
+<div id="strategy-benefits">
+  ### 戦略のメリット
+</div>
 
 - **realtime**: 即時に可視化でき、デバッグに最適
 - **batch-with-updates**: スループットが10〜100倍に向上し、スパンのライフサイクルを完全にカバー
 - **insert-only**: データベース操作をさらに70%削減し、分析に最適
 
-## バッチ化の挙動
+<div id="batching-behavior">
+  ## バッチ化の挙動
+</div>
 
-### フラッシュトリガー
+<div id="flush-triggers">
+  ### フラッシュトリガー
+</div>
 
 両方のバッチ戦略（`batch-with-updates` と `insert-only`）では、次のいずれかの条件を満たすとトレースはストレージにフラッシュされます：
 
@@ -129,7 +159,9 @@ strategy を `'auto'` に設定すると、`DefaultExporter` がストレージ�
 3. **緊急フラッシュ**：バッファが `maxBufferSize` の上限に近づいたとき
 4. **シャットダウン**：保留中のすべてのイベントを強制的にフラッシュ
 
-### エラー処理
+<div id="error-handling">
+  ### エラー処理
+</div>
 
 DefaultExporter は本番環境向けに堅牢なエラー処理を備えています:
 
@@ -138,7 +170,9 @@ DefaultExporter は本番環境向けに堅牢なエラー処理を備えてい�
 - **永続的な障害**: 4回失敗した後にバッチを破棄
 - **バッファオーバーフロー**: ストレージ障害時のメモリ問題を防止
 
-### 設定例
+<div id="configuration-examples">
+  ### 設定例
+</div>
 
 ```typescript
 // 設定不要 - ほとんどのユーザーに推奨
@@ -164,7 +198,9 @@ new DefaultExporter({
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [AI トレーシングの概要](/docs/observability/ai-tracing/overview)
 - [CloudExporter](/docs/observability/ai-tracing/exporters/cloud)

@@ -3,11 +3,15 @@ title: "リファレンス: Google Gemini Live Voice | Voice | Mastra ドキュ�
 description: "GeminiLiveVoice クラスのドキュメント。Google の Gemini Live API を用い、Gemini API と Vertex AI の両方に対応したリアルタイムのマルチモーダル音声対話を提供します。"
 ---
 
-# Google Gemini Live Voice
+<div id="google-gemini-live-voice">
+  # Google Gemini Live Voice
+</div>
 
 GeminiLiveVoice クラスは、Google の Gemini Live API を用いてリアルタイムの音声対話を実現します。双方向の音声ストリーミング、ツールの呼び出し、セッション管理に対応し、標準的な Google API と Vertex AI のいずれの認証方式も利用できます。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
@@ -92,9 +96,13 @@ voice.close();
 ```
 
 
-## 設定
+<div id="configuration">
+  ## 設定
+</div>
 
-### コンストラクターのオプション
+<div id="constructor-options">
+  ### コンストラクターのオプション
+</div>
 
 <PropertiesTable
   content={[
@@ -176,7 +184,9 @@ voice.close();
   ]}
 />
 
-### セッション設定
+<div id="session-configuration">
+  ### セッション設定
+</div>
 
 <PropertiesTable
   content={[
@@ -210,9 +220,13 @@ voice.close();
   ]}
 />
 
-## メソッド
+<div id="methods">
+  ## メソッド
+</div>
 
-### connect()
+<div id="connect">
+  ### connect()
+</div>
 
 Gemini Live API への接続を確立します。speak、listen、または send メソッドを使用する前に呼び出す必要があります。
 
@@ -232,7 +246,9 @@ Gemini Live API への接続を確立します。speak、listen、または send
   ]}
 />
 
-### speak()
+<div id="speak">
+  ### speak()
+</div>
 
 テキストを音声に変換してモデルに送信します。入力は文字列または読み取り可能なストリームを受け付けます。
 
@@ -275,7 +291,9 @@ Gemini Live API への接続を確立します。speak、listen、または send
 
 戻り値: `Promise<void>`（レスポンスは `speaker` および `writing` イベントで発行されます）
 
-### listen()
+<div id="listen">
+  ### listen()
+</div>
 
 音声認識のための音声入力を処理します。読み取り可能な音声データのストリームを受け取り、文字起こしされたテキストを返します。
 
@@ -298,7 +316,9 @@ Gemini Live API への接続を確立します。speak、listen、または send
 
 戻り値: `Promise<string>` - 文字起こしされたテキスト
 
-### send()
+<div id="send">
+  ### send()
+</div>
 
 ライブのマイク入力など、連続的な音声ストリーミングのシナリオで、音声データをリアルタイムに Gemini サービスへストリーミングします。
 
@@ -315,7 +335,9 @@ Gemini Live API への接続を確立します。speak、listen、または send
 
 Returns: `Promise<void>`
 
-### updateSessionConfig()
+<div id="updatesessionconfig">
+  ### updateSessionConfig()
+</div>
 
 セッション設定を動的に更新します。音声設定やスピーカー選択、その他のランタイム設定の変更に使用できます。
 
@@ -332,7 +354,9 @@ Returns: `Promise<void>`
 
 戻り値: `Promise<void>`
 
-### addTools()
+<div id="addtools">
+  ### addTools()
+</div>
 
 音声インスタンスにツールのセットを追加します。ツールを使うと、モデルは会話中に追加のアクションを実行できます。GeminiLiveVoice を Agent に追加すると、Agent に設定されたツールは自動的に音声インターフェースでも利用可能になります。
 
@@ -349,7 +373,9 @@ Returns: `Promise<void>`
 
 Returns: `void`
 
-### addInstructions()
+<div id="addinstructions">
+  ### addInstructions()
+</div>
 
 モデルに対するシステム指示を追加または更新します。
 
@@ -366,7 +392,9 @@ Returns: `void`
 
 戻り値: `void`
 
-### answer()
+<div id="answer">
+  ### answer()
+</div>
 
 モデルからの応答を起動します。このメソッドは、エージェントと統合された場合に主に内部で使用されます。
 
@@ -383,25 +411,33 @@ Returns: `void`
 
 戻り値: `Promise<void>`
 
-### getSpeakers()
+<div id="getspeakers">
+  ### getSpeakers()
+</div>
 
 Gemini Live API で利用可能な音声ボイスの一覧を返します。
 
 Returns: `Promise<Array<{ voiceId: string; description?: string }>>`
 
-### disconnect()
+<div id="disconnect">
+  ### disconnect()
+</div>
 
 Gemini Live セッションから切断し、リソースを解放します。クリーンアップを適切に行う非同期メソッドです。
 
 戻り値: `Promise<void>`
 
-### close()
+<div id="close">
+  ### close()
+</div>
 
 disconnect() の同期ラッパー。内部で await せずに disconnect() を呼び出します。
 
 戻り値: `void`
 
-### on()
+<div id="on">
+  ### on()
+</div>
 
 音声イベントのリスナーを登録します。
 
@@ -424,7 +460,9 @@ disconnect() の同期ラッパー。内部で await せずに disconnect() を�
 
 戻り値: `void`
 
-### off()
+<div id="off">
+  ### off()
+</div>
 
 以前に登録したイベントリスナーを削除します。
 
@@ -447,7 +485,9 @@ disconnect() の同期ラッパー。内部で await せずに disconnect() を�
 
 戻り値: `void`
 
-## イベント
+<div id="events">
+  ## イベント
+</div>
 
 GeminiLiveVoice クラスは次のイベントを発行します:
 
@@ -512,7 +552,9 @@ GeminiLiveVoice クラスは次のイベントを発行します:
 ]}
 />
 
-## 利用可能なモデル
+<div id="available-models">
+  ## 利用可能なモデル
+</div>
 
 利用可能な Gemini Live モデルは次のとおりです:
 
@@ -524,7 +566,9 @@ GeminiLiveVoice クラスは次のイベントを発行します:
 - `gemini-live-2.5-flash-preview`
 - `gemini-2.6.flash-preview-tts`
 
-## 利用可能な音声
+<div id="available-voices">
+  ## 利用可能な音声
+</div>
 
 利用できる音声オプションは次のとおりです:
 
@@ -533,9 +577,13 @@ GeminiLiveVoice クラスは次のイベントを発行します:
 - `Kore`: 中立的でプロフェッショナル
 - `Fenrir`: 温かみがあり、親しみやすい
 
-## 認証方式
+<div id="authentication-methods">
+  ## 認証方式
+</div>
 
-### Gemini API（開発）
+<div id="gemini-api-development">
+  ### Gemini API（開発）
+</div>
 
 [Google AI Studio](https://makersuite.google.com/app/apikey) の API キーを使う最も簡単な方法：
 
@@ -547,7 +595,9 @@ const voice = new GeminiLiveVoice({
 ```
 
 
-### Vertex AI（本番環境）
+<div id="vertex-ai-production">
+  ### Vertex AI（本番環境）
+</div>
 
 OAuth 認証と Google Cloud Platform を使用する本番環境向け:
 
@@ -577,9 +627,13 @@ const voice = new GeminiLiveVoice({
 ```
 
 
-## 高度な機能
+<div id="advanced-features">
+  ## 高度な機能
+</div>
 
-### セッション管理
+<div id="session-management">
+  ### セッション管理
+</div>
 
 Gemini Live API は、ネットワーク障害時のセッション再開に対応しています:
 
@@ -599,7 +653,9 @@ const voice = new GeminiLiveVoice({
 ```
 
 
-### ツール呼び出し
+<div id="tool-calling">
+  ### ツール呼び出し
+</div>
 
 会話中にモデルが関数を呼び出せるようにする:
 
@@ -625,7 +681,9 @@ voice.on("toolCall", ({ name, args, id }) => {
 ```
 
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - Gemini Live API はリアルタイム通信に WebSocket を使用します
 - 音声は入力が 16 kHz の PCM16、出力が 24 kHz の PCM16 として処理されます

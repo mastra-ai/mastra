@@ -3,11 +3,15 @@ title: "リファレンス: voice.connect() | Voice | Mastra ドキュメント"
 description: "リアルタイム音声プロバイダーで利用できる connect() メソッドのドキュメント。音声対音声のコミュニケーション用に接続を確立します。"
 ---
 
-# voice.connect()
+<div id="voiceconnect">
+  # voice.connect()
+</div>
 
 `connect()` メソッドは、リアルタイムの音声同士のコミュニケーションのために WebSocket または WebRTC の接続を確立します。`send()` や `answer()` など、他のリアルタイム機能を使用する前にこのメソッドを呼び出す必要があります。
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
@@ -50,7 +54,9 @@ await voice.connect({
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -63,15 +69,21 @@ await voice.connect({
   ]}
 />
 
-## 戻り値
+<div id="return-value">
+  ## 戻り値
+</div>
 
 接続が正常に確立されると解決される `Promise<void>` を返します。
 
-## プロバイダー固有のオプション
+<div id="provider-specific-options">
+  ## プロバイダー固有のオプション
+</div>
 
 リアルタイム音声プロバイダーごとに、`connect()` メソッドで利用できるオプションは異なる場合があります。
 
-### OpenAI Realtime
+<div id="openai-realtime">
+  ### OpenAI Realtime
+</div>
 
 <PropertiesTable
   content={[
@@ -92,7 +104,9 @@ await voice.connect({
   ]}
 />
 
-## CompositeVoice と併用する場合
+<div id="using-with-compositevoice">
+  ## CompositeVoice と併用する場合
+</div>
 
 `CompositeVoice` を使用する場合、`connect()` メソッドは、設定済みのリアルタイムプロバイダーに委ねられます。
 
@@ -108,7 +122,9 @@ await voice.connect();
 ```
 
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - このメソッドは、音声同士の変換（スピーチツー スピーチ）をサポートするリアルタイム音声プロバイダーでのみ実装されています
 - この機能をサポートしていない音声プロバイダーで呼び出した場合は、警告をログ出力し、即座に処理を終了します
@@ -117,7 +133,9 @@ await voice.connect();
 - 実装によっては、接続断時に自動再接続するプロバイダーもあります
 - 接続エラーは通常、捕捉して処理すべき例外としてスローされます
 
-## 関連メソッド
+<div id="related-methods">
+  ## 関連メソッド
+</div>
 
 - [voice.send()](./voice.send) - 音声データを音声プロバイダーに送信する
 - [voice.answer()](./voice.answer) - 音声プロバイダーによる応答をトリガーする

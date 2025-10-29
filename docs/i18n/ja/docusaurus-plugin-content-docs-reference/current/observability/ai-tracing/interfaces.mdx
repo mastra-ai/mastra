@@ -6,11 +6,17 @@ description: AI トレーシングの型定義とインターフェース
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
-# インターフェイス
+<div id="interfaces">
+  # インターフェイス
+</div>
 
-## コア・インターフェース
+<div id="core-interfaces">
+  ## コア・インターフェース
+</div>
 
-### AITracing
+<div id="aitracing">
+  ### AITracing
+</div>
 
 AI Tracing の主要なインターフェイス。
 
@@ -39,7 +45,9 @@ interface AITracing {
 ```
 
 
-### AISpanTypeMap
+<div id="aispantypemap">
+  ### AISpanTypeMap
+</div>
 
 スパン種別と、それに対応する属性インターフェースのマッピング。
 
@@ -66,7 +74,9 @@ interface AISpanTypeMap {
 このマッピングは、スパンの作成や処理の際に、各スパン種別で使用される属性インターフェースを定義します。
 
 
-### AISpan
+<div id="aispan">
+  ### AISpan
+</div>
 
 内部でトレース用途に用いられる AI Span インターフェース。
 
@@ -120,7 +130,9 @@ interface AISpan<TType extends AISpanType> {
 ```
 
 
-### AITracingExporter
+<div id="aitracingexporter">
+  ### AITracingExporter
+</div>
 
 トレーシングエクスポーター用のインターフェース。
 
@@ -141,7 +153,9 @@ interface AITracingExporter {
 ```
 
 
-### AISpanProcessor
+<div id="aispanprocessor">
+  ### AISpanProcessor
+</div>
 
 スパンプロセッサ用のインターフェース。
 
@@ -159,9 +173,13 @@ interface AISpanProcessor {
 ```
 
 
-## スパンのタイプ
+<div id="span-types">
+  ## スパンのタイプ
+</div>
 
-### AISpanType
+<div id="aispantype">
+  ### AISpanType
+</div>
 
 AI 固有のスパンタイプと、それに付随するメタデータ。
 
@@ -215,7 +233,9 @@ enum AISpanType {
 ```
 
 
-### AnyAISpan
+<div id="anyaispan">
+  ### AnyAISpan
+</div>
 
 あらゆるスパンを扱う必要がある場合に用いるユニオン型。
 
@@ -224,9 +244,13 @@ type AnyAISpan = AISpan<keyof AISpanTypeMap>;
 ```
 
 
-## span 属性
+<div id="span-attributes">
+  ## span 属性
+</div>
 
-### AgentRunAttributes
+<div id="agentrunattributes">
+  ### AgentRunAttributes
+</div>
 
 Agent Run の属性。
 
@@ -250,7 +274,9 @@ interface AgentRunAttributes {
 ```
 
 
-### ModelGenerationAttributes
+<div id="modelgenerationattributes">
+  ### ModelGenerationAttributes
+</div>
 
 モデル生成の属性。
 
@@ -300,7 +326,9 @@ interface ModelGenerationAttributes {
 ```
 
 
-### ModelStepAttributes
+<div id="modelstepattributes">
+  ### ModelStepAttributes
+</div>
 
 モデルステップ属性 — 1 回の生成プロセス内における単一のモデル実行に関する属性。
 
@@ -324,7 +352,9 @@ interface ModelStepAttributes {
 ```
 
 
-### ModelChunkAttributes
+<div id="modelchunkattributes">
+  ### ModelChunkAttributes
+</div>
 
 Model Chunk の属性 — 個々のストリーミングチャンク／イベント用。
 
@@ -339,7 +369,9 @@ interface ModelChunkAttributes {
 ```
 
 
-### ToolCallAttributes
+<div id="toolcallattributes">
+  ### ToolCallAttributes
+</div>
 
 ツール呼び出しの属性。
 
@@ -353,7 +385,9 @@ interface ToolCallAttributes {
 ```
 
 
-### MCPToolCallAttributes
+<div id="mcptoolcallattributes">
+  ### MCPToolCallAttributes
+</div>
 
 MCP ツール呼び出しの属性。
 
@@ -374,7 +408,9 @@ interface MCPToolCallAttributes {
 ```
 
 
-### WorkflowRunAttributes
+<div id="workflowrunattributes">
+  ### WorkflowRunAttributes
+</div>
 
 Workflow Run の属性。
 
@@ -395,7 +431,9 @@ interface WorkflowRunAttributes {
 ```
 
 
-### WorkflowStepAttributes
+<div id="workflowstepattributes">
+  ### WorkflowStepAttributes
+</div>
 
 ワークフローステップの属性。
 
@@ -419,9 +457,13 @@ interface WorkflowStepAttributes {
 ```
 
 
-## オプションの種類
+<div id="options-types">
+  ## オプションの種類
+</div>
 
-### StartSpanOptions
+<div id="startspanoptions">
+  ### StartSpanOptions
+</div>
 
 新しいスパンを開始する際のオプション。
 
@@ -454,7 +496,9 @@ interface StartSpanOptions<TType extends AISpanType> {
 ```
 
 
-### UpdateSpanOptions
+<div id="updatespanoptions">
+  ### UpdateSpanOptions
+</div>
 
 スパン更新用のオプション。
 
@@ -475,7 +519,9 @@ interface UpdateSpanOptions<TType extends AISpanType> {
 ```
 
 
-### EndSpanOptions
+<div id="endspanoptions">
+  ### EndSpanOptions
+</div>
 
 スパンを終了するためのオプション。
 
@@ -493,7 +539,9 @@ interface EndSpanOptions<TType extends AISpanType> {
 ```
 
 
-### ErrorSpanOptions
+<div id="errorspanoptions">
+  ### ErrorSpanOptions
+</div>
 
 スパンのエラーを記録するためのオプション。
 
@@ -514,9 +562,13 @@ interface ErrorSpanOptions<TType extends AISpanType> {
 ```
 
 
-## コンテキストの型
+<div id="context-types">
+  ## コンテキストの型
+</div>
 
-### TracingContext
+<div id="tracingcontext">
+  ### TracingContext
+</div>
 
 ワークフローやエージェントの実行全体を通じて受け渡される、AIトレーシング用のコンテキスト。
 
@@ -528,7 +580,9 @@ interface TracingContext {
 ```
 
 
-### TracingProperties
+<div id="tracingproperties">
+  ### TracingProperties
+</div>
 
 トレースを外部で扱うためにユーザーに返されるプロパティ。
 
@@ -540,7 +594,9 @@ type TracingProperties = {
 ```
 
 
-### TracingOptions
+<div id="tracingoptions">
+  ### TracingOptions
+</div>
 
 新しいエージェントまたはワークフローの実行を開始する際に渡すオプション。
 
@@ -552,7 +608,9 @@ interface TracingOptions {
 ```
 
 
-### TracingPolicy
+<div id="tracingpolicy">
+  ### TracingPolicy
+</div>
 
 ワークフローまたはエージェントの作成時に適用される、ポリシーレベルのトレース設定。
 
@@ -568,9 +626,13 @@ interface TracingPolicy {
 ```
 
 
-## 設定の種類
+<div id="configuration-types">
+  ## 設定の種類
+</div>
 
-### TracingConfig
+<div id="tracingconfig">
+  ### TracingConfig
+</div>
 
 単一のトレーシングインスタンス用の設定。
 
@@ -597,7 +659,9 @@ interface TracingConfig {
 ```
 
 
-### ObservabilityRegistryConfig
+<div id="observabilityregistryconfig">
+  ### ObservabilityRegistryConfig
+</div>
 
 AI トレースのレジストリ設定一式。
 
@@ -617,9 +681,13 @@ interface ObservabilityRegistryConfig {
 ```
 
 
-## サンプリング方式
+<div id="sampling-types">
+  ## サンプリング方式
+</div>
 
-### SamplingStrategy
+<div id="samplingstrategy">
+  ### SamplingStrategy
+</div>
 
 サンプリング戦略の構成。
 
@@ -632,7 +700,9 @@ type SamplingStrategy =
 ```
 
 
-### CustomSamplerOptions
+<div id="customsampleroptions">
+  ### CustomSamplerOptions
+</div>
 
 カスタムサンプラー戦略を使用する際に渡すオプション。
 
@@ -644,9 +714,13 @@ interface CustomSamplerOptions {
 ```
 
 
-## 設定セレクターの種類
+<div id="config-selector-types">
+  ## 設定セレクターの種類
+</div>
 
-### ConfigSelector
+<div id="configselector">
+  ### ConfigSelector
+</div>
 
 特定のスパンに対して使用する AI トレーシングインスタンスを選択するための関数。
 
@@ -658,7 +732,9 @@ type ConfigSelector = (
 ```
 
 
-### ConfigSelectorOptions
+<div id="configselectoroptions">
+  ### ConfigSelectorOptions
+</div>
 
 カスタムのトレーシング設定セレクターを使用する際に渡すオプション。
 
@@ -670,9 +746,13 @@ interface ConfigSelectorOptions {
 ```
 
 
-## 内部のスパン
+<div id="internal-spans">
+  ## 内部のスパン
+</div>
 
-### InternalSpans
+<div id="internalspans">
+  ### InternalSpans
+</div>
 
 ワークフローやエージェントの実行において、各種スパンを内部扱いに設定するためのビット単位オプション。
 
@@ -699,20 +779,28 @@ enum InternalSpans {
 ```
 
 
-## 関連項目
+<div id="see-also">
+  ## 関連項目
+</div>
 
-### ドキュメント
+<div id="documentation">
+  ### ドキュメント
+</div>
 
 - [AI トレーシングの概要](/docs/observability/ai-tracing/overview) - AI トレーシングの完全ガイド
 - [子スパンの作成](/docs/observability/ai-tracing/overview#creating-child-spans) - スパンの階層構造を扱う
 - [カスタムメタデータの追加](/docs/observability/ai-tracing/overview#adding-custom-metadata) - トレースの情報を充実させる
 
-### 参考
+<div id="reference">
+  ### 参考
+</div>
 
 - [Configuration](/reference/observability/ai-tracing/configuration) - レジストリと構成
 - [AITracing Classes](/reference/observability/ai-tracing/) - コア実装
 - [Span Reference](/reference/observability/ai-tracing/span) - Span のライフサイクル メソッド
 
-### 例
+<div id="examples">
+  ### 例
+</div>
 
 - [Basic AI Tracing](/examples/observability/basic-ai-tracing) - 実装例

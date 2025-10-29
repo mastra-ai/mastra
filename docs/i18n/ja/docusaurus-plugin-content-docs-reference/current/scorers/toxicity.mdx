@@ -3,11 +3,15 @@ title: "リファレンス: Toxicity Scorer | Scorers | Mastra ドキュメン�
 description: Mastra の Toxicity Scorer に関するドキュメント。LLM の出力に人種差別的、偏見的、または有害な要素が含まれていないかを評価します。
 ---
 
-# 有害性スコアラー
+<div id="toxicity-scorer">
+  # 有害性スコアラー
+</div>
 
 `createToxicityScorer()` 関数は、LLM の出力に人種差別的、偏見的、または有害な要素が含まれているかを評価します。審査者ベースの方式を用いて、個人攻撃、嘲笑、ヘイトスピーチ、見下すような発言、脅迫など、さまざまな形態の有害性について応答を分析します。
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 `createToxicityScorer()` 関数は、次のプロパティを持つ単一のオプションオブジェクトを受け取ります:
 
@@ -31,7 +35,9 @@ description: Mastra の Toxicity Scorer に関するドキュメント。LLM の
 
 この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドは他のスコアラーと同じ入力を受け付けます（[MastraScorer リファレンス](./mastra-scorer)を参照）が、戻り値には以下に記載の LLM 固有のフィールドが含まれます。
 
-## .run() の戻り値
+<div id="run-returns">
+  ## .run() の戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -87,7 +93,9 @@ description: Mastra の Toxicity Scorer に関するドキュメント。LLM の
 ```
 
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 評価者は以下の観点から有害性を評価します:
 
@@ -97,7 +105,9 @@ description: Mastra の Toxicity Scorer に関するドキュメント。LLM の
 - 相手を見下す発言
 - 脅迫や威圧
 
-### スコアリングプロセス
+<div id="scoring-process">
+  ### スコアリングプロセス
+</div>
 
 1. 有害要素を分析:
    - 個人攻撃や嘲笑を特定
@@ -111,7 +121,9 @@ description: Mastra の Toxicity Scorer に関するドキュメント。LLM の
 
 最終スコア: `(toxicity_weighted_sum / max_toxicity) * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 毒性スコアは0から1の範囲です：
 
@@ -120,9 +132,13 @@ description: Mastra の Toxicity Scorer に関するドキュメント。LLM の
 - **0.1–0.3**：毒性が軽度
 - **0.0**：毒性は検出されませんでした
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
-### 毒性が高い例
+<div id="high-toxicity-example">
+  ### 毒性が高い例
+</div>
 
 この例では、応答に露骨な個人攻撃や有害な表現が含まれており、毒性スコアが高くなっています。
 
@@ -145,7 +161,9 @@ console.log("理由:", result.reason);
 ```
 
 
-#### 毒性が高い出力
+<div id="high-toxicity-output">
+  #### 毒性が高い出力
+</div>
 
 スコアラーは、深刻な有害コンテンツであることを示す高いスコアを返します。`reason` フィールドには、個人攻撃、差別的な表現、有害な一般化が含まれている旨が記されています。
 
@@ -157,7 +175,9 @@ console.log("理由:", result.reason);
 ```
 
 
-### 有害性が混在する例
+<div id="mixed-toxicity-example">
+  ### 有害性が混在する例
+</div>
 
 この例では、回答に有害な要素とプロフェッショナルな要素が混在しています。スコアラーは建設的なフィードバックを評価しつつ、問題のある表現を特定し、その結果として中程度の有害性スコアが付与されます。
 
@@ -182,7 +202,9 @@ console.log("理由:", result.reason);
 ```
 
 
-#### 混合的な有害性の出力
+<div id="mixed-toxicity-output">
+  #### 混合的な有害性の出力
+</div>
 
 スコアラーは、ぞんざいな表現とプロフェッショナルなフィードバックが併存することを反映した、中程度のスコアを返します。`reason` フィールドは、回答に有害な要素と建設的な要素がどちらも含まれている理由を説明します。
 
@@ -194,7 +216,9 @@ console.log("理由:", result.reason);
 ```
 
 
-### 有害性のない例
+<div id="no-toxicity-example">
+  ### 有害性のない例
+</div>
 
 この例では、応答はプロフェッショナルで建設的であり、有害または攻撃的な表現は検出されません。
 
@@ -217,7 +241,9 @@ console.log("理由:", result.reason);
 ```
 
 
-#### 有害性のない出力
+<div id="no-toxicity-output">
+  #### 有害性のない出力
+</div>
 
 スコアラーは、応答に有害な内容がないことを示す低いスコアを返します。`reason` フィールドは、フィードバックが専門的で敬意を払ったものだと確認します。
 
@@ -229,7 +255,9 @@ console.log("理由:", result.reason);
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [トーン一貫性スコアラー](./tone-consistency)
 - [バイアススコアラー](./bias)

@@ -6,7 +6,9 @@ description: "MastraModelOutput の完全なリファレンス。agent.stream() 
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
-# MastraModelOutput
+<div id="mastramodeloutput">
+  # MastraModelOutput
+</div>
 
 `MastraModelOutput` クラスは [.stream()](./stream) によって返され、モデル出力へのストリーミングおよびプロミスベースのアクセスの両方を提供します。構造化出力の生成、ツール呼び出し、推論、ならびに包括的な使用状況のトラッキングをサポートします。
 
@@ -18,7 +20,9 @@ const stream = await agent.stream("Hello world");
 セットアップと基本的な使用方法については、[.stream()](./stream) メソッドのドキュメントを参照してください。
 
 
-## ストリーミングプロパティ
+<div id="streaming-properties">
+  ## ストリーミングプロパティ
+</div>
 
 これらのプロパティは、生成中のモデル出力にリアルタイムでアクセスできます:
 
@@ -77,7 +81,9 @@ const stream = await agent.stream("Hello world");
   ]}
 />
 
-## Promise ベースのプロパティ
+<div id="promise-based-properties">
+  ## Promise ベースのプロパティ
+</div>
 
 これらのプロパティは、ストリームの完了後に最終的な値へと解決されます:
 
@@ -264,7 +270,9 @@ const stream = await agent.stream("Hello world");
 ]}
 />
 
-## エラーのプロパティ
+<div id="error-properties">
+  ## エラーのプロパティ
+</div>
 
 <PropertiesTable
   content={[
@@ -277,7 +285,9 @@ const stream = await agent.stream("Hello world");
   ]}
 />
 
-## メソッド
+<div id="methods">
+  ## メソッド
+</div>
 
 <PropertiesTable
   content={[
@@ -354,9 +364,13 @@ const stream = await agent.stream("Hello world");
   ]}
 />
 
-## 使い方の例
+<div id="usage-examples">
+  ## 使い方の例
+</div>
 
-### テキストストリーミングの基本
+<div id="basic-text-streaming">
+  ### テキストストリーミングの基本
+</div>
 
 ```typescript
 const stream = await agent.stream("俳句を書いて");
@@ -372,7 +386,9 @@ console.log(fullText);
 ```
 
 
-### 構造化出力のストリーミング
+<div id="structured-output-streaming">
+  ### 構造化出力のストリーミング
+</div>
 
 ```typescript
 const stream = await agent.stream("ユーザーデータを生成", {
@@ -413,7 +429,9 @@ console.log("結果:", toolResults);
 ````
 
 
-### 生成結果への完全アクセス
+<div id="complete-output-access">
+  ### 生成結果への完全アクセス
+</div>
 
 ```typescript
 const stream = await agent.stream("このデータを分析");
@@ -428,7 +446,9 @@ console.log({
 ```
 
 
-### フルストリーム・プロセッシング
+<div id="full-stream-processing">
+  ### フルストリーム・プロセッシング
+</div>
 
 ```typescript
 const stream = await agent.stream("複雑なタスク");
@@ -452,7 +472,9 @@ for await (const chunk of stream.fullStream) {
 ```
 
 
-### 例外処理
+<div id="error-handling">
+  ### 例外処理
+</div>
 
 ```typescript
 const stream = await agent.stream("このデータを分析");
@@ -478,7 +500,9 @@ if (stream.error) {
 ```
 
 
-## 関連型
+<div id="related-types">
+  ## 関連型
+</div>
 
 - [.stream()](./stream) - MastraModelOutput を返すメソッド
 - [ChunkType](../ChunkType) - ストリーム全体で取り得るチャンクの種類

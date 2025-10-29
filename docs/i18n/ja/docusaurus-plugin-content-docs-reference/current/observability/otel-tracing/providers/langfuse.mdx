@@ -3,17 +3,23 @@ title: "リファレンス: Langfuse | オブザーバビリティ | Mastra ド�
 description: Mastra と Langfuse の統合方法に関するドキュメント。Mastra は LLM アプリケーション向けのオープンソースのオブザーバビリティプラットフォームです。
 ---
 
-# Langfuse
+<div id="langfuse">
+  # Langfuse
+</div>
 
 Langfuse は、LLM アプリケーション向けに特化して設計されたオープンソースのオブザーバビリティ・プラットフォームです。
 
 > **注**: 現在、詳細なテレメトリーデータを含むのは AI 関連の呼び出しのみです。その他の操作でもトレースは作成されますが、情報は限定的です。
 
-## 設定
+<div id="configuration">
+  ## 設定
+</div>
 
 Mastra で Langfuse を使用するには、環境変数で設定するか、Mastra の設定で直接指定します。
 
-### 環境変数の使用
+<div id="using-environment-variables">
+  ### 環境変数の使用
+</div>
 
 以下の環境変数を設定します：
 
@@ -42,7 +48,9 @@ echo -n "pk-lf-1234567890:sk-lf-1234567890" | base64 -w 0
 ```
 
 
-## 実装
+<div id="implementation">
+  ## 実装
+</div>
 
 Mastra を OpenTelemetry と併用して Langfuse を使うように設定する手順は次のとおりです：
 
@@ -82,6 +90,8 @@ export const mastra = new Mastra({
 ```
 
 
-## ダッシュボード
+<div id="dashboard">
+  ## ダッシュボード
+</div>
 
 設定が完了すると、[cloud.langfuse.com](https://cloud.langfuse.com) の Langfuse ダッシュボードでトレースと分析を確認できます

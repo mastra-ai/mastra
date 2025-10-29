@@ -3,13 +3,17 @@ title: "リファレンス: MCPClient | Tools & MCP | Mastraドキュメント"
 description: MCPClient のAPIリファレンス—複数のModel Context Protocolサーバーとそのツールを管理するクラス。
 ---
 
-# MCPClient
+<div id="mcpclient">
+  # MCPClient
+</div>
 
 `MCPClient` クラスは、Mastra アプリケーションで複数の MCP サーバー接続とそれらのツールを一元的に管理するためのクラスです。接続のライフサイクル管理やツールの名前空間化を行い、設定済みのすべてのサーバーにまたがるツールへのアクセスを提供します。
 
 このクラスは、非推奨となった [`MastraMCPClient`](/reference/tools/client) の後継です。
 
-## コンストラクター
+<div id="constructor">
+  ## コンストラクター
+</div>
 
 MCPClient クラスの新しいインスタンスを生成します。
 
@@ -22,7 +26,9 @@ constructor({
 ```
 
 
-### MCPClientOptions
+<div id="mcpclientoptions">
+  ### MCPClientOptions
+</div>
 
 <br />
 
@@ -52,7 +58,9 @@ constructor({
   ]}
 />
 
-### MastraMCPServerDefinition
+<div id="mastramcpserverdefinition">
+  ### MastraMCPServerDefinition
+</div>
 
 `servers` マップ内の各サーバーは `MastraMCPServerDefinition` 型で構成します。トランスポート種別は、指定されたパラメータに基づいて自動判別されます。
 
@@ -130,9 +138,13 @@ constructor({
   ]}
 />
 
-## 手法
+<div id="methods">
+  ## 手法
+</div>
 
-### getTools()
+<div id="gettools">
+  ### getTools()
+</div>
 
 構成済みのすべてのサーバーからツールを取得します。ツール名は競合を防ぐため、サーバー名で名前空間化されます（形式は `serverName_toolName`）。\
 Agent の定義に渡すことを想定しています。
@@ -142,7 +154,9 @@ new Agent({ tools: await mcp.getTools() });
 ```
 
 
-### getToolsets()
+<div id="gettoolsets">
+  ### getToolsets()
+</div>
 
 名前空間付きのツール名（`serverName.toolName` の形式）を、それぞれのツール実装に対応付けたオブジェクトを返します。
 generate または stream メソッドに動的に渡すことを想定しています。
@@ -154,7 +168,9 @@ const res = await agent.stream(prompt, {
 ```
 
 
-### disconnect()
+<div id="disconnect">
+  ### disconnect()
+</div>
 
 すべての MCP サーバーから切断し、リソースを解放します。
 
@@ -163,7 +179,9 @@ async disconnect(): Promise<void>
 ```
 
 
-### `resources` プロパティ
+<div id="resources-property">
+  ### `resources` プロパティ
+</div>
 
 `MCPClient` インスタンスには、リソース関連の操作にアクセスするための `resources` プロパティがあります。
 
@@ -179,7 +197,9 @@ const templatesByServer = await mcpClient.resources.templates();
 ```
 
 
-#### `resources.list()`
+<div id="resourceslist">
+  #### `resources.list()`
+</div>
 
 接続されているすべての MCP サーバーから、利用可能なリソースをサーバー名ごとにグループ化して取得します。
 
@@ -197,7 +217,9 @@ for (const serverName in resourcesByServer) {
 ```
 
 
-#### `resources.templates()`
+<div id="resourcestemplates">
+  #### `resources.templates()`
+</div>
 
 接続中のすべての MCP サーバーから利用可能なリソーステンプレートを取得し、サーバー名ごとにグループ化します。
 
@@ -215,7 +237,9 @@ for (const serverName in templatesByServer) {
 ```
 
 
-#### `resources.read(serverName: string, uri: string)`
+<div id="resourcesreadservername-string-uri-string">
+  #### `resources.read(serverName: string, uri: string)`
+</div>
 
 指定したサーバーから、特定のリソースの内容を読み込みます。
 
@@ -237,7 +261,9 @@ console.log("現在の天気：", content.contents[0].text);
 ```
 
 
-#### `resources.subscribe(serverName: string, uri: string)`
+<div id="resourcessubscribeservername-string-uri-string">
+  #### `resources.subscribe(serverName: string, uri: string)`
+</div>
 
 指定された名前のサーバー上にある特定のリソースの更新を購読します。
 
@@ -252,7 +278,9 @@ await mcpClient.resources.subscribe("myWeatherServer", "weather://current");
 ```
 
 
-#### `resources.unsubscribe(serverName: string, uri: string)`
+<div id="resourcesunsubscribeservername-string-uri-string">
+  #### `resources.unsubscribe(serverName: string, uri: string)`
+</div>
 
 指定したサーバー上の特定のリソースに対する更新の購読を解除します。
 
@@ -267,7 +295,9 @@ await mcpClient.resources.unsubscribe("myWeatherServer", "weather://current");
 ```
 
 
-#### `resources.onUpdated(serverName: string, handler: (params: { uri: string }) => void)`
+<div id="resourcesonupdatedservername-string-handler-params-uri-string-void">
+  #### `resources.onUpdated(serverName: string, handler: (params: { uri: string }) => void)`
+</div>
 
 特定のサーバーで購読中のリソースが更新された際に呼び出される通知ハンドラーを設定します。
 
@@ -286,7 +316,9 @@ mcpClient.resources.onUpdated("myWeatherServer", (params) => {
 ```
 
 
-#### `resources.onListChanged(serverName: string, handler: () => void)`
+<div id="resourcesonlistchangedservername-string-handler-void">
+  #### `resources.onListChanged(serverName: string, handler: () => void)`
+</div>
 
 特定のサーバー上で利用可能なリソースの一覧に変更があった際に呼び出される通知ハンドラを設定します。
 
@@ -305,7 +337,9 @@ mcpClient.resources.onListChanged("myWeatherServer", () => {
 ```
 
 
-### `prompts` プロパティ
+<div id="prompts-property">
+  ### `prompts` プロパティ
+</div>
 
 `MCPClient` インスタンスには、プロンプト関連の操作にアクセスできる `prompts` プロパティがあります。
 
@@ -323,7 +357,9 @@ const { prompt, messages } = await mcpClient.prompts.get({
 ```
 
 
-### `elicitation` プロパティ
+<div id="elicitation-property">
+  ### `elicitation` プロパティ
+</div>
 
 `MCPClient` インスタンスには、エリシテーション（elicitation）に関連する操作へアクセスできる `elicitation` プロパティがあります。エリシテーションにより、MCP サーバーはユーザーから構造化された情報を要求できます。
 
@@ -347,7 +383,9 @@ mcpClient.elicitation.onRequest("serverName", async (request) => {
 ```
 
 
-#### `elicitation.onRequest(serverName: string, handler: ElicitationHandler)`
+<div id="elicitationonrequestservername-string-handler-elicitationhandler">
+  #### `elicitation.onRequest(serverName: string, handler: ElicitationHandler)`
+</div>
 
 接続中のいずれかの MCP サーバーがエリシテーションリクエストを送信した際に呼び出されるハンドラー関数を設定します。ハンドラーはリクエストを受け取り、レスポンスを返す必要があります。
 
@@ -468,7 +506,9 @@ await mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
 ```
 
 
-#### `prompts.list()`
+<div id="promptslist">
+  #### `prompts.list()`
+</div>
 
 接続中のすべての MCP サーバーから利用可能なプロンプトを取得し、サーバー名ごとにグループ化します。
 
@@ -486,7 +526,9 @@ for (const serverName in promptsByServer) {
 ```
 
 
-#### `prompts.get({ serverName, name, args?, version? })`
+<div id="promptsget-servername-name-args-version">
+  #### `prompts.get({ serverName, name, args?, version? })`
+</div>
 
 サーバーから特定のプロンプトとそのメッセージを取得します。
 
@@ -517,7 +559,9 @@ console.log(messages);
 ```
 
 
-#### `prompts.onListChanged(serverName: string, handler: () => void)`
+<div id="promptsonlistchangedservername-string-handler-void">
+  #### `prompts.onListChanged(serverName: string, handler: () => void)`
+</div>
 
 指定したサーバーで利用可能なプロンプトの一覧が変更された際に呼び出される通知ハンドラーを設定します。
 
@@ -536,11 +580,15 @@ mcpClient.prompts.onListChanged("myWeatherServer", () => {
 ```
 
 
-## Elicitation（情報引き出し）
+<div id="elicitation">
+  ## Elicitation（情報引き出し）
+</div>
 
 Elicitation は、MCP サーバーがユーザーに対して構造化された情報の提供を求められる機能です。サーバーが追加のデータを必要とする場合、クライアントがユーザーに質問（プロンプト）して処理する elicitation リクエストを送信できます。代表的な例として、ツールの呼び出し時があります。
 
-### Elicitation の仕組み
+<div id="how-elicitation-works">
+  ### Elicitation の仕組み
+</div>
 
 1. **サーバーリクエスト**: MCP サーバーツールがメッセージとスキーマを指定して `server.elicitation.sendRequest()` を呼び出します
 2. **クライアントハンドラー**: あなたの elicitation ハンドラー関数がそのリクエストで呼び出されます
@@ -548,7 +596,9 @@ Elicitation は、MCP サーバーがユーザーに対して構造化された�
 4. **レスポンス**: ハンドラーがユーザーの応答（accept/decline/cancel）を返します
 5. **ツールの継続**: サーバーツールは応答を受け取り、処理を続行します
 
-### エリシテーションの設定
+<div id="setting-up-elicitation">
+  ### エリシテーションの設定
+</div>
 
 エリシテーションを利用するツールを呼び出す前に、エリシテーションハンドラーを設定する必要があります。
 
@@ -579,7 +629,9 @@ mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
 ```
 
 
-### レスポンスの種類
+<div id="response-types">
+  ### レスポンスの種類
+</div>
 
 elicitation ハンドラーは、次の3つのレスポンスのいずれかを返す必要があります:
 
@@ -603,7 +655,9 @@ elicitation ハンドラーは、次の3つのレスポンスのいずれかを�
   return { action: "cancel" };
   ```
 
-### スキーマベースの入力収集
+<div id="schema-based-input-collection">
+  ### スキーマベースの入力収集
+</div>
 
 `requestedSchema` は、サーバーが必要とするデータの構造を定義します。
 
@@ -637,7 +691,9 @@ await mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
 ```
 
 
-### ベストプラクティス
+<div id="best-practices">
+  ### ベストプラクティス
+</div>
 
 - **常にエリシテーションに対応する**: エリシテーションを利用する可能性のあるツールを呼び出す前にハンドラーを用意する
 - **入力を検証する**: 必須項目が入力されているか確認する
@@ -645,9 +701,13 @@ await mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
 - **わかりやすいUI**: 何の情報を、なぜ求めているのかを明確に示す
 - **セキュリティ**: 機密情報の要求を自動承認しない
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
-### 静的ツール構成
+<div id="static-tool-configuration">
+  ### 静的ツール構成
+</div>
 
 アプリ全体で MCP サーバーへの接続が 1 つだけのツールの場合は、`getTools()` を使い、取得したツールをエージェントに渡します:
 
@@ -723,7 +783,9 @@ checkWeatherPrompt();
 ```
 
 
-### 動的ツールセット
+<div id="dynamic-toolsets">
+  ### 動的ツールセット
+</div>
 
 ユーザーごとに新しい MCP 接続が必要な場合は、`getToolsets()` を使用し、stream または generate を呼び出すときにツールを追加します。
 
@@ -771,7 +833,9 @@ const response = await agent.stream(
 ```
 
 
-## インスタンス管理
+<div id="instance-management">
+  ## インスタンス管理
+</div>
 
 `MCPClient` クラスには、複数インスタンスの管理におけるメモリリーク防止機能が組み込まれています:
 
@@ -816,7 +880,9 @@ const mcp4 = new MCPClient({
 ```
 
 
-## サーバーのライフサイクル
+<div id="server-lifecycle">
+  ## サーバーのライフサイクル
+</div>
 
 MCPClient はサーバー接続を適切に処理します:
 
@@ -824,7 +890,9 @@ MCPClient はサーバー接続を適切に処理します:
 2. 開発中のエラーメッセージを防ぐための、落ち着いた（グレースフルな）サーバーシャットダウン
 3. 切断時のリソースの適切なクリーンアップ
 
-## SSE リクエストヘッダーの使用
+<div id="using-sse-request-headers">
+  ## SSE リクエストヘッダーの使用
+</div>
 
 レガシーな SSE MCP トランスポートを使用する場合、MCP SDK の不具合により、`requestInit` と `eventSourceInit` の両方を設定する必要があります。
 
@@ -856,7 +924,9 @@ const sseClient = new MCPClient({
 ```
 
 
-## 関連情報
+<div id="related-information">
+  ## 関連情報
+</div>
 
 - MCP サーバーの作成については、[MCPServer ドキュメント](./mcp-server)を参照してください。
 - Model Context Protocol の詳細については、[@modelcontextprotocol/sdk ドキュメント](https://github.com/modelcontextprotocol/typescript-sdk)を参照してください。

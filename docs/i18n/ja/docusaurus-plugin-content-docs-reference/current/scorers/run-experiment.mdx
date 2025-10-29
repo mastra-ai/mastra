@@ -3,11 +3,15 @@ title: "リファレンス: runExperiment | Scorers | Mastra ドキュメント"
 description: "Mastra の runExperiment 関数に関するドキュメント。複数のスコアラーを使って、エージェントやワークフローを一括評価できます。"
 ---
 
-# runExperiment
+<div id="runexperiment">
+  # runExperiment
+</div>
 
 `runExperiment` 関数は、スコアラーに対して複数のテストケースを並行実行することで、エージェントやワークフローを一括評価できます。これは、体系的なテスト、パフォーマンス分析、AI システムの検証に不可欠です。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { runExperiment } from "@mastra/core/scores";
@@ -34,7 +38,9 @@ console.log(`${result.summary.totalItems} 件のアイテムを処理しまし�
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -75,7 +81,9 @@ console.log(`${result.summary.totalItems} 件のアイテムを処理しまし�
   ]}
 />
 
-## データ項目の構造
+<div id="data-item-structure">
+  ## データ項目の構造
+</div>
 
 <PropertiesTable
   content={[
@@ -108,7 +116,9 @@ console.log(`${result.summary.totalItems} 件のアイテムを処理しまし�
   ]}
 />
 
-## ワークフローのスコアラー設定
+<div id="workflow-scorer-configuration">
+  ## ワークフローのスコアラー設定
+</div>
 
 ワークフローでは、`WorkflowScorerConfig` を用いて、複数のレベルでスコアラーを指定できます。
 
@@ -130,7 +140,9 @@ console.log(`${result.summary.totalItems} 件のアイテムを処理しまし�
   ]}
 />
 
-## 返り値
+<div id="returns">
+  ## 返り値
+</div>
 
 <PropertiesTable
   content={[
@@ -153,9 +165,13 @@ console.log(`${result.summary.totalItems} 件のアイテムを処理しまし�
   ]}
 />
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
-### エージェント評価
+<div id="agent-evaluation">
+  ### エージェント評価
+</div>
 
 ```typescript
 import { runExperiment } from "@mastra/core/scores";
@@ -191,7 +207,9 @@ const result = await runExperiment({
 ```
 
 
-### ワークフロー評価
+<div id="workflow-evaluation">
+  ### ワークフロー評価
+</div>
 
 ```typescript
 const workflowResult = await runExperiment({
@@ -220,7 +238,9 @@ const workflowResult = await runExperiment({
 ```
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [createScorer()](../../reference/scorers/create-scorer) - 実験用のカスタムスコアラーを作成する
 - [MastraScorer](../../reference/scorers/mastra-scorer) - スコアラーの構造とメソッドについて学ぶ

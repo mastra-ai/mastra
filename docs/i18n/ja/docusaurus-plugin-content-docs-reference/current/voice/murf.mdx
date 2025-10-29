@@ -3,11 +3,15 @@ title: "リファレンス: Murf | Voice | Mastra ドキュメント"
 description: "Murf の音声実装に関するドキュメント。テキスト読み上げ（TTS）機能を提供します。"
 ---
 
-# Murf
+<div id="murf">
+  # Murf
+</div>
 
 Mastra の Murf 音声実装は、Murf の AI 音声サービスを利用したテキスト読み上げ（TTS）機能を提供します。複数言語の多様な音声に対応しています。
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 ```typescript
 import { MurfVoice } from "@mastra/voice-murf";
@@ -49,7 +53,9 @@ const voices = await voice.getSpeakers();
 ```
 
 
-## コンストラクターのパラメーター
+<div id="constructor-parameters">
+  ## コンストラクターのパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -70,7 +76,9 @@ const voices = await voice.getSpeakers();
   ]}
 />
 
-### MurfConfig
+<div id="murfconfig">
+  ### MurfConfig
+</div>
 
 <PropertiesTable
   content={[
@@ -97,7 +105,9 @@ const voices = await voice.getSpeakers();
   ]}
 />
 
-### 音声プロパティ
+<div id="speech-properties">
+  ### 音声プロパティ
+</div>
 
 <PropertiesTable
   content={[
@@ -170,9 +180,13 @@ const voices = await voice.getSpeakers();
   ]}
 />
 
-## メソッド
+<div id="methods">
+  ## メソッド
+</div>
 
-### speak()
+<div id="speak">
+  ### speak()
+</div>
 
 Murf の API を使ってテキストを音声に変換します。
 
@@ -208,7 +222,9 @@ Murf の API を使ってテキストを音声に変換します。
 
 戻り値: `Promise<NodeJS.ReadableStream>`
 
-### getSpeakers()
+<div id="getspeakers">
+  ### getSpeakers()
+</div>
 
 利用可能な音声オプションの配列を返します。各要素には以下が含まれます:
 
@@ -241,11 +257,15 @@ Murf の API を使ってテキストを音声に変換します。
   ]}
 />
 
-### listen()
+<div id="listen">
+  ### listen()
+</div>
 
 このメソッドはMurfではサポートされておらず、エラーをスローします。Murfは音声→テキスト（Speech-to-Text）の機能を提供していません。
 
-## 重要な注意事項
+<div id="important-notes">
+  ## 重要な注意事項
+</div>
 
 1. Murf の API キーが必要です。`MURF_API_KEY` 環境変数で設定するか、コンストラクタに渡してください。
 2. 既定のモデルバージョンとして GEN2 を使用します。

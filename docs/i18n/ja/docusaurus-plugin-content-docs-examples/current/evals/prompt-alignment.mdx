@@ -3,7 +3,9 @@ title: "例: プロンプト整合性の評価 | Evals | Mastra Docs"
 description: 応答が指示にどれだけ従っているかを評価するために、Prompt Alignment 指標を用いる例。
 ---
 
-# プロンプト整合性の評価
+<div id="prompt-alignment-evaluation">
+  # プロンプト整合性の評価
+</div>
 
 :::note
 Scorers API は現在ベータ版です。改善に鋭意取り組んでおり、皆さまのフィードバックを歓迎します。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) でお寄せください。
@@ -11,14 +13,18 @@ Scorers API は現在ベータ版です。改善に鋭意取り組んでおり�
 
 `PromptAlignmentMetric` を使用して、応答が与えられた一連の指示にどれだけ忠実に従っているかを評価します。このメトリクスは `query` と `response` を受け取り、スコアと、理由および指示単位の整合性の詳細を含む `info` オブジェクトを返します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/evals
 ```
 
 
-## 完全整合の例
+<div id="perfect-alignment-example">
+  ## 完全整合の例
+</div>
 
 この例では、応答が入力の該当するすべての指示に従っています。スコアは完全な遵守を反映しており、見落としや無視された指示はありません。
 
@@ -45,7 +51,9 @@ console.log(result);
 ```
 
 
-### 完全整合の出力
+<div id="perfect-alignment-output">
+  ### 完全整合の出力
+</div>
 
 この応答は、適用可能な指示をすべて満たしているため、高いスコアを獲得します。`info` フィールドは、各指示が漏れなく順守されたことを示しています。
 
@@ -65,7 +73,9 @@ console.log(result);
 ```
 
 
-## 混在した整合性の例
+<div id="mixed-alignment-example">
+  ## 混在した整合性の例
+</div>
 
 この例では、応答はいくつかの指示には従っている一方で、別の指示は省かれています。スコアは部分的な遵守を反映しており、守られた指示と見落とされた指示が混在しています。
 
@@ -92,7 +102,9 @@ console.log(result);
 ```
 
 
-### 指示遵守のばらつきがある出力
+<div id="mixed-alignment-output">
+  ### 指示遵守のばらつきがある出力
+</div>
 
 この応答は、一部の指示には従っている一方で、他の指示は満たしていないため、評価は混合的（ミックス）になります。`info` フィールドには、遵守された指示と見落とされた指示の内訳に加え、そのスコアの根拠が記載されています。
 
@@ -112,7 +124,9 @@ console.log(result);
 ```
 
 
-## 該当しないアライメントの例
+<div id="non-applicable-alignment-example">
+  ## 該当しないアライメントの例
+</div>
 
 この例では、クエリと無関係であるため、応答はいずれの指示にも従っていません。スコアは、この文脈では指示が適用不能だったことを反映しています。
 
@@ -137,7 +151,9 @@ console.log(result);
 ```
 
 
-### 非該当のアラインメント出力
+<div id="non-applicable-alignment-output">
+  ### 非該当のアラインメント出力
+</div>
 
 レスポンスは、いずれの指示も適用できなかったことを示すスコアを受け取ります。`info` フィールドには、レスポンスとクエリが指示と無関係であるため、測定可能なアラインメントがないことが記されています。
 
@@ -157,7 +173,9 @@ console.log(result);
 ```
 
 
-## メトリクスの設定
+<div id="metric-configuration">
+  ## メトリクスの設定
+</div>
 
 期待される動作や要件を定義する `instructions` 配列を指定して、`PromptAlignmentMetric` インスタンスを作成できます。`scale` などの任意パラメータを設定することも可能です。
 
@@ -171,7 +189,9 @@ const metric = new PromptAlignmentMetric(openai("gpt-4o-mini"), {
 > 設定オプションの全一覧は [PromptAlignmentMetric](/reference/evals/prompt-alignment) を参照してください。
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `PromptAlignment` は次の形式の結果を返します：
 
@@ -190,7 +210,9 @@ const metric = new PromptAlignmentMetric(openai("gpt-4o-mini"), {
 ```
 
 
-### プロンプト整合度スコア
+<div id="prompt-alignment-score">
+  ### プロンプト整合度スコア
+</div>
 
 プロンプト整合度スコアは 0〜1 の範囲です:
 
@@ -200,7 +222,9 @@ const metric = new PromptAlignmentMetric(openai("gpt-4o-mini"), {
 - **0.0**: 整合なし – 指示が適用されない、または守られていない。
 - **-1**: 該当なし – 指示がクエリに関連していない。
 
-### プロンプト整合性情報
+<div id="prompt-alignment-info">
+  ### プロンプト整合性情報
+</div>
 
 スコアの説明。詳細には次を含みます:
 

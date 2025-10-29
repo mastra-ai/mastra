@@ -7,11 +7,15 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 
-# データベース固有の設定
+<div id="database-specific-configurations">
+  # データベース固有の設定
+</div>
 
 この例では、ベクタークエリツールでデータベース固有の設定を活用し、パフォーマンスを最適化するとともに、各ベクターストアの固有の機能を引き出す方法を示します。
 
-## 複数環境のセットアップ
+<div id="multi-environment-setup">
+  ## 複数環境のセットアップ
+</div>
 
 環境ごとに異なる設定を使います:
 
@@ -118,7 +122,9 @@ const switchEnvironment = async (environment, query) => {
   </TabItem>
 </Tabs>
 
-## pgVector によるパフォーマンス最適化
+<div id="performance-optimization-with-pgvector">
+  ## pgVector によるパフォーマンス最適化
+</div>
 
 ユースケースに応じて検索パフォーマンスを最適化します:
 
@@ -226,7 +232,9 @@ const adaptiveSearch = async (query: string, isHighLoad: boolean) => {
   </TabItem>
 </Tabs>
 
-## Pinecone を使ったマルチテナントアプリケーション
+<div id="multi-tenant-application-with-pinecone">
+  ## Pinecone を使ったマルチテナントアプリケーション
+</div>
 
 Pinecone のネームスペースを使って、テナント分離を実装します。
 
@@ -300,7 +308,9 @@ const results = await searchService.searchForTenant(
 ```
 
 
-## Pinecone で実現するハイブリッド検索
+<div id="hybrid-search-with-pinecone">
+  ## Pinecone で実現するハイブリッド検索
+</div>
 
 セマンティック検索とキーワード検索を組み合わせる:
 
@@ -370,7 +380,9 @@ const results = await hybridSearch("REST APIの使い方", [
 ```
 
 
-## 品質ゲート型検索
+<div id="quality-gated-search">
+  ## 品質ゲート型検索
+</div>
 
 段階的に検索品質を高めていきます：
 
@@ -461,7 +473,9 @@ console.log(
 ```
 
 
-## 重要なポイント
+<div id="key-takeaways">
+  ## 重要なポイント
+</div>
 
 1. **環境の分離**: 環境やテナントごとにデータを分けるためにnamespacesを使用する
 2. **パフォーマンス調整**: 求める精度と速度のトレードオフに応じてef/probesのパラメータを調整する

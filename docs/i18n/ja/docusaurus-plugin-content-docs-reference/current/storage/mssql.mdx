@@ -3,18 +3,24 @@ title: "リファレンス: MSSQL Storage | Storage | Mastra ドキュメント"
 description: Mastra における MSSQL ストレージ実装のドキュメントです。
 ---
 
-# MSSQL ストレージ
+<div id="mssql-storage">
+  # MSSQL ストレージ
+</div>
 
 MSSQL ストレージ実装は、Microsoft SQL Server データベースを用いた本番運用レベルのストレージソリューションを提供します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/mssql@latest
 ```
 
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 ```typescript copy showLineNumbers
 import { MSSQLStore } from "@mastra/mssql";
@@ -25,7 +31,9 @@ const storage = new MSSQLStore({
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -46,7 +54,9 @@ const storage = new MSSQLStore({
   ]}
 />
 
-## コンストラクターの例
+<div id="constructor-examples">
+  ## コンストラクターの例
+</div>
 
 `MSSQLStore` は次の方法でインスタンス化できます：
 
@@ -85,9 +95,13 @@ const store5 = new MSSQLStore({
 ```
 
 
-## 追記
+<div id="additional-notes">
+  ## 追記
+</div>
 
-### スキーマ管理
+<div id="schema-management">
+  ### スキーマ管理
+</div>
 
 ストレージ実装はスキーマの作成と更新を自動的に行います。以下のテーブルを作成します:
 
@@ -99,7 +113,9 @@ const store5 = new MSSQLStore({
 - `mastra_scorers`: スコアリングおよび評価データを保存
 - `mastra_resources`: リソースの作業メモリデータを保存
 
-### データベースおよびプールへの直接アクセス
+<div id="direct-database-and-pool-access">
+  ### データベースおよびプールへの直接アクセス
+</div>
 
 `MSSQLStore` は、mssql の接続プールをパブリックなフィールドとして公開しています：
 

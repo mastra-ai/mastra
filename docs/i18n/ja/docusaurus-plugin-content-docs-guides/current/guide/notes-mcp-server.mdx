@@ -7,7 +7,9 @@ import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
 
-# Notes MCP サーバーの構築
+<div id="building-a-notes-mcp-server">
+  # Notes MCP サーバーの構築
+</div>
 
 このガイドでは、ゼロから完全な MCP（Model Context Protocol）サーバーを構築する方法を学びます。このサーバーは Markdown ノートのコレクションを管理し、次の機能を備えています：
 
@@ -15,13 +17,17 @@ import StepItem from "@site/src/components/StepItem";
 2. **ノートの作成**: ノートを新規作成または更新するためのツールを提供します
 3. **スマートプロンプトの提供**: 日次ノートのテンプレート作成や既存コンテンツの要約など、文脈に応じたプロンプトを生成します
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 - Node.js `v20.0` 以降がインストールされていること
 - サポート対象の[モデルプロバイダー](/models)の API キー
 - 既存の Mastra プロジェクト（新規プロジェクトのセットアップは[インストールガイド](/docs/getting-started/installation)を参照）
 
-## 必要な依存関係とファイルの追加
+<div id="adding-necessary-dependencies-files">
+  ## 必要な依存関係とファイルの追加
+</div>
 
 MCP サーバーを作成する前に、追加の依存関係をインストールし、ボイラープレートのフォルダ構成を用意します。
 
@@ -103,7 +109,9 @@ touch src/mastra/mcp/{server,resources,prompts}.ts
 
 </Steps>
 
-## MCPサーバーの作成
+<div id="creating-the-mcp-server">
+  ## MCPサーバーの作成
+</div>
 
 MCPサーバーを追加しましょう！
 
@@ -420,7 +428,9 @@ MCPサーバーを追加しましょう！
   </StepItem>
 </Steps>
 
-## サーバーを起動する
+<div id="run-the-server">
+  ## サーバーを起動する
+</div>
 
 やりました。初めての MCP サーバーを作成できましたね。では、[playground](/docs/getting-started/studio) を起動して試してみましょう。
 

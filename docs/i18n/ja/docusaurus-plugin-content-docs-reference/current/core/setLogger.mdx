@@ -3,18 +3,24 @@ title: "リファレンス: Mastra.setLogger() | Core | Mastra ドキュメン�
 description: "Mastra の `Mastra.setLogger()` メソッドに関するドキュメント。すべてのコンポーネント（エージェント、ワークフローなど）のロガーを設定します。"
 ---
 
-# Mastra.setLogger()
+<div id="mastrasetlogger">
+  # Mastra.setLogger()
+</div>
 
 `.setLogger()` メソッドは、Mastra インスタンス内のすべてのコンポーネント（エージェント、ワークフローなど）のロガーを設定します。このメソッドは、logger プロパティを持つ単一のオブジェクトを引数として受け取ります。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 mastra.setLogger({ logger: new PinoLogger({ name: "testLogger" }) });
 ```
 
 
-## パラメーター
+<div id="parameters">
+  ## パラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -27,7 +33,9 @@ mastra.setLogger({ logger: new PinoLogger({ name: "testLogger" }) });
   ]}
 />
 
-### オプション
+<div id="options">
+  ### オプション
+</div>
 
 <PropertiesTable
   content={[
@@ -40,11 +48,15 @@ mastra.setLogger({ logger: new PinoLogger({ name: "testLogger" }) });
   ]}
 />
 
-## 返り値
+<div id="returns">
+  ## 返り値
+</div>
 
 このメソッドは値を返しません。
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [ロギングの概要](/docs/observability/logging)
 - [ロガーのリファレンス](/reference/observability/logging/pino-logger)

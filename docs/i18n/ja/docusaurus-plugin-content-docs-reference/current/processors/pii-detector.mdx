@@ -3,11 +3,15 @@ title: "リファレンス: PIIDetector | プロセッサー | Mastra ドキュ�
 description: "Mastra の PIIDetector に関するドキュメント。AI の応答に含まれる個人を特定できる情報（PII）を検出して編集（レダクト）します。"
 ---
 
-# PIIDetector
+<div id="piidetector">
+  # PIIDetector
+</div>
 
 `PIIDetector` は、プライバシー遵守のために個人情報（PII）を検出して編集・マスキングできる、入力処理と出力処理の両方で利用可能な**ハイブリッドプロセッサ**です。このプロセッサは、さまざまな種類の PII を特定し、それらの取り扱いに関する柔軟な戦略を提供します。GDPR、CCPA、HIPAA などの各種プライバシー規制への遵守を確保するため、複数の編集方法に対応しています。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 import { openai } from "@ai-sdk/openai";
@@ -22,7 +26,9 @@ const processor = new PIIDetector({
 ```
 
 
-## コンストラクターの引数
+<div id="constructor-parameters">
+  ## コンストラクターの引数
+</div>
 
 <PropertiesTable
   content={[
@@ -35,7 +41,9 @@ const processor = new PIIDetector({
   ]}
 />
 
-### オプション
+<div id="options">
+  ### オプション
+</div>
 
 <PropertiesTable
   content={[
@@ -104,7 +112,9 @@ const processor = new PIIDetector({
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -131,7 +141,9 @@ const processor = new PIIDetector({
   ]}
 />
 
-## 発展的な使用例
+<div id="extended-usage-example">
+  ## 発展的な使用例
+</div>
 
 ```typescript title="src/mastra/agents/private-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -159,7 +171,9 @@ export const agent = new Agent({
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [入力プロセッサ](/docs/agents/guardrails)
 - [出力プロセッサ](/docs/agents/guardrails)

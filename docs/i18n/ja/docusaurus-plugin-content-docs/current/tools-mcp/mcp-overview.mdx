@@ -7,7 +7,9 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 
-# MCP の概要
+<div id="mcp-overview">
+  # MCP の概要
+</div>
 
 Mastra は、AI エージェントを外部のツールやリソースに接続するためのオープン標準である [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) をサポートしています。汎用プラグインシステムとして機能し、言語やホスティング環境に関係なくエージェントがツールを呼び出せるようにします。
 
@@ -18,7 +20,9 @@ Mastra は現在、次の 2 つの MCP クラスをサポートしています:
 1. **`MCPClient`**: 1 つまたは複数の MCP サーバーに接続し、それらのツール、リソース、プロンプトにアクセスし、エリシテーション（情報引き出し）リクエストを処理します。
 2. **`MCPServer`**: Mastra のツール、エージェント、ワークフロー、プロンプト、リソースを MCP 互換クライアントに公開します。
 
-## はじめに
+<div id="getting-started">
+  ## はじめに
+</div>
 
 MCP を使い始めるには、必要な依存関係をインストールします。
 
@@ -27,7 +31,9 @@ npm install @mastra/mcp@latest
 ```
 
 
-## `MCPClient` の設定
+<div id="configuring-mcpclient">
+  ## `MCPClient` の設定
+</div>
 
 `MCPClient` は Mastra のプリミティブを外部の MCP サーバーに接続します。サーバーは、`npx` を使って起動するローカルパッケージか、リモートの HTTP(S) エンドポイントのいずれかです。各サーバーは、ホスティング形態に応じて `command` または `url` のいずれかを指定して設定する必要があります。
 
@@ -53,7 +59,9 @@ export const testMcpClient = new MCPClient({
 > すべての設定オプションの一覧は [MCPClient](/reference/tools/mcp-client) を参照してください。
 
 
-## エージェントでの `MCPClient` の使用
+<div id="using-mcpclient-with-an-agent">
+  ## エージェントでの `MCPClient` の使用
+</div>
 
 エージェントで MCP サーバーのツールを使うには、`MCPClient` をインポートし、`tools` パラメータで `.getTools()` を呼び出します。これにより、定義済みの MCP サーバーからツールが読み込まれ、エージェントで利用可能になります。
 
@@ -80,7 +88,9 @@ export const testAgent = new Agent({
 > すべての設定オプションについては、[Agent Class](/reference/agents/agent) を参照してください。
 
 
-## `MCPServer` の設定
+<div id="configuring-mcpserver">
+  ## `MCPServer` の設定
+</div>
 
 Mastra アプリのエージェント、ツール、ワークフローを HTTP(S) 経由で外部システムに公開するには、`MCPServer` クラスを使用します。これにより、当該プロトコルに対応するあらゆるシステムやエージェントから利用可能になります。
 
@@ -104,7 +114,9 @@ export const testMcpServer = new MCPServer({
 > すべての設定オプションの一覧については、[MCPServer](/reference/tools/mcp-server) を参照してください。
 
 
-## `MCPServer` の登録
+<div id="registering-an-mcpserver">
+  ## `MCPServer` の登録
+</div>
 
 プロトコル対応の他のシステムやエージェントで MCP サーバーを利用できるようにするには、メインの `Mastra` インスタンスで `mcpServers` を使用して登録します。
 
@@ -120,7 +132,9 @@ export const mastra = new Mastra({
 ```
 
 
-## 静的ツールと動的ツール
+<div id="static-and-dynamic-tools">
+  ## 静的ツールと動的ツール
+</div>
 
 `MCPClient` は、接続先サーバーからツールを取得するための2つの方式を提供し、さまざまなアプリケーションアーキテクチャに対応します。
 
@@ -131,7 +145,9 @@ export const mastra = new Mastra({
 | **認証情報**      | すべての利用で共通                            | ユーザー／リクエストごとに個別指定可能               |
 | **エージェント設定** | `Agent` コンストラクタでツールを追加          | `.generate()` または `.stream()` のオプションでツールを渡す |
 
-### 静的ツール
+<div id="static-tools">
+  ### 静的ツール
+</div>
 
 `.getTools()` メソッドを使って、設定済みのすべての MCP サーバーからツールを取得します。これは、設定（API キーなど）がユーザーやリクエスト間で固定されており一貫している場合に適しています。エージェントを定義する際に一度だけ呼び出し、その結果を `tools` プロパティに渡します。
 
@@ -150,7 +166,9 @@ export const testAgent = new Agent({
 ```
 
 
-### 動的ツール
+<div id="dynamic-tools">
+  ### 動的ツール
+</div>
 
 ツールの構成がリクエストやユーザーごとに変わる場合（各ユーザーが自分の API キーを提供するマルチテナントシステムなど）、`.getToolsets()` メソッドを使用します。このメソッドは、エージェントの `.generate()` や `.stream()` 呼び出しで `toolsets` オプションに渡せるツールセットを返します。
 
@@ -189,7 +207,9 @@ async function handleRequest(userPrompt: string, userApiKey: string) {
 > 詳細は [getToolsets()](/reference/tools/mcp-client#gettoolsets) をご覧ください。
 
 
-## MCP レジストリへの接続
+<div id="connecting-to-an-mcp-registry">
+  ## MCP レジストリへの接続
+</div>
 
 MCP サーバーはレジストリを介して検出できます。`MCPClient` を使って、よく利用されるレジストリに接続する方法は次のとおりです:
 
@@ -360,7 +380,9 @@ MCP サーバーはレジストリを介して検出できます。`MCPClient` �
   </TabItem>
 </Tabs>
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [ツールの使用](/docs/agents/using-tools)
 - [MCPClient](/reference/tools/mcp-client)

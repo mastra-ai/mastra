@@ -3,19 +3,27 @@ title: "例: 基本的なAIトレーシング | 可観測性 | Mastra ドキュ�
 description: Mastra アプリケーションでAIトレーシングを始めましょう
 ---
 
-# AI トレーシングの基本例
+<div id="basic-ai-tracing-example">
+  # AI トレーシングの基本例
+</div>
 
 この例では、Mastra アプリケーションで、エージェントやワークフローを自動計測しながら AI トレーシングを基本的に設定する方法を紹介します。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 - Mastra v0.14.0 以上
 - Node.js 18 以上
 - 設定済みのストレージ・バックエンド（libsql または memory）
 
-## セットアップ
+<div id="setup">
+  ## セットアップ
+</div>
 
-### 1. 依存関係のインストール
+<div id="1-install-dependencies">
+  ### 1. 依存関係のインストール
+</div>
 
 ```bash npm2yarn
 npm install @mastra/core
@@ -28,7 +36,9 @@ export MASTRA_CLOUD_ACCESS_TOKEN=your_token_here
 ```
 
 
-### 2. デフォルトのトレーシングで Mastra を設定する
+<div id="2-configure-mastra-with-default-tracing">
+  ### 2. デフォルトのトレーシングで Mastra を設定する
+</div>
 
 AI トレーシングを有効にして Mastra の構成を作成します：
 
@@ -57,7 +67,9 @@ export const mastra = new Mastra({
 * **[100% sampling](/docs/observability/ai-tracing/overview#always-sample)** - すべてのトレースを収集します
 
 
-### 3. 自動トレース対応のエージェントを作成する
+<div id="3-create-an-agent-with-automatic-tracing">
+  ### 3. 自動トレース対応のエージェントを作成する
+</div>
 
 ```typescript title="src/mastra/agents/example-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
@@ -86,7 +98,9 @@ export const exampleAgent = new Agent({
 ```
 
 
-### 4. トレースの実行と表示
+<div id="4-execute-and-view-traces">
+  ### 4. トレースの実行と表示
+</div>
 
 ```typescript title="src/example.ts" showLineNumbers copy
 import { mastra } from "./mastra";
@@ -107,7 +121,9 @@ main().catch(console.error);
 ```
 
 
-## 何がトレースされるのか
+<div id="what-gets-traced">
+  ## 何がトレースされるのか
+</div>
 
 この例を実行すると、Mastraは自動的に次のスパンを作成します：
 
@@ -124,11 +140,15 @@ AGENT_RUN (example-agent)
 ```
 
 
-## トレースの表示
+<div id="viewing-traces">
+  ## トレースの表示
+</div>
 
 Playground または Mastra Cloud で Observability ページに移動し、Trace をクリックします。個々の span をクリックすると、input、output、attributes、metadata を確認できます。
 
-## カスタムメタデータの追加
+<div id="adding-custom-metadata">
+  ## カスタムメタデータの追加
+</div>
 
 トレースをカスタムメタデータで充実させましょう:
 
@@ -145,15 +165,21 @@ const result = await agent.generate("What time is it?", {
 ```
 
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
-### ドキュメント
+<div id="documentation">
+  ### ドキュメント
+</div>
 
 - [AI トレーシング概要](/docs/observability/ai-tracing/overview) - トレーシングの完全ガイド
 - [機密データフィルター](/docs/observability/ai-tracing/processors/sensitive-data-filter) - 機密情報のマスキング
 - [構成パターン](/docs/observability/ai-tracing/overview#common-configuration-patterns--troubleshooting) - ベストプラクティス
 
-### 参考
+<div id="reference">
+  ### 参考
+</div>
 
 - [設定](/reference/observability/ai-tracing/configuration) - ObservabilityConfig API
 - [エクスポーター](/reference/observability/ai-tracing/exporters/default-exporter) - DefaultExporter の詳細

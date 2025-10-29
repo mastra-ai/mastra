@@ -8,7 +8,9 @@ import StepItem from "@site/src/components/StepItem";
 import Youtube from "@site/src/components/YouTube-player";
 
 
-# AIシェフアシスタントの構築
+<div id="building-an-ai-chef-assistant">
+  # AIシェフアシスタントの構築
+</div>
 
 このガイドでは、手元の食材を使って料理を作るのを手助けする「Chef Assistant」エージェントを作成します。
 
@@ -16,13 +18,17 @@ import Youtube from "@site/src/components/YouTube-player";
 
 <YouTube id="_tZhOqHCrF0" />
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 - Node.js `v20.0` 以上がインストールされていること
 - サポート対象の [Model Provider](/models) の API キー
 - 既存の Mastra プロジェクト（新規プロジェクトのセットアップは [インストールガイド](/docs/getting-started/installation) を参照）
 
-## エージェントの作成
+<div id="creating-the-agent">
+  ## エージェントの作成
+</div>
 
 Mastra でエージェントを作成するには、`Agent` クラスで定義してから Mastra に登録します。
 
@@ -64,7 +70,9 @@ export const mastra = new Mastra({
 
 </Steps >
 
-## エージェントとのやり取り
+<div id="interacting-with-the-agent">
+  ## エージェントとのやり取り
+</div>
 
 要件に応じて、エージェントとやり取りし、さまざまな形式で応答を受け取れます。以下の手順では、生成、ストリーミング、構造化出力の取得方法を学びます。
 
@@ -213,7 +221,9 @@ Query: I want to make lasagna, can you generate a lasagna recipe for me?
 
 </Steps >
 
-## エージェントサーバーの実行
+<div id="running-the-agent-server">
+  ## エージェントサーバーの実行
+</div>
 
 Mastra の API を通じてエージェントとやり取りする方法を説明します。
 

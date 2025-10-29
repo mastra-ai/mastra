@@ -6,11 +6,15 @@ description: OpenAI の埋め込みと PGVector を用いて、Mastra で Graph 
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# Graph RAG
+<div id="graph-rag">
+  # Graph RAG
+</div>
 
 この例では、Mastra、OpenAI の埋め込み、そしてベクトル格納に PGVector を用いて、Retrieval-Augmented Generation（RAG）システムを実装する方法を示します。
 
-## 概要
+<div id="overview">
+  ## 概要
+</div>
 
 このシステムは、Mastra と OpenAI を用いて Graph RAG を実装しています。主な処理は次のとおりです：
 
@@ -24,9 +28,13 @@ import GithubLink from "@site/src/components/GithubLink";
    - クエリを用いてナレッジグラフを走査
 7. Mastra エージェントでコンテキストを踏まえた応答を生成
 
-## セットアップ
+<div id="setup">
+  ## セットアップ
+</div>
 
-### 環境のセットアップ
+<div id="environment-setup">
+  ### 環境のセットアップ
+</div>
 
 環境変数が設定されていることを確認してください:
 
@@ -36,7 +44,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
 
-### 依存関係
+<div id="dependencies">
+  ### 依存関係
+</div>
 
 次に、必要な依存パッケージをインポートします。
 
@@ -50,7 +60,9 @@ import { embedMany } from "ai";
 ```
 
 
-## GraphRAG ツールの作成
+<div id="graphrag-tool-creation">
+  ## GraphRAG ツールの作成
+</div>
 
 @mastra/rag からインポートした createGraphRAGTool を使うと、ベクトルデータベースに対してクエリを実行し、結果をナレッジグラフに変換するツールを作成できます。
 
@@ -67,7 +79,9 @@ const graphRagTool = createGraphRAGTool({
 ```
 
 
-## エージェント設定
+<div id="agent-configuration">
+  ## エージェント設定
+</div>
 
 応答を処理する Mastra エージェントを設定します：
 
@@ -92,7 +106,9 @@ const ragAgent = new Agent({
 ```
 
 
-## PgVector と Mastra をインスタンス化する
+<div id="instantiate-pgvector-and-mastra">
+  ## PgVector と Mastra をインスタンス化する
+</div>
 
 以下のコンポーネントを使って PgVector と Mastra をインスタンス化します:
 
@@ -109,7 +125,9 @@ const agent = mastra.getAgent("ragAgent");
 ```
 
 
-## ドキュメント処理
+<div id="document-processing">
+  ## ドキュメント処理
+</div>
 
 ドキュメントを作成し、チャンクに分割して処理します：
 
@@ -128,7 +146,9 @@ const chunks = await doc.chunk({
 ```
 
 
-## 埋め込みの作成と保存
+<div id="creating-and-storing-embeddings">
+  ## 埋め込みの作成と保存
+</div>
 
 チャンクの埋め込みを生成し、ベクトルデータベースに保存します。
 
@@ -151,7 +171,9 @@ await vectorStore.upsert({
 ```
 
 
-## グラフベースのクエリ
+<div id="graph-based-querying">
+  ## グラフベースのクエリ
+</div>
 
 データ内の関係を探るために、さまざまなクエリを試してみましょう。
 

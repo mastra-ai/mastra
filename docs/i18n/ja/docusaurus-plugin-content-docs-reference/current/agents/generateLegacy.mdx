@@ -3,7 +3,9 @@ title: "リファレンス: Agent.generateLegacy()（レガシー） | Agents | 
 description: "Mastra のエージェントにおける旧式の `Agent.generateLegacy()` メソッドのドキュメント。 このメソッドは非推奨で、今後のバージョンで削除されます。"
 ---
 
-# Agent.generateLegacy()（レガシー）
+<div id="agentgeneratelegacy-legacy">
+  # Agent.generateLegacy()（レガシー）
+</div>
 
 :::warning
 
@@ -13,14 +15,18 @@ description: "Mastra のエージェントにおける旧式の `Agent.generateL
 
 `.generateLegacy()` メソッドは、エージェント生成 API のレガシー版で、V1 モデルのエージェントとやり取りしてテキストまたは構造化応答を生成するために使用されます。このメソッドはメッセージと任意の生成オプションを受け付けます。
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 ```typescript copy
 await agent.generateLegacy("エージェント用メッセージ");
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -39,7 +45,9 @@ await agent.generateLegacy("エージェント用メッセージ");
   ]}
 />
 
-### オプションのパラメータ
+<div id="options-parameters">
+  ### オプションのパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -464,7 +472,9 @@ await agent.generateLegacy("エージェント用メッセージ");
 ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -514,7 +524,9 @@ await agent.generateLegacy("エージェント用メッセージ");
   ]}
 />
 
-## 新しい API への移行
+<div id="migration-to-new-api">
+  ## 新しい API への移行
+</div>
 
 :::info
 
@@ -522,9 +534,13 @@ await agent.generateLegacy("エージェント用メッセージ");
 
 :::
 
-### クイック移行の例
+<div id="quick-migration-example">
+  ### クイック移行の例
+</div>
 
-#### 旧バージョン（レガシー）
+<div id="before-legacy">
+  #### 旧バージョン（レガシー）
+</div>
 
 ```typescript
 const result = await agent.generateLegacy("message", {
@@ -534,7 +550,9 @@ const result = await agent.generateLegacy("message", {
 ```
 
 
-#### 変更後（新しい API）
+<div id="after-new-api">
+  #### 変更後（新しい API）
+</div>
 
 ```typescript
 const result = await agent.generate("message", {
@@ -546,7 +564,9 @@ const result = await agent.generate("message", {
 ```
 
 
-## 拡張使用例
+<div id="extended-usage-example">
+  ## 拡張使用例
+</div>
 
 ```typescript showLineNumbers copy
 import { z } from "zod";
@@ -605,7 +625,9 @@ await agent.generateLegacy(
 ```
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [移行ガイド](../../guides/migrations/vnext-to-standard-apis)
 - [新しい .generate() メソッド](./generate)

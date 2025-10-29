@@ -3,11 +3,15 @@ title: "リファレンス: Cloudflare | Voice | Mastra ドキュメント"
 description: "Cloudflare Workers AI を用いたテキスト読み上げ機能を提供する CloudflareVoice クラスのドキュメント。"
 ---
 
-# Cloudflare
+<div id="cloudflare">
+  # Cloudflare
+</div>
 
 Mastra の CloudflareVoice クラスは、Cloudflare Workers AI を用いてテキスト読み上げ（TTS）機能を提供します。このプロバイダーは、エッジコンピューティング環境に適した、高効率・低レイテンシの音声合成に特化しています。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { CloudflareVoice } from "@mastra/voice-cloudflare";
@@ -33,9 +37,13 @@ console.log(speakers);
 ```
 
 
-## 設定
+<div id="configuration">
+  ## 設定
+</div>
 
-### コンストラクターのオプション
+<div id="constructor-options">
+  ### コンストラクターのオプション
+</div>
 
 <PropertiesTable
   content={[
@@ -55,7 +63,9 @@ console.log(speakers);
   ]}
 />
 
-### CloudflareSpeechConfig
+<div id="cloudflarespeechconfig">
+  ### CloudflareSpeechConfig
+</div>
 
 <PropertiesTable
   content={[
@@ -83,9 +93,13 @@ console.log(speakers);
   ]}
 />
 
-## 手法
+<div id="methods">
+  ## 手法
+</div>
 
-### speak()
+<div id="speak">
+  ### speak()
+</div>
 
 Cloudflare のテキスト読み上げサービスを使って、テキストを音声に変換します。
 
@@ -116,7 +130,9 @@ Cloudflare のテキスト読み上げサービスを使って、テキストを
 
 Returns: `Promise<NodeJS.ReadableStream>`
 
-### getSpeakers()
+<div id="getspeakers">
+  ### getSpeakers()
+</div>
 
 利用可能な音声オプションの配列を返します。各項目には以下が含まれます:
 
@@ -137,7 +153,9 @@ Returns: `Promise<NodeJS.ReadableStream>`
   ]}
 />
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - API トークンはコンストラクターのオプションまたは環境変数（CLOUDFLARE_API_TOKEN と CLOUDFLARE_ACCOUNT_ID）で指定できます
 - Cloudflare Workers AI は、低レイテンシのエッジコンピューティング向けに最適化されています
@@ -146,7 +164,9 @@ Returns: `Promise<NodeJS.ReadableStream>`
 - 本番運用では、Cloudflare アカウントで適切な Workers AI サブスクリプションが有効になっていることを確認してください
 - 音声のバリエーションは他社の一部プロバイダーと比べると限られますが、エッジでのパフォーマンスは非常に優れています
 
-## 関連プロバイダー
+<div id="related-providers">
+  ## 関連プロバイダー
+</div>
 
 音声合成（text-to-speech）に加えて音声認識（speech-to-text）も必要な場合は、次のプロバイダーをご検討ください:
 

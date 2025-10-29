@@ -3,23 +3,31 @@ title: "移行：AgentNetwork から .network() へ | 移行ガイド"
 description: "Mastra で AgentNetwork のプリミティブから .network() へ移行する方法を解説します。"
 ---
 
-## 概要
+<div id="overview">
+  ## 概要
+</div>
 
 `@mastra/core` の `v0.20.0` 以降、以下の変更が適用されます。
 
-### AI SDK v4 から v5 へのアップグレード
+<div id="upgrade-from-ai-sdk-v4-to-v5">
+  ### AI SDK v4 から v5 へのアップグレード
+</div>
 
 - すべてのモデルプロバイダーのパッケージをメジャーバージョンに上げてください。
 
 > これにより、すべてが v5 モデルになります。
 
-### メモリが必須です
+<div id="memory-is-required">
+  ### メモリが必須です
+</div>
 
 - エージェントネットワークを正常に動作させるには、メモリが必須になりました。
 
 > エージェントのメモリを必ず設定してください。
 
-## 移行パス
+<div id="migration-paths">
+  ## 移行パス
+</div>
 
 `AgentNetwork` プリミティブを使用していた場合は、`AgentNetwork` を `Agent` に置き換えられます。
 

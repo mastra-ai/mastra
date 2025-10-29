@@ -3,13 +3,17 @@ title: "リファレンス: Workflow.createRun() | レガシー ワークフロ�
 description: "レガシー ワークフローにおける`.createRun()`メソッドのドキュメント。新しいワークフロー実行のランインスタンスを初期化します。"
 ---
 
-# Workflow.createRun()
+<div id="workflowcreaterun">
+  # Workflow.createRun()
+</div>
 
 `.createRun()` メソッドは、新しいワークフロー実行インスタンスを初期化します。追跡用の一意の実行 ID を生成し、呼び出すとワークフローの実行を開始する start 関数を返します。
 
 `.createRun()` を `.execute()` の代わりに使用する理由のひとつは、`.watch()` による監視や、追跡・ログ記録のために一意の実行 ID を取得できる点です。
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 ```typescript
 const { runId, start, watch } = workflow.createRun();
@@ -18,7 +22,9 @@ const result = await start();
 ```
 
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -53,7 +59,9 @@ const result = await start();
   ]}
 />
 
-## エラー処理
+<div id="error-handling">
+  ## エラー処理
+</div>
 
 ワークフローの設定が無効な場合、start 関数は検証エラーを送出することがあります:
 
@@ -71,7 +79,9 @@ try {
 ```
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [Workflow クラス リファレンス](./workflow)
 - [Step クラス リファレンス](./step-class)

@@ -3,14 +3,18 @@ title: "制御フロー | Workflows | Mastra ドキュメント"
 description: "Mastra のワークフローにおける制御フローを使うと、分岐・結合・条件分岐を管理し、要件に合ったロジックのワークフローを構築できます。"
 ---
 
-# 制御フロー
+<div id="control-flow">
+  # 制御フロー
+</div>
 
 ワークフローを構築する際は、通常、処理を小さなタスクに分割し、それらを連結して再利用します。**ステップ**は、入力・出力・実行ロジックを定義し、これらのタスクを体系的に管理するための手段です。
 
 - スキーマが一致する場合、各ステップの `outputSchema` は自動的に次のステップの `inputSchema` に渡されます。
 - スキーマが一致しない場合は、[入力データマッピング](./input-data-mapping) を使用して、`outputSchema` を期待される `inputSchema` に変換します。
 
-## `.then()` を使ったステップのチェーン
+<div id="chaining-steps-with-then">
+  ## `.then()` を使ったステップのチェーン
+</div>
 
 `.then()` を使って、ステップを順番に実行するようにチェーンします。
 
@@ -32,7 +36,9 @@ export const testWorkflow = createWorkflow({...})
 これは期待どおりに動作します。まず `step1` を実行し、続いて `step2` を実行します。
 
 
-## `.parallel()` での同時実行ステップ
+<div id="simultaneous-steps-with-parallel">
+  ## `.parallel()` での同時実行ステップ
+</div>
 
 `.parallel()` を使ってステップを同時に実行します。
 
@@ -59,7 +65,9 @@ export const testWorkflow = createWorkflow({...})
 > 📹 視聴: ステップを並列実行して Mastra のワークフローを最適化する方法 → [YouTube（3分）](https://youtu.be/GQJxve5Hki4)
 
 
-## `.branch()` を使った条件分岐
+<div id="conditional-logic-with-branch">
+  ## `.branch()` を使った条件分岐
+</div>
 
 `.branch()` を使って、条件に応じてステップを実行します:
 
@@ -85,7 +93,9 @@ export const testWorkflow = createWorkflow({...})
 > 詳細は [Workflow with Conditional Branching](/examples/workflows_legacy/conditional-branching) を参照してください。
 
 
-## ステップのループ処理
+<div id="looping-steps">
+  ## ステップのループ処理
+</div>
 
 Workflows は 2 種類のループをサポートします。ステップや、ネストされた workflow のようなステップ互換の構成要素をループさせる場合、初期の `inputData` は前のステップの出力から供給されます。
 
@@ -94,7 +104,9 @@ Workflows は 2 種類のループをサポートします。ステップや、�
 - 前のステップの出力の形に一致させる、または
 - `map` 関数で明示的に変換する。
 
-### `.dowhile()` を使った繰り返し
+<div id="repeating-with-dowhile">
+  ### `.dowhile()` を使った繰り返し
+</div>
 
 条件が true のあいだ、ステップを繰り返し実行します。
 
@@ -112,7 +124,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-### `.dountil()` による繰り返し
+<div id="repeating-with-dountil">
+  ### `.dountil()` による繰り返し
+</div>
 
 条件が真になるまでステップを繰り返し実行します。
 
@@ -130,11 +144,15 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-### ループ管理
+<div id="loop-management">
+  ### ループ管理
+</div>
 
 ループの終了方法に応じて、ループ条件はさまざまに実装できます。一般的なパターンとしては、`inputData` で返される値のチェック、反復回数の上限設定、上限に達した際の実行中止などがあります。
 
-#### 条件付きループ
+<div id="conditional-loops">
+  #### 条件付きループ
+</div>
 
 ループステップの `inputData` は前のステップの出力です。`inputData` の値に基づいて、ループを継続するか停止するかを判断します。
 
@@ -150,7 +168,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-#### ループの制限
+<div id="limiting-loops">
+  #### ループの制限
+</div>
 
 `iterationCount` は、ループステップが実行された回数を追跡します。これを使って反復回数を制限し、無限ループを防げます。`inputData` の値と組み合わせることで、設定した試行回数に達したらループを停止できます。
 
@@ -166,7 +186,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-#### ループの中断
+<div id="aborting-loops">
+  #### ループの中断
+</div>
 
 `iterationCount` を使ってループの実行回数を制限します。回数がしきい値を超えたら、エラーをスローしてステップを失敗させ、ワークフローを停止します。
 
@@ -187,7 +209,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-### `.foreach()` での反復処理
+<div id="repeating-with-foreach">
+  ### `.foreach()` での反復処理
+</div>
 
 `inputSchema` の各アイテムに対して、同一のステップを順次実行します。
 
@@ -205,7 +229,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-#### 同時実行数の制限を設定する
+<div id="setting-concurrency-limits">
+  #### 同時実行数の制限を設定する
+</div>
 
 `concurrency` を使うと、同時実行数の上限を設けたうえでステップを並列実行できます。
 
@@ -221,7 +247,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-## ネストされたワークフローの使用
+<div id="using-a-nested-workflow">
+  ## ネストされたワークフローの使用
+</div>
 
 ネストされたワークフローは、`.then()` に渡してステップとして使用します。これにより、その各ステップが親ワークフローの一部として順に実行されます。
 
@@ -237,7 +265,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-## ワークフローのクローン作成
+<div id="cloning-a-workflow">
+  ## ワークフローのクローン作成
+</div>
 
 既存のワークフローを複製するには `cloneWorkflow` を使用します。これにより、`id` などのパラメータを上書きしながら、構造を再利用できます。
 
@@ -256,7 +286,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-## 実行インスタンスの例
+<div id="example-run-instance">
+  ## 実行インスタンスの例
+</div>
 
 次の例では、複数の入力を用いて実行を開始する方法を示します。各入力は `mapStep` を順番に通過します。
 

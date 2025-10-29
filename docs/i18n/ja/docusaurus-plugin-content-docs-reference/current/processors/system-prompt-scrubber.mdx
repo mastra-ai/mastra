@@ -3,11 +3,15 @@ title: "リファレンス: SystemPromptScrubber | プロセッサ | Mastra ド�
 description: "Mastra の SystemPromptScrubber に関するドキュメント。AI の応答からシステムプロンプトを検出して編集（マスキング）します。"
 ---
 
-# SystemPromptScrubber
+<div id="systempromptscrubber">
+  # SystemPromptScrubber
+</div>
 
 `SystemPromptScrubber` は、セキュリティ上の脆弱性につながり得るシステムプロンプトや指示、その他の露出情報を検出・処理する **出力プロセッサ** です。このプロセッサは、さまざまな種類のシステムプロンプトを識別し、それらへの対処に柔軟な戦略を提供することでセキュリティの維持に寄与します。これには、機密情報を適切に無害化するための複数の編集（レダクション）手法が含まれます。
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 ```typescript copy
 import { openai } from "@ai-sdk/openai";
@@ -22,7 +26,9 @@ const processor = new SystemPromptScrubber({
 ```
 
 
-## コンストラクターのパラメータ
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -36,7 +42,9 @@ const processor = new SystemPromptScrubber({
   ]}
 />
 
-### オプション
+<div id="options">
+  ### オプション
+</div>
 
 <PropertiesTable
   content={[
@@ -96,7 +104,9 @@ const processor = new SystemPromptScrubber({
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -123,7 +133,9 @@ const processor = new SystemPromptScrubber({
   ]}
 />
 
-## さらに進んだ使用例
+<div id="extended-usage-example">
+  ## さらに進んだ使用例
+</div>
 
 ```typescript title="src/mastra/agents/scrubbed-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -150,7 +162,9 @@ export const agent = new Agent({
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [入力プロセッサ](/docs/agents/guardrails)
 - [出力プロセッサ](/docs/agents/guardrails)

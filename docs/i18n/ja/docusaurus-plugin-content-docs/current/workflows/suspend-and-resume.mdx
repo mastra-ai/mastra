@@ -3,7 +3,9 @@ title: "一時停止と再開 | ワークフロー | Mastra ドキュメント"
 description: "Mastra のワークフローでは、外部からの入力やリソースを待つ間、実行を一時停止し、後で再開できます。"
 ---
 
-# 一時停止と再開
+<div id="suspend-resume">
+  # 一時停止と再開
+</div>
 
 ワークフローは任意のステップで一時停止でき、その時点の状態はストレージ内に[スナップショット](./snapshots)として永続化されます。準備ができたら、この保存済みスナップショットから実行を再開できます。スナップショットを永続化することで、セッション、デプロイ、サーバー再起動をまたいでもワークフローの状態が維持され、外部入力やリソース待ちの間に長時間一時停止し得るワークフローにとって不可欠です。
 
@@ -20,7 +22,9 @@ description: "Mastra のワークフローでは、外部からの入力やリ�
 > - [Suspend & Resume で Human-in-the-Loop を極める](https://youtu.be/aORuNG8Tq_k) - ワークフローを一時停止し、ユーザー入力を受け付ける方法を解説
 > - [React でマルチターンのチャットインターフェースを構築](https://youtu.be/UMVm8YZwlxc) - React のチャットインターフェースで人が関与するマルチターン対話を実装
 
-## ワークフローのステータスタイプ
+<div id="workflow-status-types">
+  ## ワークフローのステータスタイプ
+</div>
 
 ワークフローを実行すると、`status` は次のいずれかになります:
 
@@ -29,7 +33,9 @@ description: "Mastra のワークフローでは、外部からの入力やリ�
 - `success` - ワークフローは完了
 - `failed` - ワークフローは失敗
 
-## `suspend()` を使ってワークフローを一時停止する
+<div id="suspending-a-workflow-with-suspend">
+  ## `suspend()` を使ってワークフローを一時停止する
+</div>
 
 特定のステップでユーザー入力が得られるまで実行を一時停止するには、`⁠suspend` 関数でワークフローを一時的に停止し、必要なデータが提供されたときにのみ再開されるようにします。
 
@@ -68,7 +74,9 @@ export const testWorkflow = createWorkflow({
 > 詳細は、[ワークフローの一時停止と再開の例](/examples/workflows_legacy/suspend-and-resume)をご覧ください。
 
 
-### 一時停止されたステップの特定
+<div id="identifying-suspended-steps">
+  ### 一時停止されたステップの特定
+</div>
 
 一時停止されたワークフローを再開するには、結果の `suspended` 配列を確認し、どのステップが入力を必要としているかを特定します。
 
@@ -114,7 +122,9 @@ if (result.status === "suspended") {
 > 詳細は[Workflow Output](./overview#workflow-output)をご覧ください。
 
 
-## suspend を用いたユーザーフィードバックの提供
+<div id="providing-user-feedback-with-suspend">
+  ## suspend を用いたユーザーフィードバックの提供
+</div>
 
 ワークフローがサスペンドされると、`suspendSchema` を通じてユーザーにフィードバックを表示できます。ワークフローが一時停止した理由を説明するために、`suspend` のペイロードに理由（reason）を含めてください。
 
@@ -173,7 +183,9 @@ export const testWorkflow = createWorkflow({
 > 詳細は[Workflow Output](./overview#workflow-output)をご覧ください。
 
 
-## `resume()` を使ってワークフローを再開する
+<div id="resuming-a-workflow-with-resume">
+  ## `resume()` を使ってワークフローを再開する
+</div>
 
 ワークフローは `resume` を呼び出し、必要な `resumeData` を渡すことで再開できます。どのステップから再開するかを明示的に指定することもできますし、ちょうど 1 つのステップだけが保留になっている場合は `step` パラメータを省略すると、そのステップが自動的に再開されます。
 
@@ -240,7 +252,9 @@ const resumedResult = await run.resume({
 > 詳細は [Runtime Context](/docs/server-db/runtime-context) をご覧ください。
 
 
-### ネストされたワークフローの再開
+<div id="resuming-nested-workflows">
+  ### ネストされたワークフローの再開
+</div>
 
 一時停止中のネストされたワークフローを再開するには、`resume` 関数の `step` パラメーターにワークフロー インスタンスを渡します。
 
@@ -286,7 +300,9 @@ if (result.status === "suspended") {
 ```
 
 
-## スリープとイベント
+<div id="sleep-events">
+  ## スリープとイベント
+</div>
 
 Workflows は、一定時間の遅延や外部イベントを待つために実行を一時停止することもできます。これらのメソッドはワークフローのステータスを `suspended` ではなく `waiting` に設定し、ポーリング、遅延リトライ、イベント駆動の処理に有用です。
 

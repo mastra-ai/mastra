@@ -3,7 +3,9 @@ title: "OpenTelemetry エクスポーター | AI トレーシング | 可観測�
 description: "AI トレースを OpenTelemetry 互換の任意の可観測性プラットフォームに送信する"
 ---
 
-# OpenTelemetry エクスポーター
+<div id="opentelemetry-exporter">
+  # OpenTelemetry エクスポーター
+</div>
 
 :::warning
 
@@ -13,7 +15,9 @@ OpenTelemetry エクスポーターは現在**実験的**です。API や設定�
 
 OpenTelemetry (OTEL) エクスポーターは、標準化された [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/) に基づき、AI のトレースを任意の OTEL 互換のオブザーバビリティプラットフォームへ送信します。これにより、Datadog、New Relic、SigNoz、Dash0、Traceloop、Laminar などのプラットフォームと幅広く互換性を保てます。
 
-## OTEL Exporter を使うべきタイミング
+<div id="when-to-use-otel-exporter">
+  ## OTEL Exporter を使うべきタイミング
+</div>
 
 OTEL exporter は次のような場合に最適です:
 
@@ -23,34 +27,46 @@ OTEL exporter は次のような場合に最適です:
 - **エンタープライズ向けプラットフォーム** - 既存の可観測性基盤と統合
 - **カスタムコレクター** - 自社の OTEL Collector へ送信
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 各プロバイダーには専用のプロトコルパッケージが必要です。ベースのエクスポーターに加えて、利用するプロバイダー用のプロトコルパッケージをインストールしてください。
 
-### HTTP/Protobuf プロバイダー（SigNoz、New Relic、Laminar）向け
+<div id="for-httpprotobuf-providers-signoz-new-relic-laminar">
+  ### HTTP/Protobuf プロバイダー（SigNoz、New Relic、Laminar）向け
+</div>
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-proto
 ```
 
 
-### gRPC プロバイダ向け（Dash0）
+<div id="for-grpc-providers-dash0">
+  ### gRPC プロバイダ向け（Dash0）
+</div>
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
 ```
 
 
-### HTTP/JSON プロバイダ向け（Traceloop）
+<div id="for-httpjson-providers-traceloop">
+  ### HTTP/JSON プロバイダ向け（Traceloop）
+</div>
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-http
 ```
 
 
-## プロバイダー設定
+<div id="provider-configurations">
+  ## プロバイダー設定
+</div>
 
-### Dash0
+<div id="dash0">
+  ### Dash0
+</div>
 
 [Dash0](https://www.dash0.com/) は、自動インサイトを備えたリアルタイムのオブザーバビリティを提供します。
 
@@ -91,7 +107,9 @@ Dash0 のエンドポイントはダッシュボードから取得してくだ�
 :::
 
 
-### SigNoz
+<div id="signoz">
+  ### SigNoz
+</div>
 
 [SigNoz](https://signoz.io/) は、AI によるトレーシングを備えたオープンソースの APM の代替です。
 
@@ -108,7 +126,9 @@ new OtelExporter({
 ```
 
 
-### New Relic
+<div id="new-relic">
+  ### New Relic
+</div>
 
 [New Relic](https://newrelic.com/) は、AI モニタリング機能を備えた包括的なオブザーバビリティを提供します。
 
@@ -124,7 +144,9 @@ new OtelExporter({
 ```
 
 
-### Traceloop
+<div id="traceloop">
+  ### Traceloop
+</div>
 
 [Traceloop](https://www.traceloop.com/) は、自動プロンプト追跡による LLM の可観測性に特化しています。
 
@@ -140,7 +162,9 @@ new OtelExporter({
 ```
 
 
-### Laminar
+<div id="laminar">
+  ### Laminar
+</div>
 
 [Laminar](https://www.lmnr.ai/) は、LLM の可観測性と分析に特化したツールを提供します。
 
@@ -156,7 +180,9 @@ new OtelExporter({
 ```
 
 
-### カスタム／汎用の OTEL エンドポイント
+<div id="customgeneric-otel-endpoints">
+  ### カスタム／汎用の OTEL エンドポイント
+</div>
 
 その他の OTEL 互換プラットフォームやカスタムコレクター向け：
 
@@ -175,9 +201,13 @@ new OtelExporter({
 ```
 
 
-## 設定オプション
+<div id="configuration-options">
+  ## 設定オプション
+</div>
 
-### 完全な設定
+<div id="complete-configuration">
+  ### 完全な設定
+</div>
 
 ```typescript
 new OtelExporter({
@@ -196,18 +226,24 @@ new OtelExporter({
 ```
 
 
-## OpenTelemetry セマンティック規約
+<div id="opentelemetry-semantic-conventions">
+  ## OpenTelemetry セマンティック規約
+</div>
 
 エクスポーターは [GenAI 向け OpenTelemetry セマンティック規約](https://opentelemetry.io/docs/specs/semconv/gen-ai/)に準拠し、各種オブザーバビリティプラットフォームとの互換性を確保します。
 
-### スパンの命名
+<div id="span-naming">
+  ### スパンの命名
+</div>
 
 - **LLM のオペレーション**: `chat {model}` または `tool_selection {model}`
 - **ツール実行**: `tool.execute {tool_name}`
 - **エージェント実行**: `agent.{agent_id}`
 - **ワークフロー実行**: `workflow.{workflow_id}`
 
-### 主要属性
+<div id="key-attributes">
+  ### 主要属性
+</div>
 
 - `gen_ai.operation.name` - 操作タイプ（chat、tool.execute など）
 - `gen_ai.system` - AI プロバイダー（OpenAI、Anthropic など）
@@ -217,7 +253,9 @@ new OtelExporter({
 - `gen_ai.request.temperature` - サンプリング温度
 - `gen_ai.response.finish_reasons` - 完了理由
 
-## バッファリング戦略
+<div id="buffering-strategy">
+  ## バッファリング戦略
+</div>
 
 エクスポーターは、トレースが完了するまでスパンをバッファリングします:
 
@@ -226,7 +264,9 @@ new OtelExporter({
 3. 親子関係を保持した完全なトレースをエクスポートする
 4. 孤立スパンが発生しないようにする
 
-## プロトコル選択ガイド
+<div id="protocol-selection-guide">
+  ## プロトコル選択ガイド
+</div>
 
 ご利用のプロバイダーに合わせて適切なプロトコルパッケージを選びましょう:
 
@@ -245,9 +285,13 @@ new OtelExporter({
 
 :::
 
-## トラブルシューティング
+<div id="troubleshooting">
+  ## トラブルシューティング
+</div>
 
-### 依存関係が見つからないエラー
+<div id="missing-dependency-error">
+  ### 依存関係が見つからないエラー
+</div>
 
 次のようなエラーが表示される場合:
 
@@ -260,14 +304,18 @@ HTTP/Protobuf エクスポートを使用するには、以下のパッケージ
 使用しているプロバイダー向けの推奨パッケージをインストールしてください。
 
 
-### よくある問題
+<div id="common-issues">
+  ### よくある問題
+</div>
 
 1. **誤ったプロトコルパッケージ**: ご利用のプロバイダーに対応するエクスポーターを正しくインストールしているか確認してください
 2. **無効なエンドポイント**: エンドポイントの形式がプロバイダーの要件に合致しているか確認してください
 3. **認証エラー**: APIキーとヘッダーが正しいか確認してください
 4. **トレースが表示されない**: トレースが完了しているか確認してください（ルートスパンが終了している必要があります）
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [AI トレーシングの概要](/docs/observability/ai-tracing/overview)
 - [OpenTelemetry GenAI の規約](https://opentelemetry.io/docs/specs/semconv/gen-ai/)

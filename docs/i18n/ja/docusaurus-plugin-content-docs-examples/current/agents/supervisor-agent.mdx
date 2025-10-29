@@ -6,7 +6,9 @@ description: Mastra を使ってスーパーバイザーエージェントを作
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# 監督エージェント
+<div id="supervisor-agent">
+  # 監督エージェント
+</div>
 
 複雑な AI アプリケーションを構築する際には、タスクの異なる側面に対して複数の専門エージェントが連携する必要がよくあります。監督エージェントは、あるエージェントが監督者として機能し、各自の専門分野に特化した他のエージェントの作業を調整できるようにする仕組みです。この構造により、エージェント同士が委任や協働を行い、単一のエージェントでは実現できない高度な成果を生み出せます。
 
@@ -16,7 +18,9 @@ import GithubLink from "@site/src/components/GithubLink";
 2. コンテンツを推敲・改良する [**Editor エージェント**](#editor-agent)。
 3. 他のエージェントを監督・調整する [**Publisher エージェント**](#publisher-agent)。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 この例では `openai` モデルを使用します。`OPENAI_API_KEY` を `.env` ファイルに追加してください。
 
@@ -25,7 +29,9 @@ OPENAI_API_KEY=<your-api-key>
 ```
 
 
-## コピーライターエージェント
+<div id="copywriter-agent">
+  ## コピーライターエージェント
+</div>
 
 この `copywriterAgent` は、指定されたトピックに基づいてブログ記事の初稿を作成する役割を担います。
 
@@ -41,7 +47,9 @@ export const copywriterAgent = new Agent({
 ```
 
 
-## コピーライターツール
+<div id="copywriter-tool">
+  ## コピーライターツール
+</div>
 
 `copywriterTool` は `copywriterAgent` を呼び出すためのインターフェースを提供し、`topic` を渡します。
 
@@ -72,7 +80,9 @@ export const copywriterTool = createTool({
 ```
 
 
-## 編集エージェント
+<div id="editor-agent">
+  ## 編集エージェント
+</div>
 
 この `editorAgent` は初稿を受け取り、品質と読みやすさを高めるために文章を磨き上げます。
 
@@ -88,7 +98,9 @@ export const editorAgent = new Agent({
 ```
 
 
-## エディター ツール
+<div id="editor-tool">
+  ## エディター ツール
+</div>
 
 `editorTool` は `editorAgent` を呼び出すためのインターフェースを提供し、`copy` を渡します。
 
@@ -121,7 +133,9 @@ export const editorTool = createTool({
 ```
 
 
-## Publisher エージェント
+<div id="publisher-agent">
+  ## Publisher エージェント
+</div>
 
 この `publisherAgent` は、最初に `copywriterTool` を、その後に `editorTool` を呼び出して、プロセス全体を統括します。
 
@@ -142,7 +156,9 @@ export const publisherAgent = new Agent({
 ```
 
 
-## エージェントの登録
+<div id="registering-the-agents">
+  ## エージェントの登録
+</div>
 
 3つのエージェントはすべてメインの Mastra インスタンスに登録され、互いに参照・利用できるようになります。
 
@@ -159,7 +175,9 @@ export const mastra = new Mastra({
 ```
 
 
-## 使用例
+<div id="example-usage">
+  ## 使用例
+</div>
 
 `getAgent()` でエージェントの参照を取得し、`generate()` にプロンプトを渡して呼び出します。
 
@@ -180,6 +198,8 @@ console.log(response.text);
 <GithubLink outdated={true} marginTop="mt-16" link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/hierarchical-multi-agent" />
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [エージェントの呼び出し](./calling-agents)

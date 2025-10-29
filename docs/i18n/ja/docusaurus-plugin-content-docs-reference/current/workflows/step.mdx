@@ -3,12 +3,16 @@ title: "リファレンス: Step クラス | ワークフロー | Mastra ドキ�
 description: Mastra の Step クラスに関するドキュメント。ワークフロー内の個々の作業単位を定義します。
 ---
 
-# Step クラス
+<div id="step-class">
+  # Step クラス
+</div>
 
 Step クラスは、ワークフロー内の個々の作業単位を定義し、実行ロジック、データ検証、入出力処理をまとめて扱います。
 ツールまたはエージェントをパラメーターとして受け取り、そこから自動的にステップを生成できます。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -33,7 +37,9 @@ const step1 = createStep({
 ```
 
 
-## コンストラクターのパラメーター
+<div id="constructor-parameters">
+  ## コンストラクターのパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -89,7 +95,9 @@ const step1 = createStep({
   ]}
 />
 
-### ExecuteParams
+<div id="executeparams">
+  ### ExecuteParams
+</div>
 
 <PropertiesTable
   content={[
@@ -153,7 +161,9 @@ const step1 = createStep({
   ]}
 />
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [制御フロー](/docs/workflows/control-flow)
 - [エージェントとツールの利用](/docs/workflows/agents-and-tools)

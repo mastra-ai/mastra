@@ -3,28 +3,38 @@ title: "リファレンス: afterEvent() | レガシー ワークフロー | Mas
 description: "Mastra のワークフローで、イベントに基づくサスペンドポイントを作成する afterEvent メソッドのリファレンス。"
 ---
 
-# afterEvent()
+<div id="afterevent">
+  # afterEvent()
+</div>
 
 `afterEvent()` メソッドは、ワークフロー内に待機ポイントを設け、実行を再開する前に特定のイベントの発生を待機します。
 
-## 構文
+<div id="syntax">
+  ## 構文
+</div>
 
 ```typescript
 workflow.afterEvent(eventName: string): Workflow
 ```
 
 
-## パラメーター
+<div id="parameters">
+  ## パラメーター
+</div>
 
 | Parameter | Type   | Description                                                                                              |
 | --------- | ------ | -------------------------------------------------------------------------------------------------------- |
 | eventName | string | 待機するイベント名。ワークフローの `events` 設定で定義されたイベントと一致している必要があります。 |
 
-## 戻り値
+<div id="return-value">
+  ## 戻り値
+</div>
 
 メソッドチェーンのためにワークフロー インスタンスを返します。
 
-## 説明
+<div id="description">
+  ## 説明
+</div>
 
 `afterEvent()` メソッドは、特定の名前付きイベントを待機する自動的なサスペンドポイントをワークフロー内に作成するために使用されます。つまり、ワークフローが一時停止して外部イベントの発生を待つべき箇所を宣言的に定義する方法です。
 
@@ -37,16 +47,22 @@ workflow.afterEvent(eventName: string): Workflow
 
 このメソッドは Mastra のイベント駆動型ワークフロー機能の一部であり、サスペンド処理のロジックを手作業で実装することなく、外部システムやユーザーとのインタラクションと連携するワークフローを構築できます。
 
-## 使用上の注意
+<div id="usage-notes">
+  ## 使用上の注意
+</div>
 
 - `afterEvent()` で指定するイベントは、ワークフローの `events` 設定でスキーマとともに定義されている必要があります
 - 作成される特別なステップには予測可能な ID 形式が使用されます: `__eventName_event`（例: `__approvalReceived_event`）
 - `afterEvent()` に続く任意のステップは、`context.inputData.resumedEvent` を通じてイベントデータにアクセスできます
 - `resumeWithEvent()` が呼び出されると、そのイベント用に定義されたスキーマに基づいてイベントデータが検証されます
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
-### 基本的な使い方
+<div id="basic-usage">
+  ### 基本的な使い方
+</div>
 
 ```typescript
 import { LegacyWorkflow } from "@mastra/core/workflows/legacy";
@@ -73,7 +89,9 @@ workflow
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [イベント駆動ワークフロー](./events)
 - [resumeWithEvent()](./resumeWithEvent)

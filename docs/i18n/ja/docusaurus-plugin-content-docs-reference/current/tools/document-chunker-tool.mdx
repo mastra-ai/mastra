@@ -3,11 +3,15 @@ title: "リファレンス: createDocumentChunkerTool() | Tools & MCP | Mastra �
 description: Mastra の Document Chunker ツールに関するドキュメント。文書を小さなチャンクに分割し、効率的な処理と検索・取得を可能にします。
 ---
 
-# createDocumentChunkerTool()
+<div id="createdocumentchunkertool">
+  # createDocumentChunkerTool()
+</div>
 
 `createDocumentChunkerTool()` 関数は、ドキュメントを小さなチャンクに分割し、効率的な処理と検索を可能にするツールを作成します。複数のチャンク手法と設定可能なパラメータに対応しています。
 
-## 基本的な使い方
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
 
 ```typescript
 import { createDocumentChunkerTool, MDocument } from "@mastra/rag";
@@ -31,7 +35,9 @@ const { chunks } = await chunker.execute();
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -51,7 +57,9 @@ const { chunks } = await chunker.execute();
   ]}
 />
 
-### ChunkParams
+<div id="chunkparams">
+  ### ChunkParams
+</div>
 
 <PropertiesTable
   content={[
@@ -86,7 +94,9 @@ const { chunks } = await chunker.execute();
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -98,7 +108,9 @@ const { chunks } = await chunker.execute();
   ]}
 />
 
-## カスタムパラメータを使った例
+<div id="example-with-custom-parameters">
+  ## カスタムパラメータを使った例
+</div>
 
 ```typescript
 const technicalDoc = new MDocument({
@@ -128,7 +140,9 @@ chunks.forEach((chunk, index) => {
 ```
 
 
-## ツールの詳細
+<div id="tool-details">
+  ## ツールの詳細
+</div>
 
 このチャンクャーは、以下のプロパティを持つ Mastra ツールとして作成されます:
 
@@ -137,7 +151,9 @@ chunks.forEach((chunk, index) => {
 - **Input Schema**: 空のオブジェクト（追加の入力は不要）
 - **Output Schema**: チャンク配列を含むオブジェクト
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [MDocument](../rag/document)
 - [createVectorQueryTool](./vector-query-tool)

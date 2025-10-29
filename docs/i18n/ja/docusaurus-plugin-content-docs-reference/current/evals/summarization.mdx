@@ -3,7 +3,9 @@ title: "リファレンス: SummarizationMetric | Evals | Mastra ドキュメン
 description: Mastra の Summarization Metric に関するドキュメント。LLM が生成した要約の内容の質と事実の正確性を評価します。
 ---
 
-# SummarizationMetric
+<div id="summarizationmetric">
+  # SummarizationMetric
+</div>
 
 :::info Scorers
 このドキュメントは旧式の evals API を参照しています。最新のスコアラー機能については [Scorers](/docs/scorers/overview) をご覧ください。
@@ -11,7 +13,9 @@ description: Mastra の Summarization Metric に関するドキュメント。LL
 
 `SummarizationMetric` は、LLM による要約が元のテキストの内容をどれだけ適切に捉え、かつ事実関係を維持しているかを評価します。アラインメント（事実の正確性）とカバレッジ（重要情報の網羅）の2つの側面を組み合わせ、両方の品質が求められるよう最小スコアを採用しています。
 
-## 基本的な使い方
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -32,7 +36,9 @@ console.log(result.info); // 要約に関する詳細な評価指標を含むオ
 ```
 
 
-## コンストラクターのパラメーター
+<div id="constructor-parameters">
+  ## コンストラクターのパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -52,7 +58,9 @@ console.log(result.info); // 要約に関する詳細な評価指標を含むオ
   ]}
 />
 
-### SummarizationMetricOptions
+<div id="summarizationmetricoptions">
+  ### SummarizationMetricOptions
+</div>
 
 <PropertiesTable
   content={[
@@ -66,7 +74,9 @@ console.log(result.info); // 要約に関する詳細な評価指標を含むオ
   ]}
 />
 
-## measure() のパラメーター
+<div id="measure-parameters">
+  ## measure() のパラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -85,7 +95,9 @@ console.log(result.info); // 要約に関する詳細な評価指標を含むオ
   ]}
 />
 
-## 返り値
+<div id="returns">
+  ## 返り値
+</div>
 
 <PropertiesTable
   content={[
@@ -135,7 +147,9 @@ console.log(result.info); // 要約に関する詳細な評価指標を含むオ
   ]}
 />
 
-## 採点の詳細
+<div id="scoring-details">
+  ## 採点の詳細
+</div>
 
 この指標は、要約を次の2つの重要な要素で評価します:
 
@@ -149,7 +163,9 @@ console.log(result.info); // 要約に関する詳細な評価指標を含むオ
    - 要約がこれらの質問に答えているかを確認
    - 情報の含まれ方を確認し、網羅性を評価
 
-### スコアリング手順
+<div id="scoring-process">
+  ### スコアリング手順
+</div>
 
 1. アラインメントスコアを算出:
    - サマリーから主張を抽出
@@ -164,7 +180,9 @@ console.log(result.info); // 要約に関する詳細な評価指標を含むオ
 
 最終スコア: `min(alignment_score, coverage_score) * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 （0からのスケール、デフォルトは0～1）
 
@@ -174,7 +192,9 @@ console.log(result.info); // 要約に関する詳細な評価指標を含むオ
 - 0.1～0.3: 大きな省略や事実誤認がある低品質な要約
 - 0.0: 無効な要約 - まったくの誤り、または重要な情報が欠落
 
-## 分析付きの例
+<div id="example-with-analysis">
+  ## 分析付きの例
+</div>
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -206,7 +226,9 @@ const result = await metric.measure(
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [忠実度メトリック](./faithfulness)
 - [完全性メトリック](./completeness)

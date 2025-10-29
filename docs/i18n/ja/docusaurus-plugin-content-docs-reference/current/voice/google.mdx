@@ -3,11 +3,15 @@ title: "リファレンス: Google | Voice | Mastra ドキュメント"
 description: "Google Voice 実装のドキュメント。テキスト読み上げ（Text-to-Speech）と音声認識（Speech-to-Text）機能を提供します。"
 ---
 
-# Google
+<div id="google">
+  # Google
+</div>
 
 Mastra の Google Voice 実装は、Google Cloud サービスを利用して、テキスト読み上げ（TTS）と音声文字起こし（STT）の両方に対応しています。複数の音声、言語、および高度なオーディオ設定オプションをサポートします。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { GoogleVoice } from "@mastra/voice-google";
@@ -47,7 +51,9 @@ const voices = await voice.getSpeakers({ languageCode: "en-US" });
 ```
 
 
-## コンストラクターのパラメータ
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -75,7 +81,9 @@ const voices = await voice.getSpeakers({ languageCode: "en-US" });
   ]}
 />
 
-### GoogleModelConfig
+<div id="googlemodelconfig">
+  ### GoogleModelConfig
+</div>
 
 <PropertiesTable
   content={[
@@ -89,9 +97,13 @@ const voices = await voice.getSpeakers({ languageCode: "en-US" });
   ]}
 />
 
-## 手法
+<div id="methods">
+  ## 手法
+</div>
 
-### speak()
+<div id="speak">
+  ### speak()
+</div>
 
 Google Cloud Text-to-Speech サービスを使用して、テキストを音声に変換します。
 
@@ -136,7 +148,9 @@ Google Cloud Text-to-Speech サービスを使用して、テキストを音声�
 
 戻り値: `Promise<NodeJS.ReadableStream>`
 
-### listen()
+<div id="listen">
+  ### listen()
+</div>
 
 Google Cloud Speech-to-Text を使用して音声をテキストに変換します。
 
@@ -173,7 +187,9 @@ Google Cloud Speech-to-Text を使用して音声をテキストに変換しま�
 
 戻り値: `Promise<string>`
 
-### getSpeakers()
+<div id="getspeakers">
+  ### getSpeakers()
+</div>
 
 利用可能な音声オプションの配列を返します。各項目には次が含まれます:
 
@@ -194,7 +210,9 @@ Google Cloud Speech-to-Text を使用して音声をテキストに変換しま�
   ]}
 />
 
-## 重要な注意事項
+<div id="important-notes">
+  ## 重要な注意事項
+</div>
 
 1. Google Cloud の API キーが必要です。`GOOGLE_API_KEY` 環境変数で設定するか、コンストラクターに渡してください。
 2. 既定の音声は「en-US-Casual-K」に設定されています。

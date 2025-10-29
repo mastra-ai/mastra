@@ -6,11 +6,15 @@ description: メモリとツール連携に対応したストリーミング型�
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# 例: AI SDK v5 連携
+<div id="example-ai-sdk-v5-integration">
+  # 例: AI SDK v5 連携
+</div>
 
 この例では、Mastra エージェントを [AI SDK v5](https://sdk.vercel.ai/) と統合し、モダンなストリーミング型チャットインターフェースを構築する方法を紹介します。リアルタイムな会話機能、永続的なメモリ、そして AI SDK v5 のフォーマットに対応した `stream` メソッドによるツール統合を備えた、完成度の高い Next.js アプリケーションを実装しています。
 
-## 主な機能
+<div id="key-features">
+  ## 主な機能
+</div>
 
 - **ストリーミングチャットインターフェース**: AI SDK v5 の `useChat` フックによるリアルタイム対話
 - **Mastra エージェント統合**: カスタムツールと OpenAI GPT-4o を活用した天気エージェント
@@ -18,7 +22,9 @@ import GithubLink from "@site/src/components/GithubLink";
 - **互換レイヤー**: Mastra と AI SDK v5 のストリームをシームレスに連携
 - **ツール統合**: リアルタイムのデータ取得に対応するカスタム天気ツール
 
-## Mastra の設定
+<div id="mastra-configuration">
+  ## Mastra の設定
+</div>
 
 まず、メモリとツールを備えた Mastra エージェントをセットアップします。
 
@@ -75,7 +81,9 @@ export const weatherAgent = new Agent({
 ```
 
 
-## カスタム天気ツール
+<div id="custom-weather-tool">
+  ## カスタム天気ツール
+</div>
 
 リアルタイムの気象データを取得するツールを作成します：
 
@@ -133,9 +141,13 @@ const getWeather = async (location: string) => {
 ```
 
 
-## Next.js の API ルート
+<div id="nextjs-api-routes">
+  ## Next.js の API ルート
+</div>
 
-### ストリーミングチャットエンドポイント
+<div id="streaming-chat-endpoint">
+  ### ストリーミングチャットエンドポイント
+</div>
 
 AI SDK v5 の形式で `stream` メソッドを使用し、Mastra エージェントの応答をストリーミングする API ルートを作成します:
 
@@ -162,7 +174,9 @@ export async function POST(req: Request) {
 ```
 
 
-### 初期のチャット履歴
+<div id="initial-chat-history">
+  ### 初期のチャット履歴
+</div>
 
 Mastra Memory から会話履歴を読み込む:
 
@@ -184,7 +198,9 @@ export async function GET() {
 ```
 
 
-## React チャットインターフェース
+<div id="react-chat-interface">
+  ## React チャットインターフェース
+</div>
 
 AI SDK v5 の `useChat` フックを使ってフロントエンドを構築します:
 
@@ -242,7 +258,9 @@ export default function Chat() {
 ```
 
 
-## パッケージの設定
+<div id="package-configuration">
+  ## パッケージの設定
+</div>
 
 必要な依存関係をインストールします：
 
@@ -266,9 +284,13 @@ NOTE: ai-sdk v5 はまだベータ版です。ベータ期間中は、ai-sdk の
 ```
 
 
-## 主要な連携ポイント
+<div id="key-integration-points">
+  ## 主要な連携ポイント
+</div>
 
-### 実験的な stream フォーマットのサポート
+<div id="experimental-stream-format-support">
+  ### 実験的な stream フォーマットのサポート
+</div>
 
 `format: 'aisdk'` を指定する実験的な `stream` メソッドは、AI SDK v5 とのネイティブ互換性を提供します：
 
@@ -283,7 +305,9 @@ return stream.toUIMessageStreamResponse();
 ```
 
 
-### メモリの永続化
+<div id="memory-persistence">
+  ### メモリの永続化
+</div>
 
 会話は Mastra Memory によって自動的に保存されます:
 
@@ -291,7 +315,9 @@ return stream.toUIMessageStreamResponse();
 - ページを再読み込みすると、履歴は `/api/initial-chat` を通じて読み込まれます
 - 新規メッセージはエージェントによって自動保存されます
 
-### ツール統合
+<div id="tool-integration">
+  ### ツール統合
+</div>
 
 天気ツールはシームレスに統合されています：
 
@@ -299,7 +325,9 @@ return stream.toUIMessageStreamResponse();
 - 外部APIからリアルタイムのデータを取得する
 - 構造化された出力により、応答の一貫性が保たれる
 
-## サンプルを実行する
+<div id="running-the-example">
+  ## サンプルを実行する
+</div>
 
 1. OpenAI の API キーを設定します：
 

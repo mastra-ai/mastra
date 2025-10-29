@@ -3,11 +3,15 @@ title: "リファレンス: Run.resume() | Workflows | Mastra ドキュメント
 description: ワークフローにおける `Run.resume()` メソッドのドキュメント。保留中のワークフローの実行を新しいデータで再開します。
 ---
 
-# Run.resume()
+<div id="runresume">
+  # Run.resume()
+</div>
 
 `.resume()` メソッドは、一時停止中のワークフロー実行を新しいデータで再開し、特定のステップから処理を継続できるようにします。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
@@ -22,7 +26,9 @@ if (result.status === "suspended") {
 ```
 
 
-## パラメーター
+<div id="parameters">
+  ## パラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -112,7 +118,9 @@ if (result.status === "suspended") {
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -132,7 +140,9 @@ if (result.status === "suspended") {
   ]}
 />
 
-## 拡張された使用例
+<div id="extended-usage-example">
+  ## 拡張された使用例
+</div>
 
 ```typescript showLineNumbers copy
 if (result.status === "suspended") {
@@ -146,7 +156,9 @@ if (result.status === "suspended") {
 > **注記**: サスペンドされているステップが1つだけの場合は、`step` パラメータを省略できます。ワークフローはそのステップを自動的に再開します。複数のステップがサスペンドされている場合は、再開するステップを明示的に指定する必要があります。
 
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [Workflows の概要](/docs/workflows/overview#running-workflows)
 - [Workflow.createRunAsync()](../workflow-methods/create-run)

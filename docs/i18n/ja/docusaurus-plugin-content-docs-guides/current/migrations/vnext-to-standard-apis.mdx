@@ -3,25 +3,33 @@ title: "移行：VNext から標準 API へ | 移行ガイド"
 description: "Mastra の VNext メソッドから新しい標準エージェント API への移行方法を解説します。"
 ---
 
-## 概要
+<div id="overview">
+  ## 概要
+</div>
 
 `@mastra/core` の `v0.20.0` 以降、以下の変更が適用されます。
 
-## レガシー API（AI SDK v4）
+<div id="legacy-apis-ai-sdk-v4">
+  ## レガシー API（AI SDK v4）
+</div>
 
 元のメソッドは名称が変更されましたが、**AI SDK v4** および `v1` モデルとの後方互換性は維持されています。
 
 - `.stream()` → `.streamLegacy()`
 - `.generate()` → `.generateLegacy()`
 
-## 標準 API（AI SDK v5）
+<div id="standard-apis-ai-sdk-v5">
+  ## 標準 API（AI SDK v5）
+</div>
 
 これらは現在の API で、**AI SDK v5** および `v2` モデルと完全互換です。
 
 - `.streamVNext()` → `.stream()`
 - `.generateVNext()` → `.generate()`
 
-## 移行パス
+<div id="migration-paths">
+  ## 移行パス
+</div>
 
 すでに `.streamVNext()` と `.generateVNext()` を使用している場合は、検索と置換でそれぞれ `.stream()` と `.generate()` に変更してください。
 
@@ -29,29 +37,39 @@ description: "Mastra の VNext メソッドから新しい標準エージェン�
 
 ニーズに合った移行パスを選択してください:
 
-### AI SDK v4 モデルを引き続き使用する
+<div id="keep-using-ai-sdk-v4-models">
+  ### AI SDK v4 モデルを引き続き使用する
+</div>
 
 - すべての `.stream()` および `.generate()` の呼び出しを、それぞれ `.streamLegacy()` および `.generateLegacy()` にリネームしてください。
 
 > それ以外の変更は必要ありません。
 
-### AI SDK v5 のモデルを引き続き使用する
+<div id="keep-using-ai-sdk-v5-models">
+  ### AI SDK v5 のモデルを引き続き使用する
+</div>
 
 - すべての `.streamVNext()` と `.generateVNext()` の呼び出しを、それぞれ `.stream()` と `.generate()` にリネームしてください。
 
 > それ以外の変更は必要ありません。
 
-### AI SDK v4 から v5 へのアップグレード
+<div id="upgrade-from-ai-sdk-v4-to-v5">
+  ### AI SDK v4 から v5 へのアップグレード
+</div>
 
 - すべてのモデルプロバイダー用パッケージをメジャーバージョンに上げてください。
 
 > これにより、すべてが v5 のモデルになります。以下のガイドで主な違いを確認し、それに合わせてコードを更新してください。
 
-## 主要な相違点
+<div id="key-differences">
+  ## 主要な相違点
+</div>
 
 更新された `.stream()` と `.generate()` メソッドは、従来のメソッドに比べ、動作、互換性、戻り値の型、利用可能なオプションが異なります。本セクションでは、移行にあたって理解しておくべき最も重要な変更点を取り上げます。
 
-### モデルバージョンのサポート
+<div id="model-version-support">
+  ### モデルバージョンのサポート
+</div>
 
 **レガシー API**
 
@@ -69,7 +87,9 @@ description: "Mastra の VNext メソッドから新しい標準エージェン�
 
 > 実行時に明確なエラーメッセージとともに強制されます。
 
-### 戻り値の型
+<div id="return-types">
+  ### 戻り値の型
+</div>
 
 **レガシー API**
 
@@ -100,7 +120,9 @@ description: "Mastra の VNext メソッドから新しい標準エージェン�
 - [Agent.generate()](/reference/agents/generate)
 - [Agent.stream()](/reference/streaming/agents/stream)
 
-### フォーマット制御
+<div id="format-control">
+  ### フォーマット制御
+</div>
 
 **レガシー API**
 
@@ -126,7 +148,9 @@ const result = await agent.stream(messages, {
 ```
 
 
-### 標準APIの新しいオプション
+<div id="new-options-in-standard-apis">
+  ### 標準APIの新しいオプション
+</div>
 
 次のオプションは標準の `.stream()` と `generate()` で利用可能ですが、レガシー版では利用できません。
 
@@ -260,7 +284,9 @@ const result = await agent.stream(messages, {
   });
   ```
 
-### 移動されたレガシーオプション
+<div id="legacy-options-that-moved">
+  ### 移動されたレガシーオプション
+</div>
 
 - `temperature` とその他の `modelSettings`
 
@@ -289,7 +315,9 @@ const result = await agent.stream(messages, {
   });
   ```
 
-### 非推奨または削除されたオプション
+<div id="deprecated-or-removed-options">
+  ### 非推奨または削除されたオプション
+</div>
 
 - `experimental_output`
 
@@ -334,7 +362,9 @@ const result = await agent.stream(messages, {
   });
   ```
 
-### 型の変更
+<div id="type-changes">
+  ### 型の変更
+</div>
 
 **レガシー API**
 

@@ -3,7 +3,9 @@ title: "リファレンス: Run.streamVNext()（実験的） | ストリーミ�
 description: ワークフローにおける `Run.streamVNext()` メソッドのドキュメント。応答をリアルタイムにストリーミングします。
 ---
 
-# Run.streamVNext()（実験的）
+<div id="runstreamvnext-experimental">
+  # Run.streamVNext()（実験的）
+</div>
 
 :::caution 実験機能
 これは将来のバージョンで変更される可能性がある実験的な API です。`streamVNext()` メソッドは、最終的に現在の `stream()` メソッドに置き換わる予定です。本番環境での使用は慎重に行ってください。
@@ -11,7 +13,9 @@ description: ワークフローにおける `Run.streamVNext()` メソッドの�
 
 `.streamVNext()` メソッドは、ワークフローからの応答をリアルタイムでストリーミングします。この拡張されたストリーミング機能は、最終的に現在の `stream()` メソッドに置き換わる予定です。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
@@ -24,7 +28,9 @@ const stream = run.streamVNext({
 ```
 
 
-## パラメーター
+<div id="parameters">
+  ## パラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -88,7 +94,9 @@ const stream = run.streamVNext({
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -123,7 +131,9 @@ const stream = run.streamVNext({
   ]}
 />
 
-## 応用例
+<div id="extended-usage-example">
+  ## 応用例
+</div>
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
@@ -138,7 +148,9 @@ const result = await stream.result;
 ```
 
 
-## ストリームイベント
+<div id="stream-events">
+  ## ストリームイベント
+</div>
 
 ストリームはワークフローの実行中にさまざまなタイプのイベントを発行します。各イベントには `type` フィールドと、関連データを含む `payload` が含まれます:
 
@@ -148,7 +160,9 @@ const result = await stream.result;
 - **`workflow-step-result`**: ステップが結果とともに完了する
 - **`workflow-finish`**: ワークフローの実行が使用状況の統計情報とともに完了する
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [Workflows の概要](/docs/workflows/overview#running-workflows)
 - [Workflow.createRunAsync()](/reference/workflows/workflow-methods/create-run)

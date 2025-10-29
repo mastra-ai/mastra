@@ -6,7 +6,9 @@ description: 検索や取得を目的として、Mastra を使って Markdown �
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# Markdown のチャンク化
+<div id="chunk-markdown">
+  # Markdown のチャンク化
+</div>
 
 Markdown は生の HTML より情報が凝縮されており、RAG パイプラインで扱いやすい形式です。Markdown を扱う際は、見出しや書式を保ったまま小さな単位に分割する必要があります。`chunk` メソッドは、見出し、リスト、コードブロックなどの Markdown 特有の要素を賢く処理します。以下の例では、検索や検索結果の取得を目的として Markdown ドキュメントをチャンク化する方法を示します。
 

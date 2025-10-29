@@ -3,11 +3,15 @@ title: "Langfuse Exporter | AIトレーシング | オブザーバビリティ |
 description: "LLMのオブザーバビリティと分析のために、AIトレースをLangfuseに送信する"
 ---
 
-# Langfuse Exporter
+<div id="langfuse-exporter">
+  # Langfuse Exporter
+</div>
 
 [Langfuse](https://langfuse.com/) は、LLM アプリケーション向けに設計されたオープンソースの可観測性プラットフォームです。Langfuse Exporter は AI のトレースを Langfuse に送信し、モデルの性能、トークン使用量、会話フローに関する詳細なインサイトを提供します。
 
-## Langfuse を使うタイミング
+<div id="when-to-use-langfuse">
+  ## Langfuse を使うタイミング
+</div>
 
 Langfuse は次の用途に最適です:
 
@@ -17,16 +21,22 @@ Langfuse は次の用途に最適です:
 - **モデル比較** - A/B テストやバージョン比較
 - **セルフホストの選択肢** - 自社インフラへのデプロイ
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash npm2yarn
 npm install @mastra/langfuse
 ```
 
 
-## 構成
+<div id="configuration">
+  ## 構成
+</div>
 
-### 前提条件
+<div id="prerequisites">
+  ### 前提条件
+</div>
 
 1. **Langfuse アカウント**: [cloud.langfuse.com](https://cloud.langfuse.com) でサインアップするか、自己ホスティングでデプロイする
 2. **API キー**: Langfuse の「Settings」→「API Keys」で公開鍵/秘密鍵のキー ペアを作成
@@ -39,7 +49,9 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com  # またはセルフホストのUR
 ```
 
 
-### 基本設定
+<div id="basic-setup">
+  ### 基本設定
+</div>
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -67,13 +79,19 @@ export const mastra = new Mastra({
 ```
 
 
-## 設定項目
+<div id="configuration-options">
+  ## 設定項目
+</div>
 
-### リアルタイムモードとバッチモード
+<div id="realtime-vs-batch-mode">
+  ### リアルタイムモードとバッチモード
+</div>
 
 Langfuse エクスポーターは、トレースを送信するために2つのモードをサポートしています：
 
-#### リアルタイムモード（開発）
+<div id="realtime-mode-development">
+  #### リアルタイムモード（開発）
+</div>
 
 トレースはLangfuseのダッシュボードに即時に表示され、デバッグに最適です：
 
@@ -86,7 +104,9 @@ new LangfuseExporter({
 ```
 
 
-#### バッチモード（本番）
+<div id="batch-mode-production">
+  #### バッチモード（本番）
+</div>
 
 自動バッチ化によりパフォーマンスが向上します：
 
@@ -99,7 +119,9 @@ new LangfuseExporter({
 ```
 
 
-### 完全な構成
+<div id="complete-configuration">
+  ### 完全な構成
+</div>
 
 ```typescript
 new LangfuseExporter({
@@ -122,7 +144,9 @@ new LangfuseExporter({
 ```
 
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [AI トレーシングの概要](/docs/observability/ai-tracing/overview)
 - [Langfuse ドキュメント](https://langfuse.com/docs)

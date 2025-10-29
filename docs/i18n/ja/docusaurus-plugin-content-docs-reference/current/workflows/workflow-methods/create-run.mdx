@@ -3,7 +3,9 @@ title: "リファレンス: Workflow.createRunAsync() | Workflows | Mastra ド�
 description: ワークフローにおける `Workflow.createRunAsync()` メソッドのドキュメント。新規のワークフロー実行インスタンスを作成します。
 ---
 
-# Workflow.createRunAsync()
+<div id="workflowcreaterunasync">
+  # Workflow.createRunAsync()
+</div>
 
 `.createRunAsync()` メソッドは新しいワークフロー実行インスタンスを作成し、指定した入力データでワークフローを実行できます。これは `Run` インスタンスを返す現行の API です。
 
@@ -13,14 +15,18 @@ description: ワークフローにおける `Workflow.createRunAsync()` メソ�
 
 :::
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 await workflow.createRunAsync();
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -33,7 +39,9 @@ await workflow.createRunAsync();
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -46,7 +54,9 @@ await workflow.createRunAsync();
   ]}
 />
 
-## 拡張的な使用例
+<div id="extended-usage-example">
+  ## 拡張的な使用例
+</div>
 
 ```typescript showLineNumbers copy
 const workflow = mastra.getWorkflow("workflow");
@@ -61,7 +71,9 @@ const result = await run.start({
 ```
 
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [Run クラス](../run)
 - [ワークフローの概要](/docs/workflows/overview)

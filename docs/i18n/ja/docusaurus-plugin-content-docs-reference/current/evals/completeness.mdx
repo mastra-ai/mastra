@@ -3,7 +3,9 @@ title: "リファレンス: CompletenessMetric | 評価 | Mastra ドキュメン
 description: Mastra における Completeness Metric のドキュメント。入力に含まれる主要な要素を、LLM の出力がどれだけ網羅できているかを評価します。
 ---
 
-# CompletenessMetric
+<div id="completenessmetric">
+  # CompletenessMetric
+</div>
 
 :::info スコアラー
 このドキュメントはレガシーの evals API を参照しています。最新のスコアラー機能については [Scorers](/docs/scorers/overview) をご覧ください。
@@ -11,7 +13,9 @@ description: Mastra における Completeness Metric のドキュメント。入
 
 `CompletenessMetric` クラスは、入力に含まれる主要要素を LLM の出力がどの程度網羅しているかを評価します。名詞、動詞、トピック、用語を分析して網羅状況を判定し、詳細な完全性スコアを提供します。
 
-## 基本的な使い方
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
 
 ```typescript
 import { CompletenessMetric } from "@mastra/evals/nlp";
@@ -28,7 +32,9 @@ console.log(result.info); // 要素のカバレッジに関する詳細な指標
 ```
 
 
-## measure() のパラメータ
+<div id="measure-parameters">
+  ## measure() のパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -47,7 +53,9 @@ console.log(result.info); // 要素のカバレッジに関する詳細な指標
   ]}
 />
 
-## 返却値
+<div id="returns">
+  ## 返却値
+</div>
 
 <PropertiesTable
   content={[
@@ -107,7 +115,9 @@ console.log(result.info); // 要素のカバレッジに関する詳細な指標
   ]}
 />
 
-## 要素抽出の詳細
+<div id="element-extraction-details">
+  ## 要素抽出の詳細
+</div>
 
 このメトリックは複数の種類の要素を抽出・分析します:
 
@@ -124,11 +134,15 @@ console.log(result.info); // 要素のカバレッジに関する詳細な指標
 - 短い単語（3文字以下）の特別な取り扱い
 - 要素の重複排除
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 この指標は、言語要素の網羅状況の分析により、完全性を評価します。
 
-### スコアリングプロセス
+<div id="scoring-process">
+  ### スコアリングプロセス
+</div>
 
 1. 主要要素を抽出:
    - 名詞と固有表現
@@ -142,7 +156,9 @@ console.log(result.info); // 要素のカバレッジに関する詳細な指標
 
 最終スコア: `(covered_elements / total_input_elements) * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 （0からのスケール、既定は0～1）
 
@@ -152,7 +168,9 @@ console.log(result.info); // 要素のカバレッジに関する詳細な指標
 - 0.1～0.3: 低い網羅 - 主要な要素の大半が欠けている
 - 0.0: 網羅なし - 出力に入力要素がまったく含まれていない
 
-## 例と分析
+<div id="example-with-analysis">
+  ## 例と分析
+</div>
 
 ```typescript
 import { CompletenessMetric } from "@mastra/evals/nlp";
@@ -177,7 +195,9 @@ const result = await metric.measure(
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [回答関連性メトリクス](./answer-relevancy)
 - [コンテンツ類似度メトリクス](./content-similarity)

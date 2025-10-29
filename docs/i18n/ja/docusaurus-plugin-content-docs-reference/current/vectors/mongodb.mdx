@@ -3,18 +3,24 @@ title: "リファレンス: MongoDB Vector Store | ベクター | Mastra ドキ�
 description: Mastra の MongoDBVector クラスに関するドキュメント。MongoDB Atlas と Atlas Vector Search を使用してベクター検索を提供します。
 ---
 
-# MongoDB ベクターストア
+<div id="mongodb-vector-store">
+  # MongoDB ベクターストア
+</div>
 
 `MongoDBVector` クラスは、[MongoDB Atlas Vector Search](https://www.mongodb.com/docs/atlas/atlas-vector-search/) を利用したベクター検索機能を提供します。MongoDB のコレクション内で、効率的な類似度検索とメタデータによるフィルタリングを実現します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/mongodb
 ```
 
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 ```typescript copy showLineNumbers
 import { MongoDBVector } from "@mastra/mongodb";
@@ -26,7 +32,9 @@ const store = new MongoDBVector({
 ```
 
 
-## コンストラクターのオプション
+<div id="constructor-options">
+  ## コンストラクターのオプション
+</div>
 
 <PropertiesTable
   content={[
@@ -49,9 +57,13 @@ const store = new MongoDBVector({
   ]}
 />
 
-## 方法
+<div id="methods">
+  ## 方法
+</div>
 
-### createIndex()
+<div id="createindex">
+  ### createIndex()
+</div>
 
 MongoDB に新しいベクトルインデックス（コレクション）を作成します。
 
@@ -77,7 +89,9 @@ MongoDB に新しいベクトルインデックス（コレクション）を作
   ]}
 />
 
-### upsert()
+<div id="upsert">
+  ### upsert()
+</div>
 
 コレクション内のベクターとそのメタデータを追加または更新します。
 
@@ -108,7 +122,9 @@ MongoDB に新しいベクトルインデックス（コレクション）を作
   ]}
 />
 
-### query()
+<div id="query">
+  ### query()
+</div>
 
 必要に応じてメタデータでフィルタしながら、類似ベクターを検索します。
 
@@ -160,7 +176,9 @@ MongoDB に新しいベクトルインデックス（コレクション）を作
   ]}
 />
 
-### describeIndex()
+<div id="describeindex">
+  ### describeIndex()
+</div>
 
 インデックス（コレクション）に関する情報を返します。
 
@@ -185,7 +203,9 @@ interface IndexStats {
 ```
 
 
-### deleteIndex()
+<div id="deleteindex">
+  ### deleteIndex()
+</div>
 
 コレクションとそのすべてのデータを削除します。
 
@@ -199,13 +219,17 @@ interface IndexStats {
   ]}
 />
 
-### listIndexes()
+<div id="listindexes">
+  ### listIndexes()
+</div>
 
 MongoDB データベース内のベクトルコレクションをすべて一覧します。
 
 Returns: `Promise<string[]>`
 
-### updateVector()
+<div id="updatevector">
+  ### updateVector()
+</div>
 
 ID を指定して、特定のベクトリエントリを新しいベクトルデータやメタデータで更新します。
 
@@ -241,7 +265,9 @@ ID を指定して、特定のベクトリエントリを新しいベクトル�
   ]}
 />
 
-### deleteVector()
+<div id="deletevector">
+  ### deleteVector()
+</div>
 
 指定したIDのベクターエントリをインデックスから削除します。
 
@@ -260,11 +286,15 @@ ID を指定して、特定のベクトリエントリを新しいベクトル�
   ]}
 />
 
-### disconnect()
+<div id="disconnect">
+  ### disconnect()
+</div>
 
 MongoDB クライアントの接続を閉じます。ストアの利用が完了したら呼び出してください。
 
-## レスポンスの種類
+<div id="response-types">
+  ## レスポンスの種類
+</div>
 
 クエリ結果は次の形式で返されます。
 
@@ -278,7 +308,9 @@ interface QueryResult {
 ```
 
 
-## エラー処理
+<div id="error-handling">
+  ## エラー処理
+</div>
 
 ストアは型付きのエラーをスローし、捕捉できます。
 
@@ -303,12 +335,16 @@ try {
 ```
 
 
-## ベストプラクティス
+<div id="best-practices">
+  ## ベストプラクティス
+</div>
 
 - クエリ性能を最適化するため、フィルターで使用するメタデータフィールドにインデックスを作成する。
 - 予期しないクエリ結果を防ぐため、メタデータのフィールド名を一貫させる。
 - 効率的な検索を維持するため、インデックスとコレクションの統計情報を定期的に監視する。
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [メタデータフィルター](../rag/metadata-filters)

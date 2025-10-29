@@ -3,11 +3,15 @@ title: "Upstash を使ったメモリ | Memory | Mastra ドキュメント"
 description: Mastra のメモリシステムを、Upstash Redis のストレージとベクトル機能で活用する方法の例。
 ---
 
-# Upstash を使ったメモリ
+<div id="memory-with-upstash">
+  # Upstash を使ったメモリ
+</div>
 
 この例では、Mastra のメモリシステムでストレージのバックエンドとして Upstash を使用する方法を紹介します。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 この例では `openai` モデルを使用し、Upstash Redis と Upstash Vector の両方のサービスが必要です。`.env` ファイルに次の内容を追加してください：
 
@@ -28,7 +32,9 @@ npm install @mastra/upstash
 ```
 
 
-## エージェントにメモリを追加する
+<div id="adding-memory-to-an-agent">
+  ## エージェントにメモリを追加する
+</div>
 
 エージェントに Upstash のメモリを追加するには、`Memory` クラスを使用し、`UpstashStore` で新しい `storage` キーを、`UpstashVector` で新しい `vector` キーを作成します。設定はリモートサービスにもローカル環境にも向けられます。
 
@@ -56,7 +62,9 @@ export const upstashAgent = new Agent({
 ```
 
 
-## fastembed を使ったローカル埋め込み
+<div id="local-embeddings-with-fastembed">
+  ## fastembed を使ったローカル埋め込み
+</div>
 
 Embedding は、memory の `semanticRecall` が意味（キーワードではなく）に基づいて関連メッセージを取得するために用いる数値ベクトルです。このセットアップでは、ベクトル埋め込みを生成するために `@mastra/fastembed` を使用します。
 
@@ -102,7 +110,9 @@ export const upstashAgent = new Agent({
 ```
 
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 このリクエストでのリコール範囲を制限するには、`memoryOptions` を使用します。`lastMessages: 5` を設定して直近ベースのリコールを絞り込み、`semanticRecall` を使って、各マッチの前後文脈として `messageRange: 2` の隣接メッセージを含めた、関連度上位 `topK: 3` 件のメッセージを取得します。
 
@@ -145,6 +155,8 @@ for await (const chunk of stream.textStream) {
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [エージェントの呼び出し](/examples/agents/calling-agents)

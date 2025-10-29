@@ -7,11 +7,15 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 
-# MastraAuthClerk クラス
+<div id="mastraauthclerk-class">
+  # MastraAuthClerk クラス
+</div>
 
 `MastraAuthClerk` クラスは、Clerk を用いて Mastra の認証を提供します。Clerk の認証システムで受信リクエストを検証し、`experimental_auth` オプションを介して Mastra サーバーと統合します。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 この例では Clerk の認証を使用します。.env ファイルに Clerk の認証情報を追加し、Clerk プロジェクトが正しく設定されていることを確認してください。
 
@@ -24,7 +28,9 @@ CLERK_JWKS_URI=https://your-clerk-domain.clerk.accounts.dev/.well-known/jwks.jso
 > **注:** これらのキーは Clerk ダッシュボードの「API Keys」で確認できます。
 
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 `MastraAuthClerk` クラスを使用する前に、`@mastra/auth-clerk` パッケージをインストールする必要があります。
 
@@ -33,7 +39,9 @@ npm install @mastra/auth-clerk@latest
 ```
 
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 ```typescript {2,7-11} title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
@@ -56,11 +64,15 @@ export const mastra = new Mastra({
 > 利用可能なすべての設定オプションについては、[MastraAuthClerk](/reference/auth/clerk) の API リファレンスを参照してください。
 
 
-## クライアント側のセットアップ
+<div id="client-side-setup">
+  ## クライアント側のセットアップ
+</div>
 
 Clerk 認証を利用する場合は、クライアント側で Clerk からアクセストークンを取得し、それを Mastra へのリクエストに渡す必要があります。
 
-### アクセストークンの取得
+<div id="retrieving-the-access-token">
+  ### アクセストークンの取得
+</div>
 
 Clerk の React フックを使ってユーザーを認証し、アクセストークンを取得します:
 
@@ -82,7 +94,9 @@ export const useClerkAuth = () => {
 > 詳細は [Clerk のドキュメント](https://clerk.com/docs)をご参照ください。
 
 
-## `MastraClient` の設定
+<div id="configuring-mastraclient">
+  ## `MastraClient` の設定
+</div>
 
 `experimental_auth` が有効な場合、`MastraClient` で行うすべてのリクエストには、`Authorization` ヘッダーに有効な Clerk のアクセストークンを含める必要があります。
 
@@ -101,7 +115,9 @@ export const mastraClient = new MastraClient({
 > さらに詳しい設定オプションについては、[Mastra Client SDK](/docs/server-db/mastra-client) をご覧ください。
 
 
-### 認証リクエストの送信
+<div id="making-authenticated-requests">
+  ### 認証リクエストの送信
+</div>
 
 `MastraClient` に Clerk のアクセストークンを設定すると、認証済みリクエストを送信できます。
 

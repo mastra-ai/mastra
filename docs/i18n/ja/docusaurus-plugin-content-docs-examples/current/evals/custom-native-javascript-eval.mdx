@@ -3,7 +3,9 @@ title: "例: カスタムのネイティブ JavaScript 評価 | Evals | Mastra D
 description: カスタムのネイティブ JavaScript 評価指標を作成する例。
 ---
 
-# カスタムネイティブ JavaScript 評価
+<div id="custom-native-javascript-evaluation">
+  # カスタムネイティブ JavaScript 評価
+</div>
 
 :::note
 Scorers API は現在ベータ版です。改善に鋭意取り組んでおり、皆さまのフィードバックを歓迎します。ご質問や機能リクエストがありましたら、[Discord](https://discord.gg/mastra) までご連絡ください。
@@ -11,14 +13,18 @@ Scorers API は現在ベータ版です。改善に鋭意取り組んでおり�
 
 この例では、JavaScript のロジックを用いてカスタム評価指標を作成する方法を示します。この指標は `query` と `response` を受け取り、スコアと、総単語数および一致した単語数を含む `info` オブジェクトを返します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash
 npm install @mastra/evals
 ```
 
 
-## カスタム eval を作成する
+<div id="create-a-custom-eval">
+  ## カスタム eval を作成する
+</div>
 
 Mastra のカスタム eval では、条件の評価にネイティブの JavaScript メソッドを使用できます。
 
@@ -56,7 +62,9 @@ export class WordInclusionMetric extends Metric {
 ```
 
 
-## 高スコアのカスタム例
+<div id="high-custom-example">
+  ## 高スコアのカスタム例
+</div>
 
 この例では、応答に入力クエリで列挙されたすべての語が含まれています。メトリクスは、語が完全に含まれていることを示す高いスコアを返します。
 
@@ -74,7 +82,9 @@ console.log(result);
 ```
 
 
-### 高品質なカスタム出力
+<div id="high-custom-output">
+  ### 高品質なカスタム出力
+</div>
 
 この出力は、入力に含まれる固有の語がすべて応答に含まれており、網羅性が高いことを示しているため、高いスコアを獲得します。
 
@@ -89,7 +99,9 @@ console.log(result);
 ```
 
 
-## 部分的なカスタム例
+<div id="partial-custom-example">
+  ## 部分的なカスタム例
+</div>
 
 この例では、応答には入力クエリに含まれる語の一部しか含まれていません。評価指標は、この不完全な語のカバレッジを反映した部分的なスコアを返します。
 
@@ -107,7 +119,9 @@ console.log(result);
 ```
 
 
-### 部分的なカスタム出力
+<div id="partial-custom-output">
+  ### 部分的なカスタム出力
+</div>
 
 このスコアは、応答に入力内のユニークな単語が一部しか含まれておらず、単語の網羅が不完全であることを示しているため、部分的な成功を反映しています。
 
@@ -122,7 +136,9 @@ console.log(result);
 ```
 
 
-## 低包含率の例
+<div id="low-custom-example">
+  ## 低包含率の例
+</div>
 
 この例では、レスポンスに入力クエリの単語がまったく含まれていません。指標は、単語の包含がないことを示す低いスコアを返します。
 
@@ -140,7 +156,9 @@ console.log(result);
 ```
 
 
-### カスタム出力が低い
+<div id="low-custom-output">
+  ### カスタム出力が低い
+</div>
 
 スコアが0なのは、入力に含まれる固有の語が応答内にまったく現れず、両テキスト間に重なりがないことを示しているためです。
 
@@ -155,7 +173,9 @@ console.log(result);
 ```
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `WordInclusionMetric` は次の形式の結果を返します:
 
@@ -170,7 +190,9 @@ console.log(result);
 ```
 
 
-### カスタムスコア
+<div id="custom-score">
+  ### カスタムスコア
+</div>
 
 0 から 1 の範囲のスコア:
 
@@ -178,7 +200,9 @@ console.log(result);
 - **0.5–0.9**: 応答に一部の単語は含まれるが、すべては含まれない。
 - **0.0**: 入力の単語が応答にまったく含まれない。
 
-### カスタム情報
+<div id="custom-info">
+  ### カスタム情報
+</div>
 
 スコアの説明。詳細は以下のとおりです。
 

@@ -3,15 +3,21 @@ title: "リファレンス: MastraMCPClient（非推奨） | Tools & MCP | Mastr
 description: MastraMCPClient の API リファレンス — Model Context Protocol 用のクライアント実装。
 ---
 
-# MastraMCPClient（非推奨）
+<div id="mastramcpclient-deprecated">
+  # MastraMCPClient（非推奨）
+</div>
 
 `MastraMCPClient` クラスは、Model Context Protocol（MCP）サーバーとやり取りするためのクライアント実装を提供します。MCP プロトコルを介して、接続の管理、リソースの検出、およびツールの実行を行います。
 
-## 廃止予定のお知らせ
+<div id="deprecation-notice">
+  ## 廃止予定のお知らせ
+</div>
 
 `MastraMCPClient` は、今後は [`MCPClient`](./mcp-client) の利用を推奨する方針に伴い、廃止予定です。単一の MCP サーバーと複数の MCP サーバーを管理するために別々のインターフェースを用意するのではなく、単一の MCP サーバーを使用する場合でも、複数を管理できるインターフェースの利用を推奨します。
 
-## コンストラクター
+<div id="constructor">
+  ## コンストラクター
+</div>
 
 MastraMCPClient の新しいインスタンスを生成します。
 
@@ -32,7 +38,9 @@ constructor({
 ```
 
 
-### パラメータ
+<div id="parameters">
+  ### パラメータ
+</div>
 
 <br />
 
@@ -74,7 +82,9 @@ constructor({
   ]}
 />
 
-### MastraMCPServerDefinition
+<div id="mastramcpserverdefinition">
+  ### MastraMCPServerDefinition
+</div>
 
 この定義を使用して MCP サーバーを構成できます。クライアントは、指定されたパラメータに基づいて自動的にトランスポート種別を判別します：
 
@@ -152,7 +162,9 @@ constructor({
   ]}
 />
 
-### LogHandler
+<div id="loghandler">
+  ### LogHandler
+</div>
 
 `LogHandler` 関数は引数に `LogMessage` オブジェクトを取り、戻り値は void です。`LogMessage` オブジェクトには次のプロパティがあります。`LoggingLevel` 型は `debug`、`info`、`warn`、`error` の文字列列挙型です。
 
@@ -189,9 +201,13 @@ constructor({
   ]}
 />
 
-## メソッド
+<div id="methods">
+  ## メソッド
+</div>
 
-### connect()
+<div id="connect">
+  ### connect()
+</div>
 
 MCP サーバーに接続します。
 
@@ -200,7 +216,9 @@ async connect(): Promise<void>
 ```
 
 
-### disconnect()
+<div id="disconnect">
+  ### disconnect()
+</div>
 
 MCP サーバーとの接続を切断します。
 
@@ -209,7 +227,9 @@ async disconnect(): Promise<void>
 ```
 
 
-### resources()
+<div id="resources">
+  ### resources()
+</div>
 
 サーバーから利用可能なリソースの一覧を取得します。
 
@@ -218,7 +238,9 @@ async resources(): Promise<ListResourcesResult>
 ```
 
 
-### tools()
+<div id="tools">
+  ### tools()
+</div>
 
 サーバーから利用可能なツールを取得して初期化し、Mastra 互換のツール形式に変換します。
 
@@ -229,11 +251,17 @@ async tools(): Promise<Record<string, Tool>>
 ツール名を対応する Mastra のツール実装へマッピングするオブジェクトを返します。
 
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
-### Mastra Agent と併用する
+<div id="using-with-mastra-agent">
+  ### Mastra Agent と併用する
+</div>
 
-#### Stdio サーバーの例
+<div id="example-with-stdio-server">
+  #### Stdio サーバーの例
+</div>
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -293,7 +321,9 @@ try {
 ```
 
 
-### SSE サーバーの例
+<div id="example-with-sse-server">
+  ### SSE サーバーの例
+</div>
 
 ```typescript
 // SSE サーバーを使用して MCP クライアントを初期化する
@@ -333,14 +363,18 @@ const sseClient = new MastraMCPClient({
 ```
 
 
-### SSE 認証に関する重要な注意事項
+<div id="important-note-about-sse-authentication">
+  ### SSE 認証に関する重要な注意事項
+</div>
 
 認証やカスタムヘッダーを伴う SSE 接続を使用する場合は、`requestInit` と `eventSourceInit` の両方を設定する必要があります。これは、SSE 接続がブラウザの EventSource API を利用しており、カスタムヘッダーを直接はサポートしていないためです。
 
 `eventSourceInit` を設定すると、SSE 接続で使用される基盤となる fetch リクエストをカスタマイズでき、認証ヘッダーを確実に含められます。
 `eventSourceInit` を設定しない場合、`requestInit` で指定した認証ヘッダーは接続リクエストに含まれず、401 Unauthorized エラーの原因になります。
 
-## 関連情報
+<div id="related-information">
+  ## 関連情報
+</div>
 
 - アプリケーションで複数の MCP サーバーを管理する方法については、[MCPClient のドキュメント](./mcp-client)をご参照ください。
 - Model Context Protocol の詳細については、[@modelcontextprotocol/sdk のドキュメント](https://github.com/modelcontextprotocol/typescript-sdk)をご覧ください。

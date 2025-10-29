@@ -5,11 +5,15 @@ sidebar_label: "制御フロー"
 description: "Mastra のレガシー ワークフローにおける制御フローでは、分岐・マージ・条件を管理し、ロジック要件を満たすレガシー ワークフローを構築できます。"
 ---
 
-# レガシー ワークフローにおける制御フロー：分岐、マージ、条件
+<div id="control-flow-in-legacy-workflows-branching-merging-and-conditions">
+  # レガシー ワークフローにおける制御フロー：分岐、マージ、条件
+</div>
 
 複数ステップのプロセスを作成する際には、ステップを並列に実行したり、順次に連結したり、結果に応じて異なる経路をたどったりする必要が生じる場合があります。このページでは、分岐・マージ・条件を管理し、ロジック要件を満たすワークフローを構築する方法を説明します。コードスニペットでは、複雑な制御フローを組み立てるための主要なパターンを示します。
 
-## 並列実行
+<div id="parallel-execution">
+  ## 並列実行
+</div>
 
 互いに依存していない場合、複数のステップを同時に実行できます。ステップが独立したタスクを実行する場合、この方法でワークフローを高速化できます。以下のコードは、2つのステップを並列に追加する方法を示しています。
 
@@ -20,7 +24,9 @@ myWorkflow.step(fetchUserData).step(fetchOrderData);
 詳細は、[Parallel Steps](/examples/workflows_legacy/parallel-steps) の例をご覧ください。
 
 
-## 逐次実行
+<div id="sequential-execution">
+  ## 逐次実行
+</div>
 
 あるステップの出力を次のステップの入力として確実に利用するため、処理を厳密な順序で実行する必要がある場合があります。依存関係のある処理をつなぐには .then() を使用します。以下のコードは、ステップを順番にチェーンする方法を示しています。
 
@@ -31,7 +37,9 @@ myWorkflow.step(fetchOrderData).then(validateData).then(processOrder);
 詳細は、[Sequential Steps](/examples/workflows_legacy/sequential-steps) のサンプルをご参照ください。
 
 
-## 分岐と統合のパス
+<div id="branching-and-merging-paths">
+  ## 分岐と統合のパス
+</div>
 
 異なる結果ごとに異なるパスが必要な場合には、分岐が有効です。完了後にパスを統合することもできます。以下のコードは、stepA の後に分岐し、後で stepF に収束（統合）する方法を示しています：
 
@@ -56,7 +64,9 @@ myWorkflow
 詳細は [Branching Paths](/examples/workflows_legacy/branching-paths) の例をご覧ください。
 
 
-## 複数ブランチのマージ
+<div id="merging-multiple-branches">
+  ## 複数ブランチのマージ
+</div>
 
 複数の他のステップが完了してからのみ実行されるステップが必要になることがあります。Mastra では、複数の依存関係を1つのステップに指定できる複合的な `.after([])` 構文を提供しています。
 
@@ -106,11 +116,15 @@ myWorkflow
 ```
 
 
-## 循環的な依存関係とループ
+<div id="cyclical-dependencies-and-loops">
+  ## 循環的な依存関係とループ
+</div>
 
 ワークフローでは、特定の条件が満たされるまで手順を繰り返す必要が生じることがよくあります。Mastra には、ループを作成するための強力な手段として `until` と `while` の 2 つが用意されています。これらのメソッドにより、反復処理を直感的に実装できます。
 
-### 手動による循環依存の利用（レガシー手法）
+<div id="using-manual-cyclical-dependencies-legacy-approach">
+  ### 手動による循環依存の利用（レガシー手法）
+</div>
 
 以前のバージョンでは、条件を用いて循環依存関係を手動で定義し、ループを作成できました。
 
@@ -130,7 +144,9 @@ myWorkflow
 この方法でも機能しますが、より新しい `until` と `while` メソッドを使うと、ループをより簡潔で保守しやすい形で作成できます。
 
 
-### 条件に基づくループでの `until` の使用
+<div id="using-until-for-condition-based-loops">
+  ### 条件に基づくループでの `until` の使用
+</div>
 
 `until` メソッドは、指定した条件が true になるまでステップを繰り返します。引数は次のとおりです。
 
@@ -201,7 +217,9 @@ workflow
 ```
 
 
-### 条件ベースのループでの `while` の使用
+<div id="using-while-for-condition-based-loops">
+  ### 条件ベースのループでの `while` の使用
+</div>
 
 `while` メソッドは、指定した条件が真である間、処理を繰り返します。引数は `until` と同じです:
 
@@ -269,7 +287,9 @@ workflow
 ```
 
 
-### 参照条件の比較演算子
+<div id="comparison-operators-for-reference-conditions">
+  ### 参照条件の比較演算子
+</div>
 
 参照ベースの条件を使用する場合、次の比較演算子を使用できます：
 
@@ -282,11 +302,15 @@ workflow
 | `$lt`    | より小さい         |
 | `$lte`   | 以下               |
 
-## 条件
+<div id="conditions">
+  ## 条件
+</div>
 
 前のステップのデータに基づいてステップを実行するかどうかを制御するには、when プロパティを使用します。条件の指定方法は次の3通りです。
 
-### オプション1：関数
+<div id="option-1-function">
+  ### オプション1：関数
+</div>
 
 ```typescript
 myWorkflow.step(
@@ -306,7 +330,9 @@ myWorkflow.step(
 ```
 
 
-### オプション 2: Query オブジェクト
+<div id="option-2-query-object">
+  ### オプション 2: Query オブジェクト
+</div>
 
 ```typescript
 myWorkflow.step(
@@ -331,7 +357,9 @@ myWorkflow.step(
 ```
 
 
-### オプション3: シンプルなパス比較
+<div id="option-3-simple-path-comparison">
+  ### オプション3: シンプルなパス比較
+</div>
 
 ```typescript
 myWorkflow.step(
@@ -350,7 +378,9 @@ myWorkflow.step(
 ```
 
 
-## データアクセスパターン
+<div id="data-access-patterns">
+  ## データアクセスパターン
+</div>
 
 Mastra では、ステップ間でデータを受け渡す方法が複数用意されています：
 
@@ -360,11 +390,15 @@ Mastra では、ステップ間でデータを受け渡す方法が複数用意�
 
 それぞれの方法には、ユースケースや型安全性の要件に応じた利点があります。
 
-### getStepResult メソッドの使用
+<div id="using-getstepresult-method">
+  ### getStepResult メソッドの使用
+</div>
 
 `getStepResult` メソッドは、ステップ結果へ型安全にアクセスする方法を提供します。TypeScript で作業する際は、型情報を保持できるため、この方法を推奨します。
 
-#### 基本的な使い方
+<div id="basic-usage">
+  #### 基本的な使い方
+</div>
 
 型安全性を高めるために、`getStepResult` に型パラメータを指定できます:
 
@@ -404,7 +438,9 @@ const analyzeDataStep = new LegacyStep({
 ```
 
 
-#### ステップ参照の使用
+<div id="using-step-references">
+  #### ステップ参照の使用
+</div>
 
 最も型安全な方法は、`getStepResult` の呼び出しでステップを直接参照することです。
 
@@ -450,7 +486,9 @@ workflow.step(fetchUserStep).then(processUserStep).commit();
 ```
 
 
-### 変数マッピングの使用
+<div id="using-variable-mapping">
+  ### 変数マッピングの使用
+</div>
 
 変数マッピングは、ステップ間のデータフローを明示的に定義する方法です。
 この手法により依存関係が明確になり、型安全性も高まります。
@@ -512,7 +550,9 @@ workflow
 変数マッピングの詳細は、[ワークフロー変数によるデータマッピング](./variables)のドキュメントをご覧ください。
 
 
-### Context オブジェクトの使用
+<div id="using-the-context-object">
+  ### Context オブジェクトの使用
+</div>
 
 Context オブジェクトは、すべてのステップ結果とその出力に直接アクセスできます。この方法はより柔軟ですが、型安全性を保つためには慎重な取り扱いが必要です。
 ステップ結果には、`context.steps` オブジェクトを通して直接アクセスできます。
@@ -548,7 +588,9 @@ workflow.step(fetchUserStep).then(processOrderStep).commit();
 ```
 
 
-### ワークフロー単位の型安全性
+<div id="workflow-level-type-safety">
+  ### ワークフロー単位の型安全性
+</div>
 
 ワークフロー全体で型安全性を徹底するには、すべてのステップに型を定義し、それらを Workflow に渡します。
 これにより、条件内でのコンテキストオブジェクトや、最終的なワークフロー出力に含まれるステップ結果に対しても型安全性を確保できます。
@@ -605,7 +647,9 @@ workflow
 ```
 
 
-### トリガーデータへのアクセス
+<div id="accessing-trigger-data">
+  ### トリガーデータへのアクセス
+</div>
 
 ステップの結果に加えて、ワークフローを開始した元のトリガーデータにもアクセスできます。
 
@@ -644,7 +688,9 @@ workflow.step(processOrderStep).commit();
 ```
 
 
-### レジュメデータへのアクセス
+<div id="accessing-resume-data">
+  ### レジュメデータへのアクセス
+</div>
 
 ステップに注入されたデータは `context.inputData` オブジェクトから参照でき、ステップの `inputSchema` に基づいて型付けされています。
 
@@ -693,7 +739,9 @@ console.log({ resumedResult });
 ```
 
 
-### ワークフロー結果へのアクセス
+<div id="accessing-workflow-results">
+  ### ワークフロー結果へのアクセス
+</div>
 
 `Workflow` の型パラメータにステップの型を渡すことで、ワークフローの結果に型安全にアクセスできます。
 
@@ -758,7 +806,9 @@ if (result.results.fetchUser.status === "success") {
 ```
 
 
-### データフローのベストプラクティス
+<div id="best-practices-for-data-flow">
+  ### データフローのベストプラクティス
+</div>
 
 1. **型安全性のために Step 参照と併せて getStepResult を使う**
    - TypeScript が正しい型を推論できるようにする
@@ -781,7 +831,9 @@ if (result.results.fetchUser.status === "success") {
    - 変数マッピングではなく、専用のステップでデータを変換する
    - ワークフローのテストやデバッグを容易にする
 
-### データフロー手法の比較
+<div id="comparison-of-data-flow-methods">
+  ### データフロー手法の比較
+</div>
 
 | 手法              | 型安全性 | 明示性 | ユースケース                                         |
 | ----------------- | -------- | ------ | ---------------------------------------------------- |

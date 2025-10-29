@@ -3,20 +3,28 @@ title: "オブザーバビリティ概要 | オブザーバビリティ | Mastra
 description: Mastra のオブザーバビリティ機能でアプリケーションを監視・デバッグします。
 ---
 
-# オブザーバビリティ概要
+<div id="observability-overview">
+  # オブザーバビリティ概要
+</div>
 
 Mastraは、AIアプリケーションに特化した包括的なオブザーバビリティ機能を提供します。LLMの動作を監視し、エージェントの意思決定をトレースし、AI特有のパターンを理解する専用ツールで複雑なワークフローをデバッグできます。
 
-## 主な機能
+<div id="key-features">
+  ## 主な機能
+</div>
 
-### 構造化ログ
+<div id="structured-logging">
+  ### 構造化ログ
+</div>
 
 コンテキスト付きのログでアプリケーションをデバッグ:
 
 - **コンテキスト伝播**: トレースとの自動的な相関付け
 - **レベル設定**: 開発・本番で重大度に基づくフィルタリング
 
-### AI トレーシング
+<div id="ai-tracing">
+  ### AI トレーシング
+</div>
 
 AI 処理向けに特化したトレーシングで、以下を捕捉します：
 
@@ -25,7 +33,9 @@ AI 処理向けに特化したトレーシングで、以下を捕捉します�
 - **ワークフローの各ステップ**：分岐ロジック、並列実行、各ステップの出力
 - **自動インストルメンテーション**：デコレータによるゼロコンフィグのトレーシング
 
-### OTEL トレーシング
+<div id="otel-tracing">
+  ### OTEL トレーシング
+</div>
 
 OpenTelemetry を用いた従来型の分散トレーシング:
 
@@ -34,7 +44,9 @@ OpenTelemetry を用いた従来型の分散トレーシング:
 - **プロバイダー連携**: Datadog、New Relic、Jaeger、その他の OTLP コレクターに対応
 - **分散コンテキスト**: W3C Trace Context の伝播に対応
 
-## クイックスタート
+<div id="quick-start">
+  ## クイックスタート
+</div>
 
 Mastra インスタンスでオブザーバビリティを設定します:
 
@@ -63,7 +75,9 @@ export const mastra = new Mastra({
 また、Langfuse や Braintrust、Datadog、New Relic、SigNoz などの OpenTelemetry 互換プラットフォームを含む各種外部トレーシングプロバイダーにも対応しています。詳しくは [AI Tracing](/docs/observability/ai-tracing/overview) のドキュメントをご覧ください。
 
 
-## 次のステップ
+<div id="whats-next">
+  ## 次のステップ
+</div>
 
 - **[AI トレーシングを設定](/docs/observability/ai-tracing/overview)**: アプリケーションのトレーシングを構成
 - **[ロギングを設定](/docs/observability/logging)**: 構造化ログを追加

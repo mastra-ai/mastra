@@ -3,11 +3,15 @@ title: "例: メッセージ長の制限 | プロセッサー | Mastra ドキュ
 description: 言語モデルに送信する前にメッセージの長さを制限するカスタム入力プロセッサーを作成する例。
 ---
 
-# メッセージ長リミッター
+<div id="message-length-limiter">
+  # メッセージ長リミッター
+</div>
 
 この例では、言語モデルに送信する前にメッセージ全体の長さを検証して制限するカスタム入力プロセッサの作成方法を紹介します。これにより、コストの高いAPI呼び出しを防ぎ、アプリケーション全体で一貫した入力制約を維持できます。
 
-## カスタム入力プロセッサを作成する
+<div id="create-a-custom-input-processor">
+  ## カスタム入力プロセッサを作成する
+</div>
 
 Mastra のカスタム入力プロセッサは、`processInput` メソッドを備えた `Processor` インターフェースを実装します。このプロセッサは、メッセージスレッド内のすべてのテキスト内容の総文字数を検証し、設定した上限を超えるリクエストを拒否します。
 
@@ -131,7 +135,9 @@ export class MessageLengthLimiter implements Processor {
 ```
 
 
-### 主要コンポーネント
+<div id="key-components">
+  ### 主要コンポーネント
+</div>
 
 - **Constructor**: options オブジェクトまたは数値を受け取る
 - **Strategy options**: 文字数超過時の処理方法を選択:
@@ -141,7 +147,9 @@ export class MessageLengthLimiter implements Processor {
 - **processInput**: メッセージ総文字数を検証し、選択した戦略を適用
 - **Error handling**: TripWire エラー（検証失敗）とアプリケーションエラーを区別
 
-### プロセッサの使用
+<div id="using-the-processor">
+  ### プロセッサの使用
+</div>
 
 明示的なストラテジー設定を行うオプションオブジェクト方式の使用例:
 
@@ -174,7 +182,9 @@ export const simpleAgent = new Agent({
 ```
 
 
-## 上限内の例
+<div id="high-example-within-limits">
+  ## 上限内の例
+</div>
 
 この例は、設定された文字数制限内に収まり、正常に処理されるメッセージを示しています。
 
@@ -199,7 +209,9 @@ console.log(result.text);
 ```
 
 
-### 高品質な出力例
+<div id="high-example-output">
+  ### 高品質な出力例
+</div>
 
 このメッセージは500文字の上限を大きく下回っているため、問題なく処理されます。
 
@@ -208,7 +220,9 @@ console.log(result.text);
 ```
 
 
-## 部分的な例（上限に近い）
+<div id="partial-example-approaching-limits">
+  ## 部分的な例（上限に近い）
+</div>
 
 この例は、文字数制限に近いものの、まだ上限内に収まっているメッセージを示しています。
 
@@ -234,7 +248,9 @@ console.log(result.text);
 ```
 
 
-### 部分的な出力例
+<div id="partial-example-output">
+  ### 部分的な出力例
+</div>
 
 このメッセージは300文字の上限未満のため、正常に処理されます。
 
@@ -243,7 +259,9 @@ console.log(result.text);
 ```
 
 
-## 低い例（上限超過）
+<div id="low-example-exceeds-limits">
+  ## 低い例（上限超過）
+</div>
 
 この例は、メッセージが設定された文字数上限を超えた場合に何が起こるかを示しています。
 
@@ -274,7 +292,9 @@ if (result.tripwire) {
 ```
 
 
-### 低品質な出力例
+<div id="low-example-output">
+  ### 低品質な出力例
+</div>
 
 このリクエストは、メッセージが100文字の上限を超えているためにブロックされました：
 
@@ -283,30 +303,40 @@ if (result.tripwire) {
 ```
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `MessageLengthLimiter` を使用すると、プロセッサは次のことを行います：
 
-### 正常に処理される場合
+<div id="successful-processing">
+  ### 正常に処理される場合
+</div>
 
 - **制限内**: 文字数制限未満のメッセージは通常どおり処理されます
 - **文字数カウント**: メッセージのテキスト内容のみをカウントします
 - **複数メッセージ対応**: スレッド内のすべてのメッセージの合計文字数をカウントします
 
-### 処理のブロック
+<div id="blocked-processing">
+  ### 処理のブロック
+</div>
 
 - **制限超過**: 設定された上限を超えるメッセージでは `result.tripwire = true` になる
 - **エラー詳細**: `result.tripwireReason` に実際の長さと設定された最大値が含まれる
 - **即時ブロック**: 処理は言語モデルに到達する前に停止する
 - **例外なし**: try/catch ブロックを使うのではなく `result.tripwire` を確認する
 
-### 設定オプション
+<div id="configuration-options">
+  ### 設定オプション
+</div>
 
 - **maxLength**: 文字数上限を設定します（既定値: 1000）
 - **カスタム上限**: エージェントごとに異なる文字数要件を設定できます
 - **実行時の上書き**: 必要に応じて呼び出し単位で上書きできます
 
-### ベストプラクティス
+<div id="best-practices">
+  ### ベストプラクティス
+</div>
 
 - モデルのコンテキストウィンドウに合わせて現実的な上限を設定する
 - 会話履歴の累積長を考慮する

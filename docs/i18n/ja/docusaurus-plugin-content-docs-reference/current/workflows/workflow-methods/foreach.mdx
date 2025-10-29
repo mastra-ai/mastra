@@ -3,18 +3,24 @@ title: "リファレンス: Workflow.foreach() | Workflows | Mastra ドキュメ
 description: ワークフローで使用する `Workflow.foreach()` メソッドのドキュメント。配列の各要素に対してステップを実行するループを作成します。
 ---
 
-# Workflow.foreach()
+<div id="workflowforeach">
+  # Workflow.foreach()
+</div>
 
 `.foreach()` メソッドは、配列内の各要素ごとにステップを実行するループを作成します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 workflow.foreach(step1, { concurrency: 2 });
 ```
 
 
-## パラメーター
+<div id="parameters">
+  ## パラメーター
+</div>
 
 <PropertiesTable
   content={[
@@ -44,7 +50,9 @@ workflow.foreach(step1, { concurrency: 2 });
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -56,6 +64,8 @@ workflow.foreach(step1, { concurrency: 2 });
   ]}
 />
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [foreach による繰り返し](/docs/workflows/control-flow#repeating-with-foreach)

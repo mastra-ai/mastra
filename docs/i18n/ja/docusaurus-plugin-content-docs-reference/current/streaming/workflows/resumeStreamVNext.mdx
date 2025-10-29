@@ -3,7 +3,9 @@ title: "リファレンス: Run.resumeStreamVNext()（実験的） | ストリ�
 description: ワークフローにおける `Run.resumeStreamVNext()` メソッドのドキュメント。中断されたワークフロー実行の再開と、その進行のリアルタイムストリーミングを可能にします。
 ---
 
-# Run.resumeStreamVNext()（実験的）
+<div id="runresumestreamvnext-experimental">
+  # Run.resumeStreamVNext()（実験的）
+</div>
 
 :::caution 実験的機能
 これは将来のバージョンで変更される可能性のある実験的な API です。`resumeStreamVNext()` メソッドは、最終的に現在のストリーミング手法を置き換える強化版ストリーミングシステムの一部です。本番環境での使用は慎重に検討してください。
@@ -11,7 +13,9 @@ description: ワークフローにおける `Run.resumeStreamVNext()` メソッ�
 
 `.resumeStreamVNext()` メソッドは、新しいデータを用いて一時停止中のワークフロー実行を再開し、特定のステップから続行すると同時に、イベントのストリームを監視できるようにします。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
@@ -34,7 +38,9 @@ if (result!.status === "suspended") {
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -78,7 +84,9 @@ if (result!.status === "suspended") {
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -106,7 +114,9 @@ if (result!.status === "suspended") {
   ]}
 />
 
-## ストリームイベント
+<div id="stream-events">
+  ## ストリームイベント
+</div>
 
 ストリームはワークフローの実行中にさまざまなイベントを送出します。各イベントには `type` フィールドと、関連するデータを含む `payload` が含まれます:
 
@@ -116,7 +126,9 @@ if (result!.status === "suspended") {
 - **`workflow-step-result`**: ステップが結果とともに完了する
 - **`workflow-finish`**: 使用状況の統計とともにワークフローの実行が完了する
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [Workflows の概要](/docs/workflows/overview#running-workflows)
 - [Workflow.createRunAsync()](/reference/workflows/workflow-methods/create-run)

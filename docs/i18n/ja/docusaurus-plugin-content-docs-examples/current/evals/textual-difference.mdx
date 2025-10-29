@@ -3,7 +3,9 @@ title: "例: テキスト差分評価 | Evals | Mastra Docs"
 description: 文字列間の類似性を、テキストの差分や変更を分析する Textual Difference 指標で評価する例。
 ---
 
-# テキスト差分評価
+<div id="textual-difference-evaluation">
+  # テキスト差分評価
+</div>
 
 :::note
 Scorers API は現在ベータ版です。改良を継続しており、皆さまのフィードバックを歓迎します。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までお寄せください。
@@ -11,14 +13,18 @@ Scorers API は現在ベータ版です。改良を継続しており、皆さ�
 
 `TextualDifferenceMetric` を使用すると、シーケンス差分や編集操作を解析して、2 つのテキスト文字列の類似度を評価できます。メトリクスは `query` と `response` を受け取り、スコアと、confidence・ratio・変更数・長さ差を含む `info` オブジェクトを返します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/evals
 ```
 
 
-## 差分なしの例
+<div id="no-differences-example">
+  ## 差分なしの例
+</div>
 
 この例では、テキストが完全に同一です。このメトリクスは、満点を付与し、変更がないことを示して、完全な一致を認識します。
 
@@ -36,7 +42,9 @@ console.log(result);
 ```
 
 
-### 差分はありません
+<div id="no-differences-output">
+  ### 差分はありません
+</div>
 
 このメトリクスは高いスコアを返し、テキストが同一であることを示しています。詳細情報でも変更はゼロで、長さの差もないことが確認できます。
 
@@ -53,7 +61,9 @@ console.log(result);
 ```
 
 
-## 些細な差異の例
+<div id="minor-differences-example">
+  ## 些細な差異の例
+</div>
 
 この例では、テキストにわずかな違いがあります。指標はこうした小さな差異を検出し、類似度は中程度というスコアを返します。
 
@@ -71,7 +81,9 @@ console.log(result);
 ```
 
 
-### 軽微な差分の出力
+<div id="minor-differences-output">
+  ### 軽微な差分の出力
+</div>
 
 このメトリクスは、テキスト間の小さな差分を反映し、中程度のスコアを返します。詳細情報には、変更数と確認された長さの差が含まれます。
 
@@ -88,7 +100,9 @@ console.log(result);
 ```
 
 
-## 大きな差異の例
+<div id="major-differences-example">
+  ## 大きな差異の例
+</div>
 
 この例では、テキストの内容が大きく異なっています。メトリクスは大幅な変更を検出し、低い類似度スコアを返します。
 
@@ -106,7 +120,9 @@ console.log(result);
 ```
 
 
-### 大きな差分の出力
+<div id="major-differences-output">
+  ### 大きな差分の出力
+</div>
 
 テキスト間に大きな違いがあるため、このメトリクスは低いスコアになります。詳細情報には多数の変更点と、長さの大きな違いが示されています。
 
@@ -123,7 +139,9 @@ console.log(result);
 ```
 
 
-## メトリックの設定
+<div id="metric-configuration">
+  ## メトリックの設定
+</div>
 
 `TextualDifferenceMetric` インスタンスはデフォルト設定で作成できます。追加の設定は不要です。
 
@@ -134,7 +152,9 @@ const metric = new TextualDifferenceMetric();
 > 設定オプションの全リストは [TextualDifferenceMetric](/reference/evals/textual-difference) を参照してください。
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `TextualDifferenceMetric` は次の形式の結果を返します：
 
@@ -151,7 +171,9 @@ const metric = new TextualDifferenceMetric();
 ```
 
 
-### テキスト差分スコア
+<div id="textual-difference-score">
+  ### テキスト差分スコア
+</div>
 
 0～1 の範囲のテキスト差分スコア:
 
@@ -161,7 +183,9 @@ const metric = new TextualDifferenceMetric();
 - **0.1–0.3**: 大きな差分 ― 大幅な修正が必要。
 - **0.0**: テキストが完全に異なる。
 
-### 文字差分情報
+<div id="textual-difference-info">
+  ### 文字差分情報
+</div>
 
 スコアの説明（以下の詳細を含む）:
 

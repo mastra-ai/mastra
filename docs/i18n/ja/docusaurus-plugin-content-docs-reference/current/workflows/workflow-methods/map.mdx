@@ -3,18 +3,24 @@ title: "リファレンス: Workflow.map() | Workflows | Mastra Docs"
 description: ワークフローにおける `Workflow.map()` メソッドのドキュメント。前のステップの出力データを後続ステップの入力にマッピングします。
 ---
 
-# Workflow.map()
+<div id="workflowmap">
+  # Workflow.map()
+</div>
 
 `.map()` メソッドは、前のステップの出力データを後続のステップの入力に対応付け、ステップ間でデータを変換できるようにします。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 workflow.map(async ({ inputData }) => `${inputData.value} - map`
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -28,7 +34,9 @@ workflow.map(async ({ inputData }) => `${inputData.value} - map`
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -40,6 +48,8 @@ workflow.map(async ({ inputData }) => `${inputData.value} - map`
   ]}
 />
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [入力データのマッピング](/docs/workflows/input-data-mapping)

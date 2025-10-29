@@ -3,11 +3,15 @@ title: "リファレンス: ExtractParams | RAG | Mastra ドキュメント"
 description: Mastra におけるメタデータ抽出設定のドキュメントです。
 ---
 
-# ExtractParams
+<div id="extractparams">
+  # ExtractParams
+</div>
 
 ExtractParams は、LLM 解析に基づいてドキュメントのチャンクからメタデータを抽出するための設定です。
 
-## 例
+<div id="example">
+  ## 例
+</div>
 
 ```typescript showLineNumbers copy
 import { MDocument } from "@mastra/rag";
@@ -30,7 +34,9 @@ const chunks = await doc.chunk({
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 `extract` パラメータは次のフィールドを受け付けます：
 
@@ -67,9 +73,13 @@ const chunks = await doc.chunk({
   ]}
 />
 
-## Extractor の引数
+<div id="extractor-arguments">
+  ## Extractor の引数
+</div>
 
-### TitleExtractorsArgs
+<div id="titleextractorsargs">
+  ### TitleExtractorsArgs
+</div>
 
 <PropertiesTable
   content={[
@@ -102,7 +112,9 @@ const chunks = await doc.chunk({
   ]}
 />
 
-### SummaryExtractArgs
+<div id="summaryextractargs">
+  ### SummaryExtractArgs
+</div>
 
 <PropertiesTable
   content={[
@@ -129,7 +141,9 @@ const chunks = await doc.chunk({
   ]}
 />
 
-### QuestionAnswerExtractArgs
+<div id="questionanswerextractargs">
+  ### QuestionAnswerExtractArgs
+</div>
 
 <PropertiesTable
   content={[
@@ -161,7 +175,9 @@ const chunks = await doc.chunk({
   ]}
 />
 
-### KeywordExtractArgs
+<div id="keywordextractargs">
+  ### KeywordExtractArgs
+</div>
 
 <PropertiesTable
   content={[
@@ -187,7 +203,9 @@ const chunks = await doc.chunk({
   ]}
 />
 
-## 上級例
+<div id="advanced-example">
+  ## 上級例
+</div>
 
 ```typescript showLineNumbers copy
 import { MDocument } from "@mastra/rag";
@@ -233,7 +251,9 @@ const chunks = await doc.chunk({
 ```
 
 
-## タイトル抽出のためのドキュメントのグループ化
+<div id="document-grouping-for-title-extraction">
+  ## タイトル抽出のためのドキュメントのグループ化
+</div>
 
 `TitleExtractor` を使用する際は、各チャンクの `metadata` フィールドに共通の `docId` を指定することで、複数のチャンクをまとめてタイトル抽出できます。同じ `docId` を持つすべてのチャンクには、同一の抽出タイトルが付与されます。`docId` が設定されていない場合、各チャンクはタイトル抽出において個別のドキュメントとして扱われます。
 

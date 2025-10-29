@@ -3,11 +3,15 @@ title: "OTEL トレーシング | オブザーバビリティ | Mastra ドキュ
 description: "Mastra アプリケーションで OpenTelemetry トレーシングを設定する"
 ---
 
-# OTEL トレーシング
+<div id="otel-tracing">
+  # OTEL トレーシング
+</div>
 
 Mastra はアプリケーションのトレーシングと監視のために OpenTelemetry Protocol (OTLP) をサポートしています。テレメトリを有効化すると、Mastra はエージェントの操作、LLM との対話、ツールの実行、連携（インテグレーション）の呼び出し、ワークフローの実行、データベース操作など、すべてのコア・プリミティブを自動的にトレースします。テレメトリ データは任意の OTEL コレクターへエクスポートできます。
 
-### 基本設定
+<div id="basic-configuration">
+  ### 基本設定
+</div>
 
 テレメトリーを有効にする簡単な例を次に示します：
 
@@ -29,7 +33,9 @@ export const mastra = new Mastra({
 ```
 
 
-### 設定オプション
+<div id="configuration-options">
+  ### 設定オプション
+</div>
 
 telemetry の設定では次のプロパティを指定できます:
 
@@ -62,7 +68,9 @@ type OtelConfig = {
 詳細は、上記のインライン型定義をご参照ください。
 
 
-### 環境変数
+<div id="environment-variables">
+  ### 環境変数
+</div>
 
 OTLP のエンドポイントとヘッダーは、環境変数で設定できます。
 
@@ -88,7 +96,9 @@ export const mastra = new Mastra({
 ```
 
 
-### 例: SigNoz との連携
+<div id="example-signoz-integration">
+  ### 例: SigNoz との連携
+</div>
 
 [SigNoz](https://signoz.io) では、トレースされたエージェントのやり取りは次のように表示されます:
 
@@ -102,15 +112,21 @@ export const mastra = new Mastra({
   height={400}
 />
 
-### その他の対応プロバイダー
+<div id="other-supported-providers">
+  ### その他の対応プロバイダー
+</div>
 
 Mastra は Datadog、New Relic、Jaeger など、OTLP 互換のオブザーバビリティプラットフォームを幅広くサポートしています。上記と同じ OTLP エンドポイントのパターンで設定してください。
 
-### カスタムインストルメンテーションファイル
+<div id="custom-instrumentation-files">
+  ### カスタムインストルメンテーションファイル
+</div>
 
 Mastra プロジェクトでは、`/mastra` フォルダに配置することでカスタムのインストルメンテーションファイルを定義できます。Mastra はデフォルトのインストルメンテーションではなく、これらのファイルを自動的に検出してバンドルします。
 
-#### 対応しているファイルタイプ
+<div id="supported-file-types">
+  #### 対応しているファイルタイプ
+</div>
 
 Mastra は、次の拡張子を持つインストルメンテーション用ファイルを探します:
 
@@ -118,7 +134,9 @@ Mastra は、次の拡張子を持つインストルメンテーション用フ�
 - `instrumentation.ts`
 - `instrumentation.mjs`
 
-#### 例
+<div id="example">
+  #### 例
+</div>
 
 ```ts title="/mastra/instrumentation.ts" showLineNumbers copy
 import { NodeSDK } from "@opentelemetry/sdk-node";
@@ -138,7 +156,9 @@ sdk.start();
 Mastra がカスタムのインストルメンテーションファイルを検出すると、デフォルトのインストルメンテーションを自動的に置き換え、ビルド時にバンドルします。
 
 
-### Mastra サーバー環境外でのトレース
+<div id="tracing-outside-mastra-server-environment">
+  ### Mastra サーバー環境外でのトレース
+</div>
 
 `mastra start` や `mastra dev` コマンドを使用すると、Mastra はトレースに必要なインストルメンテーションファイルを自動的に用意して読み込みます。ただし、Mastra を自分のアプリケーションの依存関係として使用する場合（Mastra サーバー環境外）には、インストルメンテーションファイルを手動で提供する必要があります。
 
@@ -183,7 +203,9 @@ node --import=./instrumentation.mjs --import=@opentelemetry/instrumentation/hook
 ```
 
 
-### Next.js 特有のトレーシング手順
+<div id="nextjs-specific-tracing-steps">
+  ### Next.js 特有のトレーシング手順
+</div>
 
 Next.js を使用している場合は、次の 3 つの追加設定が必要です:
 

@@ -9,7 +9,9 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 
-# Amazon EC2
+<div id="amazon-ec2">
+  # Amazon EC2
+</div>
 
 Mastra アプリケーションを Amazon EC2（Elastic Compute Cloud）にデプロイします。
 
@@ -20,7 +22,9 @@ Mastra アプリケーションを Amazon EC2（Elastic Compute Cloud）にデ�
 [はじめに](/docs/getting-started/installation)を参照してください
 :::
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 - [EC2](https://aws.amazon.com/ec2/) にアクセス可能な AWS アカウント
 - Ubuntu 24 以降または Amazon Linux を実行している EC2 インスタンス
@@ -29,7 +33,9 @@ Mastra アプリケーションを Amazon EC2（Elastic Compute Cloud）にデ�
 - SSL 証明書の設定（例: [Let's Encrypt](https://letsencrypt.org/) の利用）
 - インスタンスに Node.js 18 以降がインストール済み
 
-## デプロイ手順
+<div id="deployment-steps">
+  ## デプロイ手順
+</div>
 
 <Steps>
 
@@ -116,7 +122,9 @@ Mastra アプリケーションはデフォルトでポート 4111 で動作し�
 
 </Steps>
 
-## Mastra サーバーに接続する
+<div id="connect-to-your-mastra-server">
+  ## Mastra サーバーに接続する
+</div>
 
 クライアントアプリケーションから、`@mastra/client-js` パッケージの `MastraClient` を使って Mastra サーバーに接続できます。
 
@@ -131,6 +139,8 @@ const mastraClient = new MastraClient({
 ```
 
 
-## 次の手順
+<div id="next-steps">
+  ## 次の手順
+</div>
 
 - [Mastra クライアント SDK](/reference/client-js/mastra-client)

@@ -3,11 +3,15 @@ title: "リファレンス: getScorers() | Core | Mastra ドキュメント"
 description: "Mastra における `getScorers()` メソッドのドキュメント。AI 出力の評価に使用する、登録済みのすべてのスコアラーを返します。"
 ---
 
-# getScorers()
+<div id="getscorers">
+  # getScorers()
+</div>
 
 `getScorers()` メソッドは、Mastra インスタンスに登録されているすべてのスコアラーを返します。スコアラーは AI の出力を評価するために使用され、エージェントの生成やワークフローの実行において既定のスコアラーを差し替えることができます。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { mastra } from "./mastra";
@@ -20,11 +24,15 @@ const myScorer = allScorers.relevancyScorer;
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 このメソッドにはパラメータはありません。
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -37,7 +45,9 @@ const myScorer = allScorers.relevancyScorer;
   ]}
 />
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [getScorer()](../../reference/core/getScorer) - キーで特定のスコアラーを取得する
 - [getScorerByName()](../../reference/core/getScorerByName) - name プロパティでスコアラーを取得する

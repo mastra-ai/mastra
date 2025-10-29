@@ -6,23 +6,33 @@ description: Mastra を使って音声対話型アプリケーションを作成
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# Mastra による通話分析
+<div id="call-analysis-with-mastra">
+  # Mastra による通話分析
+</div>
 
 このガイドでは、Mastra を使って分析機能付きの完全な音声会話システムを構築する方法を解説します。例として、リアルタイムの音声対音声の会話、録音管理、そして Roark Analytics と連携した通話分析を取り上げます。
 
-## 概要
+<div id="overview">
+  ## 概要
+</div>
 
 本システムは、Mastra エージェントとの音声通話を開始し、やり取り全体を録音して Cloudinary に保存用としてアップロードした後、会話データを Roark Analytics に送信して詳細な通話分析を実施します。
 
-## 設定
+<div id="setup">
+  ## 設定
+</div>
 
-### 前提条件
+<div id="prerequisites">
+  ### 前提条件
+</div>
 
 1. 音声認識および音声合成用の OpenAI APIキー
 2. 音声ファイルの保存用 Cloudinary アカウント
 3. 通話分析用 Roark Analytics APIキー
 
-### 環境設定
+<div id="environment-configuration">
+  ### 環境設定
+</div>
 
 提供されたサンプルをもとに `.env` ファイルを作成してください：
 
@@ -35,7 +45,9 @@ ROARK_API_KEY=
 ```
 
 
-### インストール
+<div id="installation">
+  ### インストール
+</div>
 
 必要な依存関係をインストールします:
 
@@ -44,9 +56,13 @@ npm install
 ```
 
 
-## 実装
+<div id="implementation">
+  ## 実装
+</div>
 
-### Mastra エージェントの作成
+<div id="creating-the-mastra-agent">
+  ### Mastra エージェントの作成
+</div>
 
 まず、音声対応のエージェントを定義します。
 
@@ -78,7 +94,9 @@ export const speechToSpeechServer = new Agent({
 ```
 
 
-### Mastra の初期化
+<div id="initializing-mastra">
+  ### Mastra の初期化
+</div>
 
 エージェントを Mastra に登録します：
 
@@ -94,7 +112,9 @@ export const mastra = new Mastra({
 ```
 
 
-### 音声保存のための Cloudinary 連携
+<div id="cloudinary-integration-for-audio-storage">
+  ### 音声保存のための Cloudinary 連携
+</div>
 
 録音した音声ファイルを保存できるように、Cloudinary を設定します：
 
@@ -117,7 +137,9 @@ export async function uploadToCloudinary(path: string) {
 ```
 
 
-### メインアプリケーションのロジック
+<div id="main-application-logic">
+  ### メインアプリケーションのロジック
+</div>
 
 メインアプリケーションは、会話フロー、録音、アナリティクスの統合を統括します。
 
@@ -189,7 +211,9 @@ speechToSpeechServerExample().catch(console.error);
 ```
 
 
-## 会話ユーティリティ
+<div id="conversation-utilities">
+  ## 会話ユーティリティ
+</div>
 
 `utils.ts` ファイルには、会話を管理するためのヘルパー関数が含まれており、次の機能を提供します：
 
@@ -198,7 +222,9 @@ speechToSpeechServerExample().catch(console.error);
 3. ツール呼び出しの処理
 4. 会話のライフサイクルイベントの管理
 
-## 例を実行する
+<div id="running-the-example">
+  ## 例を実行する
+</div>
 
 次のコマンドで会話を開始します:
 
@@ -215,7 +241,9 @@ The application will:
 5. 分析結果を表示する
 
 
-## 主な機能
+<div id="key-features">
+  ## 主な機能
+</div>
 
 - **リアルタイム音声対話**: OpenAIの音声モデルを用いて自然な会話を実現
 - **会話の記録**: 後で分析できるよう、会話全体を保存
@@ -223,7 +251,9 @@ The application will:
 - **アナリティクス連携**: 会話データをRoark Analyticsに送信して詳細な分析を実施
 - **クラウドストレージ**: Cloudinaryに録音をアップロードして安全に保管・アクセス
 
-## カスタマイズ
+<div id="customization">
+  ## カスタマイズ
+</div>
 
 この例は次の方法でカスタマイズできます：
 

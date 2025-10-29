@@ -6,11 +6,15 @@ description: 実行中のレガシーワークフローのステップをサス�
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# ワークフロー（レガシー）の一時停止と再開
+<div id="workflow-legacy-with-suspend-and-resume">
+  # ワークフロー（レガシー）の一時停止と再開
+</div>
 
 ワークフローの各ステップは、実行の任意の時点で一時停止および再開できます。以下の例では、ワークフローステップを一時停止し、後で再開する方法を示します。
 
-## 基本例
+<div id="basic-example">
+  ## 基本例
+</div>
 
 ```ts showLineNumbers copy
 import { Mastra } from "@mastra/core";
@@ -93,7 +97,9 @@ await start({ triggerData: { inputValue: 45 } });
 ```
 
 
-## async/await パターンとサスペンドペイロードを用いた、複数のサスペンションポイントを持つ高度な例
+<div id="advanced-example-with-multiple-suspension-points-using-asyncawait-pattern-and-suspend-payloads">
+  ## async/await パターンとサスペンドペイロードを用いた、複数のサスペンションポイントを持つ高度な例
+</div>
 
 この例では、async/await パターンを使い、複数のサスペンションポイントを伴うより複雑なワークフローを示します。さまざまな段階で人の介入を必要とするコンテンツ生成ワークフローをシミュレートします。
 
@@ -368,7 +374,9 @@ console.log("最終的なワークフロー結果:", result);
 ```
 
 
-## ワークフロー（レガシー）
+<div id="workflows-legacy">
+  ## ワークフロー（レガシー）
+</div>
 
 以下のリンクは、レガシー版ワークフローの例を示すドキュメントです。
 

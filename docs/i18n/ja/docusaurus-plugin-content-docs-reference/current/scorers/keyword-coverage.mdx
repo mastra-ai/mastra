@@ -3,17 +3,23 @@ title: "リファレンス: キーワード網羅率スコアラー | Scorers | 
 description: Mastra の Keyword Coverage Scorer に関するドキュメント。入力の重要なキーワードが LLM の出力でどの程度カバーされているかを評価します。
 ---
 
-# キーワード網羅度スコアラー
+<div id="keyword-coverage-scorer">
+  # キーワード網羅度スコアラー
+</div>
 
 `createKeywordCoverageScorer()` 関数は、LLM の出力が入力中の重要なキーワードをどの程度カバーしているかを評価します。一般的な語やストップワードを無視しつつ、キーワードの有無や一致を分析します。
 
-## パラメーター
+<div id="parameters">
+  ## パラメーター
+</div>
 
 `createKeywordCoverageScorer()` 関数はオプションを受け取りません。
 
 この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドとその入出力の詳細については、[MastraScorer リファレンス](./mastra-scorer)を参照してください。
 
-## .run() の返り値
+<div id="run-returns">
+  ## .run() の返り値
+</div>
 
 <PropertiesTable
   content={[
@@ -61,7 +67,9 @@ description: Mastra の Keyword Coverage Scorer に関するドキュメント�
 ```
 
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 スコアラーは次の機能でキーワードを照合し、キーワードの網羅性を評価します:
 
@@ -70,7 +78,9 @@ description: Mastra の Keyword Coverage Scorer に関するドキュメント�
 - 語形変化への対応
 - 技術用語や複合語の特別な取り扱い
 
-### スコアリングプロセス
+<div id="scoring-process">
+  ### スコアリングプロセス
+</div>
 
 1. 入力と出力からキーワードを処理:
    - 一般語やストップワードを除外
@@ -83,7 +93,9 @@ description: Mastra の Keyword Coverage Scorer に関するドキュメント�
 
 最終スコア: `(matched_keywords / total_keywords) * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 カバレッジスコア（0〜1）:
 
@@ -93,7 +105,9 @@ description: Mastra の Keyword Coverage Scorer に関するドキュメント�
 - **0.1–0.3**: 低カバレッジ – 一部のキーワードのみ一致。
 - **0.0**: カバレッジなし – キーワードが見つからない。
 
-### 特殊なケース
+<div id="special-cases">
+  ### 特殊なケース
+</div>
 
 スコアラーは次の特殊ケースを処理します:
 
@@ -103,9 +117,13 @@ description: Mastra の Keyword Coverage Scorer に関するドキュメント�
 - 大文字小文字の違い: "JavaScript" は "javascript" と一致する
 - よく使われる語: 意味のあるキーワードに焦点を当てるため、スコア計算では無視する
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
-### 完全カバレッジの例
+<div id="full-coverage-example">
+  ### 完全カバレッジの例
+</div>
 
 この例では、回答が入力の重要な用語を余すところなく反映しています。必要なキーワードがすべて含まれており、抜け漏れのない完全なカバレッジになっています。
 
@@ -128,7 +146,9 @@ console.log("分析ステップ結果:", result.analyzeStepResult);
 ```
 
 
-#### フルカバレッジの出力
+<div id="full-coverage-output">
+  #### フルカバレッジの出力
+</div>
 
 スコアが 1 の場合、期待されるキーワードがすべてレスポンス内で見つかったことを示します。`analyzeStepResult` フィールドは、マッチしたキーワード数が入力から抽出された総キーワード数と一致していることを示します。
 
@@ -143,7 +163,9 @@ console.log("分析ステップ結果:", result.analyzeStepResult);
 ```
 
 
-### 部分的なカバレッジの例
+<div id="partial-coverage-example">
+  ### 部分的なカバレッジの例
+</div>
 
 この例では、レスポンスには入力に含まれる重要なキーワードの一部は入っていますが、すべては含まれていません。スコアは部分的なカバレッジを反映しており、主要な用語が欠落しているか、または部分的一致にとどまっています。
 
@@ -165,7 +187,9 @@ console.log("分析ステップ結果:", result.analyzeStepResult);
 ```
 
 
-#### 部分的なカバレッジの出力
+<div id="partial-coverage-output">
+  #### 部分的なカバレッジの出力
+</div>
 
 スコアが 0.5 の場合、期待されるキーワードのうち半分しかレスポンス内で見つからなかったことを示します。`analyzeStepResult` フィールドには、入力で抽出された総数に対して、いくつの用語が一致したかが示されます。
 
@@ -180,7 +204,9 @@ console.log("分析ステップ結果:", result.analyzeStepResult);
 ```
 
 
-### カバレッジが最小の例
+<div id="minimal-coverage-example">
+  ### カバレッジが最小の例
+</div>
 
 この例では、応答に入力の重要なキーワードがほとんど含まれていません。スコアはカバレッジの低さを反映しており、主要な用語の大半が欠落しているか、反映されていません。
 
@@ -203,7 +229,9 @@ console.log("分析ステップ結果:", result.analyzeStepResult);
 ```
 
 
-#### カバレッジ最小出力
+<div id="minimal-coverage-output">
+  #### カバレッジ最小出力
+</div>
 
 スコアが低い場合、期待されるキーワードのうちごく一部しか応答に含まれていないことを示します。`analyzeStepResult` フィールドは、総数と一致したキーワード数の差を示し、カバレッジ不足を明らかにします。
 
@@ -218,7 +246,9 @@ console.log("分析ステップ結果:", result.analyzeStepResult);
 ```
 
 
-### メトリクスの構成
+<div id="metric-configuration">
+  ### メトリクスの構成
+</div>
 
 `KeywordCoverageMetric` インスタンスはデフォルト設定で作成できます。追加の構成は不要です。
 
@@ -229,7 +259,9 @@ const metric = new KeywordCoverageMetric();
 > 設定オプションの全一覧については、[KeywordCoverageScorer](/reference/scorers/keyword-coverage)を参照してください。
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [完全性スコアラー](./completeness)
 - [内容類似度スコアラー](./content-similarity)

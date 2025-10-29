@@ -3,18 +3,24 @@ title: "リファレンス: Agent.getDefaultGenerateOptions() | Agents | Mastra 
 description: "Mastra のエージェントにおける `Agent.getDefaultGenerateOptions()` メソッドのドキュメント。generate 呼び出しで使用されるデフォルトのオプションを取得します。"
 ---
 
-# Agent.getDefaultGenerateOptions()
+<div id="agentgetdefaultgenerateoptions">
+  # Agent.getDefaultGenerateOptions()
+</div>
 
 エージェントは、モデルの挙動、出力のフォーマット、ツールやワークフローの呼び出しを制御するためのデフォルト生成オプションを設定できます。`.getDefaultGenerateOptions()` メソッドは、これらのデフォルトを取得し、関数であれば評価して解決します。これらのオプションは、上書きされない限りすべての `generate()` 呼び出しに適用され、エージェントの既定設定を確認するのに役立ちます。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 await agent.getDefaultGenerateOptions();
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -28,7 +34,9 @@ await agent.getDefaultGenerateOptions();
   ]}
 />
 
-## 返り値
+<div id="returns">
+  ## 返り値
+</div>
 
 <PropertiesTable
   content={[
@@ -41,7 +49,9 @@ await agent.getDefaultGenerateOptions();
   ]}
 />
 
-## 発展的な使用例
+<div id="extended-usage-example">
+  ## 発展的な使用例
+</div>
 
 ```typescript copy
 await agent.getDefaultGenerateOptions({
@@ -50,7 +60,9 @@ await agent.getDefaultGenerateOptions({
 ```
 
 
-### オプションパラメータ
+<div id="options-parameters">
+  ### オプションパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -65,7 +77,9 @@ await agent.getDefaultGenerateOptions({
   ]}
 />
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [エージェントの応答生成](/docs/agents/overview#generating-responses)
 - [ランタイムコンテキスト](/docs/server-db/runtime-context)

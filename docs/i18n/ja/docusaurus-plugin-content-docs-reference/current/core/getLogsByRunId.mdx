@@ -3,18 +3,24 @@ title: "リファレンス: Mastra.getLogsByRunId() | コア | Mastra ドキュ�
 description: "Mastra の `Mastra.getLogsByRunId()` メソッドのドキュメント。特定の実行 ID とトランスポート ID のログを取得します。"
 ---
 
-# Mastra.getLogsByRunId()
+<div id="mastragetlogsbyrunid">
+  # Mastra.getLogsByRunId()
+</div>
 
 `.getLogsByRunId()` メソッドは、特定の実行IDとトランスポートIDに対応するログを取得するために使用します。このメソッドを利用するには、`getLogsByRunId` 操作をサポートするように設定されたロガーが必要です。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 mastra.getLogsByRunId({ runId: "123", transportId: "456" });
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -69,7 +75,9 @@ mastra.getLogsByRunId({ runId: "123", transportId: "456" });
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -82,7 +90,9 @@ mastra.getLogsByRunId({ runId: "123", transportId: "456" });
   ]}
 />
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [ロギング概要](/docs/observability/logging)
 - [ロガーリファレンス](/reference/observability/logging/pino-logger)

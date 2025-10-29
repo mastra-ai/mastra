@@ -3,7 +3,9 @@ title: ドキュメントの分割と埋め込み | RAG | Mastra ドキュメン
 description: 効率的な処理と検索のための、Mastra におけるドキュメントの分割と埋め込みに関するガイド。
 ---
 
-# ドキュメントの分割と埋め込み
+<div id="chunking-and-embedding-documents">
+  # ドキュメントの分割と埋め込み
+</div>
 
 処理の前に、コンテンツから MDocument インスタンスを作成します。さまざまな形式から初期化できます:
 
@@ -15,7 +17,9 @@ const docFromJSON = MDocument.fromJSON(`{ "key": "value" }`);
 ```
 
 
-## ステップ 1: ドキュメント処理
+<div id="step-1-document-processing">
+  ## ステップ 1: ドキュメント処理
+</div>
 
 `chunk` を使ってドキュメントを扱いやすいサイズに分割します。Mastra では、ドキュメントの種類に最適化された複数のチャンク分割戦略をサポートしています:
 
@@ -73,11 +77,15 @@ const chunks = await doc.chunk({
 チャンク化の戦略については、[チャンクに関するドキュメント](/reference/rag/chunk)でさらに詳しく解説しています。
 
 
-## ステップ 2: 埋め込みの生成
+<div id="step-2-embedding-generation">
+  ## ステップ 2: 埋め込みの生成
+</div>
 
 お好みのプロバイダーを使って、チャンクを埋め込みベクトルに変換します。Mastra は、モデルルーターまたは AI SDK パッケージを通じて埋め込みモデルをサポートしています。
 
-### モデルルーターの使用（推奨）
+<div id="using-the-model-router-recommended">
+  ### モデルルーターの使用（推奨）
+</div>
 
 最も簡単な方法は、`provider/model` という文字列を使って Mastra のモデルルーターを利用することです。
 
@@ -103,7 +111,9 @@ const { embeddings } = await embedMany({
 モデルルーターは、環境変数からの API キーの検出を自動で処理します。
 
 
-### AI SDK パッケージの利用
+<div id="using-ai-sdk-packages">
+  ### AI SDK パッケージの利用
+</div>
 
 AI SDK の埋め込みモデルは、直接利用することもできます。
 
@@ -120,7 +130,9 @@ const { embeddings } = await embedMany({
 埋め込み関数は、テキストの意味を表す数値配列（ベクトル）を返し、ベクトルデータベースでの類似検索にそのまま使用できます。
 
 
-### 埋め込み次元の設定
+<div id="configuring-embedding-dimensions">
+  ### 埋め込み次元の設定
+</div>
 
 埋め込みモデルは通常、固定の次元数を持つベクトル（例: OpenAI の `text-embedding-3-small` は 1536 次元）を出力します。
 一部のモデルはこの次元数の削減に対応しており、次のような効果が期待できます:
@@ -153,11 +165,15 @@ const { embeddings } = await embedMany({
 ```
 
 
-### ベクターデータベースの互換性
+<div id="vector-database-compatibility">
+  ### ベクターデータベースの互換性
+</div>
 
 埋め込みを保存する際は、ベクターデータベースのインデックスを使用する埋め込みモデルの出力次元数に合わせて設定する必要があります。次元数が一致しない場合、エラーが発生したり、データが破損したりする恐れがあります。
 
-## 例：完全なパイプライン
+<div id="example-complete-pipeline">
+  ## 例：完全なパイプライン
+</div>
 
 以下は、両方のプロバイダーを用いたドキュメント処理と埋め込み生成の例です：
 

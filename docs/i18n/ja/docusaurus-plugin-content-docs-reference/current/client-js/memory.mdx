@@ -3,11 +3,15 @@ title: "リファレンス: メモリ API | クライアント SDK | Mastra ド�
 description: client-js SDK を使って、Mastra で会話スレッドとメッセージ履歴を管理する方法を解説します。
 ---
 
-# Memory API
+<div id="memory-api">
+  # Memory API
+</div>
 
 Memory API は、Mastra の会話スレッドとメッセージ履歴を管理するためのメソッドを提供します。
 
-### すべてのスレッドを取得
+<div id="get-all-threads">
+  ### すべてのスレッドを取得
+</div>
 
 特定のリソースに紐づくメモリスレッドをすべて取得します。
 
@@ -19,7 +23,9 @@ const threads = await mastraClient.getMemoryThreads({
 ```
 
 
-### 新規スレッドの作成
+<div id="create-a-new-thread">
+  ### 新規スレッドの作成
+</div>
 
 新しいメモリスレッドを作成します：
 
@@ -33,7 +39,9 @@ const thread = await mastraClient.createMemoryThread({
 ```
 
 
-### 特定のスレッドを扱う
+<div id="working-with-a-specific-thread">
+  ### 特定のスレッドを扱う
+</div>
 
 特定のメモリスレッドのインスタンスを取得します：
 
@@ -42,9 +50,13 @@ const thread = mastraClient.getMemoryThread("thread-id", "agent-id");
 ```
 
 
-## スレッドのメソッド
+<div id="thread-methods">
+  ## スレッドのメソッド
+</div>
 
-### スレッドの詳細を取得
+<div id="get-thread-details">
+  ### スレッドの詳細を取得
+</div>
 
 特定のスレッドの詳細を取得します。
 
@@ -53,7 +65,9 @@ const details = await thread.get();
 ```
 
 
-### スレッドの更新
+<div id="update-thread">
+  ### スレッドの更新
+</div>
 
 スレッドのプロパティを更新します：
 
@@ -66,7 +80,9 @@ const updated = await thread.update({
 ```
 
 
-### スレッドを削除
+<div id="delete-thread">
+  ### スレッドを削除
+</div>
 
 スレッドとそのメッセージを削除します：
 
@@ -75,9 +91,13 @@ await thread.delete();
 ```
 
 
-## メッセージ操作
+<div id="message-operations">
+  ## メッセージ操作
+</div>
 
-### メッセージの保存
+<div id="save-messages">
+  ### メッセージの保存
+</div>
 
 メッセージをメモリに保存します：
 
@@ -98,7 +118,9 @@ const savedMessages = await mastraClient.saveMessageToMemory({
 ```
 
 
-### スレッド メッセージの取得
+<div id="retrieve-thread-messages">
+  ### スレッド メッセージの取得
+</div>
 
 メモリ スレッドに関連するメッセージを取得します。
 
@@ -111,7 +133,9 @@ const { messages } = await thread.getMessages({ limit: 10 });
 ```
 
 
-### メッセージを削除する
+<div id="delete-a-message">
+  ### メッセージを削除する
+</div>
 
 スレッドから特定のメッセージを削除します:
 
@@ -121,7 +145,9 @@ const result = await thread.deleteMessage("message-id");
 ```
 
 
-### 複数のメッセージを削除
+<div id="delete-multiple-messages">
+  ### 複数のメッセージを削除
+</div>
 
 1 回の操作でスレッドから複数のメッセージを削除します。
 
@@ -135,7 +161,9 @@ const result = await thread.deleteMessages([
 ```
 
 
-### メモリの状態を取得
+<div id="get-memory-status">
+  ### メモリの状態を取得
+</div>
 
 メモリシステムの状態を確認します。
 

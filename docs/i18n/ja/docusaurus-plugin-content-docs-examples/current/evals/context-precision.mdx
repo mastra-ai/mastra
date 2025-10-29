@@ -3,7 +3,9 @@ title: "例: コンテキスト精度の評価 | Evals | Mastra Docs"
 description: コンテキスト情報の活用精度を評価するために「Context Precision」指標を用いる例。
 ---
 
-# コンテキスト精度の評価
+<div id="context-precision-evaluation">
+  # コンテキスト精度の評価
+</div>
 
 :::note
 Scorers API は現在ベータ版です。改善に鋭意取り組んでおり、皆さまのフィードバックをお待ちしています。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までご連絡ください。
@@ -11,14 +13,18 @@ Scorers API は現在ベータ版です。改善に鋭意取り組んでおり�
 
 `ContextPrecisionMetric` を使用して、レスポンスが提供されたコンテキストのうち最も関連性の高い部分に依拠しているかを評価します。メトリクスは `query` と `response` を受け取り、スコアと、その理由を含む `info` オブジェクトを返します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/evals
 ```
 
 
-## 高精度の例
+<div id="high-precision-example">
+  ## 高精度の例
+</div>
 
 この例では、応答はクエリに直接関係するコンテキストのみに基づいています。すべてのコンテキストが回答を支持しており、高い精度スコアにつながります。
 
@@ -45,7 +51,9 @@ console.log(result);
 ```
 
 
-### 高精度な出力
+<div id="high-precision-output">
+  ### 高精度な出力
+</div>
 
 無関係な情報を一切含まず、すべてのコンテキスト記述がクエリの回答に直接寄与しているため、この出力は満点と評価されます。
 
@@ -59,7 +67,9 @@ console.log(result);
 ```
 
 
-## 混合精度の例
+<div id="mixed-precision-example">
+  ## 混合精度の例
+</div>
 
 この例では、応答は1つ以上の関連するコンテキスト項目を利用していますが、無関係または注意をそらす情報も含んでいます。結果として、全体的な精度スコアが下がります。
 
@@ -86,7 +96,9 @@ console.log(result);
 ```
 
 
-### 混合精度の出力
+<div id="mixed-precision-output">
+  ### 混合精度の出力
+</div>
 
 関連する文脈は用いられているものの、無関係または不要な情報が混在して全体の精度を下げているため、この出力のスコアは中程度となります。
 
@@ -100,7 +112,9 @@ console.log(result);
 ```
 
 
-## 精度が低い例
+<div id="low-precision-example">
+  ## 精度が低い例
+</div>
 
 この例では、応答は提供されたコンテキストのごく一部しか利用していません。コンテキストの大半はクエリに無関係で、その結果、適合率（precision）スコアが低くなります。
 
@@ -126,7 +140,9 @@ console.log(result);
 ```
 
 
-### 低精度の出力
+<div id="low-precision-output">
+  ### 低精度の出力
+</div>
 
 この出力は、クエリに関連するコンテキストが1つしかないため、評価が低くなっています。残りのコンテキストは無関係で、回答に寄与していません。
 
@@ -140,7 +156,9 @@ console.log(result);
 ```
 
 
-## メトリックの設定
+<div id="metric-configuration">
+  ## メトリックの設定
+</div>
 
 関連する背景情報を表す `context` 配列を指定して、`ContextPrecisionMetric` インスタンスを作成できます。また、`scale` などの任意パラメータを設定して、取り得る最大スコアを指定することもできます。
 
@@ -154,7 +172,9 @@ const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
 > すべての設定オプションの一覧は、[ContextPrecisionMetric](/reference/evals/context-precision)を参照してください。
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `ContextPrecisionMetric` は次の形式の結果を返します:
 
@@ -168,7 +188,9 @@ const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
 ```
 
 
-### 精度スコア
+<div id="precision-score">
+  ### 精度スコア
+</div>
 
 0〜1の範囲の精度スコア:
 
@@ -178,7 +200,9 @@ const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
 - **0.1〜0.3**: 低精度 — 関連するコンテキスト項目が少ない。
 - **0.0**: 精度なし — 関連するコンテキスト項目がない。
 
-### 精度に関する情報
+<div id="precision-info">
+  ### 精度に関する情報
+</div>
 
 スコアの説明（以下の詳細を含む）:
 

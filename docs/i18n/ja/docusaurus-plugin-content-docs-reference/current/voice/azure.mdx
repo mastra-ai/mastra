@@ -3,11 +3,15 @@ title: "リファレンス: Azure | Voice | Mastra ドキュメント"
 description: "Azure Cognitive Services を用いてテキスト読み上げ（TTS）と音声認識（STT）を提供する AzureVoice クラスのドキュメント。"
 ---
 
-# Azure
+<div id="azure">
+  # Azure
+</div>
 
 Mastra の AzureVoice クラスは、Microsoft Azure Cognitive Services を利用して、テキスト読み上げと音声認識の機能を提供します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { AzureVoice } from "@mastra/voice-azure";
@@ -41,9 +45,13 @@ const text = await voice.listen(audioStream, {
 ```
 
 
-## 設定
+<div id="configuration">
+  ## 設定
+</div>
 
-### コンストラクターのオプション
+<div id="constructor-options">
+  ### コンストラクターのオプション
+</div>
 
 <PropertiesTable
   content={[
@@ -68,7 +76,9 @@ const text = await voice.listen(audioStream, {
   ]}
 />
 
-### AzureSpeechConfig
+<div id="azurespeechconfig">
+  ### AzureSpeechConfig
+</div>
 
 <PropertiesTable
   content={[
@@ -95,9 +105,13 @@ const text = await voice.listen(audioStream, {
   ]}
 />
 
-## 方法
+<div id="methods">
+  ## 方法
+</div>
 
-### speak()
+<div id="speak">
+  ### speak()
+</div>
 
 Azure のニューラル音声合成サービスを使用して、テキストを音声に変換します。
 
@@ -139,7 +153,9 @@ Azure のニューラル音声合成サービスを使用して、テキスト�
 
 Returns: `Promise<NodeJS.ReadableStream>`
 
-### listen()
+<div id="listen">
+  ### listen()
+</div>
 
 Azure の音声認識（Speech-to-Text）サービスを使用して音声をテキスト化します。
 
@@ -170,7 +186,9 @@ Azure の音声認識（Speech-to-Text）サービスを使用して音声をテ
 
 Returns: `Promise<string>`
 
-### getSpeakers()
+<div id="getspeakers">
+  ### getSpeakers()
+</div>
 
 利用可能な音声オプションの配列を返します。各項目には以下が含まれます:
 
@@ -210,7 +228,9 @@ Returns: `Promise<string>`
   ]}
 />
 
-## メモ
+<div id="notes">
+  ## メモ
+</div>
 
 - API キーはコンストラクターのオプションまたは環境変数（AZURE_SPEECH_KEY、AZURE_SPEECH_REGION）で指定できます
 - Azure は多言語に対応した幅広いニューラル音声を提供しています

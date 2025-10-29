@@ -3,18 +3,24 @@ title: "CloudflareDeployer | デプロイ | Mastra ドキュメント"
 description: "Mastra CloudflareDeployer を使って Mastra アプリを Cloudflare にデプロイする方法を解説します"
 ---
 
-# CloudflareDeployer
+<div id="cloudflaredeployer">
+  # CloudflareDeployer
+</div>
 
 `CloudflareDeployer` クラスは、スタンドアロンの Mastra アプリケーションを Cloudflare Workers にデプロイします。構成やデプロイの管理を行い、Cloudflare 固有の機能によってベースの [Deployer](/reference/deployer/) クラスを拡張します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/deployer-cloudflare@latest
 ```
 
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
@@ -34,7 +40,9 @@ export const mastra = new Mastra({
 > 利用可能なすべての構成オプションについては、[CloudflareDeployer](/reference/deployer/cloudflare) の API リファレンスを参照してください。
 
 
-## 手動デプロイ
+<div id="manual-deployment">
+  ## 手動デプロイ
+</div>
 
 [Cloudflare Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/) を使えば、手動デプロイも可能です。Wrangler CLI をインストールしたら、プロジェクトのルートディレクトリで以下を実行してアプリケーションをデプロイします。
 
@@ -53,7 +61,9 @@ npm run build && wrangler deploy --config .mastra/output/wrangler.json
 > プロジェクトのルートで `wrangler dev --config .mastra/output/wrangler.json` を実行すると、Mastra アプリをローカルでテストすることもできます。
 
 
-## ビルド出力
+<div id="build-output">
+  ## ビルド出力
+</div>
 
 `CloudflareDeployer` を使用する Mastra アプリケーションのビルド出力には、プロジェクト内のすべてのエージェント、ツール、ワークフローに加え、Cloudflare 上でアプリケーションを実行するために必要な Mastra 固有のファイルが含まれます。
 
@@ -85,6 +95,8 @@ package.json
 ```
 
 
-## 次のステップ
+<div id="next-steps">
+  ## 次のステップ
+</div>
 
 - [Mastra クライアント SDK](/reference/client-js/mastra-client)

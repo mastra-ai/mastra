@@ -3,11 +3,15 @@ title: "リファレンス: TokenLimiterProcessor | プロセッサ | Mastra ド
 description: "Mastra の TokenLimiterProcessor に関するドキュメント。AI 応答のトークン数を制限します。"
 ---
 
-# TokenLimiterProcessor
+<div id="tokenlimiterprocessor">
+  # TokenLimiterProcessor
+</div>
 
 `TokenLimiterProcessor` は、AI の応答に含まれるトークン数を制限する**出力プロセッサ**です。トークンのカウントを行い、上限超過時の扱い（切り詰めや中止など）を設定できるため、レスポンスの長さを制御できます。ストリーミング／非ストリーミングのいずれのシナリオにも対応します。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript copy
 import { TokenLimiterProcessor } from "@mastra/core/processors";
@@ -20,7 +24,9 @@ const processor = new TokenLimiterProcessor({
 ```
 
 
-## コンストラクターの引数
+<div id="constructor-parameters">
+  ## コンストラクターの引数
+</div>
 
 <PropertiesTable
   content={[
@@ -34,7 +40,9 @@ const processor = new TokenLimiterProcessor({
   ]}
 />
 
-### オプション
+<div id="options">
+  ### オプション
+</div>
 
 <PropertiesTable
   content={[
@@ -71,7 +79,9 @@ const processor = new TokenLimiterProcessor({
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -117,7 +127,9 @@ const processor = new TokenLimiterProcessor({
   ]}
 />
 
-## 拡張された使用例
+<div id="extended-usage-example">
+  ## 拡張された使用例
+</div>
 
 ```typescript title="src/mastra/agents/limited-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -139,7 +151,9 @@ export const agent = new Agent({
 ```
 
 
-## 関連
+<div id="related">
+  ## 関連
+</div>
 
 - [入力プロセッサ](/docs/agents/guardrails)
 - [出力プロセッサ](/docs/agents/guardrails)

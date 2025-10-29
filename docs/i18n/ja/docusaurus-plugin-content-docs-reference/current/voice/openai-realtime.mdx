@@ -3,11 +3,15 @@ title: "リファレンス: OpenAI Realtime Voice | Voice | Mastra ドキュメ�
 description: "OpenAIRealtimeVoice クラスのドキュメント。WebSocket 経由でリアルタイムの音声合成（text-to-speech）および音声認識（speech-to-text）機能を提供します。"
 ---
 
-# OpenAI Realtime Voice
+<div id="openai-realtime-voice">
+  # OpenAI Realtime Voice
+</div>
 
 OpenAIRealtimeVoice クラスは、OpenAI の WebSocket ベースの API を用いて、リアルタイムの音声対話機能を提供します。音声から音声へのリアルタイム変換、音声活動検出、イベント駆動型のオーディオストリーミングに対応しています。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
@@ -59,9 +63,13 @@ voice.connect();
 ```
 
 
-## 設定
+<div id="configuration">
+  ## 設定
+</div>
 
-### コンストラクターのオプション
+<div id="constructor-options">
+  ### コンストラクターのオプション
+</div>
 
 <PropertiesTable
   content={[
@@ -89,7 +97,9 @@ voice.connect();
   ]}
 />
 
-### Voice Activity Detection (VAD) の設定
+<div id="voice-activity-detection-vad-configuration">
+  ### Voice Activity Detection (VAD) の設定
+</div>
 
 <PropertiesTable
   content={[
@@ -126,9 +136,13 @@ voice.connect();
   ]}
 />
 
-## 手法
+<div id="methods">
+  ## 手法
+</div>
 
-### connect()
+<div id="connect">
+  ### connect()
+</div>
 
 OpenAI のリアルタイムサービスに接続します。speak、listen、send 関数を使用する前に呼び出す必要があります。
 
@@ -142,7 +156,9 @@ OpenAI のリアルタイムサービスに接続します。speak、listen、se
   ]}
 />
 
-### speak()
+<div id="speak">
+  ### speak()
+</div>
 
 設定済みの音声モデルで発話イベントを発生させます。入力は文字列または readable なストリームを受け付けます。
 
@@ -166,7 +182,9 @@ OpenAI のリアルタイムサービスに接続します。speak、listen、se
 
 Returns: `Promise<void>`
 
-### listen()
+<div id="listen">
+  ### listen()
+</div>
 
 音声認識のために音声入力を処理します。音声データの読み取り可能なストリームを受け取り、書き起こし結果のテキストを含む「listening」イベントを発行します。
 
@@ -183,7 +201,9 @@ Returns: `Promise<void>`
 
 Returns: `Promise<void>`
 
-### send()
+<div id="send">
+  ### send()
+</div>
 
 ライブのマイク入力など、連続的な音声ストリーミングのユースケースで、OpenAI サービスに音声データをリアルタイムでストリーミングします。
 
@@ -200,7 +220,9 @@ Returns: `Promise<void>`
 
 Returns: `Promise<void>`
 
-### updateConfig()
+<div id="updateconfig">
+  ### updateConfig()
+</div>
 
 音声インスタンスのセッション設定を更新します。これにより、音声設定、発話ターン検出、その他のパラメータを変更できます。
 
@@ -217,7 +239,9 @@ Returns: `Promise<void>`
 
 戻り値: `void`
 
-### addTools()
+<div id="addtools">
+  ### addTools()
+</div>
 
 音声インスタンスにツールのセットを追加します。ツールを使うと、モデルは会話中に追加の処理を実行できます。OpenAIRealtimeVoice を Agent に追加すると、その Agent に設定されたツールは自動的に音声インターフェースで利用可能になります。
 
@@ -234,19 +258,25 @@ Returns: `Promise<void>`
 
 戻り値: `void`
 
-### close()
+<div id="close">
+  ### close()
+</div>
 
 OpenAI のリアルタイムセッションから切断し、リソースを解放します。音声インスタンスの使用が完了したら呼び出してください。
 
 Returns: `void`
 
-### getSpeakers()
+<div id="getspeakers">
+  ### getSpeakers()
+</div>
 
 利用可能な音声の話者一覧を返します。
 
 戻り値: `Promise<Array<{ voiceId: string; [key: string]: any }>>`
 
-### on()
+<div id="on">
+  ### on()
+</div>
 
 音声イベントのリスナーを登録します。
 
@@ -269,7 +299,9 @@ Returns: `void`
 
 戻り値: `void`
 
-### off()
+<div id="off">
+  ### off()
+</div>
 
 以前に登録したイベントリスナーを解除します。
 
@@ -292,7 +324,9 @@ Returns: `void`
 
 戻り値: `void`
 
-## イベント
+<div id="events">
+  ## イベント
+</div>
 
 OpenAIRealtimeVoice クラスは次のイベントを送出します:
 
@@ -319,7 +353,9 @@ OpenAIRealtimeVoice クラスは次のイベントを送出します:
   ]}
 />
 
-### OpenAI Realtime のイベント
+<div id="openai-realtime-events">
+  ### OpenAI Realtime のイベント
+</div>
 
 'openAIRealtime:' をプレフィックスとして付けることで、[OpenAI Realtime のユーティリティイベント](https://github.com/openai/openai-realtime-api-beta#reference-client-utility-events)を購読できます:
 
@@ -353,7 +389,9 @@ OpenAIRealtimeVoice クラスは次のイベントを送出します:
   ]}
 />
 
-## 利用可能な音声
+<div id="available-voices">
+  ## 利用可能な音声
+</div>
 
 利用できる音声オプションは次のとおりです：
 
@@ -366,7 +404,9 @@ OpenAIRealtimeVoice クラスは次のイベントを送出します:
 - `shimmer`: 明るくエネルギッシュ
 - `verse`: 多用途で表現力豊か
 
-## 注記
+<div id="notes">
+  ## 注記
+</div>
 
 - API キーはコンストラクターのオプション、または `OPENAI_API_KEY` 環境変数で指定できます
 - OpenAI Realtime Voice API はリアルタイム通信に WebSocket を使用します

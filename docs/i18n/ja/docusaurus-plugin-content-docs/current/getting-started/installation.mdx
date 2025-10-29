@@ -10,18 +10,24 @@ import StepItem from "@site/src/components/StepItem";
 import { VideoPlayer } from "@site/src/components/video-player";
 
 
-# Mastra のインストール
+<div id="install-mastra">
+  # Mastra のインストール
+</div>
 
 `create mastra` CLI コマンドは、新しい Mastra プロジェクトを始める最速の方法です。セットアップを対話的に案内し、学習やカスタマイズに使えるサンプルのエージェント、ワークフロー、ツールを作成します。
 
 セットアップをより細かく制御したい場合や、既存プロジェクトに Mastra を追加する場合は、[手動インストールガイド](#install-manually)をご覧ください。既存プロジェクトには [`mastra init`](/reference/cli/mastra#mastra-init) も利用できます。
 
-## 始める前に
+<div id="before-you-start">
+  ## 始める前に
+</div>
 
 - セットアップを完了するには、[モデルプロバイダー](/models)の API キーが必要です。まずは [OpenAI](https://platform.openai.com/api-keys) の利用をおすすめしますが、クレジットカード不要のプロバイダーが必要な場合は、Google の [Gemini](https://aistudio.google.com/app/api-keys) も選択肢です。
 - Node.js 20 以降を[インストール](https://nodejs.org/en/download)してください。
 
-## `create mastra` でインストール
+<div id="install-with-create-mastra">
+  ## `create mastra` でインストール
+</div>
 
 `create mastra` は、マシン上のどこからでも実行できます。
 
@@ -64,7 +70,9 @@ bun create mastra@latest -y
 
 :::
 
-### エージェントをテストする
+<div id="test-your-agent">
+  ### エージェントをテストする
+</div>
 
 セットアップが完了したら、ターミナルの指示に従って Mastra の開発サーバーを起動し、http://localhost:4111 の Playground を開きます。
 
@@ -80,14 +88,18 @@ bun create mastra@latest -y
 
 [Playground](/docs/getting-started/studio) を使えば、UI を作成せずにエージェントを素早く構築・プロトタイピングできます。準備が整ったら、以下のガイドに従って Mastra エージェントをアプリケーションに統合できます。
 
-### 次のステップ
+<div id="next-steps">
+  ### 次のステップ
+</div>
 
 - [Mastra の機能](/docs#why-mastra)について詳しく読む
 - フロントエンドフレームワークと Mastra を連携する: [Next.js](/docs/frameworks/web-frameworks/next-js)、[React](/docs/frameworks/web-frameworks/vite-react)、または [Astro](/docs/frameworks/web-frameworks/astro)
 - [ガイド](/guides)に沿って、ゼロからエージェントを作成する
 - [YouTube チャンネル](https://www.youtube.com/@mastra-ai)でコンセプトガイドを視聴し、[チャンネル登録](https://www.youtube.com/@mastra-ai?sub_confirmation=1)する
 
-## 手動でインストール
+<div id="install-manually">
+  ## 手動でインストール
+</div>
 
 自動の `create mastra` CLI ツールを使用したくない場合は、以下のガイドに従って手動でプロジェクトをセットアップできます。
 

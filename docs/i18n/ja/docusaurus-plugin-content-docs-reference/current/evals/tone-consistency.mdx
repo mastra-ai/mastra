@@ -3,7 +3,9 @@ title: "リファレンス: ToneConsistencyMetric | Evals | Mastra ドキュメ�
 description: Mastra における Tone Consistency Metric のドキュメント。テキストの感情トーンとセンチメントの一貫性を評価します。
 ---
 
-# ToneConsistencyMetric
+<div id="toneconsistencymetric">
+  # ToneConsistencyMetric
+</div>
 
 :::info Scorers
 このドキュメントはレガシーの evals API を参照しています。最新のスコアラー機能については、[Scorers](/docs/scorers/overview) をご覧ください。
@@ -11,7 +13,9 @@ description: Mastra における Tone Consistency Metric のドキュメント�
 
 `ToneConsistencyMetric` クラスは、テキストの感情的なトーンとその一貫性を評価します。入力と出力のペア間でトーンを比較するモードと、単一のテキスト内でトーンの安定性を分析するモードの2つで動作します。
 
-## 基本的な使用方法
+<div id="basic-usage">
+  ## 基本的な使用方法
+</div>
 
 ```typescript
 import { ToneConsistencyMetric } from "@mastra/evals/nlp";
@@ -35,7 +39,9 @@ console.log(result2.score); // トーン安定性スコア（0〜1）
 ```
 
 
-## measure() のパラメータ
+<div id="measure-parameters">
+  ## measure() のパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -55,7 +61,9 @@ console.log(result2.score); // トーン安定性スコア（0〜1）
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -72,7 +80,9 @@ console.log(result2.score); // トーン安定性スコア（0〜1）
   ]}
 />
 
-### info オブジェクト（トーン比較）
+<div id="info-object-tone-comparison">
+  ### info オブジェクト（トーン比較）
+</div>
 
 <PropertiesTable
   content={[
@@ -94,7 +104,9 @@ console.log(result2.score); // トーン安定性スコア（0〜1）
   ]}
 />
 
-### info オブジェクト（トーンの安定性）
+<div id="info-object-tone-stability">
+  ### info オブジェクト（トーンの安定性）
+</div>
 
 <PropertiesTable
   content={[
@@ -111,11 +123,15 @@ console.log(result2.score); // トーン安定性スコア（0〜1）
   ]}
 />
 
-## スコアリングの詳細
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
 
 このメトリクスは、トーンのパターン分析とモード別スコアリングを用いて、感情の一貫性を評価します。
 
-### スコアリングの流れ
+<div id="scoring-process">
+  ### スコアリングの流れ
+</div>
 
 1. トーンパターンの分析:
    - センチメント特徴量の抽出
@@ -135,7 +151,9 @@ console.log(result2.score); // トーン安定性スコア（0〜1）
 
 最終スコア: `mode_specific_score * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 （0からのスケール、デフォルトは0～1）
 
@@ -145,7 +163,9 @@ console.log(result2.score); // トーン安定性スコア（0〜1）
 - 0.1～0.3：大きなトーン変化を伴う低い一貫性
 - 0.0：一貫性なし（まったく別のトーン）
 
-## 両方のモードを使う例
+<div id="example-with-both-modes">
+  ## 両方のモードを使う例
+</div>
 
 ```typescript
 import { ToneConsistencyMetric } from "@mastra/evals/nlp";
@@ -183,7 +203,9 @@ const stabilityResult = await metric.measure(
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [コンテンツ類似度メトリクス](./content-similarity)
 - [有害性メトリクス](./toxicity)

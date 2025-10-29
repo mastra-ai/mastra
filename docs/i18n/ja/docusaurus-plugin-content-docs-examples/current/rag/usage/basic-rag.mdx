@@ -6,11 +6,15 @@ description: OpenAI の埋め込みと、ベクター保存に PGVector を使�
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# Vector Query Tool の使用
+<div id="using-the-vector-query-tool">
+  # Vector Query Tool の使用
+</div>
 
 この例では、RAG システムにおけるセマンティック検索のために `createVectorQueryTool` を実装して利用する方法を示します。ツールの設定、ベクター格納の管理、関連するコンテキストの効果的な取得方法を解説します。
 
-## 概要
+<div id="overview">
+  ## 概要
+</div>
 
 このシステムは Mastra と OpenAI を用いて RAG を実装しています。主な処理は次のとおりです:
 
@@ -21,9 +25,13 @@ import GithubLink from "@site/src/components/GithubLink";
 
 > 注意: 埋め込みの作成と保存方法については、[Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) ガイドをご覧ください。
 
-## セットアップ
+<div id="setup">
+  ## セットアップ
+</div>
 
-### 環境のセットアップ
+<div id="environment-setup">
+  ### 環境のセットアップ
+</div>
 
 環境変数を必ず設定してください。
 
@@ -33,7 +41,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
 
 
-### 依存関係
+<div id="dependencies">
+  ### 依存関係
+</div>
 
 必要な依存物をインポートします:
 
@@ -46,7 +56,9 @@ import { PgVector } from "@mastra/pg";
 ```
 
 
-## ベクタークエリツールの作成
+<div id="vector-query-tool-creation">
+  ## ベクタークエリツールの作成
+</div>
 
 ベクターデータベースを照会できるツールを作成します。
 
@@ -59,7 +71,9 @@ const vectorQueryTool = createVectorQueryTool({
 ```
 
 
-## エージェントの設定
+<div id="agent-configuration">
+  ## エージェントの設定
+</div>
 
 応答を処理する Mastra エージェントを設定します。
 
@@ -76,7 +90,9 @@ export const ragAgent = new Agent({
 ```
 
 
-## PgVector と Mastra をインスタンス化する
+<div id="instantiate-pgvector-and-mastra">
+  ## PgVector と Mastra をインスタンス化する
+</div>
 
 すべてのコンポーネントを含めて PgVector と Mastra をインスタンス化します：
 
@@ -94,7 +110,9 @@ const agent = mastra.getAgent("ragAgent");
 ```
 
 
-## 使い方の例
+<div id="example-usage">
+  ## 使い方の例
+</div>
 
 ```typescript copy showLineNumbers{32} title="src/index.ts"
 const prompt = `

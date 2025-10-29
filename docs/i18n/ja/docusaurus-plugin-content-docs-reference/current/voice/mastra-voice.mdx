@@ -3,11 +3,15 @@ title: "リファレンス: MastraVoice | Voice | Mastra ドキュメント"
 description: "Mastra におけるすべての音声サービス（音声間変換機能を含む）のための中核インターフェースを定義する抽象基底クラス、MastraVoice のドキュメント。"
 ---
 
-# MastraVoice
+<div id="mastravoice">
+  # MastraVoice
+</div>
 
 MastraVoice クラスは、Mastra における音声サービスの中核インターフェースを定義する抽象基底クラスです。OpenAI、Deepgram、PlayAI、Speechify など、すべての音声プロバイダーの実装は、このクラスを継承して各サービス固有の機能を提供します。現在、このクラスは WebSocket 接続を用いたリアルタイムの音声間変換（speech-to-speech）機能にも対応しています。
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 ```typescript
 import { MastraVoice } from "@mastra/core/voice";
@@ -85,7 +89,9 @@ class MyVoiceProvider extends MastraVoice {
 ```
 
 
-## コンストラクターの引数
+<div id="constructor-parameters">
+  ## コンストラクターの引数
+</div>
 
 <PropertiesTable
   content={[
@@ -128,7 +134,9 @@ class MyVoiceProvider extends MastraVoice {
   ]}
 />
 
-### BuiltInModelConfig
+<div id="builtinmodelconfig">
+  ### BuiltInModelConfig
+</div>
 
 <PropertiesTable
   content={[
@@ -147,7 +155,9 @@ class MyVoiceProvider extends MastraVoice {
   ]}
 />
 
-### RealtimeConfig
+<div id="realtimeconfig">
+  ### RealtimeConfig
+</div>
 
 <PropertiesTable
   content={[
@@ -172,11 +182,15 @@ class MyVoiceProvider extends MastraVoice {
   ]}
 />
 
-## 抽象メソッド
+<div id="abstract-methods">
+  ## 抽象メソッド
+</div>
 
 これらのメソッドは、MastraVoice を継承する任意のクラスで実装する必要があります。
 
-### speak()
+<div id="speak">
+  ### speak()
+</div>
 
 設定された音声モデルを使ってテキストを音声に変換します。
 
@@ -199,7 +213,9 @@ abstract speak(
 * &#39;speaking&#39; イベントの発行によって音声が処理される場合は、void を返すことがあります
 
 
-### listen()
+<div id="listen">
+  ### listen()
+</div>
 
 設定されたリスニングモデルを使って、音声をテキストに変換します。
 
@@ -221,7 +237,9 @@ Purpose:
 * 「writing」イベントの発行によって文字起こしを処理する場合は、void を返すことがあります
 
 
-### getSpeakers()
+<div id="getspeakers">
+  ### getSpeakers()
+</div>
 
 プロバイダーがサポートする利用可能な音声の一覧を返します。
 
@@ -237,11 +255,15 @@ abstract getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: unknown 
 * テキスト読み上げ（TTS）で利用できるボイスを特定するために使用する
 
 
-## オプションのメソッド
+<div id="optional-methods">
+  ## オプションのメソッド
+</div>
 
 これらのメソッドには既定の実装がありますが、スピーチ・トゥ・スピーチ機能に対応した音声プロバイダーでは上書き（オーバーライド）できます。
 
-### connect()
+<div id="connect">
+  ### connect()
+</div>
 
 通信のために WebSocket または WebRTC 接続を確立します。
 
@@ -257,7 +279,9 @@ Purpose:
 * 設定はプロバイダごとに異なります
 
 
-### send()
+<div id="send">
+  ### send()
+</div>
 
 音声データをリアルタイムで音声プロバイダーへストリーミングします。
 
@@ -273,7 +297,9 @@ send(audioData: NodeJS.ReadableStream | Int16Array): Promise<void>
 * このメソッドを呼び出す前に、接続済みの状態である必要があります
 
 
-### answer()
+<div id="answer">
+  ### answer()
+</div>
 
 音声プロバイダーに応答の生成を指示します。
 
@@ -288,7 +314,9 @@ answer(): Promise<void>
 * 応答はイベントシステム（例: 「speaking」イベント）を通じて出力される
 
 
-### addTools()
+<div id="addtools">
+  ### addTools()
+</div>
 
 会話中に使用するツールを音声プロバイダーに追加します。
 
@@ -303,7 +331,9 @@ addTools(tools: Array<Tool>): void
 * 実装はプロバイダーごとに異なる
 
 
-### close()
+<div id="close">
+  ### close()
+</div>
 
 WebSocket または WebRTC の接続を切断します。
 
@@ -318,7 +348,9 @@ Purpose:
 * 音声インスタンスの使用が完了したら呼び出してください
 
 
-### on()
+<div id="on">
+  ### on()
+</div>
 
 音声イベント用のイベントリスナーを登録します。
 
@@ -337,7 +369,9 @@ Purpose:
 * イベントデータの構造はイベントの種類によって異なります
 
 
-### off()
+<div id="off">
+  ### off()
+</div>
 
 イベントリスナーを解除します。
 
@@ -354,7 +388,9 @@ off<E extends VoiceEventType>(
 * 不要になったイベントハンドラーを後処理（クリーンアップ）するために使用する
 
 
-## イベントシステム
+<div id="event-system">
+  ## イベントシステム
+</div>
 
 MastraVoice クラスには、リアルタイム通信のためのイベントシステムが搭載されています。標準的なイベントタイプは次のとおりです：
 
@@ -379,7 +415,9 @@ MastraVoice クラスには、リアルタイム通信のためのイベント�
   ]}
 />
 
-## 保護されたプロパティ
+<div id="protected-properties">
+  ## 保護されたプロパティ
+</div>
 
 <PropertiesTable
   content={[
@@ -410,11 +448,15 @@ MastraVoice クラスには、リアルタイム通信のためのイベント�
   ]}
 />
 
-## テレメトリーのサポート
+<div id="telemetry-support">
+  ## テレメトリーのサポート
+</div>
 
 MastraVoice には、メソッド呼び出しをパフォーマンス測定とエラー監視付きでラップする `traced` メソッドによる組み込みのテレメトリー機能が備わっています。
 
-## 注意事項
+<div id="notes">
+  ## 注意事項
+</div>
 
 - MastraVoice は抽象クラスであり、直接インスタンス化できません
 - すべての抽象メソッドに対して、実装側で具体的な実装を提供する必要があります

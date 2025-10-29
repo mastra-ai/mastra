@@ -3,11 +3,15 @@ title: "リファレンス: createScorer | Scorers | Mastra ドキュメント"
 description: Mastra でカスタムスコアラーを作成するためのドキュメント。JavaScript 関数または LLM ベースのプロンプトを用いて、独自の評価ロジックを定義できます。
 ---
 
-# createScorer
+<div id="createscorer">
+  # createScorer
+</div>
 
 Mastra には、入出力ペアの評価に使うカスタムスコアラーを定義できる統一的な `createScorer` ファクトリがあります。各評価ステップでは、ネイティブな JavaScript 関数または LLM ベースのプロンプトオブジェクトのどちらも使用できます。カスタムスコアラーは、Agent や Workflow のステップに追加できます。
 
-## カスタムスコアラーの作成方法
+<div id="how-to-create-a-custom-scorer">
+  ## カスタムスコアラーの作成方法
+</div>
 
 `createScorer` ファクトリを使用して、名前、説明、任意のジャッジ設定を指定し、スコアラーを定義します。次に、ステップメソッドをチェーンして評価パイプラインを構築します。少なくとも `generateScore` ステップは必須です。
 
@@ -36,7 +40,9 @@ const scorer = createScorer({
 ```
 
 
-## createScorer のオプション
+<div id="createscorer-options">
+  ## createScorer のオプション
+</div>
 
 <PropertiesTable
   content={[
@@ -71,7 +77,9 @@ const scorer = createScorer({
 
 この関数は、ステップメソッドをチェーンできるスコアラーのビルダーを返します。`.run()` メソッドとその入出力の詳細は、[MastraScorer リファレンス](./mastra-scorer)を参照してください。
 
-## Judge オブジェクト
+<div id="judge-object">
+  ## Judge オブジェクト
+</div>
 
 <PropertiesTable
   content={[
@@ -90,11 +98,15 @@ const scorer = createScorer({
   ]}
 />
 
-## 型安全性
+<div id="type-safety">
+  ## 型安全性
+</div>
 
 スコアラーを作成する際に入出力の型を指定すると、型推論や IntelliSense のサポートが向上します：
 
-### エージェントタイプのショートカット
+<div id="agent-type-shortcut">
+  ### エージェントタイプのショートカット
+</div>
 
 エージェントを評価する際は、`type: 'agent'` を使用すると、エージェントの入出力に対して適切な型が自動的に適用されます:
 
@@ -120,7 +132,9 @@ const agentScorer = createScorer({
 ```
 
 
-### ジェネリクスを用いたカスタム型
+<div id="custom-types-with-generics">
+  ### ジェネリクスを用いたカスタム型
+</div>
 
 カスタムの入出力型には、ジェネリクスを使う方法を採用します。
 
@@ -141,14 +155,18 @@ const customScorer = createScorer<CustomInput, CustomOutput>({
 ```
 
 
-### ビルトインのエージェント型
+<div id="built-in-agent-types">
+  ### ビルトインのエージェント型
+</div>
 
 - **`ScorerRunInputForAgent`** - エージェント評価用の `inputMessages`、`rememberedMessages`、`systemMessages`、`taggedSystemMessages` を含む
 - **`ScorerRunOutputForAgent`** - エージェントの応答メッセージの配列
 
 これらの型を使うと、オートコンプリート、コンパイル時検証、およびスコアリングロジックのドキュメント化が向上します。
 
-## エージェントタイプによるトレース採点
+<div id="trace-scoring-with-agent-types">
+  ## エージェントタイプによるトレース採点
+</div>
 
 `type: 'agent'` を使用すると、スコアラーはエージェントへの直接追加と、エージェントのやり取りから得られたトレースの採点の両方に対応します。スコアラーはトレースデータを自動的に、適切なエージェントの入出力形式へ変換します。
 
@@ -175,9 +193,13 @@ const mastra = new Mastra({
 ```
 
 
-## ステップ メソッドのシグネチャ
+<div id="step-method-signatures">
+  ## ステップ メソッドのシグネチャ
+</div>
 
-### preprocess
+<div id="preprocess">
+  ### preprocess
+</div>
 
 分析前にデータを抽出または変換できる任意の前処理ステップ。
 
@@ -258,7 +280,9 @@ const mastra = new Mastra({
   ]}
 />
 
-### analyze
+<div id="analyze">
+  ### analyze
+</div>
 
 入力・出力および任意の前処理済みデータを扱うオプションの分析ステップ。
 
@@ -339,7 +363,9 @@ Function: `({ run, results }) => any`
   ]}
 />
 
-### generateScore
+<div id="generatescore">
+  ### generateScore
+</div>
 
 最終的な数値スコアを算出する**必須**ステップ。
 
@@ -441,7 +467,9 @@ Prompt Object モードを使用する場合は、LLM の出力を数値スコ�
   ]}
 />
 
-### generateReason
+<div id="generatereason">
+  ### generateReason
+</div>
 
 スコアに対する説明を提供する任意のステップ。
 

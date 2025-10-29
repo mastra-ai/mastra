@@ -3,17 +3,23 @@ title: "メモリプロセッサー | メモリ | Mastra ドキュメント"
 description: "Mastra のメモリプロセッサーを使って、言語モデルに送信する前にメッセージをフィルタ、要約・削減、変換し、コンテキストウィンドウの制約を管理する方法を学びます。"
 ---
 
-# メモリプロセッサ
+<div id="memory-processors">
+  # メモリプロセッサ
+</div>
 
 メモリプロセッサは、メモリから取得したメッセージの一覧を、エージェントのコンテキストウィンドウに追加して LLM に送信する前に加工・変更できる仕組みです。コンテキストの規模管理、内容のフィルタリング、パフォーマンス最適化に役立ちます。
 
 プロセッサは、メモリ設定（例：`lastMessages`、`semanticRecall`）に基づいて取得されたメッセージに対して動作します。新たに届くユーザーメッセージには影響しません。
 
-## 組み込みプロセッサ
+<div id="built-in-processors">
+  ## 組み込みプロセッサ
+</div>
 
 Mastra には組み込みのプロセッサがあります：
 
-### `TokenLimiter`
+<div id="tokenlimiter">
+  ### `TokenLimiter`
+</div>
 
 このプロセッサは、LLM のコンテキストウィンドウ制限を超えて発生するエラーを防ぐために使用されます。取得したメモリメッセージのトークン数を数え、合計が指定された `limit` を下回るまで最も古いメッセージを削除します。
 
@@ -53,7 +59,9 @@ const memoryForOlderModel = new Memory({
 エンコーディングの詳細については、[OpenAI Cookbook](https://cookbook.openai.com/examples/how_to_count_tokens_with_tiktoken#encodings) または [`js-tiktoken` リポジトリ](https://github.com/dqbd/tiktoken) をご覧ください。
 
 
-### `ToolCallFilter`
+<div id="toolcallfilter">
+  ### `ToolCallFilter`
+</div>
 
 このプロセッサは、LLM に送信されるメモリメッセージからツール呼び出しを取り除きます。コンテキストから冗長になりがちなツールのやり取りを除外することでトークンを節約でき、将来のやり取りで詳細が不要な場合に有用です。また、常にエージェントに特定のツールを再度呼び出させ、メモリ内の過去のツール結果に依存させないようにしたい場合にも役立ちます。
 
@@ -76,7 +84,9 @@ const memoryFilteringTools = new Memory({
 ```
 
 
-## 複数のプロセッサの適用
+<div id="applying-multiple-processors">
+  ## 複数のプロセッサの適用
+</div>
 
 複数のプロセッサをチェーンできます。`processors` 配列に記載された順に実行され、あるプロセッサの出力が次のプロセッサの入力になります。
 
@@ -101,7 +111,9 @@ const memoryWithMultipleProcessors = new Memory({
 ```
 
 
-## カスタムプロセッサの作成
+<div id="creating-custom-processors">
+  ## カスタムプロセッサの作成
+</div>
 
 `MemoryProcessor` の基底クラスを拡張して、独自のロジックを実装できます。
 

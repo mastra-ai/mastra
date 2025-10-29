@@ -6,9 +6,13 @@ description: AI トレーシングの設定タイプとレジストリ関数
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
-# 設定
+<div id="configuration">
+  # 設定
+</div>
 
-## ObservabilityRegistryConfig
+<div id="observabilityregistryconfig">
+  ## ObservabilityRegistryConfig
+</div>
 
 ```typescript
 interface ObservabilityRegistryConfig {
@@ -42,7 +46,9 @@ interface ObservabilityRegistryConfig {
 />
 
 
-## TracingConfig（トレース設定）
+<div id="tracingconfig">
+  ## TracingConfig（トレース設定）
+</div>
 
 ```typescript
 interface TracingConfig {
@@ -90,7 +96,9 @@ interface TracingConfig {
 />
 
 
-## サンプリング戦略
+<div id="samplingstrategy">
+  ## サンプリング戦略
+</div>
 
 ```typescript
 type SamplingStrategy =
@@ -101,7 +109,9 @@ type SamplingStrategy =
 ```
 
 
-## ConfigSelector
+<div id="configselector">
+  ## ConfigSelector
+</div>
 
 ```typescript
 type ConfigSelector = (
@@ -111,7 +121,9 @@ type ConfigSelector = (
 ```
 
 
-## ConfigSelectorOptions
+<div id="configselectoroptions">
+  ## ConfigSelectorOptions
+</div>
 
 ```typescript
 interface ConfigSelectorOptions {
@@ -121,9 +133,13 @@ interface ConfigSelectorOptions {
 ```
 
 
-# レジストリの関数
+<div id="registry-functions">
+  # レジストリの関数
+</div>
 
-## setupAITracing
+<div id="setupaitracing">
+  ## setupAITracing
+</div>
 
 ```typescript
 function setupAITracing(config: ObservabilityRegistryConfig): void;
@@ -132,7 +148,9 @@ function setupAITracing(config: ObservabilityRegistryConfig): void;
 設定に基づいて AI トレースを初期化します。Mastra のコンストラクターによって自動的に呼び出されます。
 
 
-## registerAITracing
+<div id="registeraitracing">
+  ## registerAITracing
+</div>
 
 ```typescript
 function registerAITracing(
@@ -145,7 +163,9 @@ function registerAITracing(
 グローバルレジストリにトレーシング構成を登録します。
 
 
-## getAITracing
+<div id="getaitracing">
+  ## getAITracing
+</div>
 
 ```typescript
 function getAITracing(name: string): AITracing | undefined;
@@ -154,7 +174,9 @@ function getAITracing(name: string): AITracing | undefined;
 名前を指定してトレース設定を取得します。
 
 
-## getDefaultAITracing
+<div id="getdefaultaitracing">
+  ## getDefaultAITracing
+</div>
 
 ```typescript
 function getDefaultAITracing(): AITracing | undefined;
@@ -163,7 +185,9 @@ function getDefaultAITracing(): AITracing | undefined;
 デフォルトのトレース設定を返します。
 
 
-## getSelectedAITracing
+<div id="getselectedaitracing">
+  ## getSelectedAITracing
+</div>
 
 ```typescript
 function getSelectedAITracing(
@@ -174,7 +198,9 @@ function getSelectedAITracing(
 config セレクターで選択されたトレーシング設定、またはデフォルトの設定を返します。
 
 
-## setSelector
+<div id="setselector">
+  ## setSelector
+</div>
 
 ```typescript
 function setSelector(selector: ConfigSelector): void;
@@ -183,7 +209,9 @@ function setSelector(selector: ConfigSelector): void;
 グローバルな config セレクター関数を設定する。
 
 
-## unregisterAITracing
+<div id="unregisteraitracing">
+  ## unregisterAITracing
+</div>
 
 ```typescript
 function unregisterAITracing(name: string): boolean;
@@ -192,7 +220,9 @@ function unregisterAITracing(name: string): boolean;
 レジストリからトレース設定を削除します。
 
 
-## shutdownAITracingRegistry
+<div id="shutdownaitracingregistry">
+  ## shutdownAITracingRegistry
+</div>
 
 ```typescript
 async function shutdownAITracingRegistry(): Promise<void>;
@@ -201,7 +231,9 @@ async function shutdownAITracingRegistry(): Promise<void>;
 すべてのトレース設定を停止し、レジストリをクリアします。
 
 
-## clearAITracingRegistry
+<div id="clearaitracingregistry">
+  ## clearAITracingRegistry
+</div>
 
 ```typescript
 function clearAITracingRegistry(): void;
@@ -210,7 +242,9 @@ function clearAITracingRegistry(): void;
 シャットダウンせずにすべての設定を消去します。
 
 
-## getAllAITracing
+<div id="getallaitracing">
+  ## getAllAITracing
+</div>
 
 ```typescript
 function getAllAITracing(): ReadonlyMap<string, AITracing>;
@@ -219,7 +253,9 @@ function getAllAITracing(): ReadonlyMap<string, AITracing>;
 登録されているすべてのトレーシング設定を返します。
 
 
-## hasAITracing
+<div id="hasaitracing">
+  ## hasAITracing
+</div>
 
 ```typescript
 function hasAITracing(name: string): boolean;
@@ -228,25 +264,35 @@ function hasAITracing(name: string): boolean;
 トレーシングインスタンスが存在し、有効になっているかを確認します。
 
 
-## 参照
+<div id="see-also">
+  ## 参照
+</div>
 
-### ドキュメント
+<div id="documentation">
+  ### ドキュメント
+</div>
 
 - [AI Tracing の概要](/docs/observability/ai-tracing/overview) - 概念と使用ガイド
 - [サンプリング戦略](/docs/observability/ai-tracing/overview#sampling-strategies) - サンプリング設定の詳細
 - [複数設定のセットアップ](/docs/observability/ai-tracing/overview#multi-config-setup) - 複数の設定の使い方
 
-### 参考
+<div id="reference">
+  ### 参考
+</div>
 
 - [AITracing クラス](/reference/observability/ai-tracing/) - 主要なトレーシングクラス
 - [インターフェイス](/reference/observability/ai-tracing/interfaces) - 型定義
 - [スパン リファレンス](/reference/observability/ai-tracing/span) - スパンのライフサイクル
 
-### 例
+<div id="examples">
+  ### 例
+</div>
 
 - [Basic AI Tracing](/examples/observability/basic-ai-tracing) - 入門
 
-### エクスポーター
+<div id="exporters">
+  ### エクスポーター
+</div>
 
 - [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - ストレージの設定
 - [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - クラウドの設定

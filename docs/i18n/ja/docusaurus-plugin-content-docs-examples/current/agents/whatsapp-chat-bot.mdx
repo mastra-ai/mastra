@@ -3,11 +3,15 @@ title: "例: WhatsApp チャットボット | エージェント | Mastra ドキ
 description: Mastra のエージェントとワークフローを用いて、受信メッセージを処理し、テキストメッセージで自然に応答する WhatsApp チャットボットを作成する例。
 ---
 
-# WhatsApp チャットボット
+<div id="whatsapp-chat-bot">
+  # WhatsApp チャットボット
+</div>
 
 この例では、Mastra のエージェントとワークフローを使って WhatsApp チャットボットを作成する方法を紹介します。ボットは webhook で受信した WhatsApp メッセージを AI エージェントで処理し、応答を自然な複数のテキストメッセージに分割して、WhatsApp Business API 経由で送信します。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 この例を実行するには、WhatsApp Business API のセットアップが必要で、`anthropic` モデルを使用します。以下の環境変数を `.env` ファイルに追加してください:
 
@@ -20,7 +24,9 @@ WHATSAPP_API_VERSION=v22.0
 ```
 
 
-## WhatsApp クライアントの作成
+<div id="creating-the-whatsapp-client">
+  ## WhatsApp クライアントの作成
+</div>
 
 このクライアントは、WhatsApp Business API を使用してユーザーにメッセージを送信します。
 
@@ -85,7 +91,9 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageParams) {
 ```
 
 
-## チャットエージェントの作成
+<div id="creating-the-chat-agent">
+  ## チャットエージェントの作成
+</div>
 
 このエージェントは、親しみやすい会話的なキャラクターで、主な会話ロジックを担当します。
 
@@ -134,7 +142,9 @@ export const chatAgent = new Agent({
 ```
 
 
-## テキストメッセージ用エージェントの作成
+<div id="creating-the-text-message-agent">
+  ## テキストメッセージ用エージェントの作成
+</div>
 
 このエージェントは、長文の回答を、WhatsAppに適した自然で読みやすい短文テキストメッセージに変換します。
 
@@ -172,7 +182,9 @@ export const textMessageAgent = new Agent({
 ```
 
 
-## チャットワークフローの作成
+<div id="creating-the-chat-workflow">
+  ## チャットワークフローの作成
+</div>
 
 このワークフローは、応答の生成、メッセージへの分割、そして WhatsApp 経由での送信まで、チャット処理全体を統括します。
 
@@ -299,7 +311,9 @@ chatWorkflow.commit();
 ```
 
 
-## Mastra の設定
+<div id="setting-up-mastra-configuration">
+  ## Mastra の設定
+</div>
 
 Mastra インスタンスにエージェント、ワークフロー、WhatsApp の Webhook エンドポイントを設定します。
 
@@ -364,7 +378,9 @@ export const mastra = new Mastra({
 ```
 
 
-## チャットボットのテスト
+<div id="testing-the-chat-bot">
+  ## チャットボットのテスト
+</div>
 
 WhatsApp の Webhook ペイロードをシミュレートして、ローカル環境でチャットボットをテストできます。
 
@@ -406,7 +422,9 @@ console.log("ワークフロー完了:", result);
 ```
 
 
-## 出力例
+<div id="example-output">
+  ## 出力例
+</div>
 
 ユーザーがあなたの WhatsApp ボットに「Hello! How are you today?」と送ると、次のように複数のメッセージで返答することがあります。
 

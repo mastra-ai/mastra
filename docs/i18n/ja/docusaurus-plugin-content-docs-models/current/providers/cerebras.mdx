@@ -48,7 +48,9 @@ Mastra は OpenAI 互換の `/chat/completions` エンドポイントを使用�
 :::
 
 
-## モデル
+<div id="models">
+  ## モデル
+</div>
 
 <ProviderModelsTable
   models={[
@@ -91,9 +93,13 @@ Mastra は OpenAI 互換の `/chat/completions` エンドポイントを使用�
 ]}
 />
 
-## 詳細設定
+<div id="advanced-configuration">
+  ## 詳細設定
+</div>
 
-### カスタムヘッダー
+<div id="custom-headers">
+  ### カスタムヘッダー
+</div>
 
 ```typescript
 const agent = new Agent({
@@ -110,7 +116,9 @@ const agent = new Agent({
 ```
 
 
-### 動的モデル選択
+<div id="dynamic-model-selection">
+  ### 動的モデル選択
+</div>
 
 ```typescript
 const agent = new Agent({
@@ -125,7 +133,9 @@ const agent = new Agent({
 ```
 
 
-## プロバイダーを直接インストールする
+<div id="direct-provider-installation">
+  ## プロバイダーを直接インストールする
+</div>
 
 このプロバイダーはスタンドアロンのパッケージとして直接インストールすることもでき、Mastra のモデルルーター文字列の代わりに使用できます。詳細は[パッケージのドキュメント](https://www.npmjs.com/package/@ai-sdk/cerebras)をご覧ください。
 

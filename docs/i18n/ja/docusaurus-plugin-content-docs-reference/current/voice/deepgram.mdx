@@ -3,11 +3,15 @@ title: "リファレンス: Deepgram | Voice | Mastra ドキュメント"
 description: "Deepgram の音声機能実装に関するドキュメント。複数の音声モデルと言語に対応し、テキスト読み上げ（TTS）と音声認識（STT）を提供します。"
 ---
 
-# Deepgram
+<div id="deepgram">
+  # Deepgram
+</div>
 
 Mastra における Deepgram の音声機能実装は、Deepgram の API を利用してテキスト読み上げ（TTS）と音声認識（STT）を提供します。音声合成と文字起こしの双方で設定可能なオプションを備え、複数の音声モデルと言語に対応しています。
 
-## 使い方の例
+<div id="usage-example">
+  ## 使い方の例
+</div>
 
 ```typescript
 import { DeepgramVoice } from "@mastra/voice-deepgram";
@@ -36,7 +40,9 @@ const transcript = await voice.listen(audioStream);
 ```
 
 
-## コンストラクターのパラメータ
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -64,7 +70,9 @@ const transcript = await voice.listen(audioStream);
   ]}
 />
 
-### DeepgramVoiceConfig
+<div id="deepgramvoiceconfig">
+  ### DeepgramVoiceConfig
+</div>
 
 <PropertiesTable
   content={[
@@ -96,9 +104,13 @@ const transcript = await voice.listen(audioStream);
   ]}
 />
 
-## 手法
+<div id="methods">
+  ## 手法
+</div>
 
-### speak()
+<div id="speak">
+  ### speak()
+</div>
 
 設定済みの音声モデルとボイスを使って、テキストを音声に変換します。
 
@@ -128,7 +140,9 @@ const transcript = await voice.listen(audioStream);
 
 戻り値: `Promise<NodeJS.ReadableStream>`
 
-### listen()
+<div id="listen">
+  ### listen()
+</div>
 
 設定済みのリッスン用モデルを使って音声をテキストに変換します。
 
@@ -151,7 +165,9 @@ const transcript = await voice.listen(audioStream);
 
 Returns: `Promise<string>`
 
-### getSpeakers()
+<div id="getspeakers">
+  ### getSpeakers()
+</div>
 
 利用可能な音声の一覧を返します。
 

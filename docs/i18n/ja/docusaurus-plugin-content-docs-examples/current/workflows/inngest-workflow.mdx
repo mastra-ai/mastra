@@ -3,11 +3,15 @@ title: "例：Inngest ワークフロー | Workflows | Mastra ドキュメント
 description: Mastra を使って Inngest のワークフローを構築する例
 ---
 
-# Inngest ワークフロー
+<div id="inngest-workflow">
+  # Inngest ワークフロー
+</div>
 
 この例では、Mastra を使って Inngest のワークフローを構築する方法を紹介します。
 
-## セットアップ
+<div id="setup">
+  ## セットアップ
+</div>
 
 ```sh copy
 npm install @mastra/inngest inngest @mastra/core @mastra/deployer @hono/node-server @ai-sdk/openai
@@ -20,7 +24,9 @@ docker run --rm -p 8288:8288 \
 また、公式の [Inngest Dev Server ガイド](https://www.inngest.com/docs/dev-server) に従って、ローカル開発に Inngest CLI を使用することもできます。
 
 
-## 計画エージェントを定義する
+<div id="define-the-planning-agent">
+  ## 計画エージェントを定義する
+</div>
 
 場所とそのときの天候に基づいて活動計画を立てるために、LLM 呼び出しを活用する計画エージェントを定義します。
 
@@ -79,7 +85,9 @@ export { planningAgent };
 ```
 
 
-## アクティビティプランナーのワークフローを定義する
+<div id="define-the-activity-planner-workflow">
+  ## アクティビティプランナーのワークフローを定義する
+</div>
 
 アクティビティプランナーのワークフローを3つのステップで定義します。1つ目はネットワーク呼び出しで天気を取得し、2つ目はアクティビティを計画し、3つ目は屋内アクティビティのみを計画します。
 
@@ -129,7 +137,9 @@ const forecastSchema = z.object({
 ```
 
 
-#### ステップ 1: 指定した都市の気象データを取得する
+<div id="step-1-fetch-weather-data-for-a-given-city">
+  #### ステップ 1: 指定した都市の気象データを取得する
+</div>
 
 ```ts showLineNumbers copy title="workflows/inngest-workflow.ts"
 const fetchWeather = createStep({
@@ -190,7 +200,9 @@ const fetchWeather = createStep({
 ```
 
 
-#### ステップ 2: 天気に応じて（屋内または屋外の）アクティビティを提案する
+<div id="step-2-suggest-activities-indoor-or-outdoor-based-on-weather">
+  #### ステップ 2: 天気に応じて（屋内または屋外の）アクティビティを提案する
+</div>
 
 ```ts showLineNumbers copy title="workflows/inngest-workflow.ts"
 const planActivities = createStep({
@@ -238,7 +250,9 @@ const planActivities = createStep({
 ```
 
 
-#### ステップ3：雨天時は屋内のアクティビティのみを提案する
+<div id="step-3-suggest-indoor-activities-only-for-rainy-weather">
+  #### ステップ3：雨天時は屋内のアクティビティのみを提案する
+</div>
 
 ```ts showLineNumbers copy title="workflows/inngest-workflow.ts"
 const planIndoorActivities = createStep({
@@ -284,7 +298,9 @@ const planIndoorActivities = createStep({
 ```
 
 
-## アクティビティプランナーのワークフローを定義する
+<div id="define-the-activity-planner-workflow">
+  ## アクティビティプランナーのワークフローを定義する
+</div>
 
 ```ts showLineNumbers copy title="workflows/inngest-workflow.ts"
 const activityPlanningWorkflow = createWorkflow({
@@ -320,7 +336,9 @@ export { activityPlanningWorkflow };
 ```
 
 
-## Mastra クラスに Agent と Workflow のインスタンスを登録する
+<div id="register-agent-and-workflow-instances-with-mastra-class">
+  ## Mastra クラスに Agent と Workflow のインスタンスを登録する
+</div>
 
 `mastra` インスタンスに Agent と Workflow を登録します。これにより、Workflow 内から Agent にアクセスできるようになります。
 
@@ -367,7 +385,9 @@ export const mastra = new Mastra({
 ```
 
 
-## アクティビティプランナーのワークフローを実行する
+<div id="execute-the-activity-planner-workflow">
+  ## アクティビティプランナーのワークフローを実行する
+</div>
 
 ここでは、mastra インスタンスからアクティビティプランナーのワークフローを取得し、`run` を作成して、必要な `inputData` を指定して実行します。
 
@@ -402,11 +422,15 @@ srv.close();
 ワークフローを実行した後は、[http://localhost:8288](http://localhost:8288) にある Inngest ダッシュボードで、ワークフローの実行をリアルタイムに確認・監視できます。
 
 
-## Inngest フロー制御の設定
+<div id="inngest-flow-control-configuration">
+  ## Inngest フロー制御の設定
+</div>
 
 Inngest のワークフローは、同時実行数の上限、レート制限、スロットリング、デバウンス、優先度付きキューなどの高度なフロー制御機能をサポートします。これらの機能により、大規模なワークフローの実行を適切に管理し、リソースの過負荷を防止できます。
 
-### 併行制御
+<div id="concurrency-control">
+  ### 併行制御
+</div>
 
 同時に実行できるワークフローインスタンス数を制御します。
 
@@ -425,7 +449,9 @@ const workflow = createWorkflow({
 ```
 
 
-### レート制限
+<div id="rate-limiting">
+  ### レート制限
+</div>
 
 一定期間内に実行されるワークフローの回数を制限します：
 
@@ -444,7 +470,9 @@ const workflow = createWorkflow({
 ```
 
 
-### スロットリング
+<div id="throttling">
+  ### スロットリング
+</div>
 
 ワークフロー実行の間隔の最小値を保証します：
 
@@ -464,7 +492,9 @@ const workflow = createWorkflow({
 ```
 
 
-### デバウンス
+<div id="debouncing">
+  ### デバウンス
+</div>
 
 一定時間内に新たなイベントが発生しなくなるまで実行を遅らせます:
 
@@ -483,7 +513,9 @@ const workflow = createWorkflow({
 ```
 
 
-### 優先度キューイング
+<div id="priority-queuing">
+  ### 優先度キューイング
+</div>
 
 ワークフローの実行優先度を設定します：
 
@@ -504,7 +536,9 @@ const workflow = createWorkflow({
 ```
 
 
-### フロー制御の組み合わせ
+<div id="combined-flow-control">
+  ### フロー制御の組み合わせ
+</div>
 
 複数のフロー制御機能を組み合わせて使用できます:
 
@@ -543,7 +577,9 @@ const workflow = createWorkflow({
 フロー制御オプションとその挙動の詳細については、[Inngest Flow Control のドキュメント](https://www.inngest.com/docs/guides/flow-control)をご覧ください。
 
 
-## ワークフロー（レガシー）
+<div id="workflows-legacy">
+  ## ワークフロー（レガシー）
+</div>
 
 以下のリンクは、レガシー版ワークフローの例のドキュメントです：
 

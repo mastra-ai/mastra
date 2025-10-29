@@ -3,7 +3,9 @@ title: "例: キーワード網羅率の評価 | Evals | Mastra Docs"
 description: 入力テキストの重要なキーワードが応答でどれだけ網羅されているかを評価するために、Keyword Coverage 指標を用いる例。
 ---
 
-# キーワード網羅性の評価
+<div id="keyword-coverage-evaluation">
+  # キーワード網羅性の評価
+</div>
 
 :::note
 Scorers API は現在ベータ版です。改良を進めており、皆さまのフィードバックを歓迎します。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までお寄せください。
@@ -11,14 +13,18 @@ Scorers API は現在ベータ版です。改良を進めており、皆さま�
 
 `KeywordCoverageMetric` を使用すると、コンテキストで求められるキーワードやフレーズがレスポンスにどの程度正確に含まれているかを評価できます。このメトリクスは `query` と `response` を受け取り、スコアとキーワード一致の統計情報を含む `info` オブジェクトを返します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/evals
 ```
 
 
-## 完全網羅の例
+<div id="full-coverage-example">
+  ## 完全網羅の例
+</div>
 
 この例では、応答が入力の主要な用語を余すところなく反映しています。必要なキーワードがすべて含まれており、抜けのない完全なカバレッジになっています。
 
@@ -37,7 +43,9 @@ console.log(result);
 ```
 
 
-### フルカバレッジの出力
+<div id="full-coverage-output">
+  ### フルカバレッジの出力
+</div>
 
 スコアが1の場合、想定されたすべてのキーワードが応答内で見つかったことを示します。`info` フィールドは、一致したキーワード数が入力から抽出された総数と同じであることを示します。
 
@@ -52,7 +60,9 @@ console.log(result);
 ```
 
 
-## 部分的なカバレッジの例
+<div id="partial-coverage-example">
+  ## 部分的なカバレッジの例
+</div>
 
 この例では、応答には入力の重要なキーワードの一部は含まれていますが、すべては含まれていません。スコアは部分的なカバレッジを反映しており、主要な用語が欠落している、または一部しか一致していないことを示します。
 
@@ -71,7 +81,9 @@ console.log(result);
 ```
 
 
-### 部分的なカバレッジの出力
+<div id="partial-coverage-output">
+  ### 部分的なカバレッジの出力
+</div>
 
 スコアが 0.5 の場合、期待されるキーワードのうち半分しかレスポンス内で見つからなかったことを示します。`info` フィールドには、入力で特定された総数に対して、いくつの用語が一致したかが示されます。
 
@@ -86,7 +98,9 @@ console.log(result);
 ```
 
 
-## カバレッジが最小の例
+<div id="minimal-coverage-example">
+  ## カバレッジが最小の例
+</div>
 
 この例では、応答に入力の重要なキーワードがほとんど含まれていません。スコアはカバレッジの低さを反映しており、主要な用語の大半が欠落しているか考慮されていません。
 
@@ -105,7 +119,9 @@ console.log(result);
 ```
 
 
-### カバレッジが最小の出力
+<div id="minimal-coverage-output">
+  ### カバレッジが最小の出力
+</div>
 
 スコアが低い場合、期待されるキーワードのうちごく一部しか応答に含まれていないことを示します。`info` フィールドは、総キーワード数と一致したキーワード数の差を示し、カバレッジ不足を明確にします。
 
@@ -120,7 +136,9 @@ console.log(result);
 ```
 
 
-## メトリクスの設定
+<div id="metric-configuration">
+  ## メトリクスの設定
+</div>
 
 `KeywordCoverageMetric` インスタンスはデフォルト設定のままで作成できます。追加の設定は不要です。
 
@@ -131,7 +149,9 @@ const metric = new KeywordCoverageMetric();
 > 設定オプションの一覧については、[KeywordCoverageMetric](/reference/evals/keyword-coverage) を参照してください。
 
 
-## 結果の理解
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
 
 `KeywordCoverageMetric` は次の形の結果を返します：
 
@@ -146,7 +166,9 @@ const metric = new KeywordCoverageMetric();
 ```
 
 
-## キーワードカバレッジスコア
+<div id="keyword-coverage-score">
+  ## キーワードカバレッジスコア
+</div>
 
 0～1 の範囲のカバレッジスコア:
 
@@ -156,7 +178,9 @@ const metric = new KeywordCoverageMetric();
 - **0.1–0.3**: 低いカバー – 一致するキーワードが少ない。
 - **0.0**: カバーなし – キーワードが見つからない。
 
-## キーワード網羅情報
+<div id="keyword-coverage-info">
+  ## キーワード網羅情報
+</div>
 
 次の詳細な統計を含みます：
 

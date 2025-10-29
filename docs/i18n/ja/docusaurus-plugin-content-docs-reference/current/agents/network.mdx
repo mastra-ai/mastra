@@ -3,7 +3,9 @@ title: "リファレンス: Agent.network() | Agents | Mastra ドキュメント
 description: "Mastra のエージェントにおける `Agent.network()` メソッドのドキュメント。マルチエージェント間の協調とルーティングを実現します。"
 ---
 
-# Agent.network()
+<div id="agentnetwork">
+  # Agent.network()
+</div>
 
 :::caution 実験的機能
 これは将来のバージョンで変更される可能性がある実験的な API です。`network()` メソッドはマルチエージェント協調とワークフローのオーケストレーションを可能にします。本番環境での使用は十分にご注意ください。
@@ -11,7 +13,9 @@ description: "Mastra のエージェントにおける `Agent.network()` メソ�
 
 `.network()` メソッドは、マルチエージェント間の協調とルーティングを可能にします。このメソッドはメッセージと、任意の実行オプションを受け取ります。
 
-## 使用例
+<div id="usage-example">
+  ## 使用例
+</div>
 
 ```typescript copy
 import { Agent } from "@mastra/core/agent";
@@ -45,7 +49,9 @@ await agent.network(`
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -64,7 +70,9 @@ await agent.network(`
   ]}
 />
 
-### オプション
+<div id="options">
+  ### オプション
+</div>
 
 <PropertiesTable
   content={[
@@ -317,7 +325,9 @@ await agent.network(`
 ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[

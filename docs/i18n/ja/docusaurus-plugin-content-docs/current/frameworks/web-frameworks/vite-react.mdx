@@ -7,7 +7,9 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 
-# Vite/React プロジェクトに Mastra を統合する
+<div id="integrate-mastra-in-your-vitereact-project">
+  # Vite/React プロジェクトに Mastra を統合する
+</div>
 
 Mastra は Vite と連携しており、次のことを簡単に行えます:
 
@@ -23,7 +25,9 @@ Mastra は Vite と連携しており、次のことを簡単に行えます:
 
 :::
 
-## Mastra のインストール
+<div id="install-mastra">
+  ## Mastra のインストール
+</div>
 
 必要な Mastra のパッケージをインストールします：
 
@@ -58,11 +62,15 @@ bun add mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-j
 </TabItem>
 </Tabs>
 
-## Mastra を統合する
+<div id="integrate-mastra">
+  ## Mastra を統合する
+</div>
 
 プロジェクトに Mastra を統合するには、次の2つの方法があります：
 
-### 1. ワンライナーを使う
+<div id="1-use-the-one-liner">
+  ### 1. ワンライナーを使う
+</div>
 
 次のコマンドを実行すると、適切な既定値を備えたデフォルトの Weather エージェントを手早くスキャフォールドできます:
 
@@ -73,7 +81,9 @@ npx mastra@latest init --dir . --components agents,tools --example --llm openai
 > 詳細は [mastra init](/reference/cli/create-mastra) を参照してください。
 
 
-### 2. インタラクティブ CLI を使う
+<div id="2-use-the-interactive-cli">
+  ### 2. インタラクティブ CLI を使う
+</div>
 
 セットアップをカスタマイズする場合は、`init` コマンドを実行し、表示されるプロンプトに従ってオプションを選択してください。
 
@@ -116,7 +126,9 @@ npx mastra@latest init
 </Tabs>
 
 
-## TypeScript を設定する
+<div id="configure-typescript">
+  ## TypeScript を設定する
+</div>
 
 プロジェクトのルートにある `tsconfig.json` ファイルを編集します：
 
@@ -128,7 +140,9 @@ npx mastra@latest init
 ```
 
 
-## API キーの設定
+<div id="set-up-api-keys">
+  ## API キーの設定
+</div>
 
 ```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
@@ -137,7 +151,9 @@ OPENAI_API_KEY=<your-api-key>
 > 各LLMプロバイダーは異なる環境変数を使用します。詳細は[Model Capabilities](https://sdk.vercel.ai/providers)をご覧ください。
 
 
-## .gitignore を更新する
+<div id="update-gitignore">
+  ## .gitignore を更新する
+</div>
 
 `.mastra` を `.gitignore` ファイルに追加します:
 
@@ -146,7 +162,9 @@ OPENAI_API_KEY=<your-api-key>
 ```
 
 
-## Mastra Dev Server を起動する
+<div id="start-the-mastra-dev-server">
+  ## Mastra Dev Server を起動する
+</div>
 
 Mastra Dev Server を起動して、エージェントを REST エンドポイントとして公開します。
 
@@ -169,11 +187,15 @@ mastra dev:mastra
 
 > 起動すると、エージェントはローカルで利用可能になります。詳しくは [ローカル開発環境](/docs/getting-started/studio) をご覧ください。
 
-## Vite 開発サーバーを起動する
+<div id="start-vite-dev-server">
+  ## Vite 開発サーバーを起動する
+</div>
 
 Mastra Dev Server が稼働していれば、通常どおり Vite アプリを起動できます。
 
-## Mastra クライアントを作成する
+<div id="create-mastra-client">
+  ## Mastra クライアントを作成する
+</div>
 
 新しいディレクトリとファイルを作成し、次にサンプルコードを追加します。
 
@@ -191,7 +213,9 @@ export const mastraClient = new MastraClient({
 ```
 
 
-## テストルートの設定を作成する
+<div id="create-test-route-config">
+  ## テストルートの設定を作成する
+</div>
 
 設定に新しい `route` を追加します:
 
@@ -205,7 +229,9 @@ export default [
 ```
 
 
-## テスト用ルートを作成する
+<div id="create-test-route">
+  ## テスト用ルートを作成する
+</div>
 
 新しいルートを作成し、サンプルコードを追加します：
 
@@ -256,6 +282,8 @@ export default function Test() {
 ```
 
 
-## 次のステップ
+<div id="next-steps">
+  ## 次のステップ
+</div>
 
 - [モノレポのデプロイ](../../deployment/monorepo)

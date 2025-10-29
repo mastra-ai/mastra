@@ -6,13 +6,17 @@ description: Mastra Cloud で利用可能な各機能の詳細
 import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
 
 
-# ダッシュボードの使い方
+<div id="navigating-the-dashboard">
+  # ダッシュボードの使い方
+</div>
 
 このページでは、Mastra Cloud のダッシュボードの操作方法を説明します。ここでは、プロジェクトの設定、デプロイの詳細の確認、組み込みの[Playground](/docs/mastra-cloud/dashboard#playground)を使ったエージェントやワークフローとの対話が行えます。
 
 <MastraCloudCallout />
 
-## 概要
+<div id="overview">
+  ## 概要
+</div>
 
 この**概要**ページでは、アプリケーションのドメインURL、ステータス、最新のデプロイ、接続されているエージェントやワークフローなどの詳細を確認できます。
 
@@ -22,7 +26,9 @@ import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
 
 各プロジェクトには、現在のデプロイ状況、アクティブなドメイン、環境変数が表示され、アプリケーションの稼働状況をすばやく把握できます。
 
-## デプロイ
+<div id="deployments">
+  ## デプロイ
+</div>
 
 「Deployments」ページでは、最近のビルドが表示され、詳細なビルドログにすばやくアクセスできます。特定のデプロイの詳細を表示するには、任意の行をクリックしてください。
 
@@ -32,7 +38,9 @@ import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
 
 各デプロイには、現在のステータス、デプロイ元の Git ブランチ、およびコミットハッシュから生成されたタイトルが表示されます。
 
-## ログ
+<div id="logs">
+  ## ログ
+</div>
 
 本番環境でのアプリケーションの挙動をデバッグし、監視するための詳細情報は、**ログ**ページで確認できます。
 
@@ -42,7 +50,9 @@ import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
 
 各ログには、重大度レベルと、エージェント・ワークフロー・ストレージのアクティビティを示す詳細なメッセージが含まれます。
 
-## 設定
+<div id="settings">
+  ## 設定
+</div>
 
 「設定」ページでは、アプリケーションの構成を変更できます。
 
@@ -54,9 +64,13 @@ import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
 
 > 変更を反映するには、再デプロイが必要です。
 
-## プレイグラウンド
+<div id="playground">
+  ## プレイグラウンド
+</div>
 
-### エージェント
+<div id="agents">
+  ### エージェント
+</div>
 
 「エージェント」ページでは、アプリケーションで使用されているすべてのエージェントを確認できます。任意のエージェントをクリックすると、チャットインターフェースで対話できます。
 
@@ -66,7 +80,9 @@ import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
 
 チャットインターフェースでエージェントをリアルタイムにテストし、各やり取りのトレースを確認し、各応答の評価スコアを表示できます。
 
-### ワークフロー
+<div id="workflows">
+  ### ワークフロー
+</div>
 
 **Workflows** ページでは、アプリケーションで使用されているすべてのワークフローを確認できます。任意のワークフローをクリックすると、ランナーインターフェースで操作できます。
 
@@ -76,7 +92,9 @@ import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
 
 ステップごとのグラフでワークフローを可視化し、実行トレースを確認し、内蔵ランナーでワークフローを直接実行できます。
 
-### ツール
+<div id="tools">
+  ### ツール
+</div>
 
 「Tools」ページでは、エージェントが使用するすべてのツールを確認できます。任意のツールをクリックすると、入力インターフェースを使って操作できます。
 
@@ -86,7 +104,9 @@ import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
 
 スキーマに沿った入力を与え、構造化された出力を確認してツールをテストできます。
 
-## MCP サーバー
+<div id="mcp-servers">
+  ## MCP サーバー
+</div>
 
 「MCP サーバー」ページには、アプリケーションに含まれるすべての MCP サーバーが一覧表示されます。詳細を確認するには、任意の MCP サーバーをクリックしてください。
 
@@ -96,6 +116,8 @@ import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
 
 各 MCP サーバーには、HTTP および SSE の API エンドポイントに加え、Cursor や Windsurf などのツール向け IDE 用設定スニペットが含まれています。
 
-## 次のステップ
+<div id="next-steps">
+  ## 次のステップ
+</div>
 
 - [トレーシングとログを理解する](/docs/mastra-cloud/observability)

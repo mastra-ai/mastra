@@ -3,11 +3,15 @@ title: "機密データフィルタ | プロセッサ | 可観測性 | Mastra �
 description: "自動データマスキングで AI のトレース内の機密情報を保護"
 ---
 
-# 機密データフィルター
+<div id="sensitive-data-filter">
+  # 機密データフィルター
+</div>
 
 機密データフィルターは、エクスポート前に AI トレースから機密情報を自動的にマスキングするスパン・プロセッサです。これにより、パスワード、API キー、トークン、その他の秘匿すべきデータがアプリケーションの外へ出たり、オブザーバビリティ・プラットフォームに保存されたりすることがありません。
 
-## 既定の設定
+<div id="default-configuration">
+  ## 既定の設定
+</div>
 
 標準の Mastra 設定を使用すると、Sensitive Data Filter は既定で自動的に有効になります。
 
@@ -47,7 +51,9 @@ export const mastra = new Mastra({
 :::
 
 
-## 仕組み
+<div id="how-it-works">
+  ## 仕組み
+</div>
 
 Sensitive Data Filter は、エクスポーターに送信される前にスパンを処理し、次の項目をスキャンします：
 
@@ -59,7 +65,9 @@ Sensitive Data Filter は、エクスポーターに送信される前にスパ�
 
 機微なフィールドが検出されると、その値は既定で `[REDACTED]` に置き換えられます。フィルターはネストされたオブジェクト、配列、循環参照も安全に処理します。
 
-## カスタム設定
+<div id="custom-configuration">
+  ## カスタム設定
+</div>
 
 どのフィールドをマスキングするか、その表示方法をカスタマイズできます。
 
@@ -103,11 +111,15 @@ export const mastra = new Mastra({
 ```
 
 
-## マスキングのスタイル
+<div id="redaction-styles">
+  ## マスキングのスタイル
+</div>
 
 このフィルターは次の2つのマスキングスタイルに対応しています：
 
-### 全面マスキング（デフォルト）
+<div id="full-redaction-default">
+  ### 全面マスキング（デフォルト）
+</div>
 
 値全体を固定のトークンに置き換えます：
 
@@ -126,7 +138,9 @@ export const mastra = new Mastra({
 ```
 
 
-### 部分的なマスキング
+<div id="partial-redaction">
+  ### 部分的なマスキング
+</div>
 
 先頭と末尾の3文字を表示します。値の全体を露出させずにデバッグするのに便利です:
 
@@ -153,7 +167,9 @@ new SensitiveDataFilter({
 7文字未満の値は、情報漏えいを防ぐために完全にマスクされます。
 
 
-## フィールド照合ルール
+<div id="field-matching-rules">
+  ## フィールド照合ルール
+</div>
 
 このフィルターはスマートなフィールド照合を行います:
 
@@ -163,7 +179,9 @@ new SensitiveDataFilter({
    - `token` は `token`、`Token`、`TOKEN` と一致します
    - `token` は `promptTokens` や `tokenCount` とは一致しません
 
-## ネストされたオブジェクトの処理
+<div id="nested-object-handling">
+  ## ネストされたオブジェクトの処理
+</div>
 
 このフィルターはネストした構造を再帰的に処理します。
 
@@ -202,7 +220,9 @@ new SensitiveDataFilter({
 ```
 
 
-## パフォーマンスに関する考慮事項
+<div id="performance-considerations">
+  ## パフォーマンスに関する考慮事項
+</div>
 
 Sensitive Data Filter は軽量かつ効率的に設計されています:
 
@@ -210,7 +230,9 @@ Sensitive Data Filter は軽量かつ効率的に設計されています:
 - **循環参照への対応**: 複雑なオブジェクトグラフも安全に処理
 - **エラーリカバリ**: フィルタリングに失敗した場合はクラッシュせず、該当フィールドをエラーマーカーに置き換えます
 
-## フィルターを無効にする
+<div id="disabling-the-filter">
+  ## フィルターを無効にする
+</div>
 
 機密データのフィルタリングを無効にする必要がある場合（本番環境では非推奨）:
 
@@ -235,9 +257,13 @@ export const mastra = new Mastra({
 :::
 
 
-## よくあるユースケース
+<div id="common-use-cases">
+  ## よくあるユースケース
+</div>
 
-### ヘルスケアアプリケーション
+<div id="healthcare-applications">
+  ### ヘルスケアアプリケーション
+</div>
 
 ```ts
 new SensitiveDataFilter({
@@ -257,7 +283,9 @@ new SensitiveDataFilter({
 ```
 
 
-### 金融サービス
+<div id="financial-services">
+  ### 金融サービス
+</div>
 
 ```ts
 new SensitiveDataFilter({
@@ -281,7 +309,9 @@ new SensitiveDataFilter({
 ```
 
 
-## エラー処理
+<div id="error-handling">
+  ## エラー処理
+</div>
 
 フィルターがフィールドの処理中にエラーが発生した場合、そのフィールドは安全なエラーマーカーに置き換えられます。
 
@@ -298,7 +328,9 @@ new SensitiveDataFilter({
 これにより、処理エラーがトレースのエクスポートを妨げたり、アプリケーションのクラッシュを引き起こしたりしないようにします。
 
 
-## 関連情報
+<div id="related">
+  ## 関連情報
+</div>
 
 - [SensitiveDataFilter API](/reference/observability/ai-tracing/processors/sensitive-data-filter)
 - [AI トレーシングの基本例](/examples/observability/basic-ai-tracing)

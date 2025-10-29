@@ -3,18 +3,24 @@ title: "リファレンス: PostgreSQL ストレージ | ストレージ | Mastr
 description: Mastra における PostgreSQL ストレージ実装のドキュメント。
 ---
 
-# PostgreSQL ストレージ
+<div id="postgresql-storage">
+  # PostgreSQL ストレージ
+</div>
 
 PostgreSQL のストレージ実装は、PostgreSQL データベースを用いた本番運用向けのストレージソリューションを提供します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 ```bash copy
 npm install @mastra/pg@latest
 ```
 
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 ```typescript copy showLineNumbers
 import { PostgresStore } from "@mastra/pg";
@@ -25,7 +31,9 @@ const storage = new PostgresStore({
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -46,7 +54,9 @@ const storage = new PostgresStore({
   ]}
 />
 
-## コンストラクターの例
+<div id="constructor-examples">
+  ## コンストラクターの例
+</div>
 
 `PostgresStore` は次の方法でインスタンス化できます。
 
@@ -85,9 +95,13 @@ const store5 = new PostgresStore({
 ```
 
 
-## 追記
+<div id="additional-notes">
+  ## 追記
+</div>
 
-### スキーマ管理
+<div id="schema-management">
+  ### スキーマ管理
+</div>
 
 このストレージ実装は、スキーマの作成と更新を自動的に行います。次のテーブルを作成します：
 
@@ -99,7 +113,9 @@ const store5 = new PostgresStore({
 - `mastra_scorers`: スコアリングおよび評価データを保存
 - `mastra_resources`: リソースのワーキングメモリデータを保存
 
-### データベースおよびプールへの直接アクセス
+<div id="direct-database-and-pool-access">
+  ### データベースおよびプールへの直接アクセス
+</div>
 
 `PostgresStore` は、内部のデータベースオブジェクトと pg-promise のインスタンスを公開フィールドとして提供します：
 
@@ -117,11 +133,15 @@ store.pgp; // pg-promise メインインスタンス
 このアプローチは、低レベルのアクセスが必要となる上級者向けのシナリオを想定しています。
 
 
-## インデックス管理
+<div id="index-management">
+  ## インデックス管理
+</div>
 
 PostgreSQL のストレージは、クエリ性能を最適化するための充実したインデックス管理機能を提供します。
 
-### 自動パフォーマンスインデックス
+<div id="automatic-performance-indexes">
+  ### 自動パフォーマンスインデックス
+</div>
 
 PostgreSQL ストレージは、一般的なクエリパターンに合わせて初期化時に複合インデックスを自動的に作成します。
 
@@ -132,7 +152,9 @@ PostgreSQL ストレージは、一般的なクエリパターンに合わせて
 
 これらのインデックスにより、フィルタ付きのソートを伴うクエリの性能が大幅に向上します。
 
-### カスタムインデックスの作成
+<div id="creating-custom-indexes">
+  ### カスタムインデックスの作成
+</div>
 
 特定のクエリパターンを最適化するために、追加のインデックスを作成します。
 
@@ -169,7 +191,9 @@ await storage.createIndex({
 * `concurrent: true` はブロッキングしない作成（デフォルト）
 
 
-### インデックスのオプション
+<div id="index-options">
+  ### インデックスのオプション
+</div>
 
 <PropertiesTable
   content={[
@@ -237,7 +261,9 @@ await storage.createIndex({
   ]}
 />
 
-### インデックスの管理
+<div id="managing-indexes">
+  ### インデックスの管理
+</div>
 
 既存のインデックスを一覧表示し、監視します：
 
@@ -281,7 +307,9 @@ await storage.dropIndex("idx_threads_status");
 ```
 
 
-### スキーマ固有のインデックス
+<div id="schema-specific-indexes">
+  ### スキーマ固有のインデックス
+</div>
 
 カスタムスキーマを使用する場合、インデックスはスキーマのプレフィックス付きで作成されます。
 
@@ -300,7 +328,9 @@ await storage.createIndex({
 ```
 
 
-### インデックスの種類とユースケース
+<div id="index-types-and-use-cases">
+  ### インデックスの種類とユースケース
+</div>
 
 PostgreSQL には特定の用途に最適化されたさまざまなインデックス型があります:
 

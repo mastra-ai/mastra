@@ -3,11 +3,15 @@ title: "リファレンス: Answer Relevancy Scorer | Scorers | Mastra ドキュ
 description: Mastra の Answer Relevancy Scorer に関するドキュメント。LLM の出力が入力クエリにどの程度適合しているかを評価します。
 ---
 
-# 回答の関連性スコアラー
+<div id="answer-relevancy-scorer">
+  # 回答の関連性スコアラー
+</div>
 
 `createAnswerRelevancyScorer()` 関数は、以下のプロパティを持つ単一のオプションオブジェクトを受け取ります。
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -36,7 +40,9 @@ description: Mastra の Answer Relevancy Scorer に関するドキュメント�
 
 この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドは他のスコアラーと同じ入力を受け付けます（[MastraScorer リファレンス](./mastra-scorer)を参照）が、戻り値には以下に記載の LLM 固有のフィールドが含まれます。
 
-## .run() の返り値
+<div id="run-returns">
+  ## .run() の返り値
+</div>
 
 <PropertiesTable
   content={[
@@ -86,11 +92,15 @@ description: Mastra の Answer Relevancy Scorer に関するドキュメント�
   ]}
 />
 
-## 採点の詳細
+<div id="scoring-details">
+  ## 採点の詳細
+</div>
 
 スコアラーは、事実の正確性ではなく、完全性と詳細度を考慮しつつ、クエリと回答の整合性に基づいて関連性を評価します。
 
-### スコアリング手順
+<div id="scoring-process">
+  ### スコアリング手順
+</div>
 
 1. **文の前処理:**
    - 文脈を保ちつつ、出力を意味のある文に分割します。
@@ -102,7 +112,9 @@ description: Mastra の Answer Relevancy Scorer に関するドキュメント�
 3. **スコアの算出:**
    - `((direct + uncertainty * partial) / total_statements) * scale`
 
-### スコアの解釈
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
 
 0～1 の関連度スコア:
 
@@ -112,9 +124,13 @@ description: Mastra の Answer Relevancy Scorer に関するドキュメント�
 - **0.1–0.3**: 応答は関連する内容がごくわずかで、問い合わせの意図を大きく外している。
 - **0.0**: 応答は完全に無関係で、問い合わせにまったく答えていない。
 
-## 例
+<div id="examples">
+  ## 例
+</div>
 
-### 関連性が高い例
+<div id="high-relevancy-example">
+  ### 関連性が高い例
+</div>
 
 この例では、回答が入力クエリに対し、具体的かつ適切な情報で正確に応答しています。
 
@@ -142,7 +158,9 @@ console.log(result);
 ```
 
 
-#### 関連性の高い出力
+<div id="high-relevancy-output">
+  #### 関連性の高い出力
+</div>
 
 無関係な情報を含めずにクエリに正確に答えているため、この出力は高いスコアを受け取ります。
 
@@ -154,7 +172,9 @@ console.log(result);
 ```
 
 
-### 部分的な関連性の例
+<div id="partial-relevancy-example">
+  ### 部分的な関連性の例
+</div>
 
 この例では、回答は問い合わせの一部には答えていますが、直接関係のない情報も含まれています。
 
@@ -179,7 +199,9 @@ console.log(result);
 ```
 
 
-#### 部分的に関連する出力
+<div id="partial-relevancy-output">
+  #### 部分的に関連する出力
+</div>
 
 この出力はクエリに部分的にしか答えていないため、スコアが低くなります。関連情報は含まれているものの、無関係な内容が全体の関連性を下げています。
 
@@ -191,7 +213,9 @@ console.log(result);
 ```
 
 
-## 関連性が低い例
+<div id="low-relevancy-example">
+  ## 関連性が低い例
+</div>
 
 この例では、回答が問い合わせに対応しておらず、まったく無関係な情報が含まれています。
 
@@ -216,7 +240,9 @@ console.log(result);
 ```
 
 
-#### 関連性の低い出力
+<div id="low-relevancy-output">
+  #### 関連性の低い出力
+</div>
 
 クエリに答えておらず、関連する情報も提供していないため、出力のスコアは0になります。
 
@@ -228,6 +254,8 @@ console.log(result);
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [Faithfulness Scorer](./faithfulness)

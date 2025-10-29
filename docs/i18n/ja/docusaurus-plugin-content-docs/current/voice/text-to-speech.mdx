@@ -3,14 +3,18 @@ title: "Text-to-Speech (TTS) | Voice | Mastra ドキュメント"
 description: Mastra における Text-to-Speech 機能の概要。設定、利用方法、音声プロバイダーとの連携について解説します。
 ---
 
-# Text-to-Speech (TTS)
+<div id="text-to-speech-tts">
+  # Text-to-Speech (TTS)
+</div>
 
 Mastra の Text-to-Speech (TTS) は、複数のプロバイダーに対応した、テキストから音声を合成するための統一 API を提供します。
 アプリケーションに TTS を組み込むことで、自然な音声でのやり取りによるユーザー体験の向上、視覚障害のあるユーザーへのアクセシビリティ強化、そしてより魅力的なマルチモーダル・インターフェースの実現が可能になります。
 
 TTS はあらゆる音声アプリケーションの中核となるコンポーネントです。STT（Speech-to-Text）と組み合わせることで、音声インタラクション・システムの基盤を形成します。より新しいモデルは STS（[Speech-to-Speech](./speech-to-speech)）をサポートしており、リアルタイムなインタラクションに利用できますが、コスト（$）が高くなります。
 
-## 設定
+<div id="configuration">
+  ## 設定
+</div>
 
 Mastra で TTS を使用するには、ボイスプロバイダを初期化する際に `speechModel` を指定する必要があります。これには次のようなパラメータが含まれます。
 
@@ -36,7 +40,9 @@ const voice = new OpenAIVoice();
 ```
 
 
-## 利用可能なプロバイダー
+<div id="available-providers">
+  ## 利用可能なプロバイダー
+</div>
 
 Mastra は幅広いテキスト読み上げ（Text-to-Speech）プロバイダーをサポートしており、それぞれ独自の機能や声のバリエーションを提供します。用途に最も適したプロバイダーをお選びください：
 
@@ -58,7 +64,9 @@ pnpm add @mastra/voice-openai  # OpenAI の例
 ```
 
 
-## speak メソッドの使用
+<div id="using-the-speak-method">
+  ## speak メソッドの使用
+</div>
 
 TTS の主要なメソッドは `speak()` で、テキストを音声に変換します。このメソッドでは、話者やその他のプロバイダー固有の設定などのオプションを指定できます。使い方は次のとおりです。
 

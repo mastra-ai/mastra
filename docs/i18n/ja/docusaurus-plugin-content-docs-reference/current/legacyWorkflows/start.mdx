@@ -3,11 +3,15 @@ title: "リファレンス: start() | レガシー ワークフロー | Mastra �
 description: "ワークフローの `start()` メソッドに関するドキュメント。ワークフロー実行を開始するメソッドです。"
 ---
 
-# start()
+<div id="start">
+  # start()
+</div>
 
 start 関数はワークフローの実行を開始します。定義された順序に従ってすべてのステップを処理し、並列実行、分岐ロジック、ステップ間の依存関係を適切に扱います。
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 ```typescript copy showLineNumbers
 const { runId, start } = workflow.createRun();
@@ -17,7 +21,9 @@ const result = await start({
 ```
 
 
-## パラメータ
+<div id="parameters">
+  ## パラメータ
+</div>
 
 <PropertiesTable
   content={[
@@ -30,7 +36,9 @@ const result = await start({
   ]}
 />
 
-### config
+<div id="config">
+  ### config
+</div>
 
 <PropertiesTable
   content={[
@@ -43,7 +51,9 @@ const result = await start({
   ]}
 />
 
-## 戻り値
+<div id="returns">
+  ## 戻り値
+</div>
 
 <PropertiesTable
   content={[
@@ -60,7 +70,9 @@ const result = await start({
   ]}
 />
 
-## エラー処理
+<div id="error-handling">
+  ## エラー処理
+</div>
 
 start 関数は、複数の種類の検証エラーをスローすることがあります：
 
@@ -76,7 +88,9 @@ try {
 ```
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 * [例：ワークフローの作成](/examples/workflows_legacy/creating-a-workflow)
 * [例：一時停止と再開](/examples/workflows_legacy/suspend-and-resume)

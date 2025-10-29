@@ -3,13 +3,17 @@ title: "Semantic Recall | メモリ | Mastra ドキュメント"
 description: "Mastraでベクター検索と埋め込みを用い、過去の会話から関連メッセージを取得するためのセマンティックリコールの使い方を学びます。"
 ---
 
-# セマンティックリコール
+<div id="semantic-recall">
+  # セマンティックリコール
+</div>
 
 友人に先週末に何をしたか尋ねると、「先週末」に結びついた出来事を記憶からたどり、何をしたか教えてくれるはずです。Mastra のセマンティックリコールも、概ねそれと同じ仕組みで動作します。
 
 > **📹 視聴**: セマンティックリコールとは何か、その仕組み、Mastra での設定方法 → [YouTube（5分）](https://youtu.be/UVZtK8cK8xQ)
 
-## セマンティックリコールの仕組み
+<div id="how-semantic-recall-works">
+  ## セマンティックリコールの仕組み
+</div>
 
 セマンティックリコールは RAG ベースの検索機能で、メッセージが[直近の会話履歴](./conversation-history)から外れても、エージェントが長い対話の文脈を維持できるようにします。
 
@@ -27,7 +31,9 @@ description: "Mastraでベクター検索と埋め込みを用い、過去の会
 
 LLM の応答を受け取った後は、すべての新しいメッセージ（ユーザー、アシスタント、ツールの呼び出し／結果）をベクトル DB に格納し、後続の対話で想起できるようにします。
 
-## クイックスタート
+<div id="quick-start">
+  ## クイックスタート
+</div>
 
 Semantic recall はデフォルトで有効になっているため、エージェントにメモリを持たせれば自動的に適用されます。
 
@@ -45,7 +51,9 @@ const agent = new Agent({
 ```
 
 
-## リコール設定
+<div id="recall-configuration">
+  ## リコール設定
+</div>
 
 セマンティックリコールの動作を制御する主なパラメータは次の3つです。
 
@@ -68,7 +76,9 @@ const agent = new Agent({
 ```
 
 
-### ストレージ構成
+<div id="storage-configuration">
+  ### ストレージ構成
+</div>
 
 Semantic recall は、メッセージとその埋め込みを保存するために、[ストレージとベクターデータベース](/reference/memory/memory-class)に依存します。
 
@@ -99,11 +109,15 @@ const agent = new Agent({
 * [Upstash](/docs/memory/storage/memory-with-upstash)
 
 
-### 埋め込みモデルの設定
+<div id="embedder-configuration">
+  ### 埋め込みモデルの設定
+</div>
 
 Semantic recall は、メッセージをベクトル化するために[埋め込みモデル](/reference/memory/memory-class)に依存します。Mastra は、`provider/model` という文字列を用いるモデルルーター経由で埋め込みモデルを扱えるほか、AI SDK と互換性のある任意の[埋め込みモデル](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)も利用できます。
 
-#### モデルルーターの使用（推奨）
+<div id="using-the-model-router-recommended">
+  #### モデルルーターの使用（推奨）
+</div>
 
 最も簡単なのは、オートコンプリート対応の `provider/model` 文字列を使う方法です。
 
@@ -127,7 +141,9 @@ const agent = new Agent({
 モデルルーターは、環境変数（`OPENAI_API_KEY`、`GOOGLE_GENERATIVE_AI_API_KEY`）からAPIキーを自動的に検出します。
 
 
-#### AI SDK パッケージの利用
+<div id="using-ai-sdk-packages">
+  #### AI SDK パッケージの利用
+</div>
 
 AI SDK のエンベディングモデルは、直接利用することもできます。
 
@@ -145,7 +161,9 @@ const agent = new Agent({
 ```
 
 
-#### FastEmbed の使用（ローカル）
+<div id="using-fastembed-local">
+  #### FastEmbed の使用（ローカル）
+</div>
 
 ローカルの埋め込みモデルである FastEmbed を使用するには、`@mastra/fastembed` をインストールします：
 
@@ -169,7 +187,9 @@ const agent = new Agent({
 ```
 
 
-### PostgreSQLのインデックス最適化
+<div id="postgresql-index-optimization">
+  ### PostgreSQLのインデックス最適化
+</div>
 
 PostgreSQLをベクターストアとして使用する場合、ベクトルインデックスを適切に設定することで、セマンティック検索の再現率（リコール）を最適化できます。これは、数千件のメッセージを扱う大規模な運用環境で特に重要です。
 
@@ -206,7 +226,9 @@ const agent = new Agent({
 インデックスの設定オプションやパフォーマンス調整の詳細については、[PgVector 設定ガイド](/reference/vectors/pg#index-configuration-guide)をご覧ください。
 
 
-### 無効化
+<div id="disabling">
+  ### 無効化
+</div>
 
 Semantic recall を使用するとパフォーマンスに影響があります。新規メッセージは埋め込みベクトルに変換され、LLM に送信する前にベクターデータベースのクエリに利用されます。
 
@@ -228,7 +250,9 @@ const agent = new Agent({
 * リアルタイムの双方向音声など、埋め込みの作成やベクトル検索の実行による追加の待ち時間が目立つ、パフォーマンス重視のアプリケーションの場合
 
 
-## リコールされたメッセージの表示
+<div id="viewing-recalled-messages">
+  ## リコールされたメッセージの表示
+</div>
 
 トレースが有効な場合、セマンティック・リコールによって取得されたメッセージは、（設定されていれば）直近の会話履歴とともに、エージェントのトレース出力に表示されます。
 

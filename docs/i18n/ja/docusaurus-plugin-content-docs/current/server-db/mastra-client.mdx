@@ -7,11 +7,15 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 
-# Mastra Client SDK
+<div id="mastra-client-sdk">
+  # Mastra Client SDK
+</div>
 
 Mastra Client SDK は、クライアント環境から [Mastra Server](/docs/server-db/production-server) とやり取りするための、シンプルで型安全なインターフェースを提供します。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 ローカル開発をスムーズに行うため、次をご用意ください:
 
@@ -19,11 +23,15 @@ Mastra Client SDK は、クライアント環境から [Mastra Server](/docs/ser
 - TypeScript `v4.7` 以上（TypeScript を使用する場合）
 - ローカルの Mastra サーバーが起動していること（通常はポート `4111`）
 
-## 使い方
+<div id="usage">
+  ## 使い方
+</div>
 
 Mastra Client SDK はブラウザ環境向けに設計されており、Mastra サーバーへの HTTP リクエストにはネイティブの `fetch` API を使用します。
 
-## インストール
+<div id="installation">
+  ## インストール
+</div>
 
 Mastra Client SDK を使用するには、必要な依存関係をインストールしてください。
 
@@ -58,7 +66,9 @@ Mastra Client SDK を使用するには、必要な依存関係をインスト�
   </TabItem>
 </Tabs>
 
-### `MastraClient` を初期化する
+<div id="initialize-the-mastraclient">
+  ### `MastraClient` を初期化する
+</div>
 
 `baseUrl` を指定して初期化すると、`MastraClient` はエージェント、ツール、ワークフローを呼び出すための型安全なインターフェースを提供します。
 
@@ -71,7 +81,9 @@ export const mastraClient = new MastraClient({
 ```
 
 
-## コア API
+<div id="core-apis">
+  ## コア API
+</div>
 
 Mastra Client SDK は、Mastra Server が提供するすべてのリソースを公開します。
 
@@ -83,7 +95,9 @@ Mastra Client SDK は、Mastra Server が提供するすべてのリソースを
 - **[Logs](/reference/client-js/logs)**: ログを閲覧し、システムの挙動をデバッグします。
 - **[Telemetry](/reference/client-js/telemetry)**: アプリのパフォーマンスを監視し、アクティビティをトレースします。
 
-## 応答の生成
+<div id="generating-responses">
+  ## 応答の生成
+</div>
 
 `role` と `content` を含むメッセージオブジェクトの配列を渡して `.generate()` を呼び出します。
 
@@ -113,7 +127,9 @@ const testAgent = async () => {
 > 詳細は [.generate()](/reference/client-js/agents#generate-response) を参照してください。
 
 
-## ストリーミング応答
+<div id="streaming-responses">
+  ## ストリーミング応答
+</div>
 
 `role` と `content` を含むメッセージオブジェクトの配列を使ってリアルタイムに応答を得るには、`.stream()` を使用します：
 
@@ -147,7 +163,9 @@ const testAgent = async () => {
 > 詳細は [.stream()](/reference/client-js/agents#stream-response) を参照してください。
 
 
-## 設定オプション
+<div id="configuration-options">
+  ## 設定オプション
+</div>
 
 `MastraClient` は、リクエストの動作を制御するために `retries`、`backoffMs`、`headers` などの任意パラメータを受け付けます。これらのパラメータは、リトライの挙動を調整したり、診断用のメタデータを付加するのに役立ちます。
 
@@ -168,7 +186,9 @@ export const mastraClient = new MastraClient({
 > 追加の設定オプションについては、[MastraClient](/reference/client-js/mastra-client) を参照してください。
 
 
-## リクエストのキャンセルを追加する
+<div id="adding-request-cancelling">
+  ## リクエストのキャンセルを追加する
+</div>
 
 `MastraClient` は、標準的な Node.js の `AbortSignal` API によるリクエストのキャンセルに対応しています。ユーザーが操作を中止したときや、不要になったネットワーク呼び出しを整理する際など、進行中のリクエストをキャンセルするのに便利です。
 
@@ -186,7 +206,9 @@ export const mastraClient = new MastraClient({
 ```
 
 
-### `AbortController` の使用
+<div id="using-the-abortcontroller">
+  ### `AbortController` の使用
+</div>
 
 `.abort()` を呼び出すと、そのシグナルに結び付けられた進行中のリクエストがキャンセルされます。
 
@@ -199,7 +221,9 @@ const handleAbort = () => {
 ```
 
 
-## クライアントツール
+<div id="client-tools">
+  ## クライアントツール
+</div>
 
 `createTool()` 関数を使用して、クライアントサイドのアプリケーション内でツールを定義します。`.generate()` や `.stream()` の呼び出し時に、`clientTools` パラメータとして渡します。
 
@@ -243,7 +267,9 @@ const handleClientTool = async () => {
 ```
 
 
-### クライアントツールのエージェント
+<div id="client-tools-agent">
+  ### クライアントツールのエージェント
+</div>
 
 これは、上で定義したブラウザベースのクライアントツールと連携し、16進数のカラーコードを返すように設定された標準的な Mastra の[エージェント](../agents/overview#setting-up-agents)です。
 
@@ -261,7 +287,9 @@ export const colorAgent = new Agent({
 ```
 
 
-## サーバーサイド環境
+<div id="server-side-environments">
+  ## サーバーサイド環境
+</div>
 
 `MastraClient` は、API ルート、サーバーレス関数やアクションなどのサーバーサイド環境でも使用できます。基本的な使い方はほぼ同じですが、クライアントに返すレスポンスを再構築する必要が生じる場合があります。
 
@@ -278,7 +306,9 @@ export async function action() {
 ```
 
 
-## ベストプラクティス
+<div id="best-practices">
+  ## ベストプラクティス
+</div>
 
 1. **エラーハンドリング**: 開発環境向けに適切な[エラーハンドリング](/reference/client-js/error-handling)を実装します。
 2. **環境変数**: 設定には環境変数を使用します。

@@ -7,7 +7,9 @@ import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
 
-# RAG を用いた研究論文アシスタントの構築
+<div id="building-a-research-paper-assistant-with-rag">
+  # RAG を用いた研究論文アシスタントの構築
+</div>
 
 このガイドでは、Retrieval Augmented Generation (RAG) を用いて、学術論文を分析し、その内容に関する特定の質問に答えられる AI 研究アシスタントを作成します。
 
@@ -15,29 +17,39 @@ import StepItem from "@site/src/components/StepItem";
 
 例として、基礎的な Transformer の論文[「Attention Is All You Need」](https://arxiv.org/html/1706.03762) を使用します。データベースにはローカルの LibSQL を用います。
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 - Node.js `v20.0` 以降がインストールされていること
 - 対応する[モデルプロバイダー](/models)の API キー
 - 既存の Mastra プロジェクト（新規プロジェクトのセットアップは[インストールガイド](/docs/getting-started/installation)を参照）
 
-## RAG の仕組み
+<div id="how-rag-works">
+  ## RAG の仕組み
+</div>
 
 RAG がどのように動作するか、そして各コンポーネントをどのように実装するかを見ていきましょう。
 
-### ナレッジストア／インデックス
+<div id="knowledge-storeindex">
+  ### ナレッジストア／インデックス
+</div>
 
 - テキストをベクトル表現に変換する
 - コンテンツを数値ベクトルとして表現する
 - **実装**: OpenAI の `text-embedding-3-small` で埋め込みを生成し、LibSQLVector に保存する
 
-### Retriever
+<div id="retriever">
+  ### Retriever
+</div>
 
 - 類似検索によって関連するコンテンツを見つける
 - クエリの埋め込みを保存済みベクトルと照合する
 - **実装**: 保存済みの埋め込みに対して類似検索を行うために LibSQLVector を使用します
 
-### ジェネレーター
+<div id="generator">
+  ### ジェネレーター
+</div>
 
 - 取得したコンテンツを LLM で処理する
 - 文脈に基づく応答を生成する
@@ -50,7 +62,9 @@ RAG がどのように動作するか、そして各コンポーネントをど�
 3. 類似度検索で関連するセクションを特定する
 4. 取得したコンテキストに基づき正確な応答を生成する
 
-## エージェントの作成
+<div id="creating-the-agent">
+  ## エージェントの作成
+</div>
 
 エージェントの動作を定義し、Mastra プロジェクトに接続して、ベクターストアを作成します。
 
@@ -169,7 +183,9 @@ export const mastra = new Mastra({
 
 </Steps>
 
-## ドキュメントの処理
+<div id="processing-documents">
+  ## ドキュメントの処理
+</div>
 
 以下の手順では、研究論文を取得し、より小さなチャンクに分割して埋め込みを生成し、そのチャンク化した情報をベクターデータベースに保存します。
 
@@ -291,7 +307,9 @@ npx bun src/store.ts
 
 </Steps>
 
-## アシスタントをテストする
+<div id="test-the-assistant">
+  ## アシスタントをテストする
+</div>
 
 ベクターデータベースにすべての埋め込みが登録されたので、さまざまな種類のクエリでリサーチアシスタントを試せます。
 
@@ -349,7 +367,9 @@ Response: このモデルは翻訳品質において大幅な改善を示し、W
 ```
 
 
-### アプリケーションを提供する
+<div id="serve-the-application">
+  ### アプリケーションを提供する
+</div>
 
 API 経由でリサーチアシスタントを公開するため、Mastra サーバーを起動します:
 
@@ -376,7 +396,9 @@ curl -X POST http://localhost:4111/api/agents/researchAgent/generate \
 ```
 
 
-## 高度な RAG の例
+<div id="advanced-rag-examples">
+  ## 高度な RAG の例
+</div>
 
 より高度な RAG 手法の例を見てみましょう:
 

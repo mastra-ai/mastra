@@ -6,7 +6,9 @@ description: suspend/resume と dountil メソッドを用いて、人間とエ�
 import GithubLink from "@site/src/components/GithubLink";
 
 
-# Human-in-the-loop
+<div id="human-in-the-loop">
+  # Human-in-the-loop
+</div>
 
 Human-in-the-loop のワークフローは、人間と AI エージェントの継続的なやり取りを可能にし、複数回の入力と応答を伴う複雑な意思決定プロセスを実現します。これらのワークフローは特定のポイントで実行を一時停止し、人間からの入力を待って、受け取った応答に基づいて処理を再開できます。
 
@@ -18,7 +20,9 @@ Human-in-the-loop のワークフローは、人間と AI エージェントの�
 2. ゲームプレイを管理する [**Game Agent**](#game-agent)
 3. やり取りを統括する [**Multi-Turn Workflow**](#multi-turn-workflow)
 
-## 前提条件
+<div id="prerequisites">
+  ## 前提条件
+</div>
 
 この例では `openai` モデルを使用します。`.env` ファイルに以下を追加してください:
 
@@ -27,7 +31,9 @@ OPENAI_API_KEY=<your-api-key>
 ```
 
 
-## 有名人エージェント
+<div id="famous-person-agent">
+  ## 有名人エージェント
+</div>
 
 `famousPersonAgent` は、ゲームをプレイするたびに固有の名前を生成し、セマンティックメモリを用いて提案の重複を防ぎます。
 
@@ -72,7 +78,9 @@ export const famousPersonAgent = new Agent({
 > 構成オプションの一覧は [Agent](/reference/agents/agent) を参照してください。
 
 
-## ゲームエージェント
+<div id="game-agent">
+  ## ゲームエージェント
+</div>
 
 `gameAgent` は、質問に答え、推測を検証してユーザーとのやり取りを処理します。
 
@@ -110,7 +118,9 @@ export const gameAgent = new Agent({
 ```
 
 
-## 複数ターンのワークフロー
+<div id="multi-turn-workflow">
+  ## 複数ターンのワークフロー
+</div>
 
 このワークフローは、`suspend`/`resume` で人間の入力を待つために一時停止し、条件が満たされるまで `dountil` でゲームループを繰り返すことで、全体のやり取りを制御します。
 
@@ -245,7 +255,9 @@ export const headsUpWorkflow = createWorkflow({
 > 構成オプションの一覧については、[Workflow](/reference/workflows/workflow) を参照してください。
 
 
-## エージェントとワークフローの登録
+<div id="registering-the-agents-and-workflow">
+  ## エージェントとワークフローの登録
+</div>
 
 ワークフローやエージェントを使用するには、メインの Mastra インスタンスに登録してください。
 
@@ -265,7 +277,9 @@ export const mastra = new Mastra({
 <GithubLink marginTop="mt-16" link="https://github.com/mastra-ai/mastra/blob/main/examples/heads-up-game/" />
 
 
-## 関連項目
+<div id="related">
+  ## 関連項目
+</div>
 
 - [ワークフローの実行](./overview#running-workflows)
 - [制御フロー](/docs/workflows/control-flow)
