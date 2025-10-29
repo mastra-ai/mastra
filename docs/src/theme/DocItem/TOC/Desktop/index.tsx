@@ -10,6 +10,24 @@ export default function DocItemTOCDesktop(): ReactNode {
   const { toc, frontMatter } = useDoc();
   return (
     <div className="toc-wrapper">
+      <div className="flex items-center pl-2 text-(--mastra-text-secondary) gap-1.5 -mb-2!">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          className=" size-4"
+        >
+          <path d="M15 18H3"></path>
+          <path d="M17 6H3"></path>
+          <path d="M21 12H3"></path>
+        </svg>
+        <p className="text-sm mb-0!">On this page</p>
+      </div>
+
       <TOC
         toc={toc}
         minHeadingLevel={frontMatter.toc_min_heading_level}
