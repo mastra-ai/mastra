@@ -246,7 +246,7 @@ export class Workflow extends BaseResource {
     }) => Promise<{ message: string }>;
     watch: (onRecord: (record: WorkflowWatchResult) => void) => Promise<void>;
     resume: (params: {
-      step: string | string[];
+      step?: string | string[];
       resumeData?: Record<string, any>;
       runtimeContext?: RuntimeContext | Record<string, any>;
       tracingOptions?: TracingOptions;
@@ -261,13 +261,13 @@ export class Workflow extends BaseResource {
       tracingOptions?: TracingOptions;
     }) => Promise<WorkflowRunResult>;
     resumeAsync: (params: {
-      step: string | string[];
+      step?: string | string[];
       resumeData?: Record<string, any>;
       runtimeContext?: RuntimeContext | Record<string, any>;
       tracingOptions?: TracingOptions;
     }) => Promise<WorkflowRunResult>;
     resumeStreamVNext: (params: {
-      step: string | string[];
+      step?: string | string[];
       resumeData?: Record<string, any>;
       runtimeContext?: RuntimeContext | Record<string, any>;
     }) => Promise<ReadableStream>;
@@ -320,7 +320,7 @@ export class Workflow extends BaseResource {
         return this.stream({ runId, inputData: p.inputData, runtimeContext: p.runtimeContext });
       },
       resume: async (p: {
-        step: string | string[];
+        step?: string | string[];
         resumeData?: Record<string, any>;
         runtimeContext?: RuntimeContext | Record<string, any>;
         tracingOptions?: TracingOptions;
@@ -334,7 +334,7 @@ export class Workflow extends BaseResource {
         });
       },
       resumeAsync: async (p: {
-        step: string | string[];
+        step?: string | string[];
         resumeData?: Record<string, any>;
         runtimeContext?: RuntimeContext | Record<string, any>;
         tracingOptions?: TracingOptions;
@@ -348,7 +348,7 @@ export class Workflow extends BaseResource {
         });
       },
       resumeStreamVNext: async (p: {
-        step: string | string[];
+        step?: string | string[];
         resumeData?: Record<string, any>;
         runtimeContext?: RuntimeContext | Record<string, any>;
       }) => {
@@ -392,7 +392,7 @@ export class Workflow extends BaseResource {
     tracingOptions,
     ...rest
   }: {
-    step: string | string[];
+    step?: string | string[];
     runId: string;
     resumeData?: Record<string, any>;
     runtimeContext?: RuntimeContext | Record<string, any>;
@@ -715,7 +715,7 @@ export class Workflow extends BaseResource {
    */
   resumeAsync(params: {
     runId: string;
-    step: string | string[];
+    step?: string | string[];
     resumeData?: Record<string, any>;
     runtimeContext?: RuntimeContext | Record<string, any>;
     tracingOptions?: TracingOptions;
