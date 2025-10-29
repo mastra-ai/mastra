@@ -29,7 +29,7 @@ export function MainSidebarProvider({ children }: { children: React.ReactNode })
   const [state, setState] = React.useState<SidebarState>(() => 'default');
 
   // Sync with localStorage after hydration
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const storedState = window.localStorage.getItem(SIDEBAR_COOKIE_NAME);
     if (storedState === 'collapsed' || storedState === 'default') {
       setState(storedState);
