@@ -1,6 +1,9 @@
 {
-  "name": "mastra-docusaurus",
+  "name": "mastra-docs",
   "version": "0.0.0",
+  "repository": "https://github.com/mastra-ai/mastra",
+  "homepage": "https://mastra.ai",
+  "bugs": "https://github.com/mastra-ai/mastra",
   "scripts": {
     "docusaurus": "docusaurus",
     "dev": "docusaurus start",
