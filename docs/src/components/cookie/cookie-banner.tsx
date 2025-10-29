@@ -1,47 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import useIsBrowser from "@docusaurus/useIsBrowser";
+import { useFeatureFlagEnabled } from "posthog-js/react";
 import { Button } from "../ui/button";
 
 declare global {
   interface Window {
     gtag?: (...args: any[]) => void;
     dataLayer?: any[];
-  }
-}
-
-// Simple EU timezone detection (not 100% accurate but good enough for cookie consent)
-function detectEUTimezone(): boolean {
-  const euTimezones = [
-    "Europe/London",
-    "Europe/Paris",
-    "Europe/Berlin",
-    "Europe/Madrid",
-    "Europe/Rome",
-    "Europe/Amsterdam",
-    "Europe/Brussels",
-    "Europe/Vienna",
-    "Europe/Stockholm",
-    "Europe/Copenhagen",
-    "Europe/Oslo",
-    "Europe/Helsinki",
-    "Europe/Warsaw",
-    "Europe/Prague",
-    "Europe/Budapest",
-    "Europe/Athens",
-    "Europe/Bucharest",
-    "Europe/Sofia",
-    "Europe/Zagreb",
-    "Europe/Dublin",
-    "Europe/Lisbon",
-  ];
-
-  try {
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return euTimezones.some((tz) => timezone.startsWith(tz.split("/")[0]));
-  } catch {
-    // If timezone detection fails, show banner to be safe
-    return true;
   }
 }
 
@@ -53,38 +19,20 @@ export function CookieBanner({
   const [showBanner, setShowBanner] = useState(false);
   const isBrowser = useIsBrowser();
 
-  // Detect if user is in EU timezone
-  const [isEU, setIsEU] = useState<boolean | undefined>(undefined);
+  // Try to use feature flag, but default to true if undefined
+  // This ensures the banner works even if PostHog isn't properly initialized
+  const featureFlag = useFeatureFlagEnabled("cookie-banner");
+  const banner = featureFlag !== undefined ? featureFlag : true;
 
   useEffect(() => {
-    if (isBrowser) {
-      setIsEU(detectEUTimezone());
-    }
-  }, [isBrowser]);
-
-  useEffect(() => {
-    if (isEU === undefined) return;
-
-    if (isEU === false) {
-      const storedConsent = localStorage.getItem("cookie-consent");
-      if (!storedConsent) {
-        window.gtag?.("consent", "update", {
-          analytics_storage: "granted",
-          ad_storage: "granted",
-          ad_user_data: "granted",
-          ad_personalization: "granted",
-        });
-        localStorage.setItem("cookie-consent", "true");
-        onConsentChange(true);
-      } else {
-        onConsentChange(storedConsent === "true");
-      }
-      return;
-    }
+    if (!isBrowser) return;
 
     const storedConsent = localStorage.getItem("cookie-consent");
-    if (!storedConsent) {
+
+    // If feature flag is enabled and no consent stored, show banner
+    if (banner && !storedConsent) {
       setShowBanner(true);
+      // Default to denied until user makes a choice
       window.gtag?.("consent", "update", {
         analytics_storage: "denied",
         ad_storage: "denied",
@@ -93,9 +41,30 @@ export function CookieBanner({
       });
       return;
     }
-    onConsentChange(storedConsent === "true");
+
+    // If we have stored consent, apply it
+    if (storedConsent) {
+      const isConsented = storedConsent === "true";
+      onConsentChange(isConsented);
+
+      if (isConsented) {
+        window.gtag?.("consent", "update", {
+          analytics_storage: "granted",
+          ad_storage: "granted",
+          ad_user_data: "granted",
+          ad_personalization: "granted",
+        });
+      } else {
+        window.gtag?.("consent", "update", {
+          analytics_storage: "denied",
+          ad_storage: "denied",
+          ad_user_data: "denied",
+          ad_personalization: "denied",
+        });
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEU]);
+  }, [banner, isBrowser]);
 
   const handleAccept = () => {
     localStorage.setItem("cookie-consent", "true");
@@ -121,16 +90,23 @@ export function CookieBanner({
     setShowBanner(false);
   };
 
-  if (!showBanner) return null;
+  // Only show banner if both the feature flag is enabled and we should show it
+  if (!showBanner || !banner) return null;
 
   return (
-    <div className="fixed bottom-8 right-5 z-50 flex w-[322px] items-center justify-center rounded-xl dark:border-neutral-700 border bg-white dark:bg-black p-4">
+    <div className="fixed shadow-[0_4px_24px_rgba(0,0,0,.1)] bottom-8 right-20 z-50 flex w-[322px] items-center justify-center rounded-xl dark:border-neutral-700 dark:border bg-white dark:bg-black p-4">
       <div>
         <p className="mb-4 font-sans dark:text-white text-sm">
           We use tracking cookies to understand how you use the product and help
           us improve it. Please accept cookies to help us improve.
         </p>
-        <Button size={"slim"} type="button" onClick={handleAccept}>
+        <Button
+          variant="secondary"
+          size={"slim"}
+          type="button"
+          onClick={handleAccept}
+          className="bg-black text-white dark:bg-white dark:text-black"
+        >
           Accept cookies
         </Button>
         <span> </span>
