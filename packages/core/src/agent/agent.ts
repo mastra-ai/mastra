@@ -374,15 +374,23 @@ export class Agent<
    * @internal
    */
   private async getResolvedOutputProcessors(runtimeContext?: RuntimeContext): Promise<OutputProcessor[]> {
-    if (!this.#outputProcessors) {
-      return [];
-    }
+    // Get configured output processors
+    const configuredProcessors = this.#outputProcessors
+      ? typeof this.#outputProcessors === 'function'
+        ? await this.#outputProcessors({ runtimeContext: runtimeContext || new RuntimeContext() })
+        : this.#outputProcessors
+      : [];
 
-    if (typeof this.#outputProcessors === 'function') {
-      return await this.#outputProcessors({ runtimeContext: runtimeContext || new RuntimeContext() });
-    }
+    // Get memory output processors (with deduplication)
+    const memory =
+      typeof this.#memory === 'function'
+        ? await this.#memory({ runtimeContext: runtimeContext || new RuntimeContext() })
+        : this.#memory;
 
-    return this.#outputProcessors;
+    const memoryProcessors = memory ? memory.getOutputProcessors(configuredProcessors) : [];
+
+    // Memory processors should run last (to persist messages after other processing)
+    return [...configuredProcessors, ...memoryProcessors];
   }
 
   /**
@@ -390,15 +398,23 @@ export class Agent<
    * @internal
    */
   private async getResolvedInputProcessors(runtimeContext?: RuntimeContext): Promise<InputProcessor[]> {
-    if (!this.#inputProcessors) {
-      return [];
-    }
+    // Get configured input processors
+    const configuredProcessors = this.#inputProcessors
+      ? typeof this.#inputProcessors === 'function'
+        ? await this.#inputProcessors({ runtimeContext: runtimeContext || new RuntimeContext() })
+        : this.#inputProcessors
+      : [];
 
-    if (typeof this.#inputProcessors === 'function') {
-      return await this.#inputProcessors({ runtimeContext: runtimeContext || new RuntimeContext() });
-    }
+    // Get memory input processors (with deduplication)
+    const memory =
+      typeof this.#memory === 'function'
+        ? await this.#memory({ runtimeContext: runtimeContext || new RuntimeContext() })
+        : this.#memory;
 
-    return this.#inputProcessors;
+    const memoryProcessors = memory ? memory.getInputProcessors(configuredProcessors) : [];
+
+    // Memory processors should run first (to fetch history, semantic recall, working memory)
+    return [...memoryProcessors, ...configuredProcessors];
   }
 
   /**

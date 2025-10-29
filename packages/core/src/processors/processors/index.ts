@@ -28,7 +28,11 @@ export {
 } from './language-detector';
 export { StructuredOutputProcessor, type StructuredOutputOptions } from './structured-output';
 export { BatchPartsProcessor, type BatchPartsOptions, type BatchPartsState } from './batch-parts';
-export { TokenLimiterProcessor, type TokenLimiterOptions } from './token-limiter';
+export {
+  TokenLimiterProcessor,
+  TokenLimiterProcessor as TokenLimiter,
+  type TokenLimiterOptions,
+} from './token-limiter';
 export {
   SystemPromptScrubber,
   type SystemPromptScrubberOptions,

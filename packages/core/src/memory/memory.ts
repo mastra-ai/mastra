@@ -8,6 +8,7 @@ import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
 import type { InputProcessor, OutputProcessor } from '../processors';
 import { MessageHistory, SemanticRecall, WorkingMemory } from '../processors/processors';
+import type { RuntimeContext } from '../runtime-context';
 import type { MastraStorage, PaginationInfo, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
@@ -245,7 +246,7 @@ https://mastra.ai/en/docs/memory/overview`,
   }
 
   public getMergedThreadConfig(config?: MemoryConfig): MemoryConfig {
-    if (config?.workingMemory && 'use' in config.workingMemory) {
+    if (config?.workingMemory && typeof config.workingMemory === 'object' && 'use' in config.workingMemory) {
       throw new Error('The workingMemory.use option has been removed. Working memory always uses tool-call mode.');
     }
 
@@ -257,10 +258,12 @@ https://mastra.ai/en/docs/memory/overview`,
 
     const mergedConfig = deepMerge(this.threadConfig, config || {});
 
-    if (config?.workingMemory?.schema) {
-      if (mergedConfig.workingMemory) {
-        mergedConfig.workingMemory.schema = config.workingMemory.schema;
-      }
+    if (
+      typeof config?.workingMemory === 'object' &&
+      config.workingMemory?.schema &&
+      typeof mergedConfig.workingMemory === 'object'
+    ) {
+      mergedConfig.workingMemory.schema = config.workingMemory.schema;
     }
 
     return mergedConfig;
@@ -563,10 +566,11 @@ https://mastra.ai/en/docs/memory/overview`,
   /**
    * Get input processors for this memory instance.
    * This allows Memory to be used as a ProcessorProvider in Agent's inputProcessors array.
+   * @param configuredProcessors - Processors already configured by the user (for deduplication)
    * @param context - Optional execution context with threadId and resourceId
    * @returns Array of input processors configured for this memory instance
    */
-  getInputProcessors(): InputProcessor[] {
+  getInputProcessors(configuredProcessors: InputProcessor[] = [], _context?: RuntimeContext): InputProcessor[] {
     const processors: InputProcessor[] = [];
 
     // Add semantic recall processor if configured
@@ -590,22 +594,30 @@ https://mastra.ai/en/docs/memory/overview`,
             }
           : this.threadConfig.semanticRecall;
 
-      processors.push(
-        new SemanticRecall({
-          storage: this.storage.stores.memory,
-          vector: this.vector,
-          embedder: this.embedder,
-          topK: semanticConfig.topK,
-          messageRange: semanticConfig.messageRange,
-          scope: semanticConfig.scope,
-          threshold: semanticConfig.threshold,
-          indexName: semanticConfig.indexName,
-        }),
-      );
+      // Check if user already manually added SemanticRecall
+      const hasSemanticRecall = configuredProcessors.some(p => p.constructor.name === 'SemanticRecall');
+
+      if (!hasSemanticRecall) {
+        processors.push(
+          new SemanticRecall({
+            storage: this.storage.stores.memory,
+            vector: this.vector,
+            embedder: this.embedder,
+            topK: semanticConfig.topK,
+            messageRange: semanticConfig.messageRange,
+            scope: semanticConfig.scope,
+            threshold: semanticConfig.threshold,
+            indexName: semanticConfig.indexName,
+          }),
+        );
+      }
     }
 
     // Add working memory input processor if configured
-    if (this.threadConfig.workingMemory) {
+    const isWorkingMemoryEnabled =
+      typeof this.threadConfig.workingMemory === 'object' && this.threadConfig.workingMemory.enabled !== false;
+
+    if (isWorkingMemoryEnabled) {
       if (!this.storage?.stores?.memory)
         throw new MastraError({
           category: 'USER',
@@ -614,23 +626,32 @@ https://mastra.ai/en/docs/memory/overview`,
           text: 'Using Mastra Memory working memory requires a storage adapter but no attached adapter was detected.',
         });
 
-      // Convert string template to WorkingMemoryTemplate format
-      let template: { format: 'markdown' | 'json'; content: string } | undefined;
-      if (this.threadConfig.workingMemory.template) {
-        template = {
-          format: 'markdown',
-          content: this.threadConfig.workingMemory.template,
-        };
-      }
+      // Check if user already manually added WorkingMemory
+      const hasWorkingMemory = configuredProcessors.some(p => p.constructor.name === 'WorkingMemory');
 
-      processors.push(
-        new WorkingMemory({
-          storage: this.storage.stores.memory,
-          template,
-          scope: this.threadConfig.workingMemory.scope,
-          useVNext: 'version' in this.threadConfig.workingMemory && this.threadConfig.workingMemory.version === 'vnext',
-        }),
-      );
+      if (!hasWorkingMemory) {
+        // Convert string template to WorkingMemoryTemplate format
+        let template: { format: 'markdown' | 'json'; content: string } | undefined;
+        if (typeof this.threadConfig.workingMemory === 'object' && this.threadConfig.workingMemory.template) {
+          template = {
+            format: 'markdown',
+            content: this.threadConfig.workingMemory.template,
+          };
+        }
+
+        processors.push(
+          new WorkingMemory({
+            storage: this.storage.stores.memory,
+            template,
+            scope:
+              typeof this.threadConfig.workingMemory === 'object' ? this.threadConfig.workingMemory.scope : undefined,
+            useVNext:
+              typeof this.threadConfig.workingMemory === 'object' &&
+              'version' in this.threadConfig.workingMemory &&
+              this.threadConfig.workingMemory.version === 'vnext',
+          }),
+        );
+      }
     }
 
     const lastMessages = this.threadConfig.lastMessages;
@@ -642,23 +663,32 @@ https://mastra.ai/en/docs/memory/overview`,
           id: 'MESSAGE_HISTORY_MISSING_STORAGE_ADAPTER',
           text: 'Using Mastra Memory message history requires a storage adapter but no attached adapter was detected.',
         });
-      processors.push(
-        new MessageHistory({
-          storage: this.storage.stores.memory,
-          lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
-        }),
-      );
+
+      // Check if user already manually added MessageHistory
+      const hasMessageHistory = configuredProcessors.some(p => p.constructor.name === 'MessageHistory');
+
+      if (!hasMessageHistory) {
+        processors.push(
+          new MessageHistory({
+            storage: this.storage.stores.memory,
+            lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
+          }),
+        );
+      }
     }
 
+    // Return only the auto-generated processors (not the configured ones)
+    // The agent will merge them with configuredProcessors
     return processors;
   }
 
   /**
    * Get output processors for this memory instance
    * This allows Memory to be used as a ProcessorProvider in Agent's outputProcessors array.
+   * @param configuredProcessors - Processors already configured by the user (for deduplication)
    * @returns Array of output processors configured for this memory instance
    */
-  getOutputProcessors(): OutputProcessor[] {
+  getOutputProcessors(configuredProcessors: OutputProcessor[] = []): OutputProcessor[] {
     const processors: OutputProcessor[] = [];
 
     const lastMessages = this.threadConfig.lastMessages;
@@ -670,12 +700,18 @@ https://mastra.ai/en/docs/memory/overview`,
           id: 'MESSAGE_HISTORY_MISSING_STORAGE_ADAPTER',
           text: 'Using Mastra Memory message history requires a storage adapter but no attached adapter was detected.',
         });
-      processors.push(
-        new MessageHistory({
-          storage: this.storage.stores.memory,
-          lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
-        }),
-      );
+
+      // Check if user already manually added MessageHistory
+      const hasMessageHistory = configuredProcessors.some(p => p.constructor.name === 'MessageHistory');
+
+      if (!hasMessageHistory) {
+        processors.push(
+          new MessageHistory({
+            storage: this.storage.stores.memory,
+            lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
+          }),
+        );
+      }
     }
 
     // TODO: Add working memory output processor when implemented
@@ -686,6 +722,8 @@ https://mastra.ai/en/docs/memory/overview`,
     //   }));
     // }
 
+    // Return only the auto-generated processors (not the configured ones)
+    // The agent will merge them with configuredProcessors
     return processors;
   }
 }

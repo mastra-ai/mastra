@@ -8136,6 +8136,60 @@ describe('Agent Tests', () => {
     expect(finalCoreMessages.length).toBe(4); // Assistant call for tool-1, Tool result for tool-1, Assistant call for tool-2, Tool result for tool-2
   });
 
+  it('should deduplicate memory processors when manually configured', async () => {
+    const mockModel = createMockLanguageModelV1({
+      doGenerate: async () => ({
+        text: 'test response',
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 5 },
+      }),
+    });
+
+    const storage = createMemoryStorage();
+    const memory = new MastraMemory({
+      storage,
+      lastMessages: 10,
+    });
+
+    // Create custom instances of memory processors
+    const customMessageHistory = new MessageHistory();
+    const customSemanticRecall = new SemanticRecall({
+      vector: createMemoryVector(),
+      embedder: createMemoryEmbedder(),
+    });
+    const customWorkingMemory = new WorkingMemory();
+
+    // Configure agent with memory and manually add the same processors
+    const agent = new Agent({
+      name: 'test-dedup',
+      instructions: 'test',
+      model: mockModel,
+      memory,
+      inputProcessors: [customSemanticRecall, customWorkingMemory],
+      outputProcessors: [customMessageHistory],
+    });
+
+    // Get resolved processors
+    const inputProcessors = await agent.getResolvedInputProcessors({
+      threadId: 'test-thread',
+      resourceId: 'test-resource',
+    });
+    const outputProcessors = await agent.getResolvedOutputProcessors({
+      threadId: 'test-thread',
+      resourceId: 'test-resource',
+    });
+
+    // Count instances of each processor type
+    const messageHistoryCount = outputProcessors.filter(p => p.constructor.name === 'MessageHistory').length;
+    const semanticRecallCount = inputProcessors.filter(p => p.constructor.name === 'SemanticRecall').length;
+    const workingMemoryCount = inputProcessors.filter(p => p.constructor.name === 'WorkingMemory').length;
+
+    // Each processor should appear exactly once (deduplication working)
+    expect(messageHistoryCount).toBe(1);
+    expect(semanticRecallCount).toBe(1);
+    expect(workingMemoryCount).toBe(1);
+  });
+
   agentTests({ version: 'v1' });
   agentTests({ version: 'v2' });
 });

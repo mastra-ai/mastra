@@ -285,6 +285,57 @@ const memory = new Memory({
 
 If you want to adopt the new default behavior, you can optionally remove explicit `scope: 'resource'` declarations as they're now redundant.
 
+### Deprecated: `memory.processors` Configuration
+
+The `processors` option in the `Memory` constructor is now deprecated and will throw an error if used.
+
+**Before (Old Way - Will Error):**
+
+```typescript
+import { Agent, Memory } from '@mastra/core';
+import { ToolCallFilter } from '@mastra/memory';
+
+const memory = new Memory({
+  storage: new LibSQLStore({ url: 'file:local.db' }),
+  // ❌ This will now throw an error, processors only run in the Agent class. Memory processors are equivalent to Agent input processors
+  processors: [ 
+    new ToolCallFilter(),
+  ],
+});
+```
+
+**After (New Way):**
+
+```typescript
+import { Agent, Memory } from '@mastra/core';
+import { ToolCallFilter } from '@mastra/core/processors';
+
+const memory = new Memory({
+  storage: new LibSQLStore({ url: 'file:local.db' }),
+});
+
+const agent = new Agent({
+  memory,
+  inputProcessors: [
+    new ToolCallFilter(),
+  ],
+});
+```
+
+#### Updated Processor Import Paths
+
+If you're using `ToolCallFilter` or `TokenLimiter`, update your imports:
+
+```typescript
+// Old imports (deprecated)
+import { ToolCallFilter, TokenLimiter } from '@mastra/memory';
+
+// New imports (v1)
+import { ToolCallFilter, TokenLimiter } from '@mastra/core/processors';
+```
+
+The processors have been moved from `@mastra/memory` to `@mastra/core/processors`. The API remains the same.
+
 ### Deprecated: `format: "aisdk"`
 
 The `format: "aisdk"` option in `stream()`/`generate()` methods is deprecated. Use the `@mastra/ai-sdk` package instead. Learn more in the [Using Vercel AI SDK documentation](../../docs/frameworks/agentic-uis/ai-sdk.mdx).
