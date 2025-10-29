@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "scripts": {
     "docusaurus": "docusaurus",
-    "start": "docusaurus start",
+    "dev": "docusaurus start",
     "build": "npm run build:llms-txt && docusaurus build",
     "build:llms-txt": "tsx scripts/build-llms-txt.ts",
     "swizzle": "docusaurus swizzle",

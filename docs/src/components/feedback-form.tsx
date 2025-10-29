@@ -140,11 +140,8 @@ export const FeedbackForm = ({
         throw new Error("Website URL is not configured");
       }
 
-      const response = await fetch(mastraWebsite, {
+      const response = await fetch(`${mastraWebsite}/api/feedback`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           ...data,
           timestamp: new Date().toISOString(),
