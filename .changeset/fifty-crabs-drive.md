@@ -4,7 +4,7 @@
 '@mastra/server': minor
 ---
 
-Add observeStream support for agent-builder template installation recovery
+Add observeStream support for agent-builder template installation
 
 - Add observeStream, observeStreamVNext, observeStreamLegacy, and resumeStream methods to agent-builder client SDK
 - Add corresponding server handlers and deployer routes for observe streaming
