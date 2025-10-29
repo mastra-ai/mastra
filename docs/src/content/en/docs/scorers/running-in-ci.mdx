@@ -19,34 +19,9 @@ Use `runExperiment` to evaluate your agent against multiple test cases. The func
 import { describe, it, expect } from 'vitest';
 import { createScorer, runExperiment } from "@mastra/core/scores";
 import { weatherAgent } from "./weather-agent";
+import { locationScorer } from "../scorers/location-scorer";
 
 describe('Weather Agent Tests', () => {
-  const locationScorer = createScorer({
-    name: 'location-accuracy',
-    description: 'Validates location extraction',
-    type: 'agent'
-  }).generateScore(({ run }) => {
-    const { expectedLocation, expectedCountry } = run.groundTruth;
-
-    // Extract tool calls from agent output
-    const toolCalls = [];
-    for (const message of run.output) {
-      for (const part of message.parts) {
-        if (part.type === 'tool-invocation') {
-          toolCalls.push(part.toolInvocation.args);
-        }
-      }
-    }
-
-    // Validate against ground truth
-    const isValid = toolCalls.some(args =>
-      args.location === expectedLocation &&
-      args.country === expectedCountry
-    );
-
-    return isValid ? 1 : 0;
-  });
-
   it('should correctly extract locations from queries', async () => {
     const result = await runExperiment({
       data: [
@@ -73,6 +48,8 @@ describe('Weather Agent Tests', () => {
   });
 });
 ```
+
+View the full example [here](/examples/scorers/running-in-ci)
 
 ## Understanding Results
 

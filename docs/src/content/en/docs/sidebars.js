@@ -520,6 +520,11 @@ const sidebars = {
           id: "scorers/custom-scorers",
           label: "Custom Scorers",
         },
+        {
+          type: "doc",
+          id: "scorers/running-in-ci",
+          label: "Running in CI",
+        },
       ],
     },
     {
