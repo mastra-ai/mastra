@@ -165,7 +165,7 @@ Load conversation history from Mastra Memory:
 ```typescript showLineNumbers copy title="app/api/initial-chat/route.ts"
 import { mastra } from "@/src/mastra";
 import { NextResponse } from "next/server";
-import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
+import { convertMessages } from "@mastra/core/agent";
 
 const myAgent = mastra.getAgent("weatherAgent");
 
@@ -174,8 +174,7 @@ export async function GET() {
     threadId: "user-session",
   });
 
-  // Convert Mastra messages to AI SDK v5 UI format
-  const messages = toAISdkV5Messages(result?.messages || []);
+  const messages = convertMessages(result?.uiMessages || []).to("AIV5.UI");
   return NextResponse.json(messages);
 }
 ```
