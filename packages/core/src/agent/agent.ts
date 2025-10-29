@@ -3248,6 +3248,7 @@ export class Agent<
         // Pass execution-specific objects as inputs
         capabilities,
         saveQueueManager,
+        agentAISpan, // Pass the agent span directly to prevent it from being overwritten
       },
       runtimeContext,
       tracingContext: { currentSpan: agentAISpan },

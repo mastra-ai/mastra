@@ -62,7 +62,6 @@ export function createStreamStep<
         ...validatedInputData,
         outputProcessors: processors,
         returnScorerData,
-        tracingContext,
         requireToolApproval,
         resumeContext,
         _internal: {

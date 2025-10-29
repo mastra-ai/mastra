@@ -38,6 +38,7 @@ export const prepareStreamWorkflowInputSchema = z.object({
   // Add execution-specific params that were in constructor
   capabilities: z.any(), // AgentCapabilities
   saveQueueManager: z.any(), // SaveQueueManager
+  agentAISpan: z.any(), // AISpan - passed directly to prevent overwriting by child spans
 });
 
 interface CreatePrepareStreamWorkflowOptions {
@@ -75,6 +76,7 @@ export function createPrepareStreamWorkflow<OUTPUT extends OutputSchema | undefi
       tracingPolicy: {
         internal: InternalSpans.WORKFLOW,
       },
+      shouldPersistSnapshot: () => false,
     },
   })
     .parallel([prepareToolsStep, prepareMemoryStep])

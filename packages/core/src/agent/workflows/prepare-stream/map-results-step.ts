@@ -48,8 +48,8 @@ export function createMapResultsStep<
       resumeContext,
       toolCallId,
       format,
+      agentAISpan, // Get the agent span from workflow input (not tracingContext which gets overwritten)
     } = workflowInput;
-    const agentAISpan = tracingContext.currentSpan;
     const toolsData = inputData['prepare-tools-step'];
     const memoryData = inputData['prepare-memory-step'];
 

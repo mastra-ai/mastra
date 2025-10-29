@@ -127,9 +127,6 @@ export function workflowLoopStream<
         runtimeContext.set('__mastra_requireToolApproval', true);
       }
 
-      // Store workflow data in initialState so all nested workflows can access it
-      const initialState = workflowInputData;
-
       // Execution-specific objects that need to be fresh on each execution (including resume)
       const freshExecutionObjects = {
         controller,
@@ -140,7 +137,12 @@ export function workflowLoopStream<
         tools: rest.tools, // tools contain functions that can't be serialized
         modelSpanTracker: rest.modelSpanTracker, // modelSpanTracker contains functions that can't be serialized
         models, // models contain provider functions that can't be serialized
+        options: rest.options, // options contains callback functions (onFinish, onStepFinish, etc.) that can't be serialized
+        outputProcessors: rest.outputProcessors, // output processors may contain functions that can't be serialized
       };
+
+      // Store workflow data in initialState, merging with fresh execution objects
+      const initialState = { ...workflowInputData, ...freshExecutionObjects };
 
       const executionResult = resumeContext
         ? await (async () => {
