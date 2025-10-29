@@ -322,7 +322,7 @@ function runStreamTest(version: 'v1' | 'v2') {
 
       await stream.consumeStream();
 
-      const { messages } = await storage.listMessages({ threadId: 'thread-1', resourceId: 'resource-1', format: 'v2' });
+      const { messages } = await storage.listMessages({ threadId: 'thread-1', resourceId: 'resource-1' });
       // Check that the last message matches the expected final output
       expect(
         messages[messages.length - 1]?.content?.parts?.some(
@@ -479,7 +479,7 @@ function runStreamTest(version: 'v1' | 'v2') {
 
       expect(saveCallCount).toBe(1);
 
-      const { messages } = await storage.listMessages({ threadId: 'thread-2', resourceId: 'resource-2', format: 'v2' });
+      const { messages } = await storage.listMessages({ threadId: 'thread-2', resourceId: 'resource-2' });
       expect(messages.length).toBe(1);
       expect(messages[0].role).toBe('user');
       expect(messages[0].content.content).toBe('no progress');

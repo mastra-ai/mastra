@@ -525,9 +525,6 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           limit: 3,
         });
 
-        console.log(thread.resourceId);
-        console.log(result);
-
         expect(result.messages).toHaveLength(3);
         expect(result.messages.every(m => m.resourceId === thread.resourceId)).toBe(true);
       });

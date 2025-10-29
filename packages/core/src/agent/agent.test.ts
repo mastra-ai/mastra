@@ -5883,10 +5883,14 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
   describe(`${version} - UIMessageWithMetadata support`, () => {
     let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
-    const storage = new InMemoryStore();
-    const mockMemory = new MockMemory({ storage });
+    let storage: InMemoryStore;
+    let mockMemory: MockMemory;
 
     beforeEach(() => {
+      // Create fresh storage and memory instances for each test to avoid state bleed
+      storage = new InMemoryStore();
+      mockMemory = new MockMemory({ storage });
+
       if (version === 'v1') {
         dummyModel = new MockLanguageModelV1({
           doGenerate: async () => ({
