@@ -1,9 +1,7 @@
 ---
-title: "Reference: createGraphRAGTool() | RAG | Mastra Tools Docs"
+title: "Reference: createGraphRAGTool() | Tools & MCP | Mastra Docs"
 description: Documentation for the Graph RAG Tool in Mastra, which enhances RAG by building a graph of semantic relationships between documents.
 ---
-
-import { Callout } from "nextra/components";
 
 # createGraphRAGTool()
 
@@ -30,13 +28,15 @@ const graphTool = createGraphRAGTool({
 
 ## Parameters
 
-<Callout>
-  **Parameter Requirements:** Most fields can be set at creation as defaults.
-  Some fields can be overridden at runtime via the runtime context or input. If
-  a required field is missing from both creation and runtime, an error will be
-  thrown. Note that `model`, `id`, and `description` can only be set at creation
-  time.
-</Callout>
+:::note
+
+**Parameter Requirements:** Most fields can be set at creation as defaults.
+Some fields can be overridden at runtime via the runtime context or input. If
+a required field is missing from both creation and runtime, an error will be
+thrown. Note that `model`, `id`, and `description` can only be set at creation
+time.
+
+:::
 
 <PropertiesTable
   content={[
@@ -253,8 +253,8 @@ const response = await agent.generate(
 
 For more information on runtime context, please see:
 
-- [Agent Runtime Context](../../docs/server-db/runtime-context.mdx)
-- [Tool Runtime Context](../../docs/tools-mcp/overview.mdx#using-runtimecontext)
+- [Agent Runtime Context](/docs/server-db/runtime-context)
+- [Tool Runtime Context](/docs/tools-mcp/overview#using-runtimecontext)
 
 ## Related
 

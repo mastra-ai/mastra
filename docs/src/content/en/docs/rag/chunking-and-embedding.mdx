@@ -3,7 +3,7 @@ title: Chunking and Embedding Documents | RAG | Mastra Docs
 description: Guide on chunking and embedding documents in Mastra for efficient processing and retrieval.
 ---
 
-## Chunking and Embedding Documents
+# Chunking and Embedding Documents
 
 Before processing, create a MDocument instance from your content. You can initialize it from various formats:
 
@@ -69,7 +69,7 @@ const chunks = await doc.chunk({
 
 **Note:** Metadata extraction may use LLM calls, so ensure your API key is set.
 
-We go deeper into chunking strategies in our [chunk documentation](/reference/rag/chunk.mdx).
+We go deeper into chunking strategies in our [chunk documentation](/reference/rag/chunk).
 
 ## Step 2: Embedding Generation
 
@@ -83,7 +83,9 @@ The simplest way is to use Mastra's model router with `provider/model` strings:
 import { ModelRouterEmbeddingModel } from "@mastra/core";
 import { embedMany } from "ai";
 
-const embeddingModel = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
+const embeddingModel = new ModelRouterEmbeddingModel(
+  "openai/text-embedding-3-small",
+);
 
 const { embeddings } = await embedMany({
   model: embeddingModel,
@@ -92,6 +94,7 @@ const { embeddings } = await embedMany({
 ```
 
 Supported embedding models:
+
 - **OpenAI**: `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`
 - **Google**: `gemini-embedding-001`, `text-embedding-004`
 
@@ -198,11 +201,10 @@ await vectorStore.upsert({
 
 For more examples of different chunking strategies and embedding configurations, see:
 
-- [Adjust Chunk Size](/reference/rag/chunk.mdx#adjust-chunk-size)
-- [Adjust Chunk Delimiters](/reference/rag/chunk.mdx#adjust-chunk-delimiters)
-- [Embed Text with Cohere](/reference/rag/embeddings.mdx#using-cohere)
+- [Chunk Reference](/reference/rag/chunk)
+- [Embeddings Reference](/reference/rag/embeddings)
 
 For more details on vector databases and embeddings, see:
 
-- [Vector Databases](./vector-databases.mdx)
-- [Embedding API Reference](/reference/rag/embeddings.mdx)
+- [Vector Databases](./vector-databases)
+- [Embedding API Reference](/reference/rag/embeddings)

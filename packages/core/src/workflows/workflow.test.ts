@@ -1849,8 +1849,23 @@ describe('Workflow', () => {
       }
 
       const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
+      const errStreamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: getUserInput });
+      for await (const _data of errStreamResult.fullStream) {
+      }
+
+      try {
+        await errStreamResult.result;
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toBe(
+          'This workflow step "getUserInput" was not suspended. Available suspended steps: [promptAgent]',
+        );
+      }
+
       streamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: promptAgent });
+      console.log('created stream');
       for await (const _data of streamResult.fullStream) {
+        console.log('data===', _data);
       }
 
       expect(evaluateToneAction).toHaveBeenCalledTimes(1);

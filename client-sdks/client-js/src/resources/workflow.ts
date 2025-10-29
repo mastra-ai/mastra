@@ -739,7 +739,7 @@ export class Workflow extends BaseResource {
    */
   async resumeStreamVNext(params: {
     runId: string;
-    step: string | string[];
+    step?: string | string[];
     resumeData?: Record<string, any>;
     runtimeContext?: RuntimeContext | Record<string, any>;
     tracingOptions?: TracingOptions;

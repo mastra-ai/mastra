@@ -26,18 +26,19 @@ await memory?.getThreadsByResourceId({ resourceId: "user-123" });
     {
       name: "orderBy",
       type: "ThreadOrderBy",
-      description: "Field to sort threads by. Accepts 'createdAt' or 'updatedAt'. Default: 'createdAt'",
+      description:
+        "Field to sort threads by. Accepts 'createdAt' or 'updatedAt'. Default: 'createdAt'",
       isOptional: true,
     },
     {
       name: "sortDirection",
       type: "ThreadSortDirection",
-      description: "Sort order direction. Accepts 'ASC' or 'DESC'. Default: 'DESC'",
+      description:
+        "Sort order direction. Accepts 'ASC' or 'DESC'. Default: 'DESC'",
       isOptional: true,
     },
   ]}
 />
-
 
 ## Returns
 
@@ -54,7 +55,7 @@ await memory?.getThreadsByResourceId({ resourceId: "user-123" });
 
 ## Extended usage example
 
-```typescript filename="src/test-memory.ts" showLineNumbers copy
+```typescript title="src/test-memory.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
 const agent = mastra.getAgent("agent");
@@ -63,7 +64,7 @@ const memory = await agent.getMemory();
 const thread = await memory?.getThreadsByResourceId({
   resourceId: "user-123",
   orderBy: "updatedAt",
-  sortDirection: "ASC"
+  sortDirection: "ASC",
 });
 
 console.log(thread);
@@ -71,8 +72,8 @@ console.log(thread);
 
 ### Related
 
-- [Memory Class Reference](/reference/memory/Memory.mdx)
-- [getThreadsByResourceIdPaginated](/reference/memory/getThreadsByResourceIdPaginated.mdx) - Paginated version
-- [Getting Started with Memory](/docs/memory/overview.mdx) (Covers threads/resources concept)
-- [createThread](/reference/memory/createThread.mdx)
-- [getThreadById](/reference/memory/getThreadById.mdx)
+- [Memory Class Reference](/reference/memory/memory-class)
+- [getThreadsByResourceIdPaginated](/reference/memory/getThreadsByResourceIdPaginated) - Paginated version
+- [Getting Started with Memory](/docs/memory/overview) (Covers threads/resources concept)
+- [createThread](/reference/memory/createThread)
+- [getThreadById](/reference/memory/getThreadById)
