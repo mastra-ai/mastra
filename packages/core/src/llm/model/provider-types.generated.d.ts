@@ -469,6 +469,7 @@ export type ProviderModelsMap = {
     'gpt-5-codex',
     'grok-code',
     'kimi-k2',
+    'minimax-m2',
     'qwen3-coder',
   ];
   readonly fastrouter: readonly [
@@ -600,6 +601,9 @@ export type ProviderModelsMap = {
     'meta-llama/llama-3.3-70b-instruct:free',
     'meta-llama/llama-4-scout:free',
     'microsoft/mai-ds-r1:free',
+    'minimax/minimax-01',
+    'minimax/minimax-m1',
+    'minimax/minimax-m2:free',
     'mistralai/codestral-2508',
     'mistralai/devstral-medium-2507',
     'mistralai/devstral-small-2505',
@@ -670,7 +674,6 @@ export type ProviderModelsMap = {
     'x-ai/grok-3-mini-beta',
     'x-ai/grok-4',
     'x-ai/grok-4-fast',
-    'x-ai/grok-4-fast:free',
     'x-ai/grok-code-fast-1',
     'z-ai/glm-4.5',
     'z-ai/glm-4.5-air',

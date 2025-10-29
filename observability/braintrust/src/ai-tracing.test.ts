@@ -71,8 +71,6 @@ describe('BraintrustExporter', () => {
     });
 
     it('should disable exporter when apiKey is missing', async () => {
-      const mockConsole = vi.spyOn(console, 'error').mockImplementation(() => {});
-
       const invalidConfig = {
         // Missing apiKey
         endpoint: 'https://test.com',
@@ -80,13 +78,8 @@ describe('BraintrustExporter', () => {
 
       const disabledExporter = new BraintrustExporter(invalidConfig);
 
-      // Should log error about missing credentials
-      expect(mockConsole).toHaveBeenCalledWith(
-        expect.stringContaining('BraintrustExporter: Missing required credentials, exporter will be disabled'),
-        expect.objectContaining({
-          hasApiKey: false,
-        }),
-      );
+      // Should be disabled when apiKey is missing
+      expect(disabledExporter['isDisabled']).toBe(true);
 
       // Should not create spans when disabled
       const rootSpan = createMockSpan({
@@ -103,8 +96,6 @@ describe('BraintrustExporter', () => {
       });
 
       expect(mockInitLogger).not.toHaveBeenCalled();
-
-      mockConsole.mockRestore();
     });
   });
 

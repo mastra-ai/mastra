@@ -1,5 +1,5 @@
 import { convertMessages } from '@mastra/core/agent';
-import type { RuntimeContext } from '@mastra/core/di';
+import { RuntimeContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -56,7 +56,7 @@ async function getMemoryFromContext({
   if (agent) {
     return (
       (await agent?.getMemory({
-        runtimeContext,
+        runtimeContext: runtimeContext ?? new RuntimeContext(),
       })) || mastra.getMemory()
     );
   }

@@ -134,8 +134,8 @@ describe('Agent - network', () => {
       runtimeContext,
     });
 
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
   });
 
@@ -144,8 +144,8 @@ describe('Agent - network', () => {
       runtimeContext,
     });
 
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
   });
 
@@ -154,8 +154,8 @@ describe('Agent - network', () => {
       runtimeContext,
     });
 
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
   });
 
@@ -168,11 +168,27 @@ describe('Agent - network', () => {
       },
     );
 
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
+    }
+  });
+
+  it('LOOP - should track usage data from agent.network()', async () => {
+    const anStream = await network.network('Research dolphins', {
+      runtimeContext,
+    });
+
+    // Consume the stream to trigger usage collection
+    for await (const _chunk of anStream) {
+      // Just consume the stream
     }
 
-    console.log('SUH', anStream);
+    // Check that usage data is available
+    const usage = await anStream.usage;
+    expect(usage).toBeDefined();
+    expect(usage.inputTokens).toBeGreaterThan(0);
+    expect(usage.outputTokens).toBeGreaterThan(0);
+    expect(usage.totalTokens).toBeGreaterThan(0);
   });
 
   it('Should throw if memory is not configured', async () => {
@@ -255,8 +271,8 @@ describe('Agent - network', () => {
     });
 
     // Consume the stream
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
 
     // Wait a bit for async title generation to complete
@@ -316,8 +332,8 @@ describe('Agent - network', () => {
     });
 
     // Consume the stream
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
 
     // Wait a bit for async title generation to complete
@@ -365,8 +381,8 @@ describe('Agent - network', () => {
     });
 
     // Consume the stream
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
 
     // Wait for any async operations
@@ -414,8 +430,8 @@ describe('Agent - network', () => {
     });
 
     // Consume the stream
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
 
     // Wait for any async operations
