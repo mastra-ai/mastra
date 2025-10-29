@@ -11,13 +11,13 @@ If you ask your friend what they did last weekend, they will search in their mem
 
 ## How Semantic Recall Works
 
-Semantic recall is RAG-based search that helps agents maintain context across longer interactions when messages are no longer within [recent conversation history](./overview.mdx#conversation-history).
+Semantic recall is RAG-based search that helps agents maintain context across longer interactions when messages are no longer within [recent conversation history](./conversation-history).
 
 It uses vector embeddings of messages for similarity search, integrates with various vector stores, and has configurable context windows around retrieved messages.
 
 <br />
 <img
-  src="/image/semantic-recall.png"
+  src="/img/semantic-recall.png"
   alt="Diagram showing Mastra Memory semantic recall"
   width={800}
 />
@@ -49,7 +49,7 @@ The three main parameters that control semantic recall behavior are:
 
 1. **topK**: How many semantically similar messages to retrieve
 2. **messageRange**: How much surrounding context to include with each match
-3. **scope**: Whether to search within the current thread or across all threads owned by a resource. Using `scope: 'resource'` allows the agent to recall information from any of the user's past conversations.
+3. **scope**: Whether to search within the current thread or across all threads owned by a resource (the default is resource scope).
 
 ```typescript {5-7}
 const agent = new Agent({
@@ -58,18 +58,16 @@ const agent = new Agent({
       semanticRecall: {
         topK: 3, // Retrieve 3 most similar messages
         messageRange: 2, // Include 2 messages before and after each match
-        scope: 'resource', // Search across all threads for this user
+        scope: "resource", // Search across all threads for this user (default setting if omitted)
       },
     },
   }),
 });
 ```
 
-Note: currently, `scope: 'resource'` for semantic recall is supported by the following storage adapters: LibSQL, Postgres, and Upstash.
-
 ### Storage configuration
 
-Semantic recall relies on a [storage and vector db](/reference/memory/Memory#parameters) to store messages and their embeddings.
+Semantic recall relies on a [storage and vector db](/reference/memory/memory-class) to store messages and their embeddings.
 
 ```ts {8-17}
 import { Memory } from "@mastra/memory";
@@ -92,14 +90,14 @@ const agent = new Agent({
 
 **Storage/vector code Examples**:
 
-- [LibSQL](/docs/memory/storage/memory-with-libsql.mdx)
-- [MongoDB](/docs/memory/storage/memory-with-mongodb.mdx)
-- [Postgres](/docs/memory/storage/memory-with-pg.mdx)
-- [Upstash](/docs/memory/storage/memory-with-upstash.mdx)
+- [LibSQL](/docs/memory/storage/memory-with-libsql)
+- [MongoDB](/examples/memory/memory-with-mongodb)
+- [Postgres](/docs/memory/storage/memory-with-pg)
+- [Upstash](/docs/memory/storage/memory-with-upstash)
 
 ### Embedder configuration
 
-Semantic recall relies on an [embedding model](/reference/memory/Memory#embedder) to convert messages into embeddings. Mastra supports embedding models through the model router using `provider/model` strings, or you can use any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
+Semantic recall relies on an [embedding model](/reference/memory/memory-class) to convert messages into embeddings. Mastra supports embedding models through the model router using `provider/model` strings, or you can use any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
 
 #### Using the Model Router (Recommended)
 
@@ -118,6 +116,7 @@ const agent = new Agent({
 ```
 
 Supported embedding models:
+
 - **OpenAI**: `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`
 - **Google**: `gemini-embedding-001`, `text-embedding-004`
 
@@ -186,10 +185,10 @@ const agent = new Agent({
         topK: 5,
         messageRange: 2,
         indexConfig: {
-          type: 'hnsw',           // Use HNSW for better performance
-          metric: 'dotproduct',   // Best for OpenAI embeddings  
-          m: 16,                  // Number of bi-directional links (default: 16)
-          efConstruction: 64,    // Size of candidate list during construction (default: 64)
+          type: "hnsw", // Use HNSW for better performance
+          metric: "dotproduct", // Best for OpenAI embeddings
+          m: 16, // Number of bi-directional links (default: 16)
+          efConstruction: 64, // Size of candidate list during construction (default: 64)
         },
       },
     },
@@ -224,4 +223,4 @@ You might want to disable semantic recall in scenarios like:
 
 When tracing is enabled, any messages retrieved via semantic recall will appear in the agent’s trace output, alongside recent conversation history (if configured).
 
-For more info on viewing message traces, see [Viewing Retrieved Messages](./overview.mdx#viewing-retrieved-messages).
+For more info on viewing message traces, see [Viewing Retrieved Messages](./overview#viewing-retrieved-messages).

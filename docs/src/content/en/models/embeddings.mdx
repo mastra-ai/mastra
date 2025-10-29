@@ -1,9 +1,9 @@
 ---
 title: "Embedding Models"
+sidebar_position: 2
+sidebar_label: "Embeddings"
 description: "Use embedding models through Mastra's model router for semantic search and RAG."
 ---
-
-import { Callout } from "nextra/components";
 
 # Embedding Models
 
@@ -30,7 +30,7 @@ const { embeddings } = await embedMany({
 ### OpenAI
 
 - `text-embedding-3-small` - 1536 dimensions, 8191 max tokens
-- `text-embedding-3-large` - 3072 dimensions, 8191 max tokens  
+- `text-embedding-3-large` - 3072 dimensions, 8191 max tokens
 - `text-embedding-ada-002` - 1536 dimensions, 8191 max tokens
 
 ```typescript
@@ -92,12 +92,15 @@ const agent = new Agent({
 });
 ```
 
-<Callout type="info">
+:::info
+
 The `embedder` field accepts:
+
 - `EmbeddingModelId` (string with autocomplete)
 - `EmbeddingModel<string>` (AI SDK v1)
 - `EmbeddingModelV2<string>` (AI SDK v2)
-</Callout>
+
+:::
 
 ## Usage with RAG
 
@@ -121,7 +124,7 @@ await vectorStore.upsert(
     id: chunk.id,
     vector: embeddings[i],
     metadata: chunk.metadata,
-  }))
+  })),
 );
 ```
 
@@ -156,7 +159,9 @@ Missing API keys are also caught early:
 
 ```typescript
 try {
-  const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
+  const embedder = new ModelRouterEmbeddingModel(
+    "openai/text-embedding-3-small",
+  );
   // Throws if OPENAI_API_KEY is not set
 } catch (error) {
   console.error(error.message);
