@@ -1253,7 +1253,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resourceId,
     entry,
     prevOutput,
-    prevStep,
     serializedStepGraph,
     stepResults,
     resume,
@@ -1274,7 +1273,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       steps: { type: 'step'; step: Step }[];
       conditions: ConditionFunction<any, any, any, any, DefaultEngineType>[];
     };
-    prevStep: StepFlowEntry;
     prevOutput: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
     resume?: {
@@ -1407,7 +1405,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     const results: StepResult<any, any, any, any>[] = await Promise.all(
-      stepsToRun.map(async (step, _index) => {
+      stepsToRun.map(async (step, index) => {
         const currStepResult = stepResults[step.step.id];
         if (currStepResult && currStepResult.status === 'success') {
           return currStepResult;
@@ -1425,7 +1423,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           executionContext: {
             workflowId,
             runId,
-            executionPath: [...executionContext.executionPath, stepsToRun.indexOf(step)],
+            executionPath: [...executionContext.executionPath, index],
             suspendedPaths: executionContext.suspendedPaths,
             resumeLabels: executionContext.resumeLabels,
             retryConfig: executionContext.retryConfig,
@@ -1451,7 +1449,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     if (hasFailed) {
       execResults = { status: 'failed', error: hasFailed.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', payload: hasSuspended.suspendPayload };
+      execResults = { status: 'suspended', payload: hasSuspended.suspendPayload, suspendedAt: Date.now() };
     } else if (abortController?.signal?.aborted) {
       execResults = { status: 'canceled' };
     } else {
@@ -2217,7 +2215,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         workflowId,
         runId,
         entry,
-        prevStep,
         prevOutput,
         stepResults,
         serializedStepGraph,

@@ -175,6 +175,16 @@ export const useStreamWorkflow = () => {
     };
   }, []);
 
+  const handleStreamError = (err: unknown, defaultMessage: string, setIsStreaming?: (isStreaming: boolean) => void) => {
+    // Expected error during cleanup - safe to ignore
+    if (err instanceof DOMException && err.name === 'TypeError') {
+      return;
+    }
+    const errorMessage = err instanceof Error ? err.message : defaultMessage;
+    toast.error(errorMessage);
+    setIsStreaming?.(false);
+  };
+
   const streamWorkflow = useMutation({
     mutationFn: async ({
       workflowId,
@@ -204,9 +214,7 @@ export const useStreamWorkflow = () => {
       const stream = await workflow.streamVNext({ runId, inputData, runtimeContext, closeOnSuspend: true });
 
       if (!stream) {
-        toast.error('No stream returned');
-        setIsStreaming(false);
-        return;
+        return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
       }
 
       // Get a reader from the ReadableStream and store it in ref
@@ -245,11 +253,7 @@ export const useStreamWorkflow = () => {
           }
         }
       } catch (err) {
-        const error = err as Error;
-        if (error.message?.toLowerCase()?.includes('releasing default reader')) {
-          return;
-        }
-        toast.error(error.message ?? 'Error streaming workflow');
+        handleStreamError(err, 'Error streaming workflow');
       } finally {
         if (isMountedRef.current) {
           setIsStreaming(false);
@@ -290,9 +294,7 @@ export const useStreamWorkflow = () => {
       const stream = await workflow.observeStreamVNext({ runId });
 
       if (!stream) {
-        toast.error('No stream returned');
-        setIsStreaming(false);
-        return;
+        return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
       }
 
       // Get a reader from the ReadableStream and store it in ref
@@ -331,11 +333,7 @@ export const useStreamWorkflow = () => {
           }
         }
       } catch (err) {
-        const error = err as Error;
-        if (error.message?.toLowerCase()?.includes('releasing default reader')) {
-          return;
-        }
-        toast.error(error.message ?? 'Error streaming workflow');
+        handleStreamError(err, 'Error observing workflow');
       } finally {
         if (isMountedRef.current) {
           setIsStreaming(false);
@@ -378,9 +376,7 @@ export const useStreamWorkflow = () => {
       const stream = await workflow.resumeStreamVNext({ runId, step, resumeData, runtimeContext });
 
       if (!stream) {
-        toast.error('No stream returned');
-        setIsStreaming(false);
-        return;
+        return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
       }
 
       // Get a reader from the ReadableStream and store it in ref
@@ -419,12 +415,7 @@ export const useStreamWorkflow = () => {
           }
         }
       } catch (err) {
-        const error = err as Error;
-        if (error.message?.toLowerCase()?.includes('releasing default reader')) {
-          return;
-        }
-        toast.error(error.message ?? 'Error resuming workflow stream');
-        //silent error
+        handleStreamError(err, 'Error resuming workflow stream');
       } finally {
         if (isMountedRef.current) {
           setIsStreaming(false);
