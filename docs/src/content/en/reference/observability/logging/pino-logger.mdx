@@ -12,14 +12,14 @@ When deploying to Mastra Cloud, logs are displayed on the [Logs](/docs/mastra-cl
 ## Usage example
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
 
 export const mastra = new Mastra({
   // ...
   logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
 });
 ```
@@ -33,10 +33,11 @@ export const mastra = new Mastra({
       type: "string",
       description: "A label used to group and identify logs from this logger.",
     },
-     {
+    {
       name: "level",
       type: `"debug" | "info" | "warn" | "error"`,
-      description: "Sets the minimum log level. Messages below this level are ignored.",
+      description:
+        "Sets the minimum log level. Messages below this level are ignored.",
     },
     {
       name: "transports",
@@ -58,11 +59,9 @@ export const mastra = new Mastra({
   ]}
 />
 
-
 ## File transport (structured logs)
 
 Writes structured logs to a file using the `FileTransport`. The logger accepts a plain message as the first argument and structured metadata as the second argument. These are internally converted to a `BaseLogMessage` and persisted to the configured file path.
-
 
 ```typescript title="src/mastra/loggers/file-transport.ts" showLineNumbers copy
 import { FileTransport } from "@mastra/loggers/file";
@@ -104,7 +103,6 @@ export const upstashLogger = new PinoLogger({
   level: "info",
 });
 ```
-
 
 ### Upstash transport usage
 

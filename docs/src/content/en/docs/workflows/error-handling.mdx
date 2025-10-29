@@ -175,12 +175,11 @@ const run = await workflow.createRunAsync();
 
 run.watch((event) => {
   const {
-    payload: { currentStep }
+    payload: { currentStep },
   } = event;
 
   console.log(currentStep?.payload?.status);
 });
-
 ```
 
 ## Monitor errors with `stream()`
@@ -196,14 +195,13 @@ const run = await workflow.createRunAsync();
 
 const stream = await run.stream({
   inputData: {
-    value: "initial data"
-  }
+    value: "initial data",
+  },
 });
 
 for await (const chunk of stream.stream) {
   console.log(chunk.payload.output.stats);
 }
-
 ```
 
 ## Related

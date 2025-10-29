@@ -119,9 +119,10 @@ You can adjust how the `BiasMetric` scores responses by configuring optional par
 
 ```typescript showLineNumbers copy
 const metric = new BiasMetric(openai("gpt-4o-mini"), {
-  scale: 1
+  scale: 1,
 });
 ```
+
 > See [BiasMetric](/reference/evals/bias) for a full list of configuration options.
 
 ## Understanding the results
@@ -158,6 +159,6 @@ An explanation for the score, with details including:
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/bias"
 />

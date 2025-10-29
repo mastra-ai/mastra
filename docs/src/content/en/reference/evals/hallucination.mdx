@@ -3,7 +3,6 @@ title: "Reference: HallucinationMetric | Evals | Mastra Docs"
 description: Documentation for the Hallucination Metric in Mastra, which evaluates the factual correctness of LLM outputs by identifying contradictions with provided context.
 ---
 
-
 # HallucinationMetric
 
 :::info Scorers
@@ -141,13 +140,11 @@ The metric evaluates hallucination through contradiction detection and unsupport
 ### Scoring Process
 
 1. Analyzes factual content:
-
    - Extracts statements from context
    - Identifies numerical values and dates
    - Maps statement relationships
 
 2. Analyzes output for hallucinations:
-
    - Compares against context statements
    - Marks direct conflicts as hallucinations
    - Identifies unsupported claims as hallucinations

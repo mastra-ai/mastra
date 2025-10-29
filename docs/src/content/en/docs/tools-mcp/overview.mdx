@@ -67,7 +67,7 @@ const advancedTools = () => {
   // ...
 };
 
-const baseTools =  () => {
+const baseTools = () => {
   // ...
 };
 
@@ -76,10 +76,8 @@ export const testTool = createTool({
   execute: async ({ runtimeContext }) => {
     const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
 
-    return userTier === "enterprise"
-      ? advancedTools
-      : baseTools;
-  }
+    return userTier === "enterprise" ? advancedTools : baseTools;
+  },
 });
 ```
 
@@ -88,4 +86,3 @@ export const testTool = createTool({
 ## Testing with Mastra Playground
 
 Use the Mastra [Playground](/docs/getting-started/studio) to test tools with different inputs, inspect execution results, and verify tool behavior.
-

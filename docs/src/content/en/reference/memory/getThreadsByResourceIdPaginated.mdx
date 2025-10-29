@@ -13,7 +13,7 @@ The `.getThreadsByResourceIdPaginated()` method retrieves threads associated wit
 await memory.getThreadsByResourceIdPaginated({
   resourceId: "user-123",
   page: 0,
-  perPage: 10
+  perPage: 10,
 });
 ```
 
@@ -61,7 +61,8 @@ await memory.getThreadsByResourceIdPaginated({
     {
       name: "result",
       type: "Promise<PaginationInfo & { threads: StorageThreadType[] }>",
-      description: "A promise that resolves to paginated thread results with metadata",
+      description:
+        "A promise that resolves to paginated thread results with metadata",
     },
   ]}
 />
@@ -83,7 +84,7 @@ while (hasMorePages) {
     page: currentPage,
     perPage: 25,
     orderBy: "createdAt",
-    sortDirection: "ASC"
+    sortDirection: "ASC",
   });
 
   if (!threads) {

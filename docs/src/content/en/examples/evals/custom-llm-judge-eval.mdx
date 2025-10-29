@@ -68,9 +68,9 @@ class WorldCountryJudge extends MastraAgentJudge {
           info: z.object({
             reason: z.string(),
             matches: z.array(z.string()),
-            misses: z.array(z.string())
-          })
-        })
+            misses: z.array(z.string()),
+          }),
+        }),
       },
     });
 
@@ -246,6 +246,6 @@ An explanation for the score, with details including:
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/custom-eval"
 />

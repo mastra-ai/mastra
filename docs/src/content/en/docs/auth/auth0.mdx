@@ -3,8 +3,8 @@ title: "MastraAuthAuth0 Class | Auth | Mastra Docs"
 description: "Documentation for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication."
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # MastraAuthAuth0 Class
 
@@ -42,7 +42,7 @@ npm install @mastra/auth-auth0@latest
 
 ```typescript {2,7} title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
-import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 export const mastra = new Mastra({
   // ..
@@ -56,14 +56,14 @@ export const mastra = new Mastra({
 
 ```typescript {2,7-10} title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
-import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 export const mastra = new Mastra({
   // ..
   server: {
     experimental_auth: new MastraAuthAuth0({
       domain: process.env.AUTH0_DOMAIN,
-      audience: process.env.AUTH0_AUDIENCE
+      audience: process.env.AUTH0_AUDIENCE,
     }),
   },
 });
@@ -83,13 +83,13 @@ By default, `MastraAuthAuth0` allows all authenticated users who have valid Auth
 To customize user authorization, provide a custom `authorizeUser` function:
 
 ```typescript title="src/mastra/auth.ts" showLineNumbers copy
-import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 const auth0Provider = new MastraAuthAuth0({
   authorizeUser: async (user) => {
     // Custom authorization logic
-    return user.email?.endsWith('@yourcompany.com') || false;
-  }
+    return user.email?.endsWith("@yourcompany.com") || false;
+  },
 });
 ```
 
@@ -135,7 +135,7 @@ export default Auth0ProviderWithHistory;
 Use the Auth0 React SDK to authenticate users and retrieve their access tokens:
 
 ```typescript title="lib/auth.ts" showLineNumbers copy
-import { useAuth0 } from '@auth0/auth0-react';
+import { useAuth0 } from "@auth0/auth0-react";
 
 export const useAuth0Token = () => {
   const { getAccessTokenSilently } = useAuth0();
@@ -162,8 +162,8 @@ export const createMastraClient = (accessToken: string) => {
   return new MastraClient({
     baseUrl: "https://<mastra-api-url>",
     headers: {
-      Authorization: `Bearer ${accessToken}`
-    }
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
 };
 ```
@@ -221,6 +221,7 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
       );
     };
     ```
+
   </TabItem>
   <TabItem value="curl" label="cURL">
     ```bash copy
@@ -233,4 +234,3 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
     ```
   </TabItem>
 </Tabs>
-

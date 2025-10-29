@@ -34,7 +34,8 @@ await agent.getTools();
     {
       name: "tools",
       type: "TTools | Promise<TTools>",
-      description: "The tools configured for the agent, either as a direct object or a promise that resolves to the tools.",
+      description:
+        "The tools configured for the agent, either as a direct object or a promise that resolves to the tools.",
     },
   ]}
 />
@@ -43,7 +44,7 @@ await agent.getTools();
 
 ```typescript copy
 await agent.getTools({
-  runtimeContext: new RuntimeContext()
+  runtimeContext: new RuntimeContext(),
 });
 ```
 
@@ -56,7 +57,8 @@ await agent.getTools({
       type: "RuntimeContext",
       isOptional: true,
       defaultValue: "new RuntimeContext()",
-      description: "Runtime context for dependency injection and contextual information.",
+      description:
+        "Runtime context for dependency injection and contextual information.",
     },
   ]}
 />

@@ -21,7 +21,7 @@ npm install @mastra/couchbase
 ## Usage Example
 
 ```typescript copy showLineNumbers
-import { CouchbaseVector } from '@mastra/couchbase';
+import { CouchbaseVector } from "@mastra/couchbase";
 
 const store = new CouchbaseVector({
   connectionString: process.env.COUCHBASE_CONNECTION_STRING,
@@ -317,7 +317,7 @@ try {
   // Handle specific error cases
   if (error.message.includes("Invalid index name")) {
     console.error(
-      "Index name must start with a letter or underscore and contain only valid characters."
+      "Index name must start with a letter or underscore and contain only valid characters.",
     );
   } else if (error.message.includes("Index not found")) {
     console.error("The specified index does not exist");
@@ -342,4 +342,4 @@ try {
 
 ## Related
 
-- [Metadata Filters](../rag/metadata-filters) 
+- [Metadata Filters](../rag/metadata-filters)

@@ -35,29 +35,30 @@ import { MongoDBStore } from "@mastra/mongodb";
 
 export const mongodbAgent = new Agent({
   name: "mongodb-agent",
-  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new MongoDBStore({
       url: process.env.MONGODB_URI!,
-      dbName: process.env.MONGODB_DB_NAME!
+      dbName: process.env.MONGODB_DB_NAME!,
     }),
     options: {
       threads: {
-        generateTitle: true
-      }
-    }
-  })
+        generateTitle: true,
+      },
+    },
+  }),
 });
 ```
 
 ## Vector embeddings with MongoDB
 
-Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords). 
+Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords).
 
 > Note: You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
 
-This setup uses FastEmbed, a local embedding model, to generate vector embeddings. 
+This setup uses FastEmbed, a local embedding model, to generate vector embeddings.
 To use this, install `@mastra/fastembed`:
 
 ```bash copy
@@ -75,29 +76,30 @@ import { fastembed } from "@mastra/fastembed";
 
 export const mongodbAgent = new Agent({
   name: "mongodb-agent",
-  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new MongoDBStore({
       url: process.env.MONGODB_URI!,
-      dbName: process.env.MONGODB_DB_NAME!
+      dbName: process.env.MONGODB_DB_NAME!,
     }),
     vector: new MongoDBVector({
       uri: process.env.MONGODB_URI!,
-      dbName: process.env.MONGODB_DB_NAME!
+      dbName: process.env.MONGODB_DB_NAME!,
     }),
     embedder: fastembed,
     options: {
       lastMessages: 10,
       semanticRecall: {
         topK: 3,
-        messageRange: 2
+        messageRange: 2,
       },
       threads: {
-        generateTitle: true // generates descriptive thread titles automatically
-      }
-    }
-  })
+        generateTitle: true, // generates descriptive thread titles automatically
+      },
+    },
+  }),
 });
 ```
 
@@ -118,8 +120,8 @@ const agent = mastra.getAgent("mongodbAgent");
 const message = await agent.stream("My name is Mastra", {
   memory: {
     thread: threadId,
-    resource: resourceId
-  }
+    resource: resourceId,
+  },
 });
 
 await message.textStream.pipeTo(new WritableStream());
@@ -127,15 +129,15 @@ await message.textStream.pipeTo(new WritableStream());
 const stream = await agent.stream("What's my name?", {
   memory: {
     thread: threadId,
-    resource: resourceId
+    resource: resourceId,
   },
   memoryOptions: {
     lastMessages: 5,
     semanticRecall: {
       topK: 3,
-      messageRange: 2
-    }
-  }
+      messageRange: 2,
+    },
+  },
 });
 
 for await (const chunk of stream.textStream) {

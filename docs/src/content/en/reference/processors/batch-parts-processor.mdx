@@ -15,7 +15,7 @@ import { BatchPartsProcessor } from "@mastra/core/processors";
 const processor = new BatchPartsProcessor({
   batchSize: 5,
   maxWaitTime: 100,
-  emitOnNonText: true
+  emitOnNonText: true,
 });
 ```
 
@@ -46,14 +46,16 @@ const processor = new BatchPartsProcessor({
     {
       name: "maxWaitTime",
       type: "number",
-      description: "Maximum time to wait before emitting a batch (in milliseconds). If set, will emit the current batch even if it hasn't reached batchSize",
+      description:
+        "Maximum time to wait before emitting a batch (in milliseconds). If set, will emit the current batch even if it hasn't reached batchSize",
       isOptional: true,
       default: "undefined (no timeout)",
     },
     {
       name: "emitOnNonText",
       type: "boolean",
-      description: "Whether to emit immediately when a non-text part is encountered",
+      description:
+        "Whether to emit immediately when a non-text part is encountered",
       isOptional: true,
       default: "true",
     },
@@ -79,7 +81,8 @@ const processor = new BatchPartsProcessor({
     {
       name: "flush",
       type: "(state?: BatchPartsState) => ChunkType | null",
-      description: "Force flush any remaining batched parts when the stream ends",
+      description:
+        "Force flush any remaining batched parts when the stream ends",
       isOptional: false,
     },
   ]}
@@ -100,9 +103,9 @@ export const agent = new Agent({
     new BatchPartsProcessor({
       batchSize: 5,
       maxWaitTime: 100,
-      emitOnNonText: true
-    })
-  ]
+      emitOnNonText: true,
+    }),
+  ],
 });
 ```
 

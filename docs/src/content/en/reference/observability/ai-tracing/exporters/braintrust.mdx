@@ -22,7 +22,7 @@ interface BraintrustExporterConfig {
   apiKey?: string;
   endpoint?: string;
   projectName?: string;
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  logLevel?: "debug" | "info" | "warn" | "error";
   tuningParameters?: Record<string, any>;
 }
 ```
@@ -91,22 +91,22 @@ Flushes pending data and shuts down the client.
 ## Usage
 
 ```typescript
-import { BraintrustExporter } from '@mastra/braintrust';
+import { BraintrustExporter } from "@mastra/braintrust";
 
 const exporter = new BraintrustExporter({
   apiKey: process.env.BRAINTRUST_API_KEY,
-  projectName: 'my-ai-project',
+  projectName: "my-ai-project",
 });
 ```
 
 ## Span Type Mapping
 
-| AI Span Type | Braintrust Type |
-|--------------|-----------------|
-| `MODEL_GENERATION` | `llm` |
-| `MODEL_CHUNK` | `llm` |
-| `TOOL_CALL` | `tool` |
-| `MCP_TOOL_CALL` | `tool` |
-| `WORKFLOW_CONDITIONAL_EVAL` | `function` |
-| `WORKFLOW_WAIT_EVENT` | `function` |
-| All others | `task` |
+| AI Span Type                | Braintrust Type |
+| --------------------------- | --------------- |
+| `MODEL_GENERATION`          | `llm`           |
+| `MODEL_CHUNK`               | `llm`           |
+| `TOOL_CALL`                 | `tool`          |
+| `MCP_TOOL_CALL`             | `tool`          |
+| `WORKFLOW_CONDITIONAL_EVAL` | `function`      |
+| `WORKFLOW_WAIT_EVENT`       | `function`      |
+| All others                  | `task`          |

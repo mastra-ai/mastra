@@ -3,11 +3,11 @@ title: "Install Mastra | Getting Started | Mastra Docs"
 description: Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-import Steps from '@site/src/components/Steps';
-import StepItem from '@site/src/components/StepItem';
-import { VideoPlayer } from "@site/src/components/video-player"
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import { VideoPlayer } from "@site/src/components/video-player";
 
 # Install Mastra
 
@@ -26,28 +26,18 @@ You can run `create mastra` anywhere on your machine.
 
 The wizard will guide you through setup, create a new directory for your project, and generate a weather agent with example workflows and tools to get you started.
 
-
-
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy
-    npm create mastra@latest -y
-    ```
+    ```bash copy npm create mastra@latest -y ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
-    ```bash copy
-    pnpm create mastra@latest -y
-    ```
+    ```bash copy pnpm create mastra@latest -y ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
-    ```bash copy
-    yarn create mastra@latest -y
-    ```
+    ```bash copy yarn create mastra@latest -y ```
   </TabItem>
   <TabItem value="bun" label="bun">
-    ```bash copy
-    bun create mastra@latest -y
-    ```
+    ```bash copy bun create mastra@latest -y ```
   </TabItem>
 </Tabs>
 
@@ -57,16 +47,13 @@ You can use flags with `create mastra` like `--no-example` to skip the example w
 
 :::
 
-
 ### Test your agent
 
 Once setup is complete, follow the instructions in your terminal to start the Mastra dev server, then open the Playground at http://localhost:4111.
 
 Try asking about the weather. If your API key is set up correctly, you'll get a response:
 
-<VideoPlayer
-  src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4"
-/>
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4" />
 
 :::note
 
@@ -75,7 +62,6 @@ If you encounter an error, your API key may not be configured correctly. Double-
 :::
 
 The [Playground](/docs/getting-started/studio) lets you rapidly build and prototype agents without needing to build a UI. Once you're ready, you can integrate your Mastra agent into your application using the guides below.
-
 
 ### Next steps
 
@@ -100,36 +86,22 @@ mkdir my-first-agent && cd my-first-agent
 
 Initialize a TypeScript project and install the following dependencies:
 
-
-
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy
-    npm init -y
-    npm install -D typescript @types/node mastra@latest
-    npm install @mastra/core@latest zod@^4
-    ```
+    ```bash copy npm init -y npm install -D typescript @types/node mastra@latest
+    npm install @mastra/core@latest zod@^4 ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
-    ```bash copy
-    pnpm init -y
-    pnpm add -D typescript @types/node mastra@latest
-    pnpm add @mastra/core@latest zod@^4
-    ```
+    ```bash copy pnpm init -y pnpm add -D typescript @types/node mastra@latest
+    pnpm add @mastra/core@latest zod@^4 ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
-    ```bash copy
-    yarn init -y
-    yarn add -D typescript @types/node mastra@latest
-    yarn add @mastra/core@latest zod@^4
-    ```
+    ```bash copy yarn init -y yarn add -D typescript @types/node mastra@latest
+    yarn add @mastra/core@latest zod@^4 ```
   </TabItem>
   <TabItem value="bun" label="bun">
-    ```bash copy
-    bun init -y
-    bun add -d typescript @types/node mastra@latest
-    bun add @mastra/core@latest zod@^4
-    ```
+    ```bash copy bun init -y bun add -d typescript @types/node mastra@latest bun
+    add @mastra/core@latest zod@^4 ```
   </TabItem>
 </Tabs>
 
@@ -157,7 +129,6 @@ touch tsconfig.json
 
 Add the following configuration:
 
-
 ```json title="tsconfig.json" copy
 {
   "compilerOptions": {
@@ -171,11 +142,10 @@ Add the following configuration:
     "noEmit": true,
     "outDir": "dist"
   },
-  "include": [
-    "src/**/*"
-  ]
+  "include": ["src/**/*"]
 }
 ```
+
 :::info
 
 Mastra requires modern `module` and `moduleResolution` settings. Using `CommonJS` or `node` will cause resolution errors.
@@ -224,16 +194,16 @@ export const weatherTool = createTool({
   id: "get-weather",
   description: "Get current weather for a location",
   inputSchema: z.object({
-    location: z.string().describe("City name")
+    location: z.string().describe("City name"),
   }),
   outputSchema: z.object({
-    output: z.string()
+    output: z.string(),
   }),
   execute: async () => {
     return {
-      output: "The weather is sunny"
+      output: "The weather is sunny",
     };
-  }
+  },
 });
 ```
 
@@ -260,7 +230,7 @@ import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
 
 export const weatherAgent = new Agent({
-  name: 'Weather Agent',
+  name: "Weather Agent",
   instructions: `
       You are a helpful weather assistant that provides accurate weather information.
 
@@ -274,7 +244,7 @@ export const weatherAgent = new Agent({
       Use the weatherTool to fetch current weather data.
 `,
   model: "google/gemini-2.5-pro",
-  tools: { weatherTool }
+  tools: { weatherTool },
 });
 ```
 
@@ -295,7 +265,7 @@ import { Mastra } from "@mastra/core/mastra";
 import { weatherAgent } from "./agents/weather-agent";
 
 export const mastra = new Mastra({
-  agents: { weatherAgent }
+  agents: { weatherAgent },
 });
 ```
 
@@ -307,24 +277,16 @@ You can now launch the [Playground](/docs/getting-started/studio) and test your 
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy
-    npm run dev
-    ```
+    ```bash copy npm run dev ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
-    ```bash copy
-    pnpm run dev
-    ```
+    ```bash copy pnpm run dev ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
-    ```bash copy
-    yarn run dev
-    ```
+    ```bash copy yarn run dev ```
   </TabItem>
   <TabItem value="bun" label="bun">
-    ```bash copy
-    bun run dev
-    ```
+    ```bash copy bun run dev ```
   </TabItem>
 </Tabs>
 

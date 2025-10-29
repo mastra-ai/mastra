@@ -7,7 +7,6 @@ description: Documentation for the Tone Consistency Scorer in Mastra, which eval
 
 The `createToneScorer()` function evaluates the text's emotional tone and sentiment consistency. It can operate in two modes: comparing tone between input/output pairs or analyzing tone stability within a single text.
 
-
 ## Parameters
 
 The `createToneScorer()` function does not take any options.
@@ -26,7 +25,8 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
     {
       name: "analyzeStepResult",
       type: "object",
-      description: "Object with tone metrics: { responseSentiment: number, referenceSentiment: number, difference: number } (for comparison mode) OR { avgSentiment: number, sentimentVariance: number } (for stability mode)",
+      description:
+        "Object with tone metrics: { responseSentiment: number, referenceSentiment: number, difference: number } (for comparison mode) OR { avgSentiment: number, sentimentVariance: number } (for stability mode)",
     },
     {
       name: "score",
@@ -67,7 +67,7 @@ The scorer evaluates sentiment consistency through tone pattern analysis and mod
    - Compares sentiment between texts
    - Calculates sentiment difference
    - Score = 1 - (sentiment_difference / max_difference)
-   **Tone Stability** (single input):
+     **Tone Stability** (single input):
    - Analyzes sentiment across sentences
    - Calculates sentiment variance
    - Score = 1 - (sentiment_variance / max_variance)
@@ -85,7 +85,9 @@ Final score: `mode_specific_score * scale`
 - 0.0: No consistency - completely different tones
 
 ### analyzeStepResult
+
 Object with tone metrics:
+
 - **responseSentiment**: Sentiment score for the response (comparison mode).
 - **referenceSentiment**: Sentiment score for the input/reference (comparison mode).
 - **difference**: Absolute difference between sentiment scores (comparison mode).
@@ -103,16 +105,16 @@ import { createToneScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createToneScorer();
 
-const input = 'This product is fantastic and amazing!';
-const output = 'The product is excellent and wonderful!';
+const input = "This product is fantastic and amazing!";
+const output = "The product is excellent and wonderful!";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 #### Positive tone output
@@ -139,16 +141,16 @@ import { createToneScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createToneScorer();
 
-const input = 'Great service! Friendly staff. Perfect atmosphere.';
-const output = '';
+const input = "Great service! Friendly staff. Perfect atmosphere.";
+const output = "";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 #### Stable tone output
@@ -174,16 +176,18 @@ import { createToneScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createToneScorer();
 
-const input = 'The interface is frustrating and confusing, though it has potential.';
-const output = 'The design shows promise but needs significant improvements to be usable.';
+const input =
+  "The interface is frustrating and confusing, though it has potential.";
+const output =
+  "The design shows promise but needs significant improvements to be usable.";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 #### Mixed tone output

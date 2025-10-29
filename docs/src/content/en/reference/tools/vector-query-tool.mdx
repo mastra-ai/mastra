@@ -3,9 +3,8 @@ title: "Reference: createVectorQueryTool() | Tools & MCP | Mastra Docs"
 description: Documentation for the Vector Query Tool in Mastra, which facilitates semantic search over vector stores with filtering and reranking capabilities.
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # createVectorQueryTool()
 
@@ -29,10 +28,10 @@ const queryTool = createVectorQueryTool({
 :::note
 
 **Parameter Requirements:** Most fields can be set at creation as defaults.
-  Some fields can be overridden at runtime via the runtime context or input. If
-  a required field is missing from both creation and runtime, an error will be
-  thrown. Note that `model`, `id`, and `description` can only be set at creation
-  time.
+Some fields can be overridden at runtime via the runtime context or input. If
+a required field is missing from both creation and runtime, an error will be
+thrown. Note that `model`, `id`, and `description` can only be set at creation
+time.
 
 :::
 
@@ -155,7 +154,8 @@ The `DatabaseConfig` type allows you to specify database-specific configurations
     {
       name: "pgvector",
       type: "PgVectorConfig",
-      description: "Configuration specific to PostgreSQL with pgvector extension",
+      description:
+        "Configuration specific to PostgreSQL with pgvector extension",
       isOptional: true,
       properties: [
         {
@@ -169,13 +169,15 @@ The `DatabaseConfig` type allows you to specify database-specific configurations
             },
             {
               name: "ef",
-              description: "HNSW search parameter - controls accuracy vs speed tradeoff",
+              description:
+                "HNSW search parameter - controls accuracy vs speed tradeoff",
               isOptional: true,
               type: "number",
             },
             {
               name: "probes",
-              description: "IVFFlat probe parameter - number of cells to visit during search",
+              description:
+                "IVFFlat probe parameter - number of cells to visit during search",
               isOptional: true,
               type: "number",
             },
@@ -399,6 +401,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     - **Namespace**: Isolate different data sets within the same index
     - **Sparse Vector**: Combine dense and sparse embeddings for improved search quality
     - **Use Cases**: Multi-tenant applications, hybrid semantic search
+
   </TabItem>
 
   <TabItem value="pgvector" label="pgVector">
@@ -424,6 +427,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     - **ef (HNSW)**: Control accuracy vs speed for HNSW indexes
     - **probes (IVFFlat)**: Control recall vs speed for IVFFlat indexes
     - **Use Cases**: Performance tuning, quality filtering
+
   </TabItem>
 
   <TabItem value="chroma" label="Chroma">
@@ -452,6 +456,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     - **where**: Filter by metadata fields
     - **whereDocument**: Filter by document content
     - **Use Cases**: Advanced filtering, content-based search
+
   </TabItem>
 
   <TabItem value="multiple-configs" label="Multiple Configs">
@@ -482,6 +487,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     - Support multiple vector stores with one tool
     - Database-specific optimizations are automatically applied
     - Flexible deployment scenarios
+
   </TabItem>
 </Tabs>
 
@@ -490,7 +496,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
 You can override database configurations at runtime to adapt to different scenarios:
 
 ```typescript
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RuntimeContext } from "@mastra/core/runtime-context";
 
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
@@ -498,26 +504,26 @@ const queryTool = createVectorQueryTool({
   model: openai.embedding("text-embedding-3-small"),
   databaseConfig: {
     pinecone: {
-      namespace: "development"
-    }
-  }
+      namespace: "development",
+    },
+  },
 });
 
 // Override at runtime
 const runtimeContext = new RuntimeContext();
-runtimeContext.set('databaseConfig', {
+runtimeContext.set("databaseConfig", {
   pinecone: {
-    namespace: 'production'  // Switch to production namespace
-  }
+    namespace: "production", // Switch to production namespace
+  },
 });
 
-const response = await agent.generate(
-  "Find information about deployment",
-  { runtimeContext }
-);
+const response = await agent.generate("Find information about deployment", {
+  runtimeContext,
+});
 ```
 
 This approach allows you to:
+
 - Switch between environments (dev/staging/prod)
 - Adjust performance parameters based on load
 - Apply different filtering strategies per request
@@ -547,7 +553,7 @@ runtimeContext.set("indexName", "my-index");
 runtimeContext.set("topK", 5);
 runtimeContext.set("filter", { category: "docs" });
 runtimeContext.set("databaseConfig", {
-  pinecone: { namespace: "runtime-namespace" }
+  pinecone: { namespace: "runtime-namespace" },
 });
 runtimeContext.set("model", openai.embedding("text-embedding-3-small"));
 
@@ -567,6 +573,7 @@ For more information on runtime context, please see:
 ## Usage Without a Mastra Server
 
 The tool can be used by itself to retrieve documents matching a query:
+
 ```typescript copy showLineNumbers title="src/index.ts"
 import { openai } from "@ai-sdk/openai";
 import { RuntimeContext } from "@mastra/core/runtime-context";

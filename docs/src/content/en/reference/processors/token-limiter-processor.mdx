@@ -15,7 +15,7 @@ import { TokenLimiterProcessor } from "@mastra/core/processors";
 const processor = new TokenLimiterProcessor({
   limit: 1000,
   strategy: "truncate",
-  countMode: "cumulative"
+  countMode: "cumulative",
 });
 ```
 
@@ -26,7 +26,8 @@ const processor = new TokenLimiterProcessor({
     {
       name: "options",
       type: "number | Options",
-      description: "Either a simple number for token limit, or configuration options object",
+      description:
+        "Either a simple number for token limit, or configuration options object",
       isOptional: false,
     },
   ]}
@@ -45,21 +46,24 @@ const processor = new TokenLimiterProcessor({
     {
       name: "encoding",
       type: "TiktokenBPE",
-      description: "Optional encoding to use. Defaults to o200k_base which is used by gpt-4o",
+      description:
+        "Optional encoding to use. Defaults to o200k_base which is used by gpt-4o",
       isOptional: true,
       default: "o200k_base",
     },
     {
       name: "strategy",
       type: "'truncate' | 'abort'",
-      description: "Strategy when token limit is reached: 'truncate' stops emitting chunks, 'abort' calls abort() to stop the stream",
+      description:
+        "Strategy when token limit is reached: 'truncate' stops emitting chunks, 'abort' calls abort() to stop the stream",
       isOptional: true,
       default: "'truncate'",
     },
     {
       name: "countMode",
       type: "'cumulative' | 'part'",
-      description: "Whether to count tokens from the beginning of the stream or just the current part: 'cumulative' counts all tokens from start, 'part' only counts tokens in current part",
+      description:
+        "Whether to count tokens from the beginning of the stream or just the current part: 'cumulative' counts all tokens from start, 'part' only counts tokens in current part",
       isOptional: true,
       default: "'cumulative'",
     },
@@ -79,19 +83,22 @@ const processor = new TokenLimiterProcessor({
     {
       name: "processOutputStream",
       type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never }) => Promise<ChunkType | null>",
-      description: "Processes streaming output parts to limit token count during streaming",
+      description:
+        "Processes streaming output parts to limit token count during streaming",
       isOptional: false,
     },
     {
       name: "processOutputResult",
       type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }) => Promise<MastraMessageV2[]>",
-      description: "Processes final output results to limit token count in non-streaming scenarios",
+      description:
+        "Processes final output results to limit token count in non-streaming scenarios",
       isOptional: false,
     },
     {
       name: "reset",
       type: "() => void",
-      description: "Reset the token counter (useful for testing or reusing the processor)",
+      description:
+        "Reset the token counter (useful for testing or reusing the processor)",
       isOptional: false,
     },
     {
@@ -124,9 +131,9 @@ export const agent = new Agent({
     new TokenLimiterProcessor({
       limit: 1000,
       strategy: "truncate",
-      countMode: "cumulative"
-    })
-  ]
+      countMode: "cumulative",
+    }),
+  ],
 });
 ```
 

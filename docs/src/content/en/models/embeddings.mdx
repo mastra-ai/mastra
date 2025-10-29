@@ -5,7 +5,6 @@ sidebar_label: "Embeddings"
 description: "Use embedding models through Mastra's model router for semantic search and RAG."
 ---
 
-
 # Embedding Models
 
 Mastra's model router supports embedding models using the same `provider/model` string format as language models. This provides a unified interface for both chat and embedding models with TypeScript autocomplete support.
@@ -96,6 +95,7 @@ const agent = new Agent({
 :::info
 
 The `embedder` field accepts:
+
 - `EmbeddingModelId` (string with autocomplete)
 - `EmbeddingModel<string>` (AI SDK v1)
 - `EmbeddingModelV2<string>` (AI SDK v2)
@@ -124,7 +124,7 @@ await vectorStore.upsert(
     id: chunk.id,
     vector: embeddings[i],
     metadata: chunk.metadata,
-  }))
+  })),
 );
 ```
 
@@ -159,7 +159,9 @@ Missing API keys are also caught early:
 
 ```typescript
 try {
-  const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
+  const embedder = new ModelRouterEmbeddingModel(
+    "openai/text-embedding-3-small",
+  );
   // Throws if OPENAI_API_KEY is not set
 } catch (error) {
   console.error(error.message);

@@ -3,8 +3,8 @@ title: "Mastra Client SDK | Server & DB | Mastra Docs"
 description: "Learn how to set up and use the Mastra Client SDK"
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # Mastra Client SDK
 
@@ -65,7 +65,7 @@ Once initialized with a `baseUrl`, `MastraClient` exposes a type-safe interface 
 import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
-  baseUrl: process.env.MASTRA_API_URL || "http://localhost:4111"
+  baseUrl: process.env.MASTRA_API_URL || "http://localhost:4111",
 });
 ```
 
@@ -96,9 +96,9 @@ const testAgent = async () => {
       messages: [
         {
           role: "user",
-          content: "Hello"
-        }
-      ]
+          content: "Hello",
+        },
+      ],
     });
 
     console.log(response.text);
@@ -125,15 +125,15 @@ const testAgent = async () => {
       messages: [
         {
           role: "user",
-          content: "Hello"
-        }
-      ]
+          content: "Hello",
+        },
+      ],
     });
 
     stream.processDataStream({
       onTextPart: (text) => {
         console.log(text);
-      }
+      },
     });
   } catch (error) {
     return "Error occurred while generating response";
@@ -161,7 +161,7 @@ export const mastraClient = new MastraClient({
 });
 ```
 
-  > See [MastraClient](/reference/client-js/mastra-client) for more configuration options.
+> See [MastraClient](/reference/client-js/mastra-client) for more configuration options.
 
 ## Adding request cancelling
 
@@ -176,7 +176,7 @@ export const controller = new AbortController();
 
 export const mastraClient = new MastraClient({
   baseUrl: process.env.MASTRA_API_URL || "http://localhost:4111",
-  abortSignal: controller.signal
+  abortSignal: controller.signal,
 });
 ```
 
@@ -199,8 +199,8 @@ Define tools directly in client-side applications using the `createTool()` funct
 This lets agents trigger browser-side functionality such as DOM manipulation, local storage access, or other Web APIs, enabling tool execution in the user's environment rather than on the server.
 
 ```typescript {27} showLineNumbers copy
-import { createTool } from '@mastra/client-js';
-import { z } from 'zod';
+import { createTool } from "@mastra/client-js";
+import { z } from "zod";
 
 const handleClientTool = async () => {
   try {
@@ -210,22 +210,22 @@ const handleClientTool = async () => {
       id: "color-change-tool",
       description: "Changes the HTML background color",
       inputSchema: z.object({
-        color: z.string()
+        color: z.string(),
       }),
       outputSchema: z.object({
-        success: z.boolean()
+        success: z.boolean(),
       }),
       execute: async ({ context }) => {
-        const { color } = context
+        const { color } = context;
 
         document.body.style.backgroundColor = color;
         return { success: true };
-      }
+      },
     });
 
     const response = await agent.generate({
       messages: "Change the background to blue",
-      clientTools: { colorChangeTool }
+      clientTools: { colorChangeTool },
     });
 
     console.log(response);
@@ -234,6 +234,7 @@ const handleClientTool = async () => {
   }
 };
 ```
+
 ### Client tool's agent
 
 This is a standard Mastra [agent](../agents/overview#setting-up-agents) configured to return hex color codes, intended to work with the browser-based client tool defined above.
@@ -247,7 +248,7 @@ export const colorAgent = new Agent({
   instructions: `You are a helpful CSS assistant.
   You can change the background color of web pages.
   Respond with a hex reference for the color requested by the user`,
-  model: openai("gpt-4o-mini")
+  model: openai("gpt-4o-mini"),
 });
 ```
 
@@ -260,7 +261,7 @@ export async function action() {
   const agent = mastraClient.getAgent("testAgent");
 
   const stream = await agent.stream({
-    messages: [{ role: "user", content: "Hello" }]
+    messages: [{ role: "user", content: "Hello" }],
   });
 
   return new Response(stream.body);

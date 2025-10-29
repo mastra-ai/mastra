@@ -8,7 +8,6 @@ description: "Use DeepSeek models with Mastra. 2 models available."
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-
 # <img src="https://models.dev/logos/deepseek.svg" alt="DeepSeek logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />DeepSeek
 
 Access 2 DeepSeek models through Mastra's model router. Authentication is handled automatically using the `DEEPSEEK_API_KEY` environment variable.
@@ -25,7 +24,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "deepseek/deepseek-chat"
+  model: "deepseek/deepseek-chat",
 });
 
 // Generate a response
@@ -46,33 +45,33 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ## Models
 
-<ProviderModelsTable 
+<ProviderModelsTable
   models={[
-  {
-    "model": "deepseek/deepseek-chat",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": 0.57,
-    "outputCost": 1.68
-  },
-  {
-    "model": "deepseek/deepseek-reasoner",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 128000,
-    "inputCost": 0.57,
-    "outputCost": 1.68
-  }
-]}
+    {
+      model: "deepseek/deepseek-chat",
+      imageInput: false,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: true,
+      reasoning: false,
+      contextWindow: 128000,
+      maxOutput: 8192,
+      inputCost: 0.57,
+      outputCost: 1.68,
+    },
+    {
+      model: "deepseek/deepseek-reasoner",
+      imageInput: false,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: true,
+      reasoning: true,
+      contextWindow: 128000,
+      maxOutput: 128000,
+      inputCost: 0.57,
+      outputCost: 1.68,
+    },
+  ]}
 />
 
 ## Advanced Configuration
@@ -87,9 +86,9 @@ const agent = new Agent({
     id: "deepseek/deepseek-chat",
     apiKey: process.env.DEEPSEEK_API_KEY,
     headers: {
-      "X-Custom-Header": "value"
-    }
-  }
+      "X-Custom-Header": "value",
+    },
+  },
 });
 ```
 
@@ -100,11 +99,9 @@ const agent = new Agent({
   name: "dynamic-agent",
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
+    return useAdvanced
       ? "deepseek/deepseek-reasoner"
       : "deepseek/deepseek-chat";
-  }
+  },
 });
 ```
-
-

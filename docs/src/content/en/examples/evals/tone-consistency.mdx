@@ -89,8 +89,10 @@ import { ToneConsistencyMetric } from "@mastra/evals/nlp";
 
 const metric = new ToneConsistencyMetric();
 
-const query = "The interface is frustrating and confusing, though it has potential.";
-const response = "The design shows promise but needs significant improvements to be usable.";
+const query =
+  "The interface is frustrating and confusing, though it has potential.";
+const response =
+  "The design shows promise but needs significant improvements to be usable.";
 
 const result = await metric.measure(query, response);
 
@@ -122,7 +124,6 @@ const metric = new ToneConsistencyMetric();
 
 > See [ToneConsistencyMetric](/reference/evals/tone-consistency) for a full list of configuration options.
 
-
 ## Understanding the results
 
 `ToneConsistencyMetric` returns a result in the following shape:
@@ -139,6 +140,7 @@ const metric = new ToneConsistencyMetric();
   }
 }
 ```
+
 ### Tone consistency score
 
 A tone consistency score between 0 and 1:
@@ -158,6 +160,6 @@ An explanation for the score, with details including:
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/tone-consistency"
 />

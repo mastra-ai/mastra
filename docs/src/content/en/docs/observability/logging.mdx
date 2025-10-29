@@ -14,14 +14,14 @@ When deploying to Mastra Cloud, logs are shown on the [Logs](../mastra-cloud/obs
 When [initializing a new Mastra project](../getting-started/installation) using the CLI, `PinoLogger` is included by default.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
 
 export const mastra = new Mastra({
   // ...
   logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
 });
 ```
@@ -35,7 +35,6 @@ Mastra provides access to a logger instance via the `mastra.getLogger()` method,
 ### Logging from workflow steps
 
 Within a workflow step, access the logger via the `mastra` parameter inside the `execute` function. This allows you to log messages relevant to the step’s execution.
-
 
 ```typescript {8-9} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -70,17 +69,15 @@ import { z } from "zod";
 export const testTool = createTool({
   // ...
   execute: async ({ mastra }) => {
-
     const logger = mastra?.getLogger();
     logger?.info("tool info log");
 
     return {
-      output: ""
+      output: "",
     };
-  }
+  },
 });
 ```
-
 
 ## Logging with additional data
 

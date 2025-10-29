@@ -17,7 +17,8 @@ The `createHallucinationScorer()` function accepts a single options object with 
       name: "model",
       type: "LanguageModel",
       required: true,
-      description: "Configuration for the model used to evaluate hallucination.",
+      description:
+        "Configuration for the model used to evaluate hallucination.",
     },
     {
       name: "scale",
@@ -48,17 +49,20 @@ This function returns an instance of the MastraScorer class. The `.run()` method
     {
       name: "preprocessPrompt",
       type: "string",
-      description: "The prompt sent to the LLM for the preprocess step (optional).",
+      description:
+        "The prompt sent to the LLM for the preprocess step (optional).",
     },
     {
       name: "analyzeStepResult",
       type: "object",
-      description: "Object with verdicts: { verdicts: Array<{ statement: string, verdict: 'yes' | 'no', reason: string }> }",
+      description:
+        "Object with verdicts: { verdicts: Array<{ statement: string, verdict: 'yes' | 'no', reason: string }> }",
     },
     {
       name: "analyzePrompt",
       type: "string",
-      description: "The prompt sent to the LLM for the analyze step (optional).",
+      description:
+        "The prompt sent to the LLM for the analyze step (optional).",
     },
     {
       name: "score",
@@ -68,12 +72,14 @@ This function returns an instance of the MastraScorer class. The `.run()` method
     {
       name: "reason",
       type: "string",
-      description: "Detailed explanation of the score and identified contradictions.",
+      description:
+        "Detailed explanation of the score and identified contradictions.",
     },
     {
       name: "generateReasonPrompt",
       type: "string",
-      description: "The prompt sent to the LLM for the generateReason step (optional).",
+      description:
+        "The prompt sent to the LLM for the generateReason step (optional).",
     },
   ]}
 />
@@ -239,7 +245,6 @@ The Scorer assigns a score of 1 because every statement in the response conflict
   reason: 'The score is 1.0 because all three statements from the output directly contradict the context: the first flight was in 1903, not 1908; it lasted 12 seconds, not about 2 minutes; and it covered 120 feet, not nearly a mile.'
 }
 ```
-
 
 ## Related
 

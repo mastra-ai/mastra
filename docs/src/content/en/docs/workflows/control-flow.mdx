@@ -254,7 +254,7 @@ import { mastra } from "./mastra";
 const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
 const result = await run.start({
-  inputData: [{ number: 10 }, { number: 100 }, { number: 200 }]
+  inputData: [{ number: 10 }, { number: 100 }, { number: 200 }],
 });
 ```
 

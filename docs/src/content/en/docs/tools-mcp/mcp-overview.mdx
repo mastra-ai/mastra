@@ -3,8 +3,8 @@ title: "MCP Overview | Tools & MCP | Mastra Docs"
 description: Learn about the Model Context Protocol (MCP), how to use third-party tools via MCPClient, connect to registries, and share your own tools using MCPServer.
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # MCP Overview
 
@@ -37,12 +37,14 @@ export const testMcpClient = new MCPClient({
   servers: {
     wikipedia: {
       command: "npx",
-      args: ["-y", "wikipedia-mcp"]
+      args: ["-y", "wikipedia-mcp"],
     },
     weather: {
-      url: new URL(`https://server.smithery.ai/@smithery-ai/national-weather-service/mcp?api_key=${process.env.SMITHERY_API_KEY}`)
+      url: new URL(
+        `https://server.smithery.ai/@smithery-ai/national-weather-service/mcp?api_key=${process.env.SMITHERY_API_KEY}`,
+      ),
     },
-  }
+  },
 });
 ```
 
@@ -68,9 +70,10 @@ export const testAgent = new Agent({
 
       Answer questions using the information you find using the MCP Servers.`,
   model: openai("gpt-4o-mini"),
-  tools: await testMcpClient.getTools()
+  tools: await testMcpClient.getTools(),
 });
 ```
+
 > See the [Agent Class](/reference/agents/agent) for a full list of configuration options.
 
 ## Configuring `MCPServer`
@@ -90,7 +93,7 @@ export const testMcpServer = new MCPServer({
   version: "1.0.0",
   agents: { testAgent },
   tools: { testTool },
-  workflows: { testWorkflow }
+  workflows: { testWorkflow },
 });
 ```
 
@@ -107,7 +110,7 @@ import { testMcpServer } from "./mcp/test-mcp-server";
 
 export const mastra = new Mastra({
   // ...
-  mcpServers: { testMcpServer }
+  mcpServers: { testMcpServer },
 });
 ```
 
@@ -115,10 +118,10 @@ export const mastra = new Mastra({
 
 `MCPClient` offers two approaches to retrieving tools from connected servers, suitable for different application architectures:
 
-| Feature           | Static Configuration (`await mcp.getTools()`)  | Dynamic Configuration (`await mcp.getToolsets()`)     |
-| :---------------- | :---------------------------------------------| :--------------------------------------------------- |
-| **Use Case**      | Single-user, static config (e.g., CLI tool)    | Multi-user, dynamic config (e.g., SaaS app)           |
-| **Configuration**  | Fixed at agent initialization                 | Per-request, dynamic                                 |
+| Feature           | Static Configuration (`await mcp.getTools()`) | Dynamic Configuration (`await mcp.getToolsets()`)    |
+| :---------------- | :-------------------------------------------- | :--------------------------------------------------- |
+| **Use Case**      | Single-user, static config (e.g., CLI tool)   | Multi-user, dynamic config (e.g., SaaS app)          |
+| **Configuration** | Fixed at agent initialization                 | Per-request, dynamic                                 |
 | **Credentials**   | Shared across all uses                        | Can vary per user/request                            |
 | **Agent Setup**   | Tools added in `Agent` constructor            | Tools passed in `.generate()` or `.stream()` options |
 
@@ -136,7 +139,7 @@ import { testMcpClient } from "../mcp/test-mcp-client";
 
 export const testAgent = new Agent({
   // ...
-  tools: await testMcpClient.getTools()
+  tools: await testMcpClient.getTools(),
 });
 ```
 
@@ -155,23 +158,23 @@ async function handleRequest(userPrompt: string, userApiKey: string) {
         url: new URL("http://localhost:8080/mcp"),
         requestInit: {
           headers: {
-            Authorization: `Bearer ${userApiKey}`
-          }
-        }
-      }
-    }
+            Authorization: `Bearer ${userApiKey}`,
+          },
+        },
+      },
+    },
   });
 
   const agent = mastra.getAgent("testAgent");
 
   const response = await agent.generate(userPrompt, {
-    toolsets: await userMcp.getToolsets()
+    toolsets: await userMcp.getToolsets(),
   });
 
   await userMcp.disconnect();
 
   return Response.json({
-    data: response.text
+    data: response.text,
   });
 }
 ```
@@ -298,54 +301,54 @@ MCP servers can be discovered through registries. Here's how to connect to some 
   </TabItem>
   <TabItem value="ampersand" label="Ampersand">
 
-  [Ampersand](https://withampersand.com?utm_source=mastra-docs) offers an [MCP Server](https://docs.withampersand.com/mcp) that allows you to connect your agent to 150+ integrations with SaaS products like Salesforce, Hubspot, and Zendesk.
+[Ampersand](https://withampersand.com?utm_source=mastra-docs) offers an [MCP Server](https://docs.withampersand.com/mcp) that allows you to connect your agent to 150+ integrations with SaaS products like Salesforce, Hubspot, and Zendesk.
 
-  ```typescript
-  // MCPClient with Ampersand MCP Server using SSE
-  export const mcp = new MCPClient({
-      servers: {
-      "@amp-labs/mcp-server": {
-        "url": `https://mcp.withampersand.com/v1/sse?${new URLSearchParams({
-          apiKey: process.env.AMPERSAND_API_KEY,
-          project: process.env.AMPERSAND_PROJECT_ID,
-          integrationName: process.env.AMPERSAND_INTEGRATION_NAME,
-          groupRef: process.env.AMPERSAND_GROUP_REF
-        })}`
-      }
-    }
-  });
-  ```
+```typescript
+// MCPClient with Ampersand MCP Server using SSE
+export const mcp = new MCPClient({
+  servers: {
+    "@amp-labs/mcp-server": {
+      url: `https://mcp.withampersand.com/v1/sse?${new URLSearchParams({
+        apiKey: process.env.AMPERSAND_API_KEY,
+        project: process.env.AMPERSAND_PROJECT_ID,
+        integrationName: process.env.AMPERSAND_INTEGRATION_NAME,
+        groupRef: process.env.AMPERSAND_GROUP_REF,
+      })}`,
+    },
+  },
+});
+```
 
-  ```typescript
-  // If you prefer to run the MCP server locally:
-  import { MCPClient } from "@mastra/mcp";
+```typescript
+// If you prefer to run the MCP server locally:
+import { MCPClient } from "@mastra/mcp";
 
-  // MCPClient with Ampersand MCP Server using stdio transport
-  export const mcp = new MCPClient({
-      servers: {
-        "@amp-labs/mcp-server": {
-          command: "npx",
-          args: [
-            "-y",
-            "@amp-labs/mcp-server@latest",
-            "--transport",
-            "stdio",
-            "--project",
-            process.env.AMPERSAND_PROJECT_ID,
-            "--integrationName",
-            process.env.AMPERSAND_INTEGRATION_NAME,
-            "--groupRef",
-            process.env.AMPERSAND_GROUP_REF, // optional
-          ],
-          env: {
-            AMPERSAND_API_KEY: process.env.AMPERSAND_API_KEY,
-          },
-        },
+// MCPClient with Ampersand MCP Server using stdio transport
+export const mcp = new MCPClient({
+  servers: {
+    "@amp-labs/mcp-server": {
+      command: "npx",
+      args: [
+        "-y",
+        "@amp-labs/mcp-server@latest",
+        "--transport",
+        "stdio",
+        "--project",
+        process.env.AMPERSAND_PROJECT_ID,
+        "--integrationName",
+        process.env.AMPERSAND_INTEGRATION_NAME,
+        "--groupRef",
+        process.env.AMPERSAND_GROUP_REF, // optional
+      ],
+      env: {
+        AMPERSAND_API_KEY: process.env.AMPERSAND_API_KEY,
       },
-  });
-  ```
+    },
+  },
+});
+```
 
-  As an alternative to MCP, Ampersand's AI SDK also has an adapter for Mastra, so you can [directly import Ampersand tools](https://docs.withampersand.com/ai-sdk#use-with-mastra) for your agent to access.
+As an alternative to MCP, Ampersand's AI SDK also has an adapter for Mastra, so you can [directly import Ampersand tools](https://docs.withampersand.com/ai-sdk#use-with-mastra) for your agent to access.
 
   </TabItem>
 </Tabs>

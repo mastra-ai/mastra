@@ -743,23 +743,19 @@ if (result.results.fetchUser.status === "success") {
 ### Best Practices for Data Flow
 
 1. **Use getStepResult with Step References for Type Safety**
-
    - Ensures TypeScript can infer the correct types
    - Catches type errors at compile time
 
 2. \*_Use Variable Mapping for Explicit Dependencies_
-
    - Makes data flow clear and maintainable
    - Provides good documentation of step dependencies
 
 3. **Define Output Schemas for Steps**
-
    - Validates data at runtime
    - Validates return type of the `execute` function
    - Improves type inference in TypeScript
 
 4. **Handle Missing Data Gracefully**
-
    - Always check if step results exist before accessing properties
    - Provide fallback values for optional data
 

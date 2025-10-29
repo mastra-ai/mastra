@@ -30,8 +30,8 @@ const metric = new ContextPositionMetric(openai("gpt-4o-mini"), {
     "The capital of France is Paris.",
     "Paris has been the capital since 508 CE.",
     "Paris serves as France's political center.",
-    "The capital city hosts the French government."
-  ]
+    "The capital city hosts the French government.",
+  ],
 });
 
 const query = "What is the capital of France?";
@@ -68,17 +68,17 @@ const metric = new ContextPositionMetric(openai("gpt-4o-mini"), {
     "Elephants are herbivores.",
     "Adult elephants can weigh up to 13,000 pounds.",
     "Elephants are the largest land animals.",
-    "Elephants eat plants and grass."
-  ]
+    "Elephants eat plants and grass.",
+  ],
 });
 
 const query = "How much do elephants weigh?";
-const response = "Adult elephants can weigh up to 13,000 pounds, making them the largest land animals.";
+const response =
+  "Adult elephants can weigh up to 13,000 pounds, making them the largest land animals.";
 
 const result = await metric.measure(query, response);
 
 console.log(result);
-
 ```
 
 ### Mixed position output
@@ -107,12 +107,13 @@ const metric = new ContextPositionMetric(openai("gpt-4o-mini"), {
     "Rainbows appear in the sky.",
     "Rainbows have different colors.",
     "Rainbows are curved in shape.",
-    "Rainbows form when sunlight hits water droplets."
-  ]
+    "Rainbows form when sunlight hits water droplets.",
+  ],
 });
 
 const query = "How do rainbows form?";
-const response = "Rainbows are created when sunlight interacts with water droplets in the air.";
+const response =
+  "Rainbows are created when sunlight interacts with water droplets in the air.";
 
 const result = await metric.measure(query, response);
 
@@ -139,9 +140,10 @@ You can create a `ContextPositionMetric` instance by providing a `context` array
 ```typescript showLineNumbers copy
 const metric = new ContextPositionMetric(openai("gpt-4o-mini"), {
   context: [""],
-  scale: 1
+  scale: 1,
 });
 ```
+
 > See [ContextPositionMetric](/reference/evals/context-position) for a full list of configuration options.
 
 ## Understanding the results
@@ -178,6 +180,6 @@ An explanation for the score, with details including:
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-position"
 />

@@ -3,8 +3,8 @@ title: "Agent Memory | Agents | Mastra Docs"
 description: Learn how to add memory to agents to store conversation history and maintain context across interactions.
 ---
 
-import Steps from '@site/src/components/Steps';
-import StepItem from '@site/src/components/StepItem';
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
 
 # Agent memory
 
@@ -33,51 +33,51 @@ Memory requires a storage provider to persist conversation history, including us
 <Steps>
   <StepItem>
 
-  Enable memory by creating a `Memory` instance and passing it to the agent’s `memory` option.
+Enable memory by creating a `Memory` instance and passing it to the agent’s `memory` option.
 
-  ```typescript {6-9} title="src/mastra/agents/memory-agent.ts" copy
-  import { Agent } from "@mastra/core/agent";
-  import { Memory } from "@mastra/memory";
+```typescript {6-9} title="src/mastra/agents/memory-agent.ts" copy
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
 
-  export const memoryAgent = new Agent({
-    // ...
-    memory: new Memory({
-      options: {
-        lastMessages: 20
-      }
-    })
-  });
-  ```
+export const memoryAgent = new Agent({
+  // ...
+  memory: new Memory({
+    options: {
+      lastMessages: 20,
+    },
+  }),
+});
+```
 
-  :::note
+:::note
 
-  See the [Memory Class](/reference/memory/memory-class) docs for a full list of configuration options.
+See the [Memory Class](/reference/memory/memory-class) docs for a full list of configuration options.
 
-  :::
+:::
 
   </StepItem>
 
   <StepItem>
 
-  Add a storage provider to your main Mastra instance to enable memory across all configured agents.
+Add a storage provider to your main Mastra instance to enable memory across all configured agents.
 
-  ```typescript {6-8} title="src/mastra/index.ts" copy
-  import { Mastra } from "@mastra/core/mastra";
-  import { LibSQLStore } from "@mastra/libsql";
+```typescript {6-8} title="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLStore } from "@mastra/libsql";
 
-  export const mastra = new Mastra({
-    // ..
-    storage: new LibSQLStore({
-      url: ":memory:"
-    }),
-  });
-  ```
+export const mastra = new Mastra({
+  // ..
+  storage: new LibSQLStore({
+    url: ":memory:",
+  }),
+});
+```
 
-  :::note
+:::note
 
-  See the [LibSQL Storage](/reference/storage/libsql) docs for a full list of configuration options.
+See the [LibSQL Storage](/reference/storage/libsql) docs for a full list of configuration options.
 
-  :::
+:::
 
   </StepItem>
 </Steps>
@@ -93,9 +93,9 @@ export const memoryAgent = new Agent({
   // ...
   memory: new Memory({
     storage: new LibSQLStore({
-      url: ":memory:"
-    })
-  })
+      url: ":memory:",
+    }),
+  }),
 });
 ```
 
@@ -109,12 +109,15 @@ Include a `memory` object with both `resource` and `thread` to track conversatio
 These fields tell the agent where to store and retrieve context, enabling persistent, thread-aware memory across a conversation.
 
 ```typescript {3-4}
-const response = await memoryAgent.generate("Remember my favorite color is blue.", {
-  memory: {
-    thread: "user-123",
-    resource: "test-123"
-  }
-});
+const response = await memoryAgent.generate(
+  "Remember my favorite color is blue.",
+  {
+    memory: {
+      thread: "user-123",
+      resource: "test-123",
+    },
+  },
+);
 ```
 
 To recall information stored in memory, call the agent with the same `resource` and `thread` values used in the original conversation.
@@ -123,8 +126,8 @@ To recall information stored in memory, call the agent with the same `resource` 
 const response = await memoryAgent.generate("What's my favorite color?", {
   memory: {
     thread: "user-123",
-    resource: "test-123"
-  }
+    resource: "test-123",
+  },
 });
 ```
 
@@ -140,7 +143,7 @@ export type UserTier = {
 };
 
 const premiumMemory = new Memory({
- // ...
+  // ...
 });
 
 const standardMemory = new Memory({
@@ -152,10 +155,8 @@ export const memoryAgent = new Agent({
   memory: ({ runtimeContext }) => {
     const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
 
-    return userTier === "enterprise"
-      ? premiumMemory
-      : standardMemory;
-  }
+    return userTier === "enterprise" ? premiumMemory : standardMemory;
+  },
 });
 ```
 

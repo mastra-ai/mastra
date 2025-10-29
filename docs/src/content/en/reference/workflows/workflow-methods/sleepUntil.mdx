@@ -20,7 +20,8 @@ workflow.sleepUntil(new Date(Date.now() + 5000));
     {
       name: "dateOrCallback",
       type: "Date | ((params: ExecuteFunctionParams) => Promise<Date>)",
-      description: "Either a Date object or a callback function that returns a Date. The callback receives execution context and can compute the target time dynamically based on input data.",
+      description:
+        "Either a Date object or a callback function that returns a Date. The callback receives execution context and can compute the target time dynamically based on input data.",
       isOptional: false,
     },
   ]}

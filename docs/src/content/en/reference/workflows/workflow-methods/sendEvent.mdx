@@ -10,7 +10,7 @@ The `.sendEvent()` resumes execution when an event is sent.
 ## Usage example
 
 ```typescript copy
-run.sendEvent('event-name', { value: "data" });
+run.sendEvent("event-name", { value: "data" });
 ```
 
 ## Parameters
@@ -53,8 +53,8 @@ const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
 const result = run.start({
   inputData: {
-    value: "hello"
-  }
+    value: "hello",
+  },
 });
 
 setTimeout(() => {

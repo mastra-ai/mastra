@@ -39,7 +39,7 @@ import { realtimeMiddleware } from "@inngest/realtime";
 
 export const inngest = new Inngest({
   id: "mastra",
-  baseUrl:"http://localhost:8288",
+  baseUrl: "http://localhost:8288",
   isDev: true,
   middleware: [realtimeMiddleware()],
 });
@@ -296,23 +296,23 @@ import { inngest } from "./inngest";
 
 // Define custom Inngest functions
 export const customEmailFunction = inngest.createFunction(
-  { id: 'send-welcome-email' },
-  { event: 'user/registered' },
+  { id: "send-welcome-email" },
+  { event: "user/registered" },
   async ({ event }) => {
     // Custom email logic here
     console.log(`Sending welcome email to ${event.data.email}`);
-    return { status: 'email_sent' };
-  }
+    return { status: "email_sent" };
+  },
 );
 
 export const customWebhookFunction = inngest.createFunction(
-  { id: 'process-webhook' },
-  { event: 'webhook/received' },
+  { id: "process-webhook" },
+  { event: "webhook/received" },
   async ({ event }) => {
     // Custom webhook processing
     console.log(`Processing webhook: ${event.data.type}`);
     return { processed: true };
-  }
+  },
 );
 ```
 
@@ -325,7 +325,10 @@ import { Mastra } from "@mastra/core/mastra";
 import { serve as inngestServe } from "@mastra/inngest";
 import { incrementWorkflow } from "./workflows";
 import { inngest } from "./inngest";
-import { customEmailFunction, customWebhookFunction } from "./inngest/custom-functions";
+import {
+  customEmailFunction,
+  customWebhookFunction,
+} from "./inngest/custom-functions";
 
 export const mastra = new Mastra({
   workflows: {
@@ -337,11 +340,12 @@ export const mastra = new Mastra({
       {
         path: "/api/inngest",
         method: "ALL",
-        createHandler: async ({ mastra }) => inngestServe({
-          mastra,
-          inngest,
-          functions: [customEmailFunction, customWebhookFunction] // Add your custom functions
-        }),
+        createHandler: async ({ mastra }) =>
+          inngestServe({
+            mastra,
+            inngest,
+            functions: [customEmailFunction, customWebhookFunction], // Add your custom functions
+          }),
       },
     ],
   },

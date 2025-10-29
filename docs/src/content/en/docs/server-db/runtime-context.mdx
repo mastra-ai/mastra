@@ -3,7 +3,6 @@ title: "Runtime Context | Server & DB | Mastra Docs"
 description: Learn how to use Mastra's RuntimeContext to provide dynamic, request-specific configuration to agents.
 ---
 
-
 # Runtime Context
 
 Agents, tools, and workflows can all accept `RuntimeContext` as a parameter, making request-specific values available to the underlying primitives.
@@ -14,9 +13,9 @@ Use `RuntimeContext` when a primitive’s behavior should change based on runtim
 
 :::note
 
-  **Note:** `RuntimeContext` is primarily used for passing data into specific
-  requests. It's distinct from agent memory, which handles conversation
-  history and state persistence across multiple calls.
+**Note:** `RuntimeContext` is primarily used for passing data into specific
+requests. It's distinct from agent memory, which handles conversation
+history and state persistence across multiple calls.
 
 :::
 
@@ -41,33 +40,33 @@ runtimeContext.set("user-tier", "enterprise");
 
 const agent = mastra.getAgent("weatherAgent");
 await agent.generate("What's the weather in London?", {
-  runtimeContext
-})
+  runtimeContext,
+});
 
 const routingAgent = mastra.getAgent("routingAgent");
 routingAgent.network("What's the weather in London?", {
-  runtimeContext
+  runtimeContext,
 });
 
 const run = await mastra.getWorkflow("weatherWorkflow").createRunAsync();
 await run.start({
   inputData: {
-    location: "London"
+    location: "London",
   },
-  runtimeContext
+  runtimeContext,
 });
 await run.resume({
   resumeData: {
-    city: "New York"
+    city: "New York",
   },
-  runtimeContext
+  runtimeContext,
 });
 
 await weatherTool.execute({
   context: {
-    location: "London"
+    location: "London",
   },
-  runtimeContext
+  runtimeContext,
 });
 ```
 
@@ -88,12 +87,15 @@ export const mastra = new Mastra({
         const country = context.req.header("CF-IPCountry");
         const runtimeContext = context.get("runtimeContext");
 
-        runtimeContext.set("temperature-unit", country === "US" ? "fahrenheit" : "celsius");
+        runtimeContext.set(
+          "temperature-unit",
+          country === "US" ? "fahrenheit" : "celsius",
+        );
 
         await next();
-      }
-    ]
-  }
+      },
+    ],
+  },
 });
 ```
 
@@ -152,7 +154,7 @@ const stepOne = createStep({
       // ...
     }
     // ...
-  }
+  },
 });
 ```
 
@@ -160,7 +162,7 @@ const stepOne = createStep({
 
 ## Accessing values with tools
 
-You can access the `runtimeContext` argument from a tool’s `execute` function. This function is `async`.  Use the `.get()` method to read values from `runtimeContext`.
+You can access the `runtimeContext` argument from a tool’s `execute` function. This function is `async`. Use the `.get()` method to read values from `runtimeContext`.
 
 ```typescript {7-8} title="src/mastra/tools/weather-tool.ts" showLineNumbers
 export type UserTier = {
@@ -175,8 +177,8 @@ export const weatherTool = createTool({
     if (userTier === "enterprise") {
       // ...
     }
-   // ...
-  }
+    // ...
+  },
 });
 ```
 

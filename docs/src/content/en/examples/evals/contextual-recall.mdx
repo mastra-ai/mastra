@@ -29,12 +29,13 @@ const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
   context: [
     "Product features include cloud sync.",
     "Offline mode is available.",
-    "Supports multiple devices."
-  ]
+    "Supports multiple devices.",
+  ],
 });
 
 const query = "What are the key features of the product?";
-const response = "The product features cloud synchronization, offline mode support, and the ability to work across multiple devices.";
+const response =
+  "The product features cloud synchronization, offline mode support, and the ability to work across multiple devices.";
 
 const result = await metric.measure(query, response);
 
@@ -67,12 +68,13 @@ const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
     "Python is a high-level programming language.",
     "Python emphasizes code readability.",
     "Python supports multiple programming paradigms.",
-    "Python is widely used in data science."
-  ]
+    "Python is widely used in data science.",
+  ],
 });
 
 const query = "What are Python's key characteristics?";
-const response = "Python is a high-level programming language. It is also a type of snake.";
+const response =
+  "Python is a high-level programming language. It is also a type of snake.";
 
 const result = await metric.measure(query, response);
 
@@ -105,8 +107,8 @@ const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
     "The solar system has eight planets.",
     "Mercury is closest to the Sun.",
     "Venus is the hottest planet.",
-    "Mars is called the Red Planet."
-  ]
+    "Mars is called the Red Planet.",
+  ],
 });
 
 const query = "Tell me about the solar system.";
@@ -130,7 +132,6 @@ The output receives a low score because the response includes information that i
 }
 ```
 
-
 ## Metric configuration
 
 You can create a `ContextualRecallMetric` instance by providing a `context` array representing background information relevant to the response. You can also configure optional parameters such as `scale` to define the scoring range.
@@ -138,7 +139,7 @@ You can create a `ContextualRecallMetric` instance by providing a `context` arra
 ```typescript showLineNumbers copy
 const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
   context: [""],
-  scale: 1
+  scale: 1,
 });
 ```
 
@@ -178,6 +179,6 @@ An explanation for the score, with details including:
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/contextual-recall"
 />

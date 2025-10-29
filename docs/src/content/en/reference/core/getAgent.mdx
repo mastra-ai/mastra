@@ -20,7 +20,8 @@ mastra.getAgent("testAgent");
     {
       name: "name",
       type: "TAgentName extends keyof TAgents",
-      description: "The name of the agent to retrieve. Must be a valid agent name that exists in the Mastra configuration.",
+      description:
+        "The name of the agent to retrieve. Must be a valid agent name that exists in the Mastra configuration.",
     },
   ]}
 />
@@ -32,7 +33,8 @@ mastra.getAgent("testAgent");
     {
       name: "agent",
       type: "TAgents[TAgentName]",
-      description: "The agent instance with the specified name. Throws an error if the agent is not found.",
+      description:
+        "The agent instance with the specified name. Throws an error if the agent is not found.",
     },
   ]}
 />

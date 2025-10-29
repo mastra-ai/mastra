@@ -3,8 +3,8 @@ title: "MastraAuthClerk Class | Auth | Mastra Docs"
 description: "Documentation for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication."
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # MastraAuthClerk Class
 
@@ -34,7 +34,7 @@ npm install @mastra/auth-clerk@latest
 
 ```typescript {2,7-11} title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
-import { MastraAuthClerk } from '@mastra/auth-clerk';
+import { MastraAuthClerk } from "@mastra/auth-clerk";
 
 export const mastra = new Mastra({
   // ..
@@ -42,7 +42,7 @@ export const mastra = new Mastra({
     experimental_auth: new MastraAuthClerk({
       publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
       secretKey: process.env.CLERK_SECRET_KEY,
-      jwksUri: process.env.CLERK_JWKS_URI
+      jwksUri: process.env.CLERK_JWKS_URI,
     }),
   },
 });
@@ -87,8 +87,8 @@ import { MastraClient } from "@mastra/client-js";
 export const mastraClient = new MastraClient({
   baseUrl: "https://<mastra-api-url>",
   headers: {
-    Authorization: `Bearer ${accessToken}`
-  }
+    Authorization: `Bearer ${accessToken}`,
+  },
 });
 ```
 
@@ -129,6 +129,7 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
       return <button onClick={handleClick}>Test Agent</button>;
     };
     ```
+
   </TabItem>
   <TabItem value="curl" label="cURL">
     ```bash copy

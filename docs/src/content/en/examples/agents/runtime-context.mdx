@@ -29,7 +29,7 @@ import {
   knowledgeBase,
   ticketSystem,
   advancedAnalytics,
-  customIntegration
+  customIntegration,
 } from "../tools/support-tools";
 import { CharacterLimiterProcessor } from "../processors/character-limiter";
 import { responseQualityScorer } from "../scorers/response-quality";
@@ -44,7 +44,11 @@ export const supportAgent = new Agent({
   name: "dynamic-support-agent",
   description: "AI support agent that adapts to user subscription tiers",
 
-  instructions: async ({ runtimeContext }: { runtimeContext: RuntimeContext<SupportRuntimeContext> }) => {
+  instructions: async ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
     const userTier = runtimeContext.get("user-tier");
     const language = runtimeContext.get("language");
 
@@ -60,7 +64,11 @@ export const supportAgent = new Agent({
     ${userTier === "enterprise" ? "You have access to custom integrations and advanced analytics." : ""}`;
   },
 
-  model: ({ runtimeContext }: { runtimeContext: RuntimeContext<SupportRuntimeContext> }) => {
+  model: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
     const userTier = runtimeContext.get("user-tier");
 
     if (userTier === "enterprise") return "openai/gpt-5";
@@ -68,7 +76,11 @@ export const supportAgent = new Agent({
     return "openai/gpt-4o-mini";
   },
 
-  tools: ({ runtimeContext }: { runtimeContext: RuntimeContext<SupportRuntimeContext> }) => {
+  tools: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
     const userTier = runtimeContext.get("user-tier");
     const baseTools = [knowledgeBase, ticketSystem];
 
@@ -83,7 +95,11 @@ export const supportAgent = new Agent({
     return baseTools;
   },
 
-  memory: ({ runtimeContext }: { runtimeContext: RuntimeContext<SupportRuntimeContext> }) => {
+  memory: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
     const userTier = runtimeContext.get("user-tier");
 
     switch (userTier) {
@@ -115,7 +131,11 @@ export const supportAgent = new Agent({
     }
   },
 
-  inputProcessors: ({ runtimeContext }: { runtimeContext: RuntimeContext<SupportRuntimeContext> }) => {
+  inputProcessors: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
     const userTier = runtimeContext.get("user-tier");
 
     switch (userTier) {
@@ -129,21 +149,35 @@ export const supportAgent = new Agent({
     }
   },
 
-  outputProcessors: ({ runtimeContext }: { runtimeContext: RuntimeContext<SupportRuntimeContext> }) => {
+  outputProcessors: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
     const userTier = runtimeContext.get("user-tier");
 
     switch (userTier) {
       case "enterprise":
-        return [new TokenLimiterProcessor({ limit: 2000, strategy: "truncate" })];
+        return [
+          new TokenLimiterProcessor({ limit: 2000, strategy: "truncate" }),
+        ];
       case "pro":
-        return [new TokenLimiterProcessor({ limit: 500, strategy: "truncate" })];
+        return [
+          new TokenLimiterProcessor({ limit: 500, strategy: "truncate" }),
+        ];
       case "free":
       default:
-        return [new TokenLimiterProcessor({ limit: 100, strategy: "truncate" })];
+        return [
+          new TokenLimiterProcessor({ limit: 100, strategy: "truncate" }),
+        ];
     }
   },
 
-  scorers: ({ runtimeContext }: { runtimeContext: RuntimeContext<SupportRuntimeContext> }) => {
+  scorers: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
     const userTier = runtimeContext.get("user-tier");
 
     if (userTier === "enterprise") {
@@ -151,7 +185,7 @@ export const supportAgent = new Agent({
     }
 
     return [];
-  }
+  },
 });
 ```
 
@@ -166,7 +200,7 @@ import { Mastra } from "@mastra/core/mastra";
 import { supportAgent } from "./agents/support-agent";
 
 export const mastra = new Mastra({
-  agents: { supportAgent }
+  agents: { supportAgent },
 });
 ```
 
@@ -188,7 +222,7 @@ runtimeContext.set("language", "en");
 
 const response = await agent.generate(
   "I'm having trouble with API rate limits. Can you help?",
-  { runtimeContext }
+  { runtimeContext },
 );
 
 console.log(response.text);
@@ -210,7 +244,7 @@ runtimeContext.set("language", "es");
 
 const response = await agent.generate(
   "I need detailed analytics on my API usage patterns and optimization recommendations.",
-  { runtimeContext }
+  { runtimeContext },
 );
 
 console.log(response.text);
@@ -232,7 +266,7 @@ runtimeContext.set("language", "ja");
 
 const response = await agent.generate(
   "I need to integrate our custom webhook system with your platform and get real-time analytics on our usage across multiple environments.",
-  { runtimeContext }
+  { runtimeContext },
 );
 
 console.log(response.text);

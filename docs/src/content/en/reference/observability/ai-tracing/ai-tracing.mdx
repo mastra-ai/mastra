@@ -137,10 +137,10 @@ class CustomAITracing extends BaseAITracing {
     super(config);
     // Custom initialization
   }
-  
+
   // Override methods as needed
   startSpan<TType extends AISpanType>(
-    options: StartSpanOptions<TType>
+    options: StartSpanOptions<TType>,
   ): AISpan<TType> {
     // Custom span creation logic
     return super.startSpan(options);
@@ -159,6 +159,7 @@ class NoOpAISpan<TType extends AISpanType> extends BaseAISpan<TType>
 ```
 
 A span that performs no operations. All methods are no-ops:
+
 - `id` returns `'no-op'`
 - `traceId` returns `'no-op-trace'`
 - `isValid` returns `false`
@@ -168,15 +169,18 @@ A span that performs no operations. All methods are no-ops:
 ## See Also
 
 ### Documentation
+
 - [AI Tracing Overview](/docs/observability/ai-tracing/overview) - Concepts and usage guide
 - [Configuration Reference](/reference/observability/ai-tracing/configuration) - Configuration options
 - [Interfaces Reference](/reference/observability/ai-tracing/interfaces) - Type definitions
 - [Span Reference](/reference/observability/ai-tracing/span) - Span lifecycle and methods
 
 ### Examples
+
 - [Basic AI Tracing](/examples/observability/basic-ai-tracing) - Getting started example
 
 ### Exporters
+
 - [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - Storage persistence
 - [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud integration
 - [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter) - Debug output

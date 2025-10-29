@@ -21,7 +21,6 @@ npm install @mastra/evals
 
 In this example, the texts are exactly the same. The metric identifies complete similarity with a perfect score and no detected changes.
 
-
 ```typescript title="src/example-no-differences.ts" showLineNumbers copy
 import { TextualDifferenceMetric } from "@mastra/evals/nlp";
 
@@ -50,6 +49,7 @@ The metric returns a high score, indicating the texts are identical. The detaile
   }
 }
 ```
+
 ## Minor differences example
 
 In this example, the texts have small variations. The metric detects these minor differences and returns a moderate similarity score.
@@ -163,6 +163,6 @@ An explanation for the score, with details including:
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/textual-difference"
 />

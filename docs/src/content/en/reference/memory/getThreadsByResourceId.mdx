@@ -26,18 +26,19 @@ await memory?.getThreadsByResourceId({ resourceId: "user-123" });
     {
       name: "orderBy",
       type: "ThreadOrderBy",
-      description: "Field to sort threads by. Accepts 'createdAt' or 'updatedAt'. Default: 'createdAt'",
+      description:
+        "Field to sort threads by. Accepts 'createdAt' or 'updatedAt'. Default: 'createdAt'",
       isOptional: true,
     },
     {
       name: "sortDirection",
       type: "ThreadSortDirection",
-      description: "Sort order direction. Accepts 'ASC' or 'DESC'. Default: 'DESC'",
+      description:
+        "Sort order direction. Accepts 'ASC' or 'DESC'. Default: 'DESC'",
       isOptional: true,
     },
   ]}
 />
-
 
 ## Returns
 
@@ -63,7 +64,7 @@ const memory = await agent.getMemory();
 const thread = await memory?.getThreadsByResourceId({
   resourceId: "user-123",
   orderBy: "updatedAt",
-  sortDirection: "ASC"
+  sortDirection: "ASC",
 });
 
 console.log(thread);

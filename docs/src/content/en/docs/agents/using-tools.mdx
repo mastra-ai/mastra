@@ -23,10 +23,10 @@ export const weatherTool = createTool({
   id: "weather-tool",
   description: "Fetches weather for a location",
   inputSchema: z.object({
-    location: z.string()
+    location: z.string(),
   }),
   outputSchema: z.object({
-    weather: z.string()
+    weather: z.string(),
   }),
   execute: async ({ context }) => {
     const { location } = context;
@@ -35,7 +35,7 @@ export const weatherTool = createTool({
     const weather = await response.text();
 
     return { weather };
-  }
+  },
 });
 ```
 
@@ -54,7 +54,7 @@ export const weatherAgent = new Agent({
       You are a helpful weather assistant.
       Use the weatherTool to fetch current weather data.`,
   model: openai("gpt-4o-mini"),
-  tools: { weatherTool }
+  tools: { weatherTool },
 });
 ```
 
@@ -82,10 +82,9 @@ import { activitiesTool } from "../tools/activities-tool";
 
 export const weatherAgent = new Agent({
   // ..
-  tools: { weatherTool, activitiesTool }
+  tools: { weatherTool, activitiesTool },
 });
 ```
-
 
 ## Related
 

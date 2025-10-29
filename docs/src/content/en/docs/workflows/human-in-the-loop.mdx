@@ -53,17 +53,17 @@ Return only the person's name, nothing else.`,
   model: openai("gpt-4o"),
   memory: new Memory({
     vector: new LibSQLVector({
-      connectionUrl: "file:../mastra.db"
+      connectionUrl: "file:../mastra.db",
     }),
     embedder: openai.embedding("text-embedding-3-small"),
     options: {
       lastMessages: 5,
       semanticRecall: {
         topK: 10,
-        messageRange: 1
-      }
-    }
-  })
+        messageRange: 1,
+      },
+    },
+  }),
 });
 ```
 
@@ -102,10 +102,9 @@ Encourage players to make a guess when they seem to have enough information.
 You must return a JSON object with:
 - response: Your response to the user
 - gameWon: true if they guessed correctly, false otherwise`,
-  model: openai("gpt-4o")
+  model: openai("gpt-4o"),
 });
 ```
-
 
 ## Multi-turn workflow
 
@@ -114,12 +113,12 @@ The workflow coordinates the full interaction using `suspend`/`resume` to pause 
 The `startStep` generates a name using the `famousPersonAgent`, while the `gameStep` runs the interaction through the `gameAgent`, which handles both questions and guesses and produces structured output that includes a `gameWon` boolean.
 
 ```typescript title="src/mastra/workflows/example-heads-up-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 
 const startStep = createStep({
-  id: 'start-step',
-  description: 'Get the name of a famous person',
+  id: "start-step",
+  description: "Get the name of a famous person",
   inputSchema: z.object({
     start: z.boolean(),
   }),
@@ -128,13 +127,13 @@ const startStep = createStep({
     guessCount: z.number(),
   }),
   execute: async ({ mastra }) => {
-    const agent = mastra.getAgent('famousPersonAgent');
+    const agent = mastra.getAgent("famousPersonAgent");
     const response = await agent.generate("Generate a famous person's name", {
       temperature: 1.2,
       topP: 0.9,
       memory: {
-        resource: 'heads-up-game',
-        thread: 'famous-person-generator',
+        resource: "heads-up-game",
+        thread: "famous-person-generator",
       },
     });
     const famousPerson = response.text.trim();
@@ -143,8 +142,8 @@ const startStep = createStep({
 });
 
 const gameStep = createStep({
-  id: 'game-step',
-  description: 'Handles the question-answer-continue loop',
+  id: "game-step",
+  description: "Handles the question-answer-continue loop",
   inputSchema: z.object({
     famousPerson: z.string(),
     guessCount: z.number(),
@@ -167,11 +166,12 @@ const gameStep = createStep({
 
     if (!userMessage) {
       return await suspend({
-        suspendResponse: "I'm thinking of a famous person. Ask me yes/no questions to figure out who it is!",
+        suspendResponse:
+          "I'm thinking of a famous person. Ask me yes/no questions to figure out who it is!",
       });
     }
 
-    const agent = mastra.getAgent('gameAgent');
+    const agent = mastra.getAgent("gameAgent");
     const response = await agent.generate(
       `
         The famous person is: ${famousPerson}
@@ -183,7 +183,7 @@ const gameStep = createStep({
           schema: z.object({
             response: z.string(),
             gameWon: z.boolean(),
-          })
+          }),
         },
       },
     );
@@ -197,8 +197,8 @@ const gameStep = createStep({
 });
 
 const winStep = createStep({
-  id: 'win-step',
-  description: 'Handle game win logic',
+  id: "win-step",
+  description: "Handle game win logic",
   inputSchema: z.object({
     famousPerson: z.string(),
     gameWon: z.boolean(),
@@ -213,16 +213,16 @@ const winStep = createStep({
   execute: async ({ inputData }) => {
     const { famousPerson, gameWon, guessCount } = inputData;
 
-    console.log('famousPerson: ', famousPerson);
-    console.log('gameWon: ', gameWon);
-    console.log('guessCount: ', guessCount);
+    console.log("famousPerson: ", famousPerson);
+    console.log("gameWon: ", gameWon);
+    console.log("guessCount: ", guessCount);
 
     return { famousPerson, gameWon, guessCount };
   },
 });
 
 export const headsUpWorkflow = createWorkflow({
-  id: 'heads-up-workflow',
+  id: "heads-up-workflow",
   inputSchema: z.object({
     start: z.boolean(),
   }),
@@ -236,8 +236,8 @@ export const headsUpWorkflow = createWorkflow({
   .dountil(gameStep, async ({ inputData: { gameWon } }) => gameWon)
   .then(winStep)
   .commit();
-
 ```
+
 > See [Workflow](/reference/workflows/workflow) for a full list of configuration options.
 
 ## Registering the agents and workflow
@@ -253,12 +253,12 @@ import { gameAgent } from "./agents/example-game-agent";
 
 export const mastra = new Mastra({
   workflows: { headsUpWorkflow },
-  agents: { famousPersonAgent, gameAgent }
+  agents: { famousPersonAgent, gameAgent },
 });
 ```
 
 <GithubLink
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/heads-up-game/"
 />
 

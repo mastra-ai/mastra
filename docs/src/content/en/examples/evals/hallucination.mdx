@@ -29,12 +29,13 @@ const metric = new HallucinationMetric(openai("gpt-4o-mini"), {
   context: [
     "The iPhone was first released in 2007.",
     "Steve Jobs unveiled it at Macworld.",
-    "The original model had a 3.5-inch screen."
-  ]
+    "The original model had a 3.5-inch screen.",
+  ],
 });
 
 const query = "When was the first iPhone released?";
-const response = "The iPhone was first released in 2007, when Steve Jobs unveiled it at Macworld. The original iPhone featured a 3.5-inch screen.";
+const response =
+  "The iPhone was first released in 2007, when Steve Jobs unveiled it at Macworld. The original iPhone featured a 3.5-inch screen.";
 
 const result = await metric.measure(query, response);
 
@@ -67,12 +68,13 @@ const metric = new HallucinationMetric(openai("gpt-4o-mini"), {
     "The first Star Wars movie was released in 1977.",
     "It was directed by George Lucas.",
     "The film earned $775 million worldwide.",
-    "The movie was filmed in Tunisia and England."
-  ]
+    "The movie was filmed in Tunisia and England.",
+  ],
 });
 
 const query = "Tell me about the first Star Wars movie.";
-const response = "The first Star Wars movie came out in 1977 and was directed by George Lucas. It made over $1 billion at the box office and was filmed entirely in California.";
+const response =
+  "The first Star Wars movie came out in 1977 and was directed by George Lucas. It made over $1 billion at the box office and was filmed entirely in California.";
 
 const result = await metric.measure(query, response);
 
@@ -104,17 +106,17 @@ const metric = new HallucinationMetric(openai("gpt-4o-mini"), {
   context: [
     "The Wright brothers made their first flight in 1903.",
     "The flight lasted 12 seconds.",
-    "It covered a distance of 120 feet."
-  ]
+    "It covered a distance of 120 feet.",
+  ],
 });
 
 const query = "When did the Wright brothers first fly?";
-const response = "The Wright brothers achieved their historic first flight in 1908. The flight lasted about 2 minutes and covered nearly a mile.";
+const response =
+  "The Wright brothers achieved their historic first flight in 1908. The flight lasted about 2 minutes and covered nearly a mile.";
 
 const result = await metric.measure(query, response);
 
 console.log(result);
-
 ```
 
 ### Complete hallucination output
@@ -137,7 +139,7 @@ You can create a `HallucinationMetric` instance by providing a `context` array t
 ```typescript
 const metric = new HallucinationMetric(openai("gpt-4o-mini"), {
   context: [""],
-  scale: 1
+  scale: 1,
 });
 ```
 
@@ -177,6 +179,6 @@ An explanation for the score, with details including:
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/hallucination"
 />

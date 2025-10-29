@@ -83,7 +83,9 @@ The simplest way is to use Mastra's model router with `provider/model` strings:
 import { ModelRouterEmbeddingModel } from "@mastra/core";
 import { embedMany } from "ai";
 
-const embeddingModel = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
+const embeddingModel = new ModelRouterEmbeddingModel(
+  "openai/text-embedding-3-small",
+);
 
 const { embeddings } = await embedMany({
   model: embeddingModel,
@@ -92,6 +94,7 @@ const { embeddings } = await embedMany({
 ```
 
 Supported embedding models:
+
 - **OpenAI**: `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`
 - **Google**: `gemini-embedding-001`, `text-embedding-004`
 

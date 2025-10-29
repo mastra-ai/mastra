@@ -14,7 +14,7 @@ import { UnicodeNormalizer } from "@mastra/core/processors";
 
 const processor = new UnicodeNormalizer({
   stripControlChars: true,
-  collapseWhitespace: true
+  collapseWhitespace: true,
 });
 ```
 
@@ -38,21 +38,24 @@ const processor = new UnicodeNormalizer({
     {
       name: "stripControlChars",
       type: "boolean",
-      description: "Whether to strip control characters. When enabled, removes control characters except \t, \n, \r",
+      description:
+        "Whether to strip control characters. When enabled, removes control characters except \t, \n, \r",
       isOptional: true,
       default: "false",
     },
     {
       name: "preserveEmojis",
       type: "boolean",
-      description: "Whether to preserve emojis. When disabled, emojis may be removed if they contain control characters",
+      description:
+        "Whether to preserve emojis. When disabled, emojis may be removed if they contain control characters",
       isOptional: true,
       default: "true",
     },
     {
       name: "collapseWhitespace",
       type: "boolean",
-      description: "Whether to collapse consecutive whitespace. When enabled, multiple spaces/tabs/newlines are collapsed to single instances",
+      description:
+        "Whether to collapse consecutive whitespace. When enabled, multiple spaces/tabs/newlines are collapsed to single instances",
       isOptional: true,
       default: "true",
     },
@@ -85,7 +88,6 @@ const processor = new UnicodeNormalizer({
   ]}
 />
 
-
 ## Extended usage example
 
 ```typescript title="src/mastra/agents/normalized-agent.ts" showLineNumbers copy
@@ -102,12 +104,11 @@ export const agent = new Agent({
       stripControlChars: true,
       preserveEmojis: true,
       collapseWhitespace: true,
-      trim: true
-    })
-  ]
+      trim: true,
+    }),
+  ],
 });
 ```
-
 
 ## Related
 

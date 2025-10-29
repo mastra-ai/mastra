@@ -8,7 +8,6 @@ description: "Use Llama models with Mastra. 7 models available."
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-
 # <img src="https://models.dev/logos/llama.svg" alt="Llama logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Llama
 
 Access 7 Llama models through Mastra's model router. Authentication is handled automatically using the `LLAMA_API_KEY` environment variable.
@@ -25,7 +24,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "llama/cerebras-llama-4-maverick-17b-128e-instruct"
+  model: "llama/cerebras-llama-4-maverick-17b-128e-instruct",
 });
 
 // Generate a response
@@ -46,93 +45,93 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ## Models
 
-<ProviderModelsTable 
+<ProviderModelsTable
   models={[
-  {
-    "model": "llama/cerebras-llama-4-maverick-17b-128e-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "llama/cerebras-llama-4-scout-17b-16e-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "llama/groq-llama-4-maverick-17b-128e-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "llama/llama-3.3-70b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "llama/llama-3.3-8b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "llama/llama-4-maverick-17b-128e-instruct-fp8",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "llama/llama-4-scout-17b-16e-instruct-fp8",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": null,
-    "outputCost": null
-  }
-]}
+    {
+      model: "llama/cerebras-llama-4-maverick-17b-128e-instruct",
+      imageInput: false,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: true,
+      reasoning: false,
+      contextWindow: 128000,
+      maxOutput: 4096,
+      inputCost: null,
+      outputCost: null,
+    },
+    {
+      model: "llama/cerebras-llama-4-scout-17b-16e-instruct",
+      imageInput: false,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: true,
+      reasoning: false,
+      contextWindow: 128000,
+      maxOutput: 4096,
+      inputCost: null,
+      outputCost: null,
+    },
+    {
+      model: "llama/groq-llama-4-maverick-17b-128e-instruct",
+      imageInput: false,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: true,
+      reasoning: false,
+      contextWindow: 128000,
+      maxOutput: 4096,
+      inputCost: null,
+      outputCost: null,
+    },
+    {
+      model: "llama/llama-3.3-70b-instruct",
+      imageInput: false,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: true,
+      reasoning: false,
+      contextWindow: 128000,
+      maxOutput: 4096,
+      inputCost: null,
+      outputCost: null,
+    },
+    {
+      model: "llama/llama-3.3-8b-instruct",
+      imageInput: false,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: true,
+      reasoning: false,
+      contextWindow: 128000,
+      maxOutput: 4096,
+      inputCost: null,
+      outputCost: null,
+    },
+    {
+      model: "llama/llama-4-maverick-17b-128e-instruct-fp8",
+      imageInput: true,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: true,
+      reasoning: false,
+      contextWindow: 128000,
+      maxOutput: 4096,
+      inputCost: null,
+      outputCost: null,
+    },
+    {
+      model: "llama/llama-4-scout-17b-16e-instruct-fp8",
+      imageInput: true,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: true,
+      reasoning: false,
+      contextWindow: 128000,
+      maxOutput: 4096,
+      inputCost: null,
+      outputCost: null,
+    },
+  ]}
 />
 
 ## Advanced Configuration
@@ -147,9 +146,9 @@ const agent = new Agent({
     id: "llama/cerebras-llama-4-maverick-17b-128e-instruct",
     apiKey: process.env.LLAMA_API_KEY,
     headers: {
-      "X-Custom-Header": "value"
-    }
-  }
+      "X-Custom-Header": "value",
+    },
+  },
 });
 ```
 
@@ -160,11 +159,9 @@ const agent = new Agent({
   name: "dynamic-agent",
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
+    return useAdvanced
       ? "llama/llama-4-scout-17b-16e-instruct-fp8"
       : "llama/cerebras-llama-4-maverick-17b-128e-instruct";
-  }
+  },
 });
 ```
-
-

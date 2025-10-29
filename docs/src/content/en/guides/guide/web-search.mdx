@@ -3,10 +3,10 @@ title: "Guide: Building an Agent that can search the web | Mastra Guide"
 description: "A step-by-step guide to creating an agent that can search the web."
 ---
 
-import Steps from '@site/src/components/Steps';
-import StepItem from '@site/src/components/StepItem';
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # Building an Agent that can search the web
 
@@ -32,16 +32,12 @@ Some LLM providers include built-in web search capabilities that can be used dir
 Install dependencies
 
 <Tabs>
-    <TabItem value="openai" label="Open AI">
-    ```bash copy
-    npm install @ai-sdk/openai
-    ```
-    </TabItem>
-    <TabItem value="gemini" label="Gemini">
-    ```bash copy
-    npm install @ai-sdk/google
-    ```
-    </TabItem>
+  <TabItem value="openai" label="Open AI">
+    ```bash copy npm install @ai-sdk/openai ```
+  </TabItem>
+  <TabItem value="gemini" label="Gemini">
+    ```bash copy npm install @ai-sdk/google ```
+  </TabItem>
 </Tabs>
 
 </StepItem>
@@ -79,6 +75,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     ```
 
     </TabItem>
+
 </Tabs>
 
 </StepItem>
@@ -124,6 +121,7 @@ Setup the tool:
     ```
 
     </TabItem>
+
 </Tabs>
 
 </StepItem>
@@ -181,10 +179,10 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
 import { Agent } from "@mastra/core/agent";
 
 export const searchAgent = new Agent({
-    name: "Search Agent",
-    instructions:
-        "You are a search agent that can search the web for information.",
-    model: 'openai/gpt-4o-mini',
+  name: "Search Agent",
+  instructions:
+    "You are a search agent that can search the web for information.",
+  model: "openai/gpt-4o-mini",
 });
 ```
 
@@ -197,41 +195,37 @@ Setup the tool
 ```ts copy title="src/mastra/tools/searchTool.ts"
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
-import Exa from 'exa-js';
+import Exa from "exa-js";
 
 export const exa = new Exa(process.env.EXA_API_KEY);
 
 export const webSearch = createTool({
-    id: 'exa-web-search',
-    description: 'Search the web',
-    inputSchema: z.object({
-        query: z.string()
-            .min(1)
-            .max(50)
-            .describe('The search query'),
+  id: "exa-web-search",
+  description: "Search the web",
+  inputSchema: z.object({
+    query: z.string().min(1).max(50).describe("The search query"),
+  }),
+  outputSchema: z.array(
+    z.object({
+      title: z.string().nullable(),
+      url: z.string(),
+      content: z.string(),
+      publishedDate: z.string().optional(),
     }),
-    outputSchema: z.array(z.object({
-        title: z.string().nullable(),
-        url: z.string(),
-        content: z.string(),
-        publishedDate: z.string().optional(),
-    })),
-    execute: async ({ context }) => {
-        const { results } = await exa.searchAndContents(
-            context.query,
-            {
-                livecrawl: 'always',
-                numResults: 2,
-            }
-        );
+  ),
+  execute: async ({ context }) => {
+    const { results } = await exa.searchAndContents(context.query, {
+      livecrawl: "always",
+      numResults: 2,
+    });
 
-        return results.map(result => ({
-            title: result.title,
-            url: result.url,
-            content: result.text.slice(0, 500),
-            publishedDate: result.publishedDate,
-        }));
-    },
+    return results.map((result) => ({
+      title: result.title,
+      url: result.url,
+      content: result.text.slice(0, 500),
+      publishedDate: result.publishedDate,
+    }));
+  },
 });
 ```
 
@@ -242,15 +236,16 @@ export const webSearch = createTool({
 Add to your Agent
 
 ```ts copy title="src/mastra/agents/searchAgent.ts"
-import { webSearch } from './tools/searchTool';
+import { webSearch } from "./tools/searchTool";
 
 export const searchAgent = new Agent({
-    name: "Search Agent",
-    instructions: "You are a search agent that can search the web for information.",
-    model: 'openai/gpt-4o-mini',
-    tools: {
-        webSearch,
-    },
+  name: "Search Agent",
+  instructions:
+    "You are a search agent that can search the web for information.",
+  model: "openai/gpt-4o-mini",
+  tools: {
+    webSearch,
+  },
 });
 ```
 

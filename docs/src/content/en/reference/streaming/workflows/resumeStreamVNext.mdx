@@ -18,8 +18,8 @@ const run = await workflow.createRunAsync();
 
 const stream = run.streamVNext({
   inputData: {
-    value: "initial data"
-  }
+    value: "initial data",
+  },
 });
 
 const result = await stream.result;
@@ -27,8 +27,8 @@ const result = await stream.result;
 if (result!.status === "suspended") {
   const resumedStream = await run.resumeStreamVNext({
     resumeData: {
-      value: "resume data"
-    }
+      value: "resume data",
+    },
   });
 }
 ```
@@ -62,14 +62,17 @@ if (result!.status === "suspended") {
       description: "Options for AI tracing configuration.",
       properties: [
         {
-          parameters: [{
-            name: "metadata",
-            type: "Record<string, any>",
-            isOptional: true,
-            description: "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+      ],
     },
   ]}
 />
@@ -81,7 +84,8 @@ if (result!.status === "suspended") {
     {
       name: "stream",
       type: "MastraWorkflowStream<ChunkType>",
-      description: "A custom stream that extends ReadableStream<ChunkType> with additional workflow-specific properties",
+      description:
+        "A custom stream that extends ReadableStream<ChunkType> with additional workflow-specific properties",
     },
     {
       name: "stream.status",

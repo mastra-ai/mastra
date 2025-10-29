@@ -30,13 +30,15 @@ mastra.getLogsByRunId({ runId: "123", transportId: "456" });
     {
       name: "fromDate",
       type: "Date",
-      description: "Optional start date for filtering logs. e.g., new Date('2024-01-01').",
+      description:
+        "Optional start date for filtering logs. e.g., new Date('2024-01-01').",
       optional: true,
     },
     {
       name: "toDate",
       type: "Date",
-      description: "Optional end date for filtering logs. e.g., new Date('2024-01-31').",
+      description:
+        "Optional end date for filtering logs. e.g., new Date('2024-01-31').",
       optional: true,
     },
     {
@@ -73,7 +75,8 @@ mastra.getLogsByRunId({ runId: "123", transportId: "456" });
     {
       name: "logs",
       type: "Promise<any>",
-      description: "A promise that resolves to the logs for the specified run ID and transport ID.",
+      description:
+        "A promise that resolves to the logs for the specified run ID and transport ID.",
     },
   ]}
 />

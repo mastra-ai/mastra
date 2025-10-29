@@ -24,43 +24,43 @@ Mastra agent networks operate using these principles:
 An agent network is built around a top-level routing agent that delegates tasks to agents, workflows, and tools defined in its configuration. Memory is configured on the routing agent using the `memory` option, and `instructions` define the agent's routing behavior.
 
 ```typescript {22-23,26,29} title="src/mastra/agents/routing-agent.ts" showLineNumbers copy
-  import { openai } from "@ai-sdk/openai";
-  import { Agent } from "@mastra/core/agent";
-  import { Memory } from "@mastra/memory";
-  import { LibSQLStore } from "@mastra/libsql";
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
 
-  import { researchAgent } from "./research-agent";
-  import { writingAgent } from "./writing-agent";
+import { researchAgent } from "./research-agent";
+import { writingAgent } from "./writing-agent";
 
-  import { cityWorkflow } from "../workflows/city-workflow";
-  import { weatherTool } from "../tools/weather-tool";
+import { cityWorkflow } from "../workflows/city-workflow";
+import { weatherTool } from "../tools/weather-tool";
 
-  export const routingAgent = new Agent({
-    name: "routing-agent",
-    instructions: `
+export const routingAgent = new Agent({
+  name: "routing-agent",
+  instructions: `
       You are a network of writers and researchers.
       The user will ask you to research a topic.
       Always respond with a complete report—no bullet points.
       Write in full paragraphs, like a blog post.
       Do not answer with incomplete or uncertain information.`,
-    model: openai("gpt-4o-mini"),
-    agents: {
-      researchAgent,
-      writingAgent
-    },
-    workflows: {
-      cityWorkflow
-    },
-    tools: {
-      weatherTool
-    },
-    memory: new Memory({
-      storage: new LibSQLStore({
-        url: "file:../mastra.db"
-      })
-    })
-  });
-  ```
+  model: openai("gpt-4o-mini"),
+  agents: {
+    researchAgent,
+    writingAgent,
+  },
+  workflows: {
+    cityWorkflow,
+  },
+  tools: {
+    weatherTool,
+  },
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:../mastra.db",
+    }),
+  }),
+});
+```
 
 ### Writing descriptions for network primitives
 
@@ -79,6 +79,7 @@ export const researchAgent = new Agent({
   // ...
 });
 ```
+
 ```typescript title="src/mastra/agents/writing-agent.ts" showLineNumbers
 export const writingAgent = new Agent({
   name: "writing-agent",
@@ -101,13 +102,13 @@ export const cityWorkflow = createWorkflow({
     that research into a full written report. Use it when the user input
     includes a city to be researched.`,
   inputSchema: z.object({
-    city: z.string()
+    city: z.string(),
   }),
   outputSchema: z.object({
-    text: z.string()
-  })
+    text: z.string(),
+  }),
   //...
-})
+});
 ```
 
 #### Tool descriptions
@@ -122,10 +123,10 @@ export const weatherTool = createTool({
     Use this tool whenever up-to-date weather data is requested.
   `,
   inputSchema: z.object({
-    location: z.string()
+    location: z.string(),
   }),
   outputSchema: z.object({
-    weather: z.string()
+    weather: z.string(),
   }),
   // ...
 });
@@ -140,7 +141,9 @@ Call a Mastra agent network using `.network()` with a user message. The method r
 In this example, the network interprets the message and would route the request to both the `researchAgent` and `writingAgent` to generate a complete response.
 
 ```typescript showLineNumbers copy
-const result = await routingAgent.network("Tell me three cool ways to use Mastra");
+const result = await routingAgent.network(
+  "Tell me three cool ways to use Mastra",
+);
 
 for await (const chunk of result) {
   console.log(chunk.type);
@@ -174,7 +177,9 @@ network-execution-event-step-finish
 In this example, the routing agent recognizes the city name in the message and runs the `cityWorkflow`. The workflow defines steps that call the `researchAgent` to gather facts, then the `writingAgent` to generate the final text.
 
 ```typescript showLineNumbers copy
-const result = await routingAgent.network("Tell me some historical facts about London");
+const result = await routingAgent.network(
+  "Tell me some historical facts about London",
+);
 
 for await (const chunk of result) {
   console.log(chunk.type);
@@ -232,4 +237,3 @@ network-execution-event-step-finish
 - [Agent Memory](./agent-memory)
 - [Workflows Overview](../workflows/overview)
 - [Runtime Context](/docs/server-db/runtime-context)
-

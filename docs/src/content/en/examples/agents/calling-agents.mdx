@@ -20,12 +20,13 @@ import { z } from "zod";
 const step1 = createStep({
   // ...
   execute: async ({ mastra }) => {
-
     const agent = mastra.getAgent("harryPotterAgent");
-    const response = await agent.generate("What is your favorite room in Hogwarts?");
+    const response = await agent.generate(
+      "What is your favorite room in Hogwarts?",
+    );
 
     console.log(response.text);
-  }
+  },
 });
 
 export const testWorkflow = createWorkflow({
@@ -46,12 +47,13 @@ import { z } from "zod";
 export const testTool = createTool({
   // ...
   execute: async ({ mastra }) => {
-
     const agent = mastra.getAgent("harryPotterAgent");
-    const response = await agent.generate("What is your favorite room in Hogwarts?");
+    const response = await agent.generate(
+      "What is your favorite room in Hogwarts?",
+    );
 
     console.log(response!.text);
-  }
+  },
 });
 ```
 
@@ -67,9 +69,9 @@ const response = await agent.generate({
   messages: [
     {
       role: "user",
-      content: "What is your favorite room in Hogwarts?"
-    }
-  ]
+      content: "What is your favorite room in Hogwarts?",
+    },
+  ],
 });
 
 console.log(response.text);
@@ -101,7 +103,6 @@ curl -X POST http://localhost:4111/api/agents/harryPotterAgent/generate \
     ]
   }'| jq -r '.text'
 ```
-
 
 ## Example output
 

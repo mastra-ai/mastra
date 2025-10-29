@@ -8,7 +8,6 @@ description: "Use Moonshot AI models with Mastra. 3 models available."
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-
 # <img src="https://models.dev/logos/moonshotai.svg" alt="Moonshot AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Moonshot AI
 
 Access 3 Moonshot AI models through Mastra's model router. Authentication is handled automatically using the `MOONSHOT_API_KEY` environment variable.
@@ -25,7 +24,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "moonshotai/kimi-k2-0711-preview"
+  model: "moonshotai/kimi-k2-0711-preview",
 });
 
 // Generate a response
@@ -46,45 +45,45 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ## Models
 
-<ProviderModelsTable 
+<ProviderModelsTable
   models={[
-  {
-    "model": "moonshotai/kimi-k2-0711-preview",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 16384,
-    "inputCost": 0.6,
-    "outputCost": 2.5
-  },
-  {
-    "model": "moonshotai/kimi-k2-0905-preview",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.6,
-    "outputCost": 2.5
-  },
-  {
-    "model": "moonshotai/kimi-k2-turbo-preview",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 2.4,
-    "outputCost": 10
-  }
-]}
+    {
+      model: "moonshotai/kimi-k2-0711-preview",
+      imageInput: false,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: true,
+      reasoning: false,
+      contextWindow: 131072,
+      maxOutput: 16384,
+      inputCost: 0.6,
+      outputCost: 2.5,
+    },
+    {
+      model: "moonshotai/kimi-k2-0905-preview",
+      imageInput: false,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: true,
+      reasoning: false,
+      contextWindow: 262144,
+      maxOutput: 262144,
+      inputCost: 0.6,
+      outputCost: 2.5,
+    },
+    {
+      model: "moonshotai/kimi-k2-turbo-preview",
+      imageInput: false,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: true,
+      reasoning: false,
+      contextWindow: 262144,
+      maxOutput: 262144,
+      inputCost: 2.4,
+      outputCost: 10,
+    },
+  ]}
 />
 
 ## Advanced Configuration
@@ -99,9 +98,9 @@ const agent = new Agent({
     id: "moonshotai/kimi-k2-0711-preview",
     apiKey: process.env.MOONSHOT_API_KEY,
     headers: {
-      "X-Custom-Header": "value"
-    }
-  }
+      "X-Custom-Header": "value",
+    },
+  },
 });
 ```
 
@@ -112,11 +111,9 @@ const agent = new Agent({
   name: "dynamic-agent",
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
+    return useAdvanced
       ? "moonshotai/kimi-k2-turbo-preview"
       : "moonshotai/kimi-k2-0711-preview";
-  }
+  },
 });
 ```
-
-

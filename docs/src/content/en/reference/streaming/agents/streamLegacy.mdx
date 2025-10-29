@@ -26,7 +26,8 @@ await agent.streamLegacy("message for agent");
     {
       name: "messages",
       type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
-      description: "The messages to send to the agent. Can be a single string, array of strings, or structured message objects.",
+      description:
+        "The messages to send to the agent. Can be a single string, array of strings, or structured message objects.",
     },
     {
       name: "options",
@@ -79,33 +80,43 @@ await agent.streamLegacy("message for agent");
       name: "memory",
       type: "object",
       isOptional: true,
-      description: "Configuration for memory. This is the preferred way to manage memory.",
+      description:
+        "Configuration for memory. This is the preferred way to manage memory.",
       properties: [
         {
-          parameters: [{
+          parameters: [
+            {
               name: "thread",
               type: "string | { id: string; metadata?: Record<string, any>, title?: string }",
               isOptional: false,
-              description: "The conversation thread, as a string ID or an object with an `id` and optional `metadata`."
-          }]
+              description:
+                "The conversation thread, as a string ID or an object with an `id` and optional `metadata`.",
+            },
+          ],
         },
         {
-          parameters: [{
+          parameters: [
+            {
               name: "resource",
               type: "string",
               isOptional: false,
-              description: "Identifier for the user or resource associated with the thread."
-          }]
+              description:
+                "Identifier for the user or resource associated with the thread.",
+            },
+          ],
         },
         {
-          parameters: [{
+          parameters: [
+            {
               name: "options",
               type: "MemoryConfig",
               isOptional: true,
-              description: "Configuration for memory behavior, like message history and semantic recall."
-          }]
-        }
-      ]
+              description:
+                "Configuration for memory behavior, like message history and semantic recall.",
+            },
+          ],
+        },
+      ],
     },
     {
       name: "maxSteps",
@@ -129,38 +140,49 @@ await agent.streamLegacy("message for agent");
         "**Deprecated.** Use `memory.options` instead. Configuration options for memory management.",
       properties: [
         {
-          parameters: [{
-            name: "lastMessages",
-            type: "number | false",
-            isOptional: true,
-            description: "Number of recent messages to include in context, or false to disable."
-          }]
+          parameters: [
+            {
+              name: "lastMessages",
+              type: "number | false",
+              isOptional: true,
+              description:
+                "Number of recent messages to include in context, or false to disable.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "semanticRecall",
-            type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
-            isOptional: true,
-            description: "Enable semantic recall to find relevant past messages. Can be a boolean or detailed configuration."
-          }]
+          parameters: [
+            {
+              name: "semanticRecall",
+              type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
+              isOptional: true,
+              description:
+                "Enable semantic recall to find relevant past messages. Can be a boolean or detailed configuration.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "workingMemory",
-            type: "WorkingMemory",
-            isOptional: true,
-            description: "Configuration for working memory functionality."
-          }]
+          parameters: [
+            {
+              name: "workingMemory",
+              type: "WorkingMemory",
+              isOptional: true,
+              description: "Configuration for working memory functionality.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "threads",
-            type: "{ generateTitle?: boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> } }",
-            isOptional: true,
-            description: "Thread-specific configuration, including automatic title generation."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "threads",
+              type: "{ generateTitle?: boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> } }",
+              isOptional: true,
+              description:
+                "Thread-specific configuration, including automatic title generation.",
+            },
+          ],
+        },
+      ],
     },
     {
       name: "onFinish",
@@ -187,42 +209,53 @@ await agent.streamLegacy("message for agent");
       name: "telemetry",
       type: "TelemetrySettings",
       isOptional: true,
-      description:
-        "Settings for telemetry collection during streaming.",
+      description: "Settings for telemetry collection during streaming.",
       properties: [
         {
-          parameters: [{
-            name: "isEnabled",
-            type: "boolean",
-            isOptional: true,
-            description: "Enable or disable telemetry. Disabled by default while experimental."
-          }]
+          parameters: [
+            {
+              name: "isEnabled",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Enable or disable telemetry. Disabled by default while experimental.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "recordInputs",
-            type: "boolean",
-            isOptional: true,
-            description: "Enable or disable input recording. Enabled by default. You might want to disable input recording to avoid recording sensitive information."
-          }]
+          parameters: [
+            {
+              name: "recordInputs",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Enable or disable input recording. Enabled by default. You might want to disable input recording to avoid recording sensitive information.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "recordOutputs",
-            type: "boolean",
-            isOptional: true,
-            description: "Enable or disable output recording. Enabled by default. You might want to disable output recording to avoid recording sensitive information."
-          }]
+          parameters: [
+            {
+              name: "recordOutputs",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Enable or disable output recording. Enabled by default. You might want to disable output recording to avoid recording sensitive information.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "functionId",
-            type: "string",
-            isOptional: true,
-            description: "Identifier for this function. Used to group telemetry data by function."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "functionId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Identifier for this function. Used to group telemetry data by function.",
+            },
+          ],
+        },
+      ],
     },
     {
       name: "temperature",
@@ -246,34 +279,43 @@ await agent.streamLegacy("message for agent");
       description: "Controls how the agent uses tools during streaming.",
       properties: [
         {
-          parameters: [{
-            name: "'auto'",
-            type: "string",
-            description: "Let the model decide whether to use tools (default)."
-          }]
+          parameters: [
+            {
+              name: "'auto'",
+              type: "string",
+              description:
+                "Let the model decide whether to use tools (default).",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "'none'",
-            type: "string",
-            description: "Do not use any tools."
-          }]
+          parameters: [
+            {
+              name: "'none'",
+              type: "string",
+              description: "Do not use any tools.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "'required'",
-            type: "string",
-            description: "Require the model to use at least one tool."
-          }]
+          parameters: [
+            {
+              name: "'required'",
+              type: "string",
+              description: "Require the model to use at least one tool.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "{ type: 'tool'; toolName: string }",
-            type: "object",
-            description: "Require the model to use a specific tool by name."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "{ type: 'tool'; toolName: string }",
+              type: "object",
+              description: "Require the model to use a specific tool by name.",
+            },
+          ],
+        },
+      ],
     },
     {
       name: "toolsets",
@@ -293,59 +335,75 @@ await agent.streamLegacy("message for agent");
       name: "savePerStep",
       type: "boolean",
       isOptional: true,
-      description: "Save messages incrementally after each stream step completes (default: false).",
+      description:
+        "Save messages incrementally after each stream step completes (default: false).",
     },
     {
       name: "providerOptions",
       type: "Record<string, Record<string, JSONValue>>",
       isOptional: true,
-      description: "Additional provider-specific options that are passed through to the underlying LLM provider. The structure is `{ providerName: { optionKey: value } }`. For example: `{ openai: { reasoningEffort: 'high' }, anthropic: { maxTokens: 1000 } }`.",
+      description:
+        "Additional provider-specific options that are passed through to the underlying LLM provider. The structure is `{ providerName: { optionKey: value } }`. For example: `{ openai: { reasoningEffort: 'high' }, anthropic: { maxTokens: 1000 } }`.",
       properties: [
         {
-          parameters: [{
-            name: "openai",
-            type: "Record<string, JSONValue>",
-            isOptional: true,
-            description: "OpenAI-specific options. Example: `{ reasoningEffort: 'high' }`"
-          }]
+          parameters: [
+            {
+              name: "openai",
+              type: "Record<string, JSONValue>",
+              isOptional: true,
+              description:
+                "OpenAI-specific options. Example: `{ reasoningEffort: 'high' }`",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "anthropic",
-            type: "Record<string, JSONValue>",
-            isOptional: true,
-            description: "Anthropic-specific options. Example: `{ maxTokens: 1000 }`"
-          }]
+          parameters: [
+            {
+              name: "anthropic",
+              type: "Record<string, JSONValue>",
+              isOptional: true,
+              description:
+                "Anthropic-specific options. Example: `{ maxTokens: 1000 }`",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "google",
-            type: "Record<string, JSONValue>",
-            isOptional: true,
-            description: "Google-specific options. Example: `{ safetySettings: [...] }`"
-          }]
+          parameters: [
+            {
+              name: "google",
+              type: "Record<string, JSONValue>",
+              isOptional: true,
+              description:
+                "Google-specific options. Example: `{ safetySettings: [...] }`",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "[providerName]",
-            type: "Record<string, JSONValue>",
-            isOptional: true,
-            description: "Other provider-specific options. The key is the provider name and the value is a record of provider-specific options."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "[providerName]",
+              type: "Record<string, JSONValue>",
+              isOptional: true,
+              description:
+                "Other provider-specific options. The key is the provider name and the value is a record of provider-specific options.",
+            },
+          ],
+        },
+      ],
     },
     {
       name: "runId",
       type: "string",
       isOptional: true,
-      description: "Unique ID for this generation run. Useful for tracking and debugging purposes.",
+      description:
+        "Unique ID for this generation run. Useful for tracking and debugging purposes.",
     },
     {
       name: "runtimeContext",
       type: "RuntimeContext",
       isOptional: true,
-      description: "Runtime context for dependency injection and contextual information.",
+      description:
+        "Runtime context for dependency injection and contextual information.",
     },
     {
       name: "maxTokens",
@@ -357,44 +415,51 @@ await agent.streamLegacy("message for agent");
       name: "topP",
       type: "number",
       isOptional: true,
-      description: "Nucleus sampling. This is a number between 0 and 1. It is recommended to set either `temperature` or `topP`, but not both.",
+      description:
+        "Nucleus sampling. This is a number between 0 and 1. It is recommended to set either `temperature` or `topP`, but not both.",
     },
     {
       name: "topK",
       type: "number",
       isOptional: true,
-      description: "Only sample from the top K options for each subsequent token. Used to remove 'long tail' low probability responses.",
+      description:
+        "Only sample from the top K options for each subsequent token. Used to remove 'long tail' low probability responses.",
     },
     {
       name: "presencePenalty",
       type: "number",
       isOptional: true,
-      description: "Presence penalty setting. It affects the likelihood of the model to repeat information that is already in the prompt. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
+      description:
+        "Presence penalty setting. It affects the likelihood of the model to repeat information that is already in the prompt. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
     },
     {
       name: "frequencyPenalty",
       type: "number",
       isOptional: true,
-      description: "Frequency penalty setting. It affects the likelihood of the model to repeatedly use the same words or phrases. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
+      description:
+        "Frequency penalty setting. It affects the likelihood of the model to repeatedly use the same words or phrases. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
     },
     {
       name: "stopSequences",
       type: "string[]",
       isOptional: true,
-      description: "Stop sequences. If set, the model will stop generating text when one of the stop sequences is generated.",
+      description:
+        "Stop sequences. If set, the model will stop generating text when one of the stop sequences is generated.",
     },
     {
       name: "seed",
       type: "number",
       isOptional: true,
-      description: "The seed (integer) to use for random sampling. If set and supported by the model, calls will generate deterministic results.",
+      description:
+        "The seed (integer) to use for random sampling. If set and supported by the model, calls will generate deterministic results.",
     },
     {
       name: "headers",
       type: "Record<string, string | undefined>",
       isOptional: true,
-      description: "Additional HTTP headers to be sent with the request. Only applicable for HTTP-based providers.",
-    }
+      description:
+        "Additional HTTP headers to be sent with the request. Only applicable for HTTP-based providers.",
+    },
   ]}
 />
 
@@ -420,15 +485,13 @@ await agent.streamLegacy("message for agent");
       name: "text",
       type: "Promise<string>",
       isOptional: true,
-      description:
-        "Promise that resolves to the complete text response.",
+      description: "Promise that resolves to the complete text response.",
     },
     {
       name: "usage",
       type: "Promise<{ totalTokens: number; promptTokens: number; completionTokens: number }>",
       isOptional: true,
-      description:
-        "Promise that resolves to token usage information.",
+      description: "Promise that resolves to token usage information.",
     },
     {
       name: "finishReason",
@@ -445,22 +508,26 @@ await agent.streamLegacy("message for agent");
         "Promise that resolves to the tool calls made during the streaming process.",
       properties: [
         {
-          parameters: [{
-            name: "toolName",
-            type: "string",
-            required: true,
-            description: "The name of the tool invoked."
-          }]
+          parameters: [
+            {
+              name: "toolName",
+              type: "string",
+              required: true,
+              description: "The name of the tool invoked.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "args",
-            type: "any",
-            required: true,
-            description: "The arguments passed to the tool."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "args",
+              type: "any",
+              required: true,
+              description: "The arguments passed to the tool.",
+            },
+          ],
+        },
+      ],
     },
   ]}
 />
@@ -473,9 +540,9 @@ await agent.streamLegacy("message for agent", {
   maxSteps: 3,
   memory: {
     thread: "user-123",
-    resource: "test-app"
+    resource: "test-app",
   },
-  toolChoice: "auto"
+  toolChoice: "auto",
 });
 ```
 
@@ -490,22 +557,24 @@ The new `.stream()` method offers enhanced capabilities including AI SDK v5 comp
 ### Quick Migration Example
 
 #### Before (Legacy)
+
 ```typescript
 const result = await agent.streamLegacy("message", {
   temperature: 0.7,
   maxSteps: 3,
-  onFinish: (result) => console.log(result)
+  onFinish: (result) => console.log(result),
 });
 ```
 
 #### After (New API)
+
 ```typescript
 const result = await agent.stream("message", {
   modelSettings: {
-    temperature: 0.7
+    temperature: 0.7,
   },
   maxSteps: 3,
-  onFinish: (result) => console.log(result)
+  onFinish: (result) => console.log(result),
 });
 ```
 

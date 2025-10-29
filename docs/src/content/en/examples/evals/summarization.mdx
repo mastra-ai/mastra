@@ -62,12 +62,14 @@ const metric = new SummarizationMetric(openai("gpt-4o-mini"));
 
 const query =
   "The Python programming language was created by Guido van Rossum and was first released in 1991. It emphasizes code readability with its notable use of significant whitespace. Python is dynamically typed and garbage-collected. It supports multiple programming paradigms, including structured, object-oriented, and functional programming.";
-const response = "Python, created by Guido van Rossum, is a programming language known for its readable code and use of whitespace. It was released in 1991.";
+const response =
+  "Python, created by Guido van Rossum, is a programming language known for its readable code and use of whitespace. It was released in 1991.";
 
 const result = await metric.measure(query, response);
 
 console.log(result);
 ```
+
 ### Partial summary output
 
 The summary receives a moderate score due to missing key information from the input. The `info` field confirms factual alignment but highlights gaps in content coverage.
@@ -95,7 +97,8 @@ const metric = new SummarizationMetric(openai("gpt-4o-mini"));
 
 const query =
   "The World Wide Web was invented by Tim Berners-Lee in 1989 while working at CERN. He published the first website in 1991. Berners-Lee made the Web freely available, with no patent and no royalties due.";
-const response = "The Internet was created by Tim Berners-Lee at MIT in the early 1990s, and he went on to commercialize the technology through patents.";
+const response =
+  "The Internet was created by Tim Berners-Lee at MIT in the early 1990s, and he went on to commercialize the technology through patents.";
 
 const result = await metric.measure(query, response);
 
@@ -163,6 +166,6 @@ An explanation for the score, with details including:
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/summarization"
 />

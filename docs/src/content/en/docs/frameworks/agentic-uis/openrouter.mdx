@@ -3,8 +3,8 @@ title: "Use OpenRouter with Mastra | Frameworks | Mastra Docs"
 description: "Learn how to integrate OpenRouter with Mastra"
 ---
 
-import Steps from '@site/src/components/Steps';
-import StepItem from '@site/src/components/StepItem';
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
 
 # Use OpenRouter with Mastra
 
@@ -21,6 +21,7 @@ npx create-mastra@latest
 ```
 
 You'll be guided through prompts to set up your project. For this example, select:
+
 - Name your project: my-mastra-openrouter-app
 - Components: Agents (recommended)
 - For default provider, select OpenAI (recommended) - we'll configure OpenRouter manually later
@@ -60,14 +61,14 @@ import { Agent } from "@mastra/core/agent";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 
 const openrouter = createOpenRouter({
-    apiKey: process.env.OPENROUTER_API_KEY,
-})
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
 
 export const assistant = new Agent({
-    name: "assistant",
-    instructions: "You are a helpful assistant.",
-    model: openrouter("anthropic/claude-sonnet-4"),
-})
+  name: "assistant",
+  instructions: "You are a helpful assistant.",
+  model: openrouter("anthropic/claude-sonnet-4"),
+});
 ```
 
 Make sure to register your agent to the Mastra instance:
@@ -76,8 +77,8 @@ Make sure to register your agent to the Mastra instance:
 import { assistant } from "./agents/assistant";
 
 export const mastra = new Mastra({
-    agents: { assistant }
-})
+  agents: { assistant },
+});
 ```
 
 </StepItem>
@@ -109,19 +110,19 @@ import { Agent } from "@mastra/core/agent";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 
 const openrouter = createOpenRouter({
-    apiKey: process.env.OPENROUTER_API_KEY,
-    extraBody: {
-        reasoning: {
-            max_tokens: 10,
-        }
-    }
-})
+  apiKey: process.env.OPENROUTER_API_KEY,
+  extraBody: {
+    reasoning: {
+      max_tokens: 10,
+    },
+  },
+});
 
 export const assistant = new Agent({
-    name: "assistant",
-    instructions: "You are a helpful assistant.",
-    model: openrouter("anthropic/claude-sonnet-4"),
-})
+  name: "assistant",
+  instructions: "You are a helpful assistant.",
+  model: openrouter("anthropic/claude-sonnet-4"),
+});
 ```
 
 ### Model-specific options:
@@ -133,20 +134,20 @@ import { Agent } from "@mastra/core/agent";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 
 const openrouter = createOpenRouter({
-    apiKey: process.env.OPENROUTER_API_KEY,
-})
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
 
 export const assistant = new Agent({
-    name: "assistant",
-    instructions: "You are a helpful assistant.",
-    model: openrouter("anthropic/claude-sonnet-4", {
-        extraBody: {
-            reasoning: {
-                max_tokens: 10,
-            }
-        }
-    }),
-})
+  name: "assistant",
+  instructions: "You are a helpful assistant.",
+  model: openrouter("anthropic/claude-sonnet-4", {
+    extraBody: {
+      reasoning: {
+        max_tokens: 10,
+      },
+    },
+  }),
+});
 ```
 
 ### Provider-specific options:
@@ -157,19 +158,19 @@ You can pass provider-specific options to the OpenRouter provider:
 // Get a response with provider-specific options
 const response = await assistant.generate([
   {
-    role: 'system',
+    role: "system",
     content:
-      'You are Chef Michel, a culinary expert specializing in ketogenic (keto) diet...',
+      "You are Chef Michel, a culinary expert specializing in ketogenic (keto) diet...",
     providerOptions: {
       // Provider-specific options - key can be 'anthropic' or 'openrouter'
       anthropic: {
-        cacheControl: { type: 'ephemeral' },
+        cacheControl: { type: "ephemeral" },
       },
     },
   },
   {
-    role: 'user',
-    content: 'Can you suggest a keto breakfast?',
+    role: "user",
+    content: "Can you suggest a keto breakfast?",
   },
 ]);
 ```

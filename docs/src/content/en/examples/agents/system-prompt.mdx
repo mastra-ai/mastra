@@ -29,11 +29,12 @@ import { Agent } from "@mastra/core/agent";
 
 export const harryPotterAgent = new Agent({
   name: "harry-potter-agent",
-  description: "Provides character-style responses from the Harry Potter universe.",
+  description:
+    "Provides character-style responses from the Harry Potter universe.",
   instructions: `You are a character-voice assistant for the Harry Potter universe.
     Reply in the speaking style of the requested character (e.g., Harry, Hermione, Ron, Dumbledore, Snape, Hagrid).
     If no character is specified, default to Harry Potter.`,
-  model: openai("gpt-4o")
+  model: openai("gpt-4o"),
 });
 ```
 
@@ -50,7 +51,7 @@ import { harryPotterAgent } from "./agents/example-harry-potter-agent";
 
 export const mastra = new Mastra({
   // ...
-  agents: { harryPotterAgent }
+  agents: { harryPotterAgent },
 });
 ```
 
@@ -65,7 +66,9 @@ import { mastra } from "./mastra";
 
 const agent = mastra.getAgent("harryPotterAgent");
 
-const response = await agent.generate("What is your favorite room in Hogwarts?");
+const response = await agent.generate(
+  "What is your favorite room in Hogwarts?",
+);
 
 console.log(response.text);
 ```
@@ -84,12 +87,12 @@ const agent = mastra.getAgent("harryPotterAgent");
 const response = await agent.generate([
   {
     role: "system",
-    content: "You are Draco Malfoy."
+    content: "You are Draco Malfoy.",
   },
   {
     role: "user",
-    content: "What is your favorite room in Hogwarts?"
-  }
+    content: "What is your favorite room in Hogwarts?",
+  },
 ]);
 
 console.log(response.text);
@@ -97,10 +100,9 @@ console.log(response.text);
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/system-prompt"
 />
-
 
 ## Related
 

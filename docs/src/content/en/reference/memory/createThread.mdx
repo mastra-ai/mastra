@@ -96,15 +96,15 @@ const thread = await memory?.createThread({
   title: "Memory Test Thread",
   metadata: {
     source: "test-script",
-    purpose: "memory-testing"
-  }
+    purpose: "memory-testing",
+  },
 });
 
 const response = await agent.generate("message for agent", {
   memory: {
     thread: thread!.id,
-    resource: thread!.resourceId
-  }
+    resource: thread!.resourceId,
+  },
 });
 
 console.log(response.text);

@@ -20,12 +20,14 @@ mastra.getMCPServer("1.2.0");
     {
       name: "serverId",
       type: "string",
-      description: "The logical ID of the MCP server to retrieve. Should match the `id` property of the MCPServer instance.",
+      description:
+        "The logical ID of the MCP server to retrieve. Should match the `id` property of the MCPServer instance.",
     },
     {
       name: "version",
       type: "string",
-      description: "Optional specific version of the MCP server to retrieve. If not provided, returns the server with the most recent releaseDate.",
+      description:
+        "Optional specific version of the MCP server to retrieve. If not provided, returns the server with the most recent releaseDate.",
       optional: true,
     },
   ]}
@@ -38,7 +40,8 @@ mastra.getMCPServer("1.2.0");
     {
       name: "server",
       type: "MCPServerBase | undefined",
-      description: "The MCP server instance with the specified ID and version, or undefined if not found or if the specific version is not found.",
+      description:
+        "The MCP server instance with the specified ID and version, or undefined if not found or if the specific version is not found.",
     },
   ]}
 />

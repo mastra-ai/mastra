@@ -13,12 +13,12 @@ The `Run` class represents a workflow execution instance, providing methods to s
 const run = await workflow.createRunAsync();
 
 const result = await run.start({
-  inputData: { value: "initial data" }
+  inputData: { value: "initial data" },
 });
 
 if (result.status === "suspended") {
   const resumedResult = await run.resume({
-    resumeData: { value: "resume data" }
+    resumeData: { value: "resume data" },
   });
 }
 ```
@@ -62,7 +62,7 @@ if (result.status === "suspended") {
       type: "() => Promise<void>",
       description: "Cancels the workflow execution",
       required: true,
-    }
+    },
   ]}
 />
 

@@ -318,15 +318,15 @@ const mcpClient = new MCPClient({
 });
 
 // Set up elicitation handler
-mcpClient.elicitation.onRequest('serverName', async (request) => {
+mcpClient.elicitation.onRequest("serverName", async (request) => {
   // Handle elicitation request from server
-  console.log('Server requests:', request.message);
-  console.log('Schema:', request.requestedSchema);
-  
+  console.log("Server requests:", request.message);
+  console.log("Schema:", request.requestedSchema);
+
   // Return user response
   return {
-    action: 'accept',
-    content: { name: 'John Doe', email: 'john@example.com' }
+    action: "accept",
+    content: { name: "John Doe", email: "john@example.com" },
   };
 });
 ```
@@ -338,41 +338,43 @@ Sets up a handler function that will be called when any connected MCP server sen
 **ElicitationHandler Function:**
 
 The handler function receives a request object with:
+
 - `message`: A human-readable message describing what information is needed
 - `requestedSchema`: A JSON schema defining the structure of the expected response
 
 The handler must return an `ElicitResult` with:
+
 - `action`: One of `'accept'`, `'decline'`, or `'cancel'`
 - `content`: The user's data (only when action is `'accept'`)
 
 **Example:**
 
 ```typescript
-mcpClient.elicitation.onRequest('serverName', async (request) => {
+mcpClient.elicitation.onRequest("serverName", async (request) => {
   console.log(`Server requests: ${request.message}`);
-  
+
   // Example: Simple user input collection
   if (request.requestedSchema.properties.name) {
     // Simulate user accepting and providing data
     return {
-      action: 'accept',
+      action: "accept",
       content: {
-        name: 'Alice Smith',
-        email: 'alice@example.com'
-      }
+        name: "Alice Smith",
+        email: "alice@example.com",
+      },
     };
   }
-  
+
   // Simulate user declining the request
-  return { action: 'decline' };
+  return { action: "decline" };
 });
 ```
 
 **Complete Interactive Example:**
 
 ```typescript
-import { MCPClient } from '@mastra/mcp';
-import { createInterface } from 'readline';
+import { MCPClient } from "@mastra/mcp";
+import { createInterface } from "readline";
 
 const readline = createInterface({
   input: process.stdin,
@@ -380,69 +382,71 @@ const readline = createInterface({
 });
 
 function askQuestion(question: string): Promise<string> {
-  return new Promise(resolve => {
-    readline.question(question, answer => resolve(answer.trim()));
+  return new Promise((resolve) => {
+    readline.question(question, (answer) => resolve(answer.trim()));
   });
 }
 
 const mcpClient = new MCPClient({
   servers: {
     interactiveServer: {
-      url: new URL('http://localhost:3000/mcp'),
+      url: new URL("http://localhost:3000/mcp"),
     },
   },
 });
 
 // Set up interactive elicitation handler
-await mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
+await mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
   console.log(`\n📋 Server Request: ${request.message}`);
-  console.log('Required information:');
-  
+  console.log("Required information:");
+
   const schema = request.requestedSchema;
   const properties = schema.properties || {};
   const required = schema.required || [];
   const content: Record<string, any> = {};
-  
+
   // Collect input for each field
   for (const [fieldName, fieldSchema] of Object.entries(properties)) {
     const field = fieldSchema as any;
     const isRequired = required.includes(fieldName);
-    
+
     let prompt = `${field.title || fieldName}`;
     if (field.description) prompt += ` (${field.description})`;
-    if (isRequired) prompt += ' *required*';
-    prompt += ': ';
-    
+    if (isRequired) prompt += " *required*";
+    prompt += ": ";
+
     const answer = await askQuestion(prompt);
-    
+
     // Handle cancellation
-    if (answer.toLowerCase() === 'cancel') {
-      return { action: 'cancel' };
+    if (answer.toLowerCase() === "cancel") {
+      return { action: "cancel" };
     }
-    
+
     // Validate required fields
-    if (answer === '' && isRequired) {
+    if (answer === "" && isRequired) {
       console.log(`❌ ${fieldName} is required`);
-      return { action: 'decline' };
+      return { action: "decline" };
     }
-    
-    if (answer !== '') {
+
+    if (answer !== "") {
       content[fieldName] = answer;
     }
   }
-  
+
   // Confirm submission
-  console.log('\n📝 You provided:');
+  console.log("\n📝 You provided:");
   console.log(JSON.stringify(content, null, 2));
-  
-  const confirm = await askQuestion('\nSubmit this information? (yes/no/cancel): ');
-  
-  if (confirm.toLowerCase() === 'yes' || confirm.toLowerCase() === 'y') {
-    return { action: 'accept', content };
-  } else if (confirm.toLowerCase() === 'cancel') {
-    return { action: 'cancel' };
+
+  const confirm = await askQuestion(
+    "\nSubmit this information? (yes/no/cancel): ",
+  );
+
+  if (confirm.toLowerCase() === "yes" || confirm.toLowerCase() === "y") {
+    return { action: "accept", content };
+  } else if (confirm.toLowerCase() === "cancel") {
+    return { action: "cancel" };
   } else {
-    return { action: 'decline' };
+    return { action: "decline" };
   }
 });
 ```
@@ -529,27 +533,27 @@ Elicitation is a feature that allows MCP servers to request structured informati
 You must set up an elicitation handler before tools that use elicitation are called:
 
 ```typescript
-import { MCPClient } from '@mastra/mcp';
+import { MCPClient } from "@mastra/mcp";
 
 const mcpClient = new MCPClient({
   servers: {
     interactiveServer: {
-      url: new URL('http://localhost:3000/mcp'),
+      url: new URL("http://localhost:3000/mcp"),
     },
   },
 });
 
 // Set up elicitation handler
-mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
+mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
   // Handle the server's request for user input
   console.log(`Server needs: ${request.message}`);
-  
+
   // Your logic to collect user input
   const userData = await collectUserInput(request.requestedSchema);
-  
+
   return {
-    action: 'accept',
-    content: userData
+    action: "accept",
+    content: userData,
   };
 });
 ```
@@ -559,21 +563,23 @@ mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
 Your elicitation handler must return one of three response types:
 
 - **Accept**: User provided data and confirmed submission
+
   ```typescript
   return {
-    action: 'accept',
-    content: { name: 'John Doe', email: 'john@example.com' }
+    action: "accept",
+    content: { name: "John Doe", email: "john@example.com" },
   };
   ```
 
 - **Decline**: User explicitly declined to provide the information
+
   ```typescript
-  return { action: 'decline' };
+  return { action: "decline" };
   ```
 
 - **Cancel**: User dismissed or cancelled the request
   ```typescript
-  return { action: 'cancel' };
+  return { action: "cancel" };
   ```
 
 ### Schema-Based Input Collection
@@ -581,14 +587,14 @@ Your elicitation handler must return one of three response types:
 The `requestedSchema` provides structure for the data the server needs:
 
 ```typescript
-await mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
+await mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
   const { properties, required = [] } = request.requestedSchema;
   const content: Record<string, any> = {};
-  
+
   for (const [fieldName, fieldSchema] of Object.entries(properties || {})) {
     const field = fieldSchema as any;
     const isRequired = required.includes(fieldName);
-    
+
     // Collect input based on field type and requirements
     const value = await promptUser({
       name: fieldName,
@@ -599,13 +605,13 @@ await mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
       format: field.format,
       enum: field.enum,
     });
-    
+
     if (value !== null) {
       content[fieldName] = value;
     }
   }
-  
-  return { action: 'accept', content };
+
+  return { action: "accept", content };
 });
 ```
 
@@ -679,7 +685,7 @@ async function checkWeatherPrompt() {
     const weatherPrompts = await mcp.prompts.list();
     if (weatherPrompts.weather && weatherPrompts.weather.length > 0) {
       const currentWeatherPrompt = weatherPrompts.weather.find(
-        (p) => p.name === "current"
+        (p) => p.name === "current",
       );
       if (currentWeatherPrompt) {
         console.log("Weather prompt:", currentWeatherPrompt);

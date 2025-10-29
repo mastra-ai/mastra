@@ -43,8 +43,7 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageParams) {
   }
 
   // WhatsApp Business API endpoint
-  const url =
-    `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
+  const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
 
   // Message payload following WhatsApp API format
   const payload = {
@@ -189,9 +188,9 @@ const respondToMessage = createStep({
       throw new Error("Chat agent not found");
     }
 
-    const response = await agent.generate(
-      [{ role: "user", content: inputData.userMessage }],
-    );
+    const response = await agent.generate([
+      { role: "user", content: inputData.userMessage },
+    ]);
 
     return { response: response.text };
   },
@@ -274,8 +273,7 @@ export const chatWorkflow = createWorkflow({
 })
   .then(respondToMessage)
   .map(async ({ inputData }) => ({
-    prompt:
-      `Break this AI response into 3-8 casual, friendly text messages that feel natural for WhatsApp conversation:\n\n${inputData.response}`,
+    prompt: `Break this AI response into 3-8 casual, friendly text messages that feel natural for WhatsApp conversation:\n\n${inputData.response}`,
   }))
   .then(breakIntoMessages)
   .map(async ({ inputData, getInitData }) => {
@@ -380,22 +378,22 @@ const mockWebhookData = {
               {
                 from: "1234567890", // Test phone number
                 text: {
-                  body: "Hello! How are you today?"
-                }
-              }
-            ]
-          }
-        }
-      ]
-    }
-  ]
+                  body: "Hello! How are you today?",
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  ],
 };
 
 const workflow = mastra.getWorkflow("chatWorkflow");
 const workflowRun = await workflow.createRunAsync();
 
 const result = await workflowRun.start({
-  inputData: { userMessage: JSON.stringify(mockWebhookData) }
+  inputData: { userMessage: JSON.stringify(mockWebhookData) },
 });
 
 console.log("Workflow completed:", result);
@@ -408,7 +406,7 @@ When a user sends "Hello! How are you today?" to your WhatsApp bot, it might res
 ```text
 Hey there! 👋 I'm doing great, thanks for asking!
 
-How's your day going so far? 
+How's your day going so far?
 
 I'm here and ready to chat about whatever's on your mind
 

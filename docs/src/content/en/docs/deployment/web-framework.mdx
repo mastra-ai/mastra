@@ -35,13 +35,13 @@ If you've integrated Mastra with Astro [by following our guide](/docs/frameworks
 The only thing to verify is that you've added the following to your `astro.config.mjs` and removed any usage of [LibSQLStore](/docs/deployment/overview), which is not supported in serverless environments:
 
 ```javascript {2,6,7} title="astro.config.mjs" showLineNumbers copy
-import { defineConfig } from 'astro/config';
-import vercel from '@astrojs/vercel';
+import { defineConfig } from "astro/config";
+import vercel from "@astrojs/vercel";
 
 export default defineConfig({
   // ...
   adapter: vercel(),
-  output: "server"
+  output: "server",
 });
 ```
 
@@ -52,12 +52,12 @@ If you've integrated Mastra with Astro [by following our guide](/docs/frameworks
 The only thing to verify is that you've added the following to your `astro.config.mjs` and removed any usage of [LibSQLStore](/docs/deployment/overview), which is not supported in serverless environments:
 
 ```javascript {2,6,7} title="astro.config.mjs" showLineNumbers copy
-import { defineConfig } from 'astro/config';
-import netlify from '@astrojs/netlify';
+import { defineConfig } from "astro/config";
+import netlify from "@astrojs/netlify";
 
 export default defineConfig({
   // ...
   adapter: netlify(),
-  output: "server"
+  output: "server",
 });
 ```

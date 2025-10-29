@@ -3,7 +3,6 @@ title: "VercelDeployer | Deployment | Mastra Docs"
 description: "Learn how to deploy a Mastra application to Vercel using the Mastra VercelDeployer"
 ---
 
-
 # VercelDeployer
 
 The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/) class with Vercel specific functionality.
@@ -22,7 +21,7 @@ import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
   // ...
-  deployer: new VercelDeployer()
+  deployer: new VercelDeployer(),
 });
 ```
 
@@ -43,7 +42,7 @@ deployer: new VercelDeployer({
   maxDuration: 600,
   memory: 1536,
   regions: ["sfo1", "iad1"],
-})
+});
 ```
 
 ## Continuous integration
@@ -83,7 +82,6 @@ The build output for Mastra applications using the `VercelDeployer` includes all
 │   └── config.json
 └── package.json
 ```
-
 
 The `VercelDeployer` automatically generates a `config.json` configuration file in `.vercel/output` with the following settings:
 

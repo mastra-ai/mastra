@@ -56,7 +56,7 @@ export const workingMemoryTemplateAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
-      url: "file:working-memory-template.db"
+      url: "file:working-memory-template.db",
     }),
     options: {
       workingMemory: {
@@ -71,13 +71,13 @@ export const workingMemoryTemplateAgent = new Agent({
             - Estimated Time: 2 hours
 
           ## Completed Items
-          - None yet`
+          - None yet`,
       },
       threads: {
-        generateTitle: true  // Explicitly enable automatic title generation
-      }
-    }
-  })
+        generateTitle: true, // Explicitly enable automatic title generation
+      },
+    },
+  }),
 });
 ```
 
@@ -99,12 +99,15 @@ const resourceId = "user-456";
 
 const agent = mastra.getAgent("workingMemoryTemplateAgent");
 
-const stream = await agent.stream("Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.", {
-  memory: {
-    thread: threadId,
-    resource: resourceId
-  }
-});
+const stream = await agent.stream(
+  "Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.",
+  {
+    memory: {
+      thread: threadId,
+      resource: resourceId,
+    },
+  },
+);
 
 for await (const chunk of stream.textStream) {
   process.stdout.write(chunk);
@@ -125,12 +128,15 @@ const resourceId = "user-456";
 
 const agent = mastra.getAgent("workingMemoryTemplateAgent");
 
-const response = await agent.generate("Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.", {
-  memory: {
-    thread: threadId,
-    resource: resourceId
-  }
-});
+const response = await agent.generate(
+  "Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.",
+  {
+    memory: {
+      thread: threadId,
+      resource: resourceId,
+    },
+  },
+);
 
 console.log(response.text);
 ```
@@ -164,9 +170,9 @@ Working memory stores data in `.json` format, which would look similar to the be
       // ...
       "args": {
         "memory": "# Todo List\n## Active Items\n- Task 1: Build a new feature for our app\n  - Due: Next Friday\n  - Description: Build a new feature for our app\n  - Status: Not Started\n  - Estimated Time: 2 hours\n\n## Completed Items\n- None yet"
-      },
+      }
     }
-  ],
+  ]
 }
 ```
 

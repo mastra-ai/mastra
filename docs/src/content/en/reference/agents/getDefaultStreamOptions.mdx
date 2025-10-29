@@ -34,7 +34,8 @@ await agent.getDefaultStreamOptions();
     {
       name: "defaultOptions",
       type: "AgentExecutionOptions<Output> | Promise<AgentExecutionOptions<Output>>",
-      description: "The default vNext streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
+      description:
+        "The default vNext streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
     },
   ]}
 />
@@ -43,7 +44,7 @@ await agent.getDefaultStreamOptions();
 
 ```typescript copy
 await agent.getDefaultStreamOptions({
-  runtimeContext: new RuntimeContext()
+  runtimeContext: new RuntimeContext(),
 });
 ```
 
@@ -56,7 +57,8 @@ await agent.getDefaultStreamOptions({
       type: "RuntimeContext",
       isOptional: true,
       defaultValue: "new RuntimeContext()",
-      description: "Runtime context for dependency injection and contextual information.",
+      description:
+        "Runtime context for dependency injection and contextual information.",
     },
   ]}
 />

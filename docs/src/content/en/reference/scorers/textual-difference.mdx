@@ -7,7 +7,6 @@ description: Documentation for the Textual Difference Scorer in Mastra, which me
 
 The `createTextualDifferenceScorer()` function uses sequence matching to measure the textual differences between two strings. It provides detailed information about changes, including the number of operations needed to transform one text into another.
 
-
 ## Parameters
 
 The `createTextualDifferenceScorer()` function does not take any options.
@@ -26,7 +25,8 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
     {
       name: "analyzeStepResult",
       type: "object",
-      description: "Object with difference metrics: { confidence: number, changes: number, lengthDiff: number }",
+      description:
+        "Object with difference metrics: { confidence: number, changes: number, lengthDiff: number }",
     },
     {
       name: "score",
@@ -94,16 +94,16 @@ import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createTextualDifferenceScorer();
 
-const input = 'The quick brown fox jumps over the lazy dog';
-const output = 'The quick brown fox jumps over the lazy dog';
+const input = "The quick brown fox jumps over the lazy dog";
+const output = "The quick brown fox jumps over the lazy dog";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 #### No differences output
@@ -131,16 +131,16 @@ import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createTextualDifferenceScorer();
 
-const input = 'Hello world! How are you?';
-const output = 'Hello there! How is it going?';
+const input = "Hello world! How are you?";
+const output = "Hello there! How is it going?";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 #### Minor differences output
@@ -168,16 +168,16 @@ import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createTextualDifferenceScorer();
 
-const input = 'Python is a high-level programming language';
-const output = 'JavaScript is used for web development';
+const input = "Python is a high-level programming language";
+const output = "JavaScript is used for web development";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 #### Major differences output

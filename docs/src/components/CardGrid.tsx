@@ -11,7 +11,13 @@ export interface CardGridItemProps {
   logo?: React.ReactNode | string;
 }
 
-export function CardGridItem({ title, description, href, children, logo }: CardGridItemProps) {
+export function CardGridItem({
+  title,
+  description,
+  href,
+  children,
+  logo,
+}: CardGridItemProps) {
   return (
     <Link
       to={href}
@@ -19,7 +25,7 @@ export function CardGridItem({ title, description, href, children, logo }: CardG
     >
       {logo && (
         <div className="mb-3">
-          {typeof logo === 'string' ? (
+          {typeof logo === "string" ? (
             <img src={logo} alt={title} className="w-8 h-8 object-contain" />
           ) : (
             logo
@@ -27,7 +33,8 @@ export function CardGridItem({ title, description, href, children, logo }: CardG
         </div>
       )}
       <h3>{title}</h3>
-      {children || (description && <p className=" line-clamp-3">{description}</p>)}
+      {children ||
+        (description && <p className=" line-clamp-3">{description}</p>)}
     </Link>
   );
 }

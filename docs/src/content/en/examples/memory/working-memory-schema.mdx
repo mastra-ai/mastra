@@ -57,7 +57,7 @@ export const workingMemorySchemaAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
-      url: "file:working-memory-schema.db"
+      url: "file:working-memory-schema.db",
     }),
     options: {
       workingMemory: {
@@ -70,15 +70,15 @@ export const workingMemorySchemaAgent = new Agent({
               description: z.string(),
               status: z.enum(["active", "completed"]).default("active"),
               estimatedTime: z.string().optional(),
-            })
-          )
-        })
+            }),
+          ),
+        }),
       },
       threads: {
-        generateTitle: true  // Explicitly enable automatic title generation
-      }
-    }
-  })
+        generateTitle: true, // Explicitly enable automatic title generation
+      },
+    },
+  }),
 });
 ```
 
@@ -100,12 +100,15 @@ const resourceId = "user-456";
 
 const agent = mastra.getAgent("workingMemorySchemaAgent");
 
-const stream = await agent.stream("Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.", {
-  memory: {
-    thread: threadId,
-    resource: resourceId
-  }
-});
+const stream = await agent.stream(
+  "Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.",
+  {
+    memory: {
+      thread: threadId,
+      resource: resourceId,
+    },
+  },
+);
 
 for await (const chunk of stream.textStream) {
   process.stdout.write(chunk);
@@ -126,12 +129,15 @@ const resourceId = "user-456";
 
 const agent = mastra.getAgent("workingMemorySchemaAgent");
 
-const response = await agent.generate("Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.", {
-  memory: {
-    thread: threadId,
-    resource: resourceId
-  }
-});
+const response = await agent.generate(
+  "Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.",
+  {
+    memory: {
+      thread: threadId,
+      resource: resourceId,
+    },
+  },
+);
 
 console.log(response.text);
 ```
@@ -175,9 +181,9 @@ Working memory stores data in `.json` format, which would look similar to the be
             }
           ]
         }
-      },
+      }
     }
-  ],
+  ]
 }
 ```
 

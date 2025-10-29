@@ -49,7 +49,9 @@ const memory = await agent.getMemory();
 
 const { uiMessages } = await memory!.query({ threadId: "thread-123" });
 
-const messageIds = uiMessages.map((message: UIMessageWithMetadata) => message.id);
+const messageIds = uiMessages.map(
+  (message: UIMessageWithMetadata) => message.id,
+);
 await memory?.deleteMessages([...messageIds]);
 ```
 

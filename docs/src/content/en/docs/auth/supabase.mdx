@@ -3,8 +3,8 @@ title: "MastraAuthSupabase Class | Auth | Mastra Docs"
 description: "Documentation for the MastraAuthSupabase class, which authenticates Mastra applications using Supabase Auth."
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # MastraAuthSupabase Class
 
@@ -33,14 +33,14 @@ npm install @mastra/auth-supabase@latest
 
 ```typescript {2,7-9} title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
-import { MastraAuthSupabase } from '@mastra/auth-supabase';
+import { MastraAuthSupabase } from "@mastra/auth-supabase";
 
 export const mastra = new Mastra({
   // ..
   server: {
     experimental_auth: new MastraAuthSupabase({
       url: process.env.SUPABASE_URL,
-      anonKey: process.env.SUPABASE_ANON_KEY
+      anonKey: process.env.SUPABASE_ANON_KEY,
     }),
   },
 });
@@ -83,8 +83,8 @@ import { MastraClient } from "@mastra/client-js";
 export const mastraClient = new MastraClient({
   baseUrl: "https://<mastra-api-url>",
   headers: {
-    Authorization: `Bearer ${accessToken}`
-  }
+    Authorization: `Bearer ${accessToken}`,
+  },
 });
 ```
 
@@ -115,6 +115,7 @@ Once `MastraClient` is configured with the Supabase access token, you can send a
       return <button onClick={handleClick}>Test Agent</button>;
     };
     ```
+
   </TabItem>
   <TabItem value="react" label="React">
     ```bash copy

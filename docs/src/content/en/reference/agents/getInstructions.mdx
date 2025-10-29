@@ -34,7 +34,8 @@ await agent.getInstructions();
     {
       name: "instructions",
       type: "SystemMessage | Promise<SystemMessage>",
-      description: "The instructions configured for the agent. SystemMessage can be: string | string[] | CoreSystemMessage | CoreSystemMessage[] | SystemModelMessage | SystemModelMessage[]. Returns either directly or as a promise that resolves to the instructions.",
+      description:
+        "The instructions configured for the agent. SystemMessage can be: string | string[] | CoreSystemMessage | CoreSystemMessage[] | SystemModelMessage | SystemModelMessage[]. Returns either directly or as a promise that resolves to the instructions.",
     },
   ]}
 />
@@ -43,7 +44,7 @@ await agent.getInstructions();
 
 ```typescript copy
 await agent.getInstructions({
-  runtimeContext: new RuntimeContext()
+  runtimeContext: new RuntimeContext(),
 });
 ```
 
@@ -56,7 +57,8 @@ await agent.getInstructions({
       type: "RuntimeContext",
       isOptional: true,
       defaultValue: "undefined",
-      description: "Runtime context for dependency injection and contextual information.",
+      description:
+        "Runtime context for dependency injection and contextual information.",
     },
   ]}
 />

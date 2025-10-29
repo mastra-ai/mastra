@@ -60,7 +60,8 @@ export const mastra = new Mastra({
     {
       name: "routes",
       type: "CFRoute[]",
-      description: "Array of route configurations for your worker. Each route requires: pattern (string), zone_name (string), custom_domain (boolean, optional).",
+      description:
+        "Array of route configurations for your worker. Each route requires: pattern (string), zone_name (string), custom_domain (boolean, optional).",
       isOptional: true,
     },
     {
@@ -72,19 +73,22 @@ export const mastra = new Mastra({
     {
       name: "env",
       type: "Record<string, any>",
-      description: "Environment variables to be included in the worker configuration.",
+      description:
+        "Environment variables to be included in the worker configuration.",
       isOptional: true,
     },
     {
       name: "d1Databases",
       type: "D1DatabaseBinding[]",
-      description: "Array of D1 database bindings. Each binding requires: binding (string), database_name (string), database_id (string), preview_database_id (string, optional).",
+      description:
+        "Array of D1 database bindings. Each binding requires: binding (string), database_name (string), database_id (string), preview_database_id (string, optional).",
       isOptional: true,
     },
     {
       name: "kvNamespaces",
       type: "KVNamespaceBinding[]",
-      description: "Array of KV namespace bindings. Each binding requires: binding (string), id (string).",
+      description:
+        "Array of KV namespace bindings. Each binding requires: binding (string), id (string).",
       isOptional: true,
     },
   ]}

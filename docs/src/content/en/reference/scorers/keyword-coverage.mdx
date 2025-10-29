@@ -25,17 +25,20 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
     {
       name: "preprocessStepResult",
       type: "object",
-      description: "Object with extracted keywords: { referenceKeywords: Set<string>, responseKeywords: Set<string> }",
+      description:
+        "Object with extracted keywords: { referenceKeywords: Set<string>, responseKeywords: Set<string> }",
     },
     {
       name: "analyzeStepResult",
       type: "object",
-      description: "Object with keyword coverage: { totalKeywords: number, matchedKeywords: number }",
+      description:
+        "Object with keyword coverage: { totalKeywords: number, matchedKeywords: number }",
     },
     {
       name: "score",
       type: "number",
-      description: "Coverage score (0-1) representing the proportion of matched keywords.",
+      description:
+        "Coverage score (0-1) representing the proportion of matched keywords.",
     },
   ]}
 />
@@ -110,16 +113,17 @@ import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createKeywordCoverageScorer();
 
-const input = 'JavaScript frameworks like React and Vue';
-const output = 'Popular JavaScript frameworks include React and Vue for web development';
+const input = "JavaScript frameworks like React and Vue";
+const output =
+  "Popular JavaScript frameworks include React and Vue for web development";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 #### Full coverage output
@@ -145,16 +149,16 @@ import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createKeywordCoverageScorer();
 
-const input = 'TypeScript offers interfaces, generics, and type inference';
-const output = 'TypeScript provides type inference and some advanced features';
+const input = "TypeScript offers interfaces, generics, and type inference";
+const output = "TypeScript provides type inference and some advanced features";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 #### Partial coverage output
@@ -180,16 +184,17 @@ import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createKeywordCoverageScorer();
 
-const input = 'Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning';
-const output = 'Data preparation is important for models';
+const input =
+  "Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning";
+const output = "Data preparation is important for models";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 #### Minimal coverage output

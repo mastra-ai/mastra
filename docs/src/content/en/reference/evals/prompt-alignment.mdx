@@ -3,7 +3,6 @@ title: "Reference: PromptAlignmentMetric | Evals | Mastra Docs"
 description: Documentation for the Prompt Alignment Metric in Mastra, which evaluates how well LLM outputs adhere to given prompt instructions.
 ---
 
-
 # PromptAlignmentMetric
 
 :::info Scorers
@@ -151,13 +150,11 @@ Each instruction receives one of three verdicts:
 ### Scoring Process
 
 1. Evaluates instruction applicability:
-
    - Determines if each instruction applies to the context
    - Marks irrelevant instructions as "n/a"
    - Considers domain-specific requirements
 
 2. Assesses compliance for applicable instructions:
-
    - Evaluates each applicable instruction independently
    - Requires complete compliance for "yes" verdict
    - Documents specific reasons for all verdicts

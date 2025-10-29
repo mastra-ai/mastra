@@ -45,7 +45,7 @@
   /* Vertical guideline linking list numbers. */
   > li::after {
     --guide-width: 1px;
-    content: '';
+    content: "";
     position: absolute;
     top: calc(var(--bullet-size) + var(--bullet-margin));
     bottom: var(--bullet-margin);

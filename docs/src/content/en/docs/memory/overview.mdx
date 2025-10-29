@@ -28,8 +28,8 @@ import { LibSQLStore } from "@mastra/libsql";
 export const mastra = new Mastra({
   // ...
   storage: new LibSQLStore({
-    url: ":memory:"
-  })
+    url: ":memory:",
+  }),
 });
 ```
 
@@ -41,7 +41,7 @@ import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
   // ...
-  memory: new Memory()
+  memory: new Memory(),
 });
 ```
 
@@ -89,10 +89,10 @@ export const testAgent = new Agent({
   memory: new Memory({
     // ...
     storage: new LibSQLStore({
-      url: "file:agent-memory.db"
-    })
-  // ...
-  })
+      url: "file:agent-memory.db",
+    }),
+    // ...
+  }),
 });
 ```
 

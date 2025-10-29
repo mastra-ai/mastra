@@ -21,14 +21,14 @@ npm install @mastra/evals
 
 In this example, the response fully reflects the key terms from the input. All required keywords are present, resulting in complete coverage with no omissions.
 
-
 ```typescript title="src/example-full-keyword-coverage.ts" showLineNumbers copy
 import { KeywordCoverageMetric } from "@mastra/evals/nlp";
 
 const metric = new KeywordCoverageMetric();
 
 const query = "JavaScript frameworks like React and Vue.";
-const response = "Popular JavaScript frameworks include React and Vue for web development";
+const response =
+  "Popular JavaScript frameworks include React and Vue for web development";
 
 const result = await metric.measure(query, response);
 
@@ -59,7 +59,8 @@ import { KeywordCoverageMetric } from "@mastra/evals/nlp";
 const metric = new KeywordCoverageMetric();
 
 const query = "TypeScript offers interfaces, generics, and type inference.";
-const response = "TypeScript provides type inference and some advanced features";
+const response =
+  "TypeScript provides type inference and some advanced features";
 
 const result = await metric.measure(query, response);
 
@@ -89,7 +90,8 @@ import { KeywordCoverageMetric } from "@mastra/evals/nlp";
 
 const metric = new KeywordCoverageMetric();
 
-const query = "Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning";
+const query =
+  "Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning";
 const response = "Data preparation is important for models";
 
 const result = await metric.measure(query, response);
@@ -156,6 +158,6 @@ Detailed statistics including:
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/keyword-coverage"
 />

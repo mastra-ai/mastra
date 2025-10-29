@@ -34,7 +34,7 @@ import { Agent } from "@mastra/core/agent";
 export const copywriterAgent = new Agent({
   name: "copywriter-agent",
   instructions: "You are a copywriter agent that writes blog post copy.",
-  model: openai("gpt-4o")
+  model: openai("gpt-4o"),
 });
 ```
 
@@ -50,10 +50,10 @@ export const copywriterTool = createTool({
   id: "copywriter-agent",
   description: "Calls the copywriter agent to write blog post copy.",
   inputSchema: z.object({
-    topic: z.string()
+    topic: z.string(),
   }),
   outputSchema: z.object({
-    copy: z.string()
+    copy: z.string(),
   }),
   execute: async ({ context, mastra }) => {
     const { topic } = context;
@@ -62,9 +62,9 @@ export const copywriterTool = createTool({
     const result = await agent!.generate(`Create a blog post about ${topic}`);
 
     return {
-      copy: result.text
+      copy: result.text,
     };
-  }
+  },
 });
 ```
 
@@ -79,7 +79,7 @@ import { Agent } from "@mastra/core/agent";
 export const editorAgent = new Agent({
   name: "Editor",
   instructions: "You are an editor agent that edits blog post copy.",
-  model: openai("gpt-4o-mini")
+  model: openai("gpt-4o-mini"),
 });
 ```
 
@@ -95,21 +95,23 @@ export const editorTool = createTool({
   id: "editor-agent",
   description: "Calls the editor agent to edit blog post copy.",
   inputSchema: z.object({
-    copy: z.string()
+    copy: z.string(),
   }),
   outputSchema: z.object({
-    copy: z.string()
+    copy: z.string(),
   }),
   execute: async ({ context, mastra }) => {
     const { copy } = context;
 
     const agent = mastra!.getAgent("editorAgent");
-    const result = await agent.generate(`Edit the following blog post only returning the edited copy: ${copy}`);
+    const result = await agent.generate(
+      `Edit the following blog post only returning the edited copy: ${copy}`,
+    );
 
     return {
-      copy: result.text
+      copy: result.text,
     };
-  }
+  },
 });
 ```
 
@@ -129,7 +131,7 @@ export const publisherAgent = new Agent({
   instructions:
     "You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.",
   model: openai("gpt-4o-mini"),
-  tools: { copywriterTool, editorTool }
+  tools: { copywriterTool, editorTool },
 });
 ```
 
@@ -145,7 +147,7 @@ import { copywriterAgent } from "./agents/example-copywriter-agent";
 import { editorAgent } from "./agents/example-editor-agent";
 
 export const mastra = new Mastra({
-  agents: { copywriterAgent, editorAgent, publisherAgent }
+  agents: { copywriterAgent, editorAgent, publisherAgent },
 });
 ```
 
@@ -160,14 +162,16 @@ import { mastra } from "./mastra";
 
 const agent = mastra.getAgent("publisherAgent");
 
-const response = await agent.generate("Write a blog post about React JavaScript frameworks. Only return the final edited copy.");
+const response = await agent.generate(
+  "Write a blog post about React JavaScript frameworks. Only return the final edited copy.",
+);
 
 console.log(response.text);
 ```
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/hierarchical-multi-agent"
 />
 

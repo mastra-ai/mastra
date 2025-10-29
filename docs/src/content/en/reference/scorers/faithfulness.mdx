@@ -23,14 +23,16 @@ The `createFaithfulnessScorer()` function accepts a single options object with t
       name: "context",
       type: "string[]",
       required: true,
-      description: "Array of context chunks against which the output's claims will be verified.",
+      description:
+        "Array of context chunks against which the output's claims will be verified.",
     },
     {
       name: "scale",
       type: "number",
       required: false,
       defaultValue: "1",
-      description: "The maximum score value. The final score will be normalized to this scale.",
+      description:
+        "The maximum score value. The final score will be normalized to this scale.",
     },
   ]}
 />
@@ -54,32 +56,38 @@ This function returns an instance of the MastraScorer class. The `.run()` method
     {
       name: "preprocessPrompt",
       type: "string",
-      description: "The prompt sent to the LLM for the preprocess step (optional).",
+      description:
+        "The prompt sent to the LLM for the preprocess step (optional).",
     },
     {
       name: "analyzeStepResult",
       type: "object",
-      description: "Object with verdicts: { verdicts: Array<{ verdict: 'yes' | 'no' | 'unsure', reason: string }> }",
+      description:
+        "Object with verdicts: { verdicts: Array<{ verdict: 'yes' | 'no' | 'unsure', reason: string }> }",
     },
     {
       name: "analyzePrompt",
       type: "string",
-      description: "The prompt sent to the LLM for the analyze step (optional).",
+      description:
+        "The prompt sent to the LLM for the analyze step (optional).",
     },
     {
       name: "score",
       type: "number",
-      description: "A score between 0 and the configured scale, representing the proportion of claims that are supported by the context.",
+      description:
+        "A score between 0 and the configured scale, representing the proportion of claims that are supported by the context.",
     },
     {
       name: "reason",
       type: "string",
-      description: "A detailed explanation of the score, including which claims were supported, contradicted, or marked as unsure.",
+      description:
+        "A detailed explanation of the score, including which claims were supported, contradicted, or marked as unsure.",
     },
     {
       name: "generateReasonPrompt",
       type: "string",
-      description: "The prompt sent to the LLM for the generateReason step (optional).",
+      description:
+        "The prompt sent to the LLM for the generateReason step (optional).",
     },
   ]}
 />

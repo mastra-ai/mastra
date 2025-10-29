@@ -12,7 +12,7 @@ Processors can be configured as:
 - **`inputProcessors`**: Applied before messages reach the language model.
 - **`outputProcessors`**: Applied to responses before they're returned to users.
 
-Some processors are *hybrid*, meaning they can be used with either `inputProcessors` or `outputProcessors`, depending on where the logic should be applied.
+Some processors are _hybrid_, meaning they can be used with either `inputProcessors` or `outputProcessors`, depending on where the logic should be applied.
 
 ## When to use processors
 
@@ -38,8 +38,8 @@ export const moderatedAgent = new Agent({
       threshold: 0.7,
       strategy: "block",
       instructions: "Detect and flag inappropriate content in user messages",
-    })
-  ]
+    }),
+  ],
 });
 ```
 
@@ -60,7 +60,7 @@ export const normalizedAgent = new Agent({
     new UnicodeNormalizer({
       stripControlChars: true,
       collapseWhitespace: true,
-    })
+    }),
   ],
 });
 ```
@@ -80,9 +80,9 @@ export const secureAgent = new Agent({
     new PromptInjectionDetector({
       model: openai("gpt-4.1-nano"),
       threshold: 0.8,
-      strategy: 'rewrite',
-      detectionTypes: ['injection', 'jailbreak', 'system-override'],
-    })
+      strategy: "rewrite",
+      detectionTypes: ["injection", "jailbreak", "system-override"],
+    }),
   ],
 });
 ```
@@ -101,10 +101,10 @@ export const multilingualAgent = new Agent({
   inputProcessors: [
     new LanguageDetector({
       model: openai("gpt-4.1-nano"),
-      targetLanguages: ['English', 'en'],
-      strategy: 'translate',
+      targetLanguages: ["English", "en"],
+      strategy: "translate",
       threshold: 0.8,
-    })
+    }),
   ],
 });
 ```
@@ -128,9 +128,9 @@ export const batchedAgent = new Agent({
     new BatchPartsProcessor({
       batchSize: 5,
       maxWaitTime: 100,
-      emitOnNonText: true
-    })
-  ]
+      emitOnNonText: true,
+    }),
+  ],
 });
 ```
 
@@ -149,10 +149,10 @@ export const limitedAgent = new Agent({
     new TokenLimiterProcessor({
       limit: 1000,
       strategy: "truncate",
-      countMode: "cumulative"
-    })
-  ]
-})
+      countMode: "cumulative",
+    }),
+  ],
+});
 ```
 
 > See [TokenLimiterProcessor](/reference/processors/token-limiter-processor) for a full list of configuration options.
@@ -171,11 +171,12 @@ const scrubbedAgent = new Agent({
       strategy: "redact",
       customPatterns: ["system prompt", "internal instructions"],
       includeDetections: true,
-      instructions: "Detect and redact system prompts, internal instructions, and security-sensitive content",
+      instructions:
+        "Detect and redact system prompts, internal instructions, and security-sensitive content",
       redactionMethod: "placeholder",
-      placeholderText: "[REDACTED]"
-    })
-  ]
+      placeholderText: "[REDACTED]",
+    }),
+  ],
 });
 ```
 
@@ -199,14 +200,14 @@ export const moderatedAgent = new Agent({
       model: openai("gpt-4.1-nano"),
       threshold: 0.7,
       strategy: "block",
-      categories: ["hate", "harassment", "violence"]
-    })
+      categories: ["hate", "harassment", "violence"],
+    }),
   ],
   outputProcessors: [
     new ModerationProcessor({
       // ...
-    })
-  ]
+    }),
+  ],
 });
 ```
 
@@ -225,17 +226,17 @@ export const privateAgent = new Agent({
     new PIIDetector({
       model: openai("gpt-4.1-nano"),
       threshold: 0.6,
-      strategy: 'redact',
-      redactionMethod: 'mask',
-      detectionTypes: ['email', 'phone', 'credit-card'],
-      instructions: "Detect and mask personally identifiable information."
-    })
+      strategy: "redact",
+      redactionMethod: "mask",
+      detectionTypes: ["email", "phone", "credit-card"],
+      instructions: "Detect and mask personally identifiable information.",
+    }),
   ],
   outputProcessors: [
     new PIIDetector({
       // ...
-    })
-  ]
+    }),
+  ],
 });
 ```
 
@@ -258,8 +259,8 @@ import {
   UnicodeNormalizer,
   ModerationProcessor,
   PromptInjectionDetector,
-  PIIDetector
-  } from "@mastra/core/processors";
+  PIIDetector,
+} from "@mastra/core/processors";
 
 export const testAgent = new Agent({
   // ...
@@ -275,7 +276,7 @@ export const testAgent = new Agent({
     }),
     new ModerationProcessor({
       // ...
-    })
+    }),
   ],
 });
 ```
@@ -294,10 +295,10 @@ export const privateAgent = new Agent({
   inputProcessors: [
     new PIIDetector({
       // ...
-      strategy: "block"
-    })
-  ]
-})
+      strategy: "block",
+    }),
+  ],
+});
 ```
 
 ### Handling blocked requests
@@ -309,15 +310,20 @@ For example, if an agent uses the `PIIDetector` with `strategy: "block"` and the
 #### `.generate()` example
 
 ```typescript {3-4, } showLineNumbers
-const result = await agent.generate("Is this credit card number valid?: 4543 1374 5089 4332");
+const result = await agent.generate(
+  "Is this credit card number valid?: 4543 1374 5089 4332",
+);
 
 console.error(result.tripwire);
 console.error(result.tripwireReason);
 ```
+
 #### `.stream()` example
 
 ```typescript {4-5} showLineNumbers
-const stream = await agent.stream("Is this credit card number valid?: 4543 1374 5089 4332");
+const stream = await agent.stream(
+  "Is this credit card number valid?: 4543 1374 5089 4332",
+);
 
 for await (const chunk of stream.fullStream) {
   if (chunk.type === "tripwire") {
@@ -325,6 +331,7 @@ for await (const chunk of stream.fullStream) {
   }
 }
 ```
+
 In this case, the `tripwireReason` indicates that a credit card number was detected:
 
 ```text

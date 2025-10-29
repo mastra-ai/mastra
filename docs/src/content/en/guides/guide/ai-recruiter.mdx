@@ -3,8 +3,8 @@ title: "Guide: Building an AI Recruiter | Mastra Workflows | Guides"
 description: Guide on building a recruiter workflow in Mastra to gather and process candidate information using LLMs.
 ---
 
-import Steps from '@site/src/components/Steps';
-import StepItem from '@site/src/components/StepItem';
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
 
 # Building an AI Recruiter
 
@@ -90,7 +90,7 @@ const gatherCandidateInfo = createStep({
           isTechnical: z.boolean(),
           specialty: z.string(),
           resumeText: z.string(),
-        })
+        }),
       },
     });
 
@@ -247,7 +247,8 @@ console.log(JSON.stringify(res, null, 2));
 
 // Get the workflow output value
 if (res.status === "success") {
-  const question = res.result.askAboutRole?.question ?? res.result.askAboutSpecialty?.question;
+  const question =
+    res.result.askAboutRole?.question ?? res.result.askAboutSpecialty?.question;
 
   console.log(`Output value: ${question}`);
 }

@@ -138,6 +138,7 @@ be inspected by middleware to tailor behaviour:
   },
 }
 ```
+
 - `x-mastra-cloud`: request originates from Mastra Cloud
 - `x-mastra-client-type`: identifies the client SDK, e.g. `js` or `python`
 - `x-mastra-dev-playground`: request triggered from a local playground
@@ -159,12 +160,15 @@ export const mastra = new Mastra({
         const country = context.req.header("CF-IPCountry");
         const runtimeContext = context.get("runtimeContext");
 
-        runtimeContext.set("temperature-unit", country === "US" ? "fahrenheit" : "celsius");
+        runtimeContext.set(
+          "temperature-unit",
+          country === "US" ? "fahrenheit" : "celsius",
+        );
 
         await next();
-      }
-    ]
-  }
+      },
+    ],
+  },
 });
 ```
 

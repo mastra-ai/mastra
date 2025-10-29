@@ -33,7 +33,7 @@ interface ArizeExporterConfig {
   // Inherited from OtelExporterConfig
   timeout?: number;
   batchSize?: number;
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  logLevel?: "debug" | "info" | "warn" | "error";
   resourceAttributes?: Record<string, any>;
 }
 ```
@@ -43,19 +43,22 @@ interface ArizeExporterConfig {
     {
       name: "endpoint",
       type: "string",
-      description: "Collector endpoint for trace exports (e.g., 'http://localhost:6006/v1/traces' for Phoenix). Required for Phoenix. Optional for Arize AX (defaults to https://otlp.arize.com/v1/traces).",
+      description:
+        "Collector endpoint for trace exports (e.g., 'http://localhost:6006/v1/traces' for Phoenix). Required for Phoenix. Optional for Arize AX (defaults to https://otlp.arize.com/v1/traces).",
       required: false,
     },
     {
       name: "apiKey",
       type: "string",
-      description: "API key for authentication. Required for Phoenix Cloud and Arize AX. Optional for self-hosted Phoenix.",
+      description:
+        "API key for authentication. Required for Phoenix Cloud and Arize AX. Optional for self-hosted Phoenix.",
       required: false,
     },
     {
       name: "spaceId",
       type: "string",
-      description: "Arize AX space identifier. Required when sending traces to Arize AX.",
+      description:
+        "Arize AX space identifier. Required when sending traces to Arize AX.",
       required: false,
     },
     {
@@ -73,7 +76,8 @@ interface ArizeExporterConfig {
     {
       name: "timeout",
       type: "number",
-      description: "Timeout in milliseconds before exporting spans (default: 30000)",
+      description:
+        "Timeout in milliseconds before exporting spans (default: 30000)",
       required: false,
     },
     {
@@ -128,24 +132,24 @@ Flushes pending data and shuts down the client.
 ### Phoenix Configuration
 
 ```typescript
-import { ArizeExporter } from '@mastra/arize';
+import { ArizeExporter } from "@mastra/arize";
 
 const exporter = new ArizeExporter({
-  endpoint: 'http://localhost:6006/v1/traces',
+  endpoint: "http://localhost:6006/v1/traces",
   apiKey: process.env.PHOENIX_API_KEY, // Optional for local Phoenix
-  projectName: 'my-ai-project',
+  projectName: "my-ai-project",
 });
 ```
 
 ### Arize AX Configuration
 
 ```typescript
-import { ArizeExporter } from '@mastra/arize';
+import { ArizeExporter } from "@mastra/arize";
 
 const exporter = new ArizeExporter({
   spaceId: process.env.ARIZE_SPACE_ID!,
   apiKey: process.env.ARIZE_API_KEY!,
-  projectName: 'my-ai-project',
+  projectName: "my-ai-project",
 });
 ```
 

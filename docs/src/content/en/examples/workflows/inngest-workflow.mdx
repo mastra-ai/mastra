@@ -366,10 +366,7 @@ Here, we'll get the activity planner workflow from the mastra instance, then cre
 ```ts showLineNumbers copy title="exec.ts"
 import { mastra } from "./";
 import { serve } from "@hono/node-server";
-import {
-  createHonoServer,
-  getToolExports,
-} from "@mastra/deployer/server";
+import { createHonoServer, getToolExports } from "@mastra/deployer/server";
 import { tools } from "#tools";
 
 const app = await createHonoServer(mastra, {
@@ -406,14 +403,14 @@ Control how many workflow instances can run simultaneously:
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
-  id: 'user-processing-workflow',
+  id: "user-processing-workflow",
   inputSchema: z.object({ userId: z.string() }),
   outputSchema: z.object({ result: z.string() }),
   steps: [processUserStep],
   // Limit to 10 concurrent executions, scoped by user ID
-  concurrency: { 
-    limit: 10, 
-    key: 'event.data.userId' // Per-user concurrency
+  concurrency: {
+    limit: 10,
+    key: "event.data.userId", // Per-user concurrency
   },
 });
 ```
@@ -424,14 +421,14 @@ Limit the number of workflow executions within a time period:
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
-  id: 'api-sync-workflow',
+  id: "api-sync-workflow",
   inputSchema: z.object({ endpoint: z.string() }),
   outputSchema: z.object({ status: z.string() }),
   steps: [apiSyncStep],
   // Maximum 1000 executions per hour
-  rateLimit: { 
-    period: '1h', 
-    limit: 1000
+  rateLimit: {
+    period: "1h",
+    limit: 1000,
   },
 });
 ```
@@ -442,15 +439,15 @@ Ensure minimum time between workflow executions:
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
-  id: 'email-notification-workflow',
+  id: "email-notification-workflow",
   inputSchema: z.object({ organizationId: z.string(), message: z.string() }),
   outputSchema: z.object({ sent: z.boolean() }),
   steps: [sendEmailStep],
   // Only one execution per 10 seconds per organization
-  throttle: { 
-    period: '10s', 
+  throttle: {
+    period: "10s",
     limit: 1,
-    key: 'event.data.organizationId'
+    key: "event.data.organizationId",
   },
 });
 ```
@@ -461,14 +458,14 @@ Delay execution until no new events arrive within a time window:
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
-  id: 'search-index-workflow',
+  id: "search-index-workflow",
   inputSchema: z.object({ documentId: z.string() }),
   outputSchema: z.object({ indexed: z.boolean() }),
   steps: [indexDocumentStep],
   // Wait 5 seconds of no updates before indexing
-  debounce: { 
-    period: '5s', 
-    key: 'event.data.documentId'
+  debounce: {
+    period: "5s",
+    key: "event.data.documentId",
   },
 });
 ```
@@ -479,13 +476,16 @@ Set execution priority for workflows:
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
-  id: 'order-processing-workflow',
-  inputSchema: z.object({ orderId: z.string(), priority: z.number().optional() }),
+  id: "order-processing-workflow",
+  inputSchema: z.object({
+    orderId: z.string(),
+    priority: z.number().optional(),
+  }),
   outputSchema: z.object({ processed: z.boolean() }),
   steps: [processOrderStep],
   // Higher priority orders execute first
-  priority: { 
-    run: 'event.data.priority ?? 50' // Dynamic priority, default 50
+  priority: {
+    run: "event.data.priority ?? 50", // Dynamic priority, default 50
   },
 });
 ```
@@ -496,31 +496,31 @@ You can combine multiple flow control features:
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
-  id: 'comprehensive-workflow',
-  inputSchema: z.object({ 
-    userId: z.string(), 
+  id: "comprehensive-workflow",
+  inputSchema: z.object({
+    userId: z.string(),
     organizationId: z.string(),
-    priority: z.number().optional() 
+    priority: z.number().optional(),
   }),
   outputSchema: z.object({ result: z.string() }),
   steps: [comprehensiveStep],
   // Multiple flow control features
-  concurrency: { 
-    limit: 5, 
-    key: 'event.data.userId' 
+  concurrency: {
+    limit: 5,
+    key: "event.data.userId",
   },
-  rateLimit: { 
-    period: '1m', 
-    limit: 100 
+  rateLimit: {
+    period: "1m",
+    limit: 100,
   },
-  throttle: { 
-    period: '10s', 
+  throttle: {
+    period: "10s",
     limit: 1,
-    key: 'event.data.organizationId' 
+    key: "event.data.organizationId",
   },
-  priority: { 
-    run: 'event.data.priority ?? 0' 
-  }
+  priority: {
+    run: "event.data.priority ?? 0",
+  },
 });
 ```
 

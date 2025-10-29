@@ -30,12 +30,15 @@ export class WordInclusionMetric extends Metric {
   }
 
   async measure(input: string, output: string): Promise<MetricResult> {
-    const tokenize = (text: string) => text.toLowerCase().match(/\b\w+\b/g) || [];
+    const tokenize = (text: string) =>
+      text.toLowerCase().match(/\b\w+\b/g) || [];
 
     const referenceWords = [...new Set(tokenize(input))];
     const outputText = output.toLowerCase();
 
-    const matchedWords = referenceWords.filter((word) => outputText.includes(word));
+    const matchedWords = referenceWords.filter((word) =>
+      outputText.includes(word),
+    );
 
     const totalWords = referenceWords.length;
     const score = totalWords > 0 ? matchedWords.length / totalWords : 0;
@@ -44,8 +47,8 @@ export class WordInclusionMetric extends Metric {
       score,
       info: {
         totalWords,
-        matchedWords: matchedWords.length
-      }
+        matchedWords: matchedWords.length,
+      },
     };
   }
 }
@@ -177,6 +180,6 @@ An explanation for the score, with details including:
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/word-inclusion"
 />

@@ -24,7 +24,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "togetherai/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8"
+  model: "togetherai/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
 });
 
 // Generate a response
@@ -45,81 +45,81 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ## Models
 
-<ProviderModelsTable 
+<ProviderModelsTable
   models={[
-  {
-    "model": "togetherai/deepseek-ai/DeepSeek-R1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 163839,
-    "maxOutput": 12288,
-    "inputCost": 3,
-    "outputCost": 7
-  },
-  {
-    "model": "togetherai/deepseek-ai/DeepSeek-V3",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 12288,
-    "inputCost": 1.25,
-    "outputCost": 1.25
-  },
-  {
-    "model": "togetherai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 66536,
-    "inputCost": 0.88,
-    "outputCost": 0.88
-  },
-  {
-    "model": "togetherai/moonshotai/Kimi-K2-Instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 1,
-    "outputCost": 3
-  },
-  {
-    "model": "togetherai/openai/gpt-oss-120b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 131072,
-    "inputCost": 0.15,
-    "outputCost": 0.6
-  },
-  {
-    "model": "togetherai/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 66536,
-    "inputCost": 2,
-    "outputCost": 2
-  }
-]}
+    {
+      model: "togetherai/deepseek-ai/DeepSeek-R1",
+      imageInput: false,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: false,
+      reasoning: true,
+      contextWindow: 163839,
+      maxOutput: 12288,
+      inputCost: 3,
+      outputCost: 7,
+    },
+    {
+      model: "togetherai/deepseek-ai/DeepSeek-V3",
+      imageInput: false,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: true,
+      reasoning: true,
+      contextWindow: 131072,
+      maxOutput: 12288,
+      inputCost: 1.25,
+      outputCost: 1.25,
+    },
+    {
+      model: "togetherai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+      imageInput: false,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: true,
+      reasoning: false,
+      contextWindow: 131072,
+      maxOutput: 66536,
+      inputCost: 0.88,
+      outputCost: 0.88,
+    },
+    {
+      model: "togetherai/moonshotai/Kimi-K2-Instruct",
+      imageInput: false,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: true,
+      reasoning: false,
+      contextWindow: 131072,
+      maxOutput: 32768,
+      inputCost: 1,
+      outputCost: 3,
+    },
+    {
+      model: "togetherai/openai/gpt-oss-120b",
+      imageInput: false,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: true,
+      reasoning: true,
+      contextWindow: 131072,
+      maxOutput: 131072,
+      inputCost: 0.15,
+      outputCost: 0.6,
+    },
+    {
+      model: "togetherai/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+      imageInput: false,
+      audioInput: false,
+      videoInput: false,
+      toolUsage: true,
+      reasoning: false,
+      contextWindow: 262144,
+      maxOutput: 66536,
+      inputCost: 2,
+      outputCost: 2,
+    },
+  ]}
 />
 
 ## Advanced Configuration
@@ -134,9 +134,9 @@ const agent = new Agent({
     id: "togetherai/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
     apiKey: process.env.TOGETHER_API_KEY,
     headers: {
-      "X-Custom-Header": "value"
-    }
-  }
+      "X-Custom-Header": "value",
+    },
+  },
 });
 ```
 
@@ -147,14 +147,12 @@ const agent = new Agent({
   name: "dynamic-agent",
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
+    return useAdvanced
       ? "togetherai/openai/gpt-oss-120b"
       : "togetherai/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8";
-  }
+  },
 });
 ```
-
-
 
 ## Direct Provider Installation
 

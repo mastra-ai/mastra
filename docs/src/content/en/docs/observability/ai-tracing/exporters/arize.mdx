@@ -3,7 +3,6 @@ title: "Arize Exporter | AI Tracing | Observability | Mastra Docs"
 description: "Send AI traces to Arize Phoenix or Arize AX using OpenTelemetry and OpenInference"
 ---
 
-
 # Arize Exporter
 
 [Arize](https://arize.com/) provides observability platforms for AI applications through [Phoenix](https://phoenix.arize.com/) (open-source) and [Arize AX](https://arize.com/generative-ai/) (enterprise). The Arize exporter sends AI traces using OpenTelemetry and [OpenInference](https://github.com/Arize-ai/openinference/tree/main/spec) semantic conventions, compatible with any OpenTelemetry platform that supports OpenInference.
@@ -11,6 +10,7 @@ description: "Send AI traces to Arize Phoenix or Arize AX using OpenTelemetry an
 ## When to Use Arize
 
 Arize is ideal when you need:
+
 - **OpenInference standards** - Industry-standard semantic conventions for AI traces
 - **Flexible deployment** - Self-hosted Phoenix or managed Arize AX
 - **OpenTelemetry compatibility** - Works with any OTLP-compatible platform
@@ -52,7 +52,7 @@ export const mastra = new Mastra({
   observability: {
     configs: {
       arize: {
-        serviceName: process.env.PHOENIX_PROJECT_NAME || 'mastra-service',
+        serviceName: process.env.PHOENIX_PROJECT_NAME || "mastra-service",
         exporters: [
           new ArizeExporter({
             endpoint: process.env.PHOENIX_ENDPOINT!,
@@ -109,7 +109,7 @@ export const mastra = new Mastra({
   observability: {
     configs: {
       arize: {
-        serviceName: process.env.ARIZE_PROJECT_NAME || 'mastra-service',
+        serviceName: process.env.ARIZE_PROJECT_NAME || "mastra-service",
         exporters: [
           new ArizeExporter({
             apiKey: process.env.ARIZE_API_KEY!,
@@ -132,31 +132,31 @@ The Arize exporter supports advanced configuration for fine-tuning OpenTelemetry
 ```typescript
 new ArizeExporter({
   // Phoenix Configuration
-  endpoint: 'https://your-collector.example.com/v1/traces',  // Required for Phoenix
+  endpoint: "https://your-collector.example.com/v1/traces", // Required for Phoenix
 
   // Arize AX Configuration
-  spaceId: 'your-space-id',  // Required for Arize AX
+  spaceId: "your-space-id", // Required for Arize AX
 
   // Shared Configuration
-  apiKey: 'your-api-key',  // Required for authenticated endpoints
-  projectName: 'mastra-service',  // Optional project name
+  apiKey: "your-api-key", // Required for authenticated endpoints
+  projectName: "mastra-service", // Optional project name
 
   // Optional OTLP settings
   headers: {
-    'x-custom-header': 'value',  // Additional headers for OTLP requests
+    "x-custom-header": "value", // Additional headers for OTLP requests
   },
 
   // Debug and performance tuning
-  logLevel: 'debug',  // Logging: debug | info | warn | error
-  batchSize: 512,     // Batch size before exporting spans
-  timeout: 30000,     // Timeout in ms before exporting spans
+  logLevel: "debug", // Logging: debug | info | warn | error
+  batchSize: 512, // Batch size before exporting spans
+  timeout: 30000, // Timeout in ms before exporting spans
 
   // Custom resource attributes
   resourceAttributes: {
-    'deployment.environment': process.env.NODE_ENV,
-    'service.version': process.env.APP_VERSION,
+    "deployment.environment": process.env.NODE_ENV,
+    "service.version": process.env.APP_VERSION,
   },
-})
+});
 ```
 
 ### Batch Processing Options
@@ -169,9 +169,9 @@ new ArizeExporter({
   apiKey: process.env.PHOENIX_API_KEY,
 
   // Batch processing configuration
-  batchSize: 512,    // Number of spans to batch (default: 512)
-  timeout: 30000,    // Max time in ms to wait before export (default: 30000)
-})
+  batchSize: 512, // Number of spans to batch (default: 512)
+  timeout: 30000, // Max time in ms to wait before export (default: 30000)
+});
 ```
 
 ### Resource Attributes
@@ -182,12 +182,12 @@ Add custom attributes to all exported spans:
 new ArizeExporter({
   endpoint: process.env.PHOENIX_ENDPOINT!,
   resourceAttributes: {
-    'deployment.environment': process.env.NODE_ENV,
-    'service.namespace': 'production',
-    'service.instance.id': process.env.HOSTNAME,
-    'custom.attribute': 'value',
+    "deployment.environment": process.env.NODE_ENV,
+    "service.namespace": "production",
+    "service.instance.id": process.env.HOSTNAME,
+    "custom.attribute": "value",
   },
-})
+});
 ```
 
 ## OpenInference Semantic Conventions

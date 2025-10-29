@@ -3,8 +3,8 @@ title: "Workflows overview | Workflows | Mastra Docs"
 description: "Workflows in Mastra help you orchestrate complex sequences of tasks with features like branching, parallel execution, resource suspension, and more."
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # Workflows overview
 
@@ -16,7 +16,7 @@ Workflows let you define complex sequences of tasks using clear, structured step
 
 Use workflows for tasks that are clearly defined upfront and involve multiple steps with a specific execution order. They give you fine-grained control over how data flows and transforms between steps, and which primitives are called at each stage.
 
-> **📹 Watch**:  → An introduction to workflows, and how they compare to agents [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
+> **📹 Watch**: → An introduction to workflows, and how they compare to agents [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
 
 ## Core principles
 
@@ -38,18 +38,18 @@ import { createStep } from "@mastra/core/workflows";
 const step1 = createStep({
   id: "step-1",
   inputSchema: z.object({
-    message: z.string()
+    message: z.string(),
   }),
   outputSchema: z.object({
-    formatted: z.string()
+    formatted: z.string(),
   }),
   execute: async ({ inputData }) => {
     const { message } = inputData;
 
     return {
-      formatted: message.toUpperCase()
+      formatted: message.toUpperCase(),
     };
-  }
+  },
 });
 ```
 
@@ -97,31 +97,31 @@ When using `.then()`, steps run sequentially. Each step’s `inputSchema` must m
 const step1 = createStep({
   //...
   inputSchema: z.object({
-    message: z.string()
+    message: z.string(),
   }),
   outputSchema: z.object({
-    formatted: z.string()
-  })
+    formatted: z.string(),
+  }),
 });
 
 const step2 = createStep({
   // ...
   inputSchema: z.object({
-    formatted: z.string()
+    formatted: z.string(),
   }),
   outputSchema: z.object({
-    emphasized: z.string()
-  })
+    emphasized: z.string(),
+  }),
 });
 
 export const testWorkflow = createWorkflow({
   // ...
   inputSchema: z.object({
-    message: z.string()
+    message: z.string(),
   }),
   outputSchema: z.object({
-    emphasized: z.string()
-  })
+    emphasized: z.string(),
+  }),
 })
   .then(step1)
   .then(step2)
@@ -149,6 +149,7 @@ You can run workflows from agents, tools, the Mastra Client, or the command line
 ```typescript showLineNumbers copy
 const testWorkflow = mastra.getWorkflow("testWorkflow");
 ```
+
 :::info
 
 `mastra.getWorkflow()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
@@ -164,38 +165,38 @@ Workflows can be run in two modes: start waits for all steps to complete before 
 <Tabs>
   <TabItem value="start" label="Start">
 
-  Create a workflow run instance using `createRunAsync()`, then call `.start()` with `inputData` matching the workflow's `inputSchema`. The workflow executes all steps and returns the final result.
+Create a workflow run instance using `createRunAsync()`, then call `.start()` with `inputData` matching the workflow's `inputSchema`. The workflow executes all steps and returns the final result.
 
-  ```typescript showLineNumbers copy
-  const run = await testWorkflow.createRunAsync();
+```typescript showLineNumbers copy
+const run = await testWorkflow.createRunAsync();
 
-  const result = await run.start({
-    inputData: {
-      message: "Hello world"
-    }
-  });
+const result = await run.start({
+  inputData: {
+    message: "Hello world",
+  },
+});
 
-  console.log(result);
-  ```
+console.log(result);
+```
 
   </TabItem>
   <TabItem value="stream" label="Stream">
 
-  Create a workflow run instance using `.createRunAsync()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as each step executes, which you can iterate over to track progress.
+Create a workflow run instance using `.createRunAsync()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as each step executes, which you can iterate over to track progress.
 
-  ```typescript showLineNumbers copy
-  const run = await testWorkflow.createRunAsync();
+```typescript showLineNumbers copy
+const run = await testWorkflow.createRunAsync();
 
-  const result = await run.stream({
-    inputData: {
-      message: "Hello world"
-    }
-  });
+const result = await run.stream({
+  inputData: {
+    message: "Hello world",
+  },
+});
 
-  for await (const chunk of result.stream) {
-    console.log(chunk);
-  }
-  ```
+for await (const chunk of result.stream) {
+  console.log(chunk);
+}
+```
 
   </TabItem>
 </Tabs>
@@ -216,7 +217,7 @@ The workflow output includes the full execution lifecycle, showing the input and
       },
       "output": {
         "formatted": "HELLO WORLD"
-      },
+      }
     },
     "step-2": {
       "status": "success",
@@ -225,7 +226,7 @@ The workflow output includes the full execution lifecycle, showing the input and
       },
       "output": {
         "emphasized": "HELLO WORLD!!!"
-      },
+      }
     }
   },
   "input": {
@@ -251,12 +252,10 @@ const step1 = createStep({
   execute: async ({ runtimeContext }) => {
     const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
 
-    const maxResults = userTier === "enterprise"
-      ? 1000
-      : 50;
+    const maxResults = userTier === "enterprise" ? 1000 : 50;
 
     return { maxResults };
-  }
+  },
 });
 ```
 
@@ -275,8 +274,6 @@ For a closer look at workflows, see our [Workflow Guide](/guides/guide/ai-recrui
 - [Inngest workflow example](/examples/workflows/inngest-workflow)
 - [Suspend and Resume workflow example](/examples/workflows_legacy/human-in-the-loop)
 
-
 ## Workflows (Legacy)
 
 For legacy workflow documentation, see [Workflows (Legacy)](../workflows-legacy/overview).
-

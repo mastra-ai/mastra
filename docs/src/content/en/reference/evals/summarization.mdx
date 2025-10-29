@@ -3,7 +3,6 @@ title: "Reference: SummarizationMetric | Evals | Mastra Docs"
 description: Documentation for the Summarization Metric in Mastra, which evaluates the quality of LLM-generated summaries for content and factual accuracy.
 ---
 
-
 # SummarizationMetric
 
 :::info Scorers
@@ -140,7 +139,6 @@ console.log(result.info); // Object containing detailed metrics about the summar
 The metric evaluates summaries through two essential components:
 
 1. **Alignment Score**: Measures factual correctness
-
    - Extracts claims from the summary
    - Verifies each claim against the original text
    - Assigns "yes", "no", or "unsure" verdicts
@@ -153,7 +151,6 @@ The metric evaluates summaries through two essential components:
 ### Scoring Process
 
 1. Calculates alignment score:
-
    - Extracts claims from summary
    - Verifies against source text
    - Computes: `supported_claims / total_claims`

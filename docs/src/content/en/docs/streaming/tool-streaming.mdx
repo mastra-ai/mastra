@@ -3,7 +3,6 @@ title: "Tool streaming | Streaming | Mastra Docs"
 description: "Learn how to use tool streaming in Mastra, including handling tool calls, tool results, and tool execution events during streaming."
 ---
 
-
 # Tool streaming
 
 Tool streaming in Mastra enables tools to send incremental results while they run, rather than waiting until execution finishes. This allows you to surface partial progress, intermediate states, or progressive data directly to users or upstream agents and workflows.
@@ -29,7 +28,7 @@ export const testAgent = new Agent({
   name: "test-agent",
   instructions: "You are a weather agent.",
   model: openai("gpt-4o-mini"),
-  tools: { testTool }
+  tools: { testTool },
 });
 ```
 
@@ -107,7 +106,7 @@ Events written to the stream are included in the emitted chunks. These chunks ca
 ```typescript showLineNumbers copy
 const stream = await testAgent.stream([
   "What is the weather in London?",
-  "Use the testTool"
+  "Use the testTool",
 ]);
 
 for await (const chunk of stream) {
@@ -136,9 +135,8 @@ export const testTool = createTool({
     await stream!.textStream.pipeTo(writer!);
 
     return {
-      value: await stream!.text
+      value: await stream!.text,
     };
-  }
+  },
 });
 ```
-

@@ -29,12 +29,13 @@ const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
   context: [
     "Einstein won the Nobel Prize for his discovery of the photoelectric effect.",
     "He published his theory of relativity in 1905.",
-    "His work revolutionized modern physics."
-  ]
+    "His work revolutionized modern physics.",
+  ],
 });
 
 const query = "What were some of Einstein's achievements?";
-const response = "Einstein won the Nobel Prize for discovering the photoelectric effect and published his groundbreaking theory of relativity.";
+const response =
+  "Einstein won the Nobel Prize for discovering the photoelectric effect and published his groundbreaking theory of relativity.";
 
 const result = await metric.measure(query, response);
 
@@ -67,8 +68,8 @@ const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
     "Solar eclipses occur when the Moon blocks the Sun.",
     "The Moon moves between the Earth and Sun during eclipses.",
     "The Moon is visible at night.",
-    "The Moon has no atmosphere."
-  ]
+    "The Moon has no atmosphere.",
+  ],
 });
 
 const query = "What causes solar eclipses?";
@@ -106,8 +107,8 @@ const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
     "The Great Barrier Reef is in Australia.",
     "Coral reefs need warm water to survive.",
     "Marine life depends on coral reefs.",
-    "The capital of Australia is Canberra."
-  ]
+    "The capital of Australia is Canberra.",
+  ],
 });
 
 const query = "What is the capital of Australia?";
@@ -138,7 +139,7 @@ You can create a `ContextRelevancyMetric` instance by providing a `context` arra
 ```typescript showLineNumbers copy
 const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
   context: [""],
-  scale: 1
+  scale: 1,
 });
 ```
 
@@ -178,6 +179,6 @@ An explanation for the score, with details including:
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-relevancy"
 />

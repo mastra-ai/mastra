@@ -22,17 +22,20 @@ const step1 = createStep({
     const { message } = inputData;
 
     const testAgent = mastra.getAgent("testAgent");
-    const response = await testAgent.generate(`Convert this message into bullet points: ${message}`, {
-      memory: {
-        thread: "user-123",
-        resource: "test-123"
-      }
-    });
+    const response = await testAgent.generate(
+      `Convert this message into bullet points: ${message}`,
+      {
+        memory: {
+          thread: "user-123",
+          resource: "test-123",
+        },
+      },
+    );
 
     return {
-      list: response.text
+      list: response.text,
     };
-  }
+  },
 });
 ```
 
@@ -55,7 +58,7 @@ export const testWorkflow = createWorkflow({
   .map(async ({ inputData }) => {
     const { message } = inputData;
     return {
-      prompt: `Convert this message into bullet points: ${message}`
+      prompt: `Convert this message into bullet points: ${message}`,
     };
   })
   .then(step1)
@@ -63,7 +66,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-  > See [Input Data Mapping](./input-data-mapping) for more information.
+> See [Input Data Mapping](./input-data-mapping) for more information.
 
 Mastra agents use a default schema that expects a `prompt` string as input and returns a `text` string as output:
 
@@ -77,7 +80,6 @@ Mastra agents use a default schema that expects a `prompt` string as input and r
   }
 }
 ```
-
 
 ## Using tools in workflows
 
@@ -97,15 +99,15 @@ const step2 = createStep({
 
     const response = await testTool.execute({
       context: {
-        text: formatted
+        text: formatted,
       },
-      runtimeContext
+      runtimeContext,
     });
 
     return {
-      emphasized: response.emphasized
+      emphasized: response.emphasized,
     };
-  }
+  },
 });
 ```
 
@@ -129,7 +131,7 @@ export const testWorkflow = createWorkflow({
   .map(async ({ inputData }) => {
     const { formatted } = inputData;
     return {
-      text: formatted
+      text: formatted,
     };
   })
   .then(step2)
@@ -142,4 +144,3 @@ export const testWorkflow = createWorkflow({
 
 - [Using Agents](/docs/agents/overview)
 - [Using Tools](../tools-mcp/overview)
-

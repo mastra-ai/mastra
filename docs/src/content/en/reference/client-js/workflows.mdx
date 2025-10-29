@@ -21,8 +21,8 @@ Get an instance of a specific workflow as defined by the const name:
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 export const testWorkflow = createWorkflow({
-  id: 'city-workflow'
-})
+  id: "city-workflow",
+});
 ```
 
 ```typescript
@@ -125,7 +125,7 @@ try {
 
   const stream = await run.stream({
     inputData: {
-      city: 'New York',
+      city: "New York",
     },
   });
 
@@ -133,7 +133,7 @@ try {
     console.log(JSON.stringify(chunk, null, 2));
   }
 } catch (e) {
-  console.error('Workflow error:', e);
+  console.error("Workflow error:", e);
 }
 ```
 
@@ -142,7 +142,7 @@ try {
 Get the result of a workflow run:
 
 ```typescript
-try  {
+try {
   const workflow = mastraClient.getWorkflow("testWorkflow");
 
   const run = await workflow.createRunAsync();

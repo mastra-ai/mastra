@@ -37,10 +37,10 @@ Then, import the necessary dependencies:
 ```typescript copy showLineNumbers title="src/index.ts"
 import { openai } from "@ai-sdk/openai";
 import { PgVector } from "@mastra/pg";
-import { 
-  MDocument, 
-  rerankWithScorer as rerank, 
-  MastraAgentRelevanceScorer 
+import {
+  MDocument,
+  rerankWithScorer as rerank,
+  MastraAgentRelevanceScorer,
 } from "@mastra/rag";
 import { embedMany, embed } from "ai";
 ```
@@ -116,7 +116,10 @@ const initialResults = await pgVector.query({
 const rerankedResults = await rerank({
   results: initialResults,
   query,
-  scorer: new MastraAgentRelevanceScorer('relevance-scorer', openai("gpt-4o-mini")),
+  scorer: new MastraAgentRelevanceScorer(
+    "relevance-scorer",
+    openai("gpt-4o-mini"),
+  ),
   options: {
     weights: {
       semantic: 0.5, // How well the content matches the query semantically

@@ -110,6 +110,7 @@ You can define custom instrumentation files in your Mastra project by placing th
 #### Supported File Types
 
 Mastra looks for instrumentation files with these extensions:
+
 - `instrumentation.js`
 - `instrumentation.ts`
 - `instrumentation.mjs`
@@ -117,13 +118,13 @@ Mastra looks for instrumentation files with these extensions:
 #### Example
 
 ```ts title="/mastra/instrumentation.ts" showLineNumbers copy
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 
 const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter({
-    url: 'http://localhost:4318/v1/traces',
+    url: "http://localhost:4318/v1/traces",
   }),
   instrumentations: [getNodeAutoInstrumentations()],
 });
@@ -152,9 +153,9 @@ export const mastra = new Mastra({
 2. Create an instrumentation file in your project (e.g., `instrumentation.mjs`):
 
 ```typescript
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 
 const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter(),

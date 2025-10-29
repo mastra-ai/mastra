@@ -26,19 +26,20 @@ const result = await run.start({ inputData: { value: "initial data" } });
     {
       name: "callback",
       type: "(event: WatchEvent) => void",
-      description: "A callback function that is called whenever a step is completed or the workflow state changes. The event parameter contains: type ('watch'), payload (currentStep and workflowState), and eventTimestamp",
+      description:
+        "A callback function that is called whenever a step is completed or the workflow state changes. The event parameter contains: type ('watch'), payload (currentStep and workflowState), and eventTimestamp",
       isOptional: false,
     },
     {
       name: "type",
       type: "'watch' | 'watch-v2'",
-      description: "The type of watch events to listen for. 'watch' for step completion events, 'watch-v2' for data stream events",
+      description:
+        "The type of watch events to listen for. 'watch' for step completion events, 'watch-v2' for data stream events",
       isOptional: true,
       defaultValue: "'watch'",
     },
   ]}
 />
-
 
 ## Returns
 
