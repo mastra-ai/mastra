@@ -12,7 +12,7 @@
     "prettier": "^3.6.2",
     "semver": "^7.7.2",
     "turbo": "^2.5.8",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   },
   "private": true,
@@ -88,7 +88,7 @@
     "pnpm": ">=9.7.0"
   },
   "resolutions": {
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.3",
     "@types/node": "^20.19.21",
     "cookie": ">=0.7.2",
     "tmp": ">=0.2.5",
