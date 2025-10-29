@@ -1,19 +1,19 @@
 ---
-title: "Textual Evals"
+title: "Textual Evals | Scorers | Mastra Docs"
 description: "Understand how Mastra uses LLM-as-judge methodology to evaluate text quality."
 ---
 
-import { ScorerCallout } from '@/components/scorer-callout'
-
 # Textual Evals
 
-<ScorerCallout />
+:::info Scorers
+This documentation refers to the legacy evals API. For the latest scorer features, see [Scorers](/docs/scorers/overview).
+:::
 
 Textual evals use an LLM-as-judge methodology to evaluate agent outputs. This approach leverages language models to assess various aspects of text quality, similar to how a teaching assistant might grade assignments using a rubric.
 
 Each eval focuses on specific quality aspects and returns a score between 0 and 1, providing quantifiable metrics for non-deterministic AI outputs.
 
-Mastra provides several eval metrics for assessing Agent outputs. Mastra is not limited to these metrics, and you can also [define your own evals](/docs/evals/custom-eval).
+Mastra provides several eval metrics for assessing Agent outputs. Mastra is not limited to these metrics, and you can also [define your own evals](/docs/scorers/evals-old-api/custom-eval).
 
 ## Why Use Textual Evals?
 

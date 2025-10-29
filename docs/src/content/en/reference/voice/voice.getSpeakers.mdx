@@ -3,7 +3,8 @@ title: "Reference: voice.getSpeakers() | Voice Providers | Mastra Docs"
 description: "Documentation for the getSpeakers() method available in voice providers, which retrieves available voice options."
 ---
 
-import { Tabs } from "nextra/components";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # voice.getSpeakers()
 
@@ -58,16 +59,8 @@ This method does not accept any parameters.
 
 Different voice providers return different metadata for their voices:
 
-{/*
-LLM CONTEXT: This Tabs component shows the different metadata structures returned by various voice providers' getSpeakers() method.
-Each tab displays the specific properties and data types returned by that voice provider when listing available speakers/voices.
-The tabs help users understand what information is available for each provider and how to access voice-specific metadata.
-Each tab includes property tables showing voiceId and provider-specific metadata like name, language, gender, accent, etc.
-The providers include OpenAI, OpenAI Realtime, Deepgram, ElevenLabs, Google, Murf, PlayAI, Sarvam, Speechify, and Azure.
-*/}
-
-<Tabs items={["OpenAI", "OpenAI Realtime", "Deepgram", "ElevenLabs", "Google", "Murf", "PlayAI", "Sarvam", "Speechify", "Azure"]}>
-  <Tabs.Tab label="OpenAI">
+<Tabs>
+  <TabItem value="OpenAI">
     <PropertiesTable
       content={[
         {
@@ -77,9 +70,9 @@ The providers include OpenAI, OpenAI Realtime, Deepgram, ElevenLabs, Google, Mur
         }
       ]}
     />
-  </Tabs.Tab>
+  </TabItem>
 
-<Tabs.Tab label="OpenAI Realtime">
+<TabItem value="OpenAI Realtime">
   <PropertiesTable
     content={[
       {
@@ -90,9 +83,9 @@ The providers include OpenAI, OpenAI Realtime, Deepgram, ElevenLabs, Google, Mur
       },
     ]}
   />
-</Tabs.Tab>
+</TabItem>
 
-<Tabs.Tab label="Deepgram">
+<TabItem value="Deepgram">
   <PropertiesTable
     content={[
       {
@@ -107,9 +100,9 @@ The providers include OpenAI, OpenAI Realtime, Deepgram, ElevenLabs, Google, Mur
       },
     ]}
   />
-</Tabs.Tab>
+</TabItem>
 
-<Tabs.Tab label="ElevenLabs">
+<TabItem value="ElevenLabs">
   <PropertiesTable
     content={[
       {
@@ -129,9 +122,9 @@ The providers include OpenAI, OpenAI Realtime, Deepgram, ElevenLabs, Google, Mur
       },
     ]}
   />
-</Tabs.Tab>
+</TabItem>
 
-<Tabs.Tab label="Google">
+<TabItem value="Google">
   <PropertiesTable
     content={[
       {
@@ -147,9 +140,9 @@ The providers include OpenAI, OpenAI Realtime, Deepgram, ElevenLabs, Google, Mur
       },
     ]}
   />
-</Tabs.Tab>
+</TabItem>
 
-<Tabs.Tab label="Azure">
+<TabItem value="Azure">
   <PropertiesTable
     content={[
       {
@@ -169,9 +162,9 @@ The providers include OpenAI, OpenAI Realtime, Deepgram, ElevenLabs, Google, Mur
       },
     ]}
   />
-</Tabs.Tab>
+</TabItem>
 
-<Tabs.Tab label="Murf">
+<TabItem value="Murf">
   <PropertiesTable
     content={[
       {
@@ -197,9 +190,9 @@ The providers include OpenAI, OpenAI Realtime, Deepgram, ElevenLabs, Google, Mur
       },
     ]}
   />
-</Tabs.Tab>
+</TabItem>
 
-<Tabs.Tab label="PlayAI">
+<TabItem value="PlayAI">
   <PropertiesTable
     content={[
       {
@@ -237,9 +230,9 @@ The providers include OpenAI, OpenAI Realtime, Deepgram, ElevenLabs, Google, Mur
       },
     ]}
   />
-</Tabs.Tab>
+</TabItem>
 
-<Tabs.Tab label="Speechify">
+<TabItem value="Speechify">
   <PropertiesTable
     content={[
       {
@@ -259,9 +252,9 @@ The providers include OpenAI, OpenAI Realtime, Deepgram, ElevenLabs, Google, Mur
       },
     ]}
   />
-</Tabs.Tab>
+</TabItem>
 
-  <Tabs.Tab label="Sarvam">
+<TabItem value="Sarvam">
     <PropertiesTable
       content={[
         {
@@ -286,7 +279,7 @@ The providers include OpenAI, OpenAI Realtime, Deepgram, ElevenLabs, Google, Mur
         }
       ]}
     />
-  </Tabs.Tab>
+  </TabItem>
 </Tabs>
 
 ## Notes
