@@ -95,14 +95,15 @@ export class MessageLengthLimiter implements Processor {
       for (let j = 0; j < parts.length; j++) {
         const part = parts[j];
         if (part.type === "text") {
-          const textPart = part as any;
-          const partLength = textPart.text.length;
+          const partLength = part.text.length;
 
           if (currentLength + partLength > maxLength) {
             const remainingChars = maxLength - currentLength;
             if (remainingChars > 0) {
-              textPart.text =
-                textPart.text.substring(0, remainingChars) + "...";
+              parts[j] = {
+                ...part,
+                text: part.text.substring(0, remainingChars) + "...",
+              };
             } else {
               parts.splice(j);
               break;
