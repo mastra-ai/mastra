@@ -442,47 +442,6 @@ export async function getAgentByIdHandler({
   }
 }
 
-export async function getEvalsByAgentIdHandler({
-  mastra,
-  runtimeContext,
-  agentId,
-}: Context & { runtimeContext: RuntimeContext; agentId: string }) {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-    const evals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'test')) || [];
-    const instructions = await agent.getInstructions({ runtimeContext });
-    return {
-      id: agentId,
-      name: agent.name,
-      instructions,
-      evals,
-    };
-  } catch (error) {
-    return handleError(error, 'Error getting test evals');
-  }
-}
-
-export async function getLiveEvalsByAgentIdHandler({
-  mastra,
-  runtimeContext,
-  agentId,
-}: Context & { runtimeContext: RuntimeContext; agentId: string }) {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-    const evals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'live')) || [];
-    const instructions = await agent.getInstructions({ runtimeContext });
-
-    return {
-      id: agentId,
-      name: agent.name,
-      instructions,
-      evals,
-    };
-  } catch (error) {
-    return handleError(error, 'Error getting live evals');
-  }
-}
-
 export async function generateLegacyHandler({
   mastra,
   runtimeContext,
@@ -896,6 +855,23 @@ export async function updateAgentModelHandler({
     return { message: 'Agent model updated' };
   } catch (error) {
     return handleError(error, 'error updating agent model');
+  }
+}
+
+export async function resetAgentModelHandler({
+  mastra,
+  agentId,
+}: Context & {
+  agentId: string;
+}): Promise<{ message: string }> {
+  try {
+    const agent = await getAgentFromSystem({ mastra, agentId });
+
+    agent.__resetToOriginalModel();
+
+    return { message: 'Agent model reset to original' };
+  } catch (error) {
+    return handleError(error, 'error resetting agent model');
   }
 }
 

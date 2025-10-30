@@ -37,31 +37,7 @@ const result = await store.getEvals({
 
 ## Enhanced Methods
 
-### 1. getEvals() - New Comprehensive Evaluation Retrieval
-
-```typescript
-const result = await store.getEvals({
-  agentName?: string;           // Filter by agent name
-  type?: 'test' | 'live';       // Filter by evaluation type
-  page?: number;                // Page number (0-based)
-  perPage?: number;             // Items per page
-  limit?: number;               // Alternative: max items
-  offset?: number;              // Alternative: items to skip
-  fromDate?: Date;              // Filter by date range
-  toDate?: Date;
-});
-
-// Returns:
-{
-  evals: EvalRow[];             // Evaluation results
-  total: number;                // Total count (before pagination)
-  page?: number;                // Current page (page-based)
-  perPage?: number;             // Items per page (page-based)
-  hasMore: boolean;             // Whether more data exists
-}
-```
-
-### 2. getMessages() - Enhanced with Pagination Support
+### 1. getMessages() - Enhanced with Pagination Support
 
 The existing `getMessages` function now supports pagination while maintaining full backward compatibility:
 

@@ -62,7 +62,6 @@ createTestSuite(
 //     await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
 //     await store.clearTable({ tableName: TABLE_MESSAGES });
 //     await store.clearTable({ tableName: TABLE_THREADS });
-//     await store.clearTable({ tableName: TABLE_EVALS });
 
 //     await store.close();
 //   });
@@ -73,7 +72,6 @@ createTestSuite(
 //     await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
 //     await store.clearTable({ tableName: TABLE_MESSAGES });
 //     await store.clearTable({ tableName: TABLE_THREADS });
-//     await store.clearTable({ tableName: TABLE_EVALS });
 //   });
 
 //   describe('Table Operations', () => {
@@ -1523,121 +1521,9 @@ createTestSuite(
 //   });
 
 //   beforeEach(async () => {
-//     await store.clearTable({ tableName: TABLE_EVALS });
 //     await store.clearTable({ tableName: TABLE_TRACES });
 //     await store.clearTable({ tableName: TABLE_MESSAGES });
 //     await store.clearTable({ tableName: TABLE_THREADS });
-//   });
-
-//   describe('getEvals with pagination', () => {
-//     it('should return paginated evals with total count (page/perPage)', async () => {
-//       const agentName = 'd1-pagination-agent-evals';
-//       const evalRecords = Array.from({ length: 25 }, (_, i) => createSampleEval(agentName, i % 2 === 0));
-//       // D1Store's batchInsert expects records to be processed (dates to ISO strings, objects to JSON strings)
-//       const processedRecords = evalRecords.map(r => store['processRecord'](r as any));
-//       await store.batchInsert({ tableName: TABLE_EVALS, records: await Promise.all(processedRecords) });
-
-//       const page1 = await store.getEvals({ agentName, page: 0, perPage: 10 });
-//       expect(page1.evals).toHaveLength(10);
-//       expect(page1.total).toBe(25);
-//       expect(page1.page).toBe(0);
-//       expect(page1.perPage).toBe(10);
-//       expect(page1.hasMore).toBe(true);
-
-//       const page3 = await store.getEvals({ agentName, page: 2, perPage: 10 });
-//       expect(page3.evals).toHaveLength(5);
-//       expect(page3.total).toBe(25);
-//       expect(page3.page).toBe(2);
-//       expect(page3.perPage).toBe(10);
-//       expect(page3.hasMore).toBe(false);
-//     });
-
-//     it('should support page/perPage pagination for getEvals', async () => {
-//       const agentName = 'd1-pagination-lo-evals';
-//       const evalRecords = Array.from({ length: 15 }, () => createSampleEval(agentName));
-//       const processedRecords = evalRecords.map(r => store['processRecord'](r as any));
-//       await store.batchInsert({ tableName: TABLE_EVALS, records: await Promise.all(processedRecords) });
-
-//       // page 2 with 5 per page (0-indexed) would be records 10-14
-//       const result = await store.getEvals({ agentName, page: 2, perPage: 5 });
-//       expect(result.evals).toHaveLength(5);
-//       expect(result.total).toBe(15);
-//       expect(result.page).toBe(2);
-//       expect(result.perPage).toBe(5);
-//       expect(result.hasMore).toBe(false); // total is 15, 2*5+5 = 15, no more records
-//     });
-
-//     it('should filter by type with pagination for getEvals', async () => {
-//       const agentName = 'd1-pagination-type-evals';
-//       const testEvals = Array.from({ length: 10 }, () => createSampleEval(agentName, true));
-//       const liveEvals = Array.from({ length: 8 }, () => createSampleEval(agentName, false));
-//       const processedTestEvals = testEvals.map(r => store['processRecord'](r as any));
-//       const processedLiveEvals = liveEvals.map(r => store['processRecord'](r as any));
-//       await store.batchInsert({
-//         tableName: TABLE_EVALS,
-//         records: await Promise.all([...processedTestEvals, ...processedLiveEvals]),
-//       });
-
-//       const testResults = await store.getEvals({ agentName, type: 'test', page: 0, perPage: 5 });
-//       expect(testResults.evals).toHaveLength(5);
-//       expect(testResults.total).toBe(10);
-//       expect(testResults.hasMore).toBe(true);
-
-//       const liveResults = await store.getEvals({ agentName, type: 'live', page: 1, perPage: 3 });
-//       expect(liveResults.evals).toHaveLength(3); // 8 total, page 0 gets 3, page 1 gets 3, page 2 gets 2
-//       expect(liveResults.total).toBe(8);
-//       expect(liveResults.hasMore).toBe(true); // 3*1 + 3 < 8
-
-//       const liveResultsPage2 = await store.getEvals({ agentName, type: 'live', page: 2, perPage: 3 });
-//       expect(liveResultsPage2.evals).toHaveLength(2);
-//       expect(liveResultsPage2.total).toBe(8);
-//       expect(liveResultsPage2.hasMore).toBe(false);
-//     });
-
-//     it('should filter by date with pagination for getEvals', async () => {
-//       const agentName = 'd1-pagination-date-evals';
-//       const now = new Date();
-//       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-//       const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
-
-//       const recordsToInsert = [
-//         createSampleEval(agentName, false, dayBeforeYesterday),
-//         createSampleEval(agentName, false, dayBeforeYesterday),
-//         createSampleEval(agentName, false, yesterday),
-//         createSampleEval(agentName, false, yesterday),
-//         createSampleEval(agentName, false, now),
-//         createSampleEval(agentName, false, now),
-//       ];
-//       const processedRecords = recordsToInsert.map(r => store['processRecord'](r as any));
-//       await store.batchInsert({ tableName: TABLE_EVALS, records: await Promise.all(processedRecords) });
-
-//       const fromYesterday = await store.getEvals({ agentName, fromDate: yesterday, page: 0, perPage: 3 });
-//       expect(fromYesterday.total).toBe(4); // 2 from now, 2 from yesterday
-//       expect(fromYesterday.evals).toHaveLength(3);
-//       fromYesterday.evals.forEach(
-//         e =>
-//           expect(new Date(e.createdAt).getTime()).toBeGreaterThanOrEqual(
-//             new Date(yesterday.toISOString().split('T')[0]).getTime(),
-//           ), // Compare date part only for safety with TZ
-//       );
-//       if (fromYesterday.evals.length > 0) {
-//         expect(new Date(fromYesterday.evals[0].createdAt).toISOString().slice(0, 10)).toEqual(
-//           now.toISOString().slice(0, 10),
-//         );
-//       }
-
-//       const onlyDayBefore = await store.getEvals({
-//         agentName,
-//         toDate: new Date(yesterday.getTime() - 1), //  Should only include dayBeforeYesterday
-//         page: 0,
-//         perPage: 5,
-//       });
-//       expect(onlyDayBefore.total).toBe(2);
-//       expect(onlyDayBefore.evals).toHaveLength(2);
-//       onlyDayBefore.evals.forEach(e =>
-//         expect(new Date(e.createdAt).toISOString().slice(0, 10)).toEqual(dayBeforeYesterday.toISOString().slice(0, 10)),
-//       );
-//     });
 //   });
 
 //   describe('getMessages with pagination', () => {

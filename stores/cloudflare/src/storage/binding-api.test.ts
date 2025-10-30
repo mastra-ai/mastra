@@ -1,7 +1,6 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
 import { createTestSuite } from '@internal/storage-test-utils';
 import {
-  TABLE_EVALS,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_SCORERS,
@@ -19,7 +18,6 @@ export interface Env {
   [TABLE_THREADS]: KVNamespace;
   [TABLE_MESSAGES]: KVNamespace;
   [TABLE_WORKFLOW_SNAPSHOT]: KVNamespace;
-  [TABLE_EVALS]: KVNamespace;
   [TABLE_TRACES]: KVNamespace;
   [TABLE_SCORERS]: KVNamespace;
   [TABLE_RESOURCES]: KVNamespace;
@@ -34,15 +32,7 @@ vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 const mf = new Miniflare({
   script: 'export default {};',
   modules: true,
-  kvNamespaces: [
-    TABLE_THREADS,
-    TABLE_MESSAGES,
-    TABLE_WORKFLOW_SNAPSHOT,
-    TABLE_EVALS,
-    TABLE_TRACES,
-    TABLE_RESOURCES,
-    TABLE_SCORERS,
-  ],
+  kvNamespaces: [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_TRACES, TABLE_RESOURCES, TABLE_SCORERS],
 });
 
 const TEST_CONFIG: CloudflareWorkersConfig = {
@@ -55,7 +45,6 @@ const kvBindings = {
   [TABLE_THREADS]: (await mf.getKVNamespace(TABLE_THREADS)) as KVNamespace,
   [TABLE_MESSAGES]: (await mf.getKVNamespace(TABLE_MESSAGES)) as KVNamespace,
   [TABLE_WORKFLOW_SNAPSHOT]: (await mf.getKVNamespace(TABLE_WORKFLOW_SNAPSHOT)) as KVNamespace,
-  [TABLE_EVALS]: (await mf.getKVNamespace(TABLE_EVALS)) as KVNamespace,
   [TABLE_TRACES]: (await mf.getKVNamespace(TABLE_TRACES)) as KVNamespace,
   [TABLE_RESOURCES]: (await mf.getKVNamespace(TABLE_RESOURCES)) as KVNamespace,
   [TABLE_SCORERS]: (await mf.getKVNamespace(TABLE_SCORERS)) as KVNamespace,
@@ -84,7 +73,6 @@ createTestSuite(new CloudflareStore(TEST_CONFIG));
 //       TABLE_THREADS,
 //       TABLE_MESSAGES,
 //       TABLE_WORKFLOW_SNAPSHOT,
-//       TABLE_EVALS,
 //       TABLE_TRACES,
 //       TABLE_RESOURCES,
 //     ] as TABLE_NAMES[];

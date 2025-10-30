@@ -1,10 +1,10 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { MockMemory } from '../memory/mock';
 import { RuntimeContext } from '../runtime-context';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
-import { MockMemory } from './test-utils';
 import { Agent } from './index';
 
 describe('Agent - network', () => {

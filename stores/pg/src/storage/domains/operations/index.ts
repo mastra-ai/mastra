@@ -5,7 +5,6 @@ import {
   TABLE_THREADS,
   TABLE_MESSAGES,
   TABLE_TRACES,
-  TABLE_EVALS,
   TABLE_SCORERS,
   TABLE_AI_SPANS,
   TABLE_SCHEMAS,
@@ -737,12 +736,6 @@ export class StoreOperationsPG extends StoreOperations {
         name: `${schemaPrefix}mastra_traces_name_starttime_idx`,
         table: TABLE_TRACES,
         columns: ['name', 'startTime DESC'],
-      },
-      // Composite index for evals (filter + sort)
-      {
-        name: `${schemaPrefix}mastra_evals_agent_name_created_at_idx`,
-        table: TABLE_EVALS,
-        columns: ['agent_name', 'created_at DESC'],
       },
       // Composite index for scores (filter + sort)
       {

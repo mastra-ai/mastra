@@ -7,7 +7,6 @@ import type {
   StorageColumn,
   StorageGetMessagesArg,
   StorageResourceType,
-  EvalRow,
   WorkflowRun,
   WorkflowRuns,
   PaginationInfo,
@@ -20,7 +19,6 @@ type DBMode = 'read' | 'read-write';
 export class BenchmarkStore extends MastraStorage {
   private data: Record<TABLE_NAMES, Map<string, any>> = {
     mastra_workflow_snapshot: new Map(),
-    mastra_evals: new Map(),
     mastra_messages: new Map(),
     mastra_threads: new Map(),
     mastra_traces: new Map(),

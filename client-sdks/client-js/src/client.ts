@@ -13,7 +13,6 @@ import {
   AgentBuilder,
   Observability,
 } from './resources';
-import { NetworkMemoryThread } from './resources/network-memory-thread';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -30,9 +29,6 @@ import type {
   SaveMessageToMemoryResponse,
   McpServerListResponse,
   McpServerToolListResponse,
-  GetNetworkMemoryThreadParams,
-  CreateNetworkMemoryThreadParams,
-  SaveNetworkMessageToMemoryParams,
   GetScorerResponse,
   GetScoresByScorerIdParams,
   GetScoresResponse,
@@ -127,7 +123,7 @@ export class MastraClient extends BaseResource {
    * @param threadId - ID of the memory thread to retrieve
    * @returns MemoryThread instance
    */
-  public getMemoryThread(threadId: string, agentId: string) {
+  public getMemoryThread({ threadId, agentId }: { threadId: string; agentId: string }) {
     return new MemoryThread(this.options, threadId, agentId);
   }
 
@@ -184,53 +180,6 @@ export class MastraClient extends BaseResource {
     runtimeContext?: RuntimeContext | Record<string, any>,
   ): Promise<{ result: boolean }> {
     return this.request(`/api/memory/status?agentId=${agentId}${runtimeContextQueryString(runtimeContext, '&')}`);
-  }
-
-  /**
-   * Retrieves memory threads for a resource
-   * @param params - Parameters containing the resource ID
-   * @returns Promise containing array of memory threads
-   */
-  public getNetworkMemoryThreads(params: GetNetworkMemoryThreadParams): Promise<GetMemoryThreadResponse> {
-    return this.request(`/api/memory/network/threads?resourceid=${params.resourceId}&networkId=${params.networkId}`);
-  }
-
-  /**
-   * Creates a new memory thread
-   * @param params - Parameters for creating the memory thread
-   * @returns Promise containing the created memory thread
-   */
-  public createNetworkMemoryThread(params: CreateNetworkMemoryThreadParams): Promise<CreateMemoryThreadResponse> {
-    return this.request(`/api/memory/network/threads?networkId=${params.networkId}`, { method: 'POST', body: params });
-  }
-
-  /**
-   * Gets a memory thread instance by ID
-   * @param threadId - ID of the memory thread to retrieve
-   * @returns MemoryThread instance
-   */
-  public getNetworkMemoryThread(threadId: string, networkId: string) {
-    return new NetworkMemoryThread(this.options, threadId, networkId);
-  }
-
-  /**
-   * Saves messages to memory
-   * @param params - Parameters containing messages to save
-   * @returns Promise containing the saved messages
-   */
-  public saveNetworkMessageToMemory(params: SaveNetworkMessageToMemoryParams): Promise<SaveMessageToMemoryResponse> {
-    return this.request(`/api/memory/network/save-messages?networkId=${params.networkId}`, {
-      method: 'POST',
-      body: params,
-    });
-  }
-
-  /**
-   * Gets the status of the memory system
-   * @returns Promise containing memory system status
-   */
-  public getNetworkMemoryStatus(networkId: string): Promise<{ result: boolean }> {
-    return this.request(`/api/memory/network/status?networkId=${networkId}`);
   }
 
   /**

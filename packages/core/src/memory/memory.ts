@@ -21,6 +21,7 @@ import type {
   MemoryConfig,
   MastraMessageV1,
   WorkingMemoryTemplate,
+  MessageDeleteInput,
 } from './types';
 
 export type MemoryProcessorOpts = {
@@ -525,7 +526,7 @@ https://mastra.ai/en/docs/memory/overview`,
    * @param messageIds - Array of message IDs to delete
    * @returns Promise that resolves when all messages are deleted
    */
-  abstract deleteMessages(messageIds: string[]): Promise<void>;
+  abstract deleteMessages(messageIds: MessageDeleteInput): Promise<void>;
 
   /**
    * Get input processors for this memory instance.
@@ -733,4 +734,6 @@ https://mastra.ai/en/docs/memory/overview`,
     // The agent will merge them with configuredProcessors
     return processors;
   }
+
+  abstract deleteMessages(messageIds: MessageDeleteInput): Promise<void>;
 }

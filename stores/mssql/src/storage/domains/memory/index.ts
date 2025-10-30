@@ -15,6 +15,10 @@ import type {
   PaginationArgs,
   StorageResourceType,
   ThreadSortOptions,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListThreadsByResourceIdPaginatedInput,
+  StorageListThreadsByResourceIdPaginatedOutput,
 } from '@mastra/core/storage';
 import sql from 'mssql';
 import type { StoreOperationsMSSQL } from '../operations';
@@ -575,6 +579,27 @@ export class MemoryMSSQL extends MemoryStorage {
       this.logger?.trackException?.(mastraError);
       return [];
     }
+  }
+
+  public async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    throw new Error(
+      `listMessages is not yet implemented by this storage adapter (${this.constructor.name}). ` +
+        `This method is currently being rolled out across all storage adapters. ` +
+        `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
+    );
+  }
+
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
+    return this.getMessagesById({ messageIds, format: 'v2' });
+  }
+
+  public async listThreadsByResourceIdPaginated(
+    args: StorageListThreadsByResourceIdPaginatedInput,
+  ): Promise<StorageListThreadsByResourceIdPaginatedOutput> {
+    const { resourceId, limit, offset, orderBy, sortDirection } = args;
+    const page = Math.floor(offset / limit);
+    const perPage = limit;
+    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage, orderBy, sortDirection });
   }
 
   public async getMessagesPaginated(

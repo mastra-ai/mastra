@@ -4,7 +4,6 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   StoreOperations,
   TABLE_AI_SPANS,
-  TABLE_EVALS,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_SCORERS,
@@ -46,7 +45,6 @@ export class StoreOperationsDynamoDB extends StoreOperations {
       [TABLE_THREADS]: 'thread',
       [TABLE_MESSAGES]: 'message',
       [TABLE_WORKFLOW_SNAPSHOT]: 'workflow_snapshot',
-      [TABLE_EVALS]: 'eval',
       [TABLE_SCORERS]: 'score',
       [TABLE_TRACES]: 'trace',
       [TABLE_RESOURCES]: 'resource',

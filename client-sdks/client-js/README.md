@@ -65,7 +65,7 @@ const client = new MastraClient({
 
 - `getMemoryThreads(params)`: Get memory threads
 - `createMemoryThread(params)`: Create a new memory thread
-- `getMemoryThread(threadId)`: Get a memory thread instance
+- `getMemoryThread({ threadId, agentId })`: Get a memory thread instance
 - `saveMessageToMemory(params)`: Save messages to memory
 - `getMemoryStatus()`: Get memory system status
 

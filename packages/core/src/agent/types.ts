@@ -3,7 +3,6 @@ import type { GenerateTextOnStepFinishCallback, ToolSet } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
-import type { Metric } from '../eval';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -107,11 +106,7 @@ type ModelWithRetries = {
   enabled?: boolean; //defaults to true
 };
 
-export interface AgentConfig<
-  TAgentId extends string = string,
-  TTools extends ToolsInput = ToolsInput,
-  TMetrics extends Record<string, Metric> = Record<string, Metric>,
-> {
+export interface AgentConfig<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> {
   /**
    * Identifier for the agent.
    * @defaultValue Uses `name` if not provided.
@@ -171,10 +166,7 @@ export interface AgentConfig<
    * Scoring configuration for runtime evaluation and observability. Can be static or dynamically provided.
    */
   scorers?: DynamicArgument<MastraScorers>;
-  /**
-   * Evaluation metrics for scoring agent responses.
-   */
-  evals?: TMetrics;
+
   /**
    * Memory module used for storing and retrieving stateful context.
    */
@@ -365,7 +357,6 @@ export type AgentStreamOptions<
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
 
 export type AgentExecuteOnFinishOptions = {
-  instructions: SystemMessage;
   runId: string;
   result: Parameters<StreamTextOnFinishCallback<ToolSet>>[0] & { object?: unknown };
   thread: StorageThreadType | null | undefined;

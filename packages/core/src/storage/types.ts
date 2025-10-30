@@ -1,6 +1,5 @@
 import type { AISpanType } from '../ai-tracing';
-import type { MetricResult, TestInfo } from '../eval';
-import type { MemoryConfig } from '../memory/types';
+import type { MemoryConfig, MastraMessageV2, StorageThreadType } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
 import type { LegacyWorkflowRunState } from '../workflows/legacy';
 
@@ -73,6 +72,52 @@ export type PaginationInfo = {
 
 export type MastraMessageFormat = 'v1' | 'v2';
 
+export type StorageListMessagesInput = {
+  threadId: string;
+  resourceId?: string;
+  include?: {
+    id: string;
+    threadId?: string;
+    withPreviousMessages?: number;
+    withNextMessages?: number;
+  }[];
+  limit?: number | false;
+  offset?: number;
+  filter?: {
+    dateRange?: {
+      start?: Date;
+      end?: Date;
+    };
+  };
+  orderBy?: {
+    field: 'createdAt';
+    direction: 'ASC' | 'DESC';
+  };
+};
+
+export type StorageListMessagesOutput = PaginationInfo & {
+  messages: MastraMessageV2[];
+};
+
+export type StorageListWorkflowRunsInput = {
+  workflowName?: string;
+  fromDate?: Date;
+  toDate?: Date;
+  limit?: number;
+  offset?: number;
+  resourceId?: string;
+};
+
+export type StorageListThreadsByResourceIdPaginatedInput = {
+  resourceId: string;
+  limit: number;
+  offset: number;
+} & ThreadSortOptions;
+
+export type StorageListThreadsByResourceIdPaginatedOutput = PaginationInfo & {
+  threads: StorageThreadType[];
+};
+
 export type StorageGetMessagesArg = {
   threadId: string;
   resourceId?: string;
@@ -89,32 +134,6 @@ export type StorageGetMessagesArg = {
   };
   threadConfig?: MemoryConfig;
   format?: MastraMessageFormat;
-};
-
-export type StorageEvalRow = {
-  input: string;
-  output: string;
-  result: Record<string, any>;
-  agent_name: string;
-  metric_name: string;
-  instructions: string;
-  test_info: Record<string, any> | null;
-  global_run_id: string;
-  run_id: string;
-  created_at: Date;
-};
-
-export type EvalRow = {
-  input: string;
-  output: string;
-  result: MetricResult;
-  agentName: string;
-  createdAt: string;
-  metricName: string;
-  instructions: string;
-  runId: string;
-  globalRunId: string;
-  testInfo?: TestInfo;
 };
 
 export type StorageResourceType = {

@@ -5,7 +5,6 @@ import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
-  EvalRow,
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
@@ -13,7 +12,6 @@ import type {
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
-  PaginationArgs,
   StoragePagination,
   ThreadSortOptions,
   StorageDomains,
@@ -27,7 +25,6 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
-import { LegacyEvalsMSSQL } from './domains/legacy-evals';
 import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
 import { StoreOperationsMSSQL } from './domains/operations';
@@ -91,7 +88,6 @@ export class MSSQLStore extends MastraStorage {
               options: config.options || { encrypt: true, trustServerCertificate: true },
             });
 
-      const legacyEvals = new LegacyEvalsMSSQL({ pool: this.pool, schema: this.schema });
       const operations = new StoreOperationsMSSQL({ pool: this.pool, schemaName: this.schema });
       const scores = new ScoresMSSQL({ pool: this.pool, operations, schema: this.schema });
       const workflows = new WorkflowsMSSQL({ pool: this.pool, operations, schema: this.schema });
@@ -102,7 +98,6 @@ export class MSSQLStore extends MastraStorage {
         operations,
         scores,
         workflows,
-        legacyEvals,
         memory,
         observability,
       };
@@ -177,20 +172,6 @@ export class MSSQLStore extends MastraStorage {
       aiTracing: true,
       indexManagement: true,
     };
-  }
-
-  /** @deprecated use getEvals instead */
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
-  }
-
-  async getEvals(
-    options: {
-      agentName?: string;
-      type?: 'test' | 'live';
-    } & PaginationArgs = {},
-  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
   }
 
   async createTable({

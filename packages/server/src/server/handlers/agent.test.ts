@@ -5,7 +5,7 @@ import { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
 import { UnicodeNormalizer, TokenLimiterProcessor } from '@mastra/core/processors';
-import type { EvalRow, MastraStorage } from '@mastra/core/storage';
+import type { MastraStorage } from '@mastra/core/storage';
 import type { AISDKV5OutputStream } from '@mastra/core/stream';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -14,8 +14,6 @@ import { HTTPException } from '../http-exception';
 import {
   getAgentsHandler,
   getAgentByIdHandler,
-  getEvalsByAgentIdHandler,
-  getLiveEvalsByAgentIdHandler,
   generateHandler,
   updateAgentModelHandler,
   reorderAgentModelListHandler,
@@ -23,23 +21,6 @@ import {
   streamGenerateLegacyHandler,
   streamGenerateHandler,
 } from './agents';
-
-const mockEvals = [
-  {
-    runId: '1',
-    input: 'test',
-    output: 'test',
-    result: {
-      score: 1,
-      info: {},
-    },
-    agentName: 'test-agent',
-    createdAt: new Date().toISOString(),
-    metricName: 'test',
-    instructions: 'test',
-    globalRunId: 'test',
-  },
-] as EvalRow[];
 class MockAgent extends Agent {
   constructor(config: AgentConfig) {
     super(config);
@@ -204,9 +185,13 @@ describe('Agent Handlers', () => {
       const firstStep = createStep({
         id: 'first',
         description: 'First step',
-        inputSchema: z.object({ name: z.string() }),
-        outputSchema: z.object({}),
-        execute: async () => ({}),
+        inputSchema: z.object({
+          name: z.string(),
+        }),
+        outputSchema: z.object({ name: z.string() }),
+        execute: async ({ inputData }) => ({
+          name: inputData.name,
+        }),
       });
 
       const secondStep = createStep({
@@ -303,37 +288,6 @@ describe('Agent Handlers', () => {
           message: 'Agent with name non-existing not found',
         }),
       );
-    });
-  });
-
-  describe('getEvalsByAgentIdHandler', () => {
-    it('should return agent evals', async () => {
-      const storage = mockMastra.getStorage();
-      vi.spyOn(storage!, 'getEvalsByAgentName').mockResolvedValue(mockEvals);
-
-      const result = await getEvalsByAgentIdHandler({ mastra: mockMastra, agentId: 'test-agent', runtimeContext });
-
-      expect(result).toEqual({
-        id: 'test-agent',
-        name: 'test-agent',
-        instructions: 'test instructions',
-        evals: mockEvals,
-      });
-    });
-  });
-
-  describe('getLiveEvalsByAgentIdHandler', () => {
-    it('should return live agent evals', async () => {
-      vi.spyOn(mockMastra.getStorage()!, 'getEvalsByAgentName').mockResolvedValue(mockEvals);
-
-      const result = await getLiveEvalsByAgentIdHandler({ mastra: mockMastra, agentId: 'test-agent', runtimeContext });
-
-      expect(result).toEqual({
-        id: 'test-agent',
-        name: 'test-agent',
-        instructions: 'test instructions',
-        evals: mockEvals,
-      });
     });
   });
 

@@ -109,7 +109,7 @@ export class LegacyWorkflow<
     config?: StepConfig<ReturnType<TWorkflow['toStep']>, CondStep, VarStep, TTriggerSchema, Steps>,
   ): WorkflowBuilder<this>;
   step<
-    TAgent extends Agent<any, any, any>,
+    TAgent extends Agent<any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
     Steps extends StepAction<any, any, any, any>[] = TSteps,
@@ -124,7 +124,7 @@ export class LegacyWorkflow<
     Steps extends StepAction<any, any, any, any>[] = TSteps,
   >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema, Steps>): WorkflowBuilder<this>;
   step<
-    TStepLike extends StepAction<string, any, any, any> | LegacyWorkflow<TSteps, any, any, any> | Agent<any, any, any>,
+    TStepLike extends StepAction<string, any, any, any> | LegacyWorkflow<TSteps, any, any, any> | Agent<any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
     Steps extends StepAction<any, any, any, any>[] = TSteps,
@@ -133,13 +133,13 @@ export class LegacyWorkflow<
       ? TStepLike
       : TStepLike extends LegacyWorkflow<TSteps, any, any, any>
         ? LegacyWorkflow<TSteps, any, any, any>
-        : Agent<any, any, any>,
+        : Agent<any, any>,
     config?: StepConfig<
       TStepLike extends StepAction<string, any, any, any>
         ? TStepLike
         : TStepLike extends LegacyWorkflow<TSteps, any, any, any>
           ? ReturnType<TStepLike['toStep']>
-          : TStepLike extends Agent<any, any, any>
+          : TStepLike extends Agent<any, any>
             ? StepAction<string, any, any, any>
             : never,
       CondStep,
@@ -386,7 +386,7 @@ export class LegacyWorkflow<
     config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema>,
   ): this;
   then<
-    TAgent extends Agent<any, any, any>,
+    TAgent extends Agent<any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(
@@ -394,7 +394,7 @@ export class LegacyWorkflow<
     config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema>,
   ): this;
   then<
-    TStep extends StepAction<string, any, any, any> | LegacyWorkflow<any, any, any, any> | Agent<any, any, any>,
+    TStep extends StepAction<string, any, any, any> | LegacyWorkflow<any, any, any, any> | Agent<any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(next: TStep | TStep[], config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema>) {
@@ -847,7 +847,7 @@ export class LegacyWorkflow<
   after<TWorkflow extends LegacyWorkflow<any, any, any, any>>(
     steps: TWorkflow | TWorkflow[],
   ): Omit<WorkflowBuilder<this>, 'then' | 'after'>;
-  after<TAgent extends Agent<any, any, any>>(steps: TAgent | TAgent[]): Omit<WorkflowBuilder<this>, 'then' | 'after'>;
+  after<TAgent extends Agent<any, any>>(steps: TAgent | TAgent[]): Omit<WorkflowBuilder<this>, 'then' | 'after'>;
   after<TStep extends StepAction<string, any, any, any> | LegacyWorkflow<any, any, any, any>>(
     steps: TStep | LegacyWorkflow | (TStep | LegacyWorkflow)[],
   ): Omit<WorkflowBuilder<this>, 'then' | 'after'> {

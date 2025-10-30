@@ -5,8 +5,6 @@ import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
-  EvalRow,
-  PaginationArgs,
   PaginationInfo,
   StorageColumn,
   StoragePagination,
@@ -23,7 +21,6 @@ import type {
 } from '@mastra/core/storage';
 
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { LegacyEvalsLibSQL } from './domains/legacy-evals';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
 import { StoreOperationsLibSQL } from './domains/operations';
@@ -100,7 +97,6 @@ export class LibSQLStore extends MastraStorage {
     const scores = new ScoresLibSQL({ client: this.client, operations });
     const workflows = new WorkflowsLibSQL({ client: this.client, operations });
     const memory = new MemoryLibSQL({ client: this.client, operations });
-    const legacyEvals = new LegacyEvalsLibSQL({ client: this.client });
     const observability = new ObservabilityLibSQL({ operations });
 
     this.stores = {
@@ -108,7 +104,6 @@ export class LibSQLStore extends MastraStorage {
       scores,
       workflows,
       memory,
-      legacyEvals,
       observability,
     };
   }
@@ -270,20 +265,6 @@ export class LibSQLStore extends MastraStorage {
 
   async deleteMessages(messageIds: string[]): Promise<void> {
     return this.stores.memory.deleteMessages(messageIds);
-  }
-
-  /** @deprecated use getEvals instead */
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
-  }
-
-  async getEvals(
-    options: {
-      agentName?: string;
-      type?: 'test' | 'live';
-    } & PaginationArgs = {},
-  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {

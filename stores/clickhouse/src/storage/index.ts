@@ -7,7 +7,6 @@ import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
   TABLE_SCHEMAS,
-  EvalRow,
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
@@ -16,11 +15,9 @@ import type {
   WorkflowRuns,
   StoragePagination,
   StorageDomains,
-  PaginationArgs,
   StorageResourceType,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { LegacyEvalsStorageClickhouse } from './domains/legacy-evals';
 import { MemoryStorageClickhouse } from './domains/memory';
 import { StoreOperationsClickhouse } from './domains/operations';
 import { ScoresStorageClickhouse } from './domains/scores';
@@ -82,14 +79,12 @@ export class ClickhouseStore extends MastraStorage {
     const operations = new StoreOperationsClickhouse({ client: this.db, ttl: this.ttl });
     const workflows = new WorkflowsStorageClickhouse({ client: this.db, operations });
     const scores = new ScoresStorageClickhouse({ client: this.db, operations });
-    const legacyEvals = new LegacyEvalsStorageClickhouse({ client: this.db, operations });
     const memory = new MemoryStorageClickhouse({ client: this.db, operations });
 
     this.stores = {
       operations,
       workflows,
       scores,
-      legacyEvals,
       memory,
     };
   }
@@ -110,16 +105,6 @@ export class ClickhouseStore extends MastraStorage {
       deleteMessages: false,
       getScoresBySpan: true,
     };
-  }
-
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
-  }
-
-  async getEvals(
-    options: { agentName?: string; type?: 'test' | 'live' } & PaginationArgs,
-  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
   }
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {

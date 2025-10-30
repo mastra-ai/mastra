@@ -1,6 +1,6 @@
 import type { StepResult, WorkflowRunState } from '../../../workflows';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../constants';
-import type { StorageWorkflowRun, WorkflowRun, WorkflowRuns } from '../../types';
+import type { StorageWorkflowRun, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
 import type { StoreOperations } from '../operations';
 import { WorkflowsStorage } from './base';
 
@@ -255,5 +255,9 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     };
 
     return parsedRun as WorkflowRun;
+  }
+
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
+    return this.getWorkflowRuns(args);
   }
 }

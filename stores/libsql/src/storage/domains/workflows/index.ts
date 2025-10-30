@@ -1,6 +1,6 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
 import type { StoreOperationsLibSQL } from '../operations';
@@ -421,5 +421,9 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         error,
       );
     }
+  }
+
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
+    return this.getWorkflowRuns(args);
   }
 }

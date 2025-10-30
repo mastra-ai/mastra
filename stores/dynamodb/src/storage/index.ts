@@ -7,7 +7,6 @@ import type { StorageThreadType, MastraMessageV2, MastraMessageV1 } from '@mastr
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
-  EvalRow,
   StorageGetMessagesArg,
   WorkflowRun,
   WorkflowRuns,
@@ -16,14 +15,12 @@ import type {
   StorageColumn,
   StoragePagination,
   StorageDomains,
-  PaginationArgs,
   StorageResourceType,
   ThreadSortOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
-import { LegacyEvalsDynamoDB } from './domains/legacy-evals';
 import { MemoryStorageDynamoDB } from './domains/memory';
 import { StoreOperationsDynamoDB } from './domains/operations';
 import { ScoresStorageDynamoDB } from './domains/score';
@@ -90,7 +87,6 @@ export class DynamoDBStore extends MastraStorage {
 
       this.stores = {
         operations,
-        legacyEvals: new LegacyEvalsDynamoDB({ service: this.service, tableName: this.tableName }),
         workflows,
         memory,
         scores,
@@ -424,20 +420,6 @@ export class DynamoDBStore extends MastraStorage {
     metadata?: Record<string, any>;
   }): Promise<StorageResourceType> {
     return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
-  }
-
-  // Eval operations
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
-  }
-
-  async getEvals(
-    options: {
-      agentName?: string;
-      type?: 'test' | 'live';
-    } & PaginationArgs,
-  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
   }
 
   /**

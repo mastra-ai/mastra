@@ -59,8 +59,6 @@
     "test:schema-compat": "pnpm --filter ./packages/schema-compat test",
     "test:docs-mcp": "pnpm --filter ./packages/mcp-docs-server test",
     "test:evals": "pnpm --filter ./packages/evals test",
-    "test:evals:nlp": "pnpm --filter ./packages/evals test src/metrics/nlp",
-    "test:evals:llm": "pnpm --filter ./packages/evals test src/metrics/llm",
     "test:agent-builder": "pnpm --filter ./packages/agent-builder test",
     "test:agent-builder:integration": "pnpm --filter @mastra/agent-builder-integration-tests test",
     "test:observability": "node scripts/test-observability.cjs",

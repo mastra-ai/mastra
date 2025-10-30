@@ -2,7 +2,6 @@ import { get } from 'radash';
 import { z } from 'zod';
 import type { ToolsInput } from '../../agent';
 import { Agent } from '../../agent';
-import type { Metric } from '../../eval';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { LegacyStep as Step } from './step';
@@ -187,15 +186,15 @@ export function getResultActivePaths(state: {
 }
 
 export function isWorkflow(
-  step: Step<any, any, any, any> | LegacyWorkflow<any, any, any, any> | Agent<any, any, any>,
+  step: Step<any, any, any, any> | LegacyWorkflow<any, any, any, any> | Agent<any, any>,
 ): step is LegacyWorkflow<any, any, any, any> {
   // @ts-ignore
   return step instanceof LegacyWorkflow;
 }
 
 export function isAgent(
-  step: Step<any, any, any, any> | Agent<any, any, any> | LegacyWorkflow<any, any, any, any>,
-): step is Agent<any, any, any> {
+  step: Step<any, any, any, any> | Agent<any, any> | LegacyWorkflow<any, any, any, any>,
+): step is Agent<any, any> {
   // @ts-ignore
   return step instanceof Agent;
 }
@@ -248,12 +247,8 @@ export function resolveVariables({
   return resolvedData;
 }
 
-export function agentToStep<
-  TAgentId extends string = string,
-  TTools extends ToolsInput = ToolsInput,
-  TMetrics extends Record<string, Metric> = Record<string, Metric>,
->(
-  agent: Agent<TAgentId, TTools, TMetrics>,
+export function agentToStep<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput>(
+  agent: Agent<TAgentId, TTools>,
   { mastra }: { mastra?: Mastra } = {},
 ): StepAction<TAgentId, z.ZodObject<{ prompt: z.ZodString }>, z.ZodObject<{ text: z.ZodString }>, any> {
   return {

@@ -13,11 +13,6 @@ const TEST_CONFIG: ClickhouseConfig = {
   //   mastra_traces: {
   //     row: { interval: 600, unit: 'SECOND' },
   //   },
-  //   mastra_evals: {
-  //     columns: {
-  //       result: { interval: 10, unit: 'SECOND' },
-  //     },
-  //   },
   // },
 };
 
