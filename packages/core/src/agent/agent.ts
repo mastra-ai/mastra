@@ -1374,10 +1374,10 @@ export class Agent<
     vectorMessageSearch: string;
     memoryConfig?: MemoryConfig;
     runtimeContext: RuntimeContext;
-  }) {
+  }): Promise<{ messages: MastraDBMessage[] }> {
     const memory = await this.getMemory({ runtimeContext });
     if (!memory) {
-      return [];
+      return { messages: [] };
     }
     return memory.rememberMessages({
       threadId,
@@ -2235,7 +2235,7 @@ export class Agent<
         const hasResourceScopeSemanticRecall =
           (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== 'thread') ||
           config?.semanticRecall === true;
-        let [memoryMessages, memorySystemMessage] = await Promise.all([
+        let [memoryResult, memorySystemMessage] = await Promise.all([
           existingThread || hasResourceScopeSemanticRecall
             ? this.getMemoryMessages({
                 resourceId,
@@ -2244,9 +2244,11 @@ export class Agent<
                 memoryConfig,
                 runtimeContext,
               })
-            : [],
+            : { messages: [] },
           memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
         ]);
+
+        const memoryMessages = memoryResult.messages;
 
         this.logger.debug('Fetched messages from memory', {
           threadId: threadObject.id,
