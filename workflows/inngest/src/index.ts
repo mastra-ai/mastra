@@ -371,7 +371,7 @@ export class InngestRun<
     const streamPromise = subscribe(
       {
         channel: `workflow:${this.workflowId}:${this.runId}`,
-        topics: ['watch-v2'],
+        topics: ['watch'],
         app: this.inngest,
       },
       (message: any) => {
@@ -799,7 +799,7 @@ export class InngestWorkflow<
           outputOptions,
           writableStream: new WritableStream<WorkflowStreamEvent>({
             write(chunk) {
-              void emitter.emit('watch-v2', chunk).catch(() => {});
+              void emitter.emit('watch', chunk).catch(() => {});
             },
           }),
         });
@@ -1002,20 +1002,20 @@ export function createStep<
         }
 
         if (streamFormat === 'legacy') {
-          await emitter.emit('watch-v2', {
+          await emitter.emit('watch', {
             type: 'tool-call-streaming-start',
             ...(toolData ?? {}),
           });
           for await (const chunk of stream) {
             if (chunk.type === 'text-delta') {
-              await emitter.emit('watch-v2', {
+              await emitter.emit('watch', {
                 type: 'tool-call-delta',
                 ...(toolData ?? {}),
                 argsTextDelta: chunk.textDelta,
               });
             }
           }
-          await emitter.emit('watch-v2', {
+          await emitter.emit('watch', {
             type: 'tool-call-streaming-finish',
             ...(toolData ?? {}),
           });
@@ -1509,7 +1509,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       `workflow.${executionContext.workflowId}.run.${executionContext.runId}.step.${step.id}.running_ev`,
       async () => {
         const startedAt = Date.now();
-        await emitter.emit('watch-v2', {
+        await emitter.emit('watch', {
           type: 'workflow-step-start',
           payload: {
             id: step.id,
@@ -1597,7 +1597,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         `workflow.${executionContext.workflowId}.step.${step.id}.nestedwf-results`,
         async () => {
           if (result.status === 'failed') {
-            await emitter.emit('watch-v2', {
+            await emitter.emit('watch', {
               type: 'workflow-step-result',
               payload: {
                 id: step.id,
@@ -1619,7 +1619,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
               executionContext.suspendedPaths[step.id] = executionContext.executionPath;
 
-              await emitter.emit('watch-v2', {
+              await emitter.emit('watch', {
                 type: 'workflow-step-suspended',
                 payload: {
                   id: step.id,
@@ -1649,7 +1649,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             };
           }
 
-          await emitter.emit('watch-v2', {
+          await emitter.emit('watch', {
             type: 'workflow-step-result',
             payload: {
               id: step.id,
@@ -1658,7 +1658,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             },
           });
 
-          await emitter.emit('watch-v2', {
+          await emitter.emit('watch', {
             type: 'workflow-step-finish',
             payload: {
               id: step.id,
@@ -1831,7 +1831,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         }
 
         if (execResults.status === 'suspended') {
-          await emitter.emit('watch-v2', {
+          await emitter.emit('watch', {
             type: 'workflow-step-suspended',
             payload: {
               id: step.id,
@@ -1839,7 +1839,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             },
           });
         } else {
-          await emitter.emit('watch-v2', {
+          await emitter.emit('watch', {
             type: 'workflow-step-result',
             payload: {
               id: step.id,
@@ -1847,7 +1847,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             },
           });
 
-          await emitter.emit('watch-v2', {
+          await emitter.emit('watch', {
             type: 'workflow-step-finish',
             payload: {
               id: step.id,

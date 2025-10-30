@@ -649,7 +649,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     const ee = new EventEmitter();
-    ee.on('watch-v2', async (event: any) => {
+    ee.on('watch', async (event: any) => {
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
         runId,

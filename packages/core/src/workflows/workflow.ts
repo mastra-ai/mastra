@@ -252,20 +252,20 @@ export function createStep<
         }
 
         if (streamFormat === 'legacy') {
-          await emitter.emit('watch-v2', {
+          await emitter.emit('watch', {
             type: 'tool-call-streaming-start',
             ...(toolData ?? {}),
           });
           for await (const chunk of stream) {
             if (chunk.type === 'text-delta') {
-              await emitter.emit('watch-v2', {
+              await emitter.emit('watch', {
                 type: 'tool-call-delta',
                 ...(toolData ?? {}),
                 argsTextDelta: chunk.textDelta,
               });
             }
           }
-          await emitter.emit('watch-v2', {
+          await emitter.emit('watch', {
             type: 'tool-call-streaming-finish',
             ...(toolData ?? {}),
           });
@@ -1778,7 +1778,7 @@ export class Run<
     });
 
     this.closeStreamAction = async () => {
-      this.emitter.emit('watch-v2', {
+      this.emitter.emit('watch', {
         type: 'workflow-finish',
         payload: { runId: this.runId },
       });
@@ -1795,7 +1795,7 @@ export class Run<
       }
     };
 
-    this.emitter.emit('watch-v2', {
+    this.emitter.emit('watch', {
       type: 'workflow-start',
       payload: { runId: this.runId },
     });
@@ -2162,17 +2162,17 @@ export class Run<
       event: { type: string; payload: { id: string } & Record<string, unknown> };
       workflowId: string;
     }) => {
-      this.emitter.emit('watch-v2', {
+      this.emitter.emit('watch', {
         ...event,
         ...(event.payload?.id ? { payload: { ...event.payload, id: `${workflowId}.${event.payload.id}` } } : {}),
       });
     };
 
-    this.emitter.on('watch-v2', cb);
+    this.emitter.on('watch', cb);
     this.emitter.on('nested-watch-v2', nestedWatchV2Cb);
 
     return () => {
-      this.emitter.off('watch-v2', cb);
+      this.emitter.off('watch', cb);
       this.emitter.off('nested-watch-v2', nestedWatchV2Cb);
     };
   }

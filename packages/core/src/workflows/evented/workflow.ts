@@ -203,20 +203,20 @@ export function createStep<
           args: inputData,
         };
 
-        await emitter.emit('watch-v2', {
+        await emitter.emit('watch', {
           type: 'tool-call-streaming-start',
           ...(toolData ?? {}),
         });
         for await (const chunk of fullStream) {
           if (chunk.type === 'text-delta') {
-            await emitter.emit('watch-v2', {
+            await emitter.emit('watch', {
               type: 'tool-call-delta',
               ...(toolData ?? {}),
               argsTextDelta: chunk.textDelta,
             });
           }
         }
-        await emitter.emit('watch-v2', {
+        await emitter.emit('watch', {
           type: 'tool-call-streaming-finish',
           ...(toolData ?? {}),
         });

@@ -734,7 +734,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     if (!skipEmits) {
-      await emitter.emit('watch-v2', {
+      await emitter.emit('watch', {
         type: 'workflow-step-start',
         payload: {
           id: step.id,
@@ -915,7 +915,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     if (!skipEmits) {
       if (execResults.status === 'suspended') {
-        await emitter.emit('watch-v2', {
+        await emitter.emit('watch', {
           type: 'workflow-step-suspended',
           payload: {
             id: step.id,
@@ -924,7 +924,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
         });
       } else {
-        await emitter.emit('watch-v2', {
+        await emitter.emit('watch', {
           type: 'workflow-step-result',
           payload: {
             id: step.id,
@@ -933,7 +933,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
         });
 
-        await emitter.emit('watch-v2', {
+        await emitter.emit('watch', {
           type: 'workflow-step-finish',
           payload: {
             id: step.id,
@@ -1638,7 +1638,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       tracingPolicy: this.options?.tracingPolicy,
     });
 
-    await emitter.emit('watch-v2', {
+    await emitter.emit('watch', {
       type: 'workflow-step-start',
       payload: {
         id: step.id,
@@ -1712,7 +1712,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           if (execResults.status === 'suspended') {
             foreachIndexObj[i + resultIndex] = execResults;
           } else {
-            await emitter.emit('watch-v2', {
+            await emitter.emit('watch', {
               type: 'workflow-step-result',
               payload: {
                 id: step.id,
@@ -1720,7 +1720,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               },
             });
 
-            await emitter.emit('watch-v2', {
+            await emitter.emit('watch', {
               type: 'workflow-step-finish',
               payload: {
                 id: step.id,
@@ -1747,7 +1747,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       if (Object.keys(foreachIndexObj).length > 0) {
         const suspendedIndices = Object.keys(foreachIndexObj).map(Number);
         const foreachIndex = suspendedIndices[0]!;
-        await emitter.emit('watch-v2', {
+        await emitter.emit('watch', {
           type: 'workflow-step-suspended',
           payload: {
             id: step.id,
@@ -1775,7 +1775,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
     }
 
-    await emitter.emit('watch-v2', {
+    await emitter.emit('watch', {
       type: 'workflow-step-result',
       payload: {
         id: step.id,
@@ -1785,7 +1785,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       },
     });
 
-    await emitter.emit('watch-v2', {
+    await emitter.emit('watch', {
       type: 'workflow-step-finish',
       payload: {
         id: step.id,
@@ -2104,7 +2104,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
     } else if (entry.type === 'sleep') {
       const startedAt = Date.now();
-      await emitter.emit('watch-v2', {
+      await emitter.emit('watch', {
         type: 'workflow-step-waiting',
         payload: {
           id: entry.id,
@@ -2161,7 +2161,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
       execResults = { ...stepInfo, status: 'success', output: prevOutput };
       stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
-      await emitter.emit('watch-v2', {
+      await emitter.emit('watch', {
         type: 'workflow-step-result',
         payload: {
           id: entry.id,
@@ -2171,7 +2171,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         },
       });
 
-      await emitter.emit('watch-v2', {
+      await emitter.emit('watch', {
         type: 'workflow-step-finish',
         payload: {
           id: entry.id,
@@ -2180,7 +2180,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
     } else if (entry.type === 'sleepUntil') {
       const startedAt = Date.now();
-      await emitter.emit('watch-v2', {
+      await emitter.emit('watch', {
         type: 'workflow-step-waiting',
         payload: {
           id: entry.id,
@@ -2239,7 +2239,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       execResults = { ...stepInfo, status: 'success', output: prevOutput };
       stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
 
-      await emitter.emit('watch-v2', {
+      await emitter.emit('watch', {
         type: 'workflow-step-result',
         payload: {
           id: entry.id,
@@ -2249,7 +2249,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         },
       });
 
-      await emitter.emit('watch-v2', {
+      await emitter.emit('watch', {
         type: 'workflow-step-finish',
         payload: {
           id: entry.id,
@@ -2259,7 +2259,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     } else if (entry.type === 'waitForEvent') {
       const startedAt = Date.now();
       let eventData: any;
-      await emitter.emit('watch-v2', {
+      await emitter.emit('watch', {
         type: 'workflow-step-waiting',
         payload: {
           id: entry.step.id,
@@ -2351,7 +2351,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     if (execResults.status === 'canceled') {
-      await emitter.emit('watch-v2', {
+      await emitter.emit('watch', {
         type: 'workflow-canceled',
         payload: {},
       });
