@@ -75,7 +75,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
       },
     };
 
-    const tools = await client.getTools();
+    const tools = await client.listTools();
     console.log('Tools:', tools);
 
     const tool = tools['myMcpServer_calculator'];
@@ -111,7 +111,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
     const toolCallPayloadParams = { num1: 10, num2: 5, operation: 'add' };
 
     // Get tools (this will connect the client internally if not already connected)
-    const tools = await sseClient.getTools();
+    const tools = await sseClient.listTools();
 
     const toolName = `${mcpServerId}_${testToolId}`;
     const tool = tools[toolName];
@@ -247,7 +247,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
         },
       };
 
-      const tools = await client.getTools();
+      const tools = await client.listTools();
       const tool = tools['myMcpServer_testMastraInstance'];
       expect(tool).toBeDefined();
 

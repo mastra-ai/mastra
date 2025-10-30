@@ -335,7 +335,22 @@ export class ProcessorRunner {
     }
 
     if (processableMessages.length > 0) {
-      messageList.add(processableMessages, 'input');
+      // Separate system messages from other messages since they need different handling
+      const systemMessages = processableMessages.filter(m => m.role === 'system');
+      const nonSystemMessages = processableMessages.filter(m => m.role !== 'system');
+
+      // Add system messages using addSystem
+      for (const sysMsg of systemMessages) {
+        messageList.addSystem(
+          (sysMsg.content.content as string) ||
+            sysMsg.content.parts.map(p => (p.type === 'text' ? p.text : '')).join('\n'),
+        );
+      }
+
+      // Add non-system messages normally
+      if (nonSystemMessages.length > 0) {
+        messageList.add(nonSystemMessages, 'input');
+      }
     }
 
     return messageList;

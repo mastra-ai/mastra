@@ -1294,7 +1294,7 @@ const validationAndFixStep = createStep({
     try {
       const model = await resolveModel({ runtimeContext, projectPath: targetPath, defaultModel: openai('gpt-4.1') });
 
-      const allTools = await AgentBuilderDefaults.getToolsForMode(targetPath, 'template');
+      const allTools = await AgentBuilderDefaults.listToolsForMode(targetPath, 'template');
 
       const validationAgent = new Agent({
         name: 'code-validator-fixer',

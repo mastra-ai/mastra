@@ -11,8 +11,6 @@ import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
 import type { AISpan, TracingContext, TracingOptions, TracingProperties } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
-import type { Metric } from '../eval';
-import { AvailableHooks, executeHook } from '../hooks';
 import { resolveModelConfig } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type {
@@ -134,16 +132,13 @@ function resolveThreadIdFromArgs(args: {
  * });
  * ```
  */
-export class Agent<
-  TAgentId extends string = string,
-  TTools extends ToolsInput = ToolsInput,
-  TMetrics extends Record<string, Metric> = Record<string, Metric>,
-> extends MastraBase {
+export class Agent<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> extends MastraBase {
   public id: TAgentId;
   public name: TAgentId;
   #instructions: DynamicAgentInstructions;
   readonly #description?: string;
   model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
+  #originalModel: DynamicArgument<MastraModelConfig> | ModelFallbacks;
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
@@ -152,7 +147,6 @@ export class Agent<
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
   #defaultStreamOptions: DynamicArgument<AgentExecutionOptions>;
   #tools: DynamicArgument<TTools>;
-  evals: TMetrics;
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
   #voice: CompositeVoice;
@@ -181,7 +175,7 @@ export class Agent<
    * });
    * ```
    */
-  constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
+  constructor(config: AgentConfig<TAgentId, TTools>) {
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
@@ -227,8 +221,10 @@ export class Agent<
         maxRetries: mdl.maxRetries ?? config?.maxRetries ?? 0,
         enabled: mdl.enabled ?? true,
       }));
+      this.#originalModel = [...this.model];
     } else {
       this.model = config.model;
+      this.#originalModel = config.model;
     }
 
     this.maxRetries = config.maxRetries ?? 0;
@@ -243,8 +239,6 @@ export class Agent<
 
     this.#tools = config.tools || ({} as TTools);
 
-    this.evals = {} as TMetrics;
-
     if (config.mastra) {
       this.__registerMastra(config.mastra);
       this.__registerPrimitives({
@@ -255,10 +249,6 @@ export class Agent<
     this.#scorers = config.scorers || ({} as MastraScorers);
 
     this.#agents = config.agents || ({} as Record<string, Agent>);
-
-    if (config.evals) {
-      this.evals = config.evals;
-    }
 
     if (config.memory) {
       this.#memory = config.memory;
@@ -511,11 +501,11 @@ export class Agent<
    *
    * @example
    * ```typescript
-   * const workflows = await agent.getWorkflows();
+   * const workflows = await agent.listWorkflows();
    * const workflow = workflows['myWorkflow'];
    * ```
    */
-  public async getWorkflows({
+  public async listWorkflows({
     runtimeContext = new RuntimeContext(),
   }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any>>> {
     let workflowRecord;
@@ -534,7 +524,7 @@ export class Agent<
     return workflowRecord;
   }
 
-  async getScorers({
+  async listScorers({
     runtimeContext = new RuntimeContext(),
   }: { runtimeContext?: RuntimeContext } = {}): Promise<MastraScorers> {
     if (typeof this.#scorers !== 'function') {
@@ -575,7 +565,7 @@ export class Agent<
   public async getVoice({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}) {
     if (this.#voice) {
       const voice = this.#voice;
-      voice?.addTools(await this.getTools({ runtimeContext }));
+      voice?.addTools(await this.listTools({ runtimeContext }));
       const instructions = await this.getInstructions({ runtimeContext });
       voice?.addInstructions(this.#convertInstructionsToString(instructions));
       return voice;
@@ -786,11 +776,11 @@ export class Agent<
    *
    * @example
    * ```typescript
-   * const tools = await agent.getTools();
+   * const tools = await agent.listTools();
    * console.log(Object.keys(tools)); // ['calculator', 'weather']
    * ```
    */
-  public getTools({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
+  public listTools({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
     | TTools
     | Promise<TTools> {
     if (typeof this.#tools !== 'function') {
@@ -981,6 +971,16 @@ export class Agent<
   __updateModel({ model }: { model: DynamicArgument<MastraModelConfig> }) {
     this.model = model;
     this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
+  }
+
+  /**
+   * Resets the agent's model to the original model set during construction.
+   * Clones arrays to prevent reordering mutations from affecting the original snapshot.
+   * @internal
+   */
+  __resetToOriginalModel() {
+    this.model = Array.isArray(this.#originalModel) ? [...this.#originalModel] : this.#originalModel;
+    this.logger.debug(`[Agents:${this.name}] Model reset to original.`, { model: this.model, name: this.name });
   }
 
   reorderModels(modelIds: string[]) {
@@ -1206,7 +1206,7 @@ export class Agent<
    * Retrieves and converts memory tools to CoreTool format.
    * @internal
    */
-  private async getMemoryTools({
+  private async listMemoryTools({
     runId,
     resourceId,
     threadId,
@@ -1224,7 +1224,7 @@ export class Agent<
     let convertedMemoryTools: Record<string, CoreTool> = {};
     // Get memory tools if available
     const memory = await this.getMemory({ runtimeContext });
-    const memoryTools = memory?.getTools?.();
+    const memoryTools = memory?.listTools?.();
 
     if (memoryTools) {
       this.logger.debug(
@@ -1392,7 +1392,7 @@ export class Agent<
    * Retrieves and converts assigned tools to CoreTool format.
    * @internal
    */
-  private async getAssignedTools({
+  private async listAssignedTools({
     runId,
     resourceId,
     threadId,
@@ -1417,7 +1417,7 @@ export class Agent<
 
     // Mastra tools passed into the Agent
 
-    const assignedTools = await this.getTools({ runtimeContext });
+    const assignedTools = await this.listTools({ runtimeContext });
 
     const assignedToolEntries = Object.entries(assignedTools || {});
 
@@ -1462,7 +1462,7 @@ export class Agent<
    * Retrieves and converts toolset tools to CoreTool format.
    * @internal
    */
-  private async getToolsets({
+  private async listToolsets({
     runId,
     threadId,
     resourceId,
@@ -1518,7 +1518,7 @@ export class Agent<
    * Retrieves and converts client-side tools to CoreTool format.
    * @internal
    */
-  private async getClientTools({
+  private async listClientTools({
     runId,
     threadId,
     resourceId,
@@ -1571,7 +1571,7 @@ export class Agent<
    * Retrieves and converts agent tools to CoreTool format.
    * @internal
    */
-  private async getAgentTools({
+  private async listAgentTools({
     runId,
     threadId,
     resourceId,
@@ -1740,7 +1740,7 @@ export class Agent<
    * Retrieves and converts workflow tools to CoreTool format.
    * @internal
    */
-  private async getWorkflowTools({
+  private async listWorkflowTools({
     runId,
     threadId,
     resourceId,
@@ -1756,7 +1756,7 @@ export class Agent<
     methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   }) {
     const convertedWorkflowTools: Record<string, CoreTool> = {};
-    const workflows = await this.getWorkflows({ runtimeContext });
+    const workflows = await this.listWorkflows({ runtimeContext });
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
         const toolObj = createTool({
@@ -1896,7 +1896,7 @@ export class Agent<
       mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
     }
 
-    const assignedTools = await this.getAssignedTools({
+    const assignedTools = await this.listAssignedTools({
       runId,
       resourceId,
       threadId,
@@ -1906,7 +1906,7 @@ export class Agent<
       writableStream,
     });
 
-    const memoryTools = await this.getMemoryTools({
+    const memoryTools = await this.listMemoryTools({
       runId,
       resourceId,
       threadId,
@@ -1915,7 +1915,7 @@ export class Agent<
       mastraProxy,
     });
 
-    const toolsetTools = await this.getToolsets({
+    const toolsetTools = await this.listToolsets({
       runId,
       resourceId,
       threadId,
@@ -1925,7 +1925,7 @@ export class Agent<
       toolsets: toolsets!,
     });
 
-    const clientSideTools = await this.getClientTools({
+    const clientSideTools = await this.listClientTools({
       runId,
       resourceId,
       threadId,
@@ -1935,7 +1935,7 @@ export class Agent<
       clientTools: clientTools!,
     });
 
-    const agentTools = await this.getAgentTools({
+    const agentTools = await this.listAgentTools({
       runId,
       resourceId,
       threadId,
@@ -1944,7 +1944,7 @@ export class Agent<
       tracingContext,
     });
 
-    const workflowTools = await this.getWorkflowTools({
+    const workflowTools = await this.listWorkflowTools({
       runId,
       resourceId,
       threadId,
@@ -2542,8 +2542,6 @@ export class Agent<
         await this.#runScorers({
           messageList,
           runId,
-          outputText,
-          instructions,
           runtimeContext,
           structuredOutput,
           overrideScorers,
@@ -2583,8 +2581,6 @@ export class Agent<
   async #runScorers({
     messageList,
     runId,
-    outputText,
-    instructions,
     runtimeContext,
     structuredOutput,
     overrideScorers,
@@ -2594,8 +2590,6 @@ export class Agent<
   }: {
     messageList: MessageList;
     runId: string;
-    outputText: string;
-    instructions: AgentInstructions;
     runtimeContext: RuntimeContext;
     structuredOutput?: boolean;
     overrideScorers?:
@@ -2605,31 +2599,11 @@ export class Agent<
     resourceId?: string;
     tracingContext: TracingContext;
   }) {
-    const agentName = this.name;
-    const userInputMessages = messageList.get.all.ui().filter(m => m.role === 'user');
-    const input = userInputMessages
-      .map(message => (typeof message.content === 'string' ? message.content : ''))
-      .join('\n');
-    const runIdToUse = runId || this.#mastra?.generateId() || randomUUID();
-
-    if (Object.keys(this.evals || {}).length > 0) {
-      for (const metric of Object.values(this.evals || {})) {
-        executeHook(AvailableHooks.ON_GENERATION, {
-          input,
-          output: outputText,
-          runId: runIdToUse,
-          metric,
-          agentName,
-          instructions: this.#convertInstructionsToString(instructions),
-        });
-      }
-    }
-
     let scorers: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig }> = {};
     try {
       scorers = overrideScorers
         ? this.resolveOverrideScorerReferences(overrideScorers)
-        : await this.getScorers({ runtimeContext });
+        : await this.listScorers({ runtimeContext });
     } catch (e) {
       this.logger.warn(`[Agent:${this.name}] - Failed to get scorers: ${e}`);
       return;
@@ -3223,7 +3197,6 @@ export class Agent<
    */
   async #executeOnFinish({
     result,
-    instructions,
     readOnlyMemory,
     thread: threadAfter,
     threadId,
@@ -3389,8 +3362,6 @@ export class Agent<
     await this.#runScorers({
       messageList,
       runId,
-      outputText,
-      instructions,
       runtimeContext,
       structuredOutput,
       overrideScorers,

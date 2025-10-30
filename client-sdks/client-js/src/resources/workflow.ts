@@ -3,8 +3,8 @@ import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type {
   ClientOptions,
   GetWorkflowResponse,
-  GetWorkflowRunsResponse,
-  GetWorkflowRunsParams,
+  ListWorkflowRunsResponse,
+  ListWorkflowRunsParams,
   WorkflowRunResult,
   WorkflowWatchResult,
   GetWorkflowRunByIdResponse,
@@ -112,9 +112,9 @@ export class Workflow extends BaseResource {
    * @returns Promise containing workflow runs array
    */
   runs(
-    params?: GetWorkflowRunsParams,
+    params?: ListWorkflowRunsParams,
     runtimeContext?: RuntimeContext | Record<string, any>,
-  ): Promise<GetWorkflowRunsResponse> {
+  ): Promise<ListWorkflowRunsResponse> {
     const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
 
     const searchParams = new URLSearchParams();

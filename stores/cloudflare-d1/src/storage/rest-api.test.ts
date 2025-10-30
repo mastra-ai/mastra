@@ -9,13 +9,7 @@ import {
 } from '@internal/storage-test-utils';
 import type { StorageThreadType } from '@mastra/core/memory';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
-import {
-  TABLE_MESSAGES,
-  TABLE_THREADS,
-  TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_EVALS,
-  TABLE_TRACES,
-} from '@mastra/core/storage';
+import { TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT, TABLE_TRACES } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
@@ -59,7 +53,6 @@ describe.skip('D1Store REST API', () => {
     await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     await store.clearTable({ tableName: TABLE_MESSAGES });
     await store.clearTable({ tableName: TABLE_THREADS });
-    await store.clearTable({ tableName: TABLE_EVALS });
 
     await store.close();
   });
@@ -70,7 +63,6 @@ describe.skip('D1Store REST API', () => {
     await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     await store.clearTable({ tableName: TABLE_MESSAGES });
     await store.clearTable({ tableName: TABLE_THREADS });
-    await store.clearTable({ tableName: TABLE_EVALS });
   });
 
   describe('Table Operations', () => {

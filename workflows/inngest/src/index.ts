@@ -90,7 +90,7 @@ export function serve({
   functions?: InngestFunction.Like[];
   registerOptions?: RegisterOptions;
 }): ReturnType<typeof inngestServe> {
-  const wfs = mastra.getWorkflows();
+  const wfs = mastra.listWorkflows();
   const workflowFunctions = Array.from(
     new Set(
       Object.values(wfs).flatMap(wf => {
@@ -847,7 +847,7 @@ export class InngestWorkflow<
   }
 }
 
-function isAgent(params: any): params is Agent<any, any, any> {
+function isAgent(params: any): params is Agent<any, any> {
   return params?.component === 'AGENT';
 }
 
@@ -887,7 +887,7 @@ export function createStep<
   TResumeSchema extends z.ZodType<any>,
   TSuspendSchema extends z.ZodType<any>,
 >(
-  agent: Agent<TStepId, any, any>,
+  agent: Agent<TStepId, any>,
   agentOptions?: AgentStepOptions,
 ): Step<TStepId, any, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
 
@@ -929,7 +929,7 @@ export function createStep<
           InngestEngineType
         >;
       }
-    | Agent<any, any, any>
+    | Agent<any, any>
     | (Tool<TStepInput, TStepOutput, any> & {
         inputSchema: TStepInput;
         outputSchema: TStepOutput;

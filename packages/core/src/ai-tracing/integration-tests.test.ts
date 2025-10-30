@@ -203,7 +203,7 @@ class TestExporter implements AITracingExporter {
   /**
    * Get all captured logs from this test
    */
-  getLogs(): string[] {
+  listLogs(): string[] {
     return [...this.logs];
   }
 

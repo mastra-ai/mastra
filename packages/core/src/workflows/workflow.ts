@@ -153,7 +153,7 @@ export function createStep<
   TResumeSchema extends z.ZodType<any>,
   TSuspendSchema extends z.ZodType<any>,
 >(
-  agent: Agent<TStepId, any, any>,
+  agent: Agent<TStepId, any>,
   agentOptions?: AgentStepOptions,
 ): Step<TStepId, any, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType>;
 
@@ -177,7 +177,7 @@ export function createStep<
 >(
   params:
     | StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>
-    | Agent<any, any, any>
+    | Agent<any, any>
     | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>,
   agentOptions?: AgentStepOptions,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType> {
@@ -1079,7 +1079,7 @@ export class Workflow<
     return run;
   }
 
-  async getScorers({
+  async listScorers({
     runtimeContext = new RuntimeContext(),
   }: { runtimeContext?: RuntimeContext } = {}): Promise<MastraScorers> {
     const steps = this.steps;
@@ -1262,6 +1262,21 @@ export class Workflow<
     }
 
     return storage.getWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
+  }
+
+  async listWorkflowRuns(args?: {
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+    resourceId?: string;
+  }) {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      this.logger.debug('Cannot get workflow runs. Mastra storage is not initialized');
+      return { runs: [], total: 0 };
+    }
+    return storage.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
   }
 
   async getWorkflowRunById(runId: string) {

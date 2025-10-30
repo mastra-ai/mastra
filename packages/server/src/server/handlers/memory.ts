@@ -31,7 +31,7 @@ async function getMemoryFromContext({
   }
   if (agentId && !agent) {
     logger.debug('Agent not found, searching agents for agent', { agentId });
-    const agents = mastra.getAgents();
+    const agents = mastra.listAgents();
     if (Object.keys(agents || {}).length) {
       for (const [_, ag] of Object.entries(agents)) {
         try {

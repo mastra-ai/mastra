@@ -8,7 +8,6 @@ import type { StepResult, WorkflowRunState } from '../workflows/types';
 
 import {
   TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_EVALS,
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_TRACES,
@@ -18,16 +17,8 @@ import {
   TABLE_AI_SPANS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
+import type { ScoresStorage, StoreOperations, WorkflowsStorage, MemoryStorage, ObservabilityStorage } from './domains';
 import type {
-  ScoresStorage,
-  StoreOperations,
-  WorkflowsStorage,
-  MemoryStorage,
-  LegacyEvalsStorage,
-  ObservabilityStorage,
-} from './domains';
-import type {
-  EvalRow,
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
@@ -36,7 +27,6 @@ import type {
   ThreadSortOptions,
   WorkflowRun,
   WorkflowRuns,
-  PaginationArgs,
   AISpanRecord,
   AITraceRecord,
   AITracesPaginatedArg,
@@ -45,10 +35,14 @@ import type {
   StorageIndexStats,
   UpdateAISpanRecord,
   CreateAISpanRecord,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListWorkflowRunsInput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
 } from './types';
 
 export type StorageDomains = {
-  legacyEvals: LegacyEvalsStorage;
   operations: StoreOperations;
   workflows: WorkflowsStorage;
   scores: ScoresStorage;
@@ -80,17 +74,6 @@ export function resolveMessageLimit({
   return defaultLimit;
 }
 export abstract class MastraStorage extends MastraBase {
-  /** @deprecated import from { TABLE_WORKFLOW_SNAPSHOT } '@mastra/core/storage' instead */
-  static readonly TABLE_WORKFLOW_SNAPSHOT = TABLE_WORKFLOW_SNAPSHOT;
-  /** @deprecated import from { TABLE_EVALS } '@mastra/core/storage' instead */
-  static readonly TABLE_EVALS = TABLE_EVALS;
-  /** @deprecated import from { TABLE_MESSAGES } '@mastra/core/storage' instead */
-  static readonly TABLE_MESSAGES = TABLE_MESSAGES;
-  /** @deprecated import from { TABLE_THREADS } '@mastra/core/storage' instead */
-  static readonly TABLE_THREADS = TABLE_THREADS;
-  /** @deprecated import { TABLE_TRACES } from '@mastra/core/storage' instead */
-  static readonly TABLE_TRACES = TABLE_TRACES;
-
   protected hasInitialized: null | Promise<boolean> = null;
   protected shouldCacheInit = true;
 
@@ -267,6 +250,56 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }>;
 
+  async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    if (this.stores?.memory) {
+      return this.stores.memory.listMessages(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_MESSAGES_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing messages is not implemented by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
+    if (this.stores?.workflows) {
+      return this.stores.workflows.listWorkflowRuns(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_WORKFLOW_RUNS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing workflow runs is not implemented by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    if (this.stores?.memory) {
+      return this.stores.memory.listThreadsByResourceId(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_THREADS_BY_RESOURCE_ID_PAGINATED_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing threads by resource ID paginated is not implemented by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraDBMessage[]> {
+    if (this.stores?.memory) {
+      return this.stores.memory.listMessagesById({ messageIds });
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_MESSAGES_BY_ID_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing messages by ID is not implemented by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
   abstract updateMessages(args: {
     messages: Partial<Omit<MastraDBMessage, 'createdAt'>> &
       {
@@ -292,11 +325,6 @@ export abstract class MastraStorage extends MastraBase {
       this.createTable({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
-      }),
-
-      this.createTable({
-        tableName: TABLE_EVALS,
-        schema: TABLE_SCHEMAS[TABLE_EVALS],
       }),
 
       this.createTable({
@@ -492,15 +520,6 @@ export abstract class MastraStorage extends MastraBase {
       details: { traceId, spanId },
     });
   }
-
-  abstract getEvals(
-    options: {
-      agentName?: string;
-      type?: 'test' | 'live';
-    } & PaginationArgs,
-  ): Promise<PaginationInfo & { evals: EvalRow[] }>;
-
-  abstract getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]>;
 
   abstract getWorkflowRuns(args?: {
     workflowName?: string;

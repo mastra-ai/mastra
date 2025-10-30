@@ -8,6 +8,10 @@ import type {
   ThreadOrderBy,
   ThreadSortDirection,
   ThreadSortOptions,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
 } from '../../types';
 
 export abstract class MemoryStorage extends MastraBase {
@@ -40,7 +44,11 @@ export abstract class MemoryStorage extends MastraBase {
 
   abstract getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }>;
 
+  abstract listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
+
   abstract getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }>;
+
+  abstract listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraDBMessage[]>;
 
   abstract saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }>;
 
@@ -66,6 +74,10 @@ export abstract class MemoryStorage extends MastraBase {
       perPage: number;
     } & ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
+
+  abstract listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput>;
 
   abstract getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }>;
 

@@ -1,13 +1,7 @@
 import { createSampleMessageV1, createSampleThread, checkWorkflowSnapshot } from '@internal/storage-test-utils';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
-import {
-  TABLE_MESSAGES,
-  TABLE_THREADS,
-  TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_EVALS,
-  TABLE_TRACES,
-} from '@mastra/core/storage';
+import { TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT, TABLE_TRACES } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
@@ -47,7 +41,6 @@ describe.skip('CloudflareStore REST API', () => {
       TABLE_THREADS,
       TABLE_MESSAGES,
       TABLE_WORKFLOW_SNAPSHOT,
-      TABLE_EVALS,
       TABLE_TRACES,
     ] as TABLE_NAMES[];
 
@@ -65,7 +58,7 @@ describe.skip('CloudflareStore REST API', () => {
 
   const cleanupKVData = async () => {
     // List and delete all keys in each namespace
-    const tables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES] as TABLE_NAMES[];
+    const tables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_TRACES] as TABLE_NAMES[];
 
     for (const table of tables) {
       try {

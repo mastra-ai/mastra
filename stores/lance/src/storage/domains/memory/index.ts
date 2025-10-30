@@ -10,7 +10,15 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StorageGetMessagesArg, StorageResourceType } from '@mastra/core/storage';
+import type {
+  PaginationInfo,
+  StorageGetMessagesArg,
+  StorageResourceType,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
+} from '@mastra/core/storage';
 import type { StoreOperationsLance } from '../operations';
 import { getTableSchema, processResultWithTypeConversion } from '../utils';
 
@@ -315,6 +323,32 @@ export class StoreMemoryLance extends MemoryStorage {
         error,
       );
     }
+  }
+
+  public async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    throw new Error(
+      `listMessages is not yet implemented by this storage adapter (${this.constructor.name}). ` +
+        `This method is currently being rolled out across all storage adapters. ` +
+        `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
+    );
+  }
+
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraDBMessage[]> {
+    const result = await this.getMessagesById({ messageIds });
+    return result.messages;
+  }
+
+  /**
+   * @todo When migrating from getThreadsByResourceIdPaginated to this method,
+   * implement orderBy and sortDirection support for full sorting capabilities
+   */
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, limit, offset } = args;
+    const page = Math.floor(offset / limit);
+    const perPage = limit;
+    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
   }
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {

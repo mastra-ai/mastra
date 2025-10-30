@@ -4,10 +4,8 @@ import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/types';
 import { MastraError } from '../error';
-import type { StorageThreadType, MemoryConfig, MastraMessageV1 } from '../memory';
-import { MastraMemory } from '../memory/memory';
+import { MockMemory } from '../memory/mock';
 import { RuntimeContext } from '../runtime-context';
-import type { StorageGetMessagesArg, PaginationInfo, ThreadSortOptions } from '../storage';
 import { Mastra } from './index';
 
 // Mock Memory class for testing

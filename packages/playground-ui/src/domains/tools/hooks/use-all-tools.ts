@@ -7,7 +7,7 @@ export const useTools = () => {
   const client = useMastraClient();
   return useQuery({
     queryKey: ['tools'],
-    queryFn: () => client.getTools(runtimeContext),
+    queryFn: () => client.listTools(runtimeContext),
   });
 };
 

@@ -10,7 +10,7 @@ export const useAgents = () => {
 
   return useQuery({
     queryKey: ['agents', JSON.stringify(runtimeContext)],
-    queryFn: () => client.getAgents(runtimeContext),
+    queryFn: () => client.listAgents(runtimeContext),
   });
 };
 
@@ -65,6 +65,21 @@ export const useUpdateModelInModelList = (agentId: string) => {
     },
     onError: err => {
       console.error('Error updating model in model list', err);
+    },
+  });
+};
+
+export const useResetAgentModel = (agentId: string) => {
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => client.getAgent(agentId).resetModel(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+    },
+    onError: err => {
+      console.error('Error resetting model', err);
     },
   });
 };

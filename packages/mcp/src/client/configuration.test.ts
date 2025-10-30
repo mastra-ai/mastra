@@ -97,7 +97,7 @@ describe('MCPClient', () => {
     });
 
     it('should get connected tools with namespaced tool names', async () => {
-      const connectedTools = await mcp.getTools();
+      const connectedTools = await mcp.listTools();
 
       // Each tool should be namespaced with its server name
       expect(connectedTools).toHaveProperty('stockPrice_getStockPrice');
@@ -105,7 +105,7 @@ describe('MCPClient', () => {
     });
 
     it('should get connected toolsets grouped by server', async () => {
-      const connectedToolsets = await mcp.getToolsets();
+      const connectedToolsets = await mcp.listToolsets();
 
       expect(connectedToolsets).toHaveProperty('stockPrice');
       expect(connectedToolsets).toHaveProperty('weather');
@@ -487,7 +487,7 @@ describe('MCPClient', () => {
         },
       });
 
-      const error = await config.getTools().catch(e => e);
+      const error = await config.listTools().catch(e => e);
       expect(error).toBeDefined(); // Will throw since server exits before responding
       expect(error.message).not.toMatch(/Request timed out/);
 
@@ -515,7 +515,7 @@ describe('MCPClient', () => {
       });
 
       // This should succeed since server timeout (3s) is longer than delay (2s)
-      const error = await config.getTools().catch(e => e);
+      const error = await config.listTools().catch(e => e);
       expect(error).toBeDefined(); // Will throw since server exits before responding
       expect(error.message).not.toMatch(/Request timed out/);
 
@@ -536,7 +536,7 @@ describe('MCPClient', () => {
         },
       });
 
-      await expect(slowConfig.getTools()).rejects.toThrow(/Request timed out/);
+      await expect(slowConfig.listTools()).rejects.toThrow(/Request timed out/);
       await slowConfig.disconnect();
     });
 
@@ -552,7 +552,7 @@ describe('MCPClient', () => {
         },
       });
 
-      const error = await slowConfig.getTools().catch(e => e);
+      const error = await slowConfig.listTools().catch(e => e);
       expect(error).toBeDefined();
       expect(error.message).not.toMatch(/Request timed out/);
       await slowConfig.disconnect();
@@ -576,7 +576,7 @@ describe('MCPClient', () => {
       });
 
       // Quick server should timeout
-      await expect(mixedConfig.getTools()).rejects.toThrow(/Request timed out/);
+      await expect(mixedConfig.listTools()).rejects.toThrow(/Request timed out/);
       await mixedConfig.disconnect();
     });
 
@@ -590,7 +590,7 @@ describe('MCPClient', () => {
         },
       });
 
-      await expect(badConfig.getTools()).rejects.toThrow();
+      await expect(badConfig.listTools()).rejects.toThrow();
       await badConfig.disconnect();
     });
   });
@@ -616,11 +616,11 @@ describe('MCPClient', () => {
 
     afterEach(async () => {
       mockLogHandler.mockClear();
-      await complexClient?.disconnect().catch(() => {});
+      await complexClient?.disconnect().catch(() => { });
     });
 
     it('should process tools from firecrawl-mcp without crashing', async () => {
-      const tools = await complexClient.getTools();
+      const tools = await complexClient.listTools();
 
       Object.keys(allTools).forEach(toolName => {
         expect(tools).toHaveProperty(`${mcpServerName.replace(`-fixture`, ``)}_${toolName}`);
@@ -661,7 +661,7 @@ describe('MCPClient', () => {
       });
       clientsToCleanup.push(clientForTest);
 
-      const tools = await clientForTest.getTools();
+      const tools = await clientForTest.listTools();
       const stockTool = tools['stockPrice_getStockPrice'];
       expect(stockTool).toBeDefined();
 
@@ -710,7 +710,7 @@ describe('MCPClient', () => {
         name: agentName,
         model: 'openai/gpt-4o',
         instructions: 'Use the getStockPrice tool to find the price of MSFT.',
-        tools: await mcpClientForAgentTest.getTools(),
+        tools: await mcpClientForAgentTest.listTools(),
       });
 
       await agent.generate('What is the price of MSFT?', { runtimeContext: agentTestContext });
@@ -747,7 +747,7 @@ describe('MCPClient', () => {
       });
       clientsToCleanup.push(clientForSeqTest);
 
-      const tools = await clientForSeqTest.getTools();
+      const tools = await clientForSeqTest.listTools();
       const stockTool = tools['stockPriceServer_getStockPrice'];
       expect(stockTool).toBeDefined();
 
@@ -807,7 +807,7 @@ describe('MCPClient', () => {
       });
       clientsToCleanup.push(clientWithTwoServers);
 
-      const tools = await clientWithTwoServers.getTools();
+      const tools = await clientWithTwoServers.listTools();
       const toolX = tools['serverX_getStockPrice'];
       const toolY = tools['serverY_getStockPrice'];
       expect(toolX).toBeDefined();

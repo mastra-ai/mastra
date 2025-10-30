@@ -17,6 +17,7 @@ import type {
   MemoryConfig,
   MastraMessageV1,
   WorkingMemoryTemplate,
+  MessageDeleteInput,
 } from './types';
 
 export type MemoryProcessorOpts = {
@@ -165,7 +166,7 @@ export abstract class MastraMemory extends MastraBase {
    * This will be called when converting tools for the agent.
    * Implementations can override this to provide additional tools.
    */
-  public getTools(_config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
+  public listTools(_config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
     return {};
   }
 
@@ -508,5 +509,5 @@ export abstract class MastraMemory extends MastraBase {
    * @param messageIds - Array of message IDs to delete
    * @returns Promise that resolves when all messages are deleted
    */
-  abstract deleteMessages(messageIds: string[]): Promise<void>;
+  abstract deleteMessages(messageIds: MessageDeleteInput): Promise<void>;
 }

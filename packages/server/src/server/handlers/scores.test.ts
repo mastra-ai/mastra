@@ -8,7 +8,7 @@ import { createWorkflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
-import { getScorersHandler, getScoresByRunIdHandler, getScoresByEntityIdHandler, saveScoreHandler } from './scores';
+import { listScorersHandler, getScoresByRunIdHandler, getScoresByEntityIdHandler, saveScoreHandler } from './scores';
 
 function createPagination(args: Partial<StoragePagination>): StoragePagination {
   return {
@@ -47,9 +47,9 @@ describe('Scores Handlers', () => {
     });
   });
 
-  describe('getScorersHandler', () => {
+  describe('listScorersHandler', () => {
     it('should return empty object', async () => {
-      const result = await getScorersHandler({
+      const result = await listScorersHandler({
         mastra,
         runtimeContext: new RuntimeContext(),
       });

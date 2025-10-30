@@ -197,11 +197,11 @@ export class CoreToolBuilder extends MastraBase {
            * MASTRA INSTANCE TYPES IN TOOL EXECUTION:
            *
            * Full Mastra & MastraPrimitives (has getAgent, getWorkflow, etc.):
-           * - Auto-generated workflow tools from agent.getWorkflows()
+           * - Auto-generated workflow tools from agent.listWorkflows()
            * - These get this.#mastra directly and can be wrapped
            *
            * MastraPrimitives only (limited interface):
-           * - Memory tools (from memory.getTools())
+           * - Memory tools (from memory.listTools())
            * - Assigned tools (agent.tools)
            * - Toolset tools (from toolsets)
            * - Client tools (passed as tools in generate/stream options)

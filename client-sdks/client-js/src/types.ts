@@ -150,13 +150,6 @@ export type ReorderModelListParams = {
   reorderedModelIds: string[];
 };
 
-export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
-  evals: any[];
-  instructions: string;
-  name: string;
-  id: string;
-}
-
 export interface GetToolResponse {
   id: string;
   description: string;
@@ -164,7 +157,7 @@ export interface GetToolResponse {
   outputSchema: string;
 }
 
-export interface GetWorkflowRunsParams {
+export interface ListWorkflowRunsParams {
   fromDate?: Date;
   toDate?: Date;
   limit?: number;
@@ -172,7 +165,7 @@ export interface GetWorkflowRunsParams {
   resourceId?: string;
 }
 
-export type GetWorkflowRunsResponse = WorkflowRuns;
+export type ListWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowRun;
 
@@ -262,14 +255,6 @@ export interface CreateMemoryThreadParams {
   runtimeContext?: RuntimeContext | Record<string, any>;
 }
 
-export interface CreateNetworkMemoryThreadParams {
-  title?: string;
-  metadata?: Record<string, any>;
-  resourceId: string;
-  threadId?: string;
-  networkId: string;
-}
-
 export type CreateMemoryThreadResponse = StorageThreadType;
 
 export interface GetMemoryThreadParams {
@@ -284,11 +269,6 @@ export interface GetMemoryConfigParams {
 }
 
 export type GetMemoryConfigResponse = { config: MemoryConfig };
-
-export interface GetNetworkMemoryThreadParams {
-  resourceId: string;
-  networkId: string;
-}
 
 export type GetMemoryThreadResponse = StorageThreadType[];
 
@@ -553,7 +533,7 @@ export interface MemorySearchResult {
   };
 }
 
-export interface GetAgentsModelProvidersResponse {
+export interface ListAgentsModelProvidersResponse {
   providers: Provider[];
 }
 

@@ -7,6 +7,7 @@ import type {
   SharedMemoryConfig,
   StorageThreadType,
   WorkingMemoryTemplate,
+  MessageDeleteInput,
 } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
@@ -21,9 +22,6 @@ import xxhash from 'xxhash-wasm';
 import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
 import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
-
-// Type for flexible message deletion input
-export type MessageDeleteInput = string[] | { id: string }[];
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
@@ -1036,7 +1034,7 @@ ${
     return Boolean(isMDWorkingMemory && isMDWorkingMemory.version === `vnext`);
   }
 
-  public getTools(config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
+  public listTools(config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
     if (mergedConfig.workingMemory?.enabled) {
       return {

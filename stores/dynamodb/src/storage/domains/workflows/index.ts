@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { WorkflowsStorage } from '@mastra/core/storage';
-import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
 
@@ -326,5 +326,9 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
         error,
       );
     }
+  }
+
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
+    return this.getWorkflowRuns(args);
   }
 }
