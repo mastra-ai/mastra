@@ -411,9 +411,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           config: { lastMessages: 0, semanticRecall: { messageRange: 0, topK: 1, scope: 'thread' } },
           vectorMessageSearch: 'world',
         });
-        const contents = result.messages.map(m =>
-          Array.isArray(m.content) ? m.content.map(p => (p as TextPart).text).join(' ') : m.content,
-        );
+        const contents = result.messages.map(m => getTextContent(m));
         expect(contents[0]).toContain('world');
         expect(contents[0]).toContain('Hello');
         expect(contents[0]).toContain('again');
@@ -437,9 +435,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           config: { lastMessages: 0, semanticRecall: { messageRange: 0, topK: 1, scope: 'thread' } },
           vectorMessageSearch: 'assistant',
         });
-        const contents = result.messages.map(m =>
-          Array.isArray(m.content) ? m.content.map(p => (p as TextPart).text).join(' ') : m.content,
-        );
+        const contents = result.messages.map(m => getTextContent(m));
         expect(contents[0]).toContain('Assistant says hello.');
         expect(contents[0]).toContain('This is a test.');
       });
