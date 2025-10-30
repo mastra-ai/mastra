@@ -5,6 +5,7 @@ import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { createStep } from '../../../workflows';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
 
+// TODO: figure out how to type this
 export function createToolCallStep<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
