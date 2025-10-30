@@ -1,6 +1,9 @@
 import { Agent } from '@mastra/core/agent';
+import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
-import type { MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
+import { MockMemory } from '@mastra/core/memory';
+import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
@@ -24,6 +27,17 @@ function createThread(overrides?: Partial<StorageThreadType>): StorageThreadType
     updatedAt: now,
     ...overrides,
   };
+}
+
+function getTextContent(message: MastraDBMessage): string {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+  if (message.content && typeof message.content === 'object' && 'parts' in message.content) {
+    const textPart = message.content.parts.find((p: any) => p.type === 'text');
+    return textPart?.text || '';
+  }
+  return '';
 }
 
 describe('Memory Handlers', () => {
@@ -469,16 +483,12 @@ describe('Memory Handlers', () => {
       expect(getResponse.messages).toHaveLength(2);
 
       // Verify v1 message content
-      expect(getResponse.messages[0]).toMatchObject({
-        role: 'user',
-        content: 'Hello from v1 format!',
-      });
+      expect(getResponse.messages[0].role).toBe('user');
+      expect(getTextContent(getResponse.messages[0])).toBe('Hello from v1 format!');
 
       // Verify v2 message content
-      expect(getResponse.messages[1]).toMatchObject({
-        role: 'assistant',
-        content: 'Hello from v2 format!',
-      });
+      expect(getResponse.messages[1].role).toBe('assistant');
+      expect(getTextContent(getResponse.messages[1])).toBe('Hello from v2 format!');
     });
 
     it('should handle mixed v1 and v2 messages in single request', async () => {

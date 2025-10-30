@@ -1,3 +1,4 @@
+import { convertMessages } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions } from '@mastra/core/storage';
@@ -369,10 +370,12 @@ export async function getMessagesHandler({
       throw new HTTPException(404, { message: 'Thread not found' });
     }
 
-    return await memory.query({
+    const result = await memory.query({
       threadId: threadId,
       ...(limit && { selectBy: { last: limit } }),
     });
+    const uiMessages = convertMessages(result.messages).to('AIV5.UI');
+    return { messages: result.messages, uiMessages };
   } catch (error) {
     return handleError(error, 'Error getting messages');
   }
