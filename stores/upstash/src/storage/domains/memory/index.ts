@@ -646,12 +646,163 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  public async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    throw new Error(
-      `listMessages is not yet implemented by this storage adapter (${this.constructor.name}). ` +
-        `This method is currently being rolled out across all storage adapters. ` +
-        `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
-    );
+  public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+    const threadMessagesKey = getThreadMessagesKey(threadId);
+
+    try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
+      // Determine how many results to return
+      // Default pagination is always 40 unless explicitly specified
+      let perPage = 40;
+      if (limit !== undefined) {
+        if (limit === false) {
+          // limit: false means get ALL messages
+          perPage = Number.MAX_SAFE_INTEGER;
+        } else if (typeof limit === 'number' && limit > 0) {
+          perPage = limit;
+        }
+      }
+
+      // Convert offset to page for pagination metadata
+      const page = Math.floor(offset / perPage);
+
+      // Get included messages with context if specified
+      let includedMessages: MastraMessageV2[] = [];
+      if (include && include.length > 0) {
+        const selectBy = { include };
+        const included = await this._getIncludedMessages(threadId, selectBy);
+        includedMessages = included.map(this.parseStoredMessage);
+      }
+
+      // Get all message IDs from the sorted set
+      const allMessageIds = await this.client.zrange(threadMessagesKey, 0, -1);
+      if (allMessageIds.length === 0) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      // Use pipeline to fetch all messages efficiently
+      const pipeline = this.client.pipeline();
+      allMessageIds.forEach(id => pipeline.get(getMessageKey(threadId, id as string)));
+      const results = await pipeline.exec();
+
+      // Process messages and apply filters
+      let messagesData = results
+        .filter((msg): msg is MastraMessageV2 & { _index?: number } => msg !== null)
+        .map(this.parseStoredMessage);
+
+      // Filter by resourceId if provided
+      if (resourceId) {
+        messagesData = messagesData.filter(msg => msg.resourceId === resourceId);
+      }
+
+      // Apply date filters if provided
+      if (filter?.dateRange?.start) {
+        const fromDate = filter.dateRange.start;
+        messagesData = messagesData.filter(msg => new Date(msg.createdAt).getTime() >= fromDate.getTime());
+      }
+
+      if (filter?.dateRange?.end) {
+        const toDate = filter.dateRange.end;
+        messagesData = messagesData.filter(msg => new Date(msg.createdAt).getTime() <= toDate.getTime());
+      }
+
+      // Determine sort field and direction, default to DESC (newest first)
+      const sortField = orderBy?.field || 'createdAt';
+      const sortDirection = orderBy?.direction || 'DESC';
+
+      // Sort messages by their position in the sorted set (or by orderBy if specified)
+      if (orderBy) {
+        messagesData.sort((a, b) => {
+          const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
+          const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+          return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        });
+      } else {
+        // Default: sort by position in sorted set
+        messagesData.sort((a, b) => allMessageIds.indexOf(a.id) - allMessageIds.indexOf(b.id));
+      }
+
+      const total = messagesData.length;
+
+      // Apply pagination
+      const start = offset;
+      const end = limit === false ? total : start + perPage;
+      const hasMore = end < total;
+      const paginatedMessages = messagesData.slice(start, end);
+
+      // Combine paginated messages with included messages, deduplicating
+      const messageIds = new Set<string>();
+      const allMessages: MastraMessageV2[] = [];
+
+      // Add paginated messages first
+      for (const msg of paginatedMessages) {
+        if (!messageIds.has(msg.id)) {
+          allMessages.push(msg);
+          messageIds.add(msg.id);
+        }
+      }
+
+      // Add included messages (with context), avoiding duplicates
+      for (const msg of includedMessages) {
+        if (!messageIds.has(msg.id)) {
+          allMessages.push(msg);
+          messageIds.add(msg.id);
+        }
+      }
+
+      // Final sort to maintain order
+      if (orderBy) {
+        allMessages.sort((a, b) => {
+          const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
+          const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+          return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        });
+      } else {
+        allMessages.sort((a, b) => allMessageIds.indexOf(a.id) - allMessageIds.indexOf(b.id));
+      }
+
+      // Use MessageList for proper deduplication and format conversion
+      const list = new MessageList().add(allMessages, 'memory');
+      const finalMessages = list.get.all.v2();
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage,
+        hasMore,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_STORAGE_LIST_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+            resourceId: resourceId ?? '',
+          },
+        },
+        error,
+      );
+      this.logger.error(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      return {
+        messages: [],
+        total: 0,
+        page: Math.floor(offset / (limit === false ? Number.MAX_SAFE_INTEGER : limit || 40)),
+        perPage: limit === false ? Number.MAX_SAFE_INTEGER : limit || 40,
+        hasMore: false,
+      };
+    }
   }
 
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {

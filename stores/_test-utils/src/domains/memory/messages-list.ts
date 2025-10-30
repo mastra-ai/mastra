@@ -5,7 +5,7 @@ import type { MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import { MessageList } from '@mastra/core/agent';
 
 export function createMessagesListTest({ storage }: { storage: MastraStorage }) {
-  if (storage.name !== 'InMemoryStorage') {
+  if (!['InMemoryStorage', 'UpstashStorage'].includes(storage.name)) {
     return;
   }
 
