@@ -12,4 +12,4 @@
 '@mastra/pg': major
 ---
 
-remove getMessagesById
+Remove `getMessagesById` method from storage interfaces in favor of `listMessagesById`. The new method only returns V2-format messages and removes the format parameter, simplifying the API surface. Users should migrate from `getMessagesById({ messageIds, format })` to `listMessagesById({ messageIds })`.
