@@ -42,11 +42,20 @@ export default function Layout(props: Props): ReactNode {
 
       <Head>
         <link rel="canonical" href={currentUrl} />
-        <link rel="alternate" hrefLang="en" href={currentUrl} />
+        <link
+          rel="alternate"
+          hrefLang="en"
+          href={`https://mastra.ai${cleanPath}`}
+        />
         <link
           rel="alternate"
           hrefLang="ja"
           href={`https://mastra.ai/ja${cleanPath}`}
+        />
+        <link
+          rel="alternate"
+          hrefLang="x-default"
+          href={`https://mastra.ai${cleanPath}`}
         />
       </Head>
 
