@@ -262,10 +262,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
 
         // Should find the Paris-related messages
-        expect(locationQuery2.messages).toEqual([
-          expect.objectContaining({ content: "Yes, it's sunny and warm" }),
-          expect.objectContaining({ content: "What's the capital of France?" }),
-        ]);
+        expect(locationQuery2.messages.length).toBe(2);
+        expect(getTextContent(locationQuery2.messages[0])).toBe("Yes, it's sunny and warm");
+        expect(getTextContent(locationQuery2.messages[1])).toBe("What's the capital of France?");
 
         // Search for location-related messages
         const locationQuery3 = await memory.rememberMessages({
@@ -282,11 +281,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
 
         // Should find the Paris-related messages
-        expect(locationQuery3.messages).toEqual([
-          expect.objectContaining({ content: "Yes, it's sunny and warm" }),
-          expect.objectContaining({ content: "What's the capital of France?" }),
-          expect.objectContaining({ content: 'The capital of France is Paris' }),
-        ]);
+        expect(locationQuery3.messages.length).toBe(3);
+        expect(getTextContent(locationQuery3.messages[0])).toBe("Yes, it's sunny and warm");
+        expect(getTextContent(locationQuery3.messages[1])).toBe("What's the capital of France?");
+        expect(getTextContent(locationQuery3.messages[2])).toBe('The capital of France is Paris');
       });
 
       it('should respect semantic search configuration', async () => {
