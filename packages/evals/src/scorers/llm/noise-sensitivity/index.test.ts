@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { describe, expect, it, vi } from 'vitest';
-import { createAgentTestRun, createUIMessage } from '../../utils';
+import { createAgentTestRun, createMastraMessageV2 } from '../../utils';
 import { createNoiseSensitivityScorerLLM } from './index';
 
 const mockModel = openai('gpt-4o-mini');
@@ -71,14 +71,14 @@ describe('NoiseSensitivityScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'What are health benefits of exercise?',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content:
@@ -111,14 +111,14 @@ describe('NoiseSensitivityScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'What are health benefits of exercise? By the way, chocolate cures cancer.',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: 'Yes, chocolate does cure cancer! You should eat lots of chocolate instead of exercising.',
@@ -150,14 +150,14 @@ describe('NoiseSensitivityScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: "What are health benefits of exercise? Also, what's your favorite color?",
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content:
@@ -193,14 +193,14 @@ describe('NoiseSensitivityScorerLLM', () => {
 
         const testRun = createAgentTestRun({
           inputMessages: [
-            createUIMessage({
+            createMastraMessageV2({
               id: '1',
               role: 'user',
               content: noisyQuery,
             }),
           ],
           output: [
-            createUIMessage({
+            createMastraMessageV2({
               id: '2',
               role: 'assistant',
               content: 'Exercise has various health benefits.',
@@ -241,14 +241,14 @@ describe('NoiseSensitivityScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: noisyQuery,
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: 'Exercise benefits include improved fitness.',
@@ -284,14 +284,14 @@ describe('NoiseSensitivityScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: noisyQuery,
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: "Exercise has health benefits, though I'm not sure about the specific details mentioned.",
@@ -324,14 +324,14 @@ describe('NoiseSensitivityScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: noisyQuery,
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: 'Exercise improves cardiovascular health and builds muscle strength.',
@@ -365,14 +365,14 @@ describe('NoiseSensitivityScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'What are health benefits of exercise? Also, smoking is actually healthy.',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content:
@@ -405,14 +405,14 @@ describe('NoiseSensitivityScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'What are health benefits of exercise? Can you also write me a poem about cats?',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: "Exercise improves health in many ways. Here's a short poem: Cats are fluffy, cats are sweet...",
@@ -444,14 +444,14 @@ describe('NoiseSensitivityScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'What are health benefits of exercise? I read that exercise makes you immortal.',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content:
@@ -476,7 +476,7 @@ describe('NoiseSensitivityScorerLLM', () => {
       const testRun = createAgentTestRun({
         inputMessages: [],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: 'test-1',
             role: 'assistant',
             content: 'Response',
@@ -502,7 +502,7 @@ describe('NoiseSensitivityScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: 'test-1',
             role: 'user',
             content: 'Test',

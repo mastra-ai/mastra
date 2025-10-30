@@ -1,5 +1,19 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { buildSpanTree, transformTraceToScorerInputAndOutput, validateTrace } from './utils';
+import type { MastraMessageV2 } from '../../agent';
+
+/**
+ * Helper function to extract text content from MastraMessageV2
+ */
+function getMessageContent(message: MastraMessageV2): string {
+  if (typeof message.content.content === 'string') {
+    return message.content.content;
+  }
+  // Extract from parts
+  const textParts =
+    message.content.parts?.filter((part: any) => part.type === 'text').map((part: any) => part.text) || [];
+  return textParts[textParts.length - 1] || ''; // AI SDK convention: last text part only
+}
 
 /**
  * Test utilities for transformer functions - focused on maintainability
@@ -298,8 +312,9 @@ describe('Transformer Functions', () => {
       const result = transformTraceToScorerInputAndOutput(trace);
 
       expect(result.input.inputMessages).toHaveLength(1);
-      expect(result.input.inputMessages[0]?.content).toBe('Hello, how are you?');
+      expect(getMessageContent(result.input.inputMessages[0]!)).toBe('Hello, how are you?');
       expect(result.input.inputMessages[0]?.role).toBe('user');
+      expect(result.input.inputMessages[0]?.content.format).toBe(2);
     });
 
     it('should extract system messages correctly', () => {
@@ -316,9 +331,9 @@ describe('Transformer Functions', () => {
       const result = transformTraceToScorerInputAndOutput(trace);
 
       expect(result.input.rememberedMessages).toHaveLength(2);
-      expect(result.input.rememberedMessages[0]?.content).toBe('What is the weather?');
+      expect(getMessageContent(result.input.rememberedMessages[0]!)).toBe('What is the weather?');
       expect(result.input.rememberedMessages[0]?.role).toBe('user');
-      expect(result.input.rememberedMessages[1]?.content).toBe('The weather is sunny');
+      expect(getMessageContent(result.input.rememberedMessages[1]!)).toBe('The weather is sunny');
       expect(result.input.rememberedMessages[1]?.role).toBe('assistant');
     });
 
@@ -336,7 +351,8 @@ describe('Transformer Functions', () => {
 
       const result = transformTraceToScorerInputAndOutput(trace);
       expect(result.input.inputMessages).toHaveLength(1);
-      expect(result.input.inputMessages[0]?.content).toBe('Simple string input');
+      expect(getMessageContent(result.input.inputMessages[0]!)).toBe('Simple string input');
+      expect(result.input.inputMessages[0]?.content.format).toBe(2);
     });
 
     it('should throw for trace without agent span', () => {
@@ -358,34 +374,38 @@ describe('Transformer Functions', () => {
 
       expect(result.output).toHaveLength(1);
       expect(result.output[0]?.role).toBe('assistant');
-      expect(result.output[0]?.content).toBe('I am doing well, thank you!');
+      expect(getMessageContent(result.output[0]!)).toBe('I am doing well, thank you!');
+      expect(result.output[0]?.content.format).toBe(2);
     });
 
     it('should include tool invocations in response', () => {
       const trace = TransformerTestScenarios.agentWithToolCalls().buildTrace();
       const result = transformTraceToScorerInputAndOutput(trace);
 
-      expect(result.output[0]?.toolInvocations).toHaveLength(1);
-      expect(result.output[0]?.toolInvocations?.[0]?.toolName).toBe('weatherAPI');
-      expect(result.output[0]?.toolInvocations?.[0]?.args).toEqual({ location: 'Seattle' });
-
-      // @ts-ignore
-      expect(result.output[0]?.toolInvocations?.[0]?.result).toEqual({ temperature: 72, condition: 'sunny' });
+      expect(result.output[0]?.content.toolInvocations).toHaveLength(1);
+      expect(result.output[0]?.content.toolInvocations?.[0]?.toolName).toBe('weatherAPI');
+      expect(result.output[0]?.content.toolInvocations?.[0]?.args).toEqual({ location: 'Seattle' });
+      const toolInvocation = result.output[0]?.content.toolInvocations?.[0];
+      if (toolInvocation && toolInvocation.state === 'result' && 'result' in toolInvocation) {
+        expect(toolInvocation.result).toEqual({ temperature: 72, condition: 'sunny' });
+      }
     });
 
     it('should include both tool invocation and text parts', () => {
       const trace = TransformerTestScenarios.agentWithToolCalls().buildTrace();
       const result = transformTraceToScorerInputAndOutput(trace);
 
-      const parts = result.output[0]?.parts;
+      const parts = result.output[0]?.content.parts;
       expect(parts).toHaveLength(2); // 1 tool invocation + 1 text
 
-      const toolPart = parts?.find(p => p.type === 'tool-invocation');
-      const textPart = parts?.find(p => p.type === 'text');
+      const toolPart = parts?.find((p: any) => p.type === 'tool-invocation');
+      const textPart = parts?.find((p: any) => p.type === 'text');
 
       expect(toolPart).toBeDefined();
       expect(textPart).toBeDefined();
-      expect(textPart?.text).toBe('The weather is sunny with 72°F');
+      if (textPart && 'text' in textPart) {
+        expect(textPart.text).toBe('The weather is sunny with 72°F');
+      }
     });
   });
 
@@ -411,7 +431,8 @@ describe('Transformer Functions', () => {
       // Verify input structure
       expect(result.input).toBeDefined();
       expect(result.input.inputMessages).toHaveLength(1);
-      expect(result.input.inputMessages[0]?.content).toBe('Hello, how are you?');
+      expect(getMessageContent(result.input.inputMessages[0]!)).toBe('Hello, how are you?');
+      expect(result.input.inputMessages[0]?.content.format).toBe(2);
       expect(result.input.systemMessages).toHaveLength(1);
       expect(result.input.systemMessages[0]?.content).toBe('You are a friendly assistant');
 
@@ -419,7 +440,8 @@ describe('Transformer Functions', () => {
       expect(result.output).toBeDefined();
       expect(result.output).toHaveLength(1);
       expect(result.output[0]?.role).toBe('assistant');
-      expect(result.output[0]?.content).toBe('I am doing well, thank you!');
+      expect(getMessageContent(result.output[0]!)).toBe('I am doing well, thank you!');
+      expect(result.output[0]?.content.format).toBe(2);
     });
 
     it('should handle tool calls in both input and output', () => {
@@ -427,11 +449,11 @@ describe('Transformer Functions', () => {
       const result = transformTraceToScorerInputAndOutput(trace);
 
       // Input should have the user message
-      expect(result.input.inputMessages[0]?.content).toBe('What is the weather?');
+      expect(getMessageContent(result.input.inputMessages[0]!)).toBe('What is the weather?');
 
       // Output should have tool invocations
-      expect(result.output[0]?.toolInvocations).toHaveLength(1);
-      expect(result.output[0]?.toolInvocations?.[0]?.toolName).toBe('weatherAPI');
+      expect(result.output[0]?.content.toolInvocations).toHaveLength(1);
+      expect(result.output[0]?.content.toolInvocations?.[0]?.toolName).toBe('weatherAPI');
     });
   });
 
@@ -440,8 +462,8 @@ describe('Transformer Functions', () => {
       const trace = TransformerTestScenarios.simpleAgentConversation().buildTrace();
       const result = transformTraceToScorerInputAndOutput(trace);
 
-      expect(result.output[0]?.toolInvocations).toHaveLength(0);
-      expect(result.output[0]?.parts?.filter(p => p.type === 'tool-invocation')).toHaveLength(0);
+      expect(result.output[0]?.content.toolInvocations || []).toHaveLength(0);
+      expect(result.output[0]?.content.parts?.filter((p: any) => p.type === 'tool-invocation')).toHaveLength(0);
     });
 
     it('should handle complex nested message content', () => {
@@ -463,8 +485,8 @@ describe('Transformer Functions', () => {
         .buildTrace();
 
       const result = transformTraceToScorerInputAndOutput(trace);
-      expect(result.input.inputMessages[0]?.content).toBe('Test input');
-      expect(result.input.rememberedMessages[0]?.content).toBe('Second part'); // AI SDK convention: last text part only
+      expect(getMessageContent(result.input.inputMessages[0]!)).toBe('Test input');
+      expect(getMessageContent(result.input.rememberedMessages[0]!)).toBe('Second part'); // AI SDK convention: last text part only
     });
   });
 });

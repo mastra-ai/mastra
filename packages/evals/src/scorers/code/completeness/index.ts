@@ -1,5 +1,7 @@
 import { createScorer } from '@mastra/core/scores';
 import nlp from 'compromise';
+import type { MastraMessageV2 } from '@mastra/core/agent';
+import { getMessageContent } from '../../utils';
 
 function normalizeString(str: string): string {
   // Remove diacritics and convert to lowercase
@@ -82,17 +84,24 @@ export function createCompletenessScorer() {
     .preprocess(async ({ run }) => {
       const isInputInvalid =
         !run.input ||
-        run.input.inputMessages.some((i: { content: string }) => i.content === null || i.content === undefined);
+        run.input.inputMessages.some((i: MastraMessageV2) => {
+          const content = getMessageContent(i);
+          return content === null || content === undefined || content === '';
+        });
 
       const isOutputInvalid =
-        !run.output || run.output.some((i: { content: string }) => i.content === null || i.content === undefined);
+        !run.output ||
+        run.output.some((i: MastraMessageV2) => {
+          const content = getMessageContent(i);
+          return content === null || content === undefined || content === '';
+        });
 
       if (isInputInvalid || isOutputInvalid) {
         throw new Error('Inputs cannot be null or undefined');
       }
 
-      const input = run.input?.inputMessages.map((i: { content: string }) => i.content).join(', ') || '';
-      const output = run.output?.map(({ content }: { content: string }) => content).join(', ') || '';
+      const input = run.input?.inputMessages.map((i: MastraMessageV2) => getMessageContent(i)).join(', ') || '';
+      const output = run.output?.map((msg: MastraMessageV2) => getMessageContent(msg)).join(', ') || '';
 
       const inputToProcess = input;
       const outputToProcess = output;

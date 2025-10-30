@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { createAgentTestRun, createUIMessage } from '../../utils';
+import { createAgentTestRun, createMastraMessageV2 } from '../../utils';
 import { createCompletenessScorer } from './index';
 
 describe('CompletenessMetric', () => {
@@ -14,8 +14,8 @@ describe('CompletenessMetric', () => {
     it('should return high score for identical text', async () => {
       const text = 'The quick brown fox jumps over the lazy dog';
 
-      const inputMessages = [createUIMessage({ content: text, role: 'user', id: 'test-input' })];
-      const output = [createUIMessage({ content: text, role: 'assistant', id: 'test-output' })];
+      const inputMessages = [createMastraMessageV2({ content: text, role: 'user', id: 'test-input' })];
+      const output = [createMastraMessageV2({ content: text, role: 'assistant', id: 'test-output' })];
 
       const run = createAgentTestRun({ inputMessages, output });
       const result = await scorer.run(run);
@@ -27,8 +27,8 @@ describe('CompletenessMetric', () => {
       const original = 'The quick brown fox jumps over the lazy dog';
       const simplified = 'The fox jumps over the dog';
 
-      const inputMessages = [createUIMessage({ content: original, role: 'user', id: 'test-input' })];
-      const output = [createUIMessage({ content: simplified, role: 'assistant', id: 'test-output' })];
+      const inputMessages = [createMastraMessageV2({ content: original, role: 'user', id: 'test-input' })];
+      const output = [createMastraMessageV2({ content: simplified, role: 'assistant', id: 'test-output' })];
 
       const run = createAgentTestRun({ inputMessages, output });
       const result = await scorer.run(run);
@@ -44,8 +44,8 @@ describe('CompletenessMetric', () => {
       const original = 'The weather is sunny today';
       const simplified = 'I like to eat pizza';
 
-      const inputMessages = [createUIMessage({ content: original, role: 'user', id: 'test-input' })];
-      const outputMessages = [createUIMessage({ content: simplified, role: 'assistant', id: 'test-output' })];
+      const inputMessages = [createMastraMessageV2({ content: original, role: 'user', id: 'test-input' })];
+      const outputMessages = [createMastraMessageV2({ content: simplified, role: 'assistant', id: 'test-output' })];
 
       const run = createAgentTestRun({ inputMessages, output: outputMessages });
       const result = await scorer.run(run);
@@ -59,8 +59,8 @@ describe('CompletenessMetric', () => {
 
   describe('edge cases', () => {
     it('should handle both empty strings', async () => {
-      const inputMessages = [createUIMessage({ content: '', role: 'user', id: 'test-input' })];
-      const outputMessages = [createUIMessage({ content: '', role: 'assistant', id: 'test-output' })];
+      const inputMessages = [createMastraMessageV2({ content: '', role: 'user', id: 'test-input' })];
+      const outputMessages = [createMastraMessageV2({ content: '', role: 'assistant', id: 'test-output' })];
 
       const run = createAgentTestRun({ inputMessages, output: outputMessages });
       const result = await scorer.run(run);
@@ -71,8 +71,8 @@ describe('CompletenessMetric', () => {
     });
 
     it('should handle empty original string', async () => {
-      const inputMessages = [createUIMessage({ content: '', role: 'user', id: 'test-input' })];
-      const outputMessages = [createUIMessage({ content: 'some text', role: 'assistant', id: 'test-output' })];
+      const inputMessages = [createMastraMessageV2({ content: '', role: 'user', id: 'test-input' })];
+      const outputMessages = [createMastraMessageV2({ content: 'some text', role: 'assistant', id: 'test-output' })];
 
       const run = createAgentTestRun({ inputMessages, output: outputMessages });
       const result = await scorer.run(run);
@@ -80,8 +80,8 @@ describe('CompletenessMetric', () => {
     });
 
     it('should handle whitespace-only strings', async () => {
-      const inputMessages = [createUIMessage({ content: '   \n  ', role: 'user', id: 'test-input' })];
-      const outputMessages = [createUIMessage({ content: '  \n  ', role: 'assistant', id: 'test-output' })];
+      const inputMessages = [createMastraMessageV2({ content: '   \n  ', role: 'user', id: 'test-input' })];
+      const outputMessages = [createMastraMessageV2({ content: '  \n  ', role: 'assistant', id: 'test-output' })];
 
       const run = createAgentTestRun({ inputMessages, output: outputMessages });
       const result = await scorer.run(run);
@@ -102,9 +102,11 @@ describe('CompletenessMetric', () => {
   describe('special cases', () => {
     it('should handle lists and enumerations', async () => {
       const inputMessages = [
-        createUIMessage({ content: 'apples, oranges, and bananas', role: 'user', id: 'test-input' }),
+        createMastraMessageV2({ content: 'apples, oranges, and bananas', role: 'user', id: 'test-input' }),
       ];
-      const outputMessages = [createUIMessage({ content: 'apples and bananas', role: 'assistant', id: 'test-output' })];
+      const outputMessages = [
+        createMastraMessageV2({ content: 'apples and bananas', role: 'assistant', id: 'test-output' }),
+      ];
 
       const run = createAgentTestRun({ inputMessages, output: outputMessages });
       const result = await scorer.run(run);
@@ -113,8 +115,8 @@ describe('CompletenessMetric', () => {
     });
 
     it('should handle repeated elements', async () => {
-      const inputMessages = [createUIMessage({ content: 'cat cat cat cats', role: 'user', id: 'test-input' })];
-      const outputMessages = [createUIMessage({ content: 'cat cats', role: 'assistant', id: 'test-output' })];
+      const inputMessages = [createMastraMessageV2({ content: 'cat cat cat cats', role: 'user', id: 'test-input' })];
+      const outputMessages = [createMastraMessageV2({ content: 'cat cats', role: 'assistant', id: 'test-output' })];
 
       const run = createAgentTestRun({ inputMessages, output: outputMessages });
       const result = await scorer.run(run);
@@ -128,8 +130,8 @@ describe('CompletenessMetric', () => {
       const simplified = `First para about AI.
         Second para about ML.`;
 
-      const inputMessages = [createUIMessage({ content: original, role: 'user', id: 'test-input' })];
-      const outputMessages = [createUIMessage({ content: simplified, role: 'assistant', id: 'test-output' })];
+      const inputMessages = [createMastraMessageV2({ content: original, role: 'user', id: 'test-input' })];
+      const outputMessages = [createMastraMessageV2({ content: simplified, role: 'assistant', id: 'test-output' })];
 
       const run = createAgentTestRun({ inputMessages, output: outputMessages });
       const result = await scorer.run(run);

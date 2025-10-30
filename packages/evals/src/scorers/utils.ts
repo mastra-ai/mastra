@@ -1,6 +1,21 @@
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, ScoringInput } from '@mastra/core/scores';
+import type { MastraMessageV2 } from '@mastra/core/agent';
 import type { ToolInvocation, UIMessage } from 'ai';
+
+/**
+ * Extract text content from MastraMessageV2
+ * Checks content.content first, then falls back to extracting from parts
+ */
+export function getMessageContent(message: MastraMessageV2): string {
+  if (typeof message.content.content === 'string') {
+    return message.content.content;
+  }
+  // Extract from parts - AI SDK convention: last text part only
+  const textParts =
+    message.content.parts?.filter((part: any) => part.type === 'text').map((part: any) => part.text) || [];
+  return textParts[textParts.length - 1] || '';
+}
 
 export const roundToTwoDecimals = (num: number) => {
   return Math.round((num + Number.EPSILON) * 100) / 100;
@@ -38,7 +53,8 @@ export const createTestRun = (
 };
 
 export const getUserMessageFromRunInput = (input?: ScorerRunInputForAgent) => {
-  return input?.inputMessages.find(({ role }) => role === 'user')?.content;
+  const userMessage = input?.inputMessages.find(({ role }) => role === 'user');
+  return userMessage ? getMessageContent(userMessage) : undefined;
 };
 
 export const getSystemMessagesFromRunInput = (input?: ScorerRunInputForAgent): string[] => {
@@ -85,7 +101,8 @@ export const getCombinedSystemPrompt = (input?: ScorerRunInputForAgent): string 
 };
 
 export const getAssistantMessageFromRunOutput = (output?: ScorerRunOutputForAgent) => {
-  return output?.find(({ role }) => role === 'assistant')?.content;
+  const assistantMessage = output?.find(({ role }) => role === 'assistant');
+  return assistantMessage ? getMessageContent(assistantMessage) : undefined;
 };
 
 export const createToolInvocation = ({
@@ -100,14 +117,14 @@ export const createToolInvocation = ({
   args: Record<string, any>;
   result: Record<string, any>;
   state?: ToolInvocation['state'];
-}): { toolCallId: string; toolName: string; args: Record<string, any>; result: Record<string, any>; state: string } => {
+}): ToolInvocation => {
   return {
     toolCallId,
     toolName,
     args,
     result,
     state,
-  };
+  } as ToolInvocation;
 };
 
 export const createUIMessage = ({
@@ -133,6 +150,83 @@ export const createUIMessage = ({
     content,
     parts: [{ type: 'text', text: content }],
     toolInvocations,
+  };
+};
+
+/**
+ * Create a MastraMessageV2 for testing purposes
+ * This is the format used internally and stored in the database
+ */
+export const createMastraMessageV2 = ({
+  content,
+  role,
+  id = `test-msg-${crypto.randomUUID()}`,
+  toolInvocations = [],
+  threadId,
+  resourceId,
+  createdAt = new Date(),
+  metadata,
+}: {
+  content: string;
+  role: 'user' | 'assistant' | 'system';
+  id?: string;
+  toolInvocations?: Array<{
+    toolCallId: string;
+    toolName: string;
+    args: Record<string, any>;
+    result?: Record<string, any>;
+    state?: ToolInvocation['state'];
+  }>;
+  threadId?: string;
+  resourceId?: string;
+  createdAt?: Date;
+  metadata?: Record<string, unknown>;
+}): MastraMessageV2 => {
+  const parts: Array<{ type: 'text'; text: string } | { type: 'tool-invocation'; toolInvocation: ToolInvocation }> = [];
+
+  // Add tool invocation parts
+  for (const toolInvocation of toolInvocations) {
+    parts.push({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: toolInvocation.state || 'result',
+        toolCallId: toolInvocation.toolCallId,
+        toolName: toolInvocation.toolName,
+        args: toolInvocation.args,
+        ...(toolInvocation.result && { result: toolInvocation.result }),
+      } as ToolInvocation,
+    });
+  }
+
+  // Add text part if content exists
+  if (content.trim()) {
+    parts.push({
+      type: 'text',
+      text: content,
+    });
+  }
+
+  return {
+    id,
+    role,
+    createdAt,
+    threadId,
+    resourceId,
+    content: {
+      format: 2,
+      parts,
+      content,
+      ...(toolInvocations.length > 0 && {
+        toolInvocations: toolInvocations.map(ti => ({
+          state: ti.state || 'result',
+          toolCallId: ti.toolCallId,
+          toolName: ti.toolName,
+          args: ti.args,
+          ...(ti.result && { result: ti.result }),
+        })) as ToolInvocation[],
+      }),
+      ...(metadata && { metadata }),
+    },
   };
 };
 
@@ -184,9 +278,11 @@ export function extractToolCalls(output: ScorerRunOutputForAgent): { tools: stri
 
   for (let messageIndex = 0; messageIndex < output.length; messageIndex++) {
     const message = output[messageIndex];
-    if (message?.toolInvocations) {
-      for (let invocationIndex = 0; invocationIndex < message.toolInvocations.length; invocationIndex++) {
-        const invocation = message.toolInvocations[invocationIndex];
+    // Access toolInvocations through content wrapper for MastraMessageV2
+    const toolInvocations = message?.content.toolInvocations;
+    if (toolInvocations) {
+      for (let invocationIndex = 0; invocationIndex < toolInvocations.length; invocationIndex++) {
+        const invocation = toolInvocations[invocationIndex];
         if (invocation && invocation.toolName && (invocation.state === 'result' || invocation.state === 'call')) {
           toolCalls.push(invocation.toolName);
           toolCallInfos.push({
@@ -204,9 +300,9 @@ export function extractToolCalls(output: ScorerRunOutputForAgent): { tools: stri
 }
 
 export const extractInputMessages = (runInput: ScorerRunInputForAgent | undefined): string[] => {
-  return runInput?.inputMessages?.map(msg => msg.content) || [];
+  return runInput?.inputMessages?.map(msg => getMessageContent(msg)) || [];
 };
 
 export const extractAgentResponseMessages = (runOutput: ScorerRunOutputForAgent): string[] => {
-  return runOutput.filter(msg => msg.role === 'assistant').map(msg => msg.content);
+  return runOutput.filter(msg => msg.role === 'assistant').map(msg => getMessageContent(msg));
 };

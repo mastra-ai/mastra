@@ -1,5 +1,7 @@
 import { createScorer } from '@mastra/core/scores';
 import { SequenceMatcher } from 'difflib';
+import type { MastraMessageV2 } from '@mastra/core/agent';
+import { getMessageContent } from '../../utils';
 
 export function createTextualDifferenceScorer() {
   return createScorer({
@@ -8,8 +10,8 @@ export function createTextualDifferenceScorer() {
     type: 'agent',
   })
     .preprocess(async ({ run }) => {
-      const input = run.input?.inputMessages?.map((i: { content: string }) => i.content).join(', ') || '';
-      const output = run.output?.map((i: { content: string }) => i.content).join(', ') || '';
+      const input = run.input?.inputMessages?.map((i: MastraMessageV2) => getMessageContent(i)).join(', ') || '';
+      const output = run.output?.map((msg: MastraMessageV2) => getMessageContent(msg)).join(', ') || '';
       const matcher = new SequenceMatcher(null, input, output);
       const ratio = matcher.ratio();
 

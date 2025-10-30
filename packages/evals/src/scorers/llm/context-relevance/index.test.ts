@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 import { describe, it, expect, vi } from 'vitest';
-import { createAgentTestRun, createUIMessage } from '../../utils';
+import { createAgentTestRun, createMastraMessageV2 } from '../../utils';
 import { createContextRelevanceScorerLLM } from '.';
 
 describe('Context Relevance Scorer', () => {
@@ -196,14 +196,14 @@ describe('Context Relevance Scorer', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: 'user-1',
             role: 'user',
             content: "Tell me about Einstein's achievements",
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: 'assistant-1',
             role: 'assistant',
             content: 'Einstein won the Nobel Prize for his work on the photoelectric effect',
@@ -223,7 +223,15 @@ describe('Context Relevance Scorer', () => {
     it('should handle dynamic context from extractor', async () => {
       const contextExtractor = (input: ScorerRunInputForAgent) => {
         // Extract context based on the query
-        const userQuery = input?.inputMessages?.[0]?.content || '';
+        const userMessage = input?.inputMessages?.[0];
+        // Extract text content from MastraMessageV2
+        const userQuery =
+          typeof userMessage?.content.content === 'string'
+            ? userMessage.content.content
+            : userMessage?.content.parts
+                ?.filter((part: any) => part.type === 'text')
+                .map((part: any) => part.text)
+                .join('') || '';
         if (userQuery.toLowerCase().includes('einstein')) {
           return [
             'Einstein won the Nobel Prize for his discovery of the photoelectric effect',
@@ -235,14 +243,14 @@ describe('Context Relevance Scorer', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: 'user-1',
             role: 'user',
             content: "What were Einstein's major contributions to physics?",
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: 'assistant-1',
             role: 'assistant',
             content: "Einstein's major contributions include the photoelectric effect and relativity theory",
@@ -264,14 +272,14 @@ describe('Context Relevance Scorer', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: 'user-1',
             role: 'user',
             content: 'Test question',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: 'assistant-1',
             role: 'assistant',
             content: 'Test response',
@@ -303,14 +311,14 @@ describe('Context Relevance Scorer', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: 'user-1',
             role: 'user',
             content: 'Test question',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: 'assistant-1',
             role: 'assistant',
             content: 'Test response',
@@ -380,14 +388,14 @@ describe('Context Relevance Scorer', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: 'user-1',
             role: 'user',
             content: 'Test question',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: 'assistant-1',
             role: 'assistant',
             content: 'Test response using extracted context',

@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { createTool } from '@mastra/core';
 import { describe, expect, it, vi } from 'vitest';
-import { createAgentTestRun, createToolInvocation, createUIMessage, extractToolCalls } from '../../utils';
+import { createAgentTestRun, createToolInvocation, createMastraMessageV2, extractToolCalls } from '../../utils';
 import { createToolCallAccuracyScorerLLM } from './index';
 
 describe('createToolCallAccuracyScorerLLM', () => {
@@ -55,14 +55,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'What is the weather in Paris?',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: 'Let me check the weather in Paris for you.',
@@ -100,14 +100,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'Hello, how are you?',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: 'I am doing well, thank you for asking!',
@@ -135,14 +135,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'What is the weather in Paris?',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: 'The weather in Paris is 15°C and cloudy.',
@@ -177,14 +177,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'What is the weather today?',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: 'Let me calculate that and check your calendar.',
@@ -225,14 +225,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'What is the weather in London?',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: 'The weather in London is 10°C.',
@@ -272,14 +272,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'Hello, how are you?',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: 'Hello! I am doing well, thank you for asking.',
@@ -305,14 +305,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'What is the weather in Tokyo?',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: 'I cannot provide weather information without checking.',
@@ -340,14 +340,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'What is the weather in Paris and what are the top tourist attractions?',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: 'Let me get you the weather and tourist information for Paris.',
@@ -387,14 +387,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'I need help with something',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content:
@@ -422,14 +422,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'Test query',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: 'Test response',
@@ -457,14 +457,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'What is the weather in InvalidCity?',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: 'I encountered an error getting the weather.',
@@ -501,14 +501,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'Compare weather in Paris and London',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: 'Checking weather for both cities.',
@@ -556,14 +556,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'Schedule an outdoor picnic for this weekend if the weather is good',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: 'I will check the weather and schedule the picnic.',
@@ -609,14 +609,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '1',
             role: 'user',
             content: 'What is 15% of 240?',
           }),
         ],
         output: [
-          createUIMessage({
+          createMastraMessageV2({
             id: '2',
             role: 'assistant',
             content: '15% of 240 is 36. I also found some helpful tips about percentages and checked the weather.',
