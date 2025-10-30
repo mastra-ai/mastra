@@ -182,8 +182,8 @@ export class InMemoryMemory extends MemoryStorage {
     const end = start + perPage;
     const paginatedThreadMessages = threadMessages.slice(start, end);
 
-    // Convert paginated thread messages to MastraMessageV2
-    const messages: MastraMessageV2[] = [];
+    // Convert paginated thread messages to MastraDBMessage
+    const messages: MastraDBMessage[] = [];
     const messageIds = new Set<string>();
 
     for (const msg of paginatedThreadMessages) {
@@ -197,7 +197,7 @@ export class InMemoryMemory extends MemoryStorage {
       for (const includeItem of include) {
         const targetMessage = this.collection.messages.get(includeItem.id);
         if (targetMessage) {
-          // Convert StorageMessageType to MastraMessageV2
+          // Convert StorageMessageType to MastraDBMessage
           const convertedMessage = {
             id: targetMessage.id,
             threadId: targetMessage.thread_id,
@@ -206,7 +206,7 @@ export class InMemoryMemory extends MemoryStorage {
             type: targetMessage.type,
             createdAt: targetMessage.createdAt,
             resourceId: targetMessage.resourceId,
-          } as MastraMessageV2;
+          } as MastraDBMessage;
 
           // Only add if not already in messages array (deduplication)
           if (!messageIds.has(convertedMessage.id)) {
@@ -234,7 +234,7 @@ export class InMemoryMemory extends MemoryStorage {
                     type: message.type,
                     createdAt: message.createdAt,
                     resourceId: message.resourceId,
-                  } as MastraMessageV2;
+                  } as MastraDBMessage;
                   messages.push(convertedPrevMessage);
                   messageIds.add(message.id);
                 }
@@ -265,7 +265,7 @@ export class InMemoryMemory extends MemoryStorage {
                     type: message.type,
                     createdAt: message.createdAt,
                     resourceId: message.resourceId,
-                  } as MastraMessageV2;
+                  } as MastraDBMessage;
                   messages.push(convertedNextMessage);
                   messageIds.add(message.id);
                 }
@@ -445,24 +445,6 @@ export class InMemoryMemory extends MemoryStorage {
 
     const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
     return { messages: list.get.all.db() };
-  }
-
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
-  async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    this.logger.debug(`MockStore: getMessagesById called`);
-
-    const rawMessages = messageIds.map(id => this.collection.messages.get(id)).filter(message => !!message);
-
-    const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
-    if (format === 'v1') return list.get.all.v1();
-    return list.get.all.v2();
   }
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
