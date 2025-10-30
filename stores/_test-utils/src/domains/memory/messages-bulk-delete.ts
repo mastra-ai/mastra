@@ -151,7 +151,10 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
       await storage.deleteMessages(messagesToDelete);
 
       // Verify 50 messages remain - need to specify limit to get all remaining messages
-      const { messages: remainingMessages } = await storage.getMessages({ threadId: thread.id, selectBy: { last: 100 } });
+      const { messages: remainingMessages } = await storage.getMessages({
+        threadId: thread.id,
+        selectBy: { last: 100 },
+      });
       expect(remainingMessages).toHaveLength(50);
 
       // Verify the correct messages remain (first 50 messages, indices 0-49)

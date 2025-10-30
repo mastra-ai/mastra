@@ -316,23 +316,15 @@ export class ClickhouseStore extends MastraStorage {
     return this.stores.memory.getMessages({ threadId, resourceId, selectBy });
   }
 
-  async getMessagesById({
-    messageIds,
-  }: {
-    messageIds: string[];
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessagesById({ messageIds });
   }
 
-  async saveMessages(
-    args: { messages: MastraDBMessage[] },
-  ): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.saveMessages(args);
   }
 
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
+  async getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessagesPaginated(args);
   }
 

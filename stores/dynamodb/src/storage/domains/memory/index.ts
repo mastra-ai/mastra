@@ -337,7 +337,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         (message, index, self) => index === self.findIndex(m => m.id === message.id),
       );
 
-      const list = new MessageList({ threadId, resourceId }).add(uniqueMessages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
+      const list = new MessageList({ threadId, resourceId }).add(
+        uniqueMessages as (MastraMessageV1 | MastraDBMessage)[],
+        'memory',
+      );
       return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
@@ -352,11 +355,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-  }: {
-    messageIds: string[];
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  public async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     this.logger.debug('Getting messages by ID', { messageIds });
     if (messageIds.length === 0) return { messages: [] };
 
@@ -416,9 +415,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     const perPage = limit;
     return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
   }
-  async saveMessages(
-    args: { messages: MastraDBMessage[] },
-  ): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     const { messages } = args;
     this.logger.debug('Saving messages', { count: messages.length });
 
@@ -562,9 +559,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
+  async getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
     const { threadId, resourceId, selectBy } = args;
     const { page = 0, perPage = 40, dateRange } = selectBy?.pagination || {};
     const fromDate = dateRange?.start;
@@ -648,7 +643,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const paginatedMessages = messages.slice(start, end);
       const hasMore = end < total;
 
-      const list = new MessageList({ threadId, resourceId }).add(paginatedMessages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
+      const list = new MessageList({ threadId, resourceId }).add(
+        paginatedMessages as (MastraMessageV1 | MastraDBMessage)[],
+        'memory',
+      );
 
       return {
         messages: list.get.all.db(),

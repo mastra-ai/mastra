@@ -31,7 +31,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       expect(page1.perPage).toBe(5);
       expect(page1.hasMore).toBe(true);
 
-const page2 = await storage.getMessagesPaginated({
+      const page2 = await storage.getMessagesPaginated({
         threadId: thread.id,
         selectBy: { pagination: { page: 1, perPage: 5 } },
       });
@@ -64,17 +64,37 @@ const page2 = await storage.getMessagesPaginated({
 
       // Ensure timestamps are distinct for reliable sorting by creating them with a slight delay for testing clarity
       const messagesToSave: MastraDBMessage[] = [];
-      messagesToSave.push(createSampleMessageV2({ threadId: thread.id, createdAt: dayBeforeYesterday, content: { content: 'Message 1' } }));
+      messagesToSave.push(
+        createSampleMessageV2({
+          threadId: thread.id,
+          createdAt: dayBeforeYesterday,
+          content: { content: 'Message 1' },
+        }),
+      );
       await new Promise(r => setTimeout(r, 5));
-      messagesToSave.push(createSampleMessageV2({ threadId: thread.id, createdAt: dayBeforeYesterday, content: { content: 'Message 2' } }));
+      messagesToSave.push(
+        createSampleMessageV2({
+          threadId: thread.id,
+          createdAt: dayBeforeYesterday,
+          content: { content: 'Message 2' },
+        }),
+      );
       await new Promise(r => setTimeout(r, 5));
-      messagesToSave.push(createSampleMessageV2({ threadId: thread.id, createdAt: yesterday, content: { content: 'Message 3' } }));
+      messagesToSave.push(
+        createSampleMessageV2({ threadId: thread.id, createdAt: yesterday, content: { content: 'Message 3' } }),
+      );
       await new Promise(r => setTimeout(r, 5));
-      messagesToSave.push(createSampleMessageV2({ threadId: thread.id, createdAt: yesterday, content: { content: 'Message 4' } }));
+      messagesToSave.push(
+        createSampleMessageV2({ threadId: thread.id, createdAt: yesterday, content: { content: 'Message 4' } }),
+      );
       await new Promise(r => setTimeout(r, 5));
-      messagesToSave.push(createSampleMessageV2({ threadId: thread.id, createdAt: now, content: { content: 'Message 5' } }));
+      messagesToSave.push(
+        createSampleMessageV2({ threadId: thread.id, createdAt: now, content: { content: 'Message 5' } }),
+      );
       await new Promise(r => setTimeout(r, 5));
-      messagesToSave.push(createSampleMessageV2({ threadId: thread.id, createdAt: now, content: { content: 'Message 6' } }));
+      messagesToSave.push(
+        createSampleMessageV2({ threadId: thread.id, createdAt: now, content: { content: 'Message 6' } }),
+      );
 
       await storage.saveMessages({ messages: messagesToSave });
       // Total 6 messages: 2 now, 2 yesterday, 2 dayBeforeYesterday (oldest to newest)
@@ -102,7 +122,7 @@ const page2 = await storage.getMessagesPaginated({
 
       const messages = [
         createSampleMessageV2({ threadId: thread.id, content: { content: 'Message 1' } }),
-        createSampleMessageV2({ threadId: thread.id, content: { content: 'Message 2' } })
+        createSampleMessageV2({ threadId: thread.id, content: { content: 'Message 2' } }),
       ];
 
       // Save messages
@@ -128,9 +148,21 @@ const page2 = await storage.getMessagesPaginated({
       await storage.saveThread({ thread });
 
       const messages = [
-        createSampleMessageV2({ threadId: thread.id, content: { content: 'First' }, createdAt: new Date(Date.now() + 1) }),
-        createSampleMessageV2({ threadId: thread.id, content: { content: 'Second' }, createdAt: new Date(Date.now() + 2) }),
-        createSampleMessageV2({ threadId: thread.id, content: { content: 'Third' }, createdAt: new Date(Date.now() + 3) }),
+        createSampleMessageV2({
+          threadId: thread.id,
+          content: { content: 'First' },
+          createdAt: new Date(Date.now() + 1),
+        }),
+        createSampleMessageV2({
+          threadId: thread.id,
+          content: { content: 'Second' },
+          createdAt: new Date(Date.now() + 2),
+        }),
+        createSampleMessageV2({
+          threadId: thread.id,
+          content: { content: 'Third' },
+          createdAt: new Date(Date.now() + 3),
+        }),
       ];
 
       await storage.saveMessages({ messages });
@@ -352,7 +384,7 @@ const page2 = await storage.getMessagesPaginated({
       // Use last: 2 and include a message from another thread with context
       const { messages: result } = await storage.getMessagesPaginated({
         threadId: thread.id,
-        
+
         selectBy: {
           last: 2,
           include: [
@@ -433,8 +465,16 @@ const page2 = await storage.getMessagesPaginated({
       await new Promise(resolve => setTimeout(resolve, 10));
 
       const messages = [
-        createSampleMessageV2({ threadId: thread.id, content: { content: 'Message 1' }, resourceId: thread.resourceId }),
-        createSampleMessageV2({ threadId: thread.id, content: { content: 'Message 2' }, resourceId: thread.resourceId }),
+        createSampleMessageV2({
+          threadId: thread.id,
+          content: { content: 'Message 1' },
+          resourceId: thread.resourceId,
+        }),
+        createSampleMessageV2({
+          threadId: thread.id,
+          content: { content: 'Message 2' },
+          resourceId: thread.resourceId,
+        }),
       ];
       await storage.saveMessages({ messages });
 

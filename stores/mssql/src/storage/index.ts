@@ -264,29 +264,21 @@ export class MSSQLStore extends MastraStorage {
   /**
    * @deprecated use getMessagesPaginated instead
    */
-  public async getMessages(
-    args: StorageGetMessagesArg,
-  ): Promise<{ messages: MastraDBMessage[] }> {
+  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessages(args);
   }
 
-  async getMessagesById({
-    messageIds,
-  }: {
-    messageIds: string[];
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessagesById({ messageIds });
   }
 
-public async getMessagesPaginated(
+  public async getMessagesPaginated(
     args: StorageGetMessagesArg,
   ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessagesPaginated(args);
   }
 
-  async saveMessages(args: {
-    messages: MastraDBMessage[];
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.saveMessages(args);
   }
 

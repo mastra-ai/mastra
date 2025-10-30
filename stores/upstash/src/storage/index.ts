@@ -143,26 +143,18 @@ export class UpstashStore extends MastraStorage {
     return this.stores.memory.deleteThread({ threadId });
   }
 
-  async saveMessages(args: {
-    messages: MastraDBMessage[];
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.saveMessages(args);
   }
 
   /**
    * @deprecated use getMessagesPaginated instead
    */
-  public async getMessages(
-    args: StorageGetMessagesArg,
-  ): Promise<{ messages: MastraDBMessage[] }> {
+  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessages(args);
   }
 
-  async getMessagesById({
-    messageIds,
-  }: {
-    messageIds: string[];
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessagesById({ messageIds });
   }
 

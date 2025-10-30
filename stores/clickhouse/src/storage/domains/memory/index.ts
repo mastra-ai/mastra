@@ -160,7 +160,10 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         }
       });
 
-      const list = new MessageList({ threadId, resourceId }).add(messages as MastraMessageV1[] | MastraDBMessage[], 'memory');
+      const list = new MessageList({ threadId, resourceId }).add(
+        messages as MastraMessageV1[] | MastraDBMessage[],
+        'memory',
+      );
       return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
@@ -175,11 +178,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-  }: {
-    messageIds: string[];
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  public async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
 
     try {
@@ -251,9 +250,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     return result.messages;
   }
 
-  async saveMessages(
-    args: { messages: MastraDBMessage[] },
-  ): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     const { messages } = args;
     if (messages.length === 0) return { messages };
 
@@ -755,9 +752,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
   }
 
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
+  async getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
     const { threadId, resourceId, selectBy } = args;
     const page = selectBy?.pagination?.page || 0;
     const perPageInput = selectBy?.pagination?.perPage;

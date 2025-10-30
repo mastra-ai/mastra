@@ -163,11 +163,7 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-  }: {
-    messageIds: string[];
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  public async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
 
     try {
@@ -324,11 +320,7 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  async saveMessages({
-    messages,
-  }: {
-    messages: MastraDBMessage[];
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages({ messages }: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messages.length === 0) return { messages };
 
     try {

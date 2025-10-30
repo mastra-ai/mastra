@@ -288,11 +288,7 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-  }: {
-    messageIds: string[];
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  public async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
     try {
       const table = await this.client.openTable(TABLE_MESSAGES);
@@ -537,9 +533,7 @@ export class StoreMemoryLance extends MemoryStorage {
       .map(index => records[index]);
   }
 
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
+  async getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
     const { threadId, resourceId, selectBy } = args;
     const page = selectBy?.pagination?.page ?? 0;
     const perPage = selectBy?.pagination?.perPage ?? 10;

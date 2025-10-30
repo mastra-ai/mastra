@@ -237,7 +237,11 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
   }
 
-  async getMessages({ threadId, resourceId, selectBy }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
+  async getMessages({
+    threadId,
+    resourceId,
+    selectBy,
+  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessages({ threadId, resourceId, selectBy });
   }
 
@@ -267,9 +271,10 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.memory.getThreadsByResourceIdPaginated(args);
   }
 
-  async getMessagesPaginated({ threadId, selectBy }: StorageGetMessagesArg): Promise<
-    PaginationInfo & { messages: MastraDBMessage[] }
-  > {
+  async getMessagesPaginated({
+    threadId,
+    selectBy,
+  }: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessagesPaginated({ threadId, selectBy });
   }
 

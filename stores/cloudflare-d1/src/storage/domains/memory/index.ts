@@ -679,11 +679,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-  }: {
-    messageIds: string[];
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  public async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
     const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
     const messages: any[] = [];
@@ -763,9 +759,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     threadId,
     resourceId,
     selectBy,
-  }: StorageGetMessagesArg): Promise<
-    PaginationInfo & { messages: MastraDBMessage[] }
-  > {
+  }: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
     const { dateRange, page = 0, perPage: perPageInput } = selectBy?.pagination || {};
     const { start: fromDate, end: toDate } = dateRange || {};
     const perPage =

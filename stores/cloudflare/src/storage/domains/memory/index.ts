@@ -440,9 +440,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
-  async saveMessages(
-    args: { messages: MastraDBMessage[] },
-  ): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     const { messages } = args;
     if (!Array.isArray(messages) || messages.length === 0) return { messages: [] };
 
@@ -779,7 +777,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         createdAt: ensureDate(message.createdAt)!,
       }));
 
-      const list = new MessageList({ threadId, resourceId }).add(prepared as MastraMessageV1[] | MastraDBMessage[], 'memory');
+      const list = new MessageList({ threadId, resourceId }).add(
+        prepared as MastraMessageV1[] | MastraDBMessage[],
+        'memory',
+      );
       return { messages: list.get.all.db() };
     } catch (error) {
       const mastraError = new MastraError(
@@ -801,11 +802,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-  }: {
-    messageIds: string[];
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  public async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
 
     try {
@@ -867,9 +864,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
   }
 
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
+  async getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
     const { threadId, resourceId, selectBy } = args;
     const { page = 0, perPage = 100 } = selectBy?.pagination || {};
 

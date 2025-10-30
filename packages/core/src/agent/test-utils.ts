@@ -37,11 +37,7 @@ export class MockMemory extends MastraMemory {
     return this.threads[thread.id] as StorageThreadType;
   }
 
-  async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<MastraDBMessage[]> {
+  async getMessages({ threadId, resourceId, selectBy }: StorageGetMessagesArg): Promise<MastraDBMessage[]> {
     let results = Array.from(this.messages.values());
     if (threadId) results = results.filter(m => m.threadId === threadId);
     if (resourceId) results = results.filter(m => m.resourceId === resourceId);
@@ -78,7 +74,10 @@ export class MockMemory extends MastraMemory {
     if (!firstMessage?.threadId || !firstMessage?.resourceId) {
       throw new Error('First message must have threadId and resourceId');
     }
-    const savedMessages = await this.getMessages({ threadId: firstMessage.threadId, resourceId: firstMessage.resourceId });
+    const savedMessages = await this.getMessages({
+      threadId: firstMessage.threadId,
+      resourceId: firstMessage.resourceId,
+    });
     return { messages: savedMessages };
   }
 
@@ -155,20 +154,14 @@ export class MockMemory extends MastraMemory {
     return { messages: filteredMessages };
   }
 
-  async listThreadsByResourceId(args: {
-    resourceId: string;
-    limit?: number;
-    cursor?: string;
-  }): Promise<{
+  async listThreadsByResourceId(args: { resourceId: string; limit?: number; cursor?: string }): Promise<{
     threads: StorageThreadType[];
     total: number;
     page: number;
     perPage: number;
     hasMore: boolean;
   }> {
-    const threads = Object.values(this.threads).filter(
-      thread => thread.resourceId === args.resourceId,
-    );
+    const threads = Object.values(this.threads).filter(thread => thread.resourceId === args.resourceId);
     return {
       threads,
       total: threads.length,

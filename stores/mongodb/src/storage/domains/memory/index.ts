@@ -157,11 +157,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-  }: {
-    messageIds: string[];
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  public async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
     try {
       const collection = await this.operations.getCollection(TABLE_MESSAGES);
@@ -170,7 +166,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         .sort({ createdAt: -1 })
         .toArray();
 
-      const list = new MessageList().add(rawMessages.map(this.parseRow) as (MastraMessageV1 | MastraDBMessage)[], 'memory');
+      const list = new MessageList().add(
+        rawMessages.map(this.parseRow) as (MastraMessageV1 | MastraDBMessage)[],
+        'memory',
+      );
       return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
@@ -308,11 +307,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async saveMessages({
-    messages,
-  }: {
-    messages: MastraDBMessage[];
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages({ messages }: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messages.length === 0) return { messages: [] };
 
     try {

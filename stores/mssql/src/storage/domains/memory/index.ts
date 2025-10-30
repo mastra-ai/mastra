@@ -454,9 +454,7 @@ export class MemoryMSSQL extends MemoryStorage {
   /**
    * @deprecated use getMessagesPaginated instead
    */
-  public async getMessages(
-    args: StorageGetMessagesArg,
-  ): Promise<{ messages: MastraDBMessage[] }> {
+  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     const { threadId, resourceId, selectBy } = args;
 
     const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
@@ -528,11 +526,7 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-  }: {
-    messageIds: string[];
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  public async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
 
     const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
@@ -729,11 +723,7 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
-  async saveMessages({
-    messages,
-  }: {
-    messages: MastraDBMessage[];
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages({ messages }: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messages.length === 0) return { messages: [] };
     const threadId = messages[0]?.threadId;
     if (!threadId) {

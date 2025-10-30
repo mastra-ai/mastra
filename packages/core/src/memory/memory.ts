@@ -444,7 +444,7 @@ export abstract class MastraMemory extends MastraBase {
     // Convert V1 message to DB format before saving
     const list = new MessageList({ threadId, resourceId }).add(message, 'memory');
     const dbMessage = list.get.all.db()[0]!;
-    
+
     const savedMessages = await this.saveMessages({ messages: [dbMessage], memoryConfig: config });
     const resultList = new MessageList({ threadId, resourceId }).add(savedMessages.messages[0]!, 'memory');
     return resultList.get.all.v1()[0]!;

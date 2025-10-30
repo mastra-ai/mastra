@@ -358,9 +358,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
             const pipeline2 = this.client.pipeline();
             keys.forEach(key => pipeline2.get(key));
             const results = await pipeline2.exec();
-            const existingMessages = results.filter(
-              (msg): msg is MastraDBMessage => msg !== null,
-            ) as MastraDBMessage[];
+            const existingMessages = results.filter((msg): msg is MastraDBMessage => msg !== null) as MastraDBMessage[];
             for (const existingMessage of existingMessages) {
               const existingMessageKey = getMessageKey(existingMessage.threadId!, existingMessage.id);
               if (existingMessage && existingMessage.threadId !== message.threadId) {
@@ -478,9 +476,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
   /**
    * @deprecated use getMessagesPaginated instead
    */
-  public async getMessages(
-    args: StorageGetMessagesArg,
-  ): Promise<{ messages: MastraDBMessage[] }> {
+  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     const { threadId, resourceId, selectBy } = args;
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
@@ -573,11 +569,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-  }: {
-    messageIds: string[];
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  public async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
 
     try {
