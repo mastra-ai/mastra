@@ -28,7 +28,7 @@ jobs:
         run: |
           node .github/scripts/check-redirects.js
         env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BASE_REF: origin/${{ github.event.pull_request.base.ref }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
 
       - name: Comment on PR if redirects are missing

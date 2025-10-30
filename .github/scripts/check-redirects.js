@@ -22,7 +22,8 @@ function getDeletedMdxFiles() {
     const deletedFiles = diff
       .split('\n')
       .filter(line => line.startsWith('D\t') && line.endsWith('.mdx'))
-      .map(line => line.replace('D\t', '').trim());
+      .map(line => line.replace('D\t', '').trim())
+      .filter(file => file.length > 0);
 
     return deletedFiles;
   } catch (error) {
