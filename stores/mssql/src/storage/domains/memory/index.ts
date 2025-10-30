@@ -521,27 +521,7 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
     if (messageIds.length === 0) return [];
 
     const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
@@ -561,8 +541,8 @@ export class MemoryMSSQL extends MemoryStorage {
         return timeDiff;
       });
       rows = rows.map(({ seq_id, ...rest }) => rest);
-      if (format === `v1`) return this._parseAndFormatMessages(rows, format);
-      return this._parseAndFormatMessages(rows, `v2`);
+      const messages = this._parseAndFormatMessages(rows, `v2`);
+      return messages as MastraMessageV2[];
     } catch (error) {
       const mastraError = new MastraError(
         {
@@ -587,10 +567,6 @@ export class MemoryMSSQL extends MemoryStorage {
         `This method is currently being rolled out across all storage adapters. ` +
         `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
     );
-  }
-
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
-    return this.getMessagesById({ messageIds, format: 'v2' });
   }
 
   public async listThreadsByResourceId(
