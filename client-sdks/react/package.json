@@ -62,7 +62,7 @@
     "@tailwindcss/vite": "^4.1.13",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
-    "@vitejs/plugin-react": "^5.0.4",
+    "@vitejs/plugin-react": "^5.1.0",
     "@vitest/coverage-v8": "3.2.3",
     "@vitest/ui": "^3.2.4",
     "eslint": "^9.37.0",
