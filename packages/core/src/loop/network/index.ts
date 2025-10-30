@@ -1172,6 +1172,8 @@ export async function networkLoop<
             ...inputData,
             completionReason: `Max iterations reached: ${maxIterations}`,
           },
+          from: ChunkFrom.NETWORK,
+          runId,
         });
         return {
           ...inputData,
