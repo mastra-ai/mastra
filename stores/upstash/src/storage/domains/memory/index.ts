@@ -75,7 +75,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset = 0, limit = 100, orderBy, sortDirection } = args;
+    const { resourceId, offset = 0, limit = 100, orderBy } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
       let allThreads: StorageThreadType[] = [];
@@ -99,11 +100,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       }
 
       // Apply sorting with parameters
-      const sortedThreads = this.sortThreads(
-        allThreads,
-        this.castThreadOrderBy(orderBy),
-        this.castThreadSortDirection(sortDirection),
-      );
+      const sortedThreads = this.sortThreads(allThreads, field, direction);
 
       const total = sortedThreads.length;
       const start = offset * limit;

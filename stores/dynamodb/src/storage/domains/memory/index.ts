@@ -636,16 +636,15 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset = 0, limit = 100 } = args;
-    const orderBy = this.castThreadOrderBy(args.orderBy);
-    const sortDirection = this.castThreadSortDirection(args.sortDirection);
+    const { resourceId, offset = 0, limit = 100, orderBy } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
 
     this.logger.debug('Getting threads by resource ID with pagination', {
       resourceId,
       page: offset,
       perPage: limit,
-      orderBy,
-      sortDirection,
+      orderBy: field,
+      sortDirection: direction,
     });
 
     try {
@@ -656,7 +655,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const results = await query.go();
 
       // Use shared helper method for transformation and sorting
-      const allThreads = this.transformAndSortThreads(results.data, orderBy, sortDirection);
+      const allThreads = this.transformAndSortThreads(results.data, field, direction);
 
       // Apply pagination in memory
       const startIndex = offset * limit;

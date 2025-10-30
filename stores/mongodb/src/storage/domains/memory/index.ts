@@ -769,19 +769,19 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
-      const { resourceId, offset, limit, orderBy = 'createdAt', sortDirection = 'DESC' } = args;
+      const { resourceId, offset, limit, orderBy } = args;
+      const { field, direction } = this.parseOrderBy(orderBy);
       const collection = await this.operations.getCollection(TABLE_THREADS);
 
       const query = { resourceId };
       const total = await collection.countDocuments(query);
 
       // MongoDB sort: 1 = ASC, -1 = DESC
-      const sortField = orderBy === 'updatedAt' ? 'updatedAt' : 'createdAt';
-      const sortOrder = sortDirection === 'ASC' ? 1 : -1;
+      const sortOrder = direction === 'ASC' ? 1 : -1;
 
       const threads = await collection
         .find(query)
-        .sort({ [sortField]: sortOrder })
+        .sort({ [field]: sortOrder })
         .skip(offset * limit)
         .limit(limit)
         .toArray();

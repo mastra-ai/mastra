@@ -858,9 +858,8 @@ export class MemoryLibSQL extends MemoryStorage {
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset = 0, limit = 100 } = args;
-    const orderBy = this.castThreadOrderBy(args.orderBy);
-    const sortDirection = this.castThreadSortDirection(args.sortDirection);
+    const { resourceId, offset = 0, limit = 100, orderBy } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
       const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
@@ -894,7 +893,7 @@ export class MemoryLibSQL extends MemoryStorage {
       }
 
       const dataResult = await this.client.execute({
-        sql: `SELECT * ${baseQuery} ORDER BY ${orderBy} ${sortDirection} LIMIT ? OFFSET ?`,
+        sql: `SELECT * ${baseQuery} ORDER BY ${field} ${direction} LIMIT ? OFFSET ?`,
         args: [...queryParams, limit, currentOffset],
       });
 

@@ -545,7 +545,8 @@ export class StoreMemoryLance extends MemoryStorage {
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
-      const { resourceId, offset = 0, limit = 10, orderBy = 'createdAt', sortDirection = 'DESC' } = args;
+      const { resourceId, offset = 0, limit = 10, orderBy } = args;
+      const { field, direction } = this.parseOrderBy(orderBy);
       const table = await this.client.openTable(TABLE_THREADS);
 
       // Get total count
@@ -562,11 +563,10 @@ export class StoreMemoryLance extends MemoryStorage {
       const records = await query.toArray();
 
       // Apply dynamic sorting
-      const sortField = orderBy === 'updatedAt' ? 'updatedAt' : 'createdAt';
       records.sort((a, b) => {
-        const aTime = new Date(a[sortField]).getTime();
-        const bTime = new Date(b[sortField]).getTime();
-        return sortDirection === 'ASC' ? aTime - bTime : bTime - aTime;
+        const aTime = new Date(a[field]).getTime();
+        const bTime = new Date(b[field]).getTime();
+        return direction === 'ASC' ? aTime - bTime : bTime - aTime;
       });
 
       const schema = await getTableSchema({ tableName: TABLE_THREADS, client: this.client });

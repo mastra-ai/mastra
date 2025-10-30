@@ -11,6 +11,7 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageOrderBy,
 } from '../../types';
 
 export abstract class MemoryStorage extends MastraBase {
@@ -107,12 +108,12 @@ export abstract class MemoryStorage extends MastraBase {
     );
   }
 
-  protected castThreadOrderBy(v: unknown): ThreadOrderBy {
-    return (v as string) in THREAD_ORDER_BY_SET ? (v as ThreadOrderBy) : 'createdAt';
-  }
-
-  protected castThreadSortDirection(v: unknown): ThreadSortDirection {
-    return (v as string) in THREAD_THREAD_SORT_DIRECTION_SET ? (v as ThreadSortDirection) : 'DESC';
+  protected parseOrderBy(orderBy?: StorageOrderBy): { field: ThreadOrderBy; direction: ThreadSortDirection } {
+    return {
+      field: orderBy?.field && orderBy.field in THREAD_ORDER_BY_SET ? orderBy.field : 'createdAt',
+      direction:
+        orderBy?.direction && orderBy.direction in THREAD_THREAD_SORT_DIRECTION_SET ? orderBy.direction : 'DESC',
+    };
   }
 }
 

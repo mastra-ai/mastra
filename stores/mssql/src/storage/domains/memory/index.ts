@@ -106,7 +106,8 @@ export class MemoryMSSQL extends MemoryStorage {
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset = 0, limit: limitInput, orderBy = 'createdAt', sortDirection = 'DESC' } = args;
+    const { resourceId, offset = 0, limit: limitInput, orderBy } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
     try {
       const limit = limitInput !== undefined ? limitInput : 100;
       const currentOffset = offset * limit;
@@ -128,8 +129,8 @@ export class MemoryMSSQL extends MemoryStorage {
         };
       }
 
-      const orderByField = orderBy === 'createdAt' ? '[createdAt]' : '[updatedAt]';
-      const dir = (sortDirection || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      const orderByField = field === 'createdAt' ? '[createdAt]' : '[updatedAt]';
+      const dir = (direction || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
       const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
       const dataRequest = this.pool.request();
       dataRequest.input('resourceId', resourceId);

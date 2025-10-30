@@ -579,15 +579,12 @@ export class InMemoryMemory extends MemoryStorage {
   async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset, limit, orderBy, sortDirection } = args;
+    const { resourceId, offset, limit, orderBy } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
     this.logger.debug(`MockStore: listThreadsByResourceIdPaginated called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
     const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
-    const sortedThreads = this.sortThreads(
-      threads,
-      this.castThreadOrderBy(orderBy),
-      this.castThreadSortDirection(sortDirection),
-    );
+    const sortedThreads = this.sortThreads(threads, field, direction);
     const clonedThreads = sortedThreads.map(thread => ({
       ...thread,
       metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,

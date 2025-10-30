@@ -112,11 +112,11 @@ export async function listThreadsHandler({
   offset,
   limit,
   orderBy,
-  sortDirection,
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'requestContext'> & {
   offset: number;
   limit: number;
-} & ThreadSortOptions) {
+  orderBy?: StorageOrderBy;
+}) {
   try {
     const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 

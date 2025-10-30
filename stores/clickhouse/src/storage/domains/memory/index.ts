@@ -887,7 +887,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset = 0, limit = 100, orderBy = 'createdAt', sortDirection = 'DESC' } = args;
+    const { resourceId, offset = 0, limit = 100, orderBy } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
       const currentOffset = offset * limit;
@@ -916,10 +917,6 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         };
       }
 
-      // Determine sort field and direction
-      const sortField = orderBy === 'updatedAt' ? 'updatedAt' : 'createdAt';
-      const sortDir = sortDirection === 'ASC' ? 'ASC' : 'DESC';
-
       // Get paginated threads with dynamic sorting
       const dataResult = await this.client.query({
         query: `
@@ -932,7 +929,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 toDateTime64(updatedAt, 3) as updatedAt
               FROM ${TABLE_THREADS}
               WHERE resourceId = {resourceId:String}
-              ORDER BY ${sortField} ${sortDir}
+              ORDER BY ${field} ${direction}
               LIMIT {limit:Int64} OFFSET {offset:Int64}
             `,
         query_params: {

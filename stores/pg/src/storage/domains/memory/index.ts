@@ -108,9 +108,8 @@ export class MemoryPG extends MemoryStorage {
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset = 0, limit: limitInput } = args;
-    const orderBy = this.castThreadOrderBy(args.orderBy);
-    const sortDirection = this.castThreadSortDirection(args.sortDirection);
+    const { resourceId, offset = 0, limit: limitInput, orderBy } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
       const baseQuery = `FROM ${tableName} WHERE "resourceId" = $1`;
@@ -132,7 +131,7 @@ export class MemoryPG extends MemoryStorage {
         };
       }
 
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "${orderBy}" ${sortDirection} LIMIT $2 OFFSET $3`;
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`;
       const rows = await this.client.manyOrNone(dataQuery, [...queryParams, limit, currentOffset]);
 
       const threads = (rows || []).map(thread => ({
