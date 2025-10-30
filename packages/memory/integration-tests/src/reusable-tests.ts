@@ -62,8 +62,12 @@ const getTextContent = (message: any): string => {
   if (typeof message.content === 'string') {
     return message.content;
   }
-  if (message.content?.parts?.[0]?.text) {
-    return message.content.parts[0].text;
+  if (message.content?.parts) {
+    // Find the first text part
+    const textPart = message.content.parts.find((p: any) => p.type === 'text' && p.text);
+    if (textPart) {
+      return textPart.text;
+    }
   }
   return '';
 };
