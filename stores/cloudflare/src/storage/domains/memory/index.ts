@@ -846,14 +846,6 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     );
   }
 
-<<<<<<< HEAD
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraDBMessage[]> {
-    const result = await this.getMessagesById({ messageIds });
-    return result.messages;
-  }
-
-=======
->>>>>>> origin/main
   /**
    * @todo When migrating from getThreadsByResourceIdPaginated to this method,
    * implement orderBy and sortDirection support for full sorting capabilities
