@@ -7,6 +7,7 @@ import {
 } from "@docusaurus/theme-common";
 import { useKeyboardNavigation } from "@docusaurus/theme-common/internal";
 import { useLocation } from "@docusaurus/router";
+import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import AnnouncementBar from "@theme/AnnouncementBar";
 import ErrorPageContent from "@theme/ErrorPageContent";
 import Footer from "@theme/Footer";
@@ -31,8 +32,9 @@ export default function Layout(props: Props): ReactNode {
   useKeyboardNavigation();
 
   const location = useLocation();
-  const cleanPath = location.pathname.replace(/^\/ja\//, "/");
-  const canonicalUrl = `https://mastra.ai${cleanPath}`;
+  const { siteConfig } = useDocusaurusContext();
+  const cleanPath = location.pathname.replace(/^\/ja(\/|$)/, "/");
+  const canonicalUrl = `${siteConfig.url}${cleanPath}`;
 
   return (
     <LayoutProvider>
@@ -44,7 +46,7 @@ export default function Layout(props: Props): ReactNode {
         <link
           rel="alternate"
           hrefLang="ja"
-          href={`https://mastra.ai/ja${cleanPath}`}
+          href={`${siteConfig.url}/ja${cleanPath}`}
         />
         <link rel="alternate" hrefLang="x-default" href={canonicalUrl} />
       </Head>
