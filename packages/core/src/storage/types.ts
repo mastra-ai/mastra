@@ -1,5 +1,5 @@
 import type { AISpanType } from '../ai-tracing';
-import type { MemoryConfig, MastraMessageV2, StorageThreadType } from '../memory/types';
+import type { MemoryConfig, MastraDBMessage, StorageThreadType } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
 import type { LegacyWorkflowRunState } from '../workflows/legacy';
 
@@ -96,7 +96,7 @@ export type StorageListMessagesInput = {
 };
 
 export type StorageListMessagesOutput = PaginationInfo & {
-  messages: MastraMessageV2[];
+  messages: MastraDBMessage[];
 };
 
 export type StorageListWorkflowRunsInput = {

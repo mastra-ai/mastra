@@ -515,25 +515,26 @@ try {
                 .filter((msg: any) => msg.thread_id === includeItem.threadId)
                 .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-            const targetIndex = allThreadMessages.findIndex(msg => msg.id === includeItem.id);
-            if (targetIndex !== -1) {
-              const endIndex = Math.min(
-                allThreadMessages.length,
-                targetIndex + (includeItem.withNextMessages || 0) + 1,
-              );
-              for (let i = targetIndex + 1; i < endIndex; i++) {
-                const message = allThreadMessages[i];
-                if (message && !messages.some(m => m.id === message.id)) {
-                  const convertedNextMessage = {
-                    id: message.id,
-                    threadId: message.thread_id,
-                    content: safelyParseJSON(message.content),
-                    role: message.role as 'user' | 'assistant' | 'system' | 'tool',
-                    type: message.type,
-                    createdAt: message.createdAt,
-                    resourceId: message.resourceId,
-                  } as MastraDBMessage;
-                  messages.push(convertedNextMessage);
+              const targetIndex = allThreadMessages.findIndex(msg => msg.id === includeItem.id);
+              if (targetIndex !== -1) {
+                const endIndex = Math.min(
+                  allThreadMessages.length,
+                  targetIndex + (includeItem.withNextMessages || 0) + 1,
+                );
+                for (let i = targetIndex + 1; i < endIndex; i++) {
+                  const message = allThreadMessages[i];
+                  if (message && !messages.some(m => m.id === message.id)) {
+                    const convertedNextMessage = {
+                      id: message.id,
+                      threadId: message.thread_id,
+                      content: safelyParseJSON(message.content),
+                      role: message.role as 'user' | 'assistant' | 'system' | 'tool',
+                      type: message.type,
+                      createdAt: message.createdAt,
+                      resourceId: message.resourceId,
+                    } as MastraDBMessage;
+                    messages.push(convertedNextMessage);
+                  }
                 }
               }
             }
@@ -607,7 +608,8 @@ try {
         perPage,
         hasMore: messages.length > end,
       };
-    } catch {
+    } catch (error) {
+      this.logger.error('Error in getMessagesPaginated:', error);
       return { messages: [], total: 0, page, perPage, hasMore: false };
     }
   }

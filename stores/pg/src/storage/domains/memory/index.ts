@@ -560,8 +560,9 @@ export class MemoryPG extends MemoryStorage {
     );
   }
 
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
-    return this.getMessagesById({ messageIds, format: 'v2' });
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraDBMessage[]> {
+    const result = await this.getMessagesById({ messageIds });
+    return result.messages;
   }
 
   public async listThreadsByResourceId(
