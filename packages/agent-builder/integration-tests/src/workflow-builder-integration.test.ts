@@ -2,7 +2,7 @@ import { execSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, cpSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Mastra, Agent } from '@mastra/core';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore } from '@mastra/libsql';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { workflowBuilderWorkflow } from '../../src/workflows';
@@ -85,7 +85,7 @@ describe.skip('Workflow Builder Integration Tests', () => {
       Keep responses concise and focused.`,
     });
 
-    const runtimeContext = new RuntimeContext();
+    const requestContext = new RequestContext();
 
     const run = await workflowBuilderWorkflow.createRunAsync();
 
@@ -102,7 +102,7 @@ describe.skip('Workflow Builder Integration Tests', () => {
 
     const { stream, getWorkflowState } = run.stream({
       inputData,
-      runtimeContext,
+      requestContext,
     });
 
     let suspensionCount = 0;

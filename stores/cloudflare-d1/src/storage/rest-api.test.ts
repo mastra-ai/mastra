@@ -861,12 +861,12 @@ describe.skip('D1Store REST API', () => {
     });
   });
 
-  describe('getWorkflowRuns', () => {
+  describe('listWorkflowRuns', () => {
     beforeEach(async () => {
       await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     });
     it('returns empty array when no workflows exist', async () => {
-      const { runs, total } = await store.getWorkflowRuns();
+      const { runs, total } = await store.listWorkflowRuns();
       expect(runs).toEqual([]);
       expect(total).toBe(0);
     });
@@ -882,7 +882,7 @@ describe.skip('D1Store REST API', () => {
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
       await store.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
 
-      const { runs, total } = await store.getWorkflowRuns();
+      const { runs, total } = await store.listWorkflowRuns();
       expect(runs).toHaveLength(2);
       expect(total).toBe(2);
       expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
@@ -904,7 +904,7 @@ describe.skip('D1Store REST API', () => {
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
       await store.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
 
-      const { runs, total } = await store.getWorkflowRuns({ workflowName: workflowName1 });
+      const { runs, total } = await store.listWorkflowRuns({ workflowName: workflowName1 });
       expect(runs).toHaveLength(1);
       expect(total).toBe(1);
       expect(runs[0]!.workflowName).toBe(workflowName1);
@@ -955,7 +955,7 @@ describe.skip('D1Store REST API', () => {
         },
       });
 
-      const { runs } = await store.getWorkflowRuns({
+      const { runs } = await store.listWorkflowRuns({
         fromDate: yesterday,
         toDate: now,
       });
@@ -985,7 +985,7 @@ describe.skip('D1Store REST API', () => {
       await store.persistWorkflowSnapshot({ workflowName: workflowName3, runId: runId3, snapshot: workflow3 });
 
       // Get first page
-      const page1 = await store.getWorkflowRuns({ limit: 2, offset: 0 });
+      const page1 = await store.listWorkflowRuns({ limit: 2, offset: 0 });
       expect(page1.runs).toHaveLength(2);
       expect(page1.total).toBe(3); // Total count of all records
       expect(page1.runs[0]!.workflowName).toBe(workflowName3);
@@ -996,7 +996,7 @@ describe.skip('D1Store REST API', () => {
       checkWorkflowSnapshot(secondSnapshot, stepId2, 'failed');
 
       // Get second page
-      const page2 = await store.getWorkflowRuns({ limit: 2, offset: 2 });
+      const page2 = await store.listWorkflowRuns({ limit: 2, offset: 2 });
       expect(page2.runs).toHaveLength(1);
       expect(page2.total).toBe(3);
       expect(page2.runs[0]!.workflowName).toBe(workflowName1);
@@ -1046,7 +1046,7 @@ describe.skip('D1Store REST API', () => {
       expect(notFound).toBeNull();
     });
   });
-  describe('getWorkflowRuns with resourceId', () => {
+  describe('listWorkflowRuns with resourceId', () => {
     const workflowName = 'workflow-id-test';
     let resourceId: string;
     let runIds: string[] = [];
@@ -1085,7 +1085,7 @@ describe.skip('D1Store REST API', () => {
     });
 
     it('should retrieve all workflow runs by resourceId', async () => {
-      const { runs } = await store.getWorkflowRuns({
+      const { runs } = await store.listWorkflowRuns({
         resourceId,
         workflowName,
       });
@@ -1097,7 +1097,7 @@ describe.skip('D1Store REST API', () => {
     });
 
     it('should return an empty array if no workflow runs match resourceId', async () => {
-      const { runs } = await store.getWorkflowRuns({
+      const { runs } = await store.listWorkflowRuns({
         resourceId: 'non-existent-resource',
         workflowName,
       });

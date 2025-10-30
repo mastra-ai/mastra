@@ -159,8 +159,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "llama/llama-4-scout-17b-16e-instruct-fp8"
       : "llama/cerebras-llama-4-maverick-17b-128e-instruct";

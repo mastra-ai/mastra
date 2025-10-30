@@ -1,5 +1,5 @@
 import { StreamVNextChunkType, WorkflowWatchResult } from '@mastra/client-js';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { WorkflowStreamResult as CoreWorkflowStreamResult } from '@mastra/core/workflows';
 import { useMutation } from '@tanstack/react-query';
 import { useState, useRef, useEffect } from 'react';
@@ -75,22 +75,22 @@ export const useExecuteWorkflow = () => {
       workflowId,
       runId,
       input,
-      runtimeContext: playgroundRuntimeContext,
+      requestContext: playgroundRequestContext,
     }: {
       workflowId: string;
       runId: string;
       input: Record<string, unknown>;
-      runtimeContext: Record<string, unknown>;
+      requestContext: Record<string, unknown>;
     }) => {
       try {
-        const runtimeContext = new RuntimeContext();
-        Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {
-          runtimeContext.set(key, value);
+        const requestContext = new RequestContext();
+        Object.entries(playgroundRequestContext).forEach(([key, value]) => {
+          requestContext.set(key, value);
         });
 
         const workflow = client.getWorkflow(workflowId);
 
-        await workflow.start({ runId, inputData: input || {}, runtimeContext });
+        await workflow.start({ runId, inputData: input || {}, requestContext });
       } catch (error) {
         console.error('Error starting workflow run:', error);
         throw error;
@@ -103,20 +103,20 @@ export const useExecuteWorkflow = () => {
       workflowId,
       runId,
       input,
-      runtimeContext: playgroundRuntimeContext,
+      requestContext: playgroundRequestContext,
     }: {
       workflowId: string;
       runId?: string;
       input: Record<string, unknown>;
-      runtimeContext: Record<string, unknown>;
+      requestContext: Record<string, unknown>;
     }) => {
       try {
-        const runtimeContext = new RuntimeContext();
-        Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {
-          runtimeContext.set(key, value);
+        const requestContext = new RequestContext();
+        Object.entries(playgroundRequestContext).forEach(([key, value]) => {
+          requestContext.set(key, value);
         });
         const workflow = client.getWorkflow(workflowId);
-        const result = await workflow.startAsync({ runId, inputData: input || {}, runtimeContext });
+        const result = await workflow.startAsync({ runId, inputData: input || {}, requestContext });
         return result;
       } catch (error) {
         console.error('Error starting workflow run:', error);
@@ -200,12 +200,12 @@ export const useStreamWorkflow = () => {
       workflowId,
       runId,
       inputData,
-      runtimeContext: playgroundRuntimeContext,
+      requestContext: playgroundRequestContext,
     }: {
       workflowId: string;
       runId: string;
       inputData: Record<string, unknown>;
-      runtimeContext: Record<string, unknown>;
+      requestContext: Record<string, unknown>;
     }) => {
       // Clean up any existing reader before starting new stream
       if (readerRef.current) {
@@ -216,12 +216,12 @@ export const useStreamWorkflow = () => {
 
       setIsStreaming(true);
       setStreamResult({ input: inputData } as WorkflowStreamResult);
-      const runtimeContext = new RuntimeContext();
-      Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {
-        runtimeContext.set(key as keyof RuntimeContext, value);
+      const requestContext = new RequestContext();
+      Object.entries(playgroundRequestContext).forEach(([key, value]) => {
+        requestContext.set(key as keyof RequestContext, value);
       });
       const workflow = client.getWorkflow(workflowId);
-      const stream = await workflow.streamVNext({ runId, inputData, runtimeContext, closeOnSuspend: true });
+      const stream = await workflow.streamVNext({ runId, inputData, requestContext, closeOnSuspend: true });
 
       if (!stream) {
         return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
@@ -354,13 +354,13 @@ export const useStreamWorkflow = () => {
       runId,
       step,
       resumeData,
-      runtimeContext: playgroundRuntimeContext,
+      requestContext: playgroundRequestContext,
     }: {
       workflowId: string;
       step: string | string[];
       runId: string;
       resumeData: Record<string, unknown>;
-      runtimeContext: Record<string, unknown>;
+      requestContext: Record<string, unknown>;
     }) => {
       // Clean up any existing reader before starting new stream
       if (resumeStreamRef.current) {
@@ -371,11 +371,11 @@ export const useStreamWorkflow = () => {
 
       setIsStreaming(true);
       const workflow = client.getWorkflow(workflowId);
-      const runtimeContext = new RuntimeContext();
-      Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {
-        runtimeContext.set(key as keyof RuntimeContext, value);
+      const requestContext = new RequestContext();
+      Object.entries(playgroundRequestContext).forEach(([key, value]) => {
+        requestContext.set(key as keyof RequestContext, value);
       });
-      const stream = await workflow.resumeStreamVNext({ runId, step, resumeData, runtimeContext });
+      const stream = await workflow.resumeStreamVNext({ runId, step, resumeData, requestContext });
 
       if (!stream) {
         return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
