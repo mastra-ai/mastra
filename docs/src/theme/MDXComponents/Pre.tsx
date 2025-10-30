@@ -1,5 +1,5 @@
-import React, {type ReactNode} from 'react';
-import type {Props} from '@theme/MDXComponents/Pre';
+import React, { type ReactNode } from "react";
+import type { Props } from "@theme/MDXComponents/Pre";
 
 export default function MDXPre(props: Props): ReactNode | undefined {
   // With MDX 2, this element is only used for fenced code blocks
