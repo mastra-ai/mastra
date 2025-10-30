@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
-import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2 } from '@internal/external-types';
+import type { LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { parseModelRouterId } from './gateway-resolver.js';
 import type { MastraModelGateway } from './gateways/base.js';
 import { findGatewayForModel } from './gateways/index.js';

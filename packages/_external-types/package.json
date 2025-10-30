@@ -43,6 +43,7 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@ai-sdk/provider-utils": "^3.0.12",
+    "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@microsoft/api-extractor": "^7.53.1",

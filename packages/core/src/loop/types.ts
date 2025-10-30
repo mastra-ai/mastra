@@ -1,4 +1,5 @@
-import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2 } from '@internal/external-types';
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet, StepResult, ModelMessage } from 'ai-v5';
 import z from 'zod';
 import type { MessageList } from '../agent/message-list';

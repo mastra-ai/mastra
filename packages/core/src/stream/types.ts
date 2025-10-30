@@ -1,11 +1,11 @@
 import type { LanguageModelV1LogProbs } from '@ai-sdk/provider';
+import type { LanguageModelV2 } from '@internal/external-types';
 import type {
   LanguageModelV2FinishReason,
   LanguageModelV2Usage,
   SharedV2ProviderMetadata,
   LanguageModelV2CallWarning,
   LanguageModelV2ResponseMetadata,
-  LanguageModelV2,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
 import type { FinishReason, LanguageModelRequestMetadata } from 'ai';

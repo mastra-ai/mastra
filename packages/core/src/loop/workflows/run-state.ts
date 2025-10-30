@@ -1,4 +1,4 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2 } from '@internal/external-types';
 import type { StreamInternal } from '../types';
 
 type State = {

@@ -1,9 +1,8 @@
 import { randomUUID } from 'crypto';
 import { openai } from '@ai-sdk/openai';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV1, LanguageModelV2 } from '@internal/external-types';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
-import type { LanguageModelV1 } from 'ai';
 import { convertArrayToReadableStream } from 'ai/test';
 import { MockLanguageModelV1, MockLanguageModelV2 } from '@internal/external-types/test-tools';
 import { config } from 'dotenv';

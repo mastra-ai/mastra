@@ -1,8 +1,9 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
-import type { LanguageModelV2, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
+import type { LanguageModelV1, LanguageModelV2 } from '@internal/external-types';
+import type { LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
-import type { CoreMessage, LanguageModelV1, CoreSystemMessage } from 'ai';
+import type { CoreMessage, CoreSystemMessage } from 'ai';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from '@internal/external-types/test-tools';
 import { APICallError, stepCountIs } from 'ai-v5';

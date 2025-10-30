@@ -2,7 +2,7 @@ import { createAnthropic } from '@ai-sdk/anthropic-v5';
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2 } from '@internal/external-types';
 import { createXai } from '@ai-sdk/xai-v5';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { parseModelRouterId } from '../gateway-resolver.js';

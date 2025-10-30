@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2 } from '@internal/external-types';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import type { LanguageModel } from 'ai';

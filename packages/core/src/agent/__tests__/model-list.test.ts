@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2 } from '@internal/external-types';
 import { simulateReadableStream } from '@internal/external-types/test-tools';
 import { MockLanguageModelV1 } from '@internal/external-types/test-tools';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';

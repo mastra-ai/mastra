@@ -1,5 +1,4 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV1 } from 'ai';
+import type { LanguageModelV1, LanguageModelV2 } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 import type { TracingPolicy } from '../../ai-tracing';

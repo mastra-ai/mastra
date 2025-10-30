@@ -1,4 +1,5 @@
-import type { LanguageModelV2, LanguageModelV2CallWarning, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2 } from '@internal/external-types';
+import type { LanguageModelV2CallWarning, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 
 export const testUsage = {

@@ -1147,6 +1147,9 @@ importers:
       '@ai-sdk/provider-utils':
         specifier: ^3.0.12
         version: 3.0.13(zod@3.25.76)
+      '@ai-sdk/provider-v5':
+        specifier: npm:@ai-sdk/provider@2.0.0
+        version: '@ai-sdk/provider@2.0.0'
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config

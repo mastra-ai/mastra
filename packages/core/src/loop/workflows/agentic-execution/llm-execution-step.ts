@@ -1,6 +1,7 @@
 import type { ReadableStream } from 'stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
-import type { LanguageModelV2, LanguageModelV2Usage } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2 } from '@internal/external-types';
+import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { ToolSet } from 'ai-v5';
 import { MessageList } from '../../../agent/message-list';
 import { getErrorFromUnknown } from '../../../error/utils.js';
