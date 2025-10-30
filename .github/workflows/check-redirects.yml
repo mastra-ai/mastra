@@ -6,9 +6,6 @@ permissions:
 
 on:
   pull_request:
-    paths:
-      - 'docs/src/content/**/*.mdx'
-      - 'docs/vercel.json'
   deployment_status:
 
 jobs:
