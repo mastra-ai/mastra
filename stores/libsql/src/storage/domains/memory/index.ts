@@ -169,27 +169,7 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
     if (messageIds.length === 0) return [];
 
     try {
@@ -210,7 +190,6 @@ export class MemoryLibSQL extends MemoryStorage {
       if (!result.rows) return [];
 
       const list = new MessageList().add(result.rows.map(this.parseRow), 'memory');
-      if (format === `v1`) return list.get.all.v1();
       return list.get.all.v2();
     } catch (error) {
       throw new MastraError(
@@ -369,10 +348,6 @@ export class MemoryLibSQL extends MemoryStorage {
         hasMore: false,
       };
     }
-  }
-
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
-    return this.getMessagesById({ messageIds, format: 'v2' });
   }
 
   public async listThreadsByResourceId(

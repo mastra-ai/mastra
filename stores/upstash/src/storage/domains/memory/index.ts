@@ -589,27 +589,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
     if (messageIds.length === 0) return [];
 
     try {
@@ -629,7 +609,6 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const rawMessages = result.flat(1).filter(msg => !!msg) as (MastraMessageV2 & { _index?: number })[];
 
       const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
-      if (format === `v1`) return list.get.all.v1();
       return list.get.all.v2();
     } catch (error) {
       throw new MastraError(
@@ -672,7 +651,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       let includedMessages: MastraMessageV2[] = [];
       if (include && include.length > 0) {
         const selectBy = { include };
-        const included = await this._getIncludedMessages(threadId, selectBy);
+        const included = (await this._getIncludedMessages(threadId, selectBy)) as MastraMessageV2[];
         includedMessages = included.map(this.parseStoredMessage);
       }
 
@@ -704,13 +683,14 @@ export class StoreMemoryUpstash extends MemoryStorage {
       }
 
       // Apply date filters if provided
-      if (filter?.dateRange?.start) {
-        const fromDate = filter.dateRange.start;
+      const dateRange = filter?.dateRange;
+      if (dateRange?.start) {
+        const fromDate = dateRange.start;
         messagesData = messagesData.filter(msg => new Date(msg.createdAt).getTime() >= fromDate.getTime());
       }
 
-      if (filter?.dateRange?.end) {
-        const toDate = filter.dateRange.end;
+      if (dateRange?.end) {
+        const toDate = dateRange.end;
         messagesData = messagesData.filter(msg => new Date(msg.createdAt).getTime() <= toDate.getTime());
       }
 
@@ -803,10 +783,6 @@ export class StoreMemoryUpstash extends MemoryStorage {
         hasMore: false,
       };
     }
-  }
-
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
-    return this.getMessagesById({ messageIds, format: 'v2' });
   }
 
   public async getMessagesPaginated(

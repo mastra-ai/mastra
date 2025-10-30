@@ -688,27 +688,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
     if (messageIds.length === 0) return [];
     const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
     const messages: any[] = [];
@@ -740,7 +720,6 @@ export class MemoryStorageD1 extends MemoryStorage {
       });
       this.logger.debug(`Retrieved ${messages.length} messages`);
       const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraMessageV2[], 'memory');
-      if (format === `v1`) return list.get.all.v1();
       return list.get.all.v2();
     } catch (error) {
       const mastraError = new MastraError(
@@ -799,20 +778,17 @@ export class MemoryStorageD1 extends MemoryStorage {
         queryParams.push(resourceId);
       }
 
-      if (filter?.dateRange?.start) {
+      const dateRange = filter?.dateRange;
+      if (dateRange?.start) {
         const startDate =
-          filter.dateRange.start instanceof Date
-            ? serializeDate(filter.dateRange.start)
-            : serializeDate(new Date(filter.dateRange.start));
+          dateRange.start instanceof Date ? serializeDate(dateRange.start) : serializeDate(new Date(dateRange.start));
         query += ` AND createdAt >= ?`;
         queryParams.push(startDate);
       }
 
-      if (filter?.dateRange?.end) {
+      if (dateRange?.end) {
         const endDate =
-          filter.dateRange.end instanceof Date
-            ? serializeDate(filter.dateRange.end)
-            : serializeDate(new Date(filter.dateRange.end));
+          dateRange.end instanceof Date ? serializeDate(dateRange.end) : serializeDate(new Date(dateRange.end));
         query += ` AND createdAt <= ?`;
         queryParams.push(endDate);
       }
@@ -851,20 +827,16 @@ export class MemoryStorageD1 extends MemoryStorage {
         countParams.push(resourceId);
       }
 
-      if (filter?.dateRange?.start) {
+      if (dateRange?.start) {
         const startDate =
-          filter.dateRange.start instanceof Date
-            ? serializeDate(filter.dateRange.start)
-            : serializeDate(new Date(filter.dateRange.start));
+          dateRange.start instanceof Date ? serializeDate(dateRange.start) : serializeDate(new Date(dateRange.start));
         countQuery += ` AND createdAt >= ?`;
         countParams.push(startDate);
       }
 
-      if (filter?.dateRange?.end) {
+      if (dateRange?.end) {
         const endDate =
-          filter.dateRange.end instanceof Date
-            ? serializeDate(filter.dateRange.end)
-            : serializeDate(new Date(filter.dateRange.end));
+          dateRange.end instanceof Date ? serializeDate(dateRange.end) : serializeDate(new Date(dateRange.end));
         countQuery += ` AND createdAt <= ?`;
         countParams.push(endDate);
       }
@@ -885,15 +857,15 @@ export class MemoryStorageD1 extends MemoryStorage {
       }
 
       // Step 2: Add included messages with context (if any), excluding duplicates
-      const messageIds = new Set(paginatedMessages.map((m: MastraMessageV2) => m.id));
+      const messageIds = new Set(paginatedMessages.map((m: Record<string, any>) => m.id as string));
       let includeMessages: MastraMessageV2[] = [];
 
       if (include && include.length > 0) {
         // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
         const selectBy = { include };
-        const includeResult = await this._getIncludedMessages(threadId, selectBy);
+        const includeResult = (await this._getIncludedMessages(threadId, selectBy)) as MastraMessageV2[];
         if (Array.isArray(includeResult)) {
-          includeMessages = includeResult as MastraMessageV2[];
+          includeMessages = includeResult;
 
           // Deduplicate: only add messages that aren't already in the paginated results
           for (const includeMsg of includeMessages) {
@@ -971,10 +943,6 @@ export class MemoryStorageD1 extends MemoryStorage {
         hasMore: false,
       };
     }
-  }
-
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
-    return this.getMessagesById({ messageIds, format: 'v2' });
   }
 
   /**

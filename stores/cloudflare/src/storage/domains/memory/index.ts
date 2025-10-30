@@ -821,27 +821,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
     if (messageIds.length === 0) return [];
 
     try {
@@ -858,7 +838,6 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       }));
       // For v2 format, use MessageList for proper conversion
       const list = new MessageList().add(prepared, 'memory');
-      if (format === `v1`) return list.get.all.v1();
       return list.get.all.v2();
     } catch (error) {
       const mastraError = new MastraError(
@@ -958,11 +937,12 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       }
 
       // Filter by dateRange if specified
-      if (filter?.dateRange) {
+      const dateRange = filter?.dateRange;
+      if (dateRange) {
         filteredMessages = filteredMessages.filter(msg => {
           const messageDate = new Date(msg.createdAt);
-          if (filter.dateRange.start && messageDate < new Date(filter.dateRange.start)) return false;
-          if (filter.dateRange.end && messageDate > new Date(filter.dateRange.end)) return false;
+          if (dateRange.start && messageDate < new Date(dateRange.start)) return false;
+          if (dateRange.end && messageDate > new Date(dateRange.end)) return false;
           return true;
         });
       }
@@ -1118,10 +1098,6 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         hasMore: false,
       };
     }
-  }
-
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
-    return this.getMessagesById({ messageIds, format: 'v2' });
   }
 
   /**

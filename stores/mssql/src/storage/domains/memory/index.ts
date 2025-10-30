@@ -472,7 +472,7 @@ export class MemoryMSSQL extends MemoryStorage {
       let rows: any[] = [];
       const include = selectBy?.include || [];
       if (include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
         if (includeMessages) {
           rows.push(...includeMessages);
         }
@@ -521,27 +521,7 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
     if (messageIds.length === 0) return [];
 
     const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
@@ -561,8 +541,8 @@ export class MemoryMSSQL extends MemoryStorage {
         return timeDiff;
       });
       rows = rows.map(({ seq_id, ...rest }) => rest);
-      if (format === `v1`) return this._parseAndFormatMessages(rows, format);
-      return this._parseAndFormatMessages(rows, `v2`);
+      const messages = this._parseAndFormatMessages(rows, `v2`);
+      return messages as MastraMessageV2[];
     } catch (error) {
       const mastraError = new MastraError(
         {
@@ -659,7 +639,7 @@ export class MemoryMSSQL extends MemoryStorage {
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
         const selectBy = { include };
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
         if (includeMessages) {
           // Deduplicate: only add messages that aren't already in the paginated results
           for (const includeMsg of includeMessages) {
@@ -726,10 +706,6 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
-    return this.getMessagesById({ messageIds, format: 'v2' });
-  }
-
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
@@ -759,7 +735,7 @@ export class MemoryMSSQL extends MemoryStorage {
       let messages: any[] = [];
 
       if (selectBy?.include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
         if (includeMessages) messages.push(...includeMessages);
       }
 

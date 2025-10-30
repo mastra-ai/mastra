@@ -456,7 +456,7 @@ export class MemoryPG extends MemoryStorage {
       const include = selectBy?.include || [];
 
       if (include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
         if (includeMessages) {
           rows.push(...includeMessages);
         }
@@ -517,27 +517,7 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
     if (messageIds.length === 0) return [];
     const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
 
@@ -554,7 +534,6 @@ export class MemoryPG extends MemoryStorage {
         resultRows.map(row => this.parseRow(row)),
         'memory',
       );
-      if (format === `v1`) return list.get.all.v1();
       return list.get.all.v2();
     } catch (error) {
       const mastraError = new MastraError(
@@ -649,7 +628,7 @@ export class MemoryPG extends MemoryStorage {
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
         const selectBy = { include };
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
         if (includeMessages) {
           // Deduplicate: only add messages that aren't already in the paginated results
           for (const includeMsg of includeMessages) {
@@ -662,7 +641,7 @@ export class MemoryPG extends MemoryStorage {
       }
 
       // Parse content back to objects if they were stringified during storage
-      const messagesWithParsedContent: MastraMessageV2[] = messages.map((row: MessageRowFromDB) => {
+      const messagesWithParsedContent: MastraMessageV2[] = messages.map((row: MessageRowFromDB): MastraMessageV2 => {
         const message = this.normalizeMessageRow(row);
         if (typeof message.content === 'string') {
           try {
@@ -730,10 +709,6 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
-    return this.getMessagesById({ messageIds, format: 'v2' });
-  }
-
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
@@ -762,7 +737,7 @@ export class MemoryPG extends MemoryStorage {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
       if (selectBy?.include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
         if (includeMessages) {
           messages.push(...includeMessages);
         }
