@@ -321,12 +321,6 @@ export class ClickhouseStore extends MastraStorage {
     return this.stores.memory.saveMessages(args);
   }
 
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    return this.stores.memory.getMessagesPaginated(args);
-  }
-
   async updateMessages(args: {
     messages: (Partial<Omit<MastraMessageV2, 'createdAt'>> & {
       id: string;

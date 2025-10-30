@@ -281,15 +281,6 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.memory.getThreadsByResourceIdPaginated(args);
   }
 
-  async getMessagesPaginated({
-    threadId,
-    selectBy,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<
-    PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }
-  > {
-    return this.stores.memory.getMessagesPaginated({ threadId, selectBy });
-  }
-
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     return this.stores.scores.getScoreById({ id });
   }

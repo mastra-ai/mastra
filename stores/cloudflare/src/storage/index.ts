@@ -310,12 +310,6 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.memory.getThreadsByResourceIdPaginated(args);
   }
 
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    return this.stores.memory.getMessagesPaginated(args);
-  }
-
   async updateMessages(args: {
     messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
       {

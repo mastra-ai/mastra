@@ -412,34 +412,6 @@ export class BenchmarkStore extends MastraStorage {
     };
   }
 
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, selectBy, format = 'v1' } = args;
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-    const { page = 0, perPage = 40 } = selectBy?.pagination || {};
-
-    // Get all messages
-    const allMessages = await this.getMessages({
-      threadId,
-      selectBy: { ...selectBy, pagination: undefined },
-      format: format as any,
-    } as any);
-
-    // Apply pagination
-    const start = page * perPage;
-    const messages = allMessages.slice(start, start + perPage);
-
-    return {
-      messages,
-      total: allMessages.length,
-      page,
-      perPage,
-      hasMore: allMessages.length > (page + 1) * perPage,
-    };
-  }
-
   /**
    * Persist the current storage state to a JSON file
    */

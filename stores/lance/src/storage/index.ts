@@ -300,12 +300,6 @@ export class LanceStorage extends MastraStorage {
     return this.stores.memory.getThreadsByResourceIdPaginated(args);
   }
 
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    return this.stores.memory.getMessagesPaginated(args);
-  }
-
   async updateMessages(_args: {
     messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
       {

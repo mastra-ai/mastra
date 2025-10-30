@@ -225,14 +225,6 @@ export class LibSQLStore extends MastraStorage {
     return this.stores.memory.getMessages({ threadId, selectBy, format });
   }
 
-  public async getMessagesPaginated(
-    args: StorageGetMessagesArg & {
-      format?: 'v1' | 'v2';
-    },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    return this.stores.memory.getMessagesPaginated(args);
-  }
-
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   async saveMessages(

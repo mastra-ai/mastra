@@ -1157,65 +1157,6 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
   }
 
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, resourceId, selectBy, format = 'v1' } = args;
-    const { page = 0, perPage = 100 } = selectBy?.pagination || {};
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      // Get all messages for the thread
-      const messages =
-        format === 'v2'
-          ? await this.getMessages({ threadId, selectBy, format: 'v2' })
-          : await this.getMessages({ threadId, selectBy, format: 'v1' });
-
-      // Apply date filtering if specified
-      let filteredMessages = messages;
-      if (selectBy?.pagination?.dateRange) {
-        const { start: dateStart, end: dateEnd } = selectBy.pagination.dateRange;
-        filteredMessages = messages.filter(message => {
-          const messageDate = new Date(message.createdAt);
-          if (dateStart && messageDate < dateStart) return false;
-          if (dateEnd && messageDate > dateEnd) return false;
-          return true;
-        }) as MastraMessageV1[] | MastraMessageV2[];
-      }
-
-      // Apply pagination
-      const start = page * perPage;
-      const end = start + perPage;
-      const paginatedMessages = filteredMessages.slice(start, end);
-
-      return {
-        page,
-        perPage,
-        total: filteredMessages.length,
-        hasMore: start + perPage < filteredMessages.length,
-        messages: paginatedMessages as MastraMessageV1[] | MastraMessageV2[],
-      };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'CLOUDFLARE_STORAGE_GET_MESSAGES_PAGINATED_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          text: 'Failed to get messages with pagination',
-          details: {
-            threadId,
-            resourceId: resourceId ?? '',
-          },
-        },
-        error,
-      );
-      this.logger?.trackException?.(mastraError);
-      this.logger?.error?.(mastraError.toString());
-      return { messages: [], total: 0, page, perPage: perPage || 40, hasMore: false };
-    }
-  }
-
   async updateMessages(args: {
     messages: (Partial<Omit<MastraMessageV2, 'createdAt'>> & {
       id: string;

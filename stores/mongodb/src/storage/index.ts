@@ -210,12 +210,6 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.memory.getMessages({ threadId, selectBy, format });
   }
 
-  async getMessagesPaginated(
-    _args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    return this.stores.memory.getMessagesPaginated(_args);
-  }
-
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   async saveMessages(
