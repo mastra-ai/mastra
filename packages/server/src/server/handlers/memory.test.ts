@@ -1,9 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import type { MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
-import { MastraMemory } from '@mastra/core/memory';
-import { MockStore } from '@mastra/core/storage';
-import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
