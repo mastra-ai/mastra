@@ -6,12 +6,10 @@ permissions:
 
 on:
   pull_request:
-  deployment_status:
 
 jobs:
   check-deleted-pages:
     name: Check for deleted pages without redirects
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR branch
@@ -64,7 +62,6 @@ jobs:
 
   check-duplicate-redirects:
     name: Check for duplicate redirects
-    if: ${{ github.event.deployment_status.state == 'success' && github.event.deployment_status.environment == 'Preview – mastra-docs' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -81,9 +78,6 @@ jobs:
       - name: Install dependencies for docs
         run: npm ci
         working-directory: docs
-
-      - name: Set deployment URL as env var
-        run: echo "MASTRA_DEPLOYMENT_URL=${{ github.event.deployment_status.target_url }}" >> $GITHUB_ENV
 
       - name: Run check-duplicate-redirects
         run: node .github/scripts/check-duplicate-redirects.js
