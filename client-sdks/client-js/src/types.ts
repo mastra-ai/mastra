@@ -87,7 +87,6 @@ export interface GetAgentResponse {
   provider: string;
   modelId: string;
   modelVersion: string;
-  defaultOptions: WithoutMethods<AgentExecutionOptions>;
   modelList:
     | Array<{
         id: string;
@@ -100,6 +99,7 @@ export interface GetAgentResponse {
         };
       }>
     | undefined;
+  defaultOptions: WithoutMethods<AgentExecutionOptions>;
   defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
 }
