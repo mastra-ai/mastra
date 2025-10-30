@@ -14,6 +14,7 @@ import type {
   StoragePagination,
   StorageDomains,
   StorageResourceType,
+  StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { StoreMemoryLance } from './domains/memory';
@@ -327,14 +328,7 @@ export class LanceStorage extends MastraStorage {
     return this.stores.memory.updateMessages(_args);
   }
 
-  async listWorkflowRuns(args?: {
-    namespace?: string;
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-  }): Promise<WorkflowRuns> {
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     return this.stores.workflows.listWorkflowRuns(args);
   }
 

@@ -17,6 +17,7 @@ import type {
   StorageDomains,
   StorageResourceType,
   ThreadSortOptions,
+  StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
@@ -387,14 +388,7 @@ export class DynamoDBStore extends MastraStorage {
     return this.stores.workflows.loadWorkflowSnapshot({ workflowName, runId });
   }
 
-  async listWorkflowRuns(args?: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns> {
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     return this.stores.workflows.listWorkflowRuns(args);
   }
 

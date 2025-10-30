@@ -17,6 +17,7 @@ import type {
   AITracesPaginatedArg,
   CreateAISpanRecord,
   UpdateAISpanRecord,
+  StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
@@ -245,14 +246,7 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.memory.updateMessages(_args);
   }
 
-  async listWorkflowRuns(args?: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns> {
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     return this.stores.workflows.listWorkflowRuns(args);
   }
 
