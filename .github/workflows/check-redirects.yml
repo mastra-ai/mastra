@@ -49,11 +49,18 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const fs = require('fs');
-            try {
-              const missing = JSON.parse(fs.readFileSync('/tmp/missing-redirects.json', 'utf8'));
-              const body = `## 🚨 Missing Redirects Detected\n\nThe following pages were removed but don't have redirects in \`vercel.json\`:\n\n${missing.map(path => `- \`${path}\``).join('\n')}\n\nPlease add redirects for these pages to prevent 404 errors.`;
+            const logsUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
+            const body = [
+              '## 🚨 Missing Redirects Detected',
+              '',
+              'Some pages were removed in this PR but don\'t have corresponding redirects in `docs/vercel.json`.',
+              '',
+              '**Action Required:** Add redirects for the deleted pages to prevent 404 errors.',
+              '',
+              `📋 [View workflow logs for details](${logsUrl})`
+            ].join('\n');
 
+            try {
               await github.rest.issues.createComment({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
@@ -61,8 +68,7 @@ jobs:
                 body: body
               });
             } catch (error) {
-              console.error('Failed to read missing-redirects.json or post comment:', error);
-              console.log('The check-deleted-pages script may have failed for a different reason.');
+              console.error('Failed to post comment:', error);
             }
 
   check-duplicate-redirects:
@@ -86,3 +92,30 @@ jobs:
 
       - name: Run check-duplicate-redirects
         run: node .github/scripts/check-duplicate-redirects.js
+
+      - name: Comment on PR if redirect issues found
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const logsUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
+            const body = [
+              '## 🚨 Redirect Issues Detected',
+              '',
+              'The redirect validation found issues in `docs/vercel.json` (duplicate sources or broken destination links).',
+              '',
+              '**Action Required:** Review and fix the redirect configuration.',
+              '',
+              `📋 [View workflow logs for details](${logsUrl})`
+            ].join('\n');
+
+            try {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            } catch (error) {
+              console.error('Failed to post comment:', error);
+            }
