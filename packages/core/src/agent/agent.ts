@@ -367,14 +367,14 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // Get configured output processors
     const configuredProcessors = this.#outputProcessors
       ? typeof this.#outputProcessors === 'function'
-        ? await this.#outputProcessors({ runtimeContext: runtimeContext || new RequestContext() })
+        ? await this.#outputProcessors({ requestContext: runtimeContext || new RequestContext() })
         : this.#outputProcessors
       : [];
 
     // Get memory output processors (with deduplication)
     const memory =
       typeof this.#memory === 'function'
-        ? await this.#memory({ runtimeContext: runtimeContext || new RequestContext() })
+        ? await this.#memory({ requestContext: runtimeContext || new RequestContext() })
         : this.#memory;
 
     const memoryProcessors = memory ? memory.getOutputProcessors(configuredProcessors) : [];
@@ -391,14 +391,14 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // Get configured input processors
     const configuredProcessors = this.#inputProcessors
       ? typeof this.#inputProcessors === 'function'
-        ? await this.#inputProcessors({ runtimeContext: runtimeContext || new RequestContext() })
+        ? await this.#inputProcessors({ requestContext: runtimeContext || new RequestContext() })
         : this.#inputProcessors
       : [];
 
     // Get memory input processors (with deduplication)
     const memory =
       typeof this.#memory === 'function'
-        ? await this.#memory({ runtimeContext: runtimeContext || new RequestContext() })
+        ? await this.#memory({ requestContext: runtimeContext || new RequestContext() })
         : this.#memory;
 
     const memoryProcessors = memory ? memory.getInputProcessors(configuredProcessors) : [];
@@ -2238,7 +2238,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
-          .addSystem(instructions || (await this.getInstructions({ runtimeContext })))
+          .addSystem(instructions || (await this.getInstructions({ requestContext })))
           .addSystem(systemMessages)
           .add(context || [], 'context')
           .add(messageList.get.all.v2(), 'user')
