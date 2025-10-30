@@ -22,6 +22,11 @@ import type {
 import type { StoreOperationsLance } from '../operations';
 import { getTableSchema, processResultWithTypeConversion } from '../utils';
 
+// Utility to escape single quotes in SQL strings
+function escapeSql(str: string): string {
+  return str.replace(/'/g, "''");
+}
+
 export class StoreMemoryLance extends MemoryStorage {
   private client: Connection;
   private operations: StoreOperationsLance;
@@ -549,26 +554,26 @@ export class StoreMemoryLance extends MemoryStorage {
       const table = await this.client.openTable(TABLE_THREADS);
 
       // Get total count
-      const total = await table.countRows(`\`resourceId\` = '${resourceId}'`);
+      const total = await table.countRows(`\`resourceId\` = '${escapeSql(resourceId)}'`);
 
-      // Get paginated results
-      const query = table.query().where(`\`resourceId\` = '${resourceId}'`);
-      query.limit(limit);
-      if (offset > 0) {
-        query.offset(offset);
-      }
-
+      // Get ALL matching records (no limit/offset yet - need to sort first)
+      const query = table.query().where(`\`resourceId\` = '${escapeSql(resourceId)}'`);
       const records = await query.toArray();
 
-      // Apply dynamic sorting
+      // Apply dynamic sorting BEFORE pagination
       records.sort((a, b) => {
         const aTime = new Date(a[field]).getTime();
         const bTime = new Date(b[field]).getTime();
         return direction === 'ASC' ? aTime - bTime : bTime - aTime;
       });
 
+      // Apply pagination AFTER sorting
+      const paginatedRecords = records.slice(offset, offset + limit);
+
       const schema = await getTableSchema({ tableName: TABLE_THREADS, client: this.client });
-      const threads = records.map(record => processResultWithTypeConversion(record, schema)) as StorageThreadType[];
+      const threads = paginatedRecords.map(record =>
+        processResultWithTypeConversion(record, schema),
+      ) as StorageThreadType[];
 
       return {
         threads,

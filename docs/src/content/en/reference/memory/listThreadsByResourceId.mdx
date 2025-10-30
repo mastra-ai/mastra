@@ -64,7 +64,7 @@ await memory.listThreadsByResourceId({
 The return object contains:
 - `threads`: Array of thread objects
 - `total`: Total number of threads for this resource
-- `page`: Current page (same as offset)
+- `page`: Current page number (`Math.floor(offset / limit)` when `limit > 0`)
 - `perPage`: Items per page (same as limit)
 - `hasMore`: Boolean indicating if more results are available
 

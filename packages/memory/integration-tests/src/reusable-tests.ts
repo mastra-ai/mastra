@@ -879,7 +879,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       // Test second page
       const page2Result = await memory.listThreadsByResourceId({
         resourceId,
-        offset: 1,
+        offset: 7,
         limit: 7,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
@@ -891,7 +891,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       // Test third page (final page)
       const page3Result = await memory.listThreadsByResourceId({
         resourceId,
-        offset: 2,
+        offset: 14,
         limit: 7,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });

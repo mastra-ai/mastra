@@ -574,14 +574,14 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
         const page2 = await storage.listThreadsByResourceId({
           resourceId,
-          offset: 1,
+          offset: 2,
           limit: 2,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
 
         const page3 = await storage.listThreadsByResourceId({
           resourceId,
-          offset: 2,
+          offset: 4,
           limit: 2,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
