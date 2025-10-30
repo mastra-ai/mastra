@@ -21,6 +21,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/08-running-evals",
+      "destination": "/docs/evals/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/agents/00-overview",
       "destination": "/docs/agents/overview",
       "permanent": true
@@ -43,6 +48,26 @@
     {
       "source": "/docs/agents/03-adding-voice",
       "destination": "/docs/agents/adding-voice",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/00-overview",
+      "destination": "/docs/evals/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/01-textual-evals",
+      "destination": "/docs/evals/textual-evals",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/02-custom-eval",
+      "destination": "/docs/evals/custom-eval",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/03-running-in-ci",
+      "destination": "/docs/evals/running-in-ci",
       "permanent": true
     },
     {
@@ -213,6 +238,11 @@
     {
       "source": "/docs/integrations",
       "destination": "/docs/tools-mcp/mcp-overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/01-supported-evals",
+      "destination": "/docs/evals/overview",
       "permanent": true
     },
     {
@@ -558,6 +588,16 @@
     {
       "source": "/docs/frameworks/agentic-uis",
       "destination": "/docs/frameworks/agentic-uis/ai-sdk",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/word-inclusion",
+      "destination": "/examples/evals/custom-native-javascript-eval",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/custom-eval",
+      "destination": "/examples/evals/custom-llm-judge-eval",
       "permanent": true
     },
     {
@@ -1091,6 +1131,31 @@
       "permanent": true
     },
     {
+      "source": "/docs/evals",
+      "destination": "/docs/scorers/evals-old-api",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/overview",
+      "destination": "/docs/scorers/evals-old-api/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/custom-eval",
+      "destination": "/docs/scorers/evals-old-api/custom-eval",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/running-in-ci",
+      "destination": "/docs/scorers/evals-old-api/running-in-ci",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/textual-evals",
+      "destination": "/docs/scorers/evals-old-api/textual-evals",
+      "permanent": true
+    },
+    {
       "source": "/examples/agents/using-a-tool",
       "destination": "/docs/agents/using-tools-and-mcp#adding-tools-to-an-agent",
       "permanent": true
@@ -1103,6 +1168,61 @@
     {
       "source": "/docs/workflows/pausing-execution",
       "destination": "/docs/workflows/suspend-and-resume",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getAgents",
+      "destination": "/reference/core/listAgents",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getScorers",
+      "destination": "/reference/core/listScorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getLogs",
+      "destination": "/reference/core/listLogs",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getLogsByRunId",
+      "destination": "/reference/core/listLogsByRunId",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getWorkflows",
+      "destination": "/reference/core/listWorkflows",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getTools",
+      "destination": "/reference/agents/listTools",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getWorkflows",
+      "destination": "/reference/agents/listWorkflows",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getScorers",
+      "destination": "/reference/agents/listScorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/client-js/workflows-legacy",
+      "destination": "/reference/client-js/workflows",
+      "permanent": true
+    },
+    {
+      "source": "/examples/workflows_legacy/:path*",
+      "destination": "/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/examples/workflows-legacy/:path*",
+      "destination": "/docs/workflows/overview",
       "permanent": true
     },
     {
