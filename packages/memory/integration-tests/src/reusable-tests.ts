@@ -803,6 +803,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
   });
 
   describe('Thread Pagination', () => {
+    beforeEach(async () => {
+      const threads = await memory.getThreadsByResourceId({ resourceId });
+      await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
+    });
+
     it('should return paginated threads with correct metadata', async () => {
       // Create multiple test threads (25 threads)
       await Promise.all(
