@@ -209,13 +209,10 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
   }
 
-  /**
-   * @todo Implement orderBy and sortDirection support for full sorting capabilities
-   */
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset, limit } = args;
+    const { resourceId, offset, limit, orderBy = 'createdAt', sortDirection = 'DESC' } = args;
     const fullTableName = this.operations.getTableName(TABLE_THREADS);
 
     const mapRowToStorageThreadType = (row: Record<string, any>): StorageThreadType => ({
@@ -235,11 +232,15 @@ export class MemoryStorageD1 extends MemoryStorage {
       }[];
       const total = Number(countResult?.[0]?.count ?? 0);
 
+      // Determine sort field and direction
+      const sortField = orderBy === 'updatedAt' ? 'updatedAt' : 'createdAt';
+      const sortDir = sortDirection === 'ASC' ? 'ASC' : 'DESC';
+
       const selectQuery = createSqlBuilder()
         .select('*')
         .from(fullTableName)
         .where('resourceId = ?', resourceId)
-        .orderBy('createdAt', 'DESC')
+        .orderBy(sortField, sortDir)
         .limit(limit)
         .offset(offset * limit);
 

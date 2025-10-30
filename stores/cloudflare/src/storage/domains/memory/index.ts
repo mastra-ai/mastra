@@ -63,14 +63,11 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
-  /**
-   * @todo Implement orderBy and sortDirection support for full sorting capabilities
-   */
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
-      const { resourceId, offset = 0, limit = 100 } = args;
+      const { resourceId, offset = 0, limit = 100, orderBy = 'createdAt', sortDirection = 'DESC' } = args;
 
       // List all keys in the threads table
       const prefix = this.operations.namespacePrefix ? `${this.operations.namespacePrefix}:` : '';
@@ -88,11 +85,12 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         threads.push(data);
       }
 
-      // Sort by createdAt descending
+      // Apply dynamic sorting
+      const sortField = orderBy === 'updatedAt' ? 'updatedAt' : 'createdAt';
       threads.sort((a, b) => {
-        const aTime = new Date(a.createdAt || 0).getTime();
-        const bTime = new Date(b.createdAt || 0).getTime();
-        return bTime - aTime;
+        const aTime = new Date(a[sortField] || 0).getTime();
+        const bTime = new Date(b[sortField] || 0).getTime();
+        return sortDirection === 'ASC' ? aTime - bTime : bTime - aTime;
       });
 
       // Apply pagination

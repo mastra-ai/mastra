@@ -17,6 +17,8 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  ThreadOrderBy,
+  ThreadSortDirection,
 } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
 import type { StoreOperationsUpstash } from '../operations';
@@ -70,13 +72,10 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  /**
-   * @todo Implement orderBy and sortDirection support for full sorting capabilities
-   */
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset = 0, limit = 100 } = args;
+    const { resourceId, offset = 0, limit = 100, orderBy, sortDirection } = args;
 
     try {
       let allThreads: StorageThreadType[] = [];
@@ -99,12 +98,17 @@ export class StoreMemoryUpstash extends MemoryStorage {
         }
       }
 
-      allThreads.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      // Apply sorting with parameters
+      const sortedThreads = this.sortThreads(
+        allThreads,
+        this.castThreadOrderBy(orderBy),
+        this.castThreadSortDirection(sortDirection),
+      );
 
-      const total = allThreads.length;
+      const total = sortedThreads.length;
       const start = offset * limit;
       const end = start + limit;
-      const paginatedThreads = allThreads.slice(start, end);
+      const paginatedThreads = sortedThreads.slice(start, end);
       const hasMore = end < total;
 
       return {
@@ -1010,5 +1014,22 @@ export class StoreMemoryUpstash extends MemoryStorage {
         error,
       );
     }
+  }
+
+  private sortThreads(
+    threads: StorageThreadType[],
+    orderBy: ThreadOrderBy,
+    sortDirection: ThreadSortDirection,
+  ): StorageThreadType[] {
+    return threads.sort((a, b) => {
+      const aValue = new Date(a[orderBy]).getTime();
+      const bValue = new Date(b[orderBy]).getTime();
+
+      if (sortDirection === 'ASC') {
+        return aValue - bValue;
+      } else {
+        return bValue - aValue;
+      }
+    });
   }
 }

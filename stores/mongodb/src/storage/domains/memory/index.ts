@@ -612,22 +612,23 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  /**
-   * @todo Implement orderBy and sortDirection support for full sorting capabilities
-   */
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
-      const { resourceId, offset, limit } = args;
+      const { resourceId, offset, limit, orderBy = 'createdAt', sortDirection = 'DESC' } = args;
       const collection = await this.operations.getCollection(TABLE_THREADS);
 
       const query = { resourceId };
       const total = await collection.countDocuments(query);
 
+      // MongoDB sort: 1 = ASC, -1 = DESC
+      const sortField = orderBy === 'updatedAt' ? 'updatedAt' : 'createdAt';
+      const sortOrder = sortDirection === 'ASC' ? 1 : -1;
+
       const threads = await collection
         .find(query)
-        .sort({ updatedAt: -1 })
+        .sort({ [sortField]: sortOrder })
         .skip(offset * limit)
         .limit(limit)
         .toArray();
