@@ -93,7 +93,7 @@
     "jsondiffpatch": ">=0.7.3"
   },
   "license": "Apache-2.0",
-  "packageManager": "pnpm@10.18.2",
+  "packageManager": "pnpm@10.19.0",
   "dependencies": {
     "globby": "^14.1.0",
     "resolve-from": "^5.0.0"
