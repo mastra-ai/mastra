@@ -1,24 +1,32 @@
 ---
-title: "Agent Overview | Agents | Mastra Docs"
+title: "Using Agents | Agents | Mastra Docs"
 description: Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
 ---
 
-import { Steps, Callout, Tabs } from "nextra/components";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
 
 # Using Agents
 
 Agents use LLMs and tools to solve open-ended tasks. They reason about goals, decide which tools to use, retain conversation memory, and iterate internally until the model emits a final answer or an optional stop condition is met. Agents produce structured responses you can render in your UI or process programmatically. Use agents directly or compose them into workflows or agent networks.
 
-![Agents overview](/image/agents/agents-overview.jpg)
+![Agents overview](/img/agents/agents-overview.jpg)
 
-> **📹 Watch**:  → An introduction to agents, and how they compare to workflows [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
+:::tip[Watch an introduction]
+
+An introduction to agents, and how they compare to workflows on [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
+
+:::
 
 ## Setting up agents
 
-<Tabs items={["Mastra model router", "Vercel AI SDK"]}>
-  <Tabs.Tab>
+<Tabs>
+  <TabItem value="mastra-model-router" label="Model router">
     <Steps>
-### Install dependencies [#install-dependencies-mastra-router]
+
+<StepItem>
 
 Add the Mastra core package to your project:
 
@@ -26,35 +34,46 @@ Add the Mastra core package to your project:
 npm install @mastra/core
 ```
 
-### Set your API key [#set-api-key-mastra-router]
+</StepItem>
+
+<StepItem>
 
 Mastra's model router auto-detects environment variables for your chosen provider. For OpenAI, set `OPENAI_API_KEY`:
 
-```bash filename=".env" copy
+```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
-> Mastra supports more than 600 models. Choose from the full list [here](/models).
+:::note
 
-### Creating an agent [#creating-an-agent-mastra-router]
+Mastra supports more than 600 models. Choose from the [full list](/models).
+
+:::
+
+</StepItem>
+
+<StepItem>
 
 Create an agent by instantiating the `Agent` class with system `instructions` and a `model`:
 
-```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/test-agent.ts" copy
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
   name: "test-agent",
   instructions: "You are a helpful assistant.",
-  model: "openai/gpt-4o-mini"
+  model: "openai/gpt-4o-mini",
 });
 ```
-    </Steps>
-  </Tabs.Tab>
-  <Tabs.Tab>
+
+</StepItem>
+
+</Steps>
+  </TabItem>
+  <TabItem value="vercel-ai-sdk" label="Vercel AI SDK">
     <Steps>
 
-### Install dependencies [#install-dependencies-ai-sdk]
+<StepItem>
 
 Include the Mastra core package alongside the Vercel AI SDK provider you want to use:
 
@@ -62,35 +81,45 @@ Include the Mastra core package alongside the Vercel AI SDK provider you want to
 npm install @mastra/core @ai-sdk/openai
 ```
 
-### Set your API key [#set-api-key-ai-sdk]
+</StepItem>
+
+<StepItem>
 
 Set the corresponding environment variable for your provider. For OpenAI via the AI SDK:
 
-```bash filename=".env" copy
+```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
-> See the [AI SDK Providers](https://ai-sdk.dev/providers/ai-sdk-providers) in the Vercel AI SDK docs for additional configuration options.
+:::note
 
-### Creating an agent [#creating-an-agent-ai-sdk]
+See the [AI SDK Providers](https://ai-sdk.dev/providers/ai-sdk-providers) in the Vercel AI SDK docs for additional configuration options.
+
+:::
+
+</StepItem>
+
+<StepItem>
 
 To create an agent in Mastra, use the `Agent` class. Every agent must include `instructions` to define its behavior, and a `model` parameter to specify the LLM provider and model. When using the Vercel AI SDK, provide the client to your agent's `model` field:
 
-```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/test-agent.ts" copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
   name: "test-agent",
   instructions: "You are a helpful assistant.",
-  model: openai("gpt-4o-mini")
+  model: openai("gpt-4o-mini"),
 });
 ```
+
+</StepItem>
     </Steps>
-  </Tabs.Tab>
+  </TabItem>
 </Tabs>
 
-#### Instruction formats
+### Instruction formats
 
 Instructions define the agent's behavior, personality, and capabilities.
 They are system-level prompts that establish the agent's core identity and expertise.
@@ -99,23 +128,23 @@ Instructions can be provided in multiple formats for greater flexibility. The ex
 
 ```typescript copy
 // String (most common)
-instructions: "You are a helpful assistant."
+instructions: "You are a helpful assistant.";
 
 // Array of strings
 instructions: [
   "You are a helpful assistant.",
   "Always be polite.",
-  "Provide detailed answers."
-]
+  "Provide detailed answers.",
+];
 
 // Array of system messages
 instructions: [
   { role: "system", content: "You are a helpful assistant." },
-  { role: "system", content: "You have expertise in TypeScript." }
-]
+  { role: "system", content: "You have expertise in TypeScript." },
+];
 ```
 
-#### Provider-specific options
+### Provider-specific options
 
 Each model provider also enables a few different options, including prompt caching and configuring reasoning. We provide a `providerOptions` flag to manage these. You can set `providerOptions` on the instruction level to set different caching strategy per system instruction/prompt.
 
@@ -132,15 +161,15 @@ instructions: {
 }
 ```
 
-> See the [Agent reference doc](../../reference/agents/agent.mdx) for more information.
+> See the [Agent reference doc](/reference/agents/agent) for more information.
 
 ### Registering an agent
 
 Register your agent in the Mastra instance to make it available throughout your application. Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features:
 
-```typescript {6} showLineNumbers filename="src/mastra/index.ts" copy
+```typescript {6} showLineNumbers title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core/mastra";
-import { testAgent } from './agents/test-agent';
+import { testAgent } from "./agents/test-agent";
 
 export const mastra = new Mastra({
   // ...
@@ -155,20 +184,21 @@ You can call agents from workflow steps, tools, the Mastra Client, or the comman
 ```typescript showLineNumbers copy
 const testAgent = mastra.getAgent("testAgent");
 ```
-<Callout type="info">
-  <p>
-    `mastra.getAgent()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
-  </p>
-</Callout>
 
-> See [Calling agents](../../examples/agents/calling-agents.mdx) for more information.
+:::info
+
+`mastra.getAgent()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
+
+See [Calling agents](/examples/agents/calling-agents) for more information.
+
+:::
 
 ## Generating responses
 
 Agents can return results in two ways: generating the full output before returning it or streaming tokens in real time. Choose the approach that fits your use case: generate for short, internal responses or debugging, and stream to deliver pixels to end users as quickly as possible.
 
-<Tabs items={["Generate", "Stream"]}>
-  <Tabs.Tab>
+<Tabs>
+  <TabItem value="generate" label="Generate">
 Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content`.
 
 (The `role` defines the speaker for each message. Typical roles are `user` for human input, `assistant` for agent responses, and `system` for instructions.)
@@ -178,13 +208,17 @@ const response = await testAgent.generate([
   { role: "user", content: "Help me organize my day" },
   { role: "user", content: "My day starts at 9am and finishes at 5.30pm" },
   { role: "user", content: "I take lunch between 12:30 and 13:30" },
-  { role: "user", content: "I have meetings Monday to Friday between 10:30 and 11:30" }
+  {
+    role: "user",
+    content: "I have meetings Monday to Friday between 10:30 and 11:30",
+  },
 ]);
 
 console.log(response.text);
 ```
-  </Tabs.Tab>
-  <Tabs.Tab>
+
+  </TabItem>
+  <TabItem value="stream" label="Stream">
 Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content`.
 
 (The `role` defines the speaker for each message. Typical roles are `user` for human input, `assistant` for agent responses, and `system` for instructions.)
@@ -194,7 +228,10 @@ const stream = await testAgent.stream([
   { role: "user", content: "Help me organize my day" },
   { role: "user", content: "My day starts at 9am and finishes at 5.30pm" },
   { role: "user", content: "I take lunch between 12:30 and 13:30" },
-  { role: "user", content: "I have meetings Monday to Friday between 10:30 and 11:30" }
+  {
+    role: "user",
+    content: "I have meetings Monday to Friday between 10:30 and 11:30",
+  },
 ]);
 
 for await (const chunk of stream.textStream) {
@@ -211,17 +248,18 @@ It provides the final `text`, execution `steps`, `finishReason`, token `usage` s
 const stream = await testAgent.stream("Help me organize my day", {
   onFinish: ({ steps, text, finishReason, usage }) => {
     console.log({ steps, text, finishReason, usage });
-  }
+  },
 });
 
 for await (const chunk of stream.textStream) {
   process.stdout.write(chunk);
 }
 ```
-  </Tabs.Tab>
+
+  </TabItem>
 </Tabs>
 
-> See [.generate()](../../reference/agents/generate.mdx) or [.stream()](../../reference/agents/stream.mdx) for more information.
+> See [.generate()](/reference/agents/generate) or [.stream()](/reference/streaming/agents/stream) for more information.
 
 ## Structured output
 
@@ -238,21 +276,21 @@ const response = await testAgent.generate(
   [
     {
       role: "system",
-      content: "Provide a summary and keywords for the following text:"
+      content: "Provide a summary and keywords for the following text:",
     },
     {
       role: "user",
-      content: "Monkey, Ice Cream, Boat"
-    }
+      content: "Monkey, Ice Cream, Boat",
+    },
   ],
   {
     structuredOutput: {
       schema: z.object({
         summary: z.string(),
-        keywords: z.array(z.string())
-      })
+        keywords: z.array(z.string()),
+      }),
     },
-  }
+  },
 );
 
 console.log(response.object);
@@ -269,26 +307,26 @@ const response = await testAgentWithTools.generate(
   [
     {
       role: "system",
-      content: "Provide a summary and keywords for the following text:"
+      content: "Provide a summary and keywords for the following text:",
     },
     {
       role: "user",
-      content: "Please use your test tool and let me know the results"
-    }
+      content: "Please use your test tool and let me know the results",
+    },
   ],
   {
     structuredOutput: {
       schema: z.object({
         summary: z.string(),
-        keywords: z.array(z.string())
+        keywords: z.array(z.string()),
       }),
-      model: "openai/gpt-4o"
+      model: "openai/gpt-4o",
     },
-  }
+  },
 );
 
 console.log(response.object);
-console.log(response.toolResults)
+console.log(response.toolResults);
 ```
 
 ### Response format
@@ -302,27 +340,26 @@ const response = await testAgentThatDoesntSupportStructuredOutput.generate(
   [
     {
       role: "system",
-      content: "Provide a summary and keywords for the following text:"
+      content: "Provide a summary and keywords for the following text:",
     },
     {
       role: "user",
-      content: "Monkey, Ice Cream, Boat"
-    }
+      content: "Monkey, Ice Cream, Boat",
+    },
   ],
   {
     structuredOutput: {
       schema: z.object({
         summary: z.string(),
-        keywords: z.array(z.string())
+        keywords: z.array(z.string()),
       }),
-      jsonPromptInjection: true
+      jsonPromptInjection: true,
     },
-  }
+  },
 );
 
 console.log(response.object);
 ```
-
 
 ## Working with images
 
@@ -336,20 +373,20 @@ const response = await testAgent.generate([
       {
         type: "image",
         image: "https://placebear.com/cache/395-205.jpg",
-        mimeType: "image/jpeg"
+        mimeType: "image/jpeg",
       },
       {
         type: "text",
-        text: "Describe the image in detail, and extract all the text in the image."
-      }
-    ]
-  }
+        text: "Describe the image in detail, and extract all the text in the image.",
+      },
+    ],
+  },
 ]);
 
 console.log(response.text);
 ```
 
-For a detailed guide to creating and configuring tools, see the [Tools Overview](../tools-mcp/overview.mdx) page.
+For a detailed guide to creating and configuring tools, see the [Tools Overview](../tools-mcp/overview) page.
 
 ### Using `maxSteps`
 
@@ -357,7 +394,7 @@ The `maxSteps` parameter controls the maximum number of sequential LLM calls an 
 
 ```typescript showLineNumbers copy
 const response = await testAgent.generate("Help me organize my day", {
-  maxSteps: 5
+  maxSteps: 5,
 });
 
 console.log(response.text);
@@ -373,7 +410,7 @@ You can monitor the progress of multi-step operations using the `onStepFinish` c
 const response = await testAgent.generate("Help me organize my day", {
   onStepFinish: ({ text, toolCalls, toolResults, finishReason, usage }) => {
     console.log({ text, toolCalls, toolResults, finishReason, usage });
-  }
+  },
 });
 ```
 
@@ -381,45 +418,45 @@ const response = await testAgent.generate("Help me organize my day", {
 
 Agents can use tools to go beyond language generation, enabling structured interactions with external APIs and services. Tools allow agents to access data and perform clearly defined operations in a reliable, repeatable way.
 
-```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers
+```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
 export const testAgent = new Agent({
   // ...
-  tools: { testTool }
+  tools: { testTool },
 });
 ```
 
-> See [Using Tools](./using-tools.mdx) for more information.
+> See [Using Tools](./using-tools) for more information.
 
-## Using `RuntimeContext`
+## Using `RequestContext`
 
-Use `RuntimeContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use `RequestContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
-```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers
+```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
 
 export const testAgent = new Agent({
   // ...
-  model: ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+  model: ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     return userTier === "enterprise"
       ? openai("gpt-4o-mini")
       : openai("gpt-4.1-nano");
-  }
+  },
 });
 ```
 
-> See [Runtime Context](../server-db/runtime-context.mdx) for more information.
+> See [Request Context](/docs/server-db/request-context) for more information.
 
 ## Testing with Mastra Playground
 
-Use the Mastra [Playground](../server-db/local-dev-playground.mdx) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
+Use the Mastra [Playground](/docs/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
 
 ## Related
 
-- [Using Tools](./using-tools.mdx)
-- [Agent Memory](./agent-memory.mdx)
-- [Runtime Context](../../examples/agents/runtime-context.mdx)
-- [Calling Agents](../../examples/agents/calling-agents.mdx)
+- [Using Tools](./using-tools)
+- [Agent Memory](./agent-memory)
+- [Request Context](/examples/agents/request-context)
+- [Calling Agents](/examples/agents/calling-agents)

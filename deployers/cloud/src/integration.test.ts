@@ -55,19 +55,6 @@ describe('CloudDeployer Integration Tests', () => {
       expect(fs.existsSync(join(outputDir, 'output'))).toBe(true);
     });
 
-    it('should write instrumentation file correctly', async () => {
-      await deployer.writeInstrumentationFile(outputDir);
-
-      const instrumentationPath = join(outputDir, 'instrumentation.mjs');
-      const fs = await import('fs');
-      expect(fs.existsSync(instrumentationPath)).toBe(true);
-
-      const content = await readFile(instrumentationPath, 'utf-8');
-      expect(content).toContain('MastraCloudExporter');
-      expect(content).toContain('NodeSDK');
-      expect(content).toContain('telemetry');
-    });
-
     it('should write package.json with cloud dependencies', async () => {
       const dependencies = new Map<string, string>([
         ['express', '^4.18.0'],
@@ -91,10 +78,6 @@ describe('CloudDeployer Integration Tests', () => {
 
       // Verify nested package handling (should only take first part)
       expect(packageJson.dependencies['nested']).toBe('2.0.0');
-
-      // Verify telemetry dependencies
-      expect(packageJson.dependencies['@opentelemetry/core']).toBeDefined();
-      expect(packageJson.dependencies['@opentelemetry/sdk-node']).toBeDefined();
 
       // Verify package.json structure
       expect(packageJson.name).toBe('server');
@@ -145,7 +128,6 @@ describe('CloudDeployer Integration Tests', () => {
         "import { mastra } from '#mastra'",
         "import { MultiLogger } from '@mastra/core/logger'",
         "import { PinoLogger } from '@mastra/loggers'",
-        "import { evaluate } from '@mastra/core/eval'",
         "import { AvailableHooks, registerHook } from '@mastra/core/hooks'",
         "import { LibSQLStore, LibSQLVector } from '@mastra/libsql'",
       ];

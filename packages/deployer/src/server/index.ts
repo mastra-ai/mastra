@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { readFile } from 'fs/promises';
 import * as https from 'node:https';
 import { join } from 'path/posix';
@@ -6,8 +5,7 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core/mastra';
-import { RuntimeContext } from '@mastra/core/runtime-context';
-import { Telemetry } from '@mastra/core/telemetry';
+import { RequestContext } from '@mastra/core/request-context';
 import { Tool } from '@mastra/core/tools';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { Context, MiddlewareHandler } from 'hono';
@@ -29,7 +27,6 @@ import { mcpRouter } from './handlers/routes/mcp/router';
 import { memoryRoutes } from './handlers/routes/memory/router';
 import { observabilityRouter } from './handlers/routes/observability/router';
 import { scoresRouter } from './handlers/routes/scores/router';
-import { telemetryRouter } from './handlers/routes/telemetry/router';
 import { toolsRouter } from './handlers/routes/tools/router';
 import { vectorRouter } from './handlers/routes/vector/router';
 import { workflowsRouter } from './handlers/routes/workflows/router';
@@ -40,7 +37,7 @@ type Bindings = {};
 
 type Variables = {
   mastra: Mastra;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   clients: Set<{ controller: ReadableStreamDefaultController }>;
   tools: Record<string, Tool>;
   taskStore: InMemoryTaskStore;
@@ -94,45 +91,22 @@ export async function createHonoServer(
     }
   }
 
-  // Middleware
-  app.use('*', async function setTelemetryInfo(c, next) {
-    const requestId = c.req.header('x-request-id') ?? randomUUID();
-    const span = Telemetry.getActiveSpan();
-    if (span) {
-      span.setAttribute('http.request_id', requestId);
-      span.updateName(`${c.req.method} ${c.req.path}`);
-
-      const newCtx = Telemetry.setBaggage({
-        'http.request_id': { value: requestId },
-      });
-
-      await new Promise(resolve => {
-        Telemetry.withContext(newCtx, async () => {
-          await next();
-          resolve(true);
-        });
-      });
-    } else {
-      await next();
-    }
-  });
-
   app.onError((err, c) => errorHandler(err, c, options.isDev));
 
   // Configure hono context
   // Configure hono context
   app.use('*', async function setContext(c, next) {
-    // Parse runtime context from request body and add to context
-    let runtimeContext = new RuntimeContext();
-    // Parse runtime context from request body and add to context
+    // Parse request context from request body and add to context
+    let requestContext = new RequestContext();
+    // Parse request context from request body and add to context
     if (c.req.method === 'POST' || c.req.method === 'PUT') {
       const contentType = c.req.header('content-type');
       if (contentType?.includes('application/json')) {
         try {
           const clonedReq = c.req.raw.clone();
-          const body = (await clonedReq.json()) as { runtimeContext?: Record<string, any> };
-          if (body.runtimeContext) {
-            runtimeContext = new RuntimeContext(Object.entries(body.runtimeContext));
+          const body = (await clonedReq.json()) as { requestContext?: Record<string, any> };
+          if (body.requestContext) {
+            requestContext = new RequestContext(Object.entries(body.requestContext));
           }
         } catch {
           // Body parsing failed, continue without body
@@ -140,27 +114,27 @@ export async function createHonoServer(
       }
     }
 
-    // Parse runtime context from query params and add to context
+    // Parse request context from query params and add to context
     if (c.req.method === 'GET') {
       try {
-        const encodedRuntimeContext = c.req.query('runtimeContext');
-        if (encodedRuntimeContext) {
-          let parsedRuntimeContext: Record<string, any> | undefined;
+        const encodedRequestContext = c.req.query('requestContext');
+        if (encodedRequestContext) {
+          let parsedRequestContext: Record<string, any> | undefined;
           // Try JSON first
           try {
-            parsedRuntimeContext = JSON.parse(encodedRuntimeContext);
+            parsedRequestContext = JSON.parse(encodedRequestContext);
           } catch {
             // Fallback to base64(JSON)
             try {
-              const json = Buffer.from(encodedRuntimeContext, 'base64').toString('utf-8');
-              parsedRuntimeContext = JSON.parse(json);
+              const json = Buffer.from(encodedRequestContext, 'base64').toString('utf-8');
+              parsedRequestContext = JSON.parse(json);
             } catch {
               // ignore if still invalid
             }
           }
 
-          if (parsedRuntimeContext && typeof parsedRuntimeContext === 'object') {
-            runtimeContext = new RuntimeContext([...runtimeContext.entries(), ...Object.entries(parsedRuntimeContext)]);
+          if (parsedRequestContext && typeof parsedRequestContext === 'object') {
+            requestContext = new RequestContext([...requestContext.entries(), ...Object.entries(parsedRequestContext)]);
           }
         }
       } catch {
@@ -169,7 +143,7 @@ export async function createHonoServer(
     }
 
     // Add relevant contexts to hono context
-    c.set('runtimeContext', runtimeContext);
+    c.set('requestContext', requestContext);
     c.set('mastra', mastra);
     c.set('tools', options.tools);
     c.set('taskStore', a2aTaskStore);
@@ -449,8 +423,6 @@ export async function createHonoServer(
   app.route('/api/mcp', mcpRouter(bodyLimitOptions));
   // Network Memory routes
   app.route('/api/memory', memoryRoutes(bodyLimitOptions));
-  // Telemetry routes
-  app.route('/api/telemetry', telemetryRouter());
   // Observability routes
   app.route('/api/observability', observabilityRouter());
   // Legacy Workflow routes
@@ -561,10 +533,6 @@ export async function createHonoServer(
     if (options?.playground) {
       // For HTML routes, serve index.html with dynamic replacements
       let indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
-      indexHtml = indexHtml.replace(
-        `'%%MASTRA_TELEMETRY_DISABLED%%'`,
-        `${Boolean(process.env.MASTRA_TELEMETRY_DISABLED)}`,
-      );
 
       // Inject the server port information
       const serverOptions = mastra.getServer();

@@ -28,8 +28,8 @@ const mockLogger: IMastraLogger = {
   error: vi.fn(),
   trackException: vi.fn(),
   getTransports: vi.fn(() => []),
-  getLogs: vi.fn(() => []),
-  getLogsByRunId: vi.fn(() => []),
+  listLogs: vi.fn(() => []),
+  listLogsByRunId: vi.fn(() => []),
 } as any;
 
 describe('ProcessorRunner', () => {
@@ -254,72 +254,6 @@ describe('ProcessorRunner', () => {
       expect((messages[1].content[0] as TextPart).text).toBe('from processor 1');
       expect((messages[2].content[0] as TextPart).text).toBe('from processor 3');
     });
-
-    describe('telemetry integration', () => {
-      it('should use telemetry.traceMethod for individual processors when telemetry is provided', async () => {
-        const mockTelemetry = {
-          traceMethod: vi.fn((fn, _options) => {
-            return () => fn({ messageList });
-          }),
-        };
-
-        const inputProcessors: Processor[] = [
-          {
-            name: 'processor1',
-            processInput: async ({ messages }) => {
-              messages.push(createMessage('processed', 'user'));
-              return messages;
-            },
-          },
-        ];
-
-        runner = new ProcessorRunner({
-          inputProcessors,
-          outputProcessors: [],
-          logger: mockLogger,
-          agentName: 'test-agent',
-        });
-
-        messageList.add([createMessage('original', 'user')], 'user');
-        await runner.runInputProcessors(messageList, undefined, mockTelemetry);
-
-        expect(mockTelemetry.traceMethod).toHaveBeenCalledWith(expect.any(Function), {
-          spanName: 'agent.inputProcessor.processor1',
-          attributes: {
-            'processor.name': 'processor1',
-            'processor.index': '0',
-            'processor.total': '1',
-          },
-        });
-      });
-
-      it('should work without telemetry when not provided', async () => {
-        const inputProcessors: Processor[] = [
-          {
-            name: 'processor1',
-            processInput: async ({ messages }) => {
-              messages.push(createMessage('processed', 'user'));
-              return messages;
-            },
-          },
-        ];
-
-        runner = new ProcessorRunner({
-          inputProcessors,
-          outputProcessors: [],
-          logger: mockLogger,
-          agentName: 'test-agent',
-        });
-
-        messageList.add([createMessage('original', 'user')], 'user');
-        const result = await runner.runInputProcessors(messageList);
-
-        const messages = await result.get.all.prompt();
-        expect(messages).toHaveLength(2);
-        expect((messages[0].content[0] as TextPart).text).toBe('original');
-        expect((messages[1].content[0] as TextPart).text).toBe('processed');
-      });
-    });
   });
 
   describe('Output Processors', () => {
@@ -432,45 +366,6 @@ describe('ProcessorRunner', () => {
       expect((assistantMessage!.content[0] as TextPart).text).toBe('initial response');
       expect((assistantMessage!.content[1] as TextPart).text).toBe('message from processor 1');
       expect((assistantMessage!.content[2] as TextPart).text).toBe('message from processor 3');
-    });
-
-    describe('telemetry integration', () => {
-      it('should use telemetry.traceMethod for individual processors when telemetry is provided', async () => {
-        const mockTelemetry = {
-          traceMethod: vi.fn((fn, _options) => {
-            return () => fn({ messageList });
-          }),
-        };
-
-        const outputProcessors: Processor[] = [
-          {
-            name: 'processor1',
-            processOutputResult: async ({ messages }) => {
-              messages.push(createMessage('processed', 'assistant'));
-              return messages;
-            },
-          },
-        ];
-
-        runner = new ProcessorRunner({
-          inputProcessors: [],
-          outputProcessors,
-          logger: mockLogger,
-          agentName: 'test-agent',
-        });
-
-        messageList.add([createMessage('original', 'assistant')], 'response');
-        await runner.runOutputProcessors(messageList, undefined, mockTelemetry);
-
-        expect(mockTelemetry.traceMethod).toHaveBeenCalledWith(expect.any(Function), {
-          spanName: 'agent.outputProcessor.processor1',
-          attributes: {
-            'processor.name': 'processor1',
-            'processor.index': '0',
-            'processor.total': '1',
-          },
-        });
-      });
     });
   });
 

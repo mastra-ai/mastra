@@ -14,7 +14,7 @@ import Workflows from './pages/workflows';
 import { Workflow } from './pages/workflows/workflow';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
-import RuntimeContext from './pages/runtime-context';
+import RequestContext from './pages/request-context';
 import MCPs from './pages/mcps';
 import MCPServerToolExecutor from './pages/mcps/tool';
 
@@ -35,7 +35,8 @@ const paths: LinkComponentProviderProps['paths'] = {
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentsLink: () => `/agents`,
   agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/${uuid()}`,
-  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/chat/${threadId}`,
+  agentThreadLink: (agentId: string, threadId: string, messageId?: string) =>
+    messageId ? `/agents/${agentId}/chat/${threadId}?messageId=${messageId}` : `/agents/${agentId}/chat/${threadId}`,
   workflowsLink: () => `/workflows`,
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
   networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
@@ -87,10 +88,7 @@ function App() {
                   }
                 >
                   <Route path="/scorers" element={<Scorers />} />
-                  <Route
-                    path="/scorers/:scorerId"
-                    element={<Scorer computeTraceLink={traceId => `/observability?traceId=${traceId}`} />}
-                  />
+                  <Route path="/scorers/:scorerId" element={<Scorer />} />
                 </Route>
                 <Route
                   element={
@@ -146,7 +144,7 @@ function App() {
                   </Route>
 
                   <Route path="/" element={<NavigateTo to="/agents" />} />
-                  <Route path="/runtime-context" element={<RuntimeContext />} />
+                  <Route path="/request-context" element={<RequestContext />} />
                 </Route>
               </Routes>
             </LinkComponentWrapper>

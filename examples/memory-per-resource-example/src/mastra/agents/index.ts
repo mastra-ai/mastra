@@ -14,7 +14,7 @@ export const memory = new Memory({
     lastMessages: 5,
     workingMemory: {
       enabled: true,
-      scope: 'resource', // 🆕 NEW: Per-resource working memory!
+      scope: 'resource', // Default: Per-resource working memory persists across all threads
       template: `# User Profile
 - **Name**: 
 - **Location**: 

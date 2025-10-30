@@ -6,10 +6,9 @@ import { z } from 'zod';
 import { Agent } from '../../agent';
 import { createLogger } from '../../logger';
 import { Mastra } from '../../mastra';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../storage';
 import { MockStore } from '../../storage/mock';
-import { Telemetry } from '../../telemetry';
 import { createTool } from '../../tools';
 
 import { LegacyStep as Step } from './step';
@@ -3168,69 +3167,6 @@ describe('LegacyWorkflow', async () => {
     });
   });
 
-  describe('Accessing Mastra', () => {
-    it('should be able to access the deprecated mastra primitives', async () => {
-      let telemetry: Telemetry | undefined;
-      const step1 = new Step({
-        id: 'step1',
-        execute: async ({ mastra }) => {
-          telemetry = mastra?.telemetry;
-        },
-      });
-
-      const workflow = new LegacyWorkflow({ name: 'test-workflow' });
-      workflow.step(step1).commit();
-
-      const mastra = new Mastra({
-        logger,
-        legacy_workflows: { 'test-workflow': workflow },
-        storage,
-      });
-
-      const wf = mastra.legacy_getWorkflow('test-workflow');
-
-      expect(mastra?.getLogger()).toBe(logger);
-
-      // Access new instance properties directly - should work without warning
-      const run = wf.createRun();
-      await run.start();
-
-      expect(telemetry).toBeDefined();
-      expect(telemetry).toBeInstanceOf(Telemetry);
-    });
-
-    it('should be able to access the new Mastra primitives', async () => {
-      let telemetry: Telemetry | undefined;
-      const step1 = new Step({
-        id: 'step1',
-        execute: async ({ mastra }) => {
-          telemetry = mastra?.getTelemetry();
-        },
-      });
-
-      const workflow = new LegacyWorkflow({ name: 'test-workflow' });
-      workflow.step(step1).commit();
-
-      const mastra = new Mastra({
-        logger,
-        legacy_workflows: { 'test-workflow': workflow },
-        storage,
-      });
-
-      const wf = mastra.legacy_getWorkflow('test-workflow');
-
-      expect(mastra?.getLogger()).toBe(logger);
-
-      // Access new instance properties directly - should work without warning
-      const run = wf.createRun();
-      run.watch(() => {});
-      await run.start();
-
-      expect(telemetry).toBeDefined();
-      expect(telemetry).toBeInstanceOf(Telemetry);
-    });
-  });
-
   describe('Agent as step', () => {
     it('should be able to use an agent as a step', async () => {
       const workflow = new LegacyWorkflow({
@@ -4893,13 +4829,13 @@ describe('LegacyWorkflow', async () => {
   });
 
   describe('Dependency Injection', () => {
-    it('should inject runtimeContext dependencies into steps during run', async () => {
-      const runtimeContext = new RuntimeContext();
+    it('should inject requestContext dependencies into steps during run', async () => {
+      const requestContext = new RequestContext();
       const testValue = 'test-dependency';
-      runtimeContext.set('testKey', testValue);
+      requestContext.set('testKey', testValue);
 
-      const execute = vi.fn(({ runtimeContext }) => {
-        const value = runtimeContext.get('testKey');
+      const execute = vi.fn(({ requestContext }) => {
+        const value = requestContext.get('testKey');
         return { injectedValue: value };
       });
 
@@ -4909,28 +4845,28 @@ describe('LegacyWorkflow', async () => {
       workflow.step(step).commit();
 
       const run = workflow.createRun();
-      const result = await run.start({ runtimeContext });
+      const result = await run.start({ requestContext });
 
       // @ts-ignore
       expect(result.results.step1.output.injectedValue).toBe(testValue);
     });
 
-    it('should inject runtimeContext dependencies into steps during resume', async () => {
-      const runtimeContext = new RuntimeContext();
+    it('should inject requestContext dependencies into steps during resume', async () => {
+      const requestContext = new RequestContext();
       const testValue = 'test-dependency';
-      runtimeContext.set('testKey', testValue);
+      requestContext.set('testKey', testValue);
 
       const mastra = new Mastra({
         logger: false,
         storage,
       });
 
-      const execute = vi.fn(async ({ runtimeContext, suspend, context }) => {
+      const execute = vi.fn(async ({ requestContext, suspend, context }) => {
         if (!context.inputData.human) {
           await suspend();
         }
 
-        const value = runtimeContext.get('testKey');
+        const value = requestContext.get('testKey');
         return { injectedValue: value };
       });
 
@@ -4939,17 +4875,17 @@ describe('LegacyWorkflow', async () => {
       workflow.step(step).commit();
 
       const run = workflow.createRun();
-      await run.start({ runtimeContext });
+      await run.start({ requestContext });
 
-      const resumeRuntimeContext = new RuntimeContext();
-      resumeRuntimeContext.set('testKey', testValue + '2');
+      const resumeRequestContext = new RequestContext();
+      resumeRequestContext.set('testKey', testValue + '2');
 
       const result = await run.resume({
         stepId: 'step1',
         context: {
           human: true,
         },
-        runtimeContext: resumeRuntimeContext,
+        requestContext: resumeRequestContext,
       });
 
       // @ts-ignore

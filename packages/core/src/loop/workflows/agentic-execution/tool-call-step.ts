@@ -3,7 +3,6 @@ import type { OutputSchema } from '../../../stream/base/schema';
 import { ChunkFrom } from '../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { createStep } from '../../../workflows';
-import { assembleOperationName, getTracer } from '../../telemetry';
 import type { OuterLLMRun } from '../../types';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
 
@@ -14,7 +13,6 @@ export function createToolCallStep<
   tools,
   messageList,
   options,
-  telemetry_settings,
   writer,
   controller,
   runId,
@@ -25,35 +23,9 @@ export function createToolCallStep<
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
-    execute: async ({ inputData, suspend, resumeData, runtimeContext }) => {
+    execute: async ({ inputData, suspend, resumeData, requestContext }) => {
       // If the tool was already executed by the provider, skip execution
       if (inputData.providerExecuted) {
-        // Still emit telemetry for provider-executed tools
-        const tracer = getTracer({
-          isEnabled: telemetry_settings?.isEnabled,
-          tracer: telemetry_settings?.tracer,
-        });
-
-        const span = tracer.startSpan('mastra.stream.toolCall').setAttributes({
-          ...assembleOperationName({
-            operationId: 'mastra.stream.toolCall',
-            telemetry: telemetry_settings,
-          }),
-          'stream.toolCall.toolName': inputData.toolName,
-          'stream.toolCall.toolCallId': inputData.toolCallId,
-          'stream.toolCall.args': JSON.stringify(inputData.args),
-          'stream.toolCall.providerExecuted': true,
-        });
-
-        if (inputData.output) {
-          span.setAttributes({
-            'stream.toolCall.result': JSON.stringify(inputData.output),
-          });
-        }
-
-        span.end();
-
-        // Return the provider-executed result
         return {
           ...inputData,
           result: inputData.output,
@@ -85,23 +57,8 @@ export function createToolCallStep<
         return inputData;
       }
 
-      const tracer = getTracer({
-        isEnabled: telemetry_settings?.isEnabled,
-        tracer: telemetry_settings?.tracer,
-      });
-
-      const span = tracer.startSpan('mastra.stream.toolCall').setAttributes({
-        ...assembleOperationName({
-          operationId: 'mastra.stream.toolCall',
-          telemetry: telemetry_settings,
-        }),
-        'stream.toolCall.toolName': inputData.toolName,
-        'stream.toolCall.toolCallId': inputData.toolCallId,
-        'stream.toolCall.args': JSON.stringify(inputData.args),
-      });
-
       try {
-        const requireToolApproval = runtimeContext.get('__mastra_requireToolApproval');
+        const requireToolApproval = requestContext.get('__mastra_requireToolApproval');
         if (requireToolApproval || (tool as any).requireApproval) {
           if (!resumeData) {
             controller.enqueue({
@@ -129,10 +86,6 @@ export function createToolCallStep<
             );
           } else {
             if (!resumeData.approved) {
-              span.end();
-              span.setAttributes({
-                'stream.toolCall.result': 'Tool call was not approved by the user',
-              });
               return {
                 result: 'Tool call was not approved by the user',
                 ...inputData,
@@ -170,20 +123,8 @@ export function createToolCallStep<
         };
 
         const result = await tool.execute(inputData.args, toolOptions);
-
-        span.setAttributes({
-          'stream.toolCall.result': JSON.stringify(result),
-        });
-
-        span.end();
-
         return { result, ...inputData };
       } catch (error) {
-        span.setStatus({
-          code: 2,
-          message: (error as Error)?.message ?? error,
-        });
-        span.recordException(error as Error);
         return {
           error: error as Error,
           ...inputData,

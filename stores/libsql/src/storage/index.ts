@@ -5,8 +5,6 @@ import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
-  EvalRow,
-  PaginationArgs,
   PaginationInfo,
   StorageColumn,
   StoragePagination,
@@ -15,7 +13,6 @@ import type {
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
-  StorageGetTracesArg,
   StorageDomains,
   ThreadSortOptions,
   AISpanRecord,
@@ -23,14 +20,11 @@ import type {
   AITracesPaginatedArg,
 } from '@mastra/core/storage';
 
-import type { Trace } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { LegacyEvalsLibSQL } from './domains/legacy-evals';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
 import { StoreOperationsLibSQL } from './domains/operations';
 import { ScoresLibSQL } from './domains/scores';
-import { TracesLibSQL } from './domains/traces';
 import { WorkflowsLibSQL } from './domains/workflows';
 
 export type LibSQLConfig =
@@ -101,19 +95,15 @@ export class LibSQLStore extends MastraStorage {
     });
 
     const scores = new ScoresLibSQL({ client: this.client, operations });
-    const traces = new TracesLibSQL({ client: this.client, operations });
     const workflows = new WorkflowsLibSQL({ client: this.client, operations });
     const memory = new MemoryLibSQL({ client: this.client, operations });
-    const legacyEvals = new LegacyEvalsLibSQL({ client: this.client });
     const observability = new ObservabilityLibSQL({ operations });
 
     this.stores = {
       operations,
       scores,
-      traces,
       workflows,
       memory,
-      legacyEvals,
       observability,
     };
   }
@@ -277,20 +267,6 @@ export class LibSQLStore extends MastraStorage {
     return this.stores.memory.deleteMessages(messageIds);
   }
 
-  /** @deprecated use getEvals instead */
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
-  }
-
-  async getEvals(
-    options: {
-      agentName?: string;
-      type?: 'test' | 'live';
-    } & PaginationArgs = {},
-  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
-  }
-
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     return this.stores.scores.getScoreById({ id });
   }
@@ -338,25 +314,6 @@ export class LibSQLStore extends MastraStorage {
   }
 
   /**
-   * TRACES
-   */
-
-  /**
-   * @deprecated use getTracesPaginated instead.
-   */
-  async getTraces(args: StorageGetTracesArg): Promise<Trace[]> {
-    return this.stores.traces.getTraces(args);
-  }
-
-  async getTracesPaginated(args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
-    return this.stores.traces.getTracesPaginated(args);
-  }
-
-  async batchTraceInsert(args: { records: Record<string, any>[] }): Promise<void> {
-    return this.stores.traces.batchTraceInsert(args);
-  }
-
-  /**
    * WORKFLOWS
    */
 
@@ -365,15 +322,15 @@ export class LibSQLStore extends MastraStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
+    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
   }
 
   async updateWorkflowState({

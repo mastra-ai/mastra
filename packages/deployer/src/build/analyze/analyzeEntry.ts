@@ -79,6 +79,7 @@ async function captureDependenciesToOptimize(
   output: OutputChunk,
   workspaceMap: Map<string, WorkspacePackageInfo>,
   projectRoot: string,
+  initialDepsToOptimize: Map<string, DependencyMetadata>,
   {
     logger,
   }: {
@@ -145,7 +146,6 @@ async function captureDependenciesToOptimize(
       try {
         // Absolute path to the dependency
         const resolvedPath = resolveFrom(projectRoot, dep);
-
         if (!resolvedPath) {
           logger.warn(`Could not resolve path for workspace dependency ${dep}`);
           continue;
@@ -156,6 +156,7 @@ async function captureDependenciesToOptimize(
           projectRoot,
           logger: noopLogger,
           sourcemapEnabled: false,
+          initialDepsToOptimize: depsToOptimize,
         });
 
         if (!analysis?.dependencies) {
@@ -186,7 +187,7 @@ async function captureDependenciesToOptimize(
     }
   }
 
-  await checkTransitiveDependencies(new Map());
+  await checkTransitiveDependencies(initialDepsToOptimize);
 
   // #tools is a generated dependency, we don't want our analyzer to handle it
   const dynamicImports = output.dynamicImports.filter(d => !DEPS_TO_IGNORE.includes(d));
@@ -228,11 +229,13 @@ export async function analyzeEntry(
     sourcemapEnabled,
     workspaceMap,
     projectRoot,
+    initialDepsToOptimize = new Map(), // used to avoid infinite recursion
   }: {
     logger: IMastraLogger;
     sourcemapEnabled: boolean;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     projectRoot: string;
+    initialDepsToOptimize?: Map<string, DependencyMetadata>;
   },
 ): Promise<{
   dependencies: Map<string, DependencyMetadata>;
@@ -257,9 +260,15 @@ export async function analyzeEntry(
 
   await optimizerBundler.close();
 
-  const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, projectRoot, {
-    logger,
-  });
+  const depsToOptimize = await captureDependenciesToOptimize(
+    output[0] as OutputChunk,
+    workspaceMap,
+    projectRoot,
+    initialDepsToOptimize,
+    {
+      logger,
+    },
+  );
 
   return {
     dependencies: depsToOptimize,

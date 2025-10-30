@@ -1,0 +1,10 @@
+{
+  "name": "@internal/a",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@internal/shared": "workspace:*"
+  }
+}

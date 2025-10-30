@@ -6,7 +6,6 @@ import type {
   CoreUserMessage as AiCoreUserMessage,
   EmbedManyResult as AiEmbedManyResult,
   EmbedResult as AiEmbedResult,
-  TelemetrySettings,
   streamText,
   streamObject,
   generateText,
@@ -20,8 +19,8 @@ import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
 import type { TracingContext } from '../ai-tracing';
+import type { RequestContext } from '../request-context';
 import type { Run } from '../run/types';
-import type { RuntimeContext } from '../runtime-context';
 import type { CoreTool } from '../tools/types';
 import type { MastraLanguageModel } from './model/shared.types';
 
@@ -103,7 +102,6 @@ type MastraCustomLLMOptionsKeys =
   | 'model'
   | 'onStepFinish'
   | 'experimental_output'
-  | 'experimental_telemetry'
   | 'messages'
   | 'onFinish'
   | 'output';
@@ -117,10 +115,9 @@ type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = unde
   tools?: Record<string, CoreTool>;
   onStepFinish?: (step: unknown) => Promise<void> | void;
   experimental_output?: Z;
-  telemetry?: TelemetrySettings;
   threadId?: string;
   resourceId?: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   tracingContext: TracingContext;
 } & Run;
 

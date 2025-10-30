@@ -1,12 +1,10 @@
 import { spawn } from 'child_process';
 import fs from 'fs';
 import { join } from 'path';
-import { isWebContainer } from '@webcontainer/env';
 import { config } from 'dotenv';
 import { logger } from '../../utils/logger';
 interface StartOptions {
   dir?: string;
-  telemetry?: boolean;
   env?: string;
 }
 
@@ -15,7 +13,6 @@ export async function start(options: StartOptions = {}) {
   config({ path: [options.env || '.env.production', '.env'] });
 
   const outputDir = options.dir || '.mastra/output';
-  const telemetry = options.telemetry ?? true;
 
   try {
     // Check if the output directory exist
@@ -25,11 +22,6 @@ export async function start(options: StartOptions = {}) {
     }
 
     const commands = [];
-
-    if (telemetry && !isWebContainer()) {
-      const instrumentation = '@opentelemetry/instrumentation/hook.mjs';
-      commands.push('--import=./instrumentation.mjs', `--import=${instrumentation}`);
-    }
 
     commands.push('index.mjs');
 

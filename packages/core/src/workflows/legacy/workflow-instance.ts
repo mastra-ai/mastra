@@ -1,10 +1,8 @@
-import type { Span } from '@opentelemetry/api';
-import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Snapshot } from 'xstate';
 import type { z } from 'zod';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
 import type { WorkflowRunState as NewWorkflowRunState } from '../../workflows';
 import { Machine } from './machine';
 import type { LegacyStep as Step } from './step';
@@ -32,7 +30,7 @@ export interface WorkflowResultReturn<
 > {
   runId: string;
   start: (
-    props?: { triggerData?: z.infer<T>; runtimeContext?: RuntimeContext } | undefined,
+    props?: { triggerData?: z.infer<T>; requestContext?: RequestContext } | undefined,
   ) => Promise<WorkflowRunResult<T, TSteps, TResult>>;
   watch: (
     onTransition: (
@@ -42,12 +40,12 @@ export interface WorkflowResultReturn<
   resume: (props: {
     stepId: string;
     context?: Record<string, any>;
-    runtimeContext?: RuntimeContext;
+    requestContext?: RequestContext;
   }) => Promise<Omit<WorkflowRunResult<T, TSteps, TResult>, 'runId'> | undefined>;
   resumeWithEvent: (
     eventName: string,
     data: any,
-    runtimeContext?: RuntimeContext,
+    requestContext?: RequestContext,
   ) => Promise<Omit<WorkflowRunResult<T, TSteps, TResult>, 'runId'> | undefined>;
 }
 
@@ -72,7 +70,6 @@ export class WorkflowInstance<
 
   #runId: string;
   #state: any | null = null;
-  #executionSpan: Span | undefined;
 
   #onStepTransition: Set<
     (
@@ -154,10 +151,6 @@ export class WorkflowInstance<
     return this.#runId;
   }
 
-  get executionSpan() {
-    return this.#executionSpan;
-  }
-
   watch(
     onTransition: (
       state: Pick<
@@ -175,9 +168,9 @@ export class WorkflowInstance<
 
   async start({
     triggerData,
-    runtimeContext,
-  }: { triggerData?: z.infer<TTriggerSchema>; runtimeContext?: RuntimeContext } = {}) {
-    const results = await this.execute({ triggerData, runtimeContext: runtimeContext ?? new RuntimeContext() });
+    requestContext,
+  }: { triggerData?: z.infer<TTriggerSchema>; requestContext?: RequestContext } = {}) {
+    const results = await this.execute({ triggerData, requestContext: requestContext ?? new RequestContext() });
 
     if (this.#onFinish) {
       const activePathsObj = Object.fromEntries(results.activePaths) as { [key: string]: { status: string } };
@@ -208,19 +201,15 @@ export class WorkflowInstance<
       snapshot,
       stepId,
       resumeData,
-      runtimeContext,
+      requestContext,
     }: {
       stepId?: string;
       triggerData?: z.infer<TTriggerSchema>;
       snapshot?: Snapshot<any>;
       resumeData?: any; // TODO: once we have a resume schema plug that in here
-      runtimeContext: RuntimeContext;
-    } = { runtimeContext: new RuntimeContext() },
+      requestContext: RequestContext;
+    } = { requestContext: new RequestContext() },
   ): Promise<Omit<WorkflowRunResult<TTriggerSchema, TSteps, TResult>, 'runId'>> {
-    this.#executionSpan = this.#mastra?.getTelemetry()?.tracer.startSpan(`workflow.${this.name}.execute`, {
-      attributes: { componentName: this.name, runId: this.runId },
-    });
-
     let machineInput = {
       // Maintain the original step results and their output
       steps: {},
@@ -249,13 +238,12 @@ export class WorkflowInstance<
     const defaultMachine = new Machine<TSteps, TTriggerSchema, TResult>({
       logger: this.logger,
       mastra: this.#mastra,
-      runtimeContext,
+      requestContext,
       workflowInstance: this,
       name: this.name,
       runId: this.runId,
       steps: this.#steps,
       stepGraph,
-      executionSpan: this.#executionSpan,
       startStepId,
       retryConfig: this.#retryConfig,
     });
@@ -331,7 +319,7 @@ export class WorkflowInstance<
     return Object.keys(this.#stepSubscriberGraph).some(key => key.split('&&').includes(stepId));
   }
 
-  async runMachine(parentStepId: string, input: any, runtimeContext: RuntimeContext = new RuntimeContext()) {
+  async runMachine(parentStepId: string, input: any, requestContext: RequestContext = new RequestContext()) {
     const stepStatus = input.steps[parentStepId]?.status;
 
     // get all keys from this.#stepSubscriberGraph that include the parentStepId after the &&
@@ -383,13 +371,12 @@ export class WorkflowInstance<
         const machine = new Machine<TSteps, TTriggerSchema, TResult>({
           logger: this.logger,
           mastra: this.#mastra,
-          runtimeContext: runtimeContext,
+          requestContext: requestContext,
           workflowInstance: this,
           name: parentStepId === 'trigger' ? this.name : `${this.name}-${parentStepId}`,
           runId: this.runId,
           steps: this.#steps,
           stepGraph: this.#stepSubscriberGraph[key],
-          executionSpan: this.#executionSpan,
           startStepId: parentStepId,
         });
 
@@ -537,7 +524,7 @@ export class WorkflowInstance<
     };
   }
 
-  async resumeWithEvent(eventName: string, data: any, runtimeContext: RuntimeContext = new RuntimeContext()) {
+  async resumeWithEvent(eventName: string, data: any, requestContext: RequestContext = new RequestContext()) {
     const event = this.events?.[eventName];
     if (!event) {
       throw new Error(`Event ${eventName} not found`);
@@ -546,7 +533,7 @@ export class WorkflowInstance<
     const results = await this.resume({
       stepId: `__${eventName}_event`,
       context: { resumedEvent: data },
-      runtimeContext,
+      requestContext,
     });
     return results;
   }
@@ -554,16 +541,16 @@ export class WorkflowInstance<
   async resume({
     stepId,
     context: resumeContext,
-    runtimeContext = new RuntimeContext(),
+    requestContext = new RequestContext(),
   }: {
     stepId: string;
     context?: Record<string, any>;
-    runtimeContext?: RuntimeContext;
+    requestContext?: RequestContext;
   }) {
     // NOTE: setTimeout(0) makes sure that if the workflow is still running
     // we'll wait for any state changes to be applied before resuming
     await new Promise(resolve => setTimeout(resolve, 0));
-    return this._resume({ stepId, context: resumeContext, runtimeContext });
+    return this._resume({ stepId, context: resumeContext, requestContext });
   }
 
   async #loadWorkflowSnapshot(runId: string) {
@@ -581,11 +568,11 @@ export class WorkflowInstance<
   async _resume({
     stepId,
     context: resumeContext,
-    runtimeContext,
+    requestContext,
   }: {
     stepId: string;
     context?: Record<string, any>;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
   }) {
     const snapshot = await this.#loadWorkflowSnapshot(this.runId);
 
@@ -668,7 +655,7 @@ export class WorkflowInstance<
       snapshot: parsedSnapshot,
       stepId: stepPath,
       resumeData: resumeContext,
-      runtimeContext,
+      requestContext,
     });
   }
 
@@ -703,25 +690,6 @@ export class WorkflowInstance<
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
     stepId: TStepId,
   ): StepDef<TStepId, TSteps, any, any>[TStepId] {
-    const executeStep = (
-      handler: (data: any) => Promise<(data: any) => void>,
-      spanName: string,
-      attributes?: Record<string, string>,
-    ) => {
-      return async (data: any) => {
-        return await otlpContext.with(trace.setSpan(otlpContext.active(), this.#executionSpan as Span), async () => {
-          if (this.#mastra?.getTelemetry()) {
-            return this.#mastra.getTelemetry()?.traceMethod(handler, {
-              spanName,
-              attributes,
-            })(data);
-          } else {
-            return handler(data);
-          }
-        });
-      };
-    };
-
     // NOTE: destructuring rest breaks some injected runtime fields, like runId
     // TODO: investigate why that is exactly
     const handler = async ({ context, ...rest }: ActionContext<TSteps[number]['inputSchema']>) => {
@@ -737,27 +705,10 @@ export class WorkflowInstance<
         ...context,
       };
 
-      // Only trace if telemetry is available and action exists
-      const finalAction = this.#mastra?.getTelemetry()
-        ? executeStep(execute, `workflow.${this.name}.action.${stepId}`, {
-            componentName: this.name,
-            runId: rest.runId as string,
-          })
-        : execute;
-
-      return finalAction ? await finalAction({ context: mergedData, ...rest }) : {};
+      return execute ? await execute({ context: mergedData, ...rest }) : {};
     };
 
-    // Only trace handler if telemetry is available
-
     const finalHandler = ({ context, ...rest }: ActionContext<TSteps[number]['inputSchema']>) => {
-      if (this.#executionSpan) {
-        return executeStep(handler, `workflow.${this.name}.step.${stepId}`, {
-          componentName: this.name,
-          runId: rest?.runId as string,
-        })({ context, ...rest });
-      }
-
       return handler({ context, ...rest });
     };
 

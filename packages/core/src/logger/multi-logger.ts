@@ -36,7 +36,7 @@ export class MultiLogger implements IMastraLogger {
     return new Map(transports);
   }
 
-  async getLogs(
+  async listLogs(
     transportId: string,
     params?: {
       fromDate?: Date;
@@ -49,7 +49,7 @@ export class MultiLogger implements IMastraLogger {
     },
   ) {
     for (const logger of this.loggers) {
-      const logs = await logger.getLogs(transportId, params);
+      const logs = await logger.listLogs(transportId, params);
       if (logs.total > 0) {
         return logs;
       }
@@ -58,7 +58,7 @@ export class MultiLogger implements IMastraLogger {
     return { logs: [], total: 0, page: params?.page ?? 1, perPage: params?.perPage ?? 100, hasMore: false };
   }
 
-  async getLogsByRunId(args: {
+  async listLogsByRunId(args: {
     transportId: string;
     runId: string;
     fromDate?: Date;
@@ -69,7 +69,7 @@ export class MultiLogger implements IMastraLogger {
     perPage?: number;
   }) {
     for (const logger of this.loggers) {
-      const logs = await logger.getLogsByRunId(args);
+      const logs = await logger.listLogsByRunId(args);
       if (logs.total > 0) {
         return logs;
       }

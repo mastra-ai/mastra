@@ -8,6 +8,10 @@ import type {
   ThreadOrderBy,
   ThreadSortDirection,
   ThreadSortOptions,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
 } from '../../types';
 
 export abstract class MemoryStorage extends MastraBase {
@@ -55,6 +59,10 @@ export abstract class MemoryStorage extends MastraBase {
     format?: 'v1' | 'v2';
   }): Promise<MastraMessageV1[] | MastraMessageV2[]>;
 
+  abstract listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
+
+  abstract listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]>;
+
   abstract saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   abstract saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   abstract saveMessages(
@@ -84,23 +92,27 @@ export abstract class MemoryStorage extends MastraBase {
     } & ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
 
+  abstract listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput>;
+
   abstract getMessagesPaginated(
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }>;
 
   async getResourceById(_: { resourceId: string }): Promise<StorageResourceType | null> {
     throw new Error(
-      `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-        `To use per-resource working memory, switch to one of these supported storage adapters.`,
+      `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). ` +
+        `This is likely a bug - all Mastra storage adapters should implement resource support. ` +
+        `Please report this issue at https://github.com/mastra-ai/mastra/issues`,
     );
   }
 
   async saveResource(_: { resource: StorageResourceType }): Promise<StorageResourceType> {
     throw new Error(
-      `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-        `To use per-resource working memory, switch to one of these supported storage adapters.`,
+      `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). ` +
+        `This is likely a bug - all Mastra storage adapters should implement resource support. ` +
+        `Please report this issue at https://github.com/mastra-ai/mastra/issues`,
     );
   }
 
@@ -110,9 +122,9 @@ export abstract class MemoryStorage extends MastraBase {
     metadata?: Record<string, unknown>;
   }): Promise<StorageResourceType> {
     throw new Error(
-      `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-        `To use per-resource working memory, switch to one of these supported storage adapters.`,
+      `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). ` +
+        `This is likely a bug - all Mastra storage adapters should implement resource support. ` +
+        `Please report this issue at https://github.com/mastra-ai/mastra/issues`,
     );
   }
 

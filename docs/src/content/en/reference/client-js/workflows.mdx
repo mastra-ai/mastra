@@ -1,5 +1,5 @@
 ---
-title: Mastra Client Workflows API
+title: "Reference: Workflows API | Client SDK | Mastra Docs"
 description: Learn how to interact with and execute automated workflows in Mastra using the client-js SDK.
 ---
 
@@ -12,17 +12,17 @@ The Workflows API provides methods to interact with and execute automated workfl
 Retrieve a list of all available workflows:
 
 ```typescript
-const workflows = await mastraClient.getWorkflows();
+const workflows = await mastraClient.listWorkflows();
 ```
 
 ## Working with a Specific Workflow
 
 Get an instance of a specific workflow as defined by the const name:
 
-```typescript filename="src/mastra/workflows/test-workflow.ts"
+```typescript title="src/mastra/workflows/test-workflow.ts"
 export const testWorkflow = createWorkflow({
-  id: 'city-workflow'
-})
+  id: "city-workflow",
+});
 ```
 
 ```typescript
@@ -97,7 +97,7 @@ try {
 
   const stream = await run.stream({
     inputData: {
-      city: 'New York',
+      city: "New York",
     },
   });
 
@@ -105,7 +105,7 @@ try {
     console.log(JSON.stringify(chunk, null, 2));
   }
 } catch (e) {
-  console.error('Workflow error:', e);
+  console.error("Workflow error:", e);
 }
 ```
 
@@ -114,7 +114,7 @@ try {
 Get the result of a workflow run:
 
 ```typescript
-try  {
+try {
   const workflow = mastraClient.getWorkflow("testWorkflow");
 
   const run = await workflow.createRunAsync();
