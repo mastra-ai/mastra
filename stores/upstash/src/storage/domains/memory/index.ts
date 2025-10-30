@@ -650,13 +650,16 @@ export class StoreMemoryUpstash extends MemoryStorage {
         if (limit === false) {
           // limit: false means get ALL messages
           perPage = Number.MAX_SAFE_INTEGER;
+        } else if (limit === 0) {
+          // limit: 0 means return zero results
+          perPage = 0;
         } else if (typeof limit === 'number' && limit > 0) {
           perPage = limit;
         }
       }
 
       // Convert offset to page for pagination metadata
-      const page = Math.floor(offset / perPage);
+      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
       // Get included messages with context if specified
       let includedMessages: MastraMessageV2[] = [];
@@ -709,16 +712,43 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const sortField = orderBy?.field || 'createdAt';
       const sortDirection = orderBy?.direction || 'DESC';
 
+      // Type-safe field accessor helper
+      const getFieldValue = (msg: MastraMessageV2): number => {
+        if (sortField === 'createdAt') {
+          return new Date(msg.createdAt).getTime();
+        }
+        // Access other fields with type-safe casting
+        const value = (msg as Record<string, unknown>)[sortField];
+        if (typeof value === 'number') {
+          return value;
+        }
+        if (value instanceof Date) {
+          return value.getTime();
+        }
+        // Handle missing/undefined values - treat as 0 for numeric comparison
+        return 0;
+      };
+
       // Sort messages by their position in the sorted set (or by orderBy if specified)
       if (orderBy) {
         messagesData.sort((a, b) => {
-          const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-          const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+          const aValue = getFieldValue(a);
+          const bValue = getFieldValue(b);
           return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
         });
       } else {
         // Default: sort by position in sorted set
-        messagesData.sort((a, b) => allMessageIds.indexOf(a.id) - allMessageIds.indexOf(b.id));
+        // Build Map for O(1) lookups instead of O(n) indexOf
+        const messageIdToPosition = new Map<string, number>();
+        allMessageIds.forEach((id, index) => {
+          messageIdToPosition.set(id as string, index);
+        });
+
+        messagesData.sort((a, b) => {
+          const aPos = messageIdToPosition.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+          const bPos = messageIdToPosition.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+          return aPos - bPos;
+        });
       }
 
       const total = messagesData.length;
@@ -751,12 +781,22 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Final sort to maintain order
       if (orderBy) {
         allMessages.sort((a, b) => {
-          const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-          const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+          const aValue = getFieldValue(a);
+          const bValue = getFieldValue(b);
           return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
         });
       } else {
-        allMessages.sort((a, b) => allMessageIds.indexOf(a.id) - allMessageIds.indexOf(b.id));
+        // Build Map for O(1) lookups instead of O(n) indexOf
+        const messageIdToPosition = new Map<string, number>();
+        allMessageIds.forEach((id, index) => {
+          messageIdToPosition.set(id as string, index);
+        });
+
+        allMessages.sort((a, b) => {
+          const aPos = messageIdToPosition.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+          const bPos = messageIdToPosition.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+          return aPos - bPos;
+        });
       }
 
       // Use MessageList for proper deduplication and format conversion

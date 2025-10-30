@@ -227,13 +227,16 @@ export class MemoryLibSQL extends MemoryStorage {
         if (limit === false) {
           // limit: false means get ALL messages
           perPage = Number.MAX_SAFE_INTEGER;
+        } else if (limit === 0) {
+          // limit: 0 means return zero results
+          perPage = 0;
         } else if (typeof limit === 'number' && limit > 0) {
           perPage = limit;
         }
       }
 
       // Convert offset to page for pagination metadata
-      const page = Math.floor(offset / perPage);
+      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
       // Determine sort field and direction
       const sortField = orderBy?.field || 'createdAt';

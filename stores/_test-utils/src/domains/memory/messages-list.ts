@@ -531,15 +531,16 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       });
 
       it('should handle invalid limit values gracefully', async () => {
-        // Test limit: 0
+        // Test limit: 0 - should return zero results
         const result0 = await storage.listMessages({
           threadId: thread.id,
           limit: 0,
         });
-        // Should fall back to default behavior
-        expect(result0.messages).toHaveLength(5);
+        expect(result0.messages).toHaveLength(0);
+        expect(result0.total).toBe(5); // Total should still reflect actual count
+        expect(result0.perPage).toBe(0);
 
-        // Test negative limit
+        // Test negative limit - should fall back to default behavior
         const resultNeg = await storage.listMessages({
           threadId: thread.id,
           limit: -5,
