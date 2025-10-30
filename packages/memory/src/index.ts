@@ -680,7 +680,6 @@ ${workingMemory}`;
 
     const result = this.storage.saveMessages({
       messages: new MessageList().add(updatedMessages, 'memory').get.all.db(),
-      format: 'v2',
     });
 
     if (this.vector && config.semanticRecall) {

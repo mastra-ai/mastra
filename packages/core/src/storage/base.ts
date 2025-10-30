@@ -261,28 +261,11 @@ export abstract class MastraStorage extends MastraBase {
     );
   }
 
-  abstract getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  abstract getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraDBMessage[]>;
-  abstract getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraDBMessage[]>;
-  abstract getMessagesById({ messageIds }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  abstract getMessagesById({ messageIds }: { messageIds: string[]; format?: 'v2' }): Promise<MastraDBMessage[]>;
-  abstract getMessagesById({
-    messageIds,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraDBMessage[]>;
+  abstract getMessages(args: StorageGetMessagesArg): Promise<MastraDBMessage[]>;
 
-  abstract saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  abstract saveMessages(args: { messages: MastraDBMessage[]; format: 'v2' }): Promise<MastraDBMessage[]>;
-  abstract saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraDBMessage[]; format: 'v2' },
-  ): Promise<MastraDBMessage[] | MastraMessageV1[]>;
+  abstract getMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraDBMessage[]>;
+
+  abstract saveMessages(args: { messages: MastraDBMessage[] }): Promise<MastraDBMessage[]>;
 
   abstract updateMessages(args: {
     messages: Partial<Omit<MastraDBMessage, 'createdAt'>> &
@@ -538,9 +521,7 @@ export abstract class MastraStorage extends MastraBase {
     } & ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
 
-  abstract getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }>;
+  abstract getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }>;
 
   /**
    * OBSERVABILITY

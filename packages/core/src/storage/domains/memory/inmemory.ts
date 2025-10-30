@@ -241,30 +241,17 @@ export class InMemoryMemory extends MemoryStorage {
     } satisfies MastraDBMessage;
   }
 
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraDBMessage[]>;
-  async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
+  async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraDBMessage[]> {
     this.logger.debug(`MockStore: getMessagesById called`);
 
     const rawMessages = messageIds.map(id => this.collection.messages.get(id)).filter(message => !!message);
 
     const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
-    if (format === 'v1') return list.get.all.v1();
     return list.get.all.db();
   }
 
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraDBMessage[]; format: 'v2' }): Promise<MastraDBMessage[]>;
-  async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraDBMessage[]; format: 'v2' },
-  ): Promise<MastraDBMessage[] | MastraMessageV1[]> {
-    const { messages, format = 'v1' } = args;
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<MastraDBMessage[]> {
+    const { messages } = args;
     this.logger.debug(`MockStore: saveMessages called with ${messages.length} messages`);
     // Simulate error handling for testing - check before saving
     if (messages.some(msg => msg.id === 'error-message' || msg.resourceId === null)) {
@@ -296,8 +283,7 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     const list = new MessageList().add(messages, 'memory');
-    if (format === `v2`) return list.get.all.db();
-    return list.get.all.v1();
+    return list.get.all.db();
   }
 
   async updateMessages(args: { messages: (Partial<MastraDBMessage> & { id: string })[] }): Promise<MastraDBMessage[]> {
