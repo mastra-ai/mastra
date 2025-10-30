@@ -16,8 +16,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdPaginatedInput,
-  StorageListThreadsByResourceIdPaginatedOutput,
+  StoragelistThreadsByResourceIdInput,
+  StoragelistThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import type { StoreOperationsLance } from '../operations';
 import { getTableSchema, processResultWithTypeConversion } from '../utils';
@@ -356,9 +356,9 @@ export class StoreMemoryLance extends MemoryStorage {
    * @todo When migrating from getThreadsByResourceIdPaginated to this method,
    * implement orderBy and sortDirection support for full sorting capabilities
    */
-  public async listThreadsByResourceIdPaginated(
-    args: StorageListThreadsByResourceIdPaginatedInput,
-  ): Promise<StorageListThreadsByResourceIdPaginatedOutput> {
+  public async listThreadsByResourceId(
+    args: StoragelistThreadsByResourceIdInput,
+  ): Promise<StoragelistThreadsByResourceIdOutput> {
     const { resourceId, limit, offset } = args;
     const page = Math.floor(offset / limit);
     const perPage = limit;
