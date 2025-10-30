@@ -438,7 +438,7 @@ export class InMemoryMemory extends MemoryStorage {
       parsedContent = {
         format: 2,
         content: parsedContent,
-        parts: [],
+        parts: [{ type: 'text', text: parsedContent }],
       };
     }
 
