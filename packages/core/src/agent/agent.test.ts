@@ -5656,8 +5656,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     30000,
   );
 
-  describe('defaultStreamOptions onFinish callback bug', () => {
-    it(`${version} - should call onFinish from defaultStreamOptions when no options are passed to stream`, async () => {
+  describe('defaultOptions onFinish callback bug', () => {
+    it(`${version} - should call onFinish from defaultOptions when no options are passed to stream`, async () => {
       let onFinishCalled = false;
       let finishData: any = null;
 
@@ -5685,7 +5685,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             }),
       });
 
-      // Call stream without passing any options - should use defaultStreamOptions
+      // Call stream without passing any options - should use defaultOptions
       const result = version === 'v1' ? await agent.streamLegacy('How are you?') : await agent.stream('How are you?');
 
       // Consume the stream to trigger onFinish
@@ -5703,7 +5703,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(finishData).toBeDefined();
     });
 
-    it(`${version} - should call onFinish from defaultStreamOptions when empty options are passed to stream`, async () => {
+    it(`${version} - should call onFinish from defaultOptions when empty options are passed to stream`, async () => {
       let onFinishCalled = false;
       let finishData: any = null;
 
@@ -5731,7 +5731,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             }),
       });
 
-      // Call stream with empty options - should still use defaultStreamOptions
+      // Call stream with empty options - should still use defaultOptions
       const result =
         version === 'v1' ? await agent.streamLegacy('How are you?', {}) : await agent.stream('How are you?', {});
 
@@ -5750,7 +5750,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(finishData).toBeDefined();
     });
 
-    it(`${version} - should prioritize passed onFinish over defaultStreamOptions onFinish`, async () => {
+    it(`${version} - should prioritize passed onFinish over defaultOptions onFinish`, async () => {
       let defaultOnFinishCalled = false;
       let passedOnFinishCalled = false;
       let finishData: any = null;
@@ -5777,7 +5777,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             }),
       });
 
-      // Call stream with explicit onFinish - should override defaultStreamOptions
+      // Call stream with explicit onFinish - should override defaultOptions
       const result =
         version === 'v1'
           ? await agent.streamLegacy('How are you?', {
