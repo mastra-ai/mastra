@@ -68,14 +68,14 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
           in: 'query',
           required: false,
           schema: { type: 'number', default: 0 },
-          description: 'Page number',
+          description: 'Number of records to skip',
         },
         {
           name: 'limit',
           in: 'query',
           required: false,
           schema: { type: 'number', default: 100 },
-          description: 'Number of threads per page',
+          description: 'Maximum number of threads to return',
         },
         {
           name: 'orderBy',
@@ -568,14 +568,14 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
           in: 'query',
           required: false,
           schema: { type: 'number', default: 0 },
-          description: 'Page number',
+          description: 'Number of records to skip',
         },
         {
           name: 'limit',
           in: 'query',
           required: false,
           schema: { type: 'number', default: 100 },
-          description: 'Number of threads per page',
+          description: 'Maximum number of threads to return',
         },
         {
           name: 'orderBy',
