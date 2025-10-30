@@ -228,14 +228,14 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     try {
       // First, delete all messages associated with this thread
-      const messages = await this.getMessages({ threadId });
+      const { messages } = await this.getMessages({ threadId });
       if (messages.length > 0) {
         // Delete messages in batches
         const batchSize = 25; // DynamoDB batch limits
         for (let i = 0; i < messages.length; i += batchSize) {
           const batch = messages.slice(i, i + batchSize);
           await Promise.all(
-            batch.map(message =>
+            batch.map((message: MastraDBMessage) =>
               this.service.entities.message
                 .delete({
                   entity: 'message',
@@ -263,14 +263,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraDBMessage[]>;
   public async getMessages({
     threadId,
     resourceId,
     selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
+  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     this.logger.debug('Getting messages', { threadId, selectBy });
 
     try {
@@ -336,9 +333,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         (message, index, self) => index === self.findIndex(m => m.id === message.id),
       );
 
-      const list = new MessageList({ threadId, resourceId }).add(uniqueMessages, 'memory');
-      if (format === `v2`) return list.get.all.db();
-      return list.get.all.v1();
+      const list = new MessageList({ threadId, resourceId }).add(uniqueMessages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
+      return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
         {
@@ -354,27 +350,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
   public async getMessagesById({
     messageIds,
-    format,
   }: {
     messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraDBMessage[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
+  }): Promise<{ messages: MastraDBMessage[] }> {
     this.logger.debug('Getting messages by ID', { messageIds });
-    if (messageIds.length === 0) return [];
+    if (messageIds.length === 0) return { messages: [] };
 
     try {
       const results = await Promise.all(
@@ -392,9 +372,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         (message, index, self) => index === self.findIndex(m => m.id === message.id),
       );
 
-      const list = new MessageList().add(uniqueMessages, 'memory');
-      if (format === `v1`) return list.get.all.v1();
-      return list.get.all.db();
+      const list = new MessageList().add(uniqueMessages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
+      return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
         {
@@ -408,16 +387,14 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraDBMessage[]; format: 'v2' }): Promise<MastraDBMessage[]>;
   async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraDBMessage[]; format: 'v2' },
-  ): Promise<MastraDBMessage[] | MastraMessageV1[]> {
-    const { messages, format = 'v1' } = args;
+    args: { messages: MastraDBMessage[] },
+  ): Promise<{ messages: MastraDBMessage[] }> {
+    const { messages } = args;
     this.logger.debug('Saving messages', { count: messages.length });
 
     if (!messages.length) {
-      return [];
+      return { messages: [] };
     }
 
     const threadId = messages[0]?.threadId;
@@ -483,9 +460,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         })
         .go();
 
-      const list = new MessageList().add(messages, 'memory');
-      if (format === `v1`) return list.get.all.v1();
-      return list.get.all.db();
+      const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
+      return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
         {
@@ -558,9 +534,9 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   }
 
   async getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraDBMessage[] }> {
-    const { threadId, resourceId, selectBy, format = 'v1' } = args;
+    args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
+    const { threadId, resourceId, selectBy } = args;
     const { page = 0, perPage = 40, dateRange } = selectBy?.pagination || {};
     const fromDate = dateRange?.start;
     const toDate = dateRange?.end;
@@ -643,11 +619,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const paginatedMessages = messages.slice(start, end);
       const hasMore = end < total;
 
-      const list = new MessageList({ threadId, resourceId }).add(paginatedMessages as MastraDBMessage[], 'memory');
-      const finalMessages = format === 'v2' ? list.get.all.db() : list.get.all.v1();
+      const list = new MessageList({ threadId, resourceId }).add(paginatedMessages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
 
       return {
-        messages: finalMessages,
+        messages: list.get.all.db(),
         total,
         page,
         perPage,
