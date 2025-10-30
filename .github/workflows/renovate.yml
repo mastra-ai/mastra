@@ -45,27 +45,6 @@ jobs:
           # Use default GITHUB_TOKEN for initial checkout
           # This is needed to access the .github/actions/app-auth action
           fetch-depth: 1
-          persist-credentials: false
-
-      - name: Dane App Auth
-        id: app-auth
-        uses: ./.github/actions/app-auth
-        with:
-          app-id: ${{ vars.DANE_APP_ID }}
-          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
-          minutes: 120
-          #permission-pull-requests: write
-          #permission-issues: write
-          #permission-security-events: write
-          #permission-statuses: write
-          #permission-contents: write
-          #permission-workflows: write
-
-      - name: Re-checkout with app token
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          token: ${{ steps.app-auth.outputs.token }}
           persist-credentials: true
 
       # This third party action allows you to download the cache artifact from different workflow runs
@@ -108,7 +87,7 @@ jobs:
         with:
           configurationFile: renovate.json
           docker-user: '${{ steps.id.outputs.user }}:${{ steps.id.outputs.group }}'
-          token: ${{ steps.app-auth.outputs.token  }}
+          token: ${{ secrets.RENOVATE_PAT  }}
         env:
           LOG_LEVEL: ${{ github.event.inputs.logLevel }}
           RENOVATE_REPOSITORIES: ${{ github.repository }}

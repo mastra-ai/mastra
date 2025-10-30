@@ -1,14 +1,12 @@
 import type { Connection, FieldLike, SchemaLike } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_EVALS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 
 export function getPrimaryKeys(tableName: TABLE_NAMES): string[] {
   let primaryId: string[] = ['id'];
   if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
     primaryId = ['workflow_name', 'run_id'];
-  } else if (tableName === TABLE_EVALS) {
-    primaryId = ['agent_name', 'metric_name', 'run_id'];
   }
 
   return primaryId;

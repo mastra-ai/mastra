@@ -4,10 +4,10 @@ import { useQuery } from '@tanstack/react-query';
 
 export const useWorkflow = (workflowId?: string) => {
   const client = useMastraClient();
-  const { runtimeContext } = usePlaygroundStore();
+  const { requestContext } = usePlaygroundStore();
   return useQuery({
     queryKey: ['workflow', workflowId],
-    queryFn: () => (workflowId ? client.getWorkflow(workflowId).details(runtimeContext) : null),
+    queryFn: () => (workflowId ? client.getWorkflow(workflowId).details(requestContext) : null),
     enabled: Boolean(workflowId),
     retry: false,
     refetchOnWindowFocus: false,

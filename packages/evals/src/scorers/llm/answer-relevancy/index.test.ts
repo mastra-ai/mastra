@@ -1,8 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
-import type { TestCase } from '../../../metrics/llm/utils';
-import { isCloserTo } from '../../../metrics/llm/utils';
-import { createAgentTestRun, createUIMessage } from '../../utils';
+import type { TestCase } from '../../utils';
+import { createAgentTestRun, createUIMessage, isCloserTo } from '../../utils';
 import { createAnswerRelevancyScorer } from '.';
 
 const testCases: TestCase[] = [

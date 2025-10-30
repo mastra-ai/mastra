@@ -18,7 +18,7 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     metadata: safelyParseJSON(row.metadata),
     output: safelyParseJSON(row.output),
     additionalContext: safelyParseJSON(row.additionalContext),
-    runtimeContext: safelyParseJSON(row.runtimeContext),
+    requestContext: safelyParseJSON(row.requestContext),
     entity: safelyParseJSON(row.entity),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -98,7 +98,7 @@ export class ScoresMSSQL extends ScoresStorage {
         input,
         output,
         additionalContext,
-        runtimeContext,
+        requestContext,
         entity,
         ...rest
       } = validatedScore;
@@ -114,7 +114,7 @@ export class ScoresMSSQL extends ScoresStorage {
           analyzeStepResult: analyzeStepResult || null,
           metadata: metadata || null,
           additionalContext: additionalContext || null,
-          runtimeContext: runtimeContext || null,
+          requestContext: requestContext || null,
           entity: entity || null,
           scorer: scorer || null,
           createdAt: new Date().toISOString(),

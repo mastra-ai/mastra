@@ -18,6 +18,7 @@ export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
   defaultModel: string;
   updateModel: (newModel: UpdateModelParams) => Promise<{ message: string }>;
+  resetModel?: () => Promise<{ message: string }>;
   closeEditor?: () => void;
   modelProviders: string[];
   autoSave?: boolean;
@@ -28,8 +29,8 @@ export const AgentMetadataModelSwitcher = ({
   defaultProvider,
   defaultModel,
   updateModel,
+  resetModel,
 }: AgentMetadataModelSwitcherProps) => {
-  // Store the original values on first mount - these never change
   const [originalProvider] = useState(defaultProvider);
   const [originalModel] = useState(defaultModel);
 
@@ -45,6 +46,12 @@ export const AgentMetadataModelSwitcher = ({
   const { data: dataProviders, isLoading: providersLoading } = useAgentsModelProviders();
   const [highlightedProviderIndex, setHighlightedProviderIndex] = useState(-1);
   const [highlightedModelIndex, setHighlightedModelIndex] = useState(-1);
+
+  // Update local state when default props change (e.g., after reset)
+  useEffect(() => {
+    setSelectedModel(defaultModel);
+    setSelectedProvider(defaultProvider || '');
+  }, [defaultModel, defaultProvider]);
 
   // Ref for the model input to focus it
   const modelInputRef = useRef<HTMLInputElement>(null);
@@ -244,10 +251,13 @@ export const AgentMetadataModelSwitcher = ({
     );
   }
 
-  // Handle reset button click - resets to the ORIGINAL values
+  // Handle reset button click - resets to the ORIGINAL model
   const handleReset = async () => {
-    setSelectedProvider(cleanProviderId(originalProvider));
-    setSelectedModel(originalModel);
+    if (!resetModel) {
+      console.warn('Reset model function not provided');
+      return;
+    }
+
     setProviderSearch('');
     setModelSearch('');
     setIsSearchingProvider(false);
@@ -255,13 +265,12 @@ export const AgentMetadataModelSwitcher = ({
     setShowProviderSuggestions(false);
     setShowModelSuggestions(false);
 
-    // Update the model back to original values
+    // Call the reset endpoint to restore the original model
     try {
       setLoading(true);
-      await updateModel({
-        provider: originalProvider as UpdateModelParams['provider'],
-        modelId: originalModel,
-      });
+      await resetModel();
+      // After reset, the agent will be re-fetched with the original model
+      // which will update the defaultProvider and defaultModel props
     } catch (error) {
       console.error('Failed to reset model:', error);
     } finally {

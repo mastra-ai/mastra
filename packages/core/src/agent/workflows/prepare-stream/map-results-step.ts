@@ -1,10 +1,9 @@
 import type { AISpan, AISpanType, TracingContext } from '../../../ai-tracing';
-import type { SystemMessage } from '../../../llm';
 import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig } from '../../../memory/types';
 import { StructuredOutputProcessor } from '../../../processors';
-import type { RuntimeContext } from '../../../runtime-context';
+import type { RequestContext } from '../../../request-context';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
@@ -19,12 +18,11 @@ interface MapResultsStepOptions<
   options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
   resourceId?: string;
   runId: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   memory?: MastraMemory;
   memoryConfig?: MemoryConfig;
   saveQueueManager: SaveQueueManager;
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  instructions: SystemMessage;
   agentId: string;
 }
 
@@ -36,12 +34,11 @@ export function createMapResultsStep<
   options,
   resourceId,
   runId,
-  runtimeContext,
+  requestContext,
   memory,
   memoryConfig,
   saveQueueManager,
   agentAISpan,
-  instructions,
   agentId,
 }: MapResultsStepOptions<OUTPUT, FORMAT>) {
   return async ({
@@ -69,7 +66,7 @@ export function createMapResultsStep<
       thread: memoryData.thread,
       threadId: memoryData.thread?.id,
       resourceId,
-      runtimeContext,
+      requestContext,
       messageList: memoryData.messageList,
       onStepFinish: async (props: any) => {
         if (options.savePerStep) {
@@ -105,7 +102,7 @@ export function createMapResultsStep<
 
     // Check for tripwire and return early if triggered
     if (result.tripwire) {
-      const agentModel = await capabilities.getModel({ runtimeContext: result.runtimeContext! });
+      const agentModel = await capabilities.getModel({ requestContext: result.requestContext! });
 
       const modelOutput = await getModelOutputForTripwire({
         tripwireReason: result.tripwireReason!,
@@ -124,7 +121,7 @@ export function createMapResultsStep<
       (capabilities.outputProcessors
         ? typeof capabilities.outputProcessors === 'function'
           ? await capabilities.outputProcessors({
-              runtimeContext: result.runtimeContext!,
+              requestContext: result.requestContext!,
             })
           : capabilities.outputProcessors
         : []);
@@ -142,7 +139,7 @@ export function createMapResultsStep<
 
     const loopOptions: ModelLoopStreamArgs<any, OUTPUT> = {
       agentId,
-      runtimeContext: result.runtimeContext!,
+      requestContext: result.requestContext!,
       tracingContext: { currentSpan: agentAISpan },
       runId,
       toolChoice: result.toolChoice,
@@ -172,13 +169,12 @@ export function createMapResultsStep<
             await capabilities.executeOnFinish({
               result: payload,
               outputText,
-              instructions,
               thread: result.thread,
               threadId: result.threadId,
               readOnlyMemory: options.memory?.readOnly,
               resourceId,
               memoryConfig,
-              runtimeContext,
+              requestContext,
               agentAISpan: agentAISpan,
               runId,
               messageList,

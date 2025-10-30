@@ -13,7 +13,7 @@ import type { MessageList } from '../../agent';
 import type { TracingContext } from '../../ai-tracing';
 import type { LoopOptions } from '../../loop/types';
 import type { OutputProcessor } from '../../processors';
-import type { RuntimeContext } from '../../runtime-context';
+import type { RequestContext } from '../../request-context';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { inferOutput } from './shared.types';
 
@@ -37,7 +37,7 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
 export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT extends OutputSchema = undefined> = {
   messages?: UIMessage[] | ModelMessage[];
   outputProcessors?: OutputProcessor[];
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   tracingContext: TracingContext;
   resourceId?: string;
   threadId?: string;

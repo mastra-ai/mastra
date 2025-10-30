@@ -17,7 +17,7 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     metadata: safelyParseJSON(row.metadata),
     output: safelyParseJSON(row.output),
     additionalContext: safelyParseJSON(row.additionalContext),
-    runtimeContext: safelyParseJSON(row.runtimeContext),
+    requestContext: safelyParseJSON(row.requestContext),
     entity: safelyParseJSON(row.entity),
     createdAt: row.createdAtZ || row.createdAt,
     updatedAt: row.updatedAtZ || row.updatedAt,
@@ -175,7 +175,7 @@ export class ScoresPG extends ScoresStorage {
         input,
         output,
         additionalContext,
-        runtimeContext,
+        requestContext,
         entity,
         ...rest
       } = parsedScore;
@@ -192,7 +192,7 @@ export class ScoresPG extends ScoresStorage {
           analyzeStepResult: analyzeStepResult ? JSON.stringify(analyzeStepResult) : null,
           metadata: metadata ? JSON.stringify(metadata) : null,
           additionalContext: additionalContext ? JSON.stringify(additionalContext) : null,
-          runtimeContext: runtimeContext ? JSON.stringify(runtimeContext) : null,
+          requestContext: requestContext ? JSON.stringify(requestContext) : null,
           entity: entity ? JSON.stringify(entity) : null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),

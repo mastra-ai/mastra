@@ -5,7 +5,6 @@ import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastr
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
-  EvalRow,
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
@@ -15,11 +14,9 @@ import type {
   StoragePagination,
   WorkflowRuns,
   StorageDomains,
-  PaginationArgs,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
-import { LegacyEvalsStorageD1 } from './domains/legacy-evals';
 import { MemoryStorageD1 } from './domains/memory';
 import { StoreOperationsD1 } from './domains/operations';
 import { ScoresStorageD1 } from './domains/scores';
@@ -141,10 +138,6 @@ export class D1Store extends MastraStorage {
       operations,
     });
 
-    const legacyEvals = new LegacyEvalsStorageD1({
-      operations,
-    });
-
     const workflows = new WorkflowsStorageD1({
       operations,
     });
@@ -156,7 +149,6 @@ export class D1Store extends MastraStorage {
     this.stores = {
       operations,
       scores,
-      legacyEvals,
       workflows,
       memory,
     };
@@ -281,18 +273,6 @@ export class D1Store extends MastraStorage {
     return this.stores.memory.getMessages({ threadId, selectBy, format });
   }
 
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
-  async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    return this.stores.memory.getMessagesById({ messageIds, format });
-  }
-
   public async getMessagesPaginated({
     threadId,
     selectBy,
@@ -308,15 +288,15 @@ export class D1Store extends MastraStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
+    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
   }
 
   async updateWorkflowState({
@@ -355,7 +335,7 @@ export class D1Store extends MastraStorage {
     return this.stores.workflows.loadWorkflowSnapshot(params);
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
@@ -370,7 +350,7 @@ export class D1Store extends MastraStorage {
     offset?: number;
     resourceId?: string;
   } = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.getWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
+    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
   }
 
   async getWorkflowRunById({
@@ -390,22 +370,6 @@ export class D1Store extends MastraStorage {
    */
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     return this.stores.operations.batchInsert({ tableName, records });
-  }
-
-  /**
-   * @deprecated use getEvals instead
-   */
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
-  }
-
-  async getEvals(
-    options: {
-      agentName?: string;
-      type?: 'test' | 'live';
-    } & PaginationArgs,
-  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
   }
 
   async updateMessages(_args: {

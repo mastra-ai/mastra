@@ -112,7 +112,7 @@ describe('Zod v3 and v4 Compatibility', () => {
         context: { x: 5, y: 3 },
         runId: 'test',
         threadId: 'test',
-        runtimeContext: {} as any,
+        requestContext: {} as any,
         suspend: async () => {},
       });
 
@@ -140,7 +140,7 @@ describe('Zod v3 and v4 Compatibility', () => {
         context: { text: 'hello' },
         runId: 'test',
         threadId: 'test',
-        runtimeContext: {} as any,
+        requestContext: {} as any,
         suspend: async () => {},
       });
 

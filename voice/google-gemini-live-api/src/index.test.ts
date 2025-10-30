@@ -393,7 +393,7 @@ describe('GeminiLiveVoice', () => {
       };
 
       voice.addTools(tools);
-      const configuredTools = voice.getTools();
+      const configuredTools = voice.listTools();
       expect(configuredTools).toBeDefined();
       expect(Object.keys(configuredTools || {}).length).toBe(1);
     });
@@ -432,9 +432,9 @@ describe('GeminiLiveVoice', () => {
 
       await (voice as any).handleToolCall(toolCallData);
 
-      // Now tools receive { context, runtimeContext } with args and execution options
+      // Now tools receive { context, requestContext } with args and execution options
       expect(mockExecute).toHaveBeenCalledWith(
-        { context: { test: 'value' }, runtimeContext: undefined },
+        { context: { test: 'value' }, requestContext: undefined },
         expect.any(Object),
       );
       expect(mockWs.send).toHaveBeenCalled();
@@ -805,7 +805,7 @@ describe('GeminiLiveVoice', () => {
       expect(mockExecute).toHaveBeenCalled();
       // Verify tool was called with correct parameter structure
       const [toolArgs, execOptions] = mockExecute.mock.calls[0];
-      expect(toolArgs).toEqual({ context: { q: 1 }, runtimeContext: undefined });
+      expect(toolArgs).toEqual({ context: { q: 1 }, requestContext: undefined });
       expect(execOptions).toMatchObject({ toolCallId: 'id-1' });
       expect(mockWs.send).toHaveBeenCalled();
       const payloads = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));

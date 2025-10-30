@@ -7,7 +7,6 @@ import type { StorageThreadType, MastraMessageV2, MastraMessageV1 } from '@mastr
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
-  EvalRow,
   StorageGetMessagesArg,
   WorkflowRun,
   WorkflowRuns,
@@ -16,14 +15,13 @@ import type {
   StorageColumn,
   StoragePagination,
   StorageDomains,
-  PaginationArgs,
   StorageResourceType,
   ThreadSortOptions,
+  StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
-import { LegacyEvalsDynamoDB } from './domains/legacy-evals';
 import { MemoryStorageDynamoDB } from './domains/memory';
 import { StoreOperationsDynamoDB } from './domains/operations';
 import { ScoresStorageDynamoDB } from './domains/score';
@@ -90,7 +88,6 @@ export class DynamoDBStore extends MastraStorage {
 
       this.stores = {
         operations,
-        legacyEvals: new LegacyEvalsDynamoDB({ service: this.service, tableName: this.tableName }),
         workflows,
         memory,
         scores,
@@ -286,18 +283,6 @@ export class DynamoDBStore extends MastraStorage {
     return this.stores.memory.getMessages({ threadId, resourceId, selectBy, format });
   }
 
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
-  async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    return this.stores.memory.getMessagesById({ messageIds, format });
-  }
-
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   async saveMessages(
@@ -338,15 +323,15 @@ export class DynamoDBStore extends MastraStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
+    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
   }
 
   async updateWorkflowState({
@@ -391,15 +376,8 @@ export class DynamoDBStore extends MastraStorage {
     return this.stores.workflows.loadWorkflowSnapshot({ workflowName, runId });
   }
 
-  async getWorkflowRuns(args?: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns> {
-    return this.stores.workflows.getWorkflowRuns(args);
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
+    return this.stores.workflows.listWorkflowRuns(args);
   }
 
   async getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
@@ -424,20 +402,6 @@ export class DynamoDBStore extends MastraStorage {
     metadata?: Record<string, any>;
   }): Promise<StorageResourceType> {
     return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
-  }
-
-  // Eval operations
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
-  }
-
-  async getEvals(
-    options: {
-      agentName?: string;
-      type?: 'test' | 'live';
-    } & PaginationArgs,
-  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
   }
 
   /**

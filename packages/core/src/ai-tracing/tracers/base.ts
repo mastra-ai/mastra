@@ -5,7 +5,7 @@
 import { MastraBase } from '../../base';
 import type { IMastraLogger } from '../../logger';
 import { RegisteredLogger } from '../../logger/constants';
-import type { RuntimeContext } from '../../runtime-context';
+import type { RequestContext } from '../../request-context';
 import { NoOpAISpan } from '../spans/no-op';
 import type {
   TracingConfig,
@@ -49,7 +49,7 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
       exporters: config.exporters ?? [],
       processors: config.processors ?? [],
       includeInternalSpans: config.includeInternalSpans ?? false,
-      runtimeContextKeys: config.runtimeContextKeys ?? [],
+      requestContextKeys: config.requestContextKeys ?? [],
     };
   }
 
@@ -93,7 +93,7 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
    * Start a new span of a specific AISpanType
    */
   startSpan<TType extends AISpanType>(options: StartSpanOptions<TType>): AISpan<TType> {
-    const { customSamplerOptions, runtimeContext, metadata, tracingOptions, ...rest } = options;
+    const { customSamplerOptions, requestContext, metadata, tracingOptions, ...rest } = options;
 
     if (!this.shouldSample(customSamplerOptions)) {
       return new NoOpAISpan<TType>({ ...rest, metadata }, this);
@@ -110,8 +110,8 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
       traceState = this.computeTraceState(tracingOptions);
     }
 
-    // Extract metadata from RuntimeContext
-    const enrichedMetadata = this.extractMetadataFromRuntimeContext(runtimeContext, metadata, traceState);
+    // Extract metadata from RequestContext
+    const enrichedMetadata = this.extractMetadataFromRequestContext(requestContext, metadata, traceState);
 
     const span = this.createSpan<TType>({
       ...rest,
@@ -259,8 +259,8 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
    * Compute TraceState for a new trace based on configured and per-request keys
    */
   protected computeTraceState(tracingOptions?: TracingOptions): TraceState | undefined {
-    const configuredKeys = this.config.runtimeContextKeys ?? [];
-    const additionalKeys = tracingOptions?.runtimeContextKeys ?? [];
+    const configuredKeys = this.config.requestContextKeys ?? [];
+    const additionalKeys = tracingOptions?.requestContextKeys ?? [];
 
     // Merge: configured + additional
     const allKeys = [...configuredKeys, ...additionalKeys];
@@ -270,23 +270,23 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
     }
 
     return {
-      runtimeContextKeys: allKeys,
+      requestContextKeys: allKeys,
     };
   }
 
   /**
-   * Extract metadata from RuntimeContext using TraceState
+   * Extract metadata from RequestContext using TraceState
    */
-  protected extractMetadataFromRuntimeContext(
-    runtimeContext: RuntimeContext | undefined,
+  protected extractMetadataFromRequestContext(
+    requestContext: RequestContext | undefined,
     explicitMetadata: Record<string, any> | undefined,
     traceState: TraceState | undefined,
   ): Record<string, any> | undefined {
-    if (!runtimeContext || !traceState || traceState.runtimeContextKeys.length === 0) {
+    if (!requestContext || !traceState || traceState.requestContextKeys.length === 0) {
       return explicitMetadata;
     }
 
-    const extracted = this.extractKeys(runtimeContext, traceState.runtimeContextKeys);
+    const extracted = this.extractKeys(requestContext, traceState.requestContextKeys);
 
     // Only return an object if we have extracted or explicit metadata
     if (Object.keys(extracted).length === 0 && !explicitMetadata) {
@@ -300,16 +300,16 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
   }
 
   /**
-   * Extract specific keys from RuntimeContext
+   * Extract specific keys from RequestContext
    */
-  protected extractKeys(runtimeContext: RuntimeContext, keys: string[]): Record<string, any> {
+  protected extractKeys(requestContext: RequestContext, keys: string[]): Record<string, any> {
     const result: Record<string, any> = {};
 
     for (const key of keys) {
-      // Handle dot notation: get first part from RuntimeContext, then navigate nested properties
+      // Handle dot notation: get first part from RequestContext, then navigate nested properties
       const parts = key.split('.');
       const rootKey = parts[0]!; // parts[0] always exists since key is a non-empty string
-      const value = runtimeContext.get(rootKey);
+      const value = requestContext.get(rootKey);
 
       if (value !== undefined) {
         // If there are nested parts, extract them from the value

@@ -25,7 +25,6 @@ const store = new CloudflareStore({
     threads: THREADS_KV_NAMESPACE,
     messages: MESSAGES_KV_NAMESPACE,
     workflow_snapshot: WORKFLOW_KV_NAMESPACE,
-    evals: EVALS_KV_NAMESPACE,
     traces: TRACES_KV_NAMESPACE,
   },
   keyPrefix: 'myapp_', // Optional

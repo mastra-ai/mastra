@@ -23,7 +23,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     const input = safelyParseJSON(row.input);
     const output = safelyParseJSON(row.output);
     const additionalContext = safelyParseJSON(row.additionalContext);
-    const runtimeContext = safelyParseJSON(row.runtimeContext);
+    const requestContext = safelyParseJSON(row.requestContext);
     const entity = safelyParseJSON(row.entity);
 
     return {
@@ -35,7 +35,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
       input,
       output,
       additionalContext,
-      runtimeContext,
+      requestContext,
       entity,
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt),

@@ -324,7 +324,7 @@ import { PinoLogger } from "@mastra/loggers";
 import { Inngest } from "inngest";
 import { activityPlanningWorkflow } from "./workflows/inngest-workflow";
 import { planningAgent } from "./agents/planning-agent";
-import { realtimeMiddleware } from "@inngest/realtime";
+import { realtimeMiddleware } from "@inngest/realtime/middleware";
 
 // Create an Inngest instance for workflow orchestration and event handling
 const inngest = new Inngest({
@@ -527,9 +527,3 @@ const workflow = createWorkflow({
 All flow control features are optional. If not specified, workflows run with Inngest's default behavior. Flow control configuration is validated by Inngest's native implementation, ensuring compatibility and correctness.
 
 For detailed information about flow control options and their behavior, see the [Inngest Flow Control documentation](https://www.inngest.com/docs/guides/flow-control).
-
-## Workflows (Legacy)
-
-The following links provide example documentation for legacy workflows:
-
-- [Creating a Simple Workflow (Legacy)](/examples/workflows_legacy/creating-a-workflow)

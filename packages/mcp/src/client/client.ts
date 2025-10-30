@@ -1,6 +1,6 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { MastraBase } from '@mastra/core/base';
-import type { RuntimeContext } from '@mastra/core/di';
+import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
 import { isZodType } from '@mastra/core/utils';
@@ -59,7 +59,7 @@ export interface LogMessage {
   serverName: string;
   /** Optional additional details */
   details?: Record<string, any>;
-  runtimeContext?: RuntimeContext | null;
+  requestContext?: RequestContext | null;
 }
 
 /**
@@ -219,7 +219,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private enableServerLogs?: boolean;
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
-  private currentOperationContext: RuntimeContext | null = null;
+  private currentOperationContext: RequestContext | null = null;
 
   /** Provides access to resource operations (list, read, subscribe, etc.) */
   public readonly resources: ResourceClientActions;
@@ -288,7 +288,7 @@ export class InternalMastraMCPClient extends MastraBase {
         timestamp: new Date(),
         serverName: this.name,
         details,
-        runtimeContext: this.currentOperationContext,
+        requestContext: this.currentOperationContext,
       });
     }
   }
@@ -674,9 +674,9 @@ export class InternalMastraMCPClient extends MastraBase {
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
           outputSchema: await this.convertOutputSchema(tool.outputSchema),
-          execute: async ({ context, runtimeContext }: { context: any; runtimeContext?: RuntimeContext | null }) => {
+          execute: async ({ context, requestContext }: { context: any; requestContext?: RequestContext | null }) => {
             const previousContext = this.currentOperationContext;
-            this.currentOperationContext = runtimeContext || null; // Set current context
+            this.currentOperationContext = requestContext || null; // Set current context
             try {
               this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: context });
               const res = await this.client.callTool(

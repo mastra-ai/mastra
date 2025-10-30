@@ -1,13 +1,13 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import type { ToolAction, VercelTool } from '@mastra/core/tools';
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
-  getToolsHandler,
+  listToolsHandler,
   getToolByIdHandler,
   executeToolHandler,
   executeAgentToolHandler,
@@ -37,14 +37,14 @@ describe('Tools Handlers', () => {
     vi.clearAllMocks();
   });
 
-  describe('getToolsHandler', () => {
+  describe('listToolsHandler', () => {
     it('should return empty object when no tools are provided', async () => {
-      const result = await getToolsHandler({ tools: undefined });
+      const result = await listToolsHandler({ tools: undefined });
       expect(result).toEqual({});
     });
 
     it('should return serialized tools when tools are provided', async () => {
-      const result = await getToolsHandler({ tools: mockTools });
+      const result = await listToolsHandler({ tools: mockTools });
       expect(result).toHaveProperty(mockTool.id);
       // expect(result).toHaveProperty(mockVercelTool.id);
       expect(result[mockTool.id]).toHaveProperty('id', mockTool.id);
@@ -72,7 +72,7 @@ describe('Tools Handlers', () => {
         executeTool({
           mastra: new Mastra({ logger: false }),
           data: {},
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow('Tool ID is required');
     });
@@ -83,7 +83,7 @@ describe('Tools Handlers', () => {
           mastra: new Mastra({ logger: false }),
           toolId: 'non-existent',
           data: {},
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow('Tool not found');
     });
@@ -98,7 +98,7 @@ describe('Tools Handlers', () => {
           mastra: new Mastra(),
           toolId: nonExecutableTool.id,
           data: {},
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow('Tool is not executable');
     });
@@ -109,7 +109,7 @@ describe('Tools Handlers', () => {
           mastra: new Mastra(),
           toolId: mockTool.id,
           data: null,
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow('Argument "data" is required');
     });
@@ -121,12 +121,12 @@ describe('Tools Handlers', () => {
       mockExecute.mockResolvedValue(mockResult);
       const context = { test: 'data' };
 
-      const runtimeContext = new RuntimeContext();
+      const requestContext = new RequestContext();
       const result = await executeTool({
         mastra: mockMastra,
         toolId: mockTool.id,
         runId: 'test-run',
-        runtimeContext: runtimeContext,
+        requestContext: requestContext,
         data: context,
       });
 
@@ -136,7 +136,7 @@ describe('Tools Handlers', () => {
           context,
           mastra: mockMastra,
           runId: 'test-run',
-          runtimeContext: runtimeContext,
+          requestContext: requestContext,
           tracingContext: {
             currentSpan: undefined,
           },
@@ -153,7 +153,7 @@ describe('Tools Handlers', () => {
       const result = await executeTool({
         mastra: mockMastra,
         toolId: `tool`,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         data: { test: 'data' },
       });
 
@@ -177,7 +177,7 @@ describe('Tools Handlers', () => {
           agentId: 'non-existent',
           toolId: mockTool.id,
           data: {},
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow('Agent with name non-existent not found');
     });
@@ -192,7 +192,7 @@ describe('Tools Handlers', () => {
           agentId: 'test-agent',
           toolId: 'non-existent',
           data: {},
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow('Tool not found');
     });
@@ -215,7 +215,7 @@ describe('Tools Handlers', () => {
           agentId: 'test-agent',
           toolId: nonExecutableTool.id,
           data: {},
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow('Tool is not executable');
     });
@@ -233,13 +233,13 @@ describe('Tools Handlers', () => {
       const context = {
         test: 'data',
       };
-      const runtimeContext = new RuntimeContext();
+      const requestContext = new RequestContext();
       const result = await executeAgentToolHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
         toolId: mockTool.id,
         data: context,
-        runtimeContext: runtimeContext,
+        requestContext: requestContext,
       });
 
       expect(result).toEqual(mockResult);
@@ -248,7 +248,7 @@ describe('Tools Handlers', () => {
           context,
           mastra: mockMastra,
           runId: 'test-agent',
-          runtimeContext: runtimeContext,
+          requestContext: requestContext,
           tracingContext: {
             currentSpan: undefined,
           },
@@ -272,7 +272,7 @@ describe('Tools Handlers', () => {
         agentId: 'test-agent',
         toolId: `tool`,
         data: {},
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
 
       expect(result).toEqual(mockResult);
@@ -294,7 +294,7 @@ describe('Tools Handlers', () => {
           mastra: new Mastra({ logger: false }),
           agentId: 'non-existent',
           toolId: mockTool.id,
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(
         new HTTPException(404, {
@@ -312,7 +312,7 @@ describe('Tools Handlers', () => {
           }),
           agentId: 'test-agent',
           toolId: 'non-existent',
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(
         new HTTPException(404, {
@@ -329,7 +329,7 @@ describe('Tools Handlers', () => {
         }),
         agentId: 'test-agent',
         toolId: mockTool.id,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
       expect(result).toHaveProperty('id', mockTool.id);
       expect(result).toHaveProperty('description', mockTool.description);

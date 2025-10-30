@@ -1,10 +1,4 @@
-import {
-  serializeDate,
-  TABLE_MESSAGES,
-  TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_EVALS,
-  TABLE_SCORERS,
-} from '@mastra/core/storage';
+import { serializeDate, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCORERS } from '@mastra/core/storage';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 
 export function ensureDate(value: any): Date | null {
@@ -46,8 +40,6 @@ export function processRecord(tableName: TABLE_NAMES, record: Record<string, any
       run_id: record.run_id,
       ...(record.resourceId ? { resourceId: record.resourceId } : {}),
     });
-  } else if (tableName === TABLE_EVALS) {
-    key = getKey(tableName, { id: record.run_id });
   } else if (tableName === TABLE_SCORERS) {
     key = getKey(tableName, { runId: record.runId });
   } else {

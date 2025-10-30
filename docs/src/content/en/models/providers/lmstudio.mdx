@@ -1,5 +1,5 @@
 ---
-title: "Providers: LMStudio | Models | Mastra"
+title: "LMStudio | Models | Mastra"
 description: "Use LMStudio models with Mastra. 3 models available."
 ---
 
@@ -7,6 +7,8 @@ description: "Use LMStudio models with Mastra. 3 models available."
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
 import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
 
 # <img src="https://models.dev/logos/lmstudio.svg" alt="LMStudio logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LMStudio
 
@@ -24,7 +26,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "lmstudio/openai/gpt-oss-20b",
+  model: "lmstudio/openai/gpt-oss-20b"
 });
 
 // Generate a response
@@ -47,43 +49,43 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-    {
-      model: "lmstudio/openai/gpt-oss-20b",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: true,
-      contextWindow: 131072,
-      maxOutput: 32768,
-      inputCost: null,
-      outputCost: null,
-    },
-    {
-      model: "lmstudio/qwen/qwen3-30b-a3b-2507",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: false,
-      contextWindow: 262144,
-      maxOutput: 16384,
-      inputCost: null,
-      outputCost: null,
-    },
-    {
-      model: "lmstudio/qwen/qwen3-coder-30b",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: false,
-      contextWindow: 262144,
-      maxOutput: 65536,
-      inputCost: null,
-      outputCost: null,
-    },
-  ]}
+  {
+    "model": "lmstudio/openai/gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "lmstudio/qwen/qwen3-30b-a3b-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "lmstudio/qwen/qwen3-coder-30b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
 />
 
 ## Advanced Configuration
@@ -98,9 +100,9 @@ const agent = new Agent({
     id: "lmstudio/openai/gpt-oss-20b",
     apiKey: process.env.LMSTUDIO_API_KEY,
     headers: {
-      "X-Custom-Header": "value",
-    },
-  },
+      "X-Custom-Header": "value"
+    }
+  }
 });
 ```
 
@@ -109,11 +111,13 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "lmstudio/qwen/qwen3-coder-30b"
       : "lmstudio/openai/gpt-oss-20b";
-  },
+  }
 });
 ```
+
+

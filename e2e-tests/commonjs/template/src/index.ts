@@ -1,7 +1,7 @@
 import { mastra } from './mastra';
 
 // Get agents and ensure getters like 'instructions' are included in the JSON output
-const agents = mastra.getAgents();
+const agents = mastra.listAgents();
 
 // Create a custom serializer to handle getter properties
 const serializedAgents: Record<string, any> = {};

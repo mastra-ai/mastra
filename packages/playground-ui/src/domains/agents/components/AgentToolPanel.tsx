@@ -19,7 +19,7 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
   const tool = Object.values(agent?.tools ?? {}).find(tool => tool.id === toolId);
 
   const { mutateAsync: executeTool, isPending: isExecutingTool, data: result } = useExecuteAgentTool();
-  const { runtimeContext: playgroundRuntimeContext } = usePlaygroundStore();
+  const { requestContext: playgroundRequestContext } = usePlaygroundStore();
 
   const handleExecuteTool = async (data: any) => {
     if (!tool) return;
@@ -28,7 +28,7 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
       agentId: agentId!,
       toolId: tool.id,
       input: data,
-      playgroundRuntimeContext,
+      playgroundRequestContext,
     });
   };
 

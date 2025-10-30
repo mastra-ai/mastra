@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 import type { TracingContext } from '../ai-tracing';
 import type { Mastra } from '../mastra';
-import type { RuntimeContext } from '../runtime-context';
+import type { RequestContext } from '../request-context';
 import type { MastraScorers } from '../scores';
 import type { ChunkType } from '../stream/types';
 import type { ToolStream } from '../tools/stream';
@@ -19,7 +19,7 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
   resourceId?: string;
   workflowId: string;
   mastra: Mastra;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   inputData: TStepInput;
   state: TState;
   setState(state: TState): void;

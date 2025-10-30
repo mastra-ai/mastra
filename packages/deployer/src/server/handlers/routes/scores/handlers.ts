@@ -1,7 +1,7 @@
 import type { ScoreRowData } from '@mastra/core/scores';
 import type { StoragePagination } from '@mastra/core/storage';
 import {
-  getScorersHandler as getOriginalScorersHandler,
+  listScorersHandler as getOriginalListScorersHandler,
   getScoresByRunIdHandler as getOriginalScoresByRunIdHandler,
   getScoresByScorerIdHandler as getOriginalScoresByScorerIdHandler,
   getScoresByEntityIdHandler as getOriginalScoresByEntityIdHandler,
@@ -11,27 +11,27 @@ import {
 import type { Context } from 'hono';
 import { handleError } from '../../error';
 
-export async function getScorersHandler(c: Context) {
+export async function listScorersHandler(c: Context) {
   try {
-    const scorers = await getOriginalScorersHandler({
+    const scorers = await getOriginalListScorersHandler({
       mastra: c.get('mastra'),
-      runtimeContext: c.get('runtimeContext'),
+      requestContext: c.get('requestContext'),
     });
     return c.json(scorers);
   } catch (error) {
-    return handleError(error, 'Error getting scorers');
+    return handleError(error, 'Error listing scorers');
   }
 }
 
 export async function getScorerHandler(c: Context) {
   const mastra = c.get('mastra');
   const scorerId = c.req.param('scorerId');
-  const runtimeContext = c.get('runtimeContext');
+  const requestContext = c.get('requestContext');
 
   const scorer = await getOriginalScorerHandler({
     mastra,
     scorerId,
-    runtimeContext,
+    requestContext,
   });
 
   return c.json(scorer);

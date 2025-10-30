@@ -1,4 +1,4 @@
-import { TABLE_EVALS, TABLE_WORKFLOW_SNAPSHOT } from '../../constants';
+import { TABLE_WORKFLOW_SNAPSHOT } from '../../constants';
 import type { TABLE_NAMES } from '../../constants';
 import type { StorageColumn } from '../../types';
 import { StoreOperations } from './base';
@@ -10,7 +10,6 @@ export class StoreOperationsInMemory extends StoreOperations {
     super();
     this.data = {
       mastra_workflow_snapshot: new Map(),
-      mastra_evals: new Map(),
       mastra_messages: new Map(),
       mastra_threads: new Map(),
       mastra_traces: new Map(),
@@ -27,7 +26,7 @@ export class StoreOperationsInMemory extends StoreOperations {
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     const table = this.data[tableName];
     let key = record.id;
-    if ([TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS].includes(tableName) && !record.id && record.run_id) {
+    if ([TABLE_WORKFLOW_SNAPSHOT].includes(tableName) && !record.id && record.run_id) {
       key = record.workflow_name ? `${record.workflow_name}-${record.run_id}` : record.run_id;
       record.id = key;
     } else if (!record.id) {
@@ -41,7 +40,7 @@ export class StoreOperationsInMemory extends StoreOperations {
     const table = this.data[tableName];
     for (const record of records) {
       let key = record.id;
-      if ([TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS].includes(tableName) && !record.id && record.run_id) {
+      if ([TABLE_WORKFLOW_SNAPSHOT].includes(tableName) && !record.id && record.run_id) {
         key = record.run_id;
         record.id = key;
       } else if (!record.id) {

@@ -64,13 +64,13 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     }
   }
 
-  let runtimeContextValue: any = null;
-  if (row.runtimeContext) {
+  let requestContextValue: any = null;
+  if (row.requestContext) {
     try {
-      runtimeContextValue =
-        typeof row.runtimeContext === 'string' ? safelyParseJSON(row.runtimeContext) : row.runtimeContext;
+      requestContextValue =
+        typeof row.requestContext === 'string' ? safelyParseJSON(row.requestContext) : row.requestContext;
     } catch (e) {
-      console.warn('Failed to parse runtimeContext:', e);
+      console.warn('Failed to parse requestContext:', e);
     }
   }
 
@@ -103,7 +103,7 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     input: inputValue,
     output: outputValue,
     additionalContext: row.additionalContext,
-    runtimeContext: runtimeContextValue,
+    requestContext: requestContextValue,
     entity: entityValue,
     source: row.source as ScoringSource,
     resourceId: row.resourceId as string,
@@ -190,10 +190,10 @@ export class ScoresStorageMongoDB extends ScoresStorage {
         output:
           typeof validatedScore.output === 'string' ? safelyParseJSON(validatedScore.output) : validatedScore.output,
         additionalContext: validatedScore.additionalContext,
-        runtimeContext:
-          typeof validatedScore.runtimeContext === 'string'
-            ? safelyParseJSON(validatedScore.runtimeContext)
-            : validatedScore.runtimeContext,
+        requestContext:
+          typeof validatedScore.requestContext === 'string'
+            ? safelyParseJSON(validatedScore.requestContext)
+            : validatedScore.requestContext,
         entity:
           typeof validatedScore.entity === 'string' ? safelyParseJSON(validatedScore.entity) : validatedScore.entity,
         source: validatedScore.source,

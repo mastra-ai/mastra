@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { Agent } from '../../agent';
 import { AISpanType } from '../../ai-tracing';
 import type { AnyAISpan } from '../../ai-tracing';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { CoreToolBuilder } from './builder';
 import 'dotenv/config';
@@ -464,7 +464,7 @@ describe('CoreToolBuilder ID Preservation', () => {
         name: 'test-tool-id',
         logger: console as any,
         description: 'A test tool',
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         tracingContext: {},
       },
     });
@@ -488,7 +488,7 @@ describe('CoreToolBuilder ID Preservation', () => {
         name: 'tool-without-id',
         logger: console as any,
         description: 'A tool without ID',
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         tracingContext: {},
       },
     });
@@ -513,7 +513,7 @@ describe('CoreToolBuilder ID Preservation', () => {
         name: 'provider.tool-id',
         logger: console as any,
         description: 'A provider-defined tool',
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         tracingContext: {},
       },
     });
@@ -572,7 +572,7 @@ describe('Tool Tracing Context Injection', () => {
           trackException: vi.fn(),
         } as any,
         description: 'Test tool that captures tracing context',
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         tracingContext: { currentSpan: mockAgentSpan },
       },
     });
@@ -627,7 +627,7 @@ describe('Tool Tracing Context Injection', () => {
           trackException: vi.fn(),
         } as any,
         description: 'Test tool without agent span',
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         tracingContext: {},
       },
     });
@@ -674,7 +674,7 @@ describe('Tool Tracing Context Injection', () => {
           trackException: vi.fn(),
         } as any,
         description: 'Vercel tool test',
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         tracingContext: { currentSpan: mockAgentSpan },
       },
     });
@@ -736,7 +736,7 @@ describe('Tool Tracing Context Injection', () => {
           trackException: vi.fn(),
         } as any,
         description: 'Tool that throws an error',
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         tracingContext: { currentSpan: mockAgentSpan },
       },
     });
@@ -787,7 +787,7 @@ describe('Tool Tracing Context Injection', () => {
           trackException: vi.fn(),
         } as any,
         description: 'Tool from a toolset',
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         tracingContext: { currentSpan: mockAgentSpan },
       },
       logType: 'toolset', // Specify toolset type
@@ -838,7 +838,7 @@ describe('Tool Input Validation', () => {
         email: 'john@example.com',
         tags: ['developer', 'typescript'],
       },
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       tracingContext: {},
       suspend: async () => {},
     });
@@ -856,7 +856,7 @@ describe('Tool Input Validation', () => {
         name: 'Jane',
         age: 25,
       },
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       tracingContext: {},
       suspend: async () => {},
     });
@@ -875,7 +875,7 @@ describe('Tool Input Validation', () => {
         name: 'Jo', // Too short
         age: 30,
       },
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       tracingContext: {},
       suspend: async () => {},
     });
@@ -894,7 +894,7 @@ describe('Tool Input Validation', () => {
         name: 'John',
         age: -5, // Negative age
       },
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       tracingContext: {},
       suspend: async () => {},
     });
@@ -914,7 +914,7 @@ describe('Tool Input Validation', () => {
         age: 30,
         email: 'not-an-email', // Invalid email
       },
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       tracingContext: {},
       suspend: async () => {},
     });
@@ -934,7 +934,7 @@ describe('Tool Input Validation', () => {
         // Missing name
         age: 30,
       },
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       suspend: async () => {},
     });
 
@@ -953,7 +953,7 @@ describe('Tool Input Validation', () => {
         age: 30,
         tags: [], // Empty array when min(1) required
       },
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       tracingContext: {},
       suspend: async () => {},
     });
@@ -974,7 +974,7 @@ describe('Tool Input Validation', () => {
         email: 'bad-email',
         tags: [],
       },
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       tracingContext: {},
       suspend: async () => {},
     });

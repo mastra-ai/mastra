@@ -1,5 +1,5 @@
 ---
-title: "Providers: Baseten | Models | Mastra"
+title: "Baseten | Models | Mastra"
 description: "Use Baseten models with Mastra. 3 models available."
 ---
 
@@ -7,6 +7,8 @@ description: "Use Baseten models with Mastra. 3 models available."
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
 import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
 
 # <img src="https://models.dev/logos/baseten.svg" alt="Baseten logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Baseten
 
@@ -24,7 +26,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct",
+  model: "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct"
 });
 
 // Generate a response
@@ -47,43 +49,43 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-    {
-      model: "baseten/moonshotai/Kimi-K2-Instruct-0905",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: false,
-      contextWindow: 262144,
-      maxOutput: 262144,
-      inputCost: 0.6,
-      outputCost: 2.5,
-    },
-    {
-      model: "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: false,
-      contextWindow: 262144,
-      maxOutput: 66536,
-      inputCost: 0.38,
-      outputCost: 1.53,
-    },
-    {
-      model: "baseten/zai-org/GLM-4.6",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: false,
-      contextWindow: 200000,
-      maxOutput: 200000,
-      inputCost: 0.6,
-      outputCost: 2.2,
-    },
-  ]}
+  {
+    "model": "baseten/moonshotai/Kimi-K2-Instruct-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.6,
+    "outputCost": 2.5
+  },
+  {
+    "model": "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 66536,
+    "inputCost": 0.38,
+    "outputCost": 1.53
+  },
+  {
+    "model": "baseten/zai-org/GLM-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 200000,
+    "inputCost": 0.6,
+    "outputCost": 2.2
+  }
+]}
 />
 
 ## Advanced Configuration
@@ -98,9 +100,9 @@ const agent = new Agent({
     id: "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct",
     apiKey: process.env.BASETEN_API_KEY,
     headers: {
-      "X-Custom-Header": "value",
-    },
-  },
+      "X-Custom-Header": "value"
+    }
+  }
 });
 ```
 
@@ -109,11 +111,13 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "baseten/zai-org/GLM-4.6"
       : "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct";
-  },
+  }
 });
 ```
+
+

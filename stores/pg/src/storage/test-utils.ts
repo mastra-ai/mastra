@@ -449,8 +449,8 @@ export function pgTests() {
         expect(messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
         expect(messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
 
-        // Test getMessagesById
-        const messagesById = await store.getMessagesById({ messageIds: [testMessageId], format: 'v2' });
+        // Test listMessagesById
+        const messagesById = await store.listMessagesById({ messageIds: [testMessageId] });
         expect(messagesById.length).toBe(1);
         expect(messagesById[0]?.createdAt).toBeInstanceOf(Date);
         expect(messagesById[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
@@ -487,8 +487,8 @@ export function pgTests() {
         expect(messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
 
-        // Test getMessagesById
-        const messagesById = await store.getMessagesById({ messageIds: [testMessageId], format: 'v2' });
+        // Test listMessagesById
+        const messagesById = await store.listMessagesById({ messageIds: [testMessageId] });
         expect(messagesById.length).toBe(1);
         expect(messagesById[0]?.createdAt).toBeInstanceOf(Date);
         expect(messagesById[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());

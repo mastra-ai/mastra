@@ -166,11 +166,11 @@ describe('AI Tracing Context Integration', () => {
       const workflow = wrapped.getWorkflow('test-workflow');
       const run = await workflow.createRunAsync();
 
-      await run.start({ inputData: { test: 'data' }, runtimeContext: {} });
+      await run.start({ inputData: { test: 'data' }, requestContext: {} });
 
       expect(mockRun.start).toHaveBeenCalledWith({
         inputData: { test: 'data' },
-        runtimeContext: {},
+        requestContext: {},
         tracingContext,
       });
     });

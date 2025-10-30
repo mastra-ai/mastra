@@ -2,7 +2,6 @@ import { describe, beforeAll, afterAll } from 'vitest';
 import type { MastraStorage } from '@mastra/core/storage';
 import {
   TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_EVALS,
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_RESOURCES,
@@ -13,12 +12,10 @@ import {
 import { createScoresTest } from './domains/scores';
 import { createMemoryTest } from './domains/memory';
 import { createWorkflowsTests } from './domains/workflows';
-import { createEvalsTests } from './domains/evals';
 import { createOperationsTests } from './domains/operations';
 import { createObservabilityTests } from './domains/observability';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
-export * from './domains/evals/data';
 export * from './domains/scores/data';
 export * from './domains/observability/data';
 
@@ -36,7 +33,6 @@ export function createTestSuite(storage: MastraStorage) {
       // Clear tables after tests
       await Promise.all([
         storage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT }),
-        storage.clearTable({ tableName: TABLE_EVALS }),
         storage.clearTable({ tableName: TABLE_MESSAGES }),
         storage.clearTable({ tableName: TABLE_THREADS }),
         storage.clearTable({ tableName: TABLE_RESOURCES }),
@@ -49,8 +45,6 @@ export function createTestSuite(storage: MastraStorage) {
     createOperationsTests({ storage });
 
     createWorkflowsTests({ storage });
-
-    createEvalsTests({ storage });
 
     createMemoryTest({ storage });
 

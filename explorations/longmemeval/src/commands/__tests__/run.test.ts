@@ -148,7 +148,6 @@ describe('RunCommand', () => {
         ],
         mastra_resources: [],
         mastra_workflow_snapshot: [],
-        mastra_evals: [],
         mastra_traces: [],
       }),
     );
@@ -225,7 +224,6 @@ describe('RunCommand', () => {
         ],
         mastra_resources: [],
         mastra_workflow_snapshot: [],
-        mastra_evals: [],
         mastra_traces: [],
       }),
     );
@@ -322,7 +320,6 @@ describe('RunCommand', () => {
           ],
           mastra_resources: [],
           mastra_workflow_snapshot: [],
-          mastra_evals: [],
           mastra_traces: [],
         }),
       );

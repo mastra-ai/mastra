@@ -152,7 +152,7 @@ describe('createOnScorerHook', () => {
     };
 
     mockMastra.getAgentById.mockReturnValue({
-      getScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
     });
 
     await hook(hookData);
@@ -181,7 +181,7 @@ describe('createOnScorerHook', () => {
     };
 
     mockMastra.getAgentById.mockReturnValue({
-      getScorers: vi.fn().mockReturnValue({}), // Empty scorers
+      listScorers: vi.fn().mockReturnValue({}), // Empty scorers
     });
     mockMastra.getScorerByName.mockReturnValue(null);
 
@@ -208,7 +208,7 @@ describe('createOnScorerHook', () => {
     };
 
     mockMastra.getAgentById.mockReturnValue({
-      getScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
     });
 
     // Confirm it doesn't throw
@@ -237,7 +237,7 @@ describe('createOnScorerHook', () => {
     };
 
     mockMastra.getAgentById.mockReturnValue({
-      getScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
     });
 
     // Confirm it doesn't throw even with validation errors
@@ -279,7 +279,7 @@ describe('createOnScorerHook', () => {
     };
 
     mockMastra.getAgentById.mockReturnValue({
-      getScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
     });
 
     await hook(hookData);
@@ -326,7 +326,7 @@ describe('createOnScorerHook', () => {
     };
 
     mockMastra.getAgentById.mockReturnValue({
-      getScorers: vi.fn().mockReturnValue({ 'perf-scorer': { scorer: mockScorer } }),
+      listScorers: vi.fn().mockReturnValue({ 'perf-scorer': { scorer: mockScorer } }),
     });
 
     await hook(hookData);
@@ -377,7 +377,7 @@ describe('createOnScorerHook', () => {
     };
 
     mockMastra.getAgentById.mockReturnValue({
-      getScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
     });
 
     await hook(hookData);
@@ -426,7 +426,7 @@ describe('createOnScorerHook', () => {
     };
 
     mockMastra.getAgentById.mockReturnValue({
-      getScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
     });
 
     // Should not throw even if addScoreToTrace fails

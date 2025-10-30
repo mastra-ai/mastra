@@ -128,7 +128,6 @@ describe('CloudDeployer Integration Tests', () => {
         "import { mastra } from '#mastra'",
         "import { MultiLogger } from '@mastra/core/logger'",
         "import { PinoLogger } from '@mastra/loggers'",
-        "import { evaluate } from '@mastra/core/eval'",
         "import { AvailableHooks, registerHook } from '@mastra/core/hooks'",
         "import { LibSQLStore, LibSQLVector } from '@mastra/libsql'",
       ];

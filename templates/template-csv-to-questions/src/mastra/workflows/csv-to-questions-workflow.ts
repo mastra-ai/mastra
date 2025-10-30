@@ -1,6 +1,6 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
-import { RuntimeContext } from '@mastra/core/di';
+import { RequestContext } from '@mastra/core/di';
 import { csvFetcherTool } from '../tools/download-csv-tool';
 import { generateQuestionsFromTextTool } from '../tools/generate-questions-from-text-tool';
 
@@ -28,14 +28,14 @@ const downloadAndSummarizeCSVStep = createStep({
   description: 'Downloads CSV from URL and generates an AI summary',
   inputSchema: csvInputSchema,
   outputSchema: csvSummarySchema,
-  execute: async ({ inputData, mastra, runtimeContext }) => {
+  execute: async ({ inputData, mastra, requestContext }) => {
     console.log('Executing Step: download-and-summarize-csv');
     const { csvUrl } = inputData;
 
     const result = await csvFetcherTool.execute({
       context: { csvUrl },
       mastra,
-      runtimeContext: runtimeContext || new RuntimeContext(),
+      requestContext: requestContext || new RequestContext(),
     });
 
     console.log(
@@ -52,7 +52,7 @@ const generateQuestionsFromSummaryStep = createStep({
   description: 'Generates questions from the AI-generated CSV summary',
   inputSchema: csvSummarySchema,
   outputSchema: questionsSchema,
-  execute: async ({ inputData, mastra, runtimeContext }) => {
+  execute: async ({ inputData, mastra, requestContext }) => {
     console.log('Executing Step: generate-questions-from-summary');
 
     const { summary } = inputData;
@@ -66,7 +66,7 @@ const generateQuestionsFromSummaryStep = createStep({
       const result = await generateQuestionsFromTextTool.execute({
         context: { extractedText: summary }, // Use summary as the text input
         mastra,
-        runtimeContext: runtimeContext || new RuntimeContext(),
+        requestContext: requestContext || new RequestContext(),
       });
 
       console.log(

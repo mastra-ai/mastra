@@ -20,7 +20,7 @@ export type ScoringInput = {
   input?: any;
   output: any;
   additionalContext?: Record<string, any>;
-  runtimeContext?: Record<string, any>;
+  requestContext?: Record<string, any>;
   tracingContext?: TracingContext;
 };
 
@@ -34,7 +34,7 @@ export type ScoringHookInput = {
   source: ScoringSource;
   entity: Record<string, any>;
   entityType: ScoringEntityType;
-  runtimeContext?: Record<string, any>;
+  requestContext?: Record<string, any>;
   tracingContext?: TracingContext;
   structuredOutput?: boolean;
   traceId?: string;
@@ -142,7 +142,7 @@ export const saveScorePayloadSchema = z.object({
   generateReasonPrompt: z.string().optional(),
   analyzePrompt: z.string().optional(),
   additionalContext: z.record(z.string(), z.any()).optional(),
-  runtimeContext: z.record(z.string(), z.any()).optional(),
+  requestContext: z.record(z.string(), z.any()).optional(),
   entity: z.record(z.string(), z.any()).optional(),
   resourceId: z.string().optional(),
   threadId: z.string().optional(),

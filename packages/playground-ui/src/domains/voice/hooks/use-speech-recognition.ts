@@ -28,7 +28,7 @@ export const useSpeechRecognition = ({
 }: UseSpeechRecognitionArgs): BrowserSpeechRecognition => {
   const client = useMastraClient();
   const [agent, setAgent] = useState<Agent | null>(null);
-  const { runtimeContext } = usePlaygroundStore();
+  const { requestContext } = usePlaygroundStore();
 
   useEffect(() => {
     if (!agentId) return;
@@ -37,7 +37,7 @@ export const useSpeechRecognition = ({
 
     const check = async () => {
       try {
-        await agent.voice.getSpeakers(runtimeContext);
+        await agent.voice.getSpeakers(requestContext);
         setAgent(agent as unknown as Agent);
       } catch (error) {
         setAgent(null);

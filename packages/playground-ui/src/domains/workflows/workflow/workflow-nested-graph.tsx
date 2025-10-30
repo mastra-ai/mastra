@@ -18,17 +18,10 @@ export interface WorkflowNestedGraphProps {
   stepGraph: SerializedStepFlowEntry[];
   open: boolean;
   workflowName: string;
-  onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
   onSendEvent?: WorkflowSendEventFormProps['onSendEvent'];
 }
 
-export function WorkflowNestedGraph({
-  stepGraph,
-  open,
-  workflowName,
-  onShowTrace,
-  onSendEvent,
-}: WorkflowNestedGraphProps) {
+export function WorkflowNestedGraph({ stepGraph, open, workflowName, onSendEvent }: WorkflowNestedGraphProps) {
   const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges({
     stepGraph,
   });
@@ -39,23 +32,13 @@ export function WorkflowNestedGraph({
 
   const nodeTypes = {
     'default-node': (props: NodeProps<DefaultNode>) => (
-      <WorkflowDefaultNode
-        parentWorkflowName={workflowName}
-        onShowTrace={onShowTrace}
-        onSendEvent={onSendEvent}
-        {...props}
-      />
+      <WorkflowDefaultNode parentWorkflowName={workflowName} onSendEvent={onSendEvent} {...props} />
     ),
     'condition-node': WorkflowConditionNode,
     'after-node': WorkflowAfterNode,
     'loop-result-node': WorkflowLoopResultNode,
     'nested-node': (props: NodeProps<NestedNode>) => (
-      <WorkflowNestedNode
-        parentWorkflowName={workflowName}
-        onShowTrace={onShowTrace}
-        onSendEvent={onSendEvent}
-        {...props}
-      />
+      <WorkflowNestedNode parentWorkflowName={workflowName} onSendEvent={onSendEvent} {...props} />
     ),
   };
 

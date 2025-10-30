@@ -5,7 +5,7 @@ describe('docsTool', () => {
   let tools: any;
 
   beforeAll(async () => {
-    tools = await mcp.getTools();
+    tools = await mcp.listTools();
   });
 
   afterAll(async () => {

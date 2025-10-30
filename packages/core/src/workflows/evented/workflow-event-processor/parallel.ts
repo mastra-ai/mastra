@@ -1,6 +1,6 @@
 import EventEmitter from 'events';
 import type { StepFlowEntry } from '../..';
-import { RuntimeContext } from '../../../di';
+import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
 import type { StepExecutor } from '../step-executor';
 import type { ProcessorArgs } from '.';
@@ -16,7 +16,7 @@ export async function processWorkflowParallel(
     prevResult,
     resumeData,
     parentWorkflow,
-    runtimeContext,
+    requestContext,
   }: ProcessorArgs,
   {
     pubsub,
@@ -48,7 +48,7 @@ export async function processWorkflowParallel(
           resumeData,
           parentWorkflow,
           activeSteps,
-          runtimeContext,
+          requestContext,
         },
       });
     }),
@@ -66,7 +66,7 @@ export async function processWorkflowConditional(
     prevResult,
     resumeData,
     parentWorkflow,
-    runtimeContext,
+    requestContext,
   }: ProcessorArgs,
   {
     pubsub,
@@ -86,7 +86,7 @@ export async function processWorkflowConditional(
     // TODO: implement state
     state: {},
     emitter: new EventEmitter() as any, // TODO
-    runtimeContext: new RuntimeContext(), // TODO
+    requestContext: new RequestContext(), // TODO
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
   });
@@ -115,7 +115,7 @@ export async function processWorkflowConditional(
             resumeData,
             parentWorkflow,
             activeSteps,
-            runtimeContext,
+            requestContext,
           },
         });
       } else {
@@ -132,7 +132,7 @@ export async function processWorkflowConditional(
             resumeData,
             parentWorkflow,
             activeSteps,
-            runtimeContext,
+            requestContext,
           },
         });
       }

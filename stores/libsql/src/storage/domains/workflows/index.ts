@@ -1,6 +1,6 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
 import type { StoreOperationsLibSQL } from '../operations';
@@ -137,13 +137,13 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     return this.executeWithRetry(async () => {
       // Use a transaction to ensure atomicity
@@ -169,7 +169,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
             waitingPaths: {},
             status: 'pending',
             runId: runId,
-            runtimeContext: {},
+            requestContext: {},
           } as WorkflowRunState;
         } else {
           // Parse existing snapshot
@@ -177,9 +177,9 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
           snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
         }
 
-        // Merge the new step result and runtime context
+        // Merge the new step result and request context
         snapshot.context[stepId] = result;
-        snapshot.runtimeContext = { ...snapshot.runtimeContext, ...runtimeContext };
+        snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
         // Update the snapshot within the same transaction
         await tx.execute({
@@ -345,21 +345,14 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
       const args: InValue[] = [];

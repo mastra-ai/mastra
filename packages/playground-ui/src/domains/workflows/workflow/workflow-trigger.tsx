@@ -46,12 +46,12 @@ export interface WorkflowTriggerProps {
     workflowId,
     runId,
     inputData,
-    runtimeContext,
+    requestContext,
   }: {
     workflowId: string;
     runId: string;
     inputData: Record<string, unknown>;
-    runtimeContext: Record<string, unknown>;
+    requestContext: Record<string, unknown>;
   }) => Promise<void>;
   observeWorkflowStream?: ({ workflowId, runId }: { workflowId: string; runId: string }) => void;
   resumeWorkflow: ({
@@ -59,13 +59,13 @@ export interface WorkflowTriggerProps {
     step,
     runId,
     resumeData,
-    runtimeContext,
+    requestContext,
   }: {
     workflowId: string;
     step: string | string[];
     runId: string;
     resumeData: Record<string, unknown>;
-    runtimeContext: Record<string, unknown>;
+    requestContext: Record<string, unknown>;
   }) => Promise<void>;
   streamResult: WorkflowRunStreamResult | null;
   isCancellingWorkflowRun: boolean;
@@ -89,7 +89,7 @@ export function WorkflowTrigger({
   isCancellingWorkflowRun,
   cancelWorkflowRun,
 }: WorkflowTriggerProps) {
-  const { runtimeContext } = usePlaygroundStore();
+  const { requestContext } = usePlaygroundStore();
   const { result, setResult, payload, setPayload, setRunId: setContextRunId } = useContext(WorkflowRunContext);
 
   const [isRunning, setIsRunning] = useState(false);
@@ -112,7 +112,7 @@ export function WorkflowTrigger({
       setInnerRunId(runId);
       setContextRunId(runId);
 
-      streamWorkflow({ workflowId, runId, inputData: data, runtimeContext });
+      streamWorkflow({ workflowId, runId, inputData: data, requestContext });
     } catch (err) {
       setIsRunning(false);
       toast.error('Error executing workflow');
@@ -134,7 +134,7 @@ export function WorkflowTrigger({
       runId,
       resumeData,
       workflowId,
-      runtimeContext,
+      requestContext,
     });
   };
 

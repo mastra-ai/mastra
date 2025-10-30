@@ -81,7 +81,7 @@ export const useScorers = () => {
 
   return useQuery({
     queryKey: ['scorers'],
-    queryFn: () => client.getScorers(),
+    queryFn: () => client.listScorers(),
     staleTime: 0,
     gcTime: 0,
   });

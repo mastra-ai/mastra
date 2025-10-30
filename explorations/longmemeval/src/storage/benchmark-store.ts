@@ -7,10 +7,10 @@ import type {
   StorageColumn,
   StorageGetMessagesArg,
   StorageResourceType,
-  EvalRow,
   WorkflowRun,
   WorkflowRuns,
   PaginationInfo,
+  StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import { writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -20,7 +20,6 @@ type DBMode = 'read' | 'read-write';
 export class BenchmarkStore extends MastraStorage {
   private data: Record<TABLE_NAMES, Map<string, any>> = {
     mastra_workflow_snapshot: new Map(),
-    mastra_evals: new Map(),
     mastra_messages: new Map(),
     mastra_threads: new Map(),
     mastra_traces: new Map(),
@@ -331,21 +330,14 @@ export class BenchmarkStore extends MastraStorage {
     return evals as EvalRow[];
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     let runs = Array.from(this.data.mastra_workflow_snapshot.values());
 
     if (workflowName) runs = runs.filter((run: any) => run.workflow_name === workflowName);

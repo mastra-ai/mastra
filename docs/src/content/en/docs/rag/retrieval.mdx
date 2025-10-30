@@ -241,13 +241,13 @@ const lanceQueryTool = createVectorQueryTool({
 - Quality-gated search results
 - Embedded, file-based vector storage with LanceDB for edge deployment scenarios
 
-You can also override these configurations at runtime using the runtime context:
+You can also override these configurations at runtime using the request context:
 
 ```ts showLineNumbers copy
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 
-const runtimeContext = new RuntimeContext();
-runtimeContext.set("databaseConfig", {
+const requestContext = new RequestContext();
+requestContext.set("databaseConfig", {
   pinecone: {
     namespace: "runtime-namespace",
   },
@@ -256,7 +256,7 @@ runtimeContext.set("databaseConfig", {
 await pineconeQueryTool.execute({
   context: { queryText: "search query" },
   mastra,
-  runtimeContext,
+  requestContext,
 });
 ```
 

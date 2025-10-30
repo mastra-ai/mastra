@@ -2,7 +2,6 @@ export * from './agent/index.warning';
 export * from './base.warning';
 export * from './deployer/index.warning';
 export * from './storage/index.warning';
-export * from './eval';
 export * from './integration/index.warning';
 export * from './llm';
 export * from './mastra';

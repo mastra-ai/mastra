@@ -232,7 +232,7 @@ describe('Workflow Client Methods', () => {
       workflow2: { name: 'Workflow 2' },
     };
     mockFetchResponse(mockResponse);
-    const result = await client.getWorkflows();
+    const result = await client.listWorkflows();
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
       `${clientOptions.baseUrl}/api/workflows`,
@@ -242,20 +242,20 @@ describe('Workflow Client Methods', () => {
     );
   });
 
-  it('should get all workflows with runtimeContext', async () => {
+  it('should get all workflows with requestContext', async () => {
     const mockResponse = {
       workflow1: { name: 'Workflow 1' },
       workflow2: { name: 'Workflow 2' },
     };
-    const runtimeContext = { userId: '123', tenantId: 'tenant-456' };
-    const expectedBase64 = btoa(JSON.stringify(runtimeContext));
+    const requestContext = { userId: '123', tenantId: 'tenant-456' };
+    const expectedBase64 = btoa(JSON.stringify(requestContext));
     const expectedEncodedBase64 = encodeURIComponent(expectedBase64);
 
     mockFetchResponse(mockResponse);
-    const result = await client.getWorkflows(runtimeContext);
+    const result = await client.listWorkflows(requestContext);
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
-      `${clientOptions.baseUrl}/api/workflows?runtimeContext=${expectedEncodedBase64}`,
+      `${clientOptions.baseUrl}/api/workflows?requestContext=${expectedEncodedBase64}`,
       expect.objectContaining({
         headers: expect.objectContaining(clientOptions.headers),
       }),
