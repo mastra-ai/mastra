@@ -1,5 +1,5 @@
 ---
-title: "Providers: Cerebras | Models | Mastra"
+title: "Cerebras | Models | Mastra"
 description: "Use Cerebras models with Mastra. 3 models available."
 ---
 
@@ -7,6 +7,9 @@ description: "Use Cerebras models with Mastra. 3 models available."
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
 import PropertiesTable from "@site/src/components/PropertiesTable";
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # <img src="https://models.dev/logos/cerebras.svg" alt="Cerebras logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cerebras
 
@@ -24,7 +27,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "cerebras/gpt-oss-120b",
+  model: "cerebras/gpt-oss-120b"
 });
 
 // Generate a response
@@ -47,43 +50,43 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-    {
-      model: "cerebras/gpt-oss-120b",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: true,
-      contextWindow: 131072,
-      maxOutput: 32768,
-      inputCost: 0.25,
-      outputCost: 0.69,
-    },
-    {
-      model: "cerebras/qwen-3-235b-a22b-instruct-2507",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: false,
-      contextWindow: 131000,
-      maxOutput: 32000,
-      inputCost: 0.6,
-      outputCost: 1.2,
-    },
-    {
-      model: "cerebras/qwen-3-coder-480b",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: false,
-      contextWindow: 131000,
-      maxOutput: 32000,
-      inputCost: 2,
-      outputCost: 2,
-    },
-  ]}
+  {
+    "model": "cerebras/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.25,
+    "outputCost": 0.69
+  },
+  {
+    "model": "cerebras/qwen-3-235b-a22b-instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 32000,
+    "inputCost": 0.6,
+    "outputCost": 1.2
+  },
+  {
+    "model": "cerebras/qwen-3-coder-480b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 32000,
+    "inputCost": 2,
+    "outputCost": 2
+  }
+]}
 />
 
 ## Advanced Configuration
@@ -98,9 +101,9 @@ const agent = new Agent({
     id: "cerebras/gpt-oss-120b",
     apiKey: process.env.CEREBRAS_API_KEY,
     headers: {
-      "X-Custom-Header": "value",
-    },
-  },
+      "X-Custom-Header": "value"
+    }
+  }
 });
 ```
 
@@ -109,12 +112,16 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced ? "cerebras/qwen-3-coder-480b" : "cerebras/gpt-oss-120b";
-  },
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "cerebras/qwen-3-coder-480b"
+      : "cerebras/gpt-oss-120b";
+  }
 });
 ```
+
+
 
 ## Direct Provider Installation
 

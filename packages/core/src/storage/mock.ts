@@ -5,8 +5,6 @@ import type { StepResult, WorkflowRunState } from '../workflows/types';
 import { MastraStorage } from './base';
 import type { StorageDomains } from './base';
 import type { TABLE_NAMES } from './constants';
-import { InMemoryLegacyEvals } from './domains/legacy-evals/inmemory';
-import type { InMemoryEvals } from './domains/legacy-evals/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
 import type { InMemoryThreads, InMemoryResources, InMemoryMessages } from './domains/memory/inmemory';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
@@ -20,8 +18,6 @@ import type { InMemoryWorkflows } from './domains/workflows/inmemory';
 import type {
   AISpanRecord,
   AITraceRecord,
-  EvalRow,
-  PaginationArgs,
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
@@ -62,17 +58,12 @@ export class InMemoryStore extends MastraStorage {
       operations: operationsStorage,
     });
 
-    const legacyEvalsStorage = new InMemoryLegacyEvals({
-      collection: database.mastra_evals as InMemoryEvals,
-    });
-
     const observabilityStorage = new ObservabilityInMemory({
       collection: database.mastra_ai_spans as InMemoryObservability,
       operations: operationsStorage,
     });
 
     this.stores = {
-      legacyEvals: legacyEvalsStorage,
       operations: operationsStorage,
       workflows: workflowsStorage,
       scores: scoresStorage,
@@ -157,15 +148,15 @@ export class InMemoryStore extends MastraStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
+    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
   }
 
   async updateWorkflowState({
@@ -254,9 +245,9 @@ export class InMemoryStore extends MastraStorage {
     selectBy,
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    return this.stores.memory.getMessages({ threadId, resourceId, selectBy, format }) as unknown as Promise<
-      MastraMessageV1[] | MastraMessageV2[]
-    >;
+    return this.stores.memory
+      .getMessages({ threadId, resourceId, selectBy, format })
+      .catch(() => []) as unknown as Promise<MastraMessageV1[] | MastraMessageV2[]>;
   }
 
   async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
@@ -362,16 +353,6 @@ export class InMemoryStore extends MastraStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
-  }
-
-  async getEvals(
-    options: { agentName?: string; type?: 'test' | 'live' } & PaginationArgs,
-  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
-  }
-
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
   }
 
   async getWorkflowRuns({
