@@ -18,7 +18,6 @@ import { Mastra } from '../mastra';
 import type { MastraMessageV2, StorageThreadType } from '../memory';
 import { MockMemory } from '../memory/mock';
 import { MessageHistory, SemanticRecall, ToolCallFilter, TokenLimiterProcessor, WorkingMemory } from '../processors';
-import { RuntimeContext } from '../runtime-context';
 import { MockStore } from '../storage';
 import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';

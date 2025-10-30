@@ -1,5 +1,5 @@
 import type { MastraMessageV2 } from '../../agent/message-list';
-import type { RuntimeContext } from '../../runtime-context';
+import type { RequestContext } from '../../request-context';
 
 import type { InputProcessor } from '../index';
 
@@ -30,7 +30,7 @@ export class ToolCallFilter implements InputProcessor {
   async processInput(args: {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
-    runtimeContext?: RuntimeContext;
+    runtimeContext?: RequestContext;
   }): Promise<MastraMessageV2[]> {
     const { messages } = args;
 

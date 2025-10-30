@@ -162,7 +162,7 @@ export function createPrepareMemoryStep<
         });
       }
 
-      // Set memory context in RuntimeContext for processors to access
+      // Set memory context in RequestContext for processors to access
       runtimeContext.set('MastraMemory', {
         thread: threadObject,
         resourceId,

@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MastraMessageV2 } from '../../agent/index.js';
 import type { MemoryRuntimeContext } from '../../memory/types.js';
-import { RuntimeContext } from '../../runtime-context/index.js';
+import { RequestContext } from '../../request-context/index.js';
 import { MemoryStorage } from '../../storage/domains/memory/base.js';
 
 import { MessageHistory } from './message-history.js';
 
-// Helper to create RuntimeContext with memory context
-function createRuntimeContextWithMemory(threadId: string, resourceId?: string): RuntimeContext {
-  const runtimeContext = new RuntimeContext();
+// Helper to create RequestContext with memory context
+function createRuntimeContextWithMemory(threadId: string, resourceId?: string): RequestContext {
+  const runtimeContext = new RequestContext();
   const memoryContext: MemoryRuntimeContext = {
     thread: { id: threadId },
     resourceId,

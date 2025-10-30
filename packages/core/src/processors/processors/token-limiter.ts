@@ -3,7 +3,7 @@ import type { TiktokenBPE } from 'js-tiktoken/lite';
 import o200k_base from 'js-tiktoken/ranks/o200k_base';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import type { TracingContext } from '../../ai-tracing/types';
-import type { RuntimeContext } from '../../runtime-context';
+import type { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
@@ -70,7 +70,7 @@ export class TokenLimiterProcessor implements Processor {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-    runtimeContext?: RuntimeContext;
+    runtimeContext?: RequestContext;
   }): Promise<MastraMessageV2[]> {
     const { messages } = args;
     const limit = this.maxTokens;

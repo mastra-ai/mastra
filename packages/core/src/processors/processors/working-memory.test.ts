@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import type { MemoryRuntimeContext } from '../../memory/types';
 import type { MastraMessageV2 } from '../../message';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 
 import type { WorkingMemoryTemplate } from './working-memory';
@@ -10,7 +10,7 @@ import { WorkingMemory } from './working-memory';
 
 describe('WorkingMemory', () => {
   let mockStorage: MemoryStorage;
-  let runtimeContext: RuntimeContext;
+  let runtimeContext: RequestContext;
 
   beforeEach(() => {
     mockStorage = {
@@ -18,7 +18,7 @@ describe('WorkingMemory', () => {
       getResourceById: vi.fn(),
     } as any;
 
-    runtimeContext = new RuntimeContext();
+    runtimeContext = new RequestContext();
   });
 
   describe('Input Processing', () => {
@@ -283,7 +283,7 @@ describe('WorkingMemory', () => {
         abort: () => {
           throw new Error('Aborted');
         },
-        runtimeContext: new RuntimeContext(),
+        runtimeContext: new RequestContext(),
       });
 
       expect(result).toEqual(messages);

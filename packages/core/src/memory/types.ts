@@ -6,7 +6,7 @@ import type { ZodObject } from 'zod';
 export type { MastraMessageV2 } from '../agent';
 import type { EmbeddingModelId } from '../llm/model/index.js';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
-import type { RuntimeContext } from '../runtime-context';
+import type { RequestContext } from '../request-context';
 import type { MastraStorage } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraVector } from '../vector';
@@ -44,7 +44,7 @@ export type StorageThreadType = {
 };
 
 /**
- * Memory-specific context passed via RuntimeContext under the 'MastraMemory' key
+ * Memory-specific context passed via RequestContext under the 'MastraMemory' key
  * This provides processors with access to memory-related execution context
  */
 export type MemoryRuntimeContext = {
@@ -53,12 +53,12 @@ export type MemoryRuntimeContext = {
 };
 
 /**
- * Parse and validate memory runtime context from RuntimeContext
- * @param runtimeContext - The RuntimeContext to extract memory context from
+ * Parse and validate memory runtime context from RequestContext
+ * @param runtimeContext - The RequestContext to extract memory context from
  * @returns The validated MemoryRuntimeContext or null if not available
  * @throws Error if the context exists but is malformed
  */
-export function parseMemoryRuntimeContext(runtimeContext?: RuntimeContext): MemoryRuntimeContext | null {
+export function parseMemoryRuntimeContext(runtimeContext?: RequestContext): MemoryRuntimeContext | null {
   if (!runtimeContext) {
     return null;
   }

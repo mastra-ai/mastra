@@ -3,7 +3,7 @@ import { TripWire } from '../agent/trip-wire';
 import { AISpanType } from '../ai-tracing';
 import type { AISpan, TracingContext } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
-import type { RuntimeContext } from '../runtime-context';
+import type { RequestContext } from '../request-context';
 import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Processor } from './index';
@@ -85,13 +85,13 @@ export class ProcessorRunner {
     messageList: MessageList,
     tracingContext?: TracingContext,
     telemetry?: any,
-    runtimeContext?: RuntimeContext,
+    runtimeContext?: RequestContext,
   ): Promise<MessageList> {
     const responseMessages = messageList.clear.response.v2();
 
     let processableMessages: MastraMessageV2[] = [...responseMessages];
 
-    const ctx: { messages: MastraMessageV2[]; abort: () => never; runtimeContext?: RuntimeContext } = {
+    const ctx: { messages: MastraMessageV2[]; abort: () => never; runtimeContext?: RequestContext } = {
       messages: processableMessages,
       abort: () => {
         throw new TripWire('Tripwire triggered');
@@ -172,7 +172,7 @@ export class ProcessorRunner {
     part: ChunkType<OUTPUT>,
     processorStates: Map<string, ProcessorState<OUTPUT>>,
     tracingContext?: TracingContext,
-    runtimeContext?: RuntimeContext,
+    runtimeContext?: RequestContext,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
@@ -267,7 +267,7 @@ export class ProcessorRunner {
   async runOutputProcessorsForStream<OUTPUT extends OutputSchema = undefined>(
     streamResult: MastraModelOutput<OUTPUT>,
     tracingContext?: TracingContext,
-    runtimeContext?: RuntimeContext,
+    runtimeContext?: RequestContext,
   ): Promise<ReadableStream<any>> {
     return new ReadableStream({
       start: async controller => {
@@ -321,13 +321,13 @@ export class ProcessorRunner {
     messageList: MessageList,
     tracingContext?: TracingContext,
     telemetry?: any,
-    runtimeContext?: RuntimeContext,
+    runtimeContext?: RequestContext,
   ): Promise<MessageList> {
     const userMessages = messageList.clear.input.v2();
 
     let processableMessages: MastraMessageV2[] = [...userMessages];
 
-    const ctx: { messages: MastraMessageV2[]; abort: () => never; runtimeContext?: RuntimeContext } = {
+    const ctx: { messages: MastraMessageV2[]; abort: () => never; runtimeContext?: RequestContext } = {
       messages: processableMessages,
       abort: () => {
         throw new TripWire('Tripwire triggered');

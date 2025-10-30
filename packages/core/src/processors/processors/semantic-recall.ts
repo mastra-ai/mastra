@@ -3,7 +3,7 @@ import type { CoreMessage } from 'ai';
 import type { TracingContext } from '../../ai-tracing/types';
 import { parseMemoryRuntimeContext } from '../../memory/types';
 import type { MastraMessageV2 } from '../../memory/types';
-import type { RuntimeContext } from '../../runtime-context';
+import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage/domains/memory/base';
 import type { MastraEmbeddingModel, MastraVector } from '../../vector';
 import type { Processor } from '../index';
@@ -128,11 +128,11 @@ export class SemanticRecall implements Processor {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-    runtimeContext?: RuntimeContext;
+    runtimeContext?: RequestContext;
   }): Promise<MastraMessageV2[]> {
     const { messages, runtimeContext } = args;
 
-    // Get memory context from RuntimeContext
+    // Get memory context from RequestContext
     const memoryContext = parseMemoryRuntimeContext(runtimeContext);
     if (!memoryContext) {
       // No memory context available, return messages unchanged
@@ -402,7 +402,7 @@ ${formattedSections.join('\n')}
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-    runtimeContext?: RuntimeContext;
+    runtimeContext?: RequestContext;
   }): Promise<MastraMessageV2[]> {
     const { messages, runtimeContext } = args;
 

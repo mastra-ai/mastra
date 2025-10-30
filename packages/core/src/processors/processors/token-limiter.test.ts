@@ -2,7 +2,7 @@ import type { TextPart } from 'ai';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { MastraMessageV2 } from '../../agent/message-list';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 
@@ -590,7 +590,7 @@ describe('TokenLimiterProcessor', () => {
       const result = await processor.processInput({
         messages,
         abort: mockAbort,
-        runtimeContext: new RuntimeContext(),
+        runtimeContext: new RequestContext(),
       });
 
       console.log('Input messages:', messages.length);
@@ -617,7 +617,7 @@ describe('TokenLimiterProcessor', () => {
       const result = await processor.processInput({
         messages: [],
         abort: mockAbort,
-        runtimeContext: new RuntimeContext(),
+        runtimeContext: new RequestContext(),
       });
       expect(result).toEqual([]);
     });
@@ -663,7 +663,7 @@ describe('TokenLimiterProcessor', () => {
       const result = await processor.processInput({
         messages,
         abort: mockAbort,
-        runtimeContext: new RuntimeContext(),
+        runtimeContext: new RequestContext(),
       });
 
       // System message should always be included
@@ -733,7 +733,7 @@ describe('TokenLimiterProcessor', () => {
       const result = await processor.processInput({
         messages,
         abort: mockAbort,
-        runtimeContext: new RuntimeContext(),
+        runtimeContext: new RequestContext(),
       });
 
       // All messages should fit within the limit
@@ -771,7 +771,7 @@ describe('TokenLimiterProcessor', () => {
       const result = await processor.processInput({
         messages,
         abort: mockAbort,
-        runtimeContext: new RuntimeContext(),
+        runtimeContext: new RequestContext(),
       });
 
       // Should apply input limit (150 tokens)

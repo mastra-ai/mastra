@@ -1,7 +1,7 @@
 import type { MastraMessageV2 } from '../../agent/index.js';
 import type { TracingContext } from '../../ai-tracing/index.js';
 import { parseMemoryRuntimeContext } from '../../memory/types.js';
-import type { RuntimeContext } from '../../runtime-context/index.js';
+import type { RequestContext } from '../../request-context/index.js';
 import type { MemoryStorage } from '../../storage/domains/memory/base.js';
 import type { Processor } from '../index.js';
 
@@ -19,7 +19,7 @@ export interface MessageHistoryOptions {
  * - On input: Fetches historical messages from storage and prepends them
  * - On output: Persists new messages to storage (excluding system messages)
  *
- * This processor retrieves threadId and resourceId from RuntimeContext at execution time,
+ * This processor retrieves threadId and resourceId from RequestContext at execution time,
  * making it decoupled from memory-specific context.
  */
 export class MessageHistory implements Processor {
@@ -38,11 +38,11 @@ export class MessageHistory implements Processor {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-    runtimeContext?: RuntimeContext;
+    runtimeContext?: RequestContext;
   }): Promise<MastraMessageV2[]> {
     const { messages } = args;
 
-    // Get memory context from RuntimeContext
+    // Get memory context from RequestContext
     const memoryContext = parseMemoryRuntimeContext(args.runtimeContext);
     const threadId = memoryContext?.thread?.id;
 
@@ -79,11 +79,11 @@ export class MessageHistory implements Processor {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-    runtimeContext?: RuntimeContext;
+    runtimeContext?: RequestContext;
   }): Promise<MastraMessageV2[]> {
     const { messages } = args;
 
-    // Get memory context from RuntimeContext
+    // Get memory context from RequestContext
     const memoryContext = parseMemoryRuntimeContext(args.runtimeContext);
     const threadId = memoryContext?.thread?.id;
 

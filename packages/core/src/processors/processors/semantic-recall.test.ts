@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import type { MastraMessageV2 } from '../../agent/types';
 import type { Embedder } from '../../llm/model';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage/domains/memory/base';
 import type { VectorStore } from '../../vector/types';
 
@@ -31,7 +31,7 @@ describe('SemanticRecall', () => {
   let mockStorage: MemoryStorage;
   let mockVector: VectorStore;
   let mockEmbedder: Embedder;
-  let runtimeContext: RuntimeContext;
+  let runtimeContext: RequestContext;
 
   beforeEach(() => {
     // Mock storage
@@ -53,7 +53,7 @@ describe('SemanticRecall', () => {
     } as any;
 
     // Setup runtime context with memory data
-    runtimeContext = new RuntimeContext();
+    runtimeContext = new RequestContext();
     runtimeContext.set('MastraMemory', {
       thread: { id: 'thread-1', resourceId: 'resource-1' },
       resourceId: 'resource-1',
@@ -445,7 +445,7 @@ describe('SemanticRecall', () => {
       const inputMessages: MastraMessageV2[] = [createTestMessage('msg-new', 'user', 'Test query')];
 
       // Runtime context without thread
-      const emptyContext = new RuntimeContext();
+      const emptyContext = new RequestContext();
 
       const result = await processor.processInput({
         messages: inputMessages,
@@ -883,7 +883,7 @@ describe('SemanticRecall', () => {
         createdAt: new Date('2024-01-01T10:00:01Z'),
       };
 
-      const runtimeContext = new RuntimeContext();
+      const runtimeContext = new RequestContext();
       runtimeContext.set('MastraMemory', {
         thread: { id: 'thread-123' },
         resourceId: 'user-456',
@@ -986,7 +986,7 @@ describe('SemanticRecall', () => {
         createdAt: new Date('2024-01-01T10:00:01Z'),
       };
 
-      const runtimeContext = new RuntimeContext();
+      const runtimeContext = new RequestContext();
       runtimeContext.set('MastraMemory', {
         thread: { id: 'thread-123' },
         resourceId: 'user-456',
@@ -1066,7 +1066,7 @@ describe('SemanticRecall', () => {
         createdAt: new Date('2024-01-01T10:00:01Z'),
       };
 
-      const runtimeContext = new RuntimeContext();
+      const runtimeContext = new RequestContext();
       runtimeContext.set('MastraMemory', {
         thread: { id: 'thread-123' },
         resourceId: 'user-456',
@@ -1131,7 +1131,7 @@ describe('SemanticRecall', () => {
         createdAt: new Date('2024-01-01T10:00:00Z'),
       };
 
-      const runtimeContext = new RuntimeContext();
+      const runtimeContext = new RequestContext();
       runtimeContext.set('MastraMemory', {
         thread: { id: 'thread-123' },
         resourceId: 'user-456',
@@ -1188,7 +1188,7 @@ describe('SemanticRecall', () => {
         createdAt: new Date('2024-01-01T10:00:00Z'),
       };
 
-      const runtimeContext = new RuntimeContext();
+      const runtimeContext = new RequestContext();
       runtimeContext.set('MastraMemory', {
         thread: { id: 'thread-123' },
         resourceId: 'user-456',
@@ -1248,7 +1248,7 @@ describe('SemanticRecall', () => {
         createdAt: new Date('2024-01-01T10:00:00Z'),
       };
 
-      const runtimeContext = new RuntimeContext();
+      const runtimeContext = new RequestContext();
       // No memory context set
 
       const result = await processor.processOutputResult({
@@ -1299,7 +1299,7 @@ describe('SemanticRecall', () => {
         createdAt: new Date('2024-01-01T10:00:00Z'),
       };
 
-      const runtimeContext = new RuntimeContext();
+      const runtimeContext = new RequestContext();
       runtimeContext.set('MastraMemory', {
         thread: { id: 'thread-123' },
         resourceId: 'user-456',
@@ -1354,7 +1354,7 @@ describe('SemanticRecall', () => {
         createdAt: new Date('2024-01-01T10:00:00Z'),
       };
 
-      const runtimeContext = new RuntimeContext();
+      const runtimeContext = new RequestContext();
       runtimeContext.set('MastraMemory', {
         thread: { id: 'thread-123' },
         resourceId: 'user-456',

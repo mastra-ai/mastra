@@ -363,18 +363,18 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Resolves and returns output processors from agent configuration.
    * @internal
    */
-  private async getResolvedOutputProcessors(runtimeContext?: RuntimeContext): Promise<OutputProcessor[]> {
+  private async getResolvedOutputProcessors(runtimeContext?: RequestContext): Promise<OutputProcessor[]> {
     // Get configured output processors
     const configuredProcessors = this.#outputProcessors
       ? typeof this.#outputProcessors === 'function'
-        ? await this.#outputProcessors({ runtimeContext: runtimeContext || new RuntimeContext() })
+        ? await this.#outputProcessors({ runtimeContext: runtimeContext || new RequestContext() })
         : this.#outputProcessors
       : [];
 
     // Get memory output processors (with deduplication)
     const memory =
       typeof this.#memory === 'function'
-        ? await this.#memory({ runtimeContext: runtimeContext || new RuntimeContext() })
+        ? await this.#memory({ runtimeContext: runtimeContext || new RequestContext() })
         : this.#memory;
 
     const memoryProcessors = memory ? memory.getOutputProcessors(configuredProcessors) : [];
@@ -387,18 +387,18 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Resolves and returns input processors from agent configuration.
    * @internal
    */
-  private async getResolvedInputProcessors(runtimeContext?: RuntimeContext): Promise<InputProcessor[]> {
+  private async getResolvedInputProcessors(runtimeContext?: RequestContext): Promise<InputProcessor[]> {
     // Get configured input processors
     const configuredProcessors = this.#inputProcessors
       ? typeof this.#inputProcessors === 'function'
-        ? await this.#inputProcessors({ runtimeContext: runtimeContext || new RuntimeContext() })
+        ? await this.#inputProcessors({ runtimeContext: runtimeContext || new RequestContext() })
         : this.#inputProcessors
       : [];
 
     // Get memory input processors (with deduplication)
     const memory =
       typeof this.#memory === 'function'
-        ? await this.#memory({ runtimeContext: runtimeContext || new RuntimeContext() })
+        ? await this.#memory({ runtimeContext: runtimeContext || new RequestContext() })
         : this.#memory;
 
     const memoryProcessors = memory ? memory.getInputProcessors(configuredProcessors) : [];
@@ -649,9 +649,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           return typeof msg.content === 'string' ? msg.content : '';
         })
         .filter(content => content) // Remove empty strings
-        .join('
-
-');
+        .join('\n\n');
     }
 
     // Handle single message object - safely extract content

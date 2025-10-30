@@ -8,7 +8,7 @@ import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
 import type { InputProcessor, OutputProcessor } from '../processors';
 import { MessageHistory, SemanticRecall, WorkingMemory } from '../processors/processors';
-import type { RuntimeContext } from '../runtime-context';
+import type { RequestContext } from '../request-context';
 import type {
   MastraStorage,
   PaginationInfo,
@@ -539,7 +539,7 @@ https://mastra.ai/en/docs/memory/overview`,
    * @param context - Optional execution context with threadId and resourceId
    * @returns Array of input processors configured for this memory instance
    */
-  getInputProcessors(configuredProcessors: InputProcessor[] = [], _context?: RuntimeContext): InputProcessor[] {
+  getInputProcessors(configuredProcessors: InputProcessor[] = [], _context?: RequestContext): InputProcessor[] {
     const processors: InputProcessor[] = [];
 
     // Add semantic recall processor if configured

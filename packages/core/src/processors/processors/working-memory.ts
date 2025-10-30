@@ -1,6 +1,6 @@
 import { parseMemoryRuntimeContext } from '../../memory/types';
 import type { MastraMessageV2 } from '../../memory/types';
-import type { RuntimeContext } from '../../runtime-context';
+import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage/domains/memory/base';
 import type { InputProcessor } from '../index';
 
@@ -53,7 +53,7 @@ export class WorkingMemory implements InputProcessor {
   async processInput(args: {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
-    runtimeContext?: RuntimeContext;
+    runtimeContext?: RequestContext;
   }): Promise<MastraMessageV2[]> {
     const { messages, runtimeContext } = args;
 
