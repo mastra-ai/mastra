@@ -162,7 +162,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async endWorkflow(args: ProcessorArgs) {
-    const { stepResults, workflowId, runId, prevResult } = args;
+    const { workflowId, runId, prevResult } = args;
     await this.mastra.getStorage()?.updateWorkflowState({
       workflowName: workflowId,
       runId,
