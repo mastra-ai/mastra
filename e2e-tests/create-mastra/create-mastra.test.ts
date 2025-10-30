@@ -54,11 +54,15 @@ describe('create mastra', () => {
             PORT: port.toString(),
           },
         });
-        proc!.stderr?.on('data', data => {
-          console.error(data?.toString());
-        });
-        await new Promise<void>(resolve => {
+
+        await new Promise<void>((resolve, reject) => {
           console.log('waiting for server to start');
+          proc!.stderr?.on('data', data => {
+            console.error(data?.toString() ?? '');
+            if (data?.toString()) {
+              reject(new Error('failed to start dev: ' + data?.toString()));
+            }
+          });
           proc!.stdout?.on('data', data => {
             console.log(data?.toString());
             if (data?.toString()?.includes(`http://localhost:${port}`)) {
