@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { MockMemory } from '@mastra/core/memory';
