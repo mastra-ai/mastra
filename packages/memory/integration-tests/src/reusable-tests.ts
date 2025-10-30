@@ -44,14 +44,26 @@ const createTestMessage = (
   content: string | TextPart[] | ToolCallPart[] | ToolResultPart[],
   role: 'user' | 'assistant' | 'tool' = 'user',
   type: 'text' | 'tool-call' | 'tool-result' = 'text',
-): MastraMessageV1 => {
+): MastraDBMessage => {
   messageCounter++;
+  
+  // Convert content to MastraDBMessage format
+  let parts: (TextPart | ToolCallPart | ToolResultPart)[];
+  if (typeof content === 'string') {
+    parts = [{ type: 'text', text: content }];
+  } else {
+    parts = content;
+  }
+  
   return {
     id: randomUUID(),
     threadId,
-    content,
+    content: {
+      format: 2,
+      parts,
+    },
     role,
-    type,
+    type: type === 'text' ? undefined : type,
     createdAt: new Date(Date.now() + messageCounter * 1000), // Add 1 second per message to prevent messages having the same timestamp
     resourceId,
   };
