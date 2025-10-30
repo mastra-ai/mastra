@@ -442,47 +442,6 @@ export async function getAgentByIdHandler({
   }
 }
 
-export async function getEvalsByAgentIdHandler({
-  mastra,
-  runtimeContext,
-  agentId,
-}: Context & { runtimeContext: RuntimeContext; agentId: string }) {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-    const evals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'test')) || [];
-    const instructions = await agent.getInstructions({ runtimeContext });
-    return {
-      id: agentId,
-      name: agent.name,
-      instructions,
-      evals,
-    };
-  } catch (error) {
-    return handleError(error, 'Error getting test evals');
-  }
-}
-
-export async function getLiveEvalsByAgentIdHandler({
-  mastra,
-  runtimeContext,
-  agentId,
-}: Context & { runtimeContext: RuntimeContext; agentId: string }) {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-    const evals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'live')) || [];
-    const instructions = await agent.getInstructions({ runtimeContext });
-
-    return {
-      id: agentId,
-      name: agent.name,
-      instructions,
-      evals,
-    };
-  } catch (error) {
-    return handleError(error, 'Error getting live evals');
-  }
-}
-
 export async function generateLegacyHandler({
   mastra,
   runtimeContext,

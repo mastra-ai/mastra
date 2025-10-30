@@ -9,8 +9,6 @@ import {
   getAgentByIdHandler,
   getAgentsHandler,
   getProvidersHandler,
-  getEvalsByAgentIdHandler,
-  getLiveEvalsByAgentIdHandler,
   setAgentInstructionsHandler,
   streamGenerateHandler,
   updateAgentModelHandler,
@@ -83,50 +81,6 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getAgentByIdHandler,
-  );
-
-  router.get(
-    '/:agentId/evals/ci',
-    describeRoute({
-      description: 'Get CI evals by agent ID',
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      responses: {
-        200: {
-          description: 'List of evals',
-        },
-      },
-    }),
-    getEvalsByAgentIdHandler,
-  );
-
-  router.get(
-    '/:agentId/evals/live',
-    describeRoute({
-      description: 'Get live evals by agent ID',
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      responses: {
-        200: {
-          description: 'List of evals',
-        },
-      },
-    }),
-    getLiveEvalsByAgentIdHandler,
   );
 
   router.post(
