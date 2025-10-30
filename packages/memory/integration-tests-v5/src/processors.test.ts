@@ -109,7 +109,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result = await applyInputProcessors(
-      queryResult.uiMessages,
+      v2ToCoreMessages(queryResult.uiMessages),
       [new TokenLimiter(250)], // Limit to 250 tokens
       thread.id,
       resourceId,
