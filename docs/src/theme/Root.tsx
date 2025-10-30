@@ -6,7 +6,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PostHogProvider } from "posthog-js/react";
 import { GTProvider } from "gt-react";
 import loadTranslations from "@site/src/loadTranslations";
-import { LocaleSync } from "@site/src/components/gt/LocaleSync";
 import React from "react";
 
 const queryClient = new QueryClient({
@@ -39,9 +38,13 @@ export default function Root({ children }: { children: React.ReactNode }) {
       >
         <KapaProvider integrationId={kapaIntegrationId || ""}>
           {/* Adding GTProvider to the root of the app to ensure all jsx is translated */}
-          <GTProvider locales={locales} loadTranslations={loadTranslations}>
-            {/* Adding LocaleSync to the root of the app to ensure the locale is synced between Docusaurus and GT */}
-            <LocaleSync />
+          <GTProvider
+            locales={locales}
+            // Ensure SSR markup matches client by using Docusaurus locale
+            locale={i18n?.currentLocale}
+            defaultLocale={i18n?.defaultLocale}
+            loadTranslations={loadTranslations}
+          >
             <Toaster />
             <CookieConsent />
             {children}

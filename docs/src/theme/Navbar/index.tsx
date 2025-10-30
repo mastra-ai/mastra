@@ -4,6 +4,7 @@ import LocaleControl from "@site/src/components/gt/LocaleControl";
 import { ThemeSwitcher } from "@site/src/components/theme-switcher";
 import NavbarLayout from "@theme/Navbar/Layout";
 import NavbarMobileSidebarToggle from "@theme/Navbar/MobileSidebar/Toggle";
+import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import { type ReactNode } from "react";
 import SearchContainer from "./Search";
 import { Logo } from "./logo";
@@ -11,6 +12,8 @@ import { TabSwitcher } from "./tab-switcher";
 import { MobileDocsDropdown } from "@site/src/components/mobile-docs-dropdown";
 
 function NavbarContentDesktop() {
+  const { i18n } = useDocusaurusContext();
+  const locale = i18n?.currentLocale;
   return (
     <>
       <div className="flex px-4 border-b-[0.5px] h-[47px] border-(--border-subtle) mx-auto w-full items-center justify-between @container">
@@ -28,7 +31,7 @@ function NavbarContentDesktop() {
 
         <div className="flex gap-2 items-center">
           <div className="hidden @[798px]:block">
-            <SearchContainer locale="en" />
+            <SearchContainer locale={locale} />
           </div>
           <div className="flex gap-4 items-center">
             <GithubStarCount />
