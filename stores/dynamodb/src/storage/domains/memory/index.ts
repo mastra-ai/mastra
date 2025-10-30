@@ -10,8 +10,8 @@ import type {
   ThreadSortOptions,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StoragelistThreadsByResourceIdInput,
-  StoragelistThreadsByResourceIdOutput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
 
@@ -429,8 +429,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
    * implement orderBy and sortDirection support for full sorting capabilities
    */
   public async listThreadsByResourceId(
-    args: StoragelistThreadsByResourceIdInput,
-  ): Promise<StoragelistThreadsByResourceIdOutput> {
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, limit, offset } = args;
     const page = Math.floor(offset / limit);
     const perPage = limit;

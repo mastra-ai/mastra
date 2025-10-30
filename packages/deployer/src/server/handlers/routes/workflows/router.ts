@@ -8,7 +8,7 @@ import {
   getWorkflowByIdHandler,
   getWorkflowRunByIdHandler,
   getWorkflowRunExecutionResultHandler,
-  getWorkflowRunsHandler,
+  listWorkflowRunsHandler,
   getWorkflowsHandler,
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
@@ -388,7 +388,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
   router.get(
     '/:workflowId/runs',
     describeRoute({
-      description: 'Get all runs for a workflow',
+      description: 'List all runs for a workflow',
       tags: ['workflows'],
       parameters: [
         {
@@ -409,7 +409,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    getWorkflowRunsHandler,
+    listWorkflowRunsHandler,
   );
 
   router.get(

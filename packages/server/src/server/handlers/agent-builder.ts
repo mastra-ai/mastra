@@ -157,7 +157,7 @@ export const resumeStreamAgentBuilderActionHandler = createAgentBuilderWorkflowH
 );
 
 export const getAgentBuilderActionRunsHandler = createAgentBuilderWorkflowHandler(
-  workflows.getWorkflowRunsHandler,
+  workflows.listWorkflowRunsHandler,
   'Getting agent builder action runs',
 );
 
