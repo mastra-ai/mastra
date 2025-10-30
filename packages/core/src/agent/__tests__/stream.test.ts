@@ -128,11 +128,11 @@ function runStreamTest(version: 'v1' | 'v2') {
       expect(caught).toBe(true);
 
       // After interruption, check what was saved
-      let messages = await mockMemory.getMessages({
+      let result = await mockMemory.getMessages({
         threadId: 'thread-partial-rescue',
         resourceId: 'resource-partial-rescue',
-        format: 'v2',
       });
+      let messages = result.messages;
 
       // User message should be saved
       expect(messages.find(m => m.role === 'user')).toBeTruthy();
@@ -199,11 +199,11 @@ function runStreamTest(version: 'v1' | 'v2') {
       await stream.consumeStream();
 
       expect(saveCallCount).toBeGreaterThan(1);
-      const messages = await mockMemory.getMessages({
+      const result = await mockMemory.getMessages({
         threadId: 'thread-echo',
         resourceId: 'resource-echo',
-        format: 'v2',
       });
+      const messages = result.messages;
       expect(messages.length).toBeGreaterThan(0);
       const assistantMsg = messages.find(m => m.role === 'assistant');
       expect(assistantMsg).toBeDefined();
@@ -278,11 +278,11 @@ function runStreamTest(version: 'v1' | 'v2') {
       await stream.consumeStream();
 
       expect(saveCallCount).toBeGreaterThan(1);
-      const messages = await mockMemory.getMessages({
+      const result = await mockMemory.getMessages({
         threadId: 'thread-multi',
         resourceId: 'resource-multi',
-        format: 'v2',
       });
+      const messages = result.messages;
       expect(messages.length).toBeGreaterThan(0);
       const assistantMsg = messages.find(m => m.role === 'assistant');
       expect(assistantMsg).toBeDefined();
@@ -320,7 +320,8 @@ function runStreamTest(version: 'v1' | 'v2') {
 
       await stream.consumeStream();
 
-      const messages = await mockMemory.getMessages({ threadId: 'thread-1', resourceId: 'resource-1', format: 'v2' });
+      const result = await mockMemory.getMessages({ threadId: 'thread-1', resourceId: 'resource-1' });
+      const messages = result.messages;
       // Check that the last message matches the expected final output
       expect(
         messages[messages.length - 1]?.content?.parts?.some(
@@ -476,7 +477,8 @@ function runStreamTest(version: 'v1' | 'v2') {
 
       expect(saveCallCount).toBe(1);
 
-      const messages = await mockMemory.getMessages({ threadId: 'thread-2', resourceId: 'resource-2', format: 'v2' });
+      const result = await mockMemory.getMessages({ threadId: 'thread-2', resourceId: 'resource-2' });
+      const messages = result.messages;
       expect(messages.length).toBe(1);
       expect(messages[0].role).toBe('user');
       expect(messages[0].content.content).toBe('no progress');
@@ -518,7 +520,8 @@ function runStreamTest(version: 'v1' | 'v2') {
       });
 
       expect(saveCallCount).toBe(0);
-      const messages = await mockMemory.getMessages({ threadId: 'thread-3', resourceId: 'resource-3' });
+      const result = await mockMemory.getMessages({ threadId: 'thread-3', resourceId: 'resource-3' });
+      const messages = result.messages;
       expect(messages.length).toBe(0);
     });
 
