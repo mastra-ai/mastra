@@ -15,7 +15,7 @@ export class MockMemory extends MastraMemory {
   threads: Record<string, StorageThreadType> = {};
   messages: Map<string, MastraMessageV1 | MastraMessageV2> = new Map();
 
-  constructor(storage?: InMemoryStore) {
+  constructor({ storage }: { storage?: InMemoryStore } = {}) {
     super({ name: 'mock', storage: storage || new InMemoryStore() });
     this._hasOwnStorage = true;
   }
