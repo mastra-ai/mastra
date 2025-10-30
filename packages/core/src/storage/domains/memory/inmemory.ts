@@ -106,7 +106,7 @@ export class InMemoryMemory extends MemoryStorage {
     });
   }
 
-  async getMessages<T extends MastraDBMessage[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
+  async getMessages({ threadId, selectBy }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     this.logger.debug(`MockStore: getMessages called for thread ${threadId}`);
 
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
@@ -227,7 +227,7 @@ export class InMemoryMemory extends MemoryStorage {
     // Sort by createdAt
     messages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-    return messages as T;
+    return { messages };
   }
 
   protected parseStoredMessage(message: StorageMessageType): MastraDBMessage {
@@ -241,16 +241,16 @@ export class InMemoryMemory extends MemoryStorage {
     } satisfies MastraDBMessage;
   }
 
-  async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraDBMessage[]> {
+  async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     this.logger.debug(`MockStore: getMessagesById called`);
 
     const rawMessages = messageIds.map(id => this.collection.messages.get(id)).filter(message => !!message);
 
     const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
-    return list.get.all.db();
+    return { messages: list.get.all.db() };
   }
 
-  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<MastraDBMessage[]> {
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     const { messages } = args;
     this.logger.debug(`MockStore: saveMessages called with ${messages.length} messages`);
     // Simulate error handling for testing - check before saving
@@ -283,7 +283,7 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     const list = new MessageList().add(messages, 'memory');
-    return list.get.all.db();
+    return { messages: list.get.all.db() };
   }
 
   async updateMessages(args: { messages: (Partial<MastraDBMessage> & { id: string })[] }): Promise<MastraDBMessage[]> {

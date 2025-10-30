@@ -716,7 +716,7 @@ ${workingMemory}`;
       );
     }
 
-    return { messages: result };
+    return result;
   }
   protected updateMessageToHideWorkingMemory(message: MastraMessageV1): MastraMessageV1 | null {
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
