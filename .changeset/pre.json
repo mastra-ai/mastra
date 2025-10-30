@@ -82,5 +82,8 @@
     "@mastra/voice-speechify": "0.11.11",
     "@mastra/inngest": "0.18.3"
   },
-  "changesets": []
+  "changesets": [
+    "khaki-garlics-poke",
+    "lemon-nails-wait"
+  ]
 }

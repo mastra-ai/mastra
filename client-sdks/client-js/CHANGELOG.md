@@ -1,5 +1,14 @@
 # @mastra/client-js
 
+## 0.16.9-alpha.0
+
+### Patch Changes
+
+- Fixes issue where clicking the reset button in the model picker would fail to restore the original LanguageModelV2 (or any other types) object that was passed during agent construction. ([#9487](https://github.com/mastra-ai/mastra/pull/9487))
+
+- Updated dependencies [[`23c2614`](https://github.com/mastra-ai/mastra/commit/23c26140fdbf04b8c59e8d7d52106d67dad962ec)]:
+  - @mastra/core@0.24.0-alpha.0
+
 ## 0.16.8
 
 ### Patch Changes

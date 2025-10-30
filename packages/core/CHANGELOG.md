@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.24.0-alpha.0
+
+### Patch Changes
+
+- Fixes issue where clicking the reset button in the model picker would fail to restore the original LanguageModelV2 (or any other types) object that was passed during agent construction. ([#9487](https://github.com/mastra-ai/mastra/pull/9487))
+
 ## 0.23.3
 
 ### Patch Changes

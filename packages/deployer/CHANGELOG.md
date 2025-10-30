@@ -1,5 +1,19 @@
 # @mastra/deployer
 
+## 0.24.0-alpha.0
+
+### Minor Changes
+
+- Update peer dependencies to match core package version bump (0.23.4) ([#9487](https://github.com/mastra-ai/mastra/pull/9487))
+
+### Patch Changes
+
+- Fixes issue where clicking the reset button in the model picker would fail to restore the original LanguageModelV2 (or any other types) object that was passed during agent construction. ([#9487](https://github.com/mastra-ai/mastra/pull/9487))
+
+- Updated dependencies [[`23c2614`](https://github.com/mastra-ai/mastra/commit/23c26140fdbf04b8c59e8d7d52106d67dad962ec), [`23c2614`](https://github.com/mastra-ai/mastra/commit/23c26140fdbf04b8c59e8d7d52106d67dad962ec)]:
+  - @mastra/server@0.24.0-alpha.0
+  - @mastra/core@0.24.0-alpha.0
+
 ## 0.23.3
 
 ### Patch Changes
