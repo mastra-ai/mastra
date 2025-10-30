@@ -775,6 +775,16 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const query = { resourceId };
       const total = await collection.countDocuments(query);
 
+      if (limit === 0) {
+        return {
+          threads: [],
+          total,
+          page: 0,
+          perPage: 0,
+          hasMore: offset < total,
+        };
+      }
+
       // MongoDB sort: 1 = ASC, -1 = DESC
       const sortOrder = direction === 'ASC' ? 1 : -1;
 

@@ -566,7 +566,12 @@ export async function searchMemoryHandler({
 
     // If no threadId provided, get one from the resource
     if (!threadId) {
-      const { threads } = await memory.listThreadsByResourceId({ resourceId, limit, offset: 0 });
+      const { threads } = await memory.listThreadsByResourceId({
+        resourceId,
+        offset: 0,
+        limit: 1,
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
+      });
 
       if (threads.length === 0) {
         return {
@@ -614,8 +619,10 @@ export async function searchMemoryHandler({
     });
 
     // Get all threads to build context and show which thread each message is from
-    const { threads } = await memory.listThreadsByResourceId({ resourceId, limit, offset: 0 });
-    const threadMap = new Map(threads.map(t => [t.id, t]));
+    // Fetch threads by IDs from the actual messages to avoid truncation
+    const threadIds = Array.from(new Set(result.messagesV2.map(m => m.threadId || threadId!).filter(Boolean)));
+    const fetched = await Promise.all(threadIds.map(id => memory.getThreadById({ threadId: id })));
+    const threadMap = new Map(fetched.filter(Boolean).map(t => [t!.id, t!]));
 
     // Process each message in the results
     for (const msg of result.messagesV2) {

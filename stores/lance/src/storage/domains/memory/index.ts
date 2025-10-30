@@ -22,11 +22,6 @@ import type {
 import type { StoreOperationsLance } from '../operations';
 import { getTableSchema, processResultWithTypeConversion } from '../utils';
 
-// Utility to escape single quotes in SQL strings
-function escapeSql(str: string): string {
-  return str.replace(/'/g, "''");
-}
-
 export class StoreMemoryLance extends MemoryStorage {
   private client: Connection;
   private operations: StoreOperationsLance;
@@ -34,6 +29,11 @@ export class StoreMemoryLance extends MemoryStorage {
     super();
     this.client = client;
     this.operations = operations;
+  }
+
+  // Utility to escape single quotes in SQL strings
+  private escapeSql(str: string): string {
+    return str.replace(/'/g, "''");
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -341,11 +341,10 @@ export class StoreMemoryLance extends MemoryStorage {
       const table = await this.client.openTable(TABLE_MESSAGES);
 
       // Build query conditions
-      const escapeSql = (str: string) => str.replace(/'/g, "''");
-      const conditions: string[] = [`thread_id = '${escapeSql(threadId)}'`];
+      const conditions: string[] = [`thread_id = '${this.escapeSql(threadId)}'`];
 
       if (resourceId) {
-        conditions.push(`\`resourceId\` = '${escapeSql(resourceId)}'`);
+        conditions.push(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
       }
 
       if (filter?.dateRange?.start) {
@@ -377,6 +376,10 @@ export class StoreMemoryLance extends MemoryStorage {
       allRecords.sort((a, b) => {
         const aValue = field === 'createdAt' ? a.createdAt : a[field];
         const bValue = field === 'createdAt' ? b.createdAt : b[field];
+
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+        }
         return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
@@ -432,6 +435,10 @@ export class StoreMemoryLance extends MemoryStorage {
       finalMessages = finalMessages.sort((a, b) => {
         const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
         const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+        }
         return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
@@ -554,17 +561,21 @@ export class StoreMemoryLance extends MemoryStorage {
       const table = await this.client.openTable(TABLE_THREADS);
 
       // Get total count
-      const total = await table.countRows(`\`resourceId\` = '${escapeSql(resourceId)}'`);
+      const total = await table.countRows(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
 
       // Get ALL matching records (no limit/offset yet - need to sort first)
-      const query = table.query().where(`\`resourceId\` = '${escapeSql(resourceId)}'`);
+      const query = table.query().where(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
       const records = await query.toArray();
 
       // Apply dynamic sorting BEFORE pagination
       records.sort((a, b) => {
-        const aTime = new Date(a[field]).getTime();
-        const bTime = new Date(b[field]).getTime();
-        return direction === 'ASC' ? aTime - bTime : bTime - aTime;
+        const aValue = ['createdAt', 'updatedAt'].includes(field) ? new Date(a[field]).getTime() : a[field];
+        const bValue = ['createdAt', 'updatedAt'].includes(field) ? new Date(b[field]).getTime() : b[field];
+
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+        }
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
       // Apply pagination AFTER sorting

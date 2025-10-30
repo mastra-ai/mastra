@@ -922,7 +922,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 toDateTime64(updatedAt, 3) as updatedAt
               FROM ${TABLE_THREADS}
               WHERE resourceId = {resourceId:String}
-              ORDER BY ${field} ${direction}
+              ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}
               LIMIT {limit:Int64} OFFSET {offset:Int64}
             `,
         query_params: {

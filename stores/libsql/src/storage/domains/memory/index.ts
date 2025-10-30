@@ -890,7 +890,7 @@ export class MemoryLibSQL extends MemoryStorage {
       }
 
       const dataResult = await this.client.execute({
-        sql: `SELECT * ${baseQuery} ORDER BY ${field} ${direction} LIMIT ? OFFSET ?`,
+        sql: `SELECT * ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
         args: [...queryParams, limit, offset],
       });
 
