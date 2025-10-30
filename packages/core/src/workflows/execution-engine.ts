@@ -23,7 +23,7 @@ export interface ExecutionEngineOptions {
   shouldPersistSnapshot: (params: {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     workflowStatus: WorkflowRunStatus;
-  }) => boolean;
+  }) => boolean | { state?: boolean; runtimeContext?: boolean };
 }
 /**
  * Execution engine abstract class for building and executing workflow graphs

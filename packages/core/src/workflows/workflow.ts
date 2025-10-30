@@ -1046,14 +1046,26 @@ export class Workflow<
 
     this.#runs.set(runIdToUse, run);
 
-    const shouldPersistSnapshot = this.#options.shouldPersistSnapshot({
+    const shouldPersistResult = this.#options.shouldPersistSnapshot({
       workflowStatus: run.workflowRunStatus,
       stepResults: {},
     });
 
+    const shouldPersist =
+      typeof shouldPersistResult === 'boolean'
+        ? shouldPersistResult
+        : shouldPersistResult.state !== false || shouldPersistResult.runtimeContext !== false;
+
     const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
-    if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
+    if (!workflowSnapshotInStorage && shouldPersist) {
+      // Determine what to include based on result type
+      const includeState =
+        typeof shouldPersistResult === 'boolean' ? shouldPersistResult : shouldPersistResult.state !== false;
+
+      const includeRuntimeContext =
+        typeof shouldPersistResult === 'boolean' ? shouldPersistResult : shouldPersistResult.runtimeContext !== false;
+
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
@@ -1061,7 +1073,8 @@ export class Workflow<
         snapshot: {
           runId: runIdToUse,
           status: 'pending',
-          value: {},
+          // @ts-ignore - value can be undefined when state persistence is disabled
+          value: includeState ? {} : undefined,
           context: {},
           activePaths: [],
           serializedStepGraph: this.serializedStepGraph,
@@ -1070,6 +1083,8 @@ export class Workflow<
           waitingPaths: {},
           result: undefined,
           error: undefined,
+          // @ts-ignore - runtimeContext can be undefined when runtimeContext persistence is disabled
+          runtimeContext: includeRuntimeContext ? {} : undefined,
           // @ts-ignore
           timestamp: Date.now(),
         },

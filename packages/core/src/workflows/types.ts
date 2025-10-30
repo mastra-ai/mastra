@@ -227,7 +227,7 @@ export interface WorkflowOptions {
   shouldPersistSnapshot?: (params: {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     workflowStatus: WorkflowRunStatus;
-  }) => boolean;
+  }) => boolean | { state?: boolean; runtimeContext?: boolean };
 }
 
 export type WorkflowInfo = {

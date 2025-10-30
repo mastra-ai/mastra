@@ -33,7 +33,11 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         internal: InternalSpans.WORKFLOW,
       },
       shouldPersistSnapshot: params => {
-        return params.workflowStatus === 'suspended';
+        if (params.workflowStatus === 'suspended') {
+          // Persist execution graph and runtimeContext, but NOT state (has non-serializable objects)
+          return { state: false, runtimeContext: true };
+        }
+        return false;
       },
     },
   })

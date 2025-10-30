@@ -1990,16 +1990,26 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     error?: string | Error;
     runtimeContext: RuntimeContext;
   }) {
-    const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({ stepResults, workflowStatus });
+    const shouldPersistResult = this.options?.shouldPersistSnapshot?.({ stepResults, workflowStatus });
 
-    if (!shouldPersistSnapshot) {
+    if (!shouldPersistResult) {
       return;
     }
 
+    // Determine what to include based on result type
+    const includeState =
+      typeof shouldPersistResult === 'boolean' ? shouldPersistResult : shouldPersistResult.state !== false;
+
+    const includeRuntimeContext =
+      typeof shouldPersistResult === 'boolean' ? shouldPersistResult : shouldPersistResult.runtimeContext !== false;
+
+    // Build runtimeContext object only if needed
     const runtimeContextObj: Record<string, any> = {};
-    runtimeContext.forEach((value, key) => {
-      runtimeContextObj[key] = value;
-    });
+    if (includeRuntimeContext) {
+      runtimeContext.forEach((value, key) => {
+        runtimeContextObj[key] = value;
+      });
+    }
 
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
       workflowName: workflowId,
@@ -2008,7 +2018,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       snapshot: {
         runId,
         status: workflowStatus,
-        value: executionContext.state,
+        // @ts-ignore - value can be undefined when state persistence is disabled
+        value: includeState ? executionContext.state : undefined,
         context: stepResults as any,
         activePaths: [],
         serializedStepGraph,
@@ -2017,7 +2028,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resumeLabels: executionContext.resumeLabels,
         result,
         error,
-        runtimeContext: runtimeContextObj,
+        // @ts-ignore - runtimeContext can be undefined when runtimeContext persistence is disabled
+        runtimeContext: includeRuntimeContext ? runtimeContextObj : undefined,
         // @ts-ignore
         timestamp: Date.now(),
       },
