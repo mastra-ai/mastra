@@ -15,6 +15,35 @@ import { z } from 'zod';
 import { memoryProcessorAgent } from './mastra/agents/weather';
 import { weatherTool, weatherToolCity } from './mastra/tools/weather';
 
+// Helper function to extract text content from MastraDBMessage
+function getTextContent(message: any): string {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+  
+  if (message.content && typeof message.content === 'object') {
+    // Handle format 2 (MastraMessageContentV2)
+    if (message.content.parts && Array.isArray(message.content.parts)) {
+      const textParts = message.content.parts
+        .filter((part: any) => part.type === 'text')
+        .map((part: any) => part.text);
+      return textParts.join(' ');
+    }
+    
+    // Handle direct text property
+    if (message.content.text) {
+      return message.content.text;
+    }
+    
+    // Handle nested content property
+    if (message.content.content && typeof message.content.content === 'string') {
+      return message.content.content;
+    }
+  }
+  
+  return '';
+}
+
 describe('Agent Memory Tests', () => {
   const dbFile = 'file:mastra-agent.db';
 
@@ -224,7 +253,7 @@ describe('Agent Memory Tests', () => {
     // Verify that the retrieved messages contain content from the first thread
     const hasMessagesFromFirstThread = retrievedMemoryMessages.some(
       msg =>
-        msg.threadId === thread1Id || (typeof msg.content === 'string' && msg.content.toLowerCase().includes('cat')),
+        msg.threadId === thread1Id || getTextContent(msg).toLowerCase().includes('cat'),
     );
     expect(hasMessagesFromFirstThread).toBe(true);
     expect(secondResponse.text.toLowerCase()).toMatch(/(cat|animal|discuss)/);
@@ -353,14 +382,14 @@ describe('Agent Memory Tests', () => {
 
       // Assert that the context messages are NOT saved
       const savedContextMessages = messages.filter(
-        (m: any) => m.content === contextMessageContent1 || m.content === contextMessageContent2,
+        (m: any) => getTextContent(m) === contextMessageContent1 || getTextContent(m) === contextMessageContent2,
       );
       expect(savedContextMessages.length).toBe(0);
 
       // Assert that the user message IS saved
       const savedUserMessages = messages.filter((m: any) => m.role === 'user');
       expect(savedUserMessages.length).toBe(1);
-      expect(savedUserMessages[0].content).toBe(userMessageContent);
+      expect(getTextContent(savedUserMessages[0])).toBe(userMessageContent);
     });
 
     it('should persist UIMessageWithMetadata through agent generate and memory', async () => {

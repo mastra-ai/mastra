@@ -17,6 +17,35 @@ import { z } from 'zod';
 const resourceId = 'test-resource';
 let messageCounter = 0;
 
+// Helper function to extract text content from MastraDBMessage
+function getTextContent(message: any): string {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+  
+  if (message.content && typeof message.content === 'object') {
+    // Handle format 2 (MastraMessageContentV2)
+    if (message.content.parts && Array.isArray(message.content.parts)) {
+      const textParts = message.content.parts
+        .filter((part: any) => part.type === 'text')
+        .map((part: any) => part.text);
+      return textParts.join(' ');
+    }
+    
+    // Handle direct text property
+    if (message.content.text) {
+      return message.content.text;
+    }
+    
+    // Handle nested content property
+    if (message.content.content && typeof message.content.content === 'string') {
+      return message.content.content;
+    }
+  }
+  
+  return '';
+}
+
 // Test helpers
 const createTestThread = (title: string, metadata = {}) => ({
   id: randomUUID(),
@@ -164,8 +193,8 @@ describe('Working Memory Tests', () => {
       });
 
       // Working memory tags should be stripped from the messages
-      expect(remembered.messages[1].content).not.toContain('<working_memory>');
-      expect(remembered.messages[1].content).toContain('Hello John!');
+      expect(getTextContent(remembered.messages[1])).not.toContain('<working_memory>');
+      expect(getTextContent(remembered.messages[1])).toContain('Hello John!');
     });
 
     it('should respect working memory enabled/disabled setting', async () => {
