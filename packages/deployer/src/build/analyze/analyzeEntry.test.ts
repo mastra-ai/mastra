@@ -191,7 +191,7 @@ describe('analyzeEntry', () => {
     expect(result.output.code).toContain('greet');
   });
 
-  it.only('should handle recursive imports', async () => {
+  it('should handle recursive imports', async () => {
     const root = join(import.meta.dirname, '__fixtures__', 'nested-workspace');
     vi.spyOn(process, 'cwd').mockReturnValue(join(root, 'apps', 'mastra'));
 
