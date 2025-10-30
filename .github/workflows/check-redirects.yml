@@ -1,5 +1,9 @@
 name: Check for Missing Redirects
 
+permissions:
+  contents: read
+  pull-requests: write
+
 on:
   pull_request:
     paths:
