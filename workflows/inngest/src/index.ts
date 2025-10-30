@@ -90,7 +90,7 @@ export function serve({
   functions?: InngestFunction.Like[];
   registerOptions?: RegisterOptions;
 }): ReturnType<typeof inngestServe> {
-  const wfs = mastra.getWorkflows();
+  const wfs = mastra.listWorkflows();
   const workflowFunctions = Array.from(
     new Set(
       Object.values(wfs).flatMap(wf => {

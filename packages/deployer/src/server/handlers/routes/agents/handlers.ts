@@ -5,7 +5,7 @@ import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { ChunkType } from '@mastra/core/stream';
 import { ChunkFrom } from '@mastra/core/stream';
 import {
-  getAgentsHandler as getOriginalAgentsHandler,
+  listAgentsHandler as getOriginalListAgentsHandler,
   getAgentByIdHandler as getOriginalAgentByIdHandler,
   generateHandler as getOriginalGenerateHandler,
   streamGenerateHandler as getOriginalStreamGenerateHandler,
@@ -95,8 +95,8 @@ export const vNextBodyOptions: any = {
 };
 
 // Agent handlers
-export async function getAgentsHandler(c: Context) {
-  const serializedAgents = await getOriginalAgentsHandler({
+export async function listAgentsHandler(c: Context) {
+  const serializedAgents = await getOriginalListAgentsHandler({
     mastra: c.get('mastra'),
     runtimeContext: c.get('runtimeContext'),
   });

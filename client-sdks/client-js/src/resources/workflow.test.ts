@@ -232,7 +232,7 @@ describe('Workflow Client Methods', () => {
       workflow2: { name: 'Workflow 2' },
     };
     mockFetchResponse(mockResponse);
-    const result = await client.getWorkflows();
+    const result = await client.listWorkflows();
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
       `${clientOptions.baseUrl}/api/workflows`,
@@ -252,7 +252,7 @@ describe('Workflow Client Methods', () => {
     const expectedEncodedBase64 = encodeURIComponent(expectedBase64);
 
     mockFetchResponse(mockResponse);
-    const result = await client.getWorkflows(runtimeContext);
+    const result = await client.listWorkflows(runtimeContext);
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
       `${clientOptions.baseUrl}/api/workflows?runtimeContext=${expectedEncodedBase64}`,

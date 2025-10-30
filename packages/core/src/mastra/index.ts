@@ -756,11 +756,11 @@ do:
    *   }
    * });
    *
-   * const allAgents = mastra.getAgents();
+   * const allAgents = mastra.listAgents();
    * console.log(Object.keys(allAgents)); // ['weatherAgent', 'supportAgent']
    * ```
    */
-  public getAgents() {
+  public listAgents() {
     return this.#agents;
   }
 
@@ -1073,9 +1073,9 @@ do:
    * Returns all registered legacy workflows as a record keyed by their IDs.
    *
    * Legacy workflows are the previous generation of workflow system in Mastra,
-   * maintained for backward compatibility. For new implementations, use `getWorkflows()`.
+   * maintained for backward compatibility. For new implementations, use `listWorkflows()`.
    *
-   * @deprecated Use `getWorkflows()` for new implementations
+   * @deprecated Use `listWorkflows()` for new implementations
    *
    * @example Listing all legacy workflows
    * ```typescript
@@ -1122,7 +1122,7 @@ do:
    *   }
    * });
    *
-   * const allScorers = mastra.getScorers();
+   * const allScorers = mastra.listScorers();
    * console.log(Object.keys(allScorers)); // ['helpfulness', 'accuracy', 'relevance']
    *
    * // Check scorer configurations
@@ -1131,7 +1131,7 @@ do:
    * }
    * ```
    */
-  public getScorers() {
+  public listScorers() {
     return this.#scorers;
   }
 
@@ -1243,7 +1243,7 @@ do:
    *   }
    * });
    *
-   * const allWorkflows = mastra.getWorkflows();
+   * const allWorkflows = mastra.listWorkflows();
    * console.log(Object.keys(allWorkflows)); // ['dataProcessor', 'emailSender', 'reportGenerator']
    *
    * // Execute all workflows with sample data
@@ -1253,7 +1253,7 @@ do:
    * }
    * ```
    */
-  public getWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
+  public listWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
     if (props.serialized) {
       return Object.entries(this.#workflows).reduce((acc, [k, v]) => {
         return {
@@ -1480,7 +1480,7 @@ do:
     return this.#bundler;
   }
 
-  public async getLogsByRunId({
+  public async listLogsByRunId({
     runId,
     transportId,
     fromDate,
@@ -1501,7 +1501,7 @@ do:
   }) {
     if (!transportId) {
       const error = new MastraError({
-        id: 'MASTRA_GET_LOGS_BY_RUN_ID_MISSING_TRANSPORT',
+        id: 'MASTRA_LIST_LOGS_BY_RUN_ID_MISSING_TRANSPORT',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
         text: 'Transport ID is required',
@@ -1514,12 +1514,12 @@ do:
       throw error;
     }
 
-    if (!this.#logger?.getLogsByRunId) {
+    if (!this.#logger?.listLogsByRunId) {
       const error = new MastraError({
         id: 'MASTRA_GET_LOGS_BY_RUN_ID_LOGGER_NOT_CONFIGURED',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.SYSTEM,
-        text: 'Logger is not configured or does not support getLogsByRunId operation',
+        text: 'Logger is not configured or does not support listLogsByRunId operation',
         details: {
           runId,
           transportId,
@@ -1529,7 +1529,7 @@ do:
       throw error;
     }
 
-    return await this.#logger.getLogsByRunId({
+    return await this.#logger.listLogsByRunId({
       runId,
       transportId,
       fromDate,
@@ -1541,7 +1541,7 @@ do:
     });
   }
 
-  public async getLogs(
+  public async listLogs(
     transportId: string,
     params?: {
       fromDate?: Date;
@@ -1579,7 +1579,7 @@ do:
       throw error;
     }
 
-    return await this.#logger.getLogs(transportId, params);
+    return await this.#logger.listLogs(transportId, params);
   }
 
   /**
@@ -1598,7 +1598,7 @@ do:
    * const mcpServers = mastra.getMCPServers();
    * if (mcpServers) {
    *   const fsServer = mcpServers.filesystem;
-   *   const tools = await fsServer.getTools();
+   *   const tools = await fsServer.listTools();
    * }
    * ```
    */
@@ -1627,7 +1627,7 @@ do:
    *
    * const fsServer = mastra.getMCPServer('fs-server');
    * if (fsServer) {
-   *   const tools = await fsServer.getTools();
+   *   const tools = await fsServer.listTools();
    * }
    * ```
    */

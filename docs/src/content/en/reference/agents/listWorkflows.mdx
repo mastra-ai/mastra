@@ -1,16 +1,16 @@
 ---
-title: "Reference: Agent.getTools() | Agents | Mastra Docs"
-description: "Documentation for the `Agent.getTools()` method in Mastra agents, which retrieves the tools that the agent can use."
+title: "Reference: Agent.listWorkflows() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.listWorkflows()` method in Mastra agents, which retrieves the workflows that the agent can execute."
 ---
 
-# Agent.getTools()
+# Agent.listWorkflows()
 
-The `.getTools()` method retrieves the tools configured for an agent, resolving them if they're a function. These tools extend the agent's capabilities, allowing it to perform specific actions or access external systems.
+The `.listWorkflows()` method retrieves the workflows configured for an agent, resolving them if they're a function. These workflows enable the agent to execute complex, multi-step processes with defined execution paths.
 
 ## Usage example
 
 ```typescript copy
-await agent.getTools();
+await agent.listWorkflows();
 ```
 
 ## Parameters
@@ -32,10 +32,10 @@ await agent.getTools();
 <PropertiesTable
   content={[
     {
-      name: "tools",
-      type: "TTools | Promise<TTools>",
+      name: "workflows",
+      type: "Promise<Record<string, Workflow>>",
       description:
-        "The tools configured for the agent, either as a direct object or a promise that resolves to the tools.",
+        "A promise that resolves to a record of workflow names to their corresponding Workflow instances.",
     },
   ]}
 />
@@ -43,7 +43,7 @@ await agent.getTools();
 ## Extended usage example
 
 ```typescript copy
-await agent.getTools({
+await agent.listWorkflows({
   runtimeContext: new RuntimeContext(),
 });
 ```
@@ -65,5 +65,5 @@ await agent.getTools({
 
 ## Related
 
-- [Using tools with agents](/docs/agents/using-tools)
-- [Creating tools](/docs/tools-mcp/overview)
+- [Agents overview](/docs/agents/overview)
+- [Workflows overview](/docs/workflows/overview)

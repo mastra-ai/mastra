@@ -73,7 +73,7 @@ export class DevBundler extends Bundler {
       },
       { sourcemap: sourcemapEnabled },
     );
-    const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
+    const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 
     const outputDir = join(outputDirectory, this.outputDir);
 

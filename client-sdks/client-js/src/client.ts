@@ -42,7 +42,7 @@ import type {
   GetMemoryConfigResponse,
   GetMemoryThreadMessagesResponse,
   MemorySearchResponse,
-  GetAgentsModelProvidersResponse,
+  ListAgentsModelProvidersResponse,
 } from './types';
 import { base64RuntimeContext, parseClientRuntimeContext, runtimeContextQueryString } from './utils';
 
@@ -58,7 +58,7 @@ export class MastraClient extends BaseResource {
    * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing map of agent IDs to agent details
    */
-  public getAgents(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetAgentResponse>> {
+  public listAgents(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetAgentResponse>> {
     const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
 
     const searchParams = new URLSearchParams();
@@ -71,7 +71,7 @@ export class MastraClient extends BaseResource {
     return this.request(`/api/agents${queryString ? `?${queryString}` : ''}`);
   }
 
-  public getAgentsModelProviders(): Promise<GetAgentsModelProvidersResponse> {
+  public listAgentsModelProviders(): Promise<ListAgentsModelProvidersResponse> {
     return this.request(`/api/agents/providers`);
   }
 
@@ -187,7 +187,7 @@ export class MastraClient extends BaseResource {
    * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing map of tool IDs to tool details
    */
-  public getTools(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetToolResponse>> {
+  public listTools(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetToolResponse>> {
     const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
 
     const searchParams = new URLSearchParams();
@@ -214,7 +214,7 @@ export class MastraClient extends BaseResource {
    * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing map of workflow IDs to workflow details
    */
-  public getWorkflows(
+  public listWorkflows(
     runtimeContext?: RuntimeContext | Record<string, any>,
   ): Promise<Record<string, GetWorkflowResponse>> {
     const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
@@ -268,7 +268,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters for filtering logs
    * @returns Promise containing array of log messages
    */
-  public getLogs(params: GetLogsParams): Promise<GetLogsResponse> {
+  public listLogs(params: GetLogsParams): Promise<GetLogsResponse> {
     const { transportId, fromDate, toDate, logLevel, filters, page, perPage } = params;
     const _filters = filters ? Object.entries(filters).map(([key, value]) => `${key}:${value}`) : [];
 
@@ -361,7 +361,7 @@ export class MastraClient extends BaseResource {
    * List of all log transports
    * @returns Promise containing list of log transports
    */
-  public getLogTransports(): Promise<{ transports: string[] }> {
+  public listLogTransports(): Promise<{ transports: string[] }> {
     return this.request('/api/logs/transports');
   }
 
@@ -517,7 +517,7 @@ export class MastraClient extends BaseResource {
    * Retrieves all available scorers
    * @returns Promise containing list of available scorers
    */
-  public getScorers(): Promise<Record<string, GetScorerResponse>> {
+  public listScorers(): Promise<Record<string, GetScorerResponse>> {
     return this.request('/api/scores/scorers');
   }
 

@@ -117,7 +117,7 @@ describe('Tool Resource', () => {
       tool2: { id: 'tool2', description: 'Tool 2' },
     };
     mockFetchResponse(mockResponse);
-    const result = await client.getTools();
+    const result = await client.listTools();
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
       `${clientOptions.baseUrl}/api/tools`,
@@ -137,7 +137,7 @@ describe('Tool Resource', () => {
     const expectedEncodedBase64 = encodeURIComponent(expectedBase64);
 
     mockFetchResponse(mockResponse);
-    const result = await client.getTools(runtimeContext);
+    const result = await client.listTools(runtimeContext);
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
       `${clientOptions.baseUrl}/api/tools?runtimeContext=${expectedEncodedBase64}`,

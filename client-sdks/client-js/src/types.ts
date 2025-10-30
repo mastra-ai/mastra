@@ -530,7 +530,7 @@ export interface MemorySearchResult {
   };
 }
 
-export interface GetAgentsModelProvidersResponse {
+export interface ListAgentsModelProvidersResponse {
   providers: Provider[];
 }
 

@@ -16,7 +16,7 @@ interface ToolsContext extends Context {
 }
 
 // Tool handlers
-export async function getToolsHandler({ tools }: Pick<ToolsContext, 'tools'>) {
+export async function listToolsHandler({ tools }: Pick<ToolsContext, 'tools'>) {
   try {
     if (!tools) {
       return {};
@@ -125,7 +125,7 @@ export async function getAgentToolHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const agentTools = await agent.getTools({ runtimeContext });
+    const agentTools = await agent.listTools({ runtimeContext });
 
     const tool = Object.values(agentTools || {}).find((tool: any) => tool.id === toolId) as any;
 
@@ -162,7 +162,7 @@ export async function executeAgentToolHandler({
       throw new HTTPException(404, { message: 'Tool not found' });
     }
 
-    const agentTools = await agent.getTools({ runtimeContext });
+    const agentTools = await agent.listTools({ runtimeContext });
 
     const tool = Object.values(agentTools || {}).find((tool: any) => tool.id === toolId) as any;
 

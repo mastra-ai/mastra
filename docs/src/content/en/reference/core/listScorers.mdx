@@ -1,11 +1,11 @@
 ---
-title: "Reference: getScorers() | Core | Mastra Docs"
-description: "Documentation for the `getScorers()` method in Mastra, which returns all registered scorers for evaluating AI outputs."
+title: "Reference: listScorers() | Core | Mastra Docs"
+description: "Documentation for the `listScorers()` method in Mastra, which returns all registered scorers for evaluating AI outputs."
 ---
 
-# getScorers()
+# listScorers()
 
-The `getScorers()` method returns all scorers that have been registered with the Mastra instance. Scorers are used for evaluating AI outputs and can override default scorers during agent generation or workflow execution.
+The `listScorers()` method returns all scorers that have been registered with the Mastra instance. Scorers are used for evaluating AI outputs and can override default scorers during agent generation or workflow execution.
 
 ## Usage Example
 
@@ -13,7 +13,7 @@ The `getScorers()` method returns all scorers that have been registered with the
 import { mastra } from "./mastra";
 
 // Get all registered scorers
-const allScorers = mastra.getScorers();
+const allScorers = mastra.listScorers();
 
 // Access a specific scorer
 const myScorer = allScorers.relevancyScorer;

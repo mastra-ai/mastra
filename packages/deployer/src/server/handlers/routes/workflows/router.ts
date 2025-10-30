@@ -9,7 +9,7 @@ import {
   getWorkflowRunByIdHandler,
   getWorkflowRunExecutionResultHandler,
   listWorkflowRunsHandler,
-  getWorkflowsHandler,
+  listWorkflowsHandler,
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
   sendWorkflowRunEventHandler,
@@ -38,7 +38,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    getWorkflowsHandler,
+    listWorkflowsHandler,
   );
 
   router.get(

@@ -1,16 +1,16 @@
 ---
-title: "Reference: Agent.getWorkflows() | Agents | Mastra Docs"
-description: "Documentation for the `Agent.getWorkflows()` method in Mastra agents, which retrieves the workflows that the agent can execute."
+title: "Reference: Agent.listScorers() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.listScorers()` method in Mastra agents, which retrieves the scoring configuration."
 ---
 
-# Agent.getWorkflows()
+# Agent.listScorers()
 
-The `.getWorkflows()` method retrieves the workflows configured for an agent, resolving them if they're a function. These workflows enable the agent to execute complex, multi-step processes with defined execution paths.
+The `.listScorers()` method retrieves the scoring configuration configured for an agent, resolving it if it's a function. This method provides access to the scoring system used for evaluating agent responses and performance.
 
 ## Usage example
 
 ```typescript copy
-await agent.getWorkflows();
+await agent.listScorers();
 ```
 
 ## Parameters
@@ -32,10 +32,10 @@ await agent.getWorkflows();
 <PropertiesTable
   content={[
     {
-      name: "workflows",
-      type: "Promise<Record<string, Workflow>>",
+      name: "scorers",
+      type: "MastraScorers | Promise<MastraScorers>",
       description:
-        "A promise that resolves to a record of workflow names to their corresponding Workflow instances.",
+        "The scoring configuration configured for the agent, either as a direct object or a promise that resolves to the scorers.",
     },
   ]}
 />
@@ -43,7 +43,7 @@ await agent.getWorkflows();
 ## Extended usage example
 
 ```typescript copy
-await agent.getWorkflows({
+await agent.listScorers({
   runtimeContext: new RuntimeContext(),
 });
 ```
@@ -66,4 +66,4 @@ await agent.getWorkflows({
 ## Related
 
 - [Agents overview](/docs/agents/overview)
-- [Workflows overview](/docs/workflows/overview)
+- [Runtime Context](/docs/server-db/runtime-context)
