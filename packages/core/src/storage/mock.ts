@@ -301,7 +301,7 @@ export class InMemoryStore extends MastraStorage {
     threadId,
     selectBy,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<
-    PaginationInfo & { messages: MastraMessageV1[] | MastraDBMessage[] }
+    PaginationInfo & { messages: MastraDBMessage[] }
   > {
     return this.stores.memory.getMessagesPaginated({ threadId, selectBy });
   }

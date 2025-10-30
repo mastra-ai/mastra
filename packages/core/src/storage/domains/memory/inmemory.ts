@@ -441,7 +441,7 @@ export class InMemoryMemory extends MemoryStorage {
     threadId,
     selectBy,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<
-    PaginationInfo & { messages: MastraMessageV1[] | MastraDBMessage[] }
+    PaginationInfo & { messages: MastraDBMessage[] }
   > {
     this.logger.debug(`MockStore: getMessagesPaginated called for thread ${threadId}`);
 
