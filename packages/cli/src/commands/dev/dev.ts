@@ -309,7 +309,7 @@ export async function dev({
   bundler.__setLogger(createLogger(debug)); // Keep Pino logger for internal bundler operations
 
   // Use the bundler's getAllToolPaths method to prepare tools paths
-  const discoveredTools = bundler.getAllToolPaths(mastraDir, tools);
+  const discoveredTools = bundler.getAllToolPaths(mastraDir, tools ?? []);
 
   const loadedEnv = await bundler.loadEnvVars();
 
