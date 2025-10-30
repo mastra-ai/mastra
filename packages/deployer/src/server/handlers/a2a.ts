@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { Mastra } from '@mastra/core';
+import type { Mastra } from '@mastra/core/mastra';
 import type { MessageSendParams, TaskQueryParams, TaskIdParams } from '@mastra/core/a2a';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';

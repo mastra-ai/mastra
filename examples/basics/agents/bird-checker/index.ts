@@ -1,5 +1,5 @@
 import { anthropic } from '@ai-sdk/anthropic';
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { z } from 'zod';
 
 export type Image = {

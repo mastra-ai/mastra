@@ -1,4 +1,3 @@
-import type { AITraceRecord, AITracesPaginatedArg, WorkflowInfo } from '@mastra/core';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
 import {
@@ -45,6 +44,8 @@ import type {
   ListMemoryThreadsResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
+import type { WorkflowInfo } from '@mastra/core/workflows';
+import type { AITraceRecord, AITracesPaginatedArg } from '@mastra/core/storage';
 
 export class MastraClient extends BaseResource {
   private observability: Observability;

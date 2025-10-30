@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { PgVector } from '@mastra/pg';
 import { UpstashStore } from '@mastra/upstash';

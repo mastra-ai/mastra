@@ -1,9 +1,9 @@
-import { createTool } from '@mastra/core';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import { APICallError } from 'ai-v5';
 import { describe, it, beforeEach, expect, vi } from 'vitest';
 import z from 'zod';
 import { MastraClient } from '../client';
+import { createTool } from '@mastra/core/tools';
 
 // Mock fetch globally
 global.fetch = vi.fn();
