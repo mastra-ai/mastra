@@ -8,7 +8,12 @@ import type {
   ThreadOrderBy,
   ThreadSortDirection,
   ThreadSortOptions,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListThreadsByResourceIdPaginatedInput,
+  StorageListThreadsByResourceIdPaginatedOutput,
 } from '../../types';
+import { safelyParseJSON } from '../../utils';
 import type { StoreOperations } from '../operations';
 import { MemoryStorage } from './base';
 
@@ -122,8 +127,7 @@ export class InMemoryMemory extends MemoryStorage {
           const convertedMessage = {
             id: targetMessage.id,
             threadId: targetMessage.thread_id,
-            content:
-              typeof targetMessage.content === 'string' ? JSON.parse(targetMessage.content) : targetMessage.content,
+            content: safelyParseJSON(targetMessage.content),
             role: targetMessage.role as 'user' | 'assistant' | 'system' | 'tool',
             type: targetMessage.type,
             createdAt: targetMessage.createdAt,
@@ -147,7 +151,7 @@ export class InMemoryMemory extends MemoryStorage {
                   const convertedPrevMessage = {
                     id: message.id,
                     threadId: message.thread_id,
-                    content: typeof message.content === 'string' ? JSON.parse(message.content) : message.content,
+                    content: safelyParseJSON(message.content),
                     role: message.role as 'user' | 'assistant' | 'system' | 'tool',
                     type: message.type,
                     createdAt: message.createdAt,
@@ -177,7 +181,7 @@ export class InMemoryMemory extends MemoryStorage {
                   const convertedNextMessage = {
                     id: message.id,
                     threadId: message.thread_id,
-                    content: typeof message.content === 'string' ? JSON.parse(message.content) : message.content,
+                    content: safelyParseJSON(message.content),
                     role: message.role as 'user' | 'assistant' | 'system' | 'tool',
                     type: message.type,
                     createdAt: message.createdAt,
@@ -207,7 +211,7 @@ export class InMemoryMemory extends MemoryStorage {
           const convertedMessage = {
             id: msg.id,
             threadId: msg.thread_id,
-            content: typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content,
+            content: safelyParseJSON(msg.content),
             role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
             type: msg.type,
             createdAt: msg.createdAt,
@@ -233,22 +237,16 @@ export class InMemoryMemory extends MemoryStorage {
   protected parseStoredMessage(message: StorageMessageType): MastraMessageV2 {
     const { resourceId, content, role, thread_id, ...rest } = message;
 
-    // Parse content: if it's a string, try to parse as JSON (V2 format)
-    // If parsing fails, it's a plain text string (V1 format)
-    let parsedContent: MastraMessageV2['content'];
-    if (typeof content === 'string') {
-      try {
-        parsedContent = JSON.parse(content);
-      } catch {
-        // Plain text content (V1 format) - wrap in V2 structure
-        parsedContent = {
-          format: 2,
-          content: content,
-          parts: [],
-        };
-      }
-    } else {
-      parsedContent = content;
+    // Parse content using safelyParseJSON utility
+    let parsedContent = safelyParseJSON(content);
+
+    // If the result is a plain string (V1 format), wrap it in V2 structure
+    if (typeof parsedContent === 'string') {
+      parsedContent = {
+        format: 2,
+        content: parsedContent,
+        parts: [],
+      };
     }
 
     return {
@@ -278,6 +276,18 @@ export class InMemoryMemory extends MemoryStorage {
     return list.get.all.v2();
   }
 
+  async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    throw new Error(
+      `listMessages is not yet implemented by this storage adapter (${this.constructor.name}). ` +
+        `This method is currently being rolled out across all storage adapters. ` +
+        `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
+    );
+  }
+
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
+    return this.getMessagesById({ messageIds, format: 'v2' });
+  }
+
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   async saveMessages(
@@ -305,7 +315,7 @@ export class InMemoryMemory extends MemoryStorage {
       const storageMessage: StorageMessageType = {
         id: message.id,
         thread_id: message.threadId || '',
-        content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+        content: JSON.stringify(message.content),
         role: message.role || 'user',
         type: message.type || 'text',
         createdAt: message.createdAt,
@@ -340,7 +350,7 @@ export class InMemoryMemory extends MemoryStorage {
       if (update.resourceId !== undefined) storageMsg.resourceId = update.resourceId;
       // Deep merge content if present
       if (update.content !== undefined) {
-        let oldContent = typeof storageMsg.content === 'string' ? JSON.parse(storageMsg.content) : storageMsg.content;
+        let oldContent = safelyParseJSON(storageMsg.content);
         let newContent = update.content;
         if (typeof newContent === 'object' && typeof oldContent === 'object') {
           // Deep merge for metadata/content fields
@@ -388,7 +398,7 @@ export class InMemoryMemory extends MemoryStorage {
       updatedMessages.push({
         id: storageMsg.id,
         threadId: storageMsg.thread_id,
-        content: typeof storageMsg.content === 'string' ? JSON.parse(storageMsg.content) : storageMsg.content,
+        content: safelyParseJSON(storageMsg.content),
         role: storageMsg.role === 'user' || storageMsg.role === 'assistant' ? storageMsg.role : 'user',
         type: storageMsg.type,
         createdAt: storageMsg.createdAt,
@@ -456,6 +466,15 @@ export class InMemoryMemory extends MemoryStorage {
     };
   }
 
+  async listThreadsByResourceIdPaginated(
+    args: StorageListThreadsByResourceIdPaginatedInput,
+  ): Promise<StorageListThreadsByResourceIdPaginatedOutput> {
+    const { resourceId, limit, offset, orderBy, sortDirection } = args;
+    const page = Math.floor(offset / limit);
+    const perPage = limit;
+    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage, orderBy, sortDirection });
+  }
+
   async getMessagesPaginated({
     threadId,
     selectBy,
@@ -479,8 +498,7 @@ export class InMemoryMemory extends MemoryStorage {
           const convertedMessage = {
             id: targetMessage.id,
             threadId: targetMessage.thread_id,
-            content:
-              typeof targetMessage.content === 'string' ? JSON.parse(targetMessage.content) : targetMessage.content,
+            content: safelyParseJSON(targetMessage.content),
             role: targetMessage.role as 'user' | 'assistant' | 'system' | 'tool',
             type: targetMessage.type,
             createdAt: targetMessage.createdAt,
@@ -504,7 +522,7 @@ export class InMemoryMemory extends MemoryStorage {
                   const convertedPrevMessage = {
                     id: message.id,
                     threadId: message.thread_id,
-                    content: typeof message.content === 'string' ? JSON.parse(message.content) : message.content,
+                    content: safelyParseJSON(message.content),
                     role: message.role as 'user' | 'assistant' | 'system' | 'tool',
                     type: message.type,
                     createdAt: message.createdAt,
@@ -534,7 +552,7 @@ export class InMemoryMemory extends MemoryStorage {
                   const convertedNextMessage = {
                     id: message.id,
                     threadId: message.thread_id,
-                    content: typeof message.content === 'string' ? JSON.parse(message.content) : message.content,
+                    content: safelyParseJSON(message.content),
                     role: message.role as 'user' | 'assistant' | 'system' | 'tool',
                     type: message.type,
                     createdAt: message.createdAt,
@@ -578,7 +596,7 @@ export class InMemoryMemory extends MemoryStorage {
           const convertedMessage = {
             id: msg.id,
             threadId: msg.thread_id,
-            content: typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content,
+            content: safelyParseJSON(msg.content),
             role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
             type: msg.type,
             createdAt: msg.createdAt,
@@ -592,7 +610,7 @@ export class InMemoryMemory extends MemoryStorage {
           const convertedMessage = {
             id: msg.id,
             threadId: msg.thread_id,
-            content: typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content,
+            content: safelyParseJSON(msg.content),
             role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
             type: msg.type,
             createdAt: msg.createdAt,

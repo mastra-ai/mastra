@@ -11,8 +11,6 @@ import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
 import type { AISpan, TracingContext, TracingOptions, TracingProperties } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
-import type { Metric } from '../eval';
-import { AvailableHooks, executeHook } from '../hooks';
 import { resolveModelConfig } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type {
@@ -134,16 +132,13 @@ function resolveThreadIdFromArgs(args: {
  * });
  * ```
  */
-export class Agent<
-  TAgentId extends string = string,
-  TTools extends ToolsInput = ToolsInput,
-  TMetrics extends Record<string, Metric> = Record<string, Metric>,
-> extends MastraBase {
+export class Agent<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> extends MastraBase {
   public id: TAgentId;
   public name: TAgentId;
   #instructions: DynamicAgentInstructions;
   readonly #description?: string;
   model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
+  #originalModel: DynamicArgument<MastraModelConfig> | ModelFallbacks;
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
@@ -152,7 +147,6 @@ export class Agent<
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
   #defaultStreamOptions: DynamicArgument<AgentExecutionOptions>;
   #tools: DynamicArgument<TTools>;
-  evals: TMetrics;
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
   #voice: CompositeVoice;
@@ -181,7 +175,7 @@ export class Agent<
    * });
    * ```
    */
-  constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
+  constructor(config: AgentConfig<TAgentId, TTools>) {
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
@@ -227,8 +221,10 @@ export class Agent<
         maxRetries: mdl.maxRetries ?? config?.maxRetries ?? 0,
         enabled: mdl.enabled ?? true,
       }));
+      this.#originalModel = [...this.model];
     } else {
       this.model = config.model;
+      this.#originalModel = config.model;
     }
 
     this.maxRetries = config.maxRetries ?? 0;
@@ -243,8 +239,6 @@ export class Agent<
 
     this.#tools = config.tools || ({} as TTools);
 
-    this.evals = {} as TMetrics;
-
     if (config.mastra) {
       this.__registerMastra(config.mastra);
       this.__registerPrimitives({
@@ -255,10 +249,6 @@ export class Agent<
     this.#scorers = config.scorers || ({} as MastraScorers);
 
     this.#agents = config.agents || ({} as Record<string, Agent>);
-
-    if (config.evals) {
-      this.evals = config.evals;
-    }
 
     if (config.memory) {
       this.#memory = config.memory;
@@ -981,6 +971,16 @@ export class Agent<
   __updateModel({ model }: { model: DynamicArgument<MastraModelConfig> }) {
     this.model = model;
     this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
+  }
+
+  /**
+   * Resets the agent's model to the original model set during construction.
+   * Clones arrays to prevent reordering mutations from affecting the original snapshot.
+   * @internal
+   */
+  __resetToOriginalModel() {
+    this.model = Array.isArray(this.#originalModel) ? [...this.#originalModel] : this.#originalModel;
+    this.logger.debug(`[Agents:${this.name}] Model reset to original.`, { model: this.model, name: this.name });
   }
 
   reorderModels(modelIds: string[]) {
@@ -2542,8 +2542,6 @@ export class Agent<
         await this.#runScorers({
           messageList,
           runId,
-          outputText,
-          instructions,
           runtimeContext,
           structuredOutput,
           overrideScorers,
@@ -2583,8 +2581,6 @@ export class Agent<
   async #runScorers({
     messageList,
     runId,
-    outputText,
-    instructions,
     runtimeContext,
     structuredOutput,
     overrideScorers,
@@ -2594,8 +2590,6 @@ export class Agent<
   }: {
     messageList: MessageList;
     runId: string;
-    outputText: string;
-    instructions: AgentInstructions;
     runtimeContext: RuntimeContext;
     structuredOutput?: boolean;
     overrideScorers?:
@@ -2605,26 +2599,6 @@ export class Agent<
     resourceId?: string;
     tracingContext: TracingContext;
   }) {
-    const agentName = this.name;
-    const userInputMessages = messageList.get.all.ui().filter(m => m.role === 'user');
-    const input = userInputMessages
-      .map(message => (typeof message.content === 'string' ? message.content : ''))
-      .join('\n');
-    const runIdToUse = runId || this.#mastra?.generateId() || randomUUID();
-
-    if (Object.keys(this.evals || {}).length > 0) {
-      for (const metric of Object.values(this.evals || {})) {
-        executeHook(AvailableHooks.ON_GENERATION, {
-          input,
-          output: outputText,
-          runId: runIdToUse,
-          metric,
-          agentName,
-          instructions: this.#convertInstructionsToString(instructions),
-        });
-      }
-    }
-
     let scorers: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig }> = {};
     try {
       scorers = overrideScorers
@@ -3223,7 +3197,6 @@ export class Agent<
    */
   async #executeOnFinish({
     result,
-    instructions,
     readOnlyMemory,
     thread: threadAfter,
     threadId,
@@ -3389,8 +3362,6 @@ export class Agent<
     await this.#runScorers({
       messageList,
       runId,
-      outputText,
-      instructions,
       runtimeContext,
       structuredOutput,
       overrideScorers,

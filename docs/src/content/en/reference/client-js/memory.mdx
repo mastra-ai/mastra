@@ -36,7 +36,7 @@ const thread = await mastraClient.createMemoryThread({
 Get an instance of a specific memory thread:
 
 ```typescript
-const thread = mastraClient.getMemoryThread("thread-id", "agent-id");
+const thread = mastraClient.getMemoryThread({ threadId: "thread-id", agentId: "agent-id" });
 ```
 
 ## Thread Methods

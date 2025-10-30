@@ -1,6 +1,6 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
 import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT, safelyParseJSON } from '@mastra/core/storage';
-import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { StoreOperationsMongoDB } from '../operations';
 
@@ -232,5 +232,9 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       updatedAt: new Date(row.updatedAt as string),
       resourceId: row.resourceId,
     };
+  }
+
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
+    return this.getWorkflowRuns(args);
   }
 }
