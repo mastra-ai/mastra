@@ -236,7 +236,7 @@ export const FeedbackForm = ({
                   <FormItem className="flex-1 w-full">
                     <FormControl>
                       <Textarea
-                        placeholder="Your feedback..."
+                        placeholder={gt("Your feedback...")}
                         className="min-h-[60px] w-full text-black  dark:text-white resize-none text-sm"
                         {...field}
                       />
