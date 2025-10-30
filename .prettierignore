@@ -21,3 +21,4 @@ explorations/longmemeval/data/**/*.json
 explorations/longmemeval/prepared-data/**/*.json
 explorations/longmemeval/.embedding-cache/**/*.json
 explorations/longmemeval/.temp-longmemeval/**/*.json
+docs/src/content/en/models/sidebars.js
