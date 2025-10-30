@@ -48,7 +48,7 @@ export const useThreads = ({
 
   return useQuery({
     queryKey: ['memory', 'threads', resourceId, agentId],
-    queryFn: () => (isMemoryEnabled ? client.getMemoryThreads({ resourceId, agentId, runtimeContext }) : null),
+    queryFn: () => (isMemoryEnabled ? client.listMemoryThreads({ resourceId, agentId, runtimeContext }) : null),
     enabled: Boolean(isMemoryEnabled),
     staleTime: 0,
     gcTime: 0,
