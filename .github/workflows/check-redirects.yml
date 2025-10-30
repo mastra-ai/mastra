@@ -90,8 +90,8 @@ jobs:
               console.error('Failed to post comment:', error);
             }
 
-  check-duplicate-redirects:
-    name: Check for duplicate redirects
+  validate-redirects:
+    name: Validate redirects
     runs-on: ubuntu-latest
 
     steps:
@@ -109,8 +109,8 @@ jobs:
         run: npm ci
         working-directory: docs
 
-      - name: Run check-duplicate-redirects
-        run: node .github/scripts/check-duplicate-redirects.js
+      - name: Run validate-redirects
+        run: node .github/scripts/validate-redirects.js
 
       - name: Comment on PR if redirect issues found
         if: failure()
@@ -118,10 +118,10 @@ jobs:
         with:
           script: |
             const logsUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
-            const identifier = '<!-- redirect-check: duplicate-redirects -->';
+            const identifier = '<!-- redirect-check: validate-redirects -->';
             const body = [
               identifier,
-              '## 🚨 Redirect Issues Detected',
+              '## 🚨 Redirect Validation Failed',
               '',
               'The redirect validation found issues in `vercel.json` (duplicate sources or broken destination links).',
               '',
