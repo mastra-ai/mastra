@@ -109,7 +109,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result = await applyInputProcessors(
-      new MessageList({ threadId: thread.id, resourceId }).add(queryResult.uiMessages, 'memory').get.all.core(),
+      queryResult.uiMessages,
       [new TokenLimiter(250)], // Limit to 250 tokens
       thread.id,
       resourceId,
@@ -139,7 +139,7 @@ describe('Memory with Processors', () => {
     expect(allMessagesQuery.messages.length).toBe(20);
 
     const allMessagesResult = await applyInputProcessors(
-      new MessageList({ threadId: thread.id, resourceId }).add(allMessagesQuery.uiMessages, 'memory').get.all.core(),
+      allMessagesQuery.uiMessages,
       [new TokenLimiter(3000)], // High limit that should exceed total tokens
       thread.id,
       resourceId,
@@ -453,10 +453,9 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
 
-    const list = new MessageList({ threadId }).add(queryResult.messagesV2, 'memory');
-
+    // For this test, we'll process all messages together
     const baselineResult = await applyInputProcessors(
-      [...list.get.remembered.core(), ...list.get.input.core()],
+      v2ToCoreMessages(queryResult.messagesV2),
       [],
       threadId,
       resourceId,
@@ -476,9 +475,8 @@ describe('Memory with Processors', () => {
       threadId,
       selectBy: { last: 20 },
     });
-    const list2 = new MessageList({ threadId }).add(weatherQueryResult.messagesV2, 'memory');
     const weatherFilteredResult = await applyInputProcessors(
-      list2.get.all.core(),
+      v2ToCoreMessages(weatherQueryResult.messagesV2),
       [new ToolCallFilter({ exclude: ['get_weather'] })],
       threadId,
       resourceId,
@@ -499,9 +497,8 @@ describe('Memory with Processors', () => {
       threadId,
       selectBy: { last: 20 },
     });
-    const list3 = new MessageList({ threadId }).add(tokenLimitQuery.messages, 'memory');
     const tokenLimitedResult = await applyInputProcessors(
-      list3.get.all.core(),
+      v2ToCoreMessages(tokenLimitQuery.messages),
       [new TokenLimiter(100)], // Small limit to only get a subset
       threadId,
       resourceId,
@@ -515,9 +512,8 @@ describe('Memory with Processors', () => {
       threadId,
       selectBy: { last: 20 },
     });
-    const list4 = new MessageList({ threadId }).add(combinedQuery.messages, 'memory');
     const combinedResult = await applyInputProcessors(
-      list4.get.all.core(),
+      v2ToCoreMessages(combinedQuery.messages),
       [new ToolCallFilter({ exclude: ['get_weather', 'calculator'] }), new TokenLimiter(500)],
       threadId,
       resourceId,
