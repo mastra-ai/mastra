@@ -65,16 +65,6 @@ export class MockMemory extends MastraMemory {
     return { messages: list.get.remembered.v1(), messagesV2: list.get.remembered.v2() };
   }
 
-  async getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & any, // ThreadSortOptions
-  ): Promise<any & { threads: StorageThreadType[] }> {
-    return this.storage.getThreadsByResourceIdPaginated(args);
-  }
-
   async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {

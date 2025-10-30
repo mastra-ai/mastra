@@ -300,23 +300,17 @@ export abstract class MastraMemory extends MastraBase {
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
   /**
-   * Retrieves all threads that belong to the specified resource.
+   * Lists all threads that belong to the specified resource.
    * @param resourceId - The unique identifier of the resource
    * @param orderBy - Which timestamp field to sort by (`'createdAt'` or `'updatedAt'`);
    *                  defaults to `'createdAt'`
    * @param sortDirection - Sort order for the results (`'ASC'` or `'DESC'`);
    *                        defaults to `'DESC'`
-   * @returns Promise resolving to an array of matching threads; resolves to an empty array
+   * @param offset - The number of threads to skip
+   * @param limit - The number of threads to return
+   * @returns Promise resolving to a list of threads; resolves to an empty array
    *          if the resource has no threads
    */
-  abstract getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
-
   abstract listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput>;

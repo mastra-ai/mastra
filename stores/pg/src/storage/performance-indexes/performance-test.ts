@@ -362,13 +362,12 @@ export class PostgresPerformanceTest {
   async runPerformanceTests(scenario: 'without_indexes' | 'with_indexes'): Promise<PerformanceResult[]> {
     const results: PerformanceResult[] = [];
 
-    // Test getThreadsByResourceId
     const resourceId = 'resource_0';
-    // Test getThreadsByResourceIdPaginated
+    // Test listThreadsByResourceId
     results.push(
       await this.measureOperation(
-        'getThreadsByResourceIdPaginated',
-        () => this.store.getThreadsByResourceIdPaginated({ resourceId, page: 0, perPage: 20 }),
+        'listThreadsByResourceId',
+        () => this.store.listThreadsByResourceId({ resourceId, offset: 0, limit: 20 }),
         scenario,
       ),
     );

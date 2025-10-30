@@ -11,6 +11,7 @@ import type {
   WorkflowRuns,
   PaginationInfo,
   StorageListWorkflowRunsInput,
+  StorageListThreadsByResourceIdInput,
 } from '@mastra/core/storage';
 import { writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -384,11 +385,9 @@ export class BenchmarkStore extends MastraStorage {
     return parsedRun as WorkflowRun;
   }
 
-  async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+  async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
     const allThreads: StorageThreadType[] = [];
     for (const thread of this.data.mastra_threads.values()) {
       if (thread.resourceId === args.resourceId) {

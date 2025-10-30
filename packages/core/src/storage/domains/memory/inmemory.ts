@@ -392,15 +392,11 @@ export class InMemoryMemory extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page, perPage, orderBy, sortDirection } = args;
-    this.logger.debug(`MockStore: getThreadsByResourceIdPaginated called for ${resourceId}`);
+  async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, offset, limit, orderBy, sortDirection } = args;
+    this.logger.debug(`MockStore: listThreadsByResourceIdPaginated called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
     const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
     const sortedThreads = this.sortThreads(
@@ -413,21 +409,12 @@ export class InMemoryMemory extends MemoryStorage {
       metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
     })) as StorageThreadType[];
     return {
-      threads: clonedThreads.slice(page * perPage, (page + 1) * perPage),
+      threads: clonedThreads.slice(offset * limit, (offset + 1) * limit),
       total: clonedThreads.length,
-      page: page,
-      perPage: perPage,
-      hasMore: clonedThreads.length > (page + 1) * perPage,
+      page: offset,
+      perPage: limit,
+      hasMore: clonedThreads.length > (offset + 1) * limit,
     };
-  }
-
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset, orderBy, sortDirection } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage, orderBy, sortDirection });
   }
 
   async getMessagesPaginated({

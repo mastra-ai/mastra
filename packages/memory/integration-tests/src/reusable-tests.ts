@@ -814,10 +814,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       );
 
       // Get first page
-      const result = await memory.getThreadsByResourceIdPaginated({
+      const result = await memory.listThreadsByResourceId({
         resourceId,
-        page: 0,
-        perPage: 10,
+        offset: 0,
+        limit: 10,
         orderBy: 'createdAt',
         sortDirection: 'DESC',
       });
@@ -835,10 +835,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
     it('should handle edge cases (empty results, last page)', async () => {
       // Empty result set
-      const emptyResult = await memory.getThreadsByResourceIdPaginated({
+      const emptyResult = await memory.listThreadsByResourceId({
         resourceId: 'non-existent-resource',
-        page: 0,
-        perPage: 10,
+        offset: 0,
+        limit: 10,
         orderBy: 'createdAt',
         sortDirection: 'DESC',
       });
@@ -856,10 +856,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         ),
       );
 
-      const lastPageResult = await memory.getThreadsByResourceIdPaginated({
+      const lastPageResult = await memory.listThreadsByResourceId({
         resourceId,
-        page: 0,
-        perPage: 10,
+        offset: 0,
+        limit: 10,
         orderBy: 'createdAt',
         sortDirection: 'DESC',
       });
@@ -880,10 +880,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       );
 
       // Test second page
-      const page2Result = await memory.getThreadsByResourceIdPaginated({
+      const page2Result = await memory.listThreadsByResourceId({
         resourceId,
-        page: 1,
-        perPage: 7,
+        offset: 1,
+        limit: 7,
         orderBy: 'createdAt',
         sortDirection: 'DESC',
       });
@@ -893,10 +893,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       expect(page2Result.hasMore).toBe(true);
 
       // Test third page (final page)
-      const page3Result = await memory.getThreadsByResourceIdPaginated({
+      const page3Result = await memory.listThreadsByResourceId({
         resourceId,
-        page: 2,
-        perPage: 7,
+        offset: 2,
+        limit: 7,
         orderBy: 'createdAt',
         sortDirection: 'DESC',
       });
