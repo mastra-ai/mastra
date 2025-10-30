@@ -17,7 +17,7 @@ export function CardTitle({
           onClick={() => setActiveTab(title)}
           key={title}
           className={cn(
-            "capitalize w-fit  text-[var(--light-color-text-4)] rounded-full text-sm bg-[var(--light-color-surface-3)] dark:bg-[#121212] dark:text-[var(--color-el-3)] px-3 py-1",
+            "capitalize w-fit text-[var(--light-color-text-4)] rounded-full text-sm bg-[var(--light-color-surface-3)] dark:bg-[#121212] dark:text-[var(--color-el-3)] px-3 py-1",
             activeTab === sluggify(title) &&
               "dark:bg-gray-100 text-white bg-[var(--light-color-text-6)] dark:text-black",
           )}
