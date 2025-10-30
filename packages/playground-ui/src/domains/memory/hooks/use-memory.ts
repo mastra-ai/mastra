@@ -48,7 +48,11 @@ export const useThreads = ({
 
   return useQuery({
     queryKey: ['memory', 'threads', resourceId, agentId],
-    queryFn: () => (isMemoryEnabled ? client.getMemoryThreads({ resourceId, agentId, runtimeContext }) : null),
+    queryFn: async () => {
+      if (!isMemoryEnabled) return null;
+      const result = await client.listMemoryThreads({ resourceId, agentId, runtimeContext });
+      return result.threads;
+    },
     enabled: Boolean(isMemoryEnabled),
     staleTime: 0,
     gcTime: 0,
@@ -63,15 +67,14 @@ export const useDeleteThread = () => {
   const { runtimeContext } = usePlaygroundStore();
 
   return useMutation({
-    mutationFn: ({ threadId, agentId, networkId }: { threadId: string; agentId?: string; networkId?: string }) =>
-      client.deleteThread(threadId, { agentId, networkId, runtimeContext }),
+    mutationFn: ({ threadId, agentId }: { threadId: string; agentId: string }) => {
+      const thread = client.getMemoryThread({ threadId, agentId });
+      return thread.delete({ runtimeContext });
+    },
     onSuccess: (_, variables) => {
-      const { agentId, networkId } = variables;
+      const { agentId } = variables;
       if (agentId) {
         queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
-      }
-      if (networkId) {
-        queryClient.invalidateQueries({ queryKey: ['network', 'threads', networkId, networkId] });
       }
       toast.success('Chat deleted successfully');
     },

@@ -393,7 +393,7 @@ describe('GeminiLiveVoice', () => {
       };
 
       voice.addTools(tools);
-      const configuredTools = voice.getTools();
+      const configuredTools = voice.listTools();
       expect(configuredTools).toBeDefined();
       expect(Object.keys(configuredTools || {}).length).toBe(1);
     });

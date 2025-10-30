@@ -66,7 +66,7 @@ describe('AgentBuilder', () => {
         projectPath: '/test/project',
       });
 
-      const tools = builder.getTools({ runtimeContext: new RuntimeContext() });
+      const tools = builder.listTools({ runtimeContext: new RuntimeContext() });
       expect(tools).toBeDefined();
     });
 
@@ -191,7 +191,7 @@ describe('AgentBuilder', () => {
   describe('Server Management Tools', () => {
     it('should have manageServer and httpRequest tools available', async () => {
       const builder = new AgentBuilder(mockConfig);
-      const tools = await builder.getTools({ runtimeContext: new RuntimeContext() });
+      const tools = await builder.listTools({ runtimeContext: new RuntimeContext() });
 
       expect(tools.manageServer).toBeDefined();
       expect(tools.httpRequest).toBeDefined();

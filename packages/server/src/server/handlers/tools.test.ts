@@ -7,7 +7,7 @@ import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
-  getToolsHandler,
+  listToolsHandler,
   getToolByIdHandler,
   executeToolHandler,
   executeAgentToolHandler,
@@ -37,14 +37,14 @@ describe('Tools Handlers', () => {
     vi.clearAllMocks();
   });
 
-  describe('getToolsHandler', () => {
+  describe('listToolsHandler', () => {
     it('should return empty object when no tools are provided', async () => {
-      const result = await getToolsHandler({ tools: undefined });
+      const result = await listToolsHandler({ tools: undefined });
       expect(result).toEqual({});
     });
 
     it('should return serialized tools when tools are provided', async () => {
-      const result = await getToolsHandler({ tools: mockTools });
+      const result = await listToolsHandler({ tools: mockTools });
       expect(result).toHaveProperty(mockTool.id);
       // expect(result).toHaveProperty(mockVercelTool.id);
       expect(result[mockTool.id]).toHaveProperty('id', mockTool.id);

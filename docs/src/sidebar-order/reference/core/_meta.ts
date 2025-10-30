@@ -1,0 +1,28 @@
+const meta = {
+  "mastra-class": "Mastra",
+  getAgent: ".getAgent()",
+  listAgents: ".listAgents()",
+  getAgentById: ".getAgentById()",
+  getWorkflow: ".getWorkflow()",
+  getWorkflows: ".listWorkflows()",
+  getMemory: ".getMemory()",
+  setStorage: ".setStorage()",
+  getServer: ".getServer()",
+  getMCPServer: ".getMCPServer()",
+  getVector: ".getVector()",
+  getVectors: ".getVectors()",
+  getDeployer: ".getDeployer()",
+  getStorage: ".getStorage()",
+  getMCPServers: ".getMCPServers()",
+  getTelemetry: ".getTelemetry()",
+  setTelemetry: ".setTelemetry()",
+  listLogs: ".listLogs()",
+  listLogsByRunId: ".listLogsByRunId()",
+  getLogger: ".getLogger()",
+  setLogger: ".setLogger()",
+  listScorers: ".listScorers()",
+  getScorer: ".getScorer()",
+  getScorerByName: ".getScorerByName()",
+};
+
+export default meta;

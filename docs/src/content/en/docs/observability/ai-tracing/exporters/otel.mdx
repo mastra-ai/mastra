@@ -3,19 +3,20 @@ title: "OpenTelemetry Exporter | AI Tracing | Observability | Mastra Docs"
 description: "Send AI traces to any OpenTelemetry-compatible observability platform"
 ---
 
-import { Callout } from "nextra/components";
-
 # OpenTelemetry Exporter
 
-<Callout type="warning">
+:::warning
+
 The OpenTelemetry exporter is currently **experimental**. APIs and configuration options may change in future releases.
-</Callout>
+
+:::
 
 The OpenTelemetry (OTEL) exporter sends your AI traces to any OTEL-compatible observability platform using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, SigNoz, Dash0, Traceloop, Laminar, and more.
 
 ## When to Use OTEL Exporter
 
 The OTEL exporter is ideal when you need:
+
 - **Platform flexibility** - Send traces to any OTEL-compatible backend
 - **Standards compliance** - Follow OpenTelemetry GenAI semantic conventions
 - **Multi-vendor support** - Configure once, switch providers easily
@@ -50,7 +51,7 @@ npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-http
 
 [Dash0](https://www.dash0.com/) provides real-time observability with automatic insights.
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { OtelExporter } from "@mastra/otel-exporter";
 
@@ -58,18 +59,19 @@ export const mastra = new Mastra({
   observability: {
     configs: {
       otel: {
-        serviceName: 'my-service',
+        serviceName: "my-service",
         exporters: [
           new OtelExporter({
             provider: {
               dash0: {
                 apiKey: process.env.DASH0_API_KEY,
                 endpoint: process.env.DASH0_ENDPOINT, // e.g., 'ingress.us-west-2.aws.dash0.com:4317'
-                dataset: 'production', // Optional dataset name
-              }
+                dataset: "production", // Optional dataset name
+              },
             },
-            resourceAttributes: { // Optional OpenTelemetry Resource Attributes for the trace
-              ['deployment.environment']: 'dev',
+            resourceAttributes: {
+              // Optional OpenTelemetry Resource Attributes for the trace
+              ["deployment.environment"]: "dev",
             },
           }),
         ],
@@ -79,87 +81,89 @@ export const mastra = new Mastra({
 });
 ```
 
-<Callout type="info">
+:::info
+
 Get your Dash0 endpoint from your dashboard. It should be in the format `ingress.{region}.aws.dash0.com:4317`.
-</Callout>
+
+:::
 
 ### SigNoz
 
 [SigNoz](https://signoz.io/) is an open-source APM alternative with built-in AI tracing support.
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
     signoz: {
       apiKey: process.env.SIGNOZ_API_KEY,
-      region: 'us', // 'us' | 'eu' | 'in'
+      region: "us", // 'us' | 'eu' | 'in'
       // endpoint: 'https://my-signoz.example.com', // For self-hosted
-    }
+    },
   },
-})
+});
 ```
 
 ### New Relic
 
 [New Relic](https://newrelic.com/) provides comprehensive observability with AI monitoring capabilities.
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
     newrelic: {
       apiKey: process.env.NEW_RELIC_LICENSE_KEY,
       // endpoint: 'https://otlp.eu01.nr-data.net', // For EU region
-    }
+    },
   },
-})
+});
 ```
 
 ### Traceloop
 
 [Traceloop](https://www.traceloop.com/) specializes in LLM observability with automatic prompt tracking.
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
     traceloop: {
       apiKey: process.env.TRACELOOP_API_KEY,
-      destinationId: 'my-destination', // Optional
-    }
+      destinationId: "my-destination", // Optional
+    },
   },
-})
+});
 ```
 
 ### Laminar
 
 [Laminar](https://www.lmnr.ai/) provides specialized LLM observability and analytics.
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
     laminar: {
       apiKey: process.env.LMNR_PROJECT_API_KEY,
       // teamId: process.env.LAMINAR_TEAM_ID, // Optional, for backwards compatibility
-    }
+    },
   },
-})
+});
 ```
 
 ### Custom/Generic OTEL Endpoints
 
 For other OTEL-compatible platforms or custom collectors:
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
     custom: {
-      endpoint: 'https://your-collector.example.com/v1/traces',
-      protocol: 'http/protobuf', // 'http/json' | 'http/protobuf' | 'grpc'
+      endpoint: "https://your-collector.example.com/v1/traces",
+      protocol: "http/protobuf", // 'http/json' | 'http/protobuf' | 'grpc'
       headers: {
-        'x-api-key': process.env.API_KEY,
+        "x-api-key": process.env.API_KEY,
       },
-    }
+    },
   },
-})
+});
 ```
 
 ## Configuration Options
@@ -174,12 +178,12 @@ new OtelExporter({
   },
 
   // Export configuration
-  timeout: 30000,        // Export timeout in milliseconds
-  batchSize: 100,        // Number of spans per batch
+  timeout: 30000, // Export timeout in milliseconds
+  batchSize: 100, // Number of spans per batch
 
   // Debug options
-  logLevel: 'info',      // 'debug' | 'info' | 'warn' | 'error'
-})
+  logLevel: "info", // 'debug' | 'info' | 'warn' | 'error'
+});
 ```
 
 ## OpenTelemetry Semantic Conventions
@@ -187,12 +191,14 @@ new OtelExporter({
 The exporter follows [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/), ensuring compatibility with observability platforms:
 
 ### Span Naming
+
 - **LLM Operations**: `chat {model}` or `tool_selection {model}`
 - **Tool Execution**: `tool.execute {tool_name}`
 - **Agent Runs**: `agent.{agent_id}`
 - **Workflow Runs**: `workflow.{workflow_id}`
 
 ### Key Attributes
+
 - `gen_ai.operation.name` - Operation type (chat, tool.execute, etc.)
 - `gen_ai.system` - AI provider (openai, anthropic, etc.)
 - `gen_ai.request.model` - Model identifier
@@ -204,6 +210,7 @@ The exporter follows [OpenTelemetry Semantic Conventions for GenAI](https://open
 ## Buffering Strategy
 
 The exporter buffers spans until a trace is complete:
+
 1. Collects all spans for a trace
 2. Waits 5 seconds after root span completes
 3. Exports complete trace with preserved parent-child relationships
@@ -213,24 +220,27 @@ The exporter buffers spans until a trace is complete:
 
 Choose the right protocol package based on your provider:
 
-| Provider | Protocol | Required Package |
-|----------|----------|------------------|
-| Dash0 | gRPC | `@opentelemetry/exporter-trace-otlp-grpc` |
-| SigNoz | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
+| Provider  | Protocol      | Required Package                           |
+| --------- | ------------- | ------------------------------------------ |
+| Dash0     | gRPC          | `@opentelemetry/exporter-trace-otlp-grpc`  |
+| SigNoz    | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
 | New Relic | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
-| Traceloop | HTTP/JSON | `@opentelemetry/exporter-trace-otlp-http` |
-| Laminar | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
-| Custom | Varies | Depends on your collector |
+| Traceloop | HTTP/JSON     | `@opentelemetry/exporter-trace-otlp-http`  |
+| Laminar   | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
+| Custom    | Varies        | Depends on your collector                  |
 
-<Callout type="warning">
+:::warning
+
 Make sure to install the correct protocol package for your provider. The exporter will provide a helpful error message if the wrong package is installed.
-</Callout>
+
+:::
 
 ## Troubleshooting
 
 ### Missing Dependency Error
 
 If you see an error like:
+
 ```
 HTTP/Protobuf exporter is not installed (required for signoz).
 To use HTTP/Protobuf export, install the required package:

@@ -1941,7 +1941,7 @@ export class GeminiLiveVoice extends MastraVoice<
    * Get the current tools configured for this voice instance
    * @returns Object containing the current tools
    */
-  getTools(): ToolsInput | undefined {
+  listTools(): ToolsInput | undefined {
     return this.tools;
   }
 

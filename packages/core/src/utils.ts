@@ -371,8 +371,8 @@ export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: 
       }
 
       if (prop === 'agents') {
-        logger.warn(`Please use 'getAgents' instead, agents is deprecated`);
-        return Reflect.apply(target.getAgents, target, []);
+        logger.warn(`Please use 'listAgents' instead, agents is deprecated`);
+        return Reflect.apply(target.listAgents, target, []);
       }
 
       if (prop === 'tts') {

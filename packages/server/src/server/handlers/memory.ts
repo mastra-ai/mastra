@@ -32,7 +32,7 @@ async function getMemoryFromContext({
   }
   if (agentId && !agent) {
     logger.debug('Agent not found, searching agents for agent', { agentId });
-    const agents = mastra.getAgents();
+    const agents = mastra.listAgents();
     if (Object.keys(agents || {}).length) {
       for (const [_, ag] of Object.entries(agents)) {
         try {
@@ -104,46 +104,18 @@ export async function getMemoryConfigHandler({
   }
 }
 
-export async function getThreadsHandler({
+export async function listThreadsHandler({
   mastra,
   agentId,
   resourceId,
   runtimeContext,
-  orderBy,
-  sortDirection,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'runtimeContext'> & ThreadSortOptions) {
-  try {
-    const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
-
-    if (!memory) {
-      throw new HTTPException(400, { message: 'Memory is not initialized' });
-    }
-
-    validateBody({ resourceId });
-
-    const threads = await memory.getThreadsByResourceId({
-      resourceId: resourceId!,
-      orderBy,
-      sortDirection,
-    });
-    return threads;
-  } catch (error) {
-    return handleError(error, 'Error getting threads');
-  }
-}
-
-export async function getThreadsPaginatedHandler({
-  mastra,
-  agentId,
-  resourceId,
-  runtimeContext,
-  page,
-  perPage,
+  offset,
+  limit,
   orderBy,
   sortDirection,
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'runtimeContext'> & {
-  page: number;
-  perPage: number;
+  offset: number;
+  limit: number;
 } & ThreadSortOptions) {
   try {
     const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
@@ -154,16 +126,16 @@ export async function getThreadsPaginatedHandler({
 
     validateBody({ resourceId });
 
-    const result = await memory.getThreadsByResourceIdPaginated({
+    const result = await memory.listThreadsByResourceId({
       resourceId: resourceId!,
-      page,
-      perPage,
+      offset,
+      limit,
       orderBy,
       sortDirection,
     });
     return result;
   } catch (error) {
-    return handleError(error, 'Error getting paginated threads');
+    return handleError(error, 'Error listing threads');
   }
 }
 

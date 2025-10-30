@@ -120,7 +120,7 @@ If there are advanced use cases, edge cases, or performance considerations, add 
 
 For a more advanced usage, see “transformDataSync” in the following file:
 
-```ts filename="src/examples/advancedUsage/transformDataSync.ts"
+```ts title="src/examples/advancedUsage/transformDataSync.ts"
 import { MyFunction } from "@mastra/core";
 
 export async function transformDataSync(data: string) {

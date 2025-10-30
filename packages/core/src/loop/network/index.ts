@@ -17,8 +17,8 @@ import { PRIMITIVE_TYPES } from '../types';
 async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtimeContext: RuntimeContext }) {
   const instructionsToUse = await agent.getInstructions({ runtimeContext: runtimeContext });
   const agentsToUse = await agent.listAgents({ runtimeContext: runtimeContext });
-  const workflowsToUse = await agent.getWorkflows({ runtimeContext: runtimeContext });
-  const toolsToUse = await agent.getTools({ runtimeContext: runtimeContext });
+  const workflowsToUse = await agent.listWorkflows({ runtimeContext: runtimeContext });
+  const toolsToUse = await agent.listTools({ runtimeContext: runtimeContext });
   const model = await agent.getModel({ runtimeContext: runtimeContext });
   const memoryToUse = await agent.getMemory({ runtimeContext: runtimeContext });
 
@@ -37,7 +37,7 @@ async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtim
     })
     .join('\n');
 
-  const memoryTools = await memoryToUse?.getTools?.();
+  const memoryTools = await memoryToUse?.listTools?.();
   const toolList = Object.entries({ ...toolsToUse, ...memoryTools })
     .map(([name, tool]) => {
       return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(
@@ -682,7 +682,7 @@ export async function createNetworkLoop({
       iteration: z.number(),
     }),
     execute: async ({ inputData, writer, getInitData }) => {
-      const workflowsMap = await agent.getWorkflows({ runtimeContext: runtimeContext });
+      const workflowsMap = await agent.listWorkflows({ runtimeContext: runtimeContext });
       const workflowId = inputData.primitiveId;
       const wf = workflowsMap[workflowId];
 
@@ -842,9 +842,9 @@ export async function createNetworkLoop({
     execute: async ({ inputData, getInitData, writer }) => {
       const initData = await getInitData();
 
-      const agentTools = await agent.getTools({ runtimeContext });
+      const agentTools = await agent.listTools({ runtimeContext });
       const memory = await agent.getMemory({ runtimeContext });
-      const memoryTools = await memory?.getTools?.();
+      const memoryTools = await memory?.listTools?.();
       const toolsMap = { ...agentTools, ...memoryTools };
 
       const toolId = inputData.primitiveId;

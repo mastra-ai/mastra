@@ -182,7 +182,7 @@ async function formatAgentList({
   runtimeContext: RuntimeContext;
 }): Promise<SerializedAgentWithId> {
   const instructions = await agent.getInstructions({ runtimeContext });
-  const tools = await agent.getTools({ runtimeContext });
+  const tools = await agent.listTools({ runtimeContext });
   const llm = await agent.getLLM({ runtimeContext });
   const defaultGenerateOptions = await agent.getDefaultGenerateOptionsLegacy({ runtimeContext });
   const defaultStreamOptions = await agent.getDefaultStreamOptionsLegacy({ runtimeContext });
@@ -193,10 +193,10 @@ async function formatAgentList({
     { name: string; steps?: Record<string, { id: string; description?: string }> }
   > = {};
 
-  if ('getWorkflows' in agent) {
+  if ('listWorkflows' in agent) {
     const logger = mastra.getLogger();
     try {
-      const workflows = await agent.getWorkflows({ runtimeContext });
+      const workflows = await agent.listWorkflows({ runtimeContext });
       serializedAgentWorkflows = Object.entries(workflows || {}).reduce<
         Record<string, { name: string; steps?: Record<string, { id: string; description?: string }> }>
       >((acc, [key, workflow]) => {
@@ -266,7 +266,7 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
 
   if (!agent) {
     logger.debug(`Agent ${agentId} not found, looking through sub-agents`);
-    const agents = mastra.getAgents();
+    const agents = mastra.listAgents();
     if (Object.keys(agents || {}).length) {
       for (const [_, ag] of Object.entries(agents)) {
         try {
@@ -291,12 +291,12 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
 }
 
 // Agent handlers
-export async function getAgentsHandler({
+export async function listAgentsHandler({
   mastra,
   runtimeContext,
 }: Context & { runtimeContext: RuntimeContext }): Promise<Record<string, SerializedAgent>> {
   try {
-    const agents = mastra.getAgents();
+    const agents = mastra.listAgents();
 
     const serializedAgentsMap = await Promise.all(
       Object.entries(agents).map(async ([id, agent]) => {
@@ -328,7 +328,7 @@ async function formatAgent({
   runtimeContext: RuntimeContext;
   isPlayground: boolean;
 }): Promise<SerializedAgent> {
-  const tools = await agent.getTools({ runtimeContext });
+  const tools = await agent.listTools({ runtimeContext });
 
   const serializedAgentTools = await getSerializedAgentTools(tools);
 
@@ -337,10 +337,10 @@ async function formatAgent({
     { name: string; steps: Record<string, { id: string; description?: string }> }
   > = {};
 
-  if ('getWorkflows' in agent) {
+  if ('listWorkflows' in agent) {
     const logger = mastra.getLogger();
     try {
-      const workflows = await agent.getWorkflows({ runtimeContext });
+      const workflows = await agent.listWorkflows({ runtimeContext });
 
       serializedAgentWorkflows = Object.entries(workflows || {}).reduce<
         Record<string, { name: string; steps: Record<string, { id: string; description?: string }> }>
@@ -439,47 +439,6 @@ export async function getAgentByIdHandler({
     return formatAgent({ mastra, agent, runtimeContext, isPlayground });
   } catch (error) {
     return handleError(error, 'Error getting agent');
-  }
-}
-
-export async function getEvalsByAgentIdHandler({
-  mastra,
-  runtimeContext,
-  agentId,
-}: Context & { runtimeContext: RuntimeContext; agentId: string }) {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-    const evals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'test')) || [];
-    const instructions = await agent.getInstructions({ runtimeContext });
-    return {
-      id: agentId,
-      name: agent.name,
-      instructions,
-      evals,
-    };
-  } catch (error) {
-    return handleError(error, 'Error getting test evals');
-  }
-}
-
-export async function getLiveEvalsByAgentIdHandler({
-  mastra,
-  runtimeContext,
-  agentId,
-}: Context & { runtimeContext: RuntimeContext; agentId: string }) {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-    const evals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'live')) || [];
-    const instructions = await agent.getInstructions({ runtimeContext });
-
-    return {
-      id: agentId,
-      name: agent.name,
-      instructions,
-      evals,
-    };
-  } catch (error) {
-    return handleError(error, 'Error getting live evals');
   }
 }
 
@@ -896,6 +855,23 @@ export async function updateAgentModelHandler({
     return { message: 'Agent model updated' };
   } catch (error) {
     return handleError(error, 'error updating agent model');
+  }
+}
+
+export async function resetAgentModelHandler({
+  mastra,
+  agentId,
+}: Context & {
+  agentId: string;
+}): Promise<{ message: string }> {
+  try {
+    const agent = await getAgentFromSystem({ mastra, agentId });
+
+    agent.__resetToOriginalModel();
+
+    return { message: 'Agent model reset to original' };
+  } catch (error) {
+    return handleError(error, 'error resetting agent model');
   }
 }
 

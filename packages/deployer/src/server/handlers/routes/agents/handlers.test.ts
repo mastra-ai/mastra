@@ -103,8 +103,8 @@ describe('Handlers', () => {
       warn: vi.fn(),
       debug: vi.fn(),
       getTransports: vi.fn(() => []),
-      getLogs: vi.fn(() => []),
-      getLogsByRunId: vi.fn(() => []),
+      listLogs: vi.fn(() => []),
+      listLogsByRunId: vi.fn(() => []),
       trackException: vi.fn(),
     };
 

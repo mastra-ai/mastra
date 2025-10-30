@@ -3,8 +3,6 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import type {
-  EvalRow,
-  PaginationArgs,
   PaginationInfo,
   StorageColumn,
   StorageDomains,
@@ -23,7 +21,6 @@ import type {
 import { MastraStorage } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { MongoDBConnector } from './connectors/MongoDBConnector';
-import { LegacyEvalsMongoDB } from './domains/legacy-evals';
 import { MemoryStorageMongoDB } from './domains/memory';
 import { ObservabilityMongoDB } from './domains/observability';
 import { StoreOperationsMongoDB } from './domains/operations';
@@ -105,10 +102,6 @@ export class MongoDBStore extends MastraStorage {
       operations,
     });
 
-    const legacyEvals = new LegacyEvalsMongoDB({
-      operations,
-    });
-
     const scores = new ScoresStorageMongoDB({
       operations,
     });
@@ -124,7 +117,6 @@ export class MongoDBStore extends MastraStorage {
     this.stores = {
       operations,
       memory,
-      legacyEvals,
       scores,
       workflows,
       observability,
@@ -262,19 +254,6 @@ export class MongoDBStore extends MastraStorage {
     resourceId?: string;
   }): Promise<WorkflowRuns> {
     return this.stores.workflows.getWorkflowRuns(args);
-  }
-
-  async getEvals(
-    options: {
-      agentName?: string;
-      type?: 'test' | 'live';
-    } & PaginationArgs = {},
-  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
-  }
-
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
   }
 
   async updateWorkflowResults({
