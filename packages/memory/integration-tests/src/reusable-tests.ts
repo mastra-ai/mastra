@@ -373,9 +373,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           },
           vectorMessageSearch: 'JavaScript',
         });
-        const programmingContents = resultProgramming.messages.map(m =>
-          Array.isArray(m.content) && m.content[0]?.type === 'text' ? m.content[0].text : m.content,
-        );
+        const programmingContents = resultProgramming.messages.map(m => getTextContent(m));
         expect(programmingContents).toContain('JavaScript is a versatile language.');
         expect(programmingContents).not.toContain('The weather is rainy and cold.');
 
@@ -389,9 +387,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           },
           vectorMessageSearch: 'rainy',
         });
-        const weatherContents = resultWeather.messages.map(m =>
-          Array.isArray(m.content) && m.content[0]?.type === 'text' ? m.content[0].text : m.content,
-        );
+        const weatherContents = resultWeather.messages.map(m => getTextContent(m));
         expect(weatherContents).toContain('The weather is rainy and cold.');
         expect(weatherContents).not.toContain('JavaScript is a versatile language.');
       });

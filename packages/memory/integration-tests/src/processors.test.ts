@@ -235,7 +235,7 @@ describe('Memory with Processors', () => {
     });
 
     // Generate conversation with tool calls
-    const { messages } = generateConversationHistory({
+    const { messagesV2: messages } = generateConversationHistory({
       threadId: thread.id,
       resourceId,
       messageCount: 8,
