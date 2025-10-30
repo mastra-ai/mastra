@@ -245,6 +245,7 @@ describe('Agent Handlers', () => {
         provider: 'openai.chat',
         modelId: 'gpt-4o',
         modelVersion: 'v1',
+        defaultOptions: {},
         defaultGenerateOptionsLegacy: {},
         defaultStreamOptionsLegacy: {},
         modelList: undefined,
