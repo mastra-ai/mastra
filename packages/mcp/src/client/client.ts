@@ -19,6 +19,7 @@ import type {
   GetPromptResult,
   ListPromptsResult,
   LoggingLevel,
+  ProgressNotification
 } from '@modelcontextprotocol/sdk/types.js';
 import {
   CallToolResultSchema,
@@ -31,6 +32,7 @@ import {
   GetPromptResultSchema,
   PromptListChangedNotificationSchema,
   ElicitRequestSchema,
+  ProgressNotificationSchema
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
@@ -39,6 +41,7 @@ import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import { convertJsonSchemaToZod as convertJsonSchemaToZodV3 } from 'zod-from-json-schema-v3';
 import type { JSONSchema } from 'zod-from-json-schema-v3';
 import { ElicitationClientActions } from './elicitationActions';
+import { ProgressClientActions } from './progressActions';
 import { PromptClientActions } from './promptActions';
 import { ResourceClientActions } from './resourceActions';
 
@@ -75,6 +78,14 @@ export type LogHandler = (logMessage: LogMessage) => void;
  */
 export type ElicitationHandler = (request: ElicitRequest['params']) => Promise<ElicitResult>;
 
+
+/**
+ * Handler function for processing progress notifications from MCP servers.
+ *
+ * @param params - The progress notification parameters including message and status
+ */
+export type ProgressHandler = (params: ProgressNotification['params']) => void;
+
 /**
  * Base options common to all MCP server definitions.
  */
@@ -87,6 +98,8 @@ type BaseServerOptions = {
   capabilities?: ClientCapabilities;
   /** Whether to enable server log forwarding (default: true) */
   enableServerLogs?: boolean;
+  /** Whether to enable progress tracking (default: true) */
+  enableProgressTracking?: boolean;
 };
 
 /**
@@ -217,6 +230,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private readonly timeout: number;
   private logHandler?: LogHandler;
   private enableServerLogs?: boolean;
+  private enableProgressTracking?: boolean;
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
   private currentOperationContext: RuntimeContext | null = null;
@@ -227,6 +241,8 @@ export class InternalMastraMCPClient extends MastraBase {
   public readonly prompts: PromptClientActions;
   /** Provides access to elicitation operations (request handling) */
   public readonly elicitation: ElicitationClientActions;
+  /** Provides access to progress operations (notifications) */
+  public readonly progress: ProgressClientActions;
 
   /**
    * @internal
@@ -244,6 +260,7 @@ export class InternalMastraMCPClient extends MastraBase {
     this.logHandler = server.logger;
     this.enableServerLogs = server.enableServerLogs ?? true;
     this.serverConfig = server;
+    this.enableProgressTracking = server.enableProgressTracking ?? true;
 
     const clientCapabilities = { ...capabilities, elicitation: {} };
 
@@ -263,6 +280,7 @@ export class InternalMastraMCPClient extends MastraBase {
     this.resources = new ResourceClientActions({ client: this, logger: this.logger });
     this.prompts = new PromptClientActions({ client: this, logger: this.logger });
     this.elicitation = new ElicitationClientActions({ client: this, logger: this.logger });
+    this.progress = new ProgressClientActions({ client: this, logger: this.logger });
   }
 
   /**
@@ -569,6 +587,13 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
+  setProgressNotificationHandler(handler: ProgressHandler): void {
+    this.log('debug', 'Setting progress notification handler');
+    this.client.setNotificationHandler(ProgressNotificationSchema, notification => {
+      handler(notification.params);
+    });
+  }
+
   setElicitationRequestHandler(handler: ElicitationHandler): void {
     this.log('debug', 'Setting elicitation request handler');
     this.client.setRequestHandler(ElicitRequestSchema, async request => {
@@ -674,15 +699,17 @@ export class InternalMastraMCPClient extends MastraBase {
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
           outputSchema: await this.convertOutputSchema(tool.outputSchema),
-          execute: async ({ context, runtimeContext }: { context: any; runtimeContext?: RuntimeContext | null }) => {
+          execute: async ({ context, runtimeContext, runId }: { context: any; runtimeContext?: RuntimeContext | null, runId?: string }) => {
             const previousContext = this.currentOperationContext;
             this.currentOperationContext = runtimeContext || null; // Set current context
             try {
-              this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: context });
+              this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: context, runId });
               const res = await this.client.callTool(
                 {
                   name: tool.name,
                   arguments: context,
+                  // Use runId as progress token if available, otherwise generate a random UUID
+                  ...(this.enableProgressTracking ? { _meta: { progressToken: runId || crypto.randomUUID() } } : {}),
                 },
                 CallToolResultSchema,
                 {
