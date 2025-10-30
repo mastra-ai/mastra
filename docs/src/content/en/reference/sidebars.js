@@ -210,67 +210,6 @@ const sidebars = {
         },
       ],
     },
-    // Legacy Workflows - Hidden from sidebar using CSS class "sidebar-hidden" (see custom.css)
-    // Pages remain accessible via direct URLs and sidebar still shows when visiting legacy pages
-    {
-      type: "category",
-      label: "Legacy Workflows",
-      className: "sidebar-hidden",
-      collapsed: true,
-      items: [
-        { type: "doc", id: "legacyWorkflows/workflow", label: "Workflow" },
-        { type: "doc", id: "legacyWorkflows/after", label: ".after()" },
-        { type: "doc", id: "legacyWorkflows/then", label: ".then()" },
-        { type: "doc", id: "legacyWorkflows/until", label: ".until()" },
-        { type: "doc", id: "legacyWorkflows/while", label: ".while()" },
-        { type: "doc", id: "legacyWorkflows/if", label: ".if()" },
-        { type: "doc", id: "legacyWorkflows/else", label: ".else()" },
-        { type: "doc", id: "legacyWorkflows/createRun", label: ".createRun()" },
-        { type: "doc", id: "legacyWorkflows/start", label: ".start()" },
-        { type: "doc", id: "legacyWorkflows/execute", label: ".execute()" },
-        { type: "doc", id: "legacyWorkflows/suspend", label: ".suspend()" },
-        { type: "doc", id: "legacyWorkflows/snapshots", label: "Snapshots" },
-        { type: "doc", id: "legacyWorkflows/resume", label: ".resume()" },
-        { type: "doc", id: "legacyWorkflows/commit", label: ".commit()" },
-        { type: "doc", id: "legacyWorkflows/watch", label: ".watch()" },
-        {
-          type: "doc",
-          id: "legacyWorkflows/events",
-          label: "Event-Driven Workflows",
-        },
-        {
-          type: "doc",
-          id: "legacyWorkflows/afterEvent",
-          label: ".afterEvent()",
-        },
-        {
-          type: "doc",
-          id: "legacyWorkflows/resumeWithEvent",
-          label: ".resumeWithEvent()",
-        },
-        {
-          type: "doc",
-          id: "legacyWorkflows/step-function",
-          label: "Workflow.step()",
-        },
-        {
-          type: "doc",
-          id: "legacyWorkflows/step-options",
-          label: "StepOptions",
-        },
-        {
-          type: "doc",
-          id: "legacyWorkflows/step-retries",
-          label: "Step Retries",
-        },
-        { type: "doc", id: "legacyWorkflows/step-class", label: "Step" },
-        {
-          type: "doc",
-          id: "legacyWorkflows/step-condition",
-          label: "StepCondition",
-        },
-      ],
-    },
     {
       type: "category",
       label: "Streaming",
@@ -494,11 +433,6 @@ const sidebars = {
           type: "doc",
           id: "client-js/observability",
           label: "Observability API",
-        },
-        {
-          type: "doc",
-          id: "client-js/workflows-legacy",
-          label: "Workflows (Legacy) API",
         },
         {
           type: "doc",

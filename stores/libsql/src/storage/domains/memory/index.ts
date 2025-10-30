@@ -10,8 +10,8 @@ import type {
   ThreadSortOptions,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdPaginatedInput,
-  StorageListThreadsByResourceIdPaginatedOutput,
+  StoragelistThreadsByResourceIdInput,
+  StoragelistThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import {
   MemoryStorage,
@@ -237,9 +237,9 @@ export class MemoryLibSQL extends MemoryStorage {
     return this.getMessagesById({ messageIds, format: 'v2' });
   }
 
-  public async listThreadsByResourceIdPaginated(
-    args: StorageListThreadsByResourceIdPaginatedInput,
-  ): Promise<StorageListThreadsByResourceIdPaginatedOutput> {
+  public async listThreadsByResourceId(
+    args: StoragelistThreadsByResourceIdInput,
+  ): Promise<StoragelistThreadsByResourceIdOutput> {
     const { resourceId, limit, offset, orderBy, sortDirection } = args;
     const page = Math.floor(offset / limit);
     const perPage = limit;
