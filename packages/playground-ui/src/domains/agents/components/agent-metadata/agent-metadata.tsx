@@ -24,6 +24,7 @@ export interface AgentMetadataProps {
   modelProviders: string[];
   modelVersion: string;
   updateModel: AgentMetadataModelSwitcherProps['updateModel'];
+  resetModel: AgentMetadataModelSwitcherProps['resetModel'];
   updateModelInModelList: AgentMetadataModelListProps['updateModelInModelList'];
   reorderModelList: AgentMetadataModelListProps['reorderModelList'];
 }
@@ -60,6 +61,7 @@ export const AgentMetadata = ({
   promptSlot,
   hasMemoryEnabled,
   updateModel,
+  resetModel,
   modelProviders,
   updateModelInModelList,
   reorderModelList,
@@ -102,6 +104,7 @@ export const AgentMetadata = ({
             defaultProvider={agent.provider}
             defaultModel={agent.modelId}
             updateModel={updateModel}
+            resetModel={resetModel}
             modelProviders={modelProviders}
           />
         </AgentMetadataSection>

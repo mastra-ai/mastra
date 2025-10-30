@@ -899,6 +899,23 @@ export async function updateAgentModelHandler({
   }
 }
 
+export async function resetAgentModelHandler({
+  mastra,
+  agentId,
+}: Context & {
+  agentId: string;
+}): Promise<{ message: string }> {
+  try {
+    const agent = await getAgentFromSystem({ mastra, agentId });
+
+    agent.__resetToOriginalModel();
+
+    return { message: 'Agent model reset to original' };
+  } catch (error) {
+    return handleError(error, 'error resetting agent model');
+  }
+}
+
 export async function reorderAgentModelListHandler({
   mastra,
   agentId,
