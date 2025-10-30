@@ -538,15 +538,6 @@ export abstract class MastraStorage extends MastraBase {
     });
   }
 
-  abstract getWorkflowRuns(args?: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns>;
-
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
 
   abstract getThreadsByResourceIdPaginated(

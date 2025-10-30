@@ -347,7 +347,7 @@ export class D1Store extends MastraStorage {
     return this.stores.workflows.loadWorkflowSnapshot(params);
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
@@ -362,7 +362,7 @@ export class D1Store extends MastraStorage {
     offset?: number;
     resourceId?: string;
   } = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.getWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
+    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
   }
 
   async getWorkflowRunById({

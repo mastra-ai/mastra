@@ -174,21 +174,14 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return d ? JSON.parse(JSON.stringify(d.snapshot)) : null;
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     let runs = Array.from(this.collection.values());
 
     if (workflowName) runs = runs.filter((run: any) => run.workflow_name === workflowName);
@@ -255,9 +248,5 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     };
 
     return parsedRun as WorkflowRun;
-  }
-
-  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
-    return this.getWorkflowRuns(args);
   }
 }

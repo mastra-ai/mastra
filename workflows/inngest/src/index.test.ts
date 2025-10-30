@@ -10410,13 +10410,13 @@ describe('MastraInngestWorkflow', () => {
       const run1 = await workflow.createRunAsync();
       await run1.start({ inputData: {} });
 
-      const { runs, total } = await workflow.getWorkflowRuns();
+      const { runs, total } = await workflow.listWorkflowRuns();
       expect(total).toBe(1);
       expect(runs).toHaveLength(1);
 
       await run1.resume({ resumeData: { resume: 'resume' }, step: 'resume-step' });
 
-      const { runs: afterResumeRuns, total: afterResumeTotal } = await workflow.getWorkflowRuns();
+      const { runs: afterResumeRuns, total: afterResumeTotal } = await workflow.listWorkflowRuns();
       expect(afterResumeTotal).toBe(1);
       expect(afterResumeRuns).toHaveLength(1);
       expect(afterResumeRuns.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId]));
@@ -10484,7 +10484,7 @@ describe('MastraInngestWorkflow', () => {
       const run1 = await workflow.createRunAsync();
       await run1.start({ inputData: {} });
 
-      const { runs, total } = await workflow.getWorkflowRuns();
+      const { runs, total } = await workflow.listWorkflowRuns();
       expect(total).toBe(1);
       expect(runs).toHaveLength(1);
       expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId]));
