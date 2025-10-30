@@ -51,6 +51,32 @@ async function applyInputProcessors(
   return processedMessageList.get.input.aiV4.core();
 }
 
+async function applyInputProcessorsV2(
+  messages: MessageListInput,
+  processors: InputProcessor[],
+  threadId: string,
+  resourceId: string,
+): Promise<MastraMessageV2[]> {
+  const runner = new ProcessorRunner({
+    inputProcessors: processors,
+    outputProcessors: [],
+    agentName: 'test-agent',
+  });
+
+  // Add messages as 'input' so they're included in clear.input.v2()
+  const messageList = new MessageList({ threadId, resourceId }).add(messages, 'input');
+  const requestContext = new RequestContext();
+  requestContext.set('MastraMemory', {
+    thread: { id: threadId },
+    resourceId,
+  });
+
+  const processedMessageList = await runner.runInputProcessors(messageList, undefined, undefined, requestContext);
+
+  // Return only the processed input messages as MastraMessageV2
+  return processedMessageList.get.input.v2();
+}
+
 let memory: Memory;
 let storage: LibSQLStore;
 let vector: LibSQLVector;
@@ -109,7 +135,7 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       selectBy: { last: 20 },
     });
-    const result = await applyInputProcessors(
+    const result = await applyInputProcessorsV2(
       queryResult.uiMessages,
       [new TokenLimiter(250)], // Limit to 250 tokens
       thread.id,
