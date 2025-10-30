@@ -297,12 +297,12 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages, uiMessages } = await agentMemory.query({ threadId });
-      const userMessages = messages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
-      const userUiMessages = uiMessages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
+      const { messages } = await agentMemory.query({ threadId });
+      const userMessages = messages
+        .filter((m: any) => m.role === 'user')
+        .map((m: any) => getTextContent(m));
 
       expect(userMessages).toEqual(expect.arrayContaining(['First message', 'Second message']));
-      expect(userUiMessages).toEqual(expect.arrayContaining(['First message', 'Second message']));
     });
 
     it('should save assistant responses for both text and object output modes', async () => {

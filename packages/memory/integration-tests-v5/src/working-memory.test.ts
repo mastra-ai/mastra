@@ -183,7 +183,7 @@ describe('Working Memory Tests', () => {
         ),
       ];
 
-      await memory.saveMessages({ messages, format: 'v2' });
+      await memory.saveMessages({ messages });
 
       const remembered = await memory.rememberMessages({
         threadId: thread.id,
