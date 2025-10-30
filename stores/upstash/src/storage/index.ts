@@ -12,6 +12,7 @@ import type {
   PaginationInfo,
   StoragePagination,
   StorageDomains,
+  StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
@@ -236,22 +237,15 @@ export class UpstashStore extends MastraStorage {
     return this.stores.workflows.loadWorkflowSnapshot(params);
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.getWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
+    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
   }
 
   async getWorkflowRunById({

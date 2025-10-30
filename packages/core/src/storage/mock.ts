@@ -21,6 +21,7 @@ import type {
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
+  StorageListWorkflowRunsInput,
   StoragePagination,
   StorageResourceType,
   ThreadSortOptions,
@@ -355,22 +356,15 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.getWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
+    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
   }
 
   async getWorkflowRunById({

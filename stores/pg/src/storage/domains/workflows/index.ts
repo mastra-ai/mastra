@@ -199,21 +199,14 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
       const values: any[] = [];
@@ -290,9 +283,5 @@ export class WorkflowsPG extends WorkflowsStorage {
         error,
       );
     }
-  }
-
-  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
-    return this.getWorkflowRuns(args);
   }
 }

@@ -11640,7 +11640,7 @@ describe('Workflow', () => {
 
     it('should return empty result when mastra is not initialized', async () => {
       const workflow = createWorkflow({ id: 'test', inputSchema: z.object({}), outputSchema: z.object({}) });
-      const result = await workflow.getWorkflowRuns();
+      const result = await workflow.listWorkflowRuns();
       expect(result).toEqual({ runs: [], total: 0 });
     });
 
@@ -11690,7 +11690,7 @@ describe('Workflow', () => {
       const run3 = await workflow.createRunAsync();
       await run3.start({ inputData: {} });
 
-      const { runs, total } = await workflow.getWorkflowRuns();
+      const { runs, total } = await workflow.listWorkflowRuns();
       expect(total).toBe(2);
       expect(runs).toHaveLength(2);
       expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId, run2.runId]));
@@ -11748,13 +11748,13 @@ describe('Workflow', () => {
       const run1 = await workflow.createRunAsync();
       await run1.start({ inputData: {} });
 
-      const { runs, total } = await workflow.getWorkflowRuns();
+      const { runs, total } = await workflow.listWorkflowRuns();
       expect(total).toBe(1);
       expect(runs).toHaveLength(1);
 
       await run1.resume({ resumeData: { resume: 'resume' }, step: 'resume-step' });
 
-      const { runs: afterResumeRuns, total: afterResumeTotal } = await workflow.getWorkflowRuns();
+      const { runs: afterResumeRuns, total: afterResumeTotal } = await workflow.listWorkflowRuns();
       expect(afterResumeTotal).toBe(1);
       expect(afterResumeRuns).toHaveLength(1);
       expect(afterResumeRuns.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId]));
@@ -11795,7 +11795,7 @@ describe('Workflow', () => {
       const run1 = await workflow.createRunAsync();
       await run1.start({ inputData: {} });
 
-      const { runs, total } = await workflow.getWorkflowRuns();
+      const { runs, total } = await workflow.listWorkflowRuns();
       expect(total).toBe(1);
       expect(runs).toHaveLength(1);
       expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId]));
@@ -11835,7 +11835,7 @@ describe('Workflow', () => {
       await run.start({ inputData: {} });
 
       // Verify resourceId is persisted in storage
-      const { runs } = await workflow.getWorkflowRuns();
+      const { runs } = await workflow.listWorkflowRuns();
       expect(runs).toHaveLength(1);
       expect(runs[0]?.resourceId).toBe(resourceId);
 
@@ -11849,7 +11849,7 @@ describe('Workflow', () => {
       await run2.start({ inputData: {} });
 
       // Verify both runs have correct resourceIds
-      const { runs: allRuns } = await workflow.getWorkflowRuns();
+      const { runs: allRuns } = await workflow.listWorkflowRuns();
       expect(allRuns).toHaveLength(2);
       const runWithResource123 = allRuns.find(r => r.resourceId === resourceId);
       const runWithResource456 = allRuns.find(r => r.resourceId === resourceId2);
@@ -11862,7 +11862,7 @@ describe('Workflow', () => {
       const run3 = await workflow.createRunAsync();
       await run3.start({ inputData: {} });
 
-      const { runs: finalRuns } = await workflow.getWorkflowRuns();
+      const { runs: finalRuns } = await workflow.listWorkflowRuns();
       expect(finalRuns).toHaveLength(3);
       const runWithoutResource = finalRuns.find(r => r.runId === run3.runId);
       expect(runWithoutResource).toBeDefined();
@@ -11923,7 +11923,7 @@ describe('Workflow', () => {
       const runAfterResume = await workflow.getWorkflowRunById(run.runId);
       expect(runAfterResume?.resourceId).toBe(resourceId);
 
-      const { runs } = await workflow.getWorkflowRuns({ resourceId });
+      const { runs } = await workflow.listWorkflowRuns({ resourceId });
       expect(runs).toHaveLength(1);
       expect(runs[0]?.resourceId).toBe(resourceId);
     });
