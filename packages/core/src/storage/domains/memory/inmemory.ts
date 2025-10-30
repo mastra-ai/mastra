@@ -10,8 +10,8 @@ import type {
   ThreadSortOptions,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdPaginatedInput,
-  StorageListThreadsByResourceIdPaginatedOutput,
+  StoragelistThreadsByResourceIdInput,
+  StoragelistThreadsByResourceIdOutput,
 } from '../../types';
 import { safelyParseJSON } from '../../utils';
 import type { StoreOperations } from '../operations';
@@ -453,9 +453,9 @@ export class InMemoryMemory extends MemoryStorage {
     };
   }
 
-  async listThreadsByResourceIdPaginated(
-    args: StorageListThreadsByResourceIdPaginatedInput,
-  ): Promise<StorageListThreadsByResourceIdPaginatedOutput> {
+  async listThreadsByResourceId(
+    args: StoragelistThreadsByResourceIdInput,
+  ): Promise<StoragelistThreadsByResourceIdOutput> {
     const { resourceId, limit, offset, orderBy, sortDirection } = args;
     const page = Math.floor(offset / limit);
     const perPage = limit;

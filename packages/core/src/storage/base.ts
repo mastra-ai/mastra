@@ -38,8 +38,8 @@ import type {
   StorageListMessagesInput,
   StorageListMessagesOutput,
   StorageListWorkflowRunsInput,
-  StorageListThreadsByResourceIdPaginatedInput,
-  StorageListThreadsByResourceIdPaginatedOutput,
+  StoragelistThreadsByResourceIdInput,
+  StoragelistThreadsByResourceIdOutput,
 } from './types';
 
 export type StorageDomains = {
@@ -285,11 +285,11 @@ export abstract class MastraStorage extends MastraBase {
     });
   }
 
-  async listThreadsByResourceIdPaginated(
-    args: StorageListThreadsByResourceIdPaginatedInput,
-  ): Promise<StorageListThreadsByResourceIdPaginatedOutput> {
+  async listThreadsByResourceId(
+    args: StoragelistThreadsByResourceIdInput,
+  ): Promise<StoragelistThreadsByResourceIdOutput> {
     if (this.stores?.memory) {
-      return this.stores.memory.listThreadsByResourceIdPaginated(args);
+      return this.stores.memory.listThreadsByResourceId(args);
     }
     throw new MastraError({
       id: 'MASTRA_STORAGE_LIST_THREADS_BY_RESOURCE_ID_PAGINATED_NOT_SUPPORTED',
