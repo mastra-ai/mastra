@@ -90,7 +90,7 @@ export function createPrepareMemoryStep<
       addSystemMessage(messageList, options.system, 'user-provided');
 
       if (!memory || (!thread?.id && !resourceId)) {
-        messageList.add(options.messages, 'user');
+        messageList.add(options.messages, 'input');
         const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcessors({
           requestContext,
           tracingContext,
@@ -169,7 +169,7 @@ export function createPrepareMemoryStep<
       });
 
       // Add user messages - memory processors will handle history/semantic recall/working memory
-      messageList.add(options.messages, 'user');
+      messageList.add(options.messages, 'input');
 
       const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcessors({
         requestContext,
