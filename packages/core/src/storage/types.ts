@@ -108,13 +108,13 @@ export type StorageListWorkflowRunsInput = {
   resourceId?: string;
 };
 
-export type StorageListThreadsByResourceIdPaginatedInput = {
+export type StoragelistThreadsByResourceIdInput = {
   resourceId: string;
   limit: number;
   offset: number;
 } & ThreadSortOptions;
 
-export type StorageListThreadsByResourceIdPaginatedOutput = PaginationInfo & {
+export type StoragelistThreadsByResourceIdOutput = PaginationInfo & {
   threads: StorageThreadType[];
 };
 

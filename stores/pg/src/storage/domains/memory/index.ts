@@ -16,8 +16,8 @@ import type {
   ThreadSortOptions,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdPaginatedInput,
-  StorageListThreadsByResourceIdPaginatedOutput,
+  StoragelistThreadsByResourceIdInput,
+  StoragelistThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
@@ -588,9 +588,9 @@ export class MemoryPG extends MemoryStorage {
     return this.getMessagesById({ messageIds, format: 'v2' });
   }
 
-  public async listThreadsByResourceIdPaginated(
-    args: StorageListThreadsByResourceIdPaginatedInput,
-  ): Promise<StorageListThreadsByResourceIdPaginatedOutput> {
+  public async listThreadsByResourceId(
+    args: StoragelistThreadsByResourceIdInput,
+  ): Promise<StoragelistThreadsByResourceIdOutput> {
     const { resourceId, limit, offset, orderBy, sortDirection } = args;
     const page = Math.floor(offset / limit);
     const perPage = limit;
