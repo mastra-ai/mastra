@@ -516,6 +516,7 @@ span[class*="categoryLinkLabel"] {
     gap: 0.5rem;
   }
 
+  h1 code,
   h2 code,
   h3 code,
   h4 code,
