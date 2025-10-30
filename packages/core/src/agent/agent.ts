@@ -730,7 +730,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   }
 
   /**
-   * Gets the default stream options for this agent, resolving function-based options if necessary.
+   * Gets the default options for this agent, resolving function-based options if necessary.
    * These options are used as defaults when calling `stream()` or `generate()` without explicit options.
    *
    * @example
@@ -753,13 +753,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     return resolveMaybePromise(result, options => {
       if (!options) {
         const mastraError = new MastraError({
-          id: 'AGENT_GET_DEFAULT_VNEXT_STREAM_OPTIONS_FUNCTION_EMPTY_RETURN',
+          id: 'AGENT_GET_DEFAULT_OPTIONS_FUNCTION_EMPTY_RETURN',
           domain: ErrorDomain.AGENT,
           category: ErrorCategory.USER,
           details: {
             agentName: this.name,
           },
-          text: `[Agent:${this.name}] - Function-based default vnext stream options returned empty value`,
+          text: `[Agent:${this.name}] - Function-based default options returned empty value`,
         });
         this.logger.trackException(mastraError);
         this.logger.error(mastraError.toString());
@@ -3073,7 +3073,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   }
 
   /**
-   * Executes the agent with VNext execution model, handling tools, memory, and streaming.
+   * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
   async #execute<
@@ -3447,16 +3447,16 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    const defaultStreamOptions = await this.getDefaultOptions<OUTPUT>({
+    const defaultOptions = await this.getDefaultOptions<OUTPUT>({
       requestContext: streamOptions?.requestContext,
     });
-    const mergedStreamOptions = {
-      ...defaultStreamOptions,
+    const mergedOptions = {
+      ...defaultOptions,
       ...(streamOptions ?? {}),
     };
 
     const llm = await this.getLLM({
-      requestContext: mergedStreamOptions.requestContext,
+      requestContext: mergedOptions.requestContext,
     });
 
     const modelInfo = llm.getModel();
@@ -3480,7 +3480,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     }
 
     const executeOptions = {
-      ...mergedStreamOptions,
+      ...mergedOptions,
       messages,
       methodType: 'stream',
     } as InnerAgentExecutionOptions<OUTPUT, FORMAT>;
@@ -3516,13 +3516,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   }
 
   /**
-   * Resumes a previously suspended VNext stream execution.
+   * Resumes a previously suspended stream execution.
    * Used to continue execution after a suspension point (e.g., tool approval, workflow suspend).
    *
    * @example
    * ```typescript
    * // Resume after suspension
-   * const stream = await agent.resumeStreamVNext(
+   * const stream = await agent.resumeStream(
    *   { approved: true },
    *   { runId: 'previous-run-id' }
    * );
@@ -3550,7 +3550,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     if (llm.getModel().specificationVersion !== 'v2') {
       throw new MastraError({
-        id: 'AGENT_STREAM_VNEXT_V1_MODEL_NOT_SUPPORTED',
+        id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text: 'V1 models are not supported for stream. Please use streamLegacy instead.',
@@ -3576,7 +3576,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       if (result.status === 'failed') {
         throw new MastraError(
           {
-            id: 'AGENT_STREAM_VNEXT_FAILED',
+            id: 'AGENT_STREAM_FAILED',
             domain: ErrorDomain.AGENT,
             category: ErrorCategory.USER,
           },
@@ -3585,7 +3585,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         );
       }
       throw new MastraError({
-        id: 'AGENT_STREAM_VNEXT_UNKNOWN_ERROR',
+        id: 'AGENT_STREAM_UNKNOWN_ERROR',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text: 'An unknown error occurred while streaming',
@@ -3645,7 +3645,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
   /**
    * Legacy implementation of generate method using AI SDK v4 models.
-   * Use this method if you need to continue using AI SDK v4 models after `generate()` switches to VNext.
+   * Use this method if you need to continue using AI SDK v4 models.
    *
    * @example
    * ```typescript
@@ -3968,7 +3968,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
   /**
    * Legacy implementation of stream method using AI SDK v4 models.
-   * Use this method if you need to continue using AI SDK v4 models after `stream()` switches to VNext.
+   * Use this method if you need to continue using AI SDK v4 models.
    *
    * @example
    * ```typescript
