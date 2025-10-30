@@ -37,7 +37,10 @@ export const CardGridItem = ({
   children?: React.ReactNode;
 }) => {
   return (
-    <Link to={href} className="block no-underline! h-full w-full">
+    <Link
+      to={href}
+      className="block no-underline! dark:text-white! h-full w-full"
+    >
       <Card className="h-full w-full shadow-none bg-(--mastra-surface-1)/20 dark:border-(--border) border-(--border) hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors cursor-pointer">
         <CardHeader>
           <div className="flex items-center gap-3">
