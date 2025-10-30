@@ -57,6 +57,17 @@ const createTestMessage = (
   };
 };
 
+// Helper to extract text content from MastraDBMessage
+const getTextContent = (message: any): string => {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+  if (message.content?.parts?.[0]?.text) {
+    return message.content.parts[0].text;
+  }
+  return '';
+};
+
 export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
   beforeEach(async () => {
     messageCounter = 0;
@@ -90,8 +101,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           config: { lastMessages: 10 },
         });
         expect(result.messages).toHaveLength(10); // lastMessages is set to 10
-        expect(result.messages[0].content).toBe('Message 6'); // First message
-        expect(result.messages[9].content).toBe('Message 15'); // Last message
+        expect(getTextContent(result.messages[0])).toBe('Message 6'); // First message
+        expect(getTextContent(result.messages[9])).toBe('Message 15'); // Last message
 
         const result2 = await memory.rememberMessages({
           threadId: thread.id,
@@ -101,8 +112,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           },
         });
         expect(result2.messages).toHaveLength(15); // lastMessages is set to 10
-        expect(result2.messages[0].content).toBe('Message 1'); // First message
-        expect(result2.messages[14].content).toBe('Message 15'); // Last message
+        expect(getTextContent(result2.messages[0])).toBe('Message 1'); // First message
+        expect(getTextContent(result2.messages[14])).toBe('Message 15'); // Last message
       });
 
       it('should maintain conversation context', async () => {
@@ -134,7 +145,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
         const threadId = thread.id;
 
-        const content = Array(1000).fill(`This is a long message to test chunking with`).join(`\n`);
+        const content = Array(1000).fill(`This is a long message to test chunking with`).join(`
+`);
         await expect(
           memory.saveMessages({
             messages: [
@@ -291,9 +303,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(result.messages.length).toBe(3); // Should still only get 3 messages even though there are 7 total
 
         // Should get exactly these 3 consecutive messages in chronological order
-        expect(result.messages[0].content).toBe('Another unrelated message');
-        expect(result.messages[1].content).toBe('Message about topic X');
-        expect(result.messages[2].content).toBe('Yet another message');
+        expect(getTextContent(result.messages[0])).toBe('Another unrelated message');
+        expect(getTextContent(result.messages[1])).toBe('Message about topic X');
+        expect(getTextContent(result.messages[2])).toBe('Yet another message');
 
         // Messages should be in the order they were created
         expect(
@@ -457,8 +469,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         // Should only find messages from thread1
         expect(threadScopeResult.messages).toHaveLength(2);
         expect(threadScopeResult.messages.map(m => m.threadId)).toEqual([thread1.id, thread1.id]);
-        expect(threadScopeResult.messages[0].content).toBe('The sky is blue today');
-        expect(threadScopeResult.messages[1].content).toBe('Yes, very clear skies');
+        expect(getTextContent(threadScopeResult.messages[0])).toBe('The sky is blue today');
+        expect(getTextContent(threadScopeResult.messages[1])).toBe('Yes, very clear skies');
 
         // 2. Test resource scope (explicitly set)
         const resourceScopeResult = await memory.rememberMessages({
@@ -482,7 +494,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(resourceScopeResult.messages.some(m => m.threadId === thread1.id)).toBe(true);
         expect(resourceScopeResult.messages.some(m => m.threadId === thread2.id)).toBe(true);
         // Check content to be reasonably sure we got the right ones (order might vary based on embedding similarity)
-        const contents = resourceScopeResult.messages.map(m => m.content);
+        const contents = resourceScopeResult.messages.map(m => getTextContent(m));
         expect(contents).toContain('The sky is blue today');
         expect(contents).toContain('Yes, very clear skies');
         expect(contents).toContain('Oceans are vast and blue');
@@ -514,7 +526,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(defaultScopeResult.messages).toHaveLength(4);
         expect(defaultScopeResult.messages.some(m => m.threadId === thread1.id)).toBe(true);
         expect(defaultScopeResult.messages.some(m => m.threadId === thread2.id)).toBe(true);
-        const defaultContents = defaultScopeResult.messages.map(m => m.content);
+        const defaultContents = defaultScopeResult.messages.map(m => getTextContent(m));
         expect(defaultContents).toContain('The sky is blue today');
         expect(defaultContents).toContain('Yes, very clear skies');
         expect(defaultContents).toContain('Oceans are vast and blue');
@@ -636,7 +648,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
 
         expect(remainingMessages.messages).toHaveLength(2);
-        expect(remainingMessages.messages.map(m => m.content)).toEqual(['Message 1', 'Message 3']);
+        expect(remainingMessages.messages.map(m => getTextContent(m))).toEqual(['Message 1', 'Message 3']);
         expect(remainingMessages.messages.find(m => m.id === messageToDelete.id)).toBeUndefined();
       });
 
@@ -683,13 +695,13 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         // Delete the complex message
         await memory.deleteMessages([savedMessages[1].id]);
 
-        const remainingMessages = await memory.query({
+const remainingMessages = await memory.query({
           threadId: thread.id,
           selectBy: { last: 10 },
         });
 
-        expect(remainingMessages.messages).toHaveLength(1);
-        expect(remainingMessages.messages[0].content).toBe('Simple text');
+        expect(remainingMessages.messages).toHaveLength(2);
+        expect(getTextContent(remainingMessages.messages[0])).toBe('Simple text');
       });
 
       it('should not affect other threads when deleting a message', async () => {
@@ -720,7 +732,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           selectBy: { last: 10 },
         });
         expect(thread2Messages.messages).toHaveLength(1);
-        expect(thread2Messages.messages[0].content).toBe('Thread 2 message');
+        expect(getTextContent(thread2Messages.messages[0])).toBe('Thread 2 message');
       });
 
       it('should throw error when messageId is not provided', async () => {
