@@ -304,19 +304,6 @@ export class StoreMemoryLance extends MemoryStorage {
     );
   }
 
-  /**
-   * @todo When migrating from getThreadsByResourceIdPaginated to this method,
-   * implement orderBy and sortDirection support for full sorting capabilities
-   */
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
-  }
-
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   async saveMessages(
@@ -384,13 +371,14 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page?: number;
-    perPage?: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+  /**
+   * @todo Implement orderBy and sortDirection support for full sorting capabilities
+   */
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
-      const { resourceId, page = 0, perPage = 10 } = args;
+      const { resourceId, offset = 0, limit = 10 } = args;
       const table = await this.client.openTable(TABLE_THREADS);
 
       // Get total count
@@ -398,10 +386,10 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // Get paginated results
       const query = table.query().where(`\`resourceId\` = '${resourceId}'`);
-      const offset = page * perPage;
-      query.limit(perPage);
-      if (offset > 0) {
-        query.offset(offset);
+      const currentOffset = offset * limit;
+      query.limit(limit);
+      if (currentOffset > 0) {
+        query.offset(currentOffset);
       }
 
       const records = await query.toArray();
@@ -415,9 +403,9 @@ export class StoreMemoryLance extends MemoryStorage {
       return {
         threads,
         total,
-        page,
-        perPage,
-        hasMore: total > (page + 1) * perPage,
+        page: offset,
+        perPage: limit,
+        hasMore: total > (offset + 1) * limit,
       };
     } catch (error: any) {
       throw new MastraError(

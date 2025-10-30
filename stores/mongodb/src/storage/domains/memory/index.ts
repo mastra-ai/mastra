@@ -195,19 +195,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     );
   }
 
-  /**
-   * @todo When migrating from getThreadsByResourceIdPaginated to this method,
-   * implement orderBy and sortDirection support for full sorting capabilities
-   */
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
-  }
-
   public async getMessagesPaginated(
     args: StorageGetMessagesArg & {
       format?: 'v1' | 'v2';
@@ -625,13 +612,14 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  public async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+  /**
+   * @todo Implement orderBy and sortDirection support for full sorting capabilities
+   */
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
-      const { resourceId, page, perPage } = args;
+      const { resourceId, offset, limit } = args;
       const collection = await this.operations.getCollection(TABLE_THREADS);
 
       const query = { resourceId };
@@ -640,8 +628,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const threads = await collection
         .find(query)
         .sort({ updatedAt: -1 })
-        .skip(page * perPage)
-        .limit(perPage)
+        .skip(offset * limit)
+        .limit(limit)
         .toArray();
 
       return {
@@ -654,9 +642,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           metadata: thread.metadata || {},
         })),
         total,
-        page,
-        perPage,
-        hasMore: (page + 1) * perPage < total,
+        page: offset,
+        perPage: limit,
+        hasMore: (offset + 1) * limit < total,
       };
     } catch (error) {
       throw new MastraError(

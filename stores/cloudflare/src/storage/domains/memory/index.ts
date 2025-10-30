@@ -63,13 +63,14 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page?: number;
-    perPage?: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+  /**
+   * @todo Implement orderBy and sortDirection support for full sorting capabilities
+   */
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
-      const { resourceId, page = 0, perPage = 100 } = args;
+      const { resourceId, offset = 0, limit = 100 } = args;
 
       // List all keys in the threads table
       const prefix = this.operations.namespacePrefix ? `${this.operations.namespacePrefix}:` : '';
@@ -95,15 +96,15 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       });
 
       // Apply pagination
-      const start = page * perPage;
-      const end = start + perPage;
+      const start = offset * limit;
+      const end = start + limit;
       const paginatedThreads = threads.slice(start, end);
 
       return {
-        page,
-        perPage,
+        page: offset,
+        perPage: limit,
         total: threads.length,
-        hasMore: start + perPage < threads.length,
+        hasMore: start + limit < threads.length,
         threads: paginatedThreads,
       };
     } catch (error) {
@@ -809,19 +810,6 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         `This method is currently being rolled out across all storage adapters. ` +
         `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
     );
-  }
-
-  /**
-   * @todo When migrating from getThreadsByResourceIdPaginated to this method,
-   * implement orderBy and sortDirection support for full sorting capabilities
-   */
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
   }
 
   async getMessagesPaginated(

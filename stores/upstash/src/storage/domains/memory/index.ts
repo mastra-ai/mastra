@@ -70,12 +70,13 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  public async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page = 0, perPage = 100 } = args;
+  /**
+   * @todo Implement orderBy and sortDirection support for full sorting capabilities
+   */
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, offset = 0, limit = 100 } = args;
 
     try {
       let allThreads: StorageThreadType[] = [];
@@ -101,16 +102,16 @@ export class StoreMemoryUpstash extends MemoryStorage {
       allThreads.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
       const total = allThreads.length;
-      const start = page * perPage;
-      const end = start + perPage;
+      const start = offset * limit;
+      const end = start + limit;
       const paginatedThreads = allThreads.slice(start, end);
       const hasMore = end < total;
 
       return {
         threads: paginatedThreads,
         total,
-        page,
-        perPage,
+        page: offset,
+        perPage: limit,
         hasMore,
       };
     } catch (error) {
@@ -121,8 +122,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             resourceId,
-            page,
-            perPage,
+            page: offset,
+            perPage: limit,
           },
         },
         error,
@@ -132,24 +133,11 @@ export class StoreMemoryUpstash extends MemoryStorage {
       return {
         threads: [],
         total: 0,
-        page,
-        perPage,
+        page: offset,
+        perPage: limit,
         hasMore: false,
       };
     }
-  }
-
-  /**
-   * @todo When migrating from getThreadsByResourceIdPaginated to this method,
-   * implement orderBy and sortDirection support for full sorting capabilities
-   */
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {

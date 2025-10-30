@@ -209,12 +209,13 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
   }
 
-  public async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page, perPage } = args;
+  /**
+   * @todo Implement orderBy and sortDirection support for full sorting capabilities
+   */
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, offset, limit } = args;
     const fullTableName = this.operations.getTableName(TABLE_THREADS);
 
     const mapRowToStorageThreadType = (row: Record<string, any>): StorageThreadType => ({
@@ -239,8 +240,8 @@ export class MemoryStorageD1 extends MemoryStorage {
         .from(fullTableName)
         .where('resourceId = ?', resourceId)
         .orderBy('createdAt', 'DESC')
-        .limit(perPage)
-        .offset(page * perPage);
+        .limit(limit)
+        .offset(offset * limit);
 
       const results = (await this.operations.executeQuery(selectQuery.build())) as Record<string, any>[];
       const threads = results.map(mapRowToStorageThreadType);
@@ -248,9 +249,9 @@ export class MemoryStorageD1 extends MemoryStorage {
       return {
         threads,
         total,
-        page,
-        perPage,
-        hasMore: page * perPage + threads.length < total,
+        page: offset,
+        perPage: limit,
+        hasMore: offset * limit + threads.length < total,
       };
     } catch (error) {
       const mastraError = new MastraError(
@@ -270,8 +271,8 @@ export class MemoryStorageD1 extends MemoryStorage {
       return {
         threads: [],
         total: 0,
-        page,
-        perPage,
+        page: offset,
+        perPage: limit,
         hasMore: false,
       };
     }
@@ -704,19 +705,6 @@ export class MemoryStorageD1 extends MemoryStorage {
         `This method is currently being rolled out across all storage adapters. ` +
         `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
     );
-  }
-
-  /**
-   * @todo When migrating from getThreadsByResourceIdPaginated to this method,
-   * implement orderBy and sortDirection support for full sorting capabilities
-   */
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
   }
 
   public async getMessagesPaginated({
