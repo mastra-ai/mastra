@@ -238,7 +238,7 @@ describe('InMemoryStore - Message Fetching', () => {
   });
 });
 
-describe('InMemoryStore - getMessagesById', () => {
+describe('InMemoryStore - listMessagesById', () => {
   let store: InMemoryStore;
   const resourceId = 'test-resource-id';
   const resourceId2 = 'test-resource-id-2';
@@ -322,7 +322,7 @@ describe('InMemoryStore - getMessagesById', () => {
   });
 
   it('should return an empty array if no message IDs are provided', async () => {
-    const messages = await store.getMessagesById({ messageIds: [] });
+    const messages = await store.listMessagesById({ messageIds: [] });
     expect(messages).toHaveLength(0);
   });
 
@@ -334,7 +334,7 @@ describe('InMemoryStore - getMessagesById', () => {
       thread1Messages[0]!.id,
       thread2Messages[1]!.id,
     ];
-    const messages = await store.getMessagesById({
+    const messages = await store.listMessagesById({
       messageIds,
     });
 
@@ -342,33 +342,17 @@ describe('InMemoryStore - getMessagesById', () => {
     expect(messages.every((msg, i, arr) => i === 0 || msg.createdAt >= arr[i - 1]!.createdAt)).toBe(true);
   });
 
-  it('should return V2 messages by default', async () => {
-    const messages: MastraMessageV2[] = await store.getMessagesById({ messageIds: thread1Messages.map(msg => msg.id) });
+  it('should return V2 messages', async () => {
+    const messages: MastraMessageV2[] = await store.listMessagesById({
+      messageIds: thread1Messages.map(msg => msg.id),
+    });
 
     expect(messages.length).toBeGreaterThan(0);
     expect(messages.every(MessageList.isMastraMessageV2)).toBe(true);
   });
 
-  it('should return messages in the specified format', async () => {
-    const v1messages: MastraMessageV1[] = await store.getMessagesById({
-      messageIds: thread1Messages.map(msg => msg.id),
-      format: 'v1',
-    });
-
-    expect(v1messages.length).toBeGreaterThan(0);
-    expect(v1messages.every(MessageList.isMastraMessageV1)).toBe(true);
-
-    const v2messages: MastraMessageV2[] = await store.getMessagesById({
-      messageIds: thread1Messages.map(msg => msg.id),
-      format: 'v2',
-    });
-
-    expect(v2messages.length).toBeGreaterThan(0);
-    expect(v2messages.every(MessageList.isMastraMessageV2)).toBe(true);
-  });
-
   it('should return messages from multiple threads', async () => {
-    const messages = await store.getMessagesById({
+    const messages = await store.listMessagesById({
       messageIds: [...thread1Messages.map(msg => msg.id), ...thread2Messages.map(msg => msg.id)],
     });
 
@@ -378,7 +362,7 @@ describe('InMemoryStore - getMessagesById', () => {
   });
 
   it('should return messages from multiple resources', async () => {
-    const messages = await store.getMessagesById({
+    const messages = await store.listMessagesById({
       messageIds: [...thread1Messages.map(msg => msg.id), ...resource2Messages.map(msg => msg.id)],
     });
 

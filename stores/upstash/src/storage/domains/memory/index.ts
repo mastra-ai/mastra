@@ -589,27 +589,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
     if (messageIds.length === 0) return [];
 
     try {
@@ -629,7 +609,6 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const rawMessages = result.flat(1).filter(msg => !!msg) as (MastraMessageV2 & { _index?: number })[];
 
       const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
-      if (format === `v1`) return list.get.all.v1();
       return list.get.all.v2();
     } catch (error) {
       throw new MastraError(
@@ -652,10 +631,6 @@ export class StoreMemoryUpstash extends MemoryStorage {
         `This method is currently being rolled out across all storage adapters. ` +
         `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
     );
-  }
-
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
-    return this.getMessagesById({ messageIds, format: 'v2' });
   }
 
   public async getMessagesPaginated(
