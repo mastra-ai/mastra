@@ -427,8 +427,8 @@ async function formatAgent({
     modelVersion: model?.specificationVersion,
     modelList,
     defaultOptions,
-    defaultGenerateOptionsLegacy: defaultGenerateOptionsLegacy,
-    defaultStreamOptionsLegacy: defaultStreamOptionsLegacy,
+    defaultGenerateOptionsLegacy,
+    defaultStreamOptionsLegacy,
   };
 }
 
