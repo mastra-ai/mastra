@@ -245,9 +245,9 @@ export class InMemoryStore extends MastraStorage {
     selectBy,
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    return this.stores.memory.getMessages({ threadId, resourceId, selectBy, format }) as unknown as Promise<
-      MastraMessageV1[] | MastraMessageV2[]
-    >;
+    return this.stores.memory
+      .getMessages({ threadId, resourceId, selectBy, format })
+      .catch(() => []) as unknown as Promise<MastraMessageV1[] | MastraMessageV2[]>;
   }
 
   async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
