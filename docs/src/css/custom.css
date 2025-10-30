@@ -611,8 +611,8 @@ span[class*="categoryLinkLabel"] {
   pre code {
     font-size: 13px;
     line-height: 1.6;
-    background: transparent;
-    border: none;
+    background: transparent !important;
+    border: none !important;
     padding: 0;
     color: var(--mastra-text-muted);
   }
