@@ -141,7 +141,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         resourceId: thread.resourceId,
         title: threadData.title,
         createdAt: thread.createdAt || now,
-        updatedAt: now,
+        updatedAt: thread.updatedAt || now,
         metadata: thread.metadata,
       };
     } catch (error) {
