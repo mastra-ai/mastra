@@ -70,19 +70,18 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  /**
-   * @deprecated use getThreadsByResourceIdPaginated instead
-   */
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
+  public async getThreadsByResourceIdPaginated(args: {
+    resourceId: string;
+    page: number;
+    perPage: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    const { resourceId, page = 0, perPage = 100 } = args;
+
     try {
+      let allThreads: StorageThreadType[] = [];
       const pattern = `${TABLE_THREADS}:*`;
       const keys = await this.operations.scanKeys(pattern);
 
-      if (keys.length === 0) {
-        return [];
-      }
-
-      const allThreads: StorageThreadType[] = [];
       const pipeline = this.client.pipeline();
       keys.forEach(key => pipeline.get(key));
       const results = await pipeline.exec();
@@ -100,34 +99,6 @@ export class StoreMemoryUpstash extends MemoryStorage {
       }
 
       allThreads.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-      return allThreads;
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            resourceId,
-          },
-        },
-        error,
-      );
-      this.logger?.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      return [];
-    }
-  }
-
-  public async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page = 0, perPage = 100 } = args;
-
-    try {
-      const allThreads = await this.getThreadsByResourceId({ resourceId });
 
       const total = allThreads.length;
       const start = page * perPage;

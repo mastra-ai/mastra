@@ -209,46 +209,6 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
   }
 
-  /**
-   * @deprecated use getThreadsByResourceIdPaginated instead
-   */
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    const fullTableName = this.operations.getTableName(TABLE_THREADS);
-
-    try {
-      const query = createSqlBuilder().select('*').from(fullTableName).where('resourceId = ?', resourceId);
-
-      const { sql, params } = query.build();
-      const results = await this.operations.executeQuery({ sql, params });
-
-      return (isArrayOfRecords(results) ? results : []).map((thread: any) => ({
-        ...thread,
-        createdAt: ensureDate(thread.createdAt) as Date,
-        updatedAt: ensureDate(thread.updatedAt) as Date,
-        metadata:
-          typeof thread.metadata === 'string'
-            ? (JSON.parse(thread.metadata || '{}') as Record<string, any>)
-            : thread.metadata || {},
-      }));
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_THREADS_BY_RESOURCE_ID_ERROR',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          text: `Error getting threads by resourceId ${resourceId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-          details: { resourceId },
-        },
-        error,
-      );
-      this.logger?.error(mastraError.toString());
-      this.logger?.trackException(mastraError);
-      return [];
-    }
-  }
-
   public async getThreadsByResourceIdPaginated(args: {
     resourceId: string;
     page: number;

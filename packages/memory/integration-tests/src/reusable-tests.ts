@@ -60,12 +60,12 @@ const createTestMessage = (
 export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
   beforeEach(async () => {
     messageCounter = 0;
-    const threads = await memory.getThreadsByResourceId({ resourceId });
+    const { threads } = await memory.listThreadsByResourceId({ resourceId, offset: 0, limit: 10 });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
   });
 
   afterAll(async () => {
-    const threads = await memory.getThreadsByResourceId({ resourceId });
+    const { threads } = await memory.listThreadsByResourceId({ resourceId, offset: 0, limit: 10 });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
   });
 

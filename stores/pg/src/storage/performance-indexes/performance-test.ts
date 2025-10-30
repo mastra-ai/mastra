@@ -364,14 +364,6 @@ export class PostgresPerformanceTest {
 
     // Test getThreadsByResourceId
     const resourceId = 'resource_0';
-    results.push(
-      await this.measureOperation(
-        'getThreadsByResourceId',
-        () => this.store.getThreadsByResourceId({ resourceId }),
-        scenario,
-      ),
-    );
-
     // Test getThreadsByResourceIdPaginated
     results.push(
       await this.measureOperation(

@@ -311,14 +311,6 @@ export class Memory extends MastraMemory {
     return this.storage.getThreadById({ threadId });
   }
 
-  async getThreadsByResourceId({
-    resourceId,
-    orderBy,
-    sortDirection,
-  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
-    return this.storage.getThreadsByResourceId({ resourceId, orderBy, sortDirection });
-  }
-
   async getThreadsByResourceIdPaginated({
     resourceId,
     page,

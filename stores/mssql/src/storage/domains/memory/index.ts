@@ -221,32 +221,6 @@ export class MemoryMSSQL extends MemoryStorage {
   }
 
   /**
-   * @deprecated use getThreadsByResourceIdPaginated instead
-   */
-  public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
-    const { resourceId, orderBy = 'createdAt', sortDirection = 'DESC' } = args;
-    try {
-      const baseQuery = `FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} WHERE [resourceId] = @resourceId`;
-      const orderByField = orderBy === 'createdAt' ? '[createdAt]' : '[updatedAt]';
-      const dir = (sortDirection || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-      const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir}`;
-      const request = this.pool.request();
-      request.input('resourceId', resourceId);
-      const resultSet = await request.query(dataQuery);
-      const rows = resultSet.recordset || [];
-      return rows.map(thread => ({
-        ...thread,
-        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-        createdAt: thread.createdAt,
-        updatedAt: thread.updatedAt,
-      }));
-    } catch (error) {
-      this.logger?.error?.(`Error getting threads for resource ${resourceId}:`, error);
-      return [];
-    }
-  }
-
-  /**
    * Updates a thread's title and metadata, merging with existing metadata. Returns the updated thread.
    */
   async updateThread({

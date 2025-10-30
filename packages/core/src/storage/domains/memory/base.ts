@@ -24,10 +24,6 @@ export abstract class MemoryStorage extends MastraBase {
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
-  abstract getThreadsByResourceId({
-    resourceId,
-  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]>;
-
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
   abstract updateThread({

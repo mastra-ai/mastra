@@ -46,89 +46,12 @@ describe('InMemoryStore - Thread Sorting', () => {
     }
   });
 
-  describe('getThreadsByResourceId', () => {
-    it('should sort by createdAt DESC by default', async () => {
-      const threads = await store.getThreadsByResourceId({ resourceId });
-
-      expect(threads).toHaveLength(3);
-      expect(threads[0].id).toBe('thread-3'); // 2024-01-03 (latest)
-      expect(threads[1].id).toBe('thread-2'); // 2024-01-02
-      expect(threads[2].id).toBe('thread-1'); // 2024-01-01 (earliest)
-    });
-
-    it('should sort by createdAt ASC when specified', async () => {
-      const threads = await store.getThreadsByResourceId({
-        resourceId,
-        orderBy: 'createdAt',
-        sortDirection: 'ASC',
-      });
-
-      expect(threads).toHaveLength(3);
-      expect(threads[0].id).toBe('thread-1'); // 2024-01-01 (earliest)
-      expect(threads[1].id).toBe('thread-2'); // 2024-01-02
-      expect(threads[2].id).toBe('thread-3'); // 2024-01-03 (latest)
-    });
-
-    it('should sort by updatedAt DESC when specified', async () => {
-      const threads = await store.getThreadsByResourceId({
-        resourceId,
-        orderBy: 'updatedAt',
-        sortDirection: 'DESC',
-      });
-
-      expect(threads).toHaveLength(3);
-      expect(threads[0].id).toBe('thread-1'); // 2024-01-03 (latest updatedAt)
-      expect(threads[1].id).toBe('thread-2'); // 2024-01-02
-      expect(threads[2].id).toBe('thread-3'); // 2024-01-01 (earliest updatedAt)
-    });
-
-    it('should sort by updatedAt ASC when specified', async () => {
-      const threads = await store.getThreadsByResourceId({
-        resourceId,
-        orderBy: 'updatedAt',
-        sortDirection: 'ASC',
-      });
-
-      expect(threads).toHaveLength(3);
-      expect(threads[0].id).toBe('thread-3'); // 2024-01-01 (earliest updatedAt)
-      expect(threads[1].id).toBe('thread-2'); // 2024-01-02
-      expect(threads[2].id).toBe('thread-1'); // 2024-01-03 (latest updatedAt)
-    });
-
-    it('should handle empty results', async () => {
-      const threads = await store.getThreadsByResourceId({
-        resourceId: 'non-existent-resource',
-      });
-
-      expect(threads).toHaveLength(0);
-    });
-
-    it('should filter by resourceId correctly', async () => {
-      // Add a thread with different resourceId
-      await store.saveThread({
-        thread: {
-          id: 'thread-other',
-          resourceId: 'other-resource',
-          title: 'Other Thread',
-          createdAt: new Date('2024-01-04T10:00:00Z'),
-          updatedAt: new Date('2024-01-04T10:00:00Z'),
-          metadata: {},
-        },
-      });
-
-      const threads = await store.getThreadsByResourceId({ resourceId });
-
-      expect(threads).toHaveLength(3);
-      expect(threads.every(t => t.resourceId === resourceId)).toBe(true);
-    });
-  });
-
-  describe('getThreadsByResourceIdPaginated', () => {
+  describe('listThreadsByResourceId', () => {
     it('should sort by createdAt DESC by default with pagination', async () => {
-      const result = await store.getThreadsByResourceIdPaginated({
+      const result = await store.listThreadsByResourceId({
         resourceId,
-        page: 0,
-        perPage: 2,
+        offset: 0,
+        limit: 2,
       });
 
       expect(result.threads).toHaveLength(2);
@@ -140,11 +63,29 @@ describe('InMemoryStore - Thread Sorting', () => {
       expect(result.hasMore).toBe(true);
     });
 
-    it('should sort by updatedAt ASC with pagination', async () => {
-      const result = await store.getThreadsByResourceIdPaginated({
+    it('should sort by createdAt ASC when specified', async () => {
+      const result = await store.listThreadsByResourceId({
         resourceId,
-        page: 0,
-        perPage: 2,
+        offset: 0,
+        limit: 2,
+        orderBy: 'createdAt',
+        sortDirection: 'ASC',
+      });
+
+      expect(result.threads).toHaveLength(2);
+      expect(result.threads[0].id).toBe('thread-1'); // 2024-01-01 (earliest)
+      expect(result.threads[1].id).toBe('thread-2'); // 2024-01-02
+      expect(result.total).toBe(3);
+      expect(result.page).toBe(0);
+      expect(result.perPage).toBe(2);
+      expect(result.hasMore).toBe(true);
+    });
+
+    it('should sort by updatedAt ASC with pagination', async () => {
+      const result = await store.listThreadsByResourceId({
+        resourceId,
+        offset: 0,
+        limit: 2,
         orderBy: 'updatedAt',
         sortDirection: 'ASC',
       });
@@ -156,21 +97,37 @@ describe('InMemoryStore - Thread Sorting', () => {
       expect(result.hasMore).toBe(true);
     });
 
+    it('should sort by updatedAt DESC when specified', async () => {
+      const result = await store.listThreadsByResourceId({
+        resourceId,
+        offset: 0,
+        limit: 2,
+        orderBy: 'updatedAt',
+        sortDirection: 'DESC',
+      });
+
+      expect(result.threads).toHaveLength(2);
+      expect(result.threads[0].id).toBe('thread-1'); // 2024-01-03 (latest updatedAt)
+      expect(result.threads[1].id).toBe('thread-2'); // 2024-01-02
+      expect(result.total).toBe(3);
+      expect(result.hasMore).toBe(true);
+    });
+
     it('should maintain sort order across pages', async () => {
       // First page
-      const page1 = await store.getThreadsByResourceIdPaginated({
+      const page1 = await store.listThreadsByResourceId({
         resourceId,
-        page: 0,
-        perPage: 2,
+        offset: 0,
+        limit: 2,
         orderBy: 'createdAt',
         sortDirection: 'ASC',
       });
 
       // Second page
-      const page2 = await store.getThreadsByResourceIdPaginated({
+      const page2 = await store.listThreadsByResourceId({
         resourceId,
-        page: 1,
-        perPage: 2,
+        offset: 1,
+        limit: 2,
         orderBy: 'createdAt',
         sortDirection: 'ASC',
       });
@@ -184,10 +141,10 @@ describe('InMemoryStore - Thread Sorting', () => {
     });
 
     it('should calculate pagination info correctly after sorting', async () => {
-      const result = await store.getThreadsByResourceIdPaginated({
+      const result = await store.listThreadsByResourceId({
         resourceId,
-        page: 1,
-        perPage: 2,
+        offset: 1,
+        limit: 2,
         orderBy: 'updatedAt',
         sortDirection: 'DESC',
       });
@@ -201,15 +158,37 @@ describe('InMemoryStore - Thread Sorting', () => {
     });
 
     it('should handle empty results with pagination', async () => {
-      const result = await store.getThreadsByResourceIdPaginated({
+      const result = await store.listThreadsByResourceId({
         resourceId: 'non-existent-resource',
-        page: 0,
-        perPage: 10,
+        offset: 0,
+        limit: 10,
       });
 
       expect(result.threads).toHaveLength(0);
       expect(result.total).toBe(0);
       expect(result.hasMore).toBe(false);
+    });
+    it('should filter by resourceId correctly', async () => {
+      // Add a thread with different resourceId
+      await store.saveThread({
+        thread: {
+          id: 'thread-other',
+          resourceId: 'other-resource',
+          title: 'Other Thread',
+          createdAt: new Date('2024-01-04T10:00:00Z'),
+          updatedAt: new Date('2024-01-04T10:00:00Z'),
+          metadata: {},
+        },
+      });
+
+      const result = await store.listThreadsByResourceId({ resourceId, offset: 0, limit: 2 });
+
+      expect(result.threads).toHaveLength(3);
+      expect(result.threads.every(t => t.resourceId === resourceId)).toBe(true);
+      expect(result.total).toBe(3);
+      expect(result.page).toBe(0);
+      expect(result.perPage).toBe(2);
+      expect(result.hasMore).toBe(true);
     });
   });
 });

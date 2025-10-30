@@ -482,50 +482,6 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    try {
-      const result = await this.client.query({
-        query: `SELECT 
-          id,
-          "resourceId",
-          title,
-          metadata,
-          toDateTime64(createdAt, 3) as createdAt,
-          toDateTime64(updatedAt, 3) as updatedAt
-        FROM "${TABLE_THREADS}"
-        WHERE "resourceId" = {var_resourceId:String}`,
-        query_params: { var_resourceId: resourceId },
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-
-      const rows = await result.json();
-      const threads = transformRows(rows.data) as StorageThreadType[];
-
-      return threads.map((thread: StorageThreadType) => ({
-        ...thread,
-        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-        createdAt: thread.createdAt,
-        updatedAt: thread.updatedAt,
-      }));
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId },
-        },
-        error,
-      );
-    }
-  }
-
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
       await this.client.insert({

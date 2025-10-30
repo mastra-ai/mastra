@@ -86,38 +86,6 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
-  /**
-   * @deprecated use getThreadsByResourceIdPaginated instead for paginated results.
-   */
-  public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
-    const resourceId = args.resourceId;
-    const orderBy = this.castThreadOrderBy(args.orderBy);
-    const sortDirection = this.castThreadSortDirection(args.sortDirection);
-
-    this.logger.debug('Getting threads by resource ID', { resourceId, orderBy, sortDirection });
-
-    try {
-      const result = await this.service.entities.thread.query.byResource({ entity: 'thread', resourceId }).go();
-
-      if (!result.data.length) {
-        return [];
-      }
-
-      // Use shared helper method for transformation and sorting
-      return this.transformAndSortThreads(result.data, orderBy, sortDirection);
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'STORAGE_DYNAMODB_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId },
-        },
-        error,
-      );
-    }
-  }
-
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     this.logger.debug('Saving thread', { threadId: thread.id });
 

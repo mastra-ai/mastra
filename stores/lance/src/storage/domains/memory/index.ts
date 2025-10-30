@@ -56,29 +56,6 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    try {
-      const table = await this.client.openTable(TABLE_THREADS);
-      // fetches all threads with the given resourceId
-      const query = table.query().where(`\`resourceId\` = '${resourceId}'`);
-
-      const records = await query.toArray();
-      return processResultWithTypeConversion(
-        records,
-        await getTableSchema({ tableName: TABLE_THREADS, client: this.client }),
-      ) as StorageThreadType[];
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: 'LANCE_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
-    }
-  }
-
   /**
    * Saves a thread to the database. This function doesn't overwrite existing threads.
    * @param thread - The thread to save

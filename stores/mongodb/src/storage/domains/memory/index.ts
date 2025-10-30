@@ -625,31 +625,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    try {
-      const collection = await this.operations.getCollection(TABLE_THREADS);
-      const results = await collection.find<any>({ resourceId }).sort({ updatedAt: -1 }).toArray();
-      if (!results.length) {
-        return [];
-      }
-
-      return results.map((result: any) => ({
-        ...result,
-        metadata: typeof result.metadata === 'string' ? safelyParseJSON(result.metadata) : result.metadata,
-      }));
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'STORAGE_MONGODB_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId },
-        },
-        error,
-      );
-    }
-  }
-
   public async getThreadsByResourceIdPaginated(args: {
     resourceId: string;
     page: number;

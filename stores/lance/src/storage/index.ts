@@ -135,10 +135,6 @@ export class LanceStorage extends MastraStorage {
     return this.stores.memory.getThreadById({ threadId });
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    return this.stores.memory.getThreadsByResourceId({ resourceId });
-  }
-
   /**
    * Saves a thread to the database. This function doesn't overwrite existing threads.
    * @param thread - The thread to save

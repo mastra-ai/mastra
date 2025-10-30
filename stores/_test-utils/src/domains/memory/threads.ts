@@ -61,7 +61,11 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       await storage.saveThread({ thread: thread1 });
       await storage.saveThread({ thread: thread2 });
 
-      const threads = await storage.getThreadsByResourceId({ resourceId: thread1.resourceId });
+      const { threads } = await storage.listThreadsByResourceId({
+        resourceId: thread1.resourceId,
+        offset: 0,
+        limit: 10,
+      });
       expect(threads).toHaveLength(2);
       expect(threads.map(t => t.id)).toEqual(expect.arrayContaining([thread1.id, thread2.id]));
     });
@@ -333,7 +337,11 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
   //     await Promise.all(threads.map(thread => storage.saveThread({ thread })));
 
-  //     const retrievedThreads = await storage.getThreadsByResourceId({ resourceId: threads[0]?.resourceId! });
+  //     const { threads: retrievedThreads } = await storage.listThreadsByResourceId({
+  //       resourceId: threads[0]?.resourceId!,
+  //       offset: 0,
+  //       limit: 10,
+  //     });
   //     expect(retrievedThreads).toHaveLength(2);
   //     retrievedThreads.forEach(thread => {
   //       expect(thread.createdAt).toBeInstanceOf(Date);
@@ -430,99 +438,6 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       }
     });
 
-    describe('getThreadsByResourceId sorting', () => {
-      it('should sort threads by createdAt DESC by default (no parameters)', async () => {
-        const result = await storage.getThreadsByResourceId({ resourceId });
-
-        expect(result).toHaveLength(5);
-        expectThreadsSortedBy(result, 'createdAt', 'DESC');
-      });
-
-      it('should sort threads by createdAt ASC', async () => {
-        const result = await storage.getThreadsByResourceId({
-          resourceId,
-          orderBy: 'createdAt',
-          sortDirection: 'ASC',
-        });
-
-        expect(result).toHaveLength(5);
-        expectThreadsSortedBy(result, 'createdAt', 'ASC');
-      });
-
-      it('should sort threads by createdAt DESC', async () => {
-        const result = await storage.getThreadsByResourceId({
-          resourceId,
-          orderBy: 'createdAt',
-          sortDirection: 'DESC',
-        });
-
-        expect(result).toHaveLength(5);
-        expectThreadsSortedBy(result, 'createdAt', 'DESC');
-      });
-
-      it('should sort threads by updatedAt ASC', async () => {
-        const result = await storage.getThreadsByResourceId({
-          resourceId,
-          orderBy: 'updatedAt',
-          sortDirection: 'ASC',
-        });
-
-        expect(result).toHaveLength(5);
-        expectThreadsSortedBy(result, 'updatedAt', 'ASC');
-      });
-
-      it('should sort threads by updatedAt DESC', async () => {
-        const result = await storage.getThreadsByResourceId({
-          resourceId,
-          orderBy: 'updatedAt',
-          sortDirection: 'DESC',
-        });
-
-        expect(result).toHaveLength(5);
-        expectThreadsSortedBy(result, 'updatedAt', 'DESC');
-      });
-
-      it('should sort by createdAt DESC when only orderBy is specified (sortDirection defaults to DESC)', async () => {
-        const result = await storage.getThreadsByResourceId({
-          resourceId,
-          orderBy: 'createdAt',
-        });
-
-        expect(result).toHaveLength(5);
-        expectThreadsSortedBy(result, 'createdAt', 'DESC');
-      });
-
-      it('should sort by updatedAt DESC when only orderBy is specified (sortDirection defaults to DESC)', async () => {
-        const result = await storage.getThreadsByResourceId({
-          resourceId,
-          orderBy: 'updatedAt',
-        });
-
-        expect(result).toHaveLength(5);
-        expectThreadsSortedBy(result, 'updatedAt', 'DESC');
-      });
-
-      it('should sort by createdAt ASC when only sortDirection ASC is specified (orderBy defaults to createdAt)', async () => {
-        const result = await storage.getThreadsByResourceId({
-          resourceId,
-          sortDirection: 'ASC',
-        });
-
-        expect(result).toHaveLength(5);
-        expectThreadsSortedBy(result, 'createdAt', 'ASC');
-      });
-
-      it('should sort by createdAt DESC when only sortDirection DESC is specified (orderBy defaults to createdAt)', async () => {
-        const result = await storage.getThreadsByResourceId({
-          resourceId,
-          sortDirection: 'DESC',
-        });
-
-        expect(result).toHaveLength(5);
-        expectThreadsSortedBy(result, 'createdAt', 'DESC');
-      });
-    });
-
     describe('getThreadsByResourceIdPaginated sorting', () => {
       it('should sort paginated threads by createdAt DESC by default', async () => {
         const result = await storage.getThreadsByResourceIdPaginated({
@@ -550,18 +465,18 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         expectThreadsSortedBy(result.threads, 'createdAt', 'ASC');
       });
 
-      it('should sort paginated threads by updatedAt DESC', async () => {
+      it('should sort threads by createdAt DESC', async () => {
         const result = await storage.getThreadsByResourceIdPaginated({
           resourceId,
+          orderBy: 'createdAt',
+          sortDirection: 'DESC',
           page: 0,
           perPage: 3,
-          orderBy: 'updatedAt',
-          sortDirection: 'DESC',
         });
 
         expect(result.threads).toHaveLength(3);
         expect(result.total).toBe(5);
-        expectThreadsSortedBy(result.threads, 'updatedAt', 'DESC');
+        expectThreadsSortedBy(result.threads, 'createdAt', 'DESC');
       });
 
       it('should sort paginated threads by updatedAt ASC', async () => {
@@ -578,12 +493,80 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         expectThreadsSortedBy(result.threads, 'updatedAt', 'ASC');
       });
 
+      it('should sort paginated threads by updatedAt DESC', async () => {
+        const result = await storage.getThreadsByResourceIdPaginated({
+          resourceId,
+          page: 0,
+          perPage: 3,
+          orderBy: 'updatedAt',
+          sortDirection: 'DESC',
+        });
+
+        expect(result.threads).toHaveLength(3);
+        expect(result.total).toBe(5);
+        expectThreadsSortedBy(result.threads, 'updatedAt', 'DESC');
+      });
+
+      it('should sort by createdAt DESC when only orderBy is specified (sortDirection defaults to DESC)', async () => {
+        const result = await storage.getThreadsByResourceIdPaginated({
+          resourceId,
+          orderBy: 'createdAt',
+          page: 0,
+          perPage: 3,
+        });
+
+        expect(result.threads).toHaveLength(3);
+        expect(result.total).toBe(5);
+        expectThreadsSortedBy(result.threads, 'createdAt', 'DESC');
+      });
+
+      it('should sort by updatedAt DESC when only orderBy is specified (sortDirection defaults to DESC)', async () => {
+        const result = await storage.getThreadsByResourceIdPaginated({
+          resourceId,
+          orderBy: 'updatedAt',
+          page: 0,
+          perPage: 3,
+        });
+
+        expect(result.threads).toHaveLength(3);
+        expect(result.total).toBe(5);
+        expectThreadsSortedBy(result.threads, 'updatedAt', 'DESC');
+      });
+
+      it('should sort by createdAt ASC when only sortDirection ASC is specified (orderBy defaults to createdAt)', async () => {
+        const result = await storage.getThreadsByResourceIdPaginated({
+          resourceId,
+          sortDirection: 'ASC',
+          page: 0,
+          perPage: 3,
+        });
+
+        expect(result.threads).toHaveLength(3);
+        expect(result.total).toBe(5);
+        expectThreadsSortedBy(result.threads, 'createdAt', 'ASC');
+      });
+
+      it('should sort by createdAt DESC when only sortDirection DESC is specified (orderBy defaults to createdAt)', async () => {
+        const result = await storage.getThreadsByResourceIdPaginated({
+          resourceId,
+          sortDirection: 'DESC',
+          page: 0,
+          perPage: 3,
+        });
+
+        expect(result.threads).toHaveLength(3);
+        expect(result.total).toBe(5);
+        expectThreadsSortedBy(result.threads, 'createdAt', 'DESC');
+      });
+
       it('should maintain sort order consistency across pages', async () => {
         // Get all threads sorted by updatedAt DESC for comparison
-        const allThreads = await storage.getThreadsByResourceId({
+        const { threads: allThreads } = await storage.getThreadsByResourceIdPaginated({
           resourceId,
           orderBy: 'updatedAt',
           sortDirection: 'DESC',
+          page: 0,
+          perPage: 10,
         });
 
         // Get paginated results
@@ -696,8 +679,10 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           }),
         ]);
 
-        const result = await storage.getThreadsByResourceId({
+        const { threads: result } = await storage.getThreadsByResourceIdPaginated({
           resourceId: identicalResourceId,
+          page: 0,
+          perPage: 3,
           orderBy: 'createdAt',
           sortDirection: 'ASC',
         });

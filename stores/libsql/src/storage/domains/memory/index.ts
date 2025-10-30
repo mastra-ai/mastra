@@ -718,53 +718,6 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  /**
-   * @deprecated use getThreadsByResourceIdPaginated instead for paginated results.
-   */
-  public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
-    const resourceId = args.resourceId;
-    const orderBy = this.castThreadOrderBy(args.orderBy);
-    const sortDirection = this.castThreadSortDirection(args.sortDirection);
-
-    try {
-      const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
-      const queryParams: InValue[] = [resourceId];
-
-      const mapRowToStorageThreadType = (row: any): StorageThreadType => ({
-        id: row.id as string,
-        resourceId: row.resourceId as string,
-        title: row.title as string,
-        createdAt: new Date(row.createdAt as string), // Convert string to Date
-        updatedAt: new Date(row.updatedAt as string), // Convert string to Date
-        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
-      });
-
-      // Non-paginated path
-      const result = await this.client.execute({
-        sql: `SELECT * ${baseQuery} ORDER BY ${orderBy} ${sortDirection}`,
-        args: queryParams,
-      });
-
-      if (!result.rows) {
-        return [];
-      }
-      return result.rows.map(mapRowToStorageThreadType);
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'LIBSQL_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId },
-        },
-        error,
-      );
-      this.logger?.trackException?.(mastraError);
-      this.logger?.error?.(mastraError.toString());
-      return [];
-    }
-  }
-
   public async getThreadsByResourceIdPaginated(
     args: {
       resourceId: string;

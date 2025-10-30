@@ -63,61 +63,6 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    try {
-      const keyList = await this.operations.listKV(TABLE_THREADS);
-      const threads = await Promise.all(
-        keyList.map(async keyObj => {
-          try {
-            const data = await this.operations.getKV(TABLE_THREADS, keyObj.name);
-            if (!data) return null;
-
-            const thread = typeof data === 'string' ? JSON.parse(data) : data;
-            if (!thread || !thread.resourceId || thread.resourceId !== resourceId) return null;
-
-            return {
-              ...thread,
-              createdAt: ensureDate(thread.createdAt)!,
-              updatedAt: ensureDate(thread.updatedAt)!,
-              metadata: this.ensureMetadata(thread.metadata),
-            };
-          } catch (error: any) {
-            const mastraError = new MastraError(
-              {
-                id: 'CLOUDFLARE_STORAGE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-                domain: ErrorDomain.STORAGE,
-                category: ErrorCategory.THIRD_PARTY,
-                details: {
-                  resourceId,
-                },
-              },
-              error,
-            );
-            this.logger?.trackException(mastraError);
-            this.logger?.error(mastraError.toString());
-            return null;
-          }
-        }),
-      );
-      return threads.filter((thread): thread is StorageThreadType => thread !== null);
-    } catch (error: any) {
-      const mastraError = new MastraError(
-        {
-          id: 'CLOUDFLARE_STORAGE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            resourceId,
-          },
-        },
-        error,
-      );
-      this.logger?.trackException(mastraError);
-      this.logger?.error(mastraError.toString());
-      return [];
-    }
-  }
-
   async getThreadsByResourceIdPaginated(args: {
     resourceId: string;
     page?: number;

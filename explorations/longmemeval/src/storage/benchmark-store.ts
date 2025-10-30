@@ -77,16 +77,6 @@ export class BenchmarkStore extends MastraStorage {
     return thread || null;
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    const threads: StorageThreadType[] = [];
-    for (const thread of this.data.mastra_threads.values()) {
-      if (thread.resourceId === resourceId) {
-        threads.push(thread);
-      }
-    }
-    return threads;
-  }
-
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     this.data.mastra_threads.set(thread.id, thread);
     return thread;
@@ -399,7 +389,12 @@ export class BenchmarkStore extends MastraStorage {
     page: number;
     perPage: number;
   }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const allThreads = await this.getThreadsByResourceId({ resourceId: args.resourceId });
+    const allThreads: StorageThreadType[] = [];
+    for (const thread of this.data.mastra_threads.values()) {
+      if (thread.resourceId === args.resourceId) {
+        allThreads.push(thread);
+      }
+    }
     const start = args.page * args.perPage;
     const threads = allThreads.slice(start, start + args.perPage);
 
