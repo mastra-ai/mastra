@@ -60,8 +60,24 @@ export class MockMemory extends MastraMemory {
     return this.storage.saveMessages({ messages: v2Messages, format: 'v2' });
   }
 
-  async rememberMessages() {
-    const list = new MessageList().add(Array.from(this.messages.values()), `memory`);
+  async rememberMessages({
+    threadId,
+    resourceId,
+    config,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    config?: MemoryConfig;
+    vectorMessageSearch?: string;
+  }) {
+    // Get messages from storage instead of the Map
+    const v2Messages = await this.storage.getMessages({
+      threadId,
+      resourceId,
+      format: 'v2',
+      selectBy: config?.selectBy,
+    });
+    const list = new MessageList().add(v2Messages, `memory`);
     return { messages: list.get.remembered.v1(), messagesV2: list.get.remembered.v2() };
   }
 

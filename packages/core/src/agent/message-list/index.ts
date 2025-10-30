@@ -2789,8 +2789,9 @@ export class MessageList {
     );
   }
 
-  private aiV5UIMessagesToAIV5ModelMessages(messages: AIV5Type.UIMessage[]): AIV5Type.ModelMessage[] {
-    const preprocessed = this.addStartStepPartsForAIV5(this.sanitizeV5UIMessages(messages));
+  private aiV5UIMessagesToAIV5ModelMessages(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
+    const sanitized = this.sanitizeV5UIMessages(messages);
+    const preprocessed = this.addStartStepPartsForAIV5(sanitized);
     const result = AIV5.convertToModelMessages(preprocessed);
     return result;
   }
