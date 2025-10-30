@@ -315,12 +315,12 @@ export type MemoryConfig = {
     | {
         /**
          * Language model to use for title generation.
-         * Can be static or a function that receives runtime context for dynamic selection.
+         * Can be static or a function that receives request context for dynamic selection.
          */
         model: DynamicArgument<MastraLanguageModel>;
         /**
          * Custom instructions for title generation.
-         * Can be static or a function that receives runtime context for dynamic customization.
+         * Can be static or a function that receives request context for dynamic customization.
          */
         instructions?: DynamicArgument<string>;
       };
@@ -417,26 +417,12 @@ export type SharedMemoryConfig = {
   processors?: MemoryProcessor[];
 };
 
-export type TraceType = {
-  id: string;
-  parentSpanId: string | null;
-  name: string;
-  traceId: string;
-  scope: string;
-  kind: number;
-  attributes: Record<string, unknown> | null;
-  status: Record<string, unknown> | null;
-  events: Record<string, unknown> | null;
-  links: Record<string, unknown> | null;
-  other: Record<string, unknown> | null;
-  startTime: number;
-  endTime: number;
-  createdAt: Date;
-};
-
 export type WorkingMemoryFormat = 'json' | 'markdown';
 
 export type WorkingMemoryTemplate = {
   format: WorkingMemoryFormat;
   content: string;
 };
+
+// Type for flexible message deletion input
+export type MessageDeleteInput = string[] | { id: string }[];

@@ -1,8 +1,10 @@
 import type { Server, IncomingMessage } from 'http';
 import { createServer } from 'http';
 import type { AddressInfo } from 'net';
-import { describe, it, beforeAll, beforeEach, afterAll, expect } from 'vitest';
+import { describe, it, beforeAll, beforeEach, afterAll, expect, vi, afterEach } from 'vitest';
+import type { ClientOptions } from '../types';
 import { AgentBuilder } from './agent-builder';
+import { Workflow } from './workflow';
 
 describe('AgentBuilder.runs', () => {
   let server: Server;
@@ -128,5 +130,175 @@ describe('AgentBuilder.runs', () => {
     expect(params.get('limit')).toBe('50');
     expect(params.get('offset')).toBe('10');
     expect(params.get('resourceId')).toBe('test-resource-456');
+  });
+});
+
+describe('AgentBuilder Streaming Methods (fetch-mocked)', () => {
+  let fetchMock: any;
+  let agentBuilder: AgentBuilder;
+  let originalFetch: any;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    fetchMock = vi.fn((input: any) => {
+      const url = String(input);
+
+      // Mock observeStream endpoint
+      if (url.includes('/observe?runId=')) {
+        const body = Workflow.createRecordStream([
+          { type: 'cache', payload: { step: 'step1', status: 'completed' } },
+          { type: 'cache', payload: { step: 'step2', status: 'completed' } },
+          { type: 'live', payload: { step: 'step3', status: 'running' } },
+        ]);
+        return Promise.resolve(new Response(body as unknown as ReadableStream, { status: 200 }));
+      }
+
+      // Mock observeStreamVNext endpoint
+      if (url.includes('/observe-streamVNext?runId=')) {
+        const body = Workflow.createRecordStream([
+          { type: 'cache', payload: { msg: 'cached event 1' } },
+          { type: 'live', payload: { msg: 'live event 1' } },
+        ]);
+        return Promise.resolve(new Response(body as unknown as ReadableStream, { status: 200 }));
+      }
+
+      // Mock observeStreamLegacy endpoint
+      if (url.includes('/observe-stream-legacy?runId=')) {
+        const body = Workflow.createRecordStream([
+          { type: 'cache', payload: { legacy: true } },
+          { type: 'live', payload: { legacy: false } },
+        ]);
+        return Promise.resolve(new Response(body as unknown as ReadableStream, { status: 200 }));
+      }
+
+      // Mock resumeStream endpoint
+      if (url.includes('/resume-stream?runId=')) {
+        const body = Workflow.createRecordStream([
+          { type: 'transition', payload: { step: 'resumed-step' } },
+          { type: 'result', payload: { success: true } },
+        ]);
+        return Promise.resolve(new Response(body as unknown as ReadableStream, { status: 200 }));
+      }
+
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    });
+    globalThis.fetch = fetchMock as any;
+
+    const options: ClientOptions = { baseUrl: 'http://localhost', retries: 0 } as any;
+    agentBuilder = new AgentBuilder(options, 'test-action');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    globalThis.fetch = originalFetch;
+  });
+
+  it('observeStream returns ReadableStream with cached and live events', async () => {
+    const stream = await agentBuilder.observeStream({ runId: 'run-123' });
+    const reader = (stream as ReadableStream<any>).getReader();
+    const records: any[] = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      records.push(value);
+    }
+
+    expect(records).toEqual([
+      { type: 'cache', payload: { step: 'step1', status: 'completed' } },
+      { type: 'cache', payload: { step: 'step2', status: 'completed' } },
+      { type: 'live', payload: { step: 'step3', status: 'running' } },
+    ]);
+
+    // Verify correct endpoint was called
+    const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/observe?runId='));
+    expect(call).toBeTruthy();
+  });
+
+  it('observeStreamVNext returns ReadableStream with VNext streaming', async () => {
+    const stream = await agentBuilder.observeStreamVNext({ runId: 'run-456' });
+    const reader = (stream as ReadableStream<any>).getReader();
+    const records: any[] = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      records.push(value);
+    }
+
+    expect(records).toEqual([
+      { type: 'cache', payload: { msg: 'cached event 1' } },
+      { type: 'live', payload: { msg: 'live event 1' } },
+    ]);
+
+    // Verify correct endpoint was called
+    const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/observe-streamVNext?runId='));
+    expect(call).toBeTruthy();
+  });
+
+  it('observeStreamLegacy returns ReadableStream with legacy streaming', async () => {
+    const stream = await agentBuilder.observeStreamLegacy({ runId: 'run-789' });
+    const reader = (stream as ReadableStream<any>).getReader();
+    const records: any[] = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      records.push(value);
+    }
+
+    expect(records).toEqual([
+      { type: 'cache', payload: { legacy: true } },
+      { type: 'live', payload: { legacy: false } },
+    ]);
+
+    // Verify correct endpoint was called
+    const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/observe-stream-legacy?runId='));
+    expect(call).toBeTruthy();
+  });
+
+  it('resumeStream returns ReadableStream with resume results', async () => {
+    const stream = await agentBuilder.resumeStream({
+      runId: 'run-abc',
+      step: 'suspended-step',
+      resumeData: { userInput: 'proceed' },
+    });
+    const reader = (stream as ReadableStream<any>).getReader();
+    const records: any[] = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      records.push(value);
+    }
+
+    expect(records).toEqual([
+      { type: 'transition', payload: { step: 'resumed-step' } },
+      { type: 'result', payload: { success: true } },
+    ]);
+
+    // Verify correct endpoint was called with proper body
+    const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/resume-stream?runId='));
+    expect(call).toBeTruthy();
+    const options = call[1];
+    const body = JSON.parse(options.body);
+    expect(body.step).toBe('suspended-step');
+    expect(body.resumeData).toEqual({ userInput: 'proceed' });
+  });
+
+  it('resumeStream passes requestContext correctly', async () => {
+    const requestContext = { userId: 'user-123', tenantId: 'tenant-456' };
+
+    await agentBuilder.resumeStream({
+      runId: 'run-context',
+      step: 'step1',
+      requestContext,
+    });
+
+    const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/resume-stream?runId='));
+    expect(call).toBeTruthy();
+    const options = call[1];
+    const body = JSON.parse(options.body);
+    expect(body.requestContext).toEqual(requestContext);
   });
 });

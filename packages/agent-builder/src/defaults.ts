@@ -173,7 +173,7 @@ You have access to an enhanced set of tools based on production coding agent pat
 ### Task Management
 - **taskManager**: Create and track multi-step coding tasks with states (pending, in_progress, completed, blocked). Use this for complex projects that require systematic progress tracking.
 
-### Code Discovery & Analysis  
+### Code Discovery & Analysis
 - **codeAnalyzer**: Analyze codebase structure, discover definitions (functions, classes, interfaces), map dependencies, and understand architectural patterns.
 - **smartSearch**: Intelligent search with context awareness, pattern matching, and relevance scoring.
 
@@ -383,7 +383,7 @@ export const mastra = new Mastra({
   workflows: { weatherWorkflow },
   agents: { weatherAgent },
   storage: new LibSQLStore({
-    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    // stores observability, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ":memory:",
   }),
   logger: new PinoLogger({
@@ -1081,7 +1081,7 @@ export const mastra = new Mastra({
   /**
    * Get tools for a specific mode
    */
-  static async getToolsForMode(
+  static async listToolsForMode(
     projectPath: string,
     mode: 'template' | 'code-editor' = 'code-editor',
   ): Promise<Record<string, any>> {

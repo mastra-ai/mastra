@@ -3,14 +3,10 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import type {
-  EvalRow,
-  PaginationArgs,
   PaginationInfo,
   StorageColumn,
   StorageDomains,
   StorageGetMessagesArg,
-  StorageGetTracesArg,
-  StorageGetTracesPaginatedArg,
   StoragePagination,
   StorageResourceType,
   TABLE_NAMES,
@@ -21,17 +17,15 @@ import type {
   AITracesPaginatedArg,
   CreateAISpanRecord,
   UpdateAISpanRecord,
+  StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { MongoDBConnector } from './connectors/MongoDBConnector';
-import { LegacyEvalsMongoDB } from './domains/legacy-evals';
 import { MemoryStorageMongoDB } from './domains/memory';
 import { ObservabilityMongoDB } from './domains/observability';
 import { StoreOperationsMongoDB } from './domains/operations';
 import { ScoresStorageMongoDB } from './domains/scores';
-import { TracesStorageMongoDB } from './domains/traces';
 import { WorkflowsStorageMongoDB } from './domains/workflows';
 import type { MongoDBConfig } from './types';
 
@@ -109,14 +103,6 @@ export class MongoDBStore extends MastraStorage {
       operations,
     });
 
-    const traces = new TracesStorageMongoDB({
-      operations,
-    });
-
-    const legacyEvals = new LegacyEvalsMongoDB({
-      operations,
-    });
-
     const scores = new ScoresStorageMongoDB({
       operations,
     });
@@ -132,8 +118,6 @@ export class MongoDBStore extends MastraStorage {
     this.stores = {
       operations,
       memory,
-      traces,
-      legacyEvals,
       scores,
       workflows,
       observability,
@@ -232,18 +216,6 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.memory.getMessagesPaginated(_args);
   }
 
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
-  async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    return this.stores.memory.getMessagesById({ messageIds, format });
-  }
-
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   async saveMessages(
@@ -262,40 +234,8 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.memory.updateMessages(_args);
   }
 
-  async getTraces(args: StorageGetTracesArg): Promise<Trace[]> {
-    return this.stores.traces.getTraces(args);
-  }
-
-  async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
-    return this.stores.traces.getTracesPaginated(args);
-  }
-
-  async batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {
-    return this.stores.traces.batchTraceInsert({ records });
-  }
-
-  async getWorkflowRuns(args?: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns> {
-    return this.stores.workflows.getWorkflowRuns(args);
-  }
-
-  async getEvals(
-    options: {
-      agentName?: string;
-      type?: 'test' | 'live';
-    } & PaginationArgs = {},
-  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
-  }
-
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
+    return this.stores.workflows.listWorkflowRuns(args);
   }
 
   async updateWorkflowResults({
@@ -303,15 +243,15 @@ export class MongoDBStore extends MastraStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
+    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
   }
 
   async updateWorkflowState({

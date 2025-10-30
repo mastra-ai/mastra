@@ -5,14 +5,14 @@ import { Mastra } from '@mastra/core';
 import type { UIMessageWithMetadata } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { memoryProcessorAgent, weatherAgent } from './mastra/agents/weather';
+import { memoryProcessorAgent } from './mastra/agents/weather';
 import { weatherTool, weatherToolCity } from './mastra/tools/weather';
 
 describe('Agent Memory Tests', () => {
@@ -458,7 +458,7 @@ describe('Agent Memory Tests', () => {
     const agentWithDynamicModelTitle = new Agent({
       name: 'title-on',
       instructions: 'Test agent with generateTitle on.',
-      model: ({ runtimeContext }) => openai(runtimeContext.get('model') as string),
+      model: ({ requestContext }) => openai(requestContext.get('model') as string),
       memory: memoryWithTitle,
       tools: { get_weather: weatherTool },
     });
@@ -504,7 +504,7 @@ describe('Agent Memory Tests', () => {
       expect(existingThread?.metadata).toMatchObject(metadata);
     });
 
-    it('should use generateTitle with runtime context', async () => {
+    it('should use generateTitle with request context', async () => {
       const threadId = randomUUID();
       const resourceId = 'gen-title-metadata';
       const metadata = { foo: 'bar', custom: 123 };
@@ -518,12 +518,12 @@ describe('Agent Memory Tests', () => {
       expect(thread).toBeDefined();
       expect(thread?.metadata).toMatchObject(metadata);
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('model', 'gpt-4o-mini');
+      const requestContext = new RequestContext();
+      requestContext.set('model', 'gpt-4o-mini');
       await agentWithDynamicModelTitle.generateLegacy([{ role: 'user', content: 'Hello, world!' }], {
         threadId,
         resourceId,
-        runtimeContext,
+        requestContext,
       });
 
       const existingThread = await memoryWithTitle.getThreadById({ threadId });
@@ -594,67 +594,6 @@ describe('Agent with message processors', () => {
         .length,
     ).toBe(4);
   }, 30_000);
-});
-
-describe('Agent.fetchMemory', () => {
-  it('should return messages from memory', async () => {
-    const threadId = randomUUID();
-    const resourceId = 'fetch-memory-test';
-
-    const response = await weatherAgent.generateLegacy('Just a simple greeting to populate memory.', {
-      threadId,
-      resourceId,
-    });
-
-    const { messages } = await weatherAgent.fetchMemory({ threadId, resourceId });
-
-    expect(messages).toBeDefined();
-    if (!messages) return;
-
-    expect(messages.length).toBe(2); // user message + assistant response
-
-    const userMessage = messages.find(m => m.role === 'user');
-    expect(userMessage).toBeDefined();
-    if (!userMessage) return;
-    expect(userMessage.content[0]).toEqual({ type: 'text', text: 'Just a simple greeting to populate memory.' });
-
-    const assistantMessage = messages.find(m => m.role === 'assistant');
-    expect(assistantMessage).toBeDefined();
-    if (!assistantMessage) return;
-    expect(assistantMessage.content).toEqual([{ type: 'text', text: response.text }]);
-  }, 30_000);
-
-  it('should apply processors when fetching memory', async () => {
-    const threadId = randomUUID();
-    const resourceId = 'fetch-memory-processor-test';
-
-    await memoryProcessorAgent.generateLegacy('What is the weather in London?', { threadId, resourceId });
-
-    const { messages } = await memoryProcessorAgent.fetchMemory({ threadId, resourceId });
-
-    expect(messages).toBeDefined();
-    if (!messages) return;
-
-    const hasToolRelatedMessage = messages.some(
-      m => m.role === 'tool' || (Array.isArray(m.content) && m.content.some(c => c.type === 'tool-call')),
-    );
-    expect(hasToolRelatedMessage).toBe(false);
-
-    const userMessage = messages.find(m => m.role === 'user');
-    expect(userMessage).toBeDefined();
-    if (!userMessage) return;
-    expect(userMessage.content[0]).toEqual({ type: 'text', text: 'What is the weather in London?' });
-  }, 30_000);
-
-  it('should return nothing if thread does not exist', async () => {
-    const threadId = randomUUID();
-    const resourceId = 'fetch-memory-no-thread';
-
-    const result = await weatherAgent.fetchMemory({ threadId, resourceId });
-
-    expect(result.messages).toEqual([]);
-    expect(result.threadId).toBe(threadId);
-  });
 });
 
 describe('Agent memory test gemini', () => {

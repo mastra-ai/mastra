@@ -8,6 +8,7 @@ import {
   useMemory,
   useThreads,
   AgentInformation,
+  AgentPromptExperimentProvider,
 } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -58,37 +59,39 @@ function Agent() {
   const withSidebar = Boolean(memory?.result);
 
   return (
-    <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
-      <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
-        <ThreadInputProvider>
-          <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
-            {withSidebar && (
-              <AgentSidebar
-                agentId={agentId!}
-                threadId={threadId!}
-                threads={threads || []}
-                isLoading={isThreadsLoading}
-              />
-            )}
+    <AgentPromptExperimentProvider initialPrompt={agent!.instructions} agentId={agentId!}>
+      <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
+        <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
+          <ThreadInputProvider>
+            <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
+              {withSidebar && (
+                <AgentSidebar
+                  agentId={agentId!}
+                  threadId={threadId!}
+                  threads={threads || []}
+                  isLoading={isThreadsLoading}
+                />
+              )}
 
-            <div className="grid overflow-y-auto relative bg-surface1 py-4">
-              <AgentChat
-                agentId={agentId!}
-                agentName={agent?.name}
-                modelVersion={agent?.modelVersion}
-                threadId={threadId!}
-                memory={memory?.result}
-                refreshThreadList={refreshThreads}
-                modelList={agent?.modelList}
-                messageId={messageId}
-              />
-            </div>
+              <div className="grid overflow-y-auto relative bg-surface1 py-4">
+                <AgentChat
+                  agentId={agentId!}
+                  agentName={agent?.name}
+                  modelVersion={agent?.modelVersion}
+                  threadId={threadId!}
+                  memory={memory?.result}
+                  refreshThreadList={refreshThreads}
+                  modelList={agent?.modelList}
+                  messageId={messageId}
+                />
+              </div>
 
-            <AgentInformation agentId={agentId!} />
-          </MainContentContent>
-        </ThreadInputProvider>
-      </WorkingMemoryProvider>
-    </AgentSettingsProvider>
+              <AgentInformation agentId={agentId!} threadId={threadId!} />
+            </MainContentContent>
+          </ThreadInputProvider>
+        </WorkingMemoryProvider>
+      </AgentSettingsProvider>
+    </AgentPromptExperimentProvider>
   );
 }
 

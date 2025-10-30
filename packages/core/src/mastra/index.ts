@@ -19,14 +19,11 @@ import type { MastraScorer } from '../scores';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
-import { InstrumentClass, Telemetry } from '../telemetry';
-import type { OtelConfig } from '../telemetry';
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator } from '../types';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import type { LegacyWorkflow } from '../workflows/legacy';
 import { createOnScorerHook } from './hooks';
 
 /**
@@ -36,7 +33,6 @@ import { createOnScorerHook } from './hooks';
  * with a Mastra instance, including agents, workflows, storage, logging, and more.
  *
  * @template TAgents - Record of agent instances keyed by their names
- * @template TLegacyWorkflows - Record of legacy workflow instances
  * @template TWorkflows - Record of workflow instances
  * @template TVectors - Record of vector store instances
  * @template TTTS - Record of text-to-speech instances
@@ -62,7 +58,6 @@ import { createOnScorerHook } from './hooks';
  */
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
-  TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
   TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
     string,
     Workflow<any, any, any, any, any, any>
@@ -98,12 +93,6 @@ export interface Config<
   logger?: TLogger | false;
 
   /**
-   * Legacy workflow definitions for backward compatibility.
-   * @deprecated Use `workflows` instead.
-   */
-  legacy_workflows?: TLegacyWorkflows;
-
-  /**
    * Workflows provide type-safe, composable task execution with built-in error handling.
    */
   workflows?: TWorkflows;
@@ -112,13 +101,6 @@ export interface Config<
    * Text-to-speech providers for voice synthesis capabilities.
    */
   tts?: TTTS;
-
-  /**
-   * OpenTelemetry configuration for distributed tracing and observability.
-   *
-   * @deprecated Use {@link observability} instead.
-   */
-  telemetry?: OtelConfig;
 
   /**
    * AI-specific observability configuration for tracking model interactions.
@@ -187,18 +169,13 @@ export interface Config<
   };
 }
 
-@InstrumentClass({
-  prefix: 'mastra',
-  excludeMethods: ['getLogger', 'getTelemetry'],
-})
 /**
- * The central orchestrator for Mastra applications, managing agents, workflows, storage, logging, telemetry, and more.
+ * The central orchestrator for Mastra applications, managing agents, workflows, storage, logging, observability, and more.
  *
  * The `Mastra` class serves as the main entry point and registry for all components in a Mastra application.
  * It coordinates the interaction between agents, workflows, storage systems, and other services.
 
  * @template TAgents - Record of agent instances keyed by their names
- * @template TLegacyWorkflows - Record of legacy workflow instances for backward compatibility
  * @template TWorkflows - Record of modern workflow instances
  * @template TVectors - Record of vector store instances for semantic search and RAG
  * @template TTTS - Record of text-to-speech provider instances
@@ -226,7 +203,6 @@ export interface Config<
  */
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
-  TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
   TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
     string,
     Workflow<any, any, any, any, any, any>
@@ -240,7 +216,6 @@ export class Mastra<
   #vectors?: TVectors;
   #agents: TAgents;
   #logger: TLogger;
-  #legacy_workflows: TLegacyWorkflows;
   #workflows: TWorkflows;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
@@ -249,10 +224,6 @@ export class Mastra<
     path: string;
   }> = [];
 
-  /**
-   * @deprecated Use {@link getAITracing()} instead.
-   */
-  #telemetry?: Telemetry;
   #storage?: MastraStorage;
   #memory?: MastraMemory;
   #scorers?: TScorers;
@@ -267,13 +238,6 @@ export class Mastra<
   #internalMastraWorkflows: Record<string, Workflow> = {};
   // This is only used internally for server handlers that require temporary persistence
   #serverCache: MastraServerCache;
-
-  /**
-   * @deprecated use {@link getAITracing()} instead
-   */
-  get telemetry() {
-    return this.#telemetry;
-  }
 
   /**
    * @deprecated use getStorage() instead
@@ -365,7 +329,7 @@ export class Mastra<
    * Creates a new Mastra instance with the provided configuration.
    *
    * The constructor initializes all the components specified in the config, sets up
-   * internal systems like logging and telemetry, and registers components with each other.
+   * internal systems like logging and observability, and registers components with each other.
    *
    * @example
    * ```typescript
@@ -380,11 +344,12 @@ export class Mastra<
    *   storage: new PostgresStore({
    *     connectionString: process.env.DATABASE_URL
    *   }),
-   *   logger: new PinoLogger({ name: 'MyApp' })
+   *   logger: new PinoLogger({ name: 'MyApp' }),
+   *   observability: { default: { enabled: true }},
    * });
    * ```
    */
-  constructor(config?: Config<TAgents, TLegacyWorkflows, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers>) {
+  constructor(config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers>) {
     // Store server middleware with default path
     if (config?.serverMiddleware) {
       this.#serverMiddleware = config.serverMiddleware.map(m => ({
@@ -459,32 +424,6 @@ export class Mastra<
     }
 
     /*
-    Telemetry
-    */
-
-    this.#telemetry = Telemetry.init(config?.telemetry);
-
-    // Warn if telemetry is enabled but the instrumentation global is not set
-    if (
-      config?.telemetry?.enabled !== false &&
-      typeof globalThis !== 'undefined' &&
-      (globalThis as any).___MASTRA_TELEMETRY___ !== true
-    ) {
-      this.#logger?.warn(
-        `Mastra telemetry is enabled, but the required instrumentation file was not loaded. ` +
-          `If you are using Mastra outside of the mastra server environment, see: https://mastra.ai/en/docs/observability/tracing#tracing-outside-mastra-server-environment`,
-        `If you are using a custom instrumentation file or want to disable this warning, set the globalThis.___MASTRA_TELEMETRY___ variable to true in your instrumentation file.`,
-      );
-    }
-
-    if (config?.telemetry?.enabled !== false) {
-      this.#logger?.warn(
-        `Mastra telemetry is deprecated and will be removed on the Nov 4th release. Instead use AI Tracing. ` +
-          `More info can be found here: https://github.com/mastra-ai/mastra/issues/8577 and here: https://mastra.ai/en/docs/observability/ai-tracing/overview`,
-      );
-    }
-
-    /*
     AI Tracing
     */
 
@@ -495,14 +434,7 @@ export class Mastra<
     /*
       Storage
     */
-    if (this.#telemetry && storage) {
-      this.#storage = this.#telemetry.traceClass(storage, {
-        excludeMethods: ['__setTelemetry', '__getTelemetry', 'batchTraceInsert', 'getTraces', 'getEvalsByAgentName'],
-      });
-      this.#storage.__setTelemetry(this.#telemetry);
-    } else {
-      this.#storage = storage;
-    }
+    this.#storage = storage;
 
     /*
     Vectors
@@ -510,29 +442,17 @@ export class Mastra<
     if (config?.vectors) {
       let vectors: Record<string, MastraVector> = {};
       Object.entries(config.vectors).forEach(([key, vector]) => {
-        if (this.#telemetry) {
-          vectors[key] = this.#telemetry.traceClass(vector, {
-            excludeMethods: ['__setTelemetry', '__getTelemetry'],
-          });
-          vectors[key].__setTelemetry(this.#telemetry);
-        } else {
-          vectors[key] = vector;
-        }
+        vectors[key] = vector;
       });
-
       this.#vectors = vectors as TVectors;
     }
 
     if (config?.mcpServers) {
       this.#mcpServers = config.mcpServers;
 
-      // Set logger/telemetry/Mastra instance/id for MCP servers
+      // Set logger/Mastra instance/id for MCP servers
       Object.entries(this.#mcpServers).forEach(([key, server]) => {
         server.setId(key);
-        if (this.#telemetry) {
-          server.__setTelemetry(this.#telemetry);
-        }
-
         server.__registerMastra(this);
         server.__setLogger(this.getLogger());
       });
@@ -559,17 +479,6 @@ do:
 
     if (config?.tts) {
       this.#tts = config.tts;
-      Object.entries(this.#tts).forEach(([key, ttsCl]) => {
-        if (this.#tts?.[key]) {
-          if (this.#telemetry) {
-            // @ts-ignore
-            this.#tts[key] = this.#telemetry.traceClass(ttsCl, {
-              excludeMethods: ['__setTelemetry', '__getTelemetry'],
-            });
-            this.#tts[key].__setTelemetry(this.#telemetry);
-          }
-        }
-      });
     }
 
     /*
@@ -595,7 +504,6 @@ do:
 
         agent.__registerPrimitives({
           logger: this.getLogger(),
-          telemetry: this.#telemetry,
           storage: this.storage,
           memory: this.memory,
           agents: agents,
@@ -621,43 +529,12 @@ do:
     }
     this.#scorers = scorers as TScorers;
 
-    /*
-    Legacy Workflows
-    */
-    this.#legacy_workflows = {} as TLegacyWorkflows;
-
-    if (config?.legacy_workflows) {
-      Object.entries(config.legacy_workflows).forEach(([key, workflow]) => {
-        workflow.__registerMastra(this);
-        workflow.__registerPrimitives({
-          logger: this.getLogger(),
-          telemetry: this.#telemetry,
-          storage: this.storage,
-          memory: this.memory,
-          agents: agents,
-          tts: this.#tts,
-          vectors: this.#vectors,
-        });
-        // @ts-ignore
-        this.#legacy_workflows[key] = workflow;
-
-        const workflowSteps = Object.values(workflow.steps).filter(step => !!step.workflowId && !!step.workflow);
-        if (workflowSteps.length > 0) {
-          workflowSteps.forEach(step => {
-            // @ts-ignore
-            this.#legacy_workflows[step.workflowId] = step.workflow;
-          });
-        }
-      });
-    }
-
     this.#workflows = {} as TWorkflows;
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
         workflow.__registerMastra(this);
         workflow.__registerPrimitives({
           logger: this.getLogger(),
-          telemetry: this.#telemetry,
           storage: this.storage,
           memory: this.memory,
           agents: agents,
@@ -838,11 +715,11 @@ do:
    *   }
    * });
    *
-   * const allAgents = mastra.getAgents();
+   * const allAgents = mastra.listAgents();
    * console.log(Object.keys(allAgents)); // ['weatherAgent', 'supportAgent']
    * ```
    */
-  public getAgents() {
+  public listAgents() {
     return this.#agents;
   }
 
@@ -953,57 +830,6 @@ do:
    */
   public getDeployer() {
     return this.#deployer;
-  }
-
-  /**
-   * Retrieves a registered legacy workflow by its ID.
-   *
-   * Legacy workflows are the previous generation of workflow system in Mastra,
-   * maintained for backward compatibility. For new implementations, use the
-   * modern workflow system accessed via `getWorkflow()`.
-   *
-   * @template TWorkflowId - The specific workflow ID type from the registered legacy workflows
-   * @throws {MastraError} When the legacy workflow with the specified ID is not found
-   * @deprecated Use `getWorkflow()` for new implementations
-   *
-   * @example Getting a legacy workflow
-   * ```typescript
-   * const mastra = new Mastra({
-   *   legacy_workflows: {
-   *     oldDataFlow: legacyWorkflowInstance
-   *   }
-   * });
-   *
-   * const workflow = mastra.legacy_getWorkflow('oldDataFlow');
-   * const result = await workflow.execute({ input: 'data' });
-   * ```
-   */
-  public legacy_getWorkflow<TWorkflowId extends keyof TLegacyWorkflows>(
-    id: TWorkflowId,
-    { serialized }: { serialized?: boolean } = {},
-  ): TLegacyWorkflows[TWorkflowId] {
-    const workflow = this.#legacy_workflows?.[id];
-    if (!workflow) {
-      const error = new MastraError({
-        id: 'MASTRA_GET_LEGACY_WORKFLOW_BY_ID_NOT_FOUND',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `Workflow with ID ${String(id)} not found`,
-        details: {
-          status: 404,
-          workflowId: String(id),
-          workflows: Object.keys(this.#legacy_workflows ?? {}).join(', '),
-        },
-      });
-      this.#logger?.trackException(error);
-      throw error;
-    }
-
-    if (serialized) {
-      return { name: workflow.name } as TLegacyWorkflows[TWorkflowId];
-    }
-
-    return workflow;
   }
 
   /**
@@ -1152,44 +978,6 @@ do:
   }
 
   /**
-   * Returns all registered legacy workflows as a record keyed by their IDs.
-   *
-   * Legacy workflows are the previous generation of workflow system in Mastra,
-   * maintained for backward compatibility. For new implementations, use `getWorkflows()`.
-   *
-   * @deprecated Use `getWorkflows()` for new implementations
-   *
-   * @example Listing all legacy workflows
-   * ```typescript
-   * const mastra = new Mastra({
-   *   legacy_workflows: {
-   *     oldFlow1: legacyWorkflow1,
-   *     oldFlow2: legacyWorkflow2
-   *   }
-   * });
-   *
-   * const allLegacyWorkflows = mastra.legacy_getWorkflows();
-   * console.log(Object.keys(allLegacyWorkflows)); // ['oldFlow1', 'oldFlow2']
-   *
-   * // Execute all legacy workflows
-   * for (const [id, workflow] of Object.entries(allLegacyWorkflows)) {
-   *   console.log(`Legacy workflow ${id}:`, workflow.name);
-   * }
-   * ```
-   */
-  public legacy_getWorkflows(props: { serialized?: boolean } = {}): Record<string, LegacyWorkflow> {
-    if (props.serialized) {
-      return Object.entries(this.#legacy_workflows).reduce((acc, [k, v]) => {
-        return {
-          ...acc,
-          [k]: { name: v.name },
-        };
-      }, {});
-    }
-    return this.#legacy_workflows;
-  }
-
-  /**
    * Returns all registered scorers as a record keyed by their IDs.
    *
    * @example Listing all scorers
@@ -1204,7 +992,7 @@ do:
    *   }
    * });
    *
-   * const allScorers = mastra.getScorers();
+   * const allScorers = mastra.listScorers();
    * console.log(Object.keys(allScorers)); // ['helpfulness', 'accuracy', 'relevance']
    *
    * // Check scorer configurations
@@ -1213,7 +1001,7 @@ do:
    * }
    * ```
    */
-  public getScorers() {
+  public listScorers() {
     return this.#scorers;
   }
 
@@ -1325,7 +1113,7 @@ do:
    *   }
    * });
    *
-   * const allWorkflows = mastra.getWorkflows();
+   * const allWorkflows = mastra.listWorkflows();
    * console.log(Object.keys(allWorkflows)); // ['dataProcessor', 'emailSender', 'reportGenerator']
    *
    * // Execute all workflows with sample data
@@ -1335,7 +1123,7 @@ do:
    * }
    * ```
    */
-  public getWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
+  public listWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
     if (props.serialized) {
       return Object.entries(this.#workflows).reduce((acc, [k, v]) => {
         return {
@@ -1416,65 +1204,6 @@ do:
     });
   }
 
-  public setTelemetry(telemetry: OtelConfig) {
-    this.#telemetry = Telemetry.init(telemetry);
-
-    if (this.#agents) {
-      Object.keys(this.#agents).forEach(key => {
-        if (this.#telemetry) {
-          this.#agents?.[key]?.__setTelemetry(this.#telemetry);
-        }
-      });
-    }
-
-    if (this.#memory) {
-      this.#memory = this.#telemetry.traceClass(this.#memory, {
-        excludeMethods: ['__setTelemetry', '__getTelemetry'],
-      });
-      this.#memory.__setTelemetry(this.#telemetry);
-    }
-
-    if (this.#deployer) {
-      this.#deployer = this.#telemetry.traceClass(this.#deployer, {
-        excludeMethods: ['__setTelemetry', '__getTelemetry'],
-      });
-      this.#deployer.__setTelemetry(this.#telemetry);
-    }
-
-    if (this.#tts) {
-      let tts = {} as Record<string, MastraTTS>;
-      Object.entries(this.#tts).forEach(([key, ttsCl]) => {
-        if (this.#telemetry) {
-          tts[key] = this.#telemetry.traceClass(ttsCl, {
-            excludeMethods: ['__setTelemetry', '__getTelemetry'],
-          });
-          tts[key].__setTelemetry(this.#telemetry);
-        }
-      });
-      this.#tts = tts as TTTS;
-    }
-
-    if (this.#storage) {
-      this.#storage = this.#telemetry.traceClass(this.#storage, {
-        excludeMethods: ['__setTelemetry', '__getTelemetry'],
-      });
-      this.#storage.__setTelemetry(this.#telemetry);
-    }
-
-    if (this.#vectors) {
-      let vectors = {} as Record<string, MastraVector>;
-      Object.entries(this.#vectors).forEach(([key, vector]) => {
-        if (this.#telemetry) {
-          vectors[key] = this.#telemetry.traceClass(vector, {
-            excludeMethods: ['__setTelemetry', '__getTelemetry'],
-          });
-          vectors[key].__setTelemetry(this.#telemetry);
-        }
-      });
-      this.#vectors = vectors as TVectors;
-    }
-  }
-
   /**
    * Gets all registered text-to-speech (TTS) providers.
    *
@@ -1519,32 +1248,6 @@ do:
    */
   public getLogger() {
     return this.#logger;
-  }
-
-  /**
-   * Gets the currently configured telemetry instance.
-   *
-   * @example
-   * ```typescript
-   * const mastra = new Mastra({
-   *   telemetry: {
-   *     enabled: true,
-   *     serviceName: 'my-mastra-app'
-   *   }
-   * });
-   *
-   * const telemetry = mastra.getTelemetry();
-   * if (telemetry) {
-   *   const span = telemetry.startSpan('custom-operation');
-   *   span.setAttributes({ operation: 'data-processing' });
-   *   span.end();
-   * }
-   * ```
-   *
-   * @deprecated use {@link getAITracing()} instead
-   */
-  public getTelemetry() {
-    return this.#telemetry;
   }
 
   /**
@@ -1647,7 +1350,7 @@ do:
     return this.#bundler;
   }
 
-  public async getLogsByRunId({
+  public async listLogsByRunId({
     runId,
     transportId,
     fromDate,
@@ -1668,7 +1371,7 @@ do:
   }) {
     if (!transportId) {
       const error = new MastraError({
-        id: 'MASTRA_GET_LOGS_BY_RUN_ID_MISSING_TRANSPORT',
+        id: 'MASTRA_LIST_LOGS_BY_RUN_ID_MISSING_TRANSPORT',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
         text: 'Transport ID is required',
@@ -1681,12 +1384,12 @@ do:
       throw error;
     }
 
-    if (!this.#logger?.getLogsByRunId) {
+    if (!this.#logger?.listLogsByRunId) {
       const error = new MastraError({
         id: 'MASTRA_GET_LOGS_BY_RUN_ID_LOGGER_NOT_CONFIGURED',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.SYSTEM,
-        text: 'Logger is not configured or does not support getLogsByRunId operation',
+        text: 'Logger is not configured or does not support listLogsByRunId operation',
         details: {
           runId,
           transportId,
@@ -1696,7 +1399,7 @@ do:
       throw error;
     }
 
-    return await this.#logger.getLogsByRunId({
+    return await this.#logger.listLogsByRunId({
       runId,
       transportId,
       fromDate,
@@ -1708,7 +1411,7 @@ do:
     });
   }
 
-  public async getLogs(
+  public async listLogs(
     transportId: string,
     params?: {
       fromDate?: Date;
@@ -1746,7 +1449,7 @@ do:
       throw error;
     }
 
-    return await this.#logger.getLogs(transportId, params);
+    return await this.#logger.listLogs(transportId, params);
   }
 
   /**
@@ -1765,7 +1468,7 @@ do:
    * const mcpServers = mastra.getMCPServers();
    * if (mcpServers) {
    *   const fsServer = mcpServers.filesystem;
-   *   const tools = await fsServer.getTools();
+   *   const tools = await fsServer.listTools();
    * }
    * ```
    */
@@ -1794,7 +1497,7 @@ do:
    *
    * const fsServer = mastra.getMCPServer('fs-server');
    * if (fsServer) {
-   *   const tools = await fsServer.getTools();
+   *   const tools = await fsServer.listTools();
    * }
    * ```
    */

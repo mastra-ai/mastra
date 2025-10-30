@@ -68,10 +68,6 @@ export class MastraLLMVNext extends MastraBase {
   }
 
   __registerPrimitives(p: MastraPrimitives) {
-    if (p.telemetry) {
-      this.__setTelemetry(p.telemetry);
-    }
-
     if (p.logger) {
       this.__setLogger(p.logger);
     }
@@ -150,7 +146,6 @@ export class MastraLLMVNext extends MastraBase {
     tools = {} as Tools,
     modelSettings,
     toolChoice = 'auto',
-    telemetry_settings,
     threadId,
     resourceId,
     structuredOutput,
@@ -220,10 +215,6 @@ export class MastraLLMVNext extends MastraBase {
         toolChoice,
         modelSettings,
         providerOptions,
-        telemetry_settings: {
-          ...this.experimental_telemetry,
-          ...telemetry_settings,
-        },
         _internal,
         structuredOutput,
         outputProcessors,
@@ -280,6 +271,30 @@ export class MastraLLMVNext extends MastraBase {
           },
 
           onFinish: async props => {
+            // End the model generation span BEFORE calling the user's onFinish callback
+            // This ensures the model span ends before the agent span
+            modelSpanTracker?.endGeneration({
+              output: {
+                files: props?.files,
+                object: props?.object,
+                reasoning: props?.reasoning,
+                reasoningText: props?.reasoningText,
+                sources: props?.sources,
+                text: props?.text,
+                warnings: props?.warnings,
+              },
+              attributes: {
+                finishReason: props?.finishReason,
+                usage: {
+                  inputTokens: props?.totalUsage?.inputTokens,
+                  outputTokens: props?.totalUsage?.outputTokens,
+                  totalTokens: props?.totalUsage?.totalTokens,
+                  reasoningTokens: props?.totalUsage?.reasoningTokens,
+                  cachedInputTokens: props?.totalUsage?.cachedInputTokens,
+                },
+              },
+            });
+
             try {
               await options?.onFinish?.({ ...props, runId: runId! });
             } catch (e: unknown) {
@@ -306,28 +321,6 @@ export class MastraLLMVNext extends MastraBase {
               this.logger.trackException(mastraError);
               throw mastraError;
             }
-
-            modelSpanTracker?.endGeneration({
-              output: {
-                files: props?.files,
-                object: props?.object,
-                reasoning: props?.reasoning,
-                reasoningText: props?.reasoningText,
-                sources: props?.sources,
-                text: props?.text,
-                warnings: props?.warnings,
-              },
-              attributes: {
-                finishReason: props?.finishReason,
-                usage: {
-                  inputTokens: props?.totalUsage?.inputTokens,
-                  outputTokens: props?.totalUsage?.outputTokens,
-                  totalTokens: props?.totalUsage?.totalTokens,
-                  reasoningTokens: props?.totalUsage?.reasoningTokens,
-                  cachedInputTokens: props?.totalUsage?.cachedInputTokens,
-                },
-              },
-            });
 
             this.logger.debug('[LLM] - Stream Finished:', {
               text: props?.text,

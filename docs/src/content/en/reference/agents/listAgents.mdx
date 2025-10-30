@@ -19,10 +19,10 @@ await agent.listAgents();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
       defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
+      description: "Optional configuration object containing request context.",
     },
   ]}
 />
@@ -34,7 +34,8 @@ await agent.listAgents();
     {
       name: "agents",
       type: "Promise<Record<string, Agent>>",
-      description: "A promise that resolves to a record of agent names to their corresponding Agent instances.",
+      description:
+        "A promise that resolves to a record of agent names to their corresponding Agent instances.",
     },
   ]}
 />
@@ -42,10 +43,10 @@ await agent.listAgents();
 ## Extended usage example
 
 ```typescript copy
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 
 await agent.listAgents({
-  runtimeContext: new RuntimeContext()
+  requestContext: new RequestContext(),
 });
 ```
 
@@ -54,15 +55,16 @@ await agent.listAgents({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
-      description: "Runtime context for dependency injection and contextual information.",
+      defaultValue: "new RequestContext()",
+      description:
+        "Request Context for dependency injection and contextual information.",
     },
   ]}
 />
 
 ## Related
 
-- [Agents overview](../../docs/agents/overview.mdx)
+- [Agents overview](/docs/agents/overview)

@@ -1,5 +1,5 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi } from 'vitest';
 
 // Mock the utils module
@@ -66,7 +66,7 @@ describe('AgentBuilder', () => {
         projectPath: '/test/project',
       });
 
-      const tools = builder.getTools({ runtimeContext: new RuntimeContext() });
+      const tools = builder.listTools({ requestContext: new RequestContext() });
       expect(tools).toBeDefined();
     });
 
@@ -191,7 +191,7 @@ describe('AgentBuilder', () => {
   describe('Server Management Tools', () => {
     it('should have manageServer and httpRequest tools available', async () => {
       const builder = new AgentBuilder(mockConfig);
-      const tools = await builder.getTools({ runtimeContext: new RuntimeContext() });
+      const tools = await builder.listTools({ requestContext: new RequestContext() });
 
       expect(tools.manageServer).toBeDefined();
       expect(tools.httpRequest).toBeDefined();

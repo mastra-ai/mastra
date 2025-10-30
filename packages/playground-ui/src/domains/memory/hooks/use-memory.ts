@@ -1,15 +1,17 @@
 import { toast } from 'sonner';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import type { MemorySearchResponse, MemorySearchParams } from '@/types/memory';
+import type { MemorySearchParams } from '@/types/memory';
 import { useMastraClient } from '@mastra/react';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useMemory = (agentId?: string) => {
   const client = useMastraClient();
+  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
     queryKey: ['memory', agentId],
-    queryFn: () => (agentId ? client.getMemoryStatus(agentId) : null),
+    queryFn: () => (agentId ? client.getMemoryStatus(agentId, requestContext) : null),
     enabled: Boolean(agentId),
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
@@ -19,10 +21,11 @@ export const useMemory = (agentId?: string) => {
 
 export const useMemoryConfig = (agentId?: string) => {
   const client = useMastraClient();
+  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
     queryKey: ['memory', 'config', agentId],
-    queryFn: () => (agentId ? client.getMemoryConfig({ agentId }) : null),
+    queryFn: () => (agentId ? client.getMemoryConfig({ agentId, requestContext }) : null),
     enabled: Boolean(agentId),
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
@@ -41,10 +44,15 @@ export const useThreads = ({
   isMemoryEnabled: boolean;
 }) => {
   const client = useMastraClient();
+  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
     queryKey: ['memory', 'threads', resourceId, agentId],
-    queryFn: () => (isMemoryEnabled ? client.getMemoryThreads({ resourceId, agentId }) : null),
+    queryFn: async () => {
+      if (!isMemoryEnabled) return null;
+      const result = await client.listMemoryThreads({ resourceId, agentId, requestContext });
+      return result.threads;
+    },
     enabled: Boolean(isMemoryEnabled),
     staleTime: 0,
     gcTime: 0,
@@ -56,17 +64,17 @@ export const useThreads = ({
 export const useDeleteThread = () => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
+  const { requestContext } = usePlaygroundStore();
 
   return useMutation({
-    mutationFn: ({ threadId, agentId, networkId }: { threadId: string; agentId?: string; networkId?: string }) =>
-      client.deleteThread(threadId, { agentId, networkId }),
+    mutationFn: ({ threadId, agentId }: { threadId: string; agentId: string }) => {
+      const thread = client.getMemoryThread({ threadId, agentId });
+      return thread.delete({ requestContext });
+    },
     onSuccess: (_, variables) => {
-      const { agentId, networkId } = variables;
+      const { agentId } = variables;
       if (agentId) {
         queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
-      }
-      if (networkId) {
-        queryClient.invalidateQueries({ queryKey: ['network', 'threads', networkId, networkId] });
       }
       toast.success('Chat deleted successfully');
     },
@@ -85,41 +93,11 @@ export const useMemorySearch = ({
   resourceId: string;
   threadId?: string;
 }) => {
-  const searchMemory = async (searchQuery: string, memoryConfig?: MemorySearchParams) => {
-    if (!searchQuery.trim()) {
-      return { results: [], count: 0, query: searchQuery };
-    }
-
-    const params = new URLSearchParams({
-      searchQuery,
-      resourceId,
-      agentId,
-    });
-
-    if (threadId) {
-      params.append('threadId', threadId);
-    }
-
-    if (memoryConfig) {
-      params.append('memoryConfig', JSON.stringify(memoryConfig));
-    }
-
-    const response = await fetch(`/api/memory/search?${params}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-mastra-dev-playground': 'true',
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
-      console.error('Search memory error:', errorData);
-      throw new Error(errorData.message || errorData.error || 'Failed to search memory');
-    }
-
-    return response.json() as Promise<MemorySearchResponse>;
-  };
-
-  return { searchMemory };
+  const { requestContext } = usePlaygroundStore();
+  const client = useMastraClient();
+  return useMutation({
+    mutationFn: async ({ searchQuery, memoryConfig }: { searchQuery: string; memoryConfig?: MemorySearchParams }) => {
+      return client.searchMemory({ agentId, resourceId, threadId, searchQuery, memoryConfig, requestContext });
+    },
+  });
 };

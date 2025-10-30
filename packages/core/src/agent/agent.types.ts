@@ -1,4 +1,3 @@
-import type { TelemetrySettings } from 'ai';
 import type { ModelMessage, ToolChoice } from 'ai-v5';
 import type { TracingContext, TracingOptions } from '../ai-tracing';
 import type { SystemMessage } from '../llm';
@@ -7,7 +6,7 @@ import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { InputProcessor, OutputProcessor } from '../processors';
-import type { RuntimeContext } from '../runtime-context';
+import type { RequestContext } from '../request-context';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
@@ -20,8 +19,8 @@ export type MultiPrimitiveExecutionOptions = {
   /** Unique identifier for this execution run */
   runId?: string;
 
-  /** Runtime context containing dynamic configuration and state */
-  runtimeContext?: RuntimeContext;
+  /** Request Context containing dynamic configuration and state */
+  requestContext?: RequestContext;
 
   /** Maximum number of steps to run */
   maxSteps?: number;
@@ -31,8 +30,6 @@ export type MultiPrimitiveExecutionOptions = {
 
   /** Model-specific settings like temperature, maxTokens, topP, etc. */
   modelSettings?: LoopOptions['modelSettings'];
-
-  telemetry?: TelemetrySettings;
 };
 
 export type AgentExecutionOptions<
@@ -63,16 +60,13 @@ export type AgentExecutionOptions<
   /** Save messages incrementally after each stream step completes (default: false). */
   savePerStep?: boolean;
 
-  /** Runtime context containing dynamic configuration and state */
-  runtimeContext?: RuntimeContext;
+  /** Request Context containing dynamic configuration and state */
+  requestContext?: RequestContext;
 
   /** @deprecated Use memory.resource instead. Identifier for the resource/user */
   resourceId?: string;
   /** @deprecated Use memory.thread instead. Thread identifier for conversation continuity */
   threadId?: string;
-
-  /** Telemetry collection settings for observability */
-  telemetry?: TelemetrySettings;
 
   /** Maximum number of steps to run */
   maxSteps?: number;

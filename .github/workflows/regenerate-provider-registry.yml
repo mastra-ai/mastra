@@ -1,17 +1,17 @@
-name: Regenerate Provider Registry
+name: Regenerate Providers & Docs
 
 permissions:
   contents: write
 
 on:
-  # Run every 6 hours to keep provider registry up-to-date
+  # Run every 6 hours to keep provider registry and documentation up-to-date
   schedule:
     - cron: '0 */6 * * *' # Every 6 hours
   # Allow manual triggering for testing
   workflow_dispatch:
 
 concurrency:
-  group: regenerate-provider-registry
+  group: regenerate-providers-docs
   cancel-in-progress: false
 
 jobs:
@@ -56,15 +56,18 @@ jobs:
       - name: Generate model documentation
         run: pnpx tsx packages/core/scripts/generate-model-docs.ts
 
+      - name: Generate llms.txt files
+        run: pnpx tsx docs/scripts/build-llms-text-files.ts docs
+
       - name: Format generated files with Prettier
         run: |
           pnpm prettier --write packages/core/src/llm/model/provider-registry.json
           pnpm prettier --write packages/core/src/llm/model/provider-types.generated.d.ts
-          pnpm prettier --write docs/src/content/en/models/**/*.{mdx,ts}
+          pnpm prettier --write docs/src/content/en/models/**/*.{mdx,ts,js}
       - name: Check for changes
         id: git-check
         run: |
-          git diff --exit-code packages/core/src/llm/model/provider-registry.json packages/core/src/llm/model/provider-types.generated.d.ts docs/src/content/en/models/ || echo "changed=true" >> $GITHUB_OUTPUT
+          git diff --exit-code packages/core/src/llm/model/provider-registry.json packages/core/src/llm/model/provider-types.generated.d.ts docs/src/content/en/models/ docs/public/llms.txt docs/public/llms-full.txt || echo "changed=true" >> $GITHUB_OUTPUT
 
       - name: Create changeset
         if: steps.git-check.outputs.changed == 'true'
@@ -104,17 +107,19 @@ jobs:
           git add packages/core/src/llm/model/provider-registry.json
           git add packages/core/src/llm/model/provider-types.generated.d.ts
           git add docs/src/content/en/models/
+          git add docs/public/llms.txt
+          git add docs/public/llms-full.txt
           if [ -n "${CHANGESET_FILE}" ]; then
             git add "${CHANGESET_FILE}"
           fi
-          git commit -m "chore: regenerate provider registry and model documentation [skip ci]"
+          git commit -m "chore: regenerate providers and docs [skip ci]"
           git pull --rebase
           git push
 
       - name: Log summary
         if: steps.git-check.outputs.changed == 'true'
-        run: echo "✅ Provider registry and model documentation updated with changeset and committed to main"
+        run: echo "✅ Providers and documentation updated with changeset and committed to main"
 
       - name: Log no changes
         if: steps.git-check.outputs.changed != 'true'
-        run: echo "ℹ️ No changes detected in provider registry or model documentation"
+        run: echo "ℹ️ No changes detected in providers or documentation"

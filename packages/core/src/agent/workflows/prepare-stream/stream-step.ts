@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
-import { RuntimeContext } from '../../../runtime-context';
+import { RequestContext } from '../../../request-context';
 import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
@@ -56,7 +56,7 @@ export function createStreamStep<
         (capabilities.outputProcessors
           ? typeof capabilities.outputProcessors === 'function'
             ? await capabilities.outputProcessors({
-                runtimeContext: validatedInputData.runtimeContext || new RuntimeContext(),
+                requestContext: validatedInputData.requestContext || new RequestContext(),
               })
             : capabilities.outputProcessors
           : []);

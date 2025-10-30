@@ -80,8 +80,6 @@ describe('LangSmithExporter', () => {
     });
 
     it('should disable exporter when apiKey is missing', async () => {
-      const mockConsole = vi.spyOn(console, 'error').mockImplementation(() => {});
-
       const invalidConfig = {
         // Missing apiKey
         apiUrl: 'https://test.com',
@@ -89,13 +87,8 @@ describe('LangSmithExporter', () => {
 
       const disabledExporter = new LangSmithExporter(invalidConfig);
 
-      // Should log error about missing credentials
-      expect(mockConsole).toHaveBeenCalledWith(
-        expect.stringContaining('LangSmithExporter: Missing required credentials, exporter will be disabled'),
-        expect.objectContaining({
-          hasApiKey: false,
-        }),
-      );
+      // Should be disabled when apiKey is missing
+      expect(disabledExporter['isDisabled']).toBe(true);
 
       // Should not create spans when disabled
       const rootSpan = createMockSpan({
@@ -112,8 +105,6 @@ describe('LangSmithExporter', () => {
       });
 
       expect(MockRunTreeClass).not.toHaveBeenCalled();
-
-      mockConsole.mockRestore();
     });
   });
 
