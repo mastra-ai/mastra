@@ -217,7 +217,7 @@ export const scoreEntity = new Entity({
         return value;
       },
     },
-    runtimeContext: {
+    requestContext: {
       type: 'string',
       required: false,
       set: (value?: Record<string, unknown> | string) => {

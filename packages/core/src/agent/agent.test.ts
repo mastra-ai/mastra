@@ -381,6 +381,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('tool approval and suspension', () => {
       describe.skipIf(version === 'v1')('requireToolApproval', () => {
         it('should call findUserTool with requireToolApproval on tool and be able to reject the tool call', async () => {
+          mockFindUser.mockClear(); // Reset mock call count before this test
+
           const findUserTool = createTool({
             id: 'Find user tool',
             description: 'This is a test tool that returns the name and email',
@@ -1320,8 +1322,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       mockMemory.getMergedThreadConfig = () => {
         return {
           generateTitle: {
-            model: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
-              const userTier = runtimeContext.get('userTier');
+            model: ({ requestContext }: { requestContext: RequestContext }) => {
+              const userTier = requestContext.get('userTier');
               return userTier === 'premium' ? premiumModel : standardModel;
             },
           },
@@ -1336,8 +1338,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       // Generate with premium context
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('userTier', 'premium');
+      const requestContext = new RequestContext();
+      requestContext.set('userTier', 'premium');
 
       if (version === 'v1') {
         await agent.generateLegacy('Test message', {
@@ -1348,7 +1350,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               title: 'New Thread 2024-01-01T00:00:00.000Z',
             },
           },
-          runtimeContext,
+          requestContext,
         });
       } else {
         await agent.generate('Test message', {
@@ -1359,7 +1361,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               title: 'New Thread 2024-01-01T00:00:00.000Z',
             },
           },
-          runtimeContext,
+          requestContext,
         });
       }
 
@@ -1368,7 +1370,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // Reset and test with standard tier
       usedModelName = '';
-      const standardContext = new RuntimeContext();
+      const standardContext = new RequestContext();
       standardContext.set('userTier', 'standard');
 
       if (version === 'v1') {
@@ -1380,7 +1382,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               title: 'New Thread 2024-01-01T00:00:00.000Z',
             },
           },
-          runtimeContext: standardContext,
+          requestContext: standardContext,
         });
       } else {
         await agent.generate('Test message', {
@@ -1391,7 +1393,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               title: 'New Thread 2024-01-01T00:00:00.000Z',
             },
           },
-          runtimeContext: standardContext,
+          requestContext: standardContext,
         });
       }
 
@@ -2172,8 +2174,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         return {
           generateTitle: {
             model: titleModel,
-            instructions: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
-              const language = runtimeContext.get('language');
+            instructions: ({ requestContext }: { requestContext: RequestContext }) => {
+              const language = requestContext.get('language');
               return language === 'ja'
                 ? '会話内容に基づいて簡潔なタイトルを生成してください'
                 : 'Generate a concise title based on the conversation';
@@ -2190,7 +2192,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       // Test with Japanese context
-      const japaneseContext = new RuntimeContext();
+      const japaneseContext = new RequestContext();
       japaneseContext.set('language', 'ja');
 
       if (version === 'v1') {
@@ -2202,7 +2204,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               title: 'New Thread 2024-01-01T00:00:00.000Z',
             },
           },
-          runtimeContext: japaneseContext,
+          requestContext: japaneseContext,
         });
       } else {
         await agent.generate('Test message', {
@@ -2213,7 +2215,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               title: 'New Thread 2024-01-01T00:00:00.000Z',
             },
           },
-          runtimeContext: japaneseContext,
+          requestContext: japaneseContext,
         });
       }
 
@@ -2224,7 +2226,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Reset and test with English context
       capturedPrompt = '';
       usedLanguage = '';
-      const englishContext = new RuntimeContext();
+      const englishContext = new RequestContext();
       englishContext.set('language', 'en');
 
       if (version === 'v1') {
@@ -2236,7 +2238,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               title: 'New Thread 2024-01-01T00:00:00.000Z',
             },
           },
-          runtimeContext: englishContext,
+          requestContext: englishContext,
         });
       } else {
         await agent.generate('Test message', {
@@ -2247,7 +2249,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               title: 'New Thread 2024-01-01T00:00:00.000Z',
             },
           },
-          runtimeContext: englishContext,
+          requestContext: englishContext,
         });
       }
 
@@ -3430,16 +3432,16 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should expose mastra instance in dynamic instructions', async () => {
       let capturedMastra: Mastra | undefined;
-      let capturedRuntimeContext: RuntimeContext | undefined;
+      let capturedRequestContext: RequestContext | undefined;
 
       const agent = new Agent({
         name: 'test-agent',
-        instructions: ({ runtimeContext, mastra }) => {
-          capturedRuntimeContext = runtimeContext;
+        instructions: ({ requestContext, mastra }) => {
+          capturedRequestContext = requestContext;
           capturedMastra = mastra;
 
           const logger = mastra?.getLogger();
-          logger?.debug('Running with context', { info: runtimeContext.get('info') });
+          logger?.debug('Running with context', { info: requestContext.get('info') });
 
           return 'You are a helpful assistant.';
         },
@@ -3447,20 +3449,20 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         mastra,
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('info', 'test-info');
+      const requestContext = new RequestContext();
+      requestContext.set('info', 'test-info');
 
       let response;
       if (version === 'v1') {
-        response = await agent.generateLegacy('hello', { runtimeContext });
+        response = await agent.generateLegacy('hello', { requestContext });
       } else {
-        response = await agent.generate('hello', { runtimeContext });
+        response = await agent.generate('hello', { requestContext });
       }
 
       expect(response.text).toBe('Logger test response');
       expect(capturedMastra).toBe(mastra);
-      expect(capturedRuntimeContext).toBe(runtimeContext);
-      expect(capturedRuntimeContext?.get('info')).toBe('test-info');
+      expect(capturedRequestContext).toBe(requestContext);
+      expect(capturedRequestContext?.get('info')).toBe('test-info');
     });
 
     it('should work with static instructions (backward compatibility)', async () => {
@@ -3607,25 +3609,25 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should support dynamic instructions returning string', async () => {
       const agent = new Agent({
         name: 'test-agent',
-        instructions: ({ runtimeContext }) => {
-          const role = runtimeContext?.get('role') || 'assistant';
+        instructions: ({ requestContext }) => {
+          const role = requestContext?.get('role') || 'assistant';
           return `You are a helpful ${role}.`;
         },
         model: dummyModel,
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('role', 'teacher');
+      const requestContext = new RequestContext();
+      requestContext.set('role', 'teacher');
 
-      const instructions = await agent.getInstructions({ runtimeContext });
+      const instructions = await agent.getInstructions({ requestContext });
       expect(instructions).toBe('You are a helpful teacher.');
     });
 
     it('should support dynamic instructions returning CoreSystemMessage', async () => {
       const agent = new Agent({
         name: 'test-agent',
-        instructions: ({ runtimeContext }) => {
-          const role = runtimeContext?.get('role') || 'assistant';
+        instructions: ({ requestContext }) => {
+          const role = requestContext?.get('role') || 'assistant';
           return {
             role: 'system',
             content: `You are a helpful ${role}.`,
@@ -3634,10 +3636,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         model: dummyModel,
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('role', 'doctor');
+      const requestContext = new RequestContext();
+      requestContext.set('role', 'doctor');
 
-      const instructions = await agent.getInstructions({ runtimeContext });
+      const instructions = await agent.getInstructions({ requestContext });
       expect(instructions).toEqual({
         role: 'system',
         content: 'You are a helpful doctor.',
@@ -3647,8 +3649,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should support dynamic instructions returning array', async () => {
       const agent = new Agent({
         name: 'test-agent',
-        instructions: ({ runtimeContext }) => {
-          const expertise = (runtimeContext?.get('expertise') as string[]) || [];
+        instructions: ({ requestContext }) => {
+          const expertise = (requestContext?.get('expertise') as string[]) || [];
           const expertiseMessages: CoreSystemMessage[] = expertise.map((exp: string) => ({
             role: 'system',
             content: `You have expertise in ${exp}.`,
@@ -3662,10 +3664,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         model: dummyModel,
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('expertise', ['Python', 'JavaScript']);
+      const requestContext = new RequestContext();
+      requestContext.set('expertise', ['Python', 'JavaScript']);
 
-      const instructions = await agent.getInstructions({ runtimeContext });
+      const instructions = await agent.getInstructions({ requestContext });
       expect(instructions).toEqual([
         { role: 'system', content: 'You are a helpful assistant.' },
         { role: 'system', content: 'You have expertise in Python.' },
@@ -3676,10 +3678,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should support async dynamic instructions', async () => {
       const agent = new Agent({
         name: 'test-agent',
-        instructions: async ({ runtimeContext }) => {
+        instructions: async ({ requestContext }) => {
           // Simulate async operation
           await delay(10);
-          const role = runtimeContext?.get('role') || 'assistant';
+          const role = requestContext?.get('role') || 'assistant';
           return {
             role: 'system',
             content: `You are an async ${role}.`,
@@ -3688,10 +3690,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         model: dummyModel,
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('role', 'consultant');
+      const requestContext = new RequestContext();
+      requestContext.set('role', 'consultant');
 
-      const instructions = await agent.getInstructions({ runtimeContext });
+      const instructions = await agent.getInstructions({ requestContext });
       expect(instructions).toEqual({
         role: 'system',
         content: 'You are an async consultant.',
@@ -3929,8 +3931,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should support dynamic instructions returning SystemModelMessage', async () => {
       const agent = new Agent({
         name: 'test-agent',
-        instructions: ({ runtimeContext }) => {
-          const mode = runtimeContext?.get('mode') || 'default';
+        instructions: ({ requestContext }) => {
+          const mode = requestContext?.get('mode') || 'default';
           return {
             role: 'system' as const,
             content: `You are in ${mode} mode.`,
@@ -3942,10 +3944,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         model: dummyModel,
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('mode', 'creative');
+      const requestContext = new RequestContext();
+      requestContext.set('mode', 'creative');
 
-      const instructions = await agent.getInstructions({ runtimeContext });
+      const instructions = await agent.getInstructions({ requestContext });
       expect(instructions).toEqual({
         role: 'system',
         content: 'You are in creative mode.',
@@ -5408,15 +5410,15 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     describe('dynamic input processors', () => {
       it('should support function-based input processors', async () => {
-        const runtimeContext = new RuntimeContext<{ processorMessage: string }>();
-        runtimeContext.set('processorMessage', 'Dynamic message');
+        const requestContext = new RequestContext<{ processorMessage: string }>();
+        requestContext.set('processorMessage', 'Dynamic message');
 
         const agentWithDynamicProcessors = new Agent({
           name: 'test-agent',
           instructions: 'You are a helpful assistant',
           model: mockModel,
-          inputProcessors: ({ runtimeContext }) => {
-            const message: string = runtimeContext.get('processorMessage') || 'Default message';
+          inputProcessors: ({ requestContext }) => {
+            const message: string = requestContext.get('processorMessage') || 'Default message';
             return [
               {
                 name: 'dynamic-processor',
@@ -5432,11 +5434,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let result;
         if (version === 'v1') {
           result = await agentWithDynamicProcessors.generateLegacy('Test dynamic', {
-            runtimeContext,
+            requestContext,
           });
         } else {
           result = await agentWithDynamicProcessors.generate('Test dynamic', {
-            runtimeContext,
+            requestContext,
           });
         }
 
@@ -6224,14 +6226,14 @@ describe('Agent Tests', () => {
 //       });
 
 //       // Verify tools exist
-//       expect((agent.getTools() as Agent['tools']).mastraTool).toBeDefined();
-//       expect((agent.getTools() as Agent['tools']).vercelTool).toBeDefined();
+//       expect((agent.listTools() as Agent['tools']).mastraTool).toBeDefined();
+//       expect((agent.listTools() as Agent['tools']).vercelTool).toBeDefined();
 
 //       // Verify both tools can be executed
 //       // @ts-ignore
-//       await (agent.getTools() as Agent['tools']).mastraTool.execute!({ name: 'test' });
+//       await (agent.listTools() as Agent['tools']).mastraTool.execute!({ name: 'test' });
 //       // @ts-ignore
-//       await (agent.getTools() as Agent['tools']).vercelTool.execute!({ name: 'test' });
+//       await (agent.listTools() as Agent['tools']).vercelTool.execute!({ name: 'test' });
 
 //       expect(mastraExecute).toHaveBeenCalled();
 //       expect(vercelExecute).toHaveBeenCalled();

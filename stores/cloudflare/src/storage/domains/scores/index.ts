@@ -15,7 +15,7 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
   deserialized.analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
   deserialized.metadata = safelyParseJSON(row.metadata);
   deserialized.additionalContext = safelyParseJSON(row.additionalContext);
-  deserialized.runtimeContext = safelyParseJSON(row.runtimeContext);
+  deserialized.requestContext = safelyParseJSON(row.requestContext);
   deserialized.entity = safelyParseJSON(row.entity);
 
   return deserialized as ScoreRowData;

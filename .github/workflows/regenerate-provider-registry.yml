@@ -63,7 +63,7 @@ jobs:
         run: |
           pnpm prettier --write packages/core/src/llm/model/provider-registry.json
           pnpm prettier --write packages/core/src/llm/model/provider-types.generated.d.ts
-          pnpm prettier --write docs/src/content/en/models/**/*.{mdx,ts}
+          pnpm prettier --write docs/src/content/en/models/**/*.{mdx,ts,js}
       - name: Check for changes
         id: git-check
         run: |

@@ -54,7 +54,7 @@ export class FileTransport extends LoggerTransport {
     callback(error);
   }
 
-  async getLogs(params?: {
+  async listLogs(params?: {
     fromDate?: Date;
     toDate?: Date;
     logLevel?: LogLevel;
@@ -145,7 +145,7 @@ export class FileTransport extends LoggerTransport {
     }
   }
 
-  async getLogsByRunId({
+  async listLogsByRunId({
     runId,
     fromDate,
     toDate,
@@ -171,7 +171,7 @@ export class FileTransport extends LoggerTransport {
     try {
       const page = pageInput === 0 ? 1 : (pageInput ?? 1);
       const perPage = perPageInput ?? 100;
-      const allLogs = await this.getLogs({ fromDate, toDate, logLevel, filters });
+      const allLogs = await this.listLogs({ fromDate, toDate, logLevel, filters });
       const logs = (allLogs?.logs?.filter(log => log?.runId === runId) || []) as BaseLogMessage[];
       const total = logs.length;
       const resolvedPerPage = perPage || 100;

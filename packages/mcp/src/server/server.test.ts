@@ -980,7 +980,7 @@ describe('MCPServer', () => {
         },
       });
 
-      const tools = await existingConfig.getTools();
+      const tools = await existingConfig.listTools();
       expect(Object.keys(tools).length).toBeGreaterThan(0);
       expect(Object.keys(tools)[0]).toBe('weather_weatherTool');
       await existingConfig.disconnect();
@@ -1061,7 +1061,7 @@ describe('MCPServer', () => {
     });
 
     it('should respond to HTTP request using client', async () => {
-      const tools = await client.getTools();
+      const tools = await client.listTools();
       const tool = tools['local_weatherTool'];
       expect(tool).toBeDefined();
 
@@ -1196,7 +1196,7 @@ describe('MCPServer', () => {
 
     it('should respond to SSE connection and tool call', async () => {
       // Get tools from the client
-      const tools = await client.getTools();
+      const tools = await client.listTools();
       const tool = tools['local_weatherTool'];
       expect(tool).toBeDefined();
 
@@ -1290,7 +1290,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
       expect(generateSpy).toHaveBeenCalledWith(
         queryInput.message,
         expect.objectContaining({
-          runtimeContext: expect.any(Object),
+          requestContext: expect.any(Object),
           tracingContext: expect.any(Object),
         }),
       );
@@ -1821,7 +1821,7 @@ describe('MCPServer - Elicitation', () => {
     elicitationClient1.elicitation.onRequest('elicitation1', client1Handler);
     elicitationClient2.elicitation.onRequest('elicitation2', client2Handler);
 
-    const tools = await elicitationClient1.getTools();
+    const tools = await elicitationClient1.listTools();
     const tool = tools['elicitation1_testElicitationTool'];
     expect(tool).toBeDefined();
     await tool.execute({
@@ -1830,7 +1830,7 @@ describe('MCPServer - Elicitation', () => {
       },
     });
 
-    const tools2 = await elicitationClient2.getTools();
+    const tools2 = await elicitationClient2.listTools();
     const tool2 = tools2['elicitation2_testElicitationTool'];
     expect(tool2).toBeDefined();
 
@@ -1900,14 +1900,14 @@ describe('MCPServer with Tool Output Schema', () => {
   });
 
   it('should list tool with outputSchema', async () => {
-    const tools = await clientWithOutputSchema.getTools();
+    const tools = await clientWithOutputSchema.listTools();
     const tool = tools['local_structuredTool'];
     expect(tool).toBeDefined();
     expect(tool.outputSchema).toBeDefined();
   });
 
   it('should call tool and receive structuredContent', async () => {
-    const tools = await clientWithOutputSchema.getTools();
+    const tools = await clientWithOutputSchema.listTools();
     const tool = tools['local_structuredTool'];
     const result = await tool.execute({ context: { input: 'hello' } });
 

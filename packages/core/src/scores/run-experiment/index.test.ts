@@ -3,7 +3,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
 import { createWorkflow, createStep } from '../../workflows';
 import { createScorer } from '../base';
 import type { MastraScorer } from '../base';
@@ -175,19 +175,19 @@ describe('runExperiment', () => {
       expect(mockAgent.generateLegacy).toHaveBeenCalledWith('test input', {
         scorers: {},
         returnScorerData: true,
-        runtimeContext: undefined,
+        requestContext: undefined,
       });
     });
 
-    it('should pass runtimeContext when provided', async () => {
-      const runtimeContext = new RuntimeContext([['userId', 'test-user']]);
+    it('should pass requestContext when provided', async () => {
+      const requestContext = new RequestContext([['userId', 'test-user']]);
 
       await runExperiment({
         data: [
           {
             input: 'test input',
             groundTruth: 'truth',
-            runtimeContext,
+            requestContext,
           },
         ],
         scorers: mockScorers,
@@ -198,7 +198,7 @@ describe('runExperiment', () => {
       expect(mockAgent.generateLegacy).toHaveBeenCalledWith('test input', {
         scorers: {},
         returnScorerData: true,
-        runtimeContext,
+        requestContext,
       });
     });
   });
@@ -418,7 +418,7 @@ describe('runExperiment', () => {
         input: { input: 'Test input' }, // step payload
         output: { output: 'Processed: Test input' }, // step output
         groundTruth: 'Expected',
-        runtimeContext: undefined,
+        requestContext: undefined,
       });
     });
 

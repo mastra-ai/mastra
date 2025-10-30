@@ -172,7 +172,7 @@ export class HttpTransport extends LoggerTransport {
     }
   }
 
-  async getLogs(params?: {
+  async listLogs(params?: {
     fromDate?: Date;
     toDate?: Date;
     logLevel?: LogLevel;
@@ -190,7 +190,7 @@ export class HttpTransport extends LoggerTransport {
     // HttpTransport is write-only by default
     // Subclasses can override this method to implement log retrieval
     console.warn(
-      'HttpTransport.getLogs: This transport is write-only. Override this method to implement log retrieval.',
+      'HttpTransport.listLogs: This transport is write-only. Override this method to implement log retrieval.',
     );
 
     return {
@@ -202,7 +202,7 @@ export class HttpTransport extends LoggerTransport {
     };
   }
 
-  async getLogsByRunId({
+  async listLogsByRunId({
     runId: _runId,
     fromDate: _fromDate,
     toDate: _toDate,
@@ -228,7 +228,7 @@ export class HttpTransport extends LoggerTransport {
     // HttpTransport is write-only by default
     // Subclasses can override this method to implement log retrieval
     console.warn(
-      'HttpTransport.getLogsByRunId: This transport is write-only. Override this method to implement log retrieval.',
+      'HttpTransport.listLogsByRunId: This transport is write-only. Override this method to implement log retrieval.',
     );
 
     return {

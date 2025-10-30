@@ -53,7 +53,7 @@ export class ConsoleLogger extends MastraLogger {
     }
   }
 
-  async getLogs(
+  async listLogs(
     _transportId: string,
     _params?: {
       fromDate?: Date;
@@ -67,7 +67,7 @@ export class ConsoleLogger extends MastraLogger {
     return { logs: [], total: 0, page: _params?.page ?? 1, perPage: _params?.perPage ?? 100, hasMore: false };
   }
 
-  async getLogsByRunId(_args: {
+  async listLogsByRunId(_args: {
     transportId: string;
     runId: string;
     fromDate?: Date;

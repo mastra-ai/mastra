@@ -20,6 +20,7 @@ import type {
   StoragePagination,
   StorageDomains,
   StorageResourceType,
+  StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
@@ -227,15 +228,15 @@ export class CloudflareStore extends MastraStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
+    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
   }
 
   async updateWorkflowState({
@@ -285,22 +286,15 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.operations.batchInsert(input);
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     limit = 20,
     offset = 0,
     resourceId,
     fromDate,
     toDate,
-  }: {
-    workflowName?: string;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-    fromDate?: Date;
-    toDate?: Date;
-  } = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.getWorkflowRuns({
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
+    return this.stores.workflows.listWorkflowRuns({
       workflowName,
       limit,
       offset,

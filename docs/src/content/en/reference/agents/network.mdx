@@ -300,11 +300,11 @@ await agent.network(`
         "Unique ID for this generation run. Useful for tracking and debugging purposes.",
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
     {
       name: "traceId",

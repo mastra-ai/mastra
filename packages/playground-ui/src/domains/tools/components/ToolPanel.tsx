@@ -16,7 +16,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   const { data: tool, isLoading } = useTool(toolId!);
 
   const { mutateAsync: executeTool, isPending: isExecuting, data: result } = useExecuteTool();
-  const { runtimeContext: playgroundRuntimeContext } = usePlaygroundStore();
+  const { requestContext: playgroundRequestContext } = usePlaygroundStore();
 
   const handleExecuteTool = async (data: any) => {
     if (!tool) return;
@@ -24,7 +24,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     return executeTool({
       toolId: tool.id,
       input: data,
-      runtimeContext: playgroundRuntimeContext,
+      requestContext: playgroundRequestContext,
     });
   };
 

@@ -17,7 +17,7 @@ type LogsContext = {
   };
 };
 
-export async function getLogsHandler({
+export async function listLogsHandler({
   mastra,
   transportId,
   params,
@@ -43,7 +43,7 @@ export async function getLogsHandler({
         )
       : undefined;
 
-    const logs = await mastra.getLogs(transportId!, {
+    const logs = await mastra.listLogs(transportId!, {
       fromDate,
       toDate,
       logLevel,
@@ -57,7 +57,7 @@ export async function getLogsHandler({
   }
 }
 
-export async function getLogsByRunIdHandler({
+export async function listLogsByRunIdHandler({
   mastra,
   runId,
   transportId,
@@ -78,7 +78,7 @@ export async function getLogsByRunIdHandler({
         )
       : undefined;
 
-    const logs = await mastra.getLogsByRunId({
+    const logs = await mastra.listLogsByRunId({
       runId: runId!,
       transportId: transportId!,
       fromDate,
@@ -94,7 +94,7 @@ export async function getLogsByRunIdHandler({
   }
 }
 
-export async function getLogTransports({ mastra }: Pick<LogsContext, 'mastra'>) {
+export async function listLogTransports({ mastra }: Pick<LogsContext, 'mastra'>) {
   try {
     const logger = mastra.getLogger();
     const transports = logger.getTransports();

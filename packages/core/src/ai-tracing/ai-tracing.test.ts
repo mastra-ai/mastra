@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraError } from '../error';
-import { RuntimeContext } from '../runtime-context';
+import { RequestContext } from '../request-context';
 import { clearAITracingRegistry } from './registry';
 import { DefaultAITracing } from './tracers';
 import type { AITracingEvent, AITracingExporter, ModelGenerationAttributes, AITracing, ExportedAISpan } from './types';
@@ -1271,30 +1271,30 @@ describe('AI Tracing', () => {
       rootSpan.end();
     });
   });
-  describe('TraceState and metadata extraction from RuntimeContext', () => {
-    it('should extract metadata from RuntimeContext using configured keys', () => {
+  describe('TraceState and metadata extraction from RequestContext', () => {
+    it('should extract metadata from RequestContext using configured keys', () => {
       // Create AI tracing with configured metadata keys
       const aiTracing = new DefaultAITracing({
         serviceName: 'test-service',
         name: 'test',
-        runtimeContextKeys: ['userId', 'environment'],
+        requestContextKeys: ['userId', 'environment'],
         exporters: [testExporter],
       });
 
-      // Create runtime context with test data
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('userId', 'user-123');
-      runtimeContext.set('environment', 'production');
-      runtimeContext.set('otherData', 'not-extracted');
+      // Create request context with test data
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      requestContext.set('environment', 'production');
+      requestContext.set('otherData', 'not-extracted');
 
-      // Start span with runtime context
+      // Start span with request context
       const span = aiTracing.startSpan({
         type: AISpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-1',
         },
-        runtimeContext,
+        requestContext,
       });
 
       // Verify metadata was extracted
@@ -1310,14 +1310,14 @@ describe('AI Tracing', () => {
       const aiTracing = new DefaultAITracing({
         serviceName: 'test-service',
         name: 'test',
-        runtimeContextKeys: ['userId', 'environment'],
+        requestContextKeys: ['userId', 'environment'],
         exporters: [testExporter],
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('userId', 'user-123');
-      runtimeContext.set('environment', 'production');
-      runtimeContext.set('experimentId', 'exp-789');
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      requestContext.set('environment', 'production');
+      requestContext.set('experimentId', 'exp-789');
 
       const span = aiTracing.startSpan({
         type: AISpanType.AGENT_RUN,
@@ -1325,9 +1325,9 @@ describe('AI Tracing', () => {
         attributes: {
           agentId: 'agent-1',
         },
-        runtimeContext,
+        requestContext,
         tracingOptions: {
-          runtimeContextKeys: ['experimentId'],
+          requestContextKeys: ['experimentId'],
         },
       });
 
@@ -1345,13 +1345,13 @@ describe('AI Tracing', () => {
       const aiTracing = new DefaultAITracing({
         serviceName: 'test-service',
         name: 'test',
-        runtimeContextKeys: ['user.id', 'session.data.experimentId'],
+        requestContextKeys: ['user.id', 'session.data.experimentId'],
         exporters: [testExporter],
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('user', { id: 'user-456', name: 'Test User' });
-      runtimeContext.set('session', { data: { experimentId: 'exp-999' } });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-456', name: 'Test User' });
+      requestContext.set('session', { data: { experimentId: 'exp-999' } });
 
       const span = aiTracing.startSpan({
         type: AISpanType.AGENT_RUN,
@@ -1359,7 +1359,7 @@ describe('AI Tracing', () => {
         attributes: {
           agentId: 'agent-1',
         },
-        runtimeContext,
+        requestContext,
       });
 
       // Verify nested values were extracted
@@ -1375,13 +1375,13 @@ describe('AI Tracing', () => {
       const aiTracing = new DefaultAITracing({
         serviceName: 'test-service',
         name: 'test',
-        runtimeContextKeys: ['userId'],
+        requestContextKeys: ['userId'],
         exporters: [testExporter],
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('userId', 'user-123');
-      runtimeContext.set('toolData', 'tool-specific');
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      requestContext.set('toolData', 'tool-specific');
 
       // Create root span
       const rootSpan = aiTracing.startSpan({
@@ -1390,7 +1390,7 @@ describe('AI Tracing', () => {
         attributes: {
           agentId: 'agent-1',
         },
-        runtimeContext,
+        requestContext,
       });
 
       // Create child span - should inherit TraceState
@@ -1404,32 +1404,32 @@ describe('AI Tracing', () => {
 
       // Verify TraceState was inherited
       expect(childSpan.traceState).toEqual(rootSpan.traceState);
-      expect(childSpan.traceState?.runtimeContextKeys).toEqual(['userId']);
+      expect(childSpan.traceState?.requestContextKeys).toEqual(['userId']);
 
       rootSpan.end();
     });
 
-    it('should extract metadata in child spans when runtimeContext is passed', () => {
+    it('should extract metadata in child spans when requestContext is passed', () => {
       const aiTracing = new DefaultAITracing({
         serviceName: 'test-service',
         name: 'test',
-        runtimeContextKeys: ['userId', 'sessionId'],
+        requestContextKeys: ['userId', 'sessionId'],
         exporters: [testExporter],
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('userId', 'user-123');
-      runtimeContext.set('sessionId', 'session-456');
-      runtimeContext.set('requestId', 'request-789');
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      requestContext.set('sessionId', 'session-456');
+      requestContext.set('requestId', 'request-789');
 
-      // Create root span with RuntimeContext
+      // Create root span with RequestContext
       const rootSpan = aiTracing.startSpan({
         type: AISpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-1',
         },
-        runtimeContext,
+        requestContext,
       });
 
       // Root span should have extracted metadata
@@ -1438,14 +1438,14 @@ describe('AI Tracing', () => {
         sessionId: 'session-456',
       });
 
-      // Create child span WITH runtimeContext passed
+      // Create child span WITH requestContext passed
       const childSpan = rootSpan.createChildSpan({
         type: AISpanType.TOOL_CALL,
         name: 'tool-call',
         attributes: {
           toolId: 'tool-1',
         },
-        runtimeContext, // Pass RuntimeContext to child
+        requestContext, // Pass RequestContext to child
       });
 
       // Child span should also have extracted metadata
@@ -1455,7 +1455,7 @@ describe('AI Tracing', () => {
       });
       expect(childSpan.traceState).toEqual(rootSpan.traceState);
 
-      // Create another child WITHOUT runtimeContext
+      // Create another child WITHOUT requestContext
       const childSpanNoContext = rootSpan.createChildSpan({
         type: AISpanType.MODEL_GENERATION,
         name: 'llm-call',
@@ -1475,12 +1475,12 @@ describe('AI Tracing', () => {
       const aiTracing = new DefaultAITracing({
         serviceName: 'test-service',
         name: 'test',
-        runtimeContextKeys: ['userId'],
+        requestContextKeys: ['userId'],
         exporters: [testExporter],
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('userId', 'user-from-context');
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-from-context');
 
       const span = aiTracing.startSpan({
         type: AISpanType.AGENT_RUN,
@@ -1488,7 +1488,7 @@ describe('AI Tracing', () => {
         attributes: {
           agentId: 'agent-1',
         },
-        runtimeContext,
+        requestContext,
         metadata: {
           userId: 'user-explicit',
           customField: 'custom-value',
@@ -1504,11 +1504,11 @@ describe('AI Tracing', () => {
       span.end();
     });
 
-    it('should handle missing RuntimeContext gracefully', () => {
+    it('should handle missing RequestContext gracefully', () => {
       const aiTracing = new DefaultAITracing({
         serviceName: 'test-service',
         name: 'test',
-        runtimeContextKeys: ['userId'],
+        requestContextKeys: ['userId'],
         exporters: [testExporter],
       });
 
@@ -1518,25 +1518,25 @@ describe('AI Tracing', () => {
         attributes: {
           agentId: 'agent-1',
         },
-        // No runtimeContext provided
+        // No requestContext provided
       });
 
-      // Should not have metadata from RuntimeContext
+      // Should not have metadata from RequestContext
       expect(span.metadata).toBeUndefined();
 
       span.end();
     });
 
-    it('should skip undefined values in RuntimeContext', () => {
+    it('should skip undefined values in RequestContext', () => {
       const aiTracing = new DefaultAITracing({
         serviceName: 'test-service',
         name: 'test',
-        runtimeContextKeys: ['userId', 'missingKey'],
+        requestContextKeys: ['userId', 'missingKey'],
         exporters: [testExporter],
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('userId', 'user-123');
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
       // missingKey is not set
 
       const span = aiTracing.startSpan({
@@ -1545,7 +1545,7 @@ describe('AI Tracing', () => {
         attributes: {
           agentId: 'agent-1',
         },
-        runtimeContext,
+        requestContext,
       });
 
       // Should only include userId

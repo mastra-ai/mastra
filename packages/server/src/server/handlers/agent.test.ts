@@ -2,7 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { openai as openaiV5 } from '@ai-sdk/openai-v5';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
-import { RuntimeContext } from '@mastra/core/di';
+import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
 import { UnicodeNormalizer, TokenLimiterProcessor } from '@mastra/core/processors';
 import type { MastraStorage } from '@mastra/core/storage';
@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import {
-  getAgentsHandler,
+  listAgentsHandler,
   getAgentByIdHandler,
   generateHandler,
   updateAgentModelHandler,
@@ -71,7 +71,7 @@ describe('Agent Handlers', () => {
   let mockMastra: Mastra;
   let mockAgent: Agent;
   let mockMultiModelAgent: Agent;
-  const runtimeContext = new RuntimeContext();
+  const requestContext = new RequestContext();
 
   beforeEach(() => {
     mockAgent = makeMockAgent();
@@ -89,9 +89,9 @@ describe('Agent Handlers', () => {
     });
   });
 
-  describe('getAgentsHandler', () => {
+  describe('listAgentsHandler', () => {
     it('should return serialized agents', async () => {
-      const result = await getAgentsHandler({ mastra: mockMastra, runtimeContext });
+      const result = await listAgentsHandler({ mastra: mockMastra, requestContext });
 
       expect(result).toEqual({
         'test-agent': {
@@ -162,7 +162,7 @@ describe('Agent Handlers', () => {
         },
       });
 
-      const result = await getAgentsHandler({ mastra: mastraWithCoreProcessors, runtimeContext });
+      const result = await listAgentsHandler({ mastra: mastraWithCoreProcessors, requestContext });
 
       expect(result['agent-with-core-processors']).toMatchObject({
         name: 'agent-with-core-processors',
@@ -216,7 +216,7 @@ describe('Agent Handlers', () => {
       workflow.then(firstStep).then(secondStep);
       mockAgent = makeMockAgent({ workflows: { hello: workflow } });
       mockMastra = makeMastraMock({ agents: { 'test-agent': mockAgent } });
-      const result = await getAgentByIdHandler({ mastra: mockMastra, agentId: 'test-agent', runtimeContext });
+      const result = await getAgentByIdHandler({ mastra: mockMastra, agentId: 'test-agent', requestContext });
 
       expect(result).toEqual({
         name: 'test-agent',
@@ -253,7 +253,7 @@ describe('Agent Handlers', () => {
       const result = await getAgentByIdHandler({
         mastra: mockMastra,
         agentId: 'test-multi-model-agent',
-        runtimeContext,
+        requestContext,
       });
       if (!result) {
         expect.fail('Result should be defined');
@@ -282,7 +282,7 @@ describe('Agent Handlers', () => {
 
     it('should throw 404 when agent not found', async () => {
       await expect(
-        getAgentByIdHandler({ mastra: mockMastra, runtimeContext, agentId: 'non-existing' }),
+        getAgentByIdHandler({ mastra: mockMastra, requestContext, agentId: 'non-existing' }),
       ).rejects.toThrow(
         new HTTPException(404, {
           message: 'Agent with name non-existing not found',
@@ -305,13 +305,13 @@ describe('Agent Handlers', () => {
           threadId: 'test-thread',
           experimental_output: undefined,
           // @ts-expect-error
-          runtimeContext: {
+          requestContext: {
             user: {
               name: 'test-user',
             },
           },
         },
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
 
       expect(result).toEqual(mockResult);
@@ -328,13 +328,13 @@ describe('Agent Handlers', () => {
             threadId: 'test-thread',
             experimental_output: undefined,
             // @ts-expect-error
-            runtimeContext: {
+            requestContext: {
               user: {
                 name: 'test-user',
               },
             },
           },
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Agent with name non-existing not found' }));
     });
@@ -357,13 +357,13 @@ describe('Agent Handlers', () => {
           threadId: 'test-thread',
           experimental_output: undefined,
           // @ts-expect-error
-          runtimeContext: {
+          requestContext: {
             user: {
               name: 'test-user',
             },
           },
         },
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
 
       expect(result).toBeInstanceOf(Response);
@@ -380,13 +380,13 @@ describe('Agent Handlers', () => {
             threadId: 'test-thread',
             experimental_output: undefined,
             // @ts-expect-error
-            runtimeContext: {
+            requestContext: {
               user: {
                 name: 'test-user',
               },
             },
           },
-          runtimeContext: new RuntimeContext(),
+          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Agent with name non-existing not found' }));
     });
@@ -424,13 +424,13 @@ describe('Agent Handlers', () => {
           threadId: 'test-thread',
           experimental_output: undefined,
           // @ts-expect-error
-          runtimeContext: {
+          requestContext: {
             user: {
               name: 'test-user',
             },
           },
         },
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
 
       expect((result as AISDKV5OutputStream<any>).toTextStreamResponse()).toBeInstanceOf(Response);

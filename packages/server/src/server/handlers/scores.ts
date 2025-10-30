@@ -1,17 +1,17 @@
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 import type { StoragePagination } from '@mastra/core/storage';
 import type { Context } from '../types';
 import { handleError } from './error';
 
-async function getScorersFromSystem({
+async function listScorersFromSystem({
   mastra,
-  runtimeContext,
+  requestContext,
 }: Context & {
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
 }) {
-  const agents = mastra.getAgents();
-  const workflows = mastra.getWorkflows();
+  const agents = mastra.listAgents();
+  const workflows = mastra.listWorkflows();
 
   const scorersMap = new Map<
     string,
@@ -20,8 +20,8 @@ async function getScorersFromSystem({
 
   for (const [agentId, agent] of Object.entries(agents)) {
     const scorers =
-      (await agent.getScorers({
-        runtimeContext,
+      (await agent.listScorers({
+        requestContext,
       })) || {};
 
     if (Object.keys(scorers).length > 0) {
@@ -45,8 +45,8 @@ async function getScorersFromSystem({
 
   for (const [workflowId, workflow] of Object.entries(workflows)) {
     const scorers =
-      (await workflow.getScorers({
-        runtimeContext,
+      (await workflow.listScorers({
+        requestContext,
       })) || {};
 
     if (Object.keys(scorers).length > 0) {
@@ -67,7 +67,7 @@ async function getScorersFromSystem({
     }
   }
 
-  const registeredScorers = await mastra.getScorers();
+  const registeredScorers = await mastra.listScorers();
   for (const [_scorerId, scorer] of Object.entries(registeredScorers || {})) {
     const scorerName = scorer.name;
     if (scorersMap.has(scorerName)) {
@@ -86,10 +86,10 @@ async function getScorersFromSystem({
   return Object.fromEntries(scorersMap.entries());
 }
 
-export async function getScorersHandler({ mastra, runtimeContext }: Context & { runtimeContext: RuntimeContext }) {
-  const scorers = await getScorersFromSystem({
+export async function listScorersHandler({ mastra, requestContext }: Context & { requestContext: RequestContext }) {
+  const scorers = await listScorersFromSystem({
     mastra,
-    runtimeContext,
+    requestContext,
   });
 
   return scorers;
@@ -98,11 +98,11 @@ export async function getScorersHandler({ mastra, runtimeContext }: Context & { 
 export async function getScorerHandler({
   mastra,
   scorerId,
-  runtimeContext,
-}: Context & { scorerId: string; runtimeContext: RuntimeContext }) {
-  const scorers = await getScorersFromSystem({
+  requestContext,
+}: Context & { scorerId: string; requestContext: RequestContext }) {
+  const scorers = await listScorersFromSystem({
     mastra,
-    runtimeContext,
+    requestContext,
   });
 
   const scorer = scorers[scorerId];

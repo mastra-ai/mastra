@@ -49,7 +49,7 @@ interface ScorerRun<TInput = any, TOutput = any> {
   input?: TInput;
   output: TOutput;
   groundTruth?: any;
-  runtimeContext?: Record<string, any>;
+  requestContext?: Record<string, any>;
   tracingContext?: TracingContext;
 }
 

@@ -1,14 +1,14 @@
 import { createSampleScore } from '@internal/storage-test-utils';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import type { StoragePagination } from '@mastra/core/storage';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createWorkflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
-import { getScorersHandler, getScoresByRunIdHandler, getScoresByEntityIdHandler, saveScoreHandler } from './scores';
+import { listScorersHandler, getScoresByRunIdHandler, getScoresByEntityIdHandler, saveScoreHandler } from './scores';
 
 function createPagination(args: Partial<StoragePagination>): StoragePagination {
   return {
@@ -47,11 +47,11 @@ describe('Scores Handlers', () => {
     });
   });
 
-  describe('getScorersHandler', () => {
+  describe('listScorersHandler', () => {
     it('should return empty object', async () => {
-      const result = await getScorersHandler({
+      const result = await listScorersHandler({
         mastra,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       });
       expect(result).toEqual({});
     });

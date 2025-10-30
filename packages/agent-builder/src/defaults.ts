@@ -1081,7 +1081,7 @@ export const mastra = new Mastra({
   /**
    * Get tools for a specific mode
    */
-  static async getToolsForMode(
+  static async listToolsForMode(
     projectPath: string,
     mode: 'template' | 'code-editor' = 'code-editor',
   ): Promise<Record<string, any>> {

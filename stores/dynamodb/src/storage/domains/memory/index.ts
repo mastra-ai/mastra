@@ -10,8 +10,8 @@ import type {
   ThreadSortOptions,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdPaginatedInput,
-  StorageListThreadsByResourceIdPaginatedOutput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
 
@@ -428,9 +428,9 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
    * @todo When migrating from getThreadsByResourceIdPaginated to this method,
    * implement orderBy and sortDirection support for full sorting capabilities
    */
-  public async listThreadsByResourceIdPaginated(
-    args: StorageListThreadsByResourceIdPaginatedInput,
-  ): Promise<StorageListThreadsByResourceIdPaginatedOutput> {
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, limit, offset } = args;
     const page = Math.floor(offset / limit);
     const perPage = limit;

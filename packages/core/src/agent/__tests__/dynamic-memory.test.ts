@@ -3,7 +3,7 @@ import { MockLanguageModelV1 } from 'ai/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../memory/mock';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
 
@@ -53,7 +53,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       expect(memory).toBe(mockMemory);
     });
 
-    it('should support dynamic memory configuration with runtimeContext', async () => {
+    it('should support dynamic memory configuration with requestContext', async () => {
       const premiumMemory = new MockMemory({ storage: new InMemoryStore() });
       const standardMemory = new MockMemory({ storage: new InMemoryStore() });
 
@@ -61,22 +61,22 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
         name: 'dynamic-memory-agent',
         instructions: 'test agent',
         model: dummyModel,
-        memory: ({ runtimeContext }) => {
-          const userTier = runtimeContext.get('userTier');
+        memory: ({ requestContext }) => {
+          const userTier = requestContext.get('userTier');
           return userTier === 'premium' ? premiumMemory : standardMemory;
         },
       });
 
       // Test with premium context
-      const premiumContext = new RuntimeContext();
+      const premiumContext = new RequestContext();
       premiumContext.set('userTier', 'premium');
-      const premiumResult = await agent.getMemory({ runtimeContext: premiumContext });
+      const premiumResult = await agent.getMemory({ requestContext: premiumContext });
       expect(premiumResult).toBe(premiumMemory);
 
       // Test with standard context
-      const standardContext = new RuntimeContext();
+      const standardContext = new RequestContext();
       standardContext.set('userTier', 'standard');
-      const standardResult = await agent.getMemory({ runtimeContext: standardContext });
+      const standardResult = await agent.getMemory({ requestContext: standardContext });
       expect(standardResult).toBe(standardMemory);
     });
 
@@ -87,8 +87,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
         name: 'async-memory-agent',
         instructions: 'test agent',
         model: dummyModel,
-        memory: async ({ runtimeContext }) => {
-          const userId = runtimeContext.get('userId') as string;
+        memory: async ({ requestContext }) => {
+          const userId = requestContext.get('userId') as string;
           // Simulate async memory creation/retrieval
           await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -101,10 +101,10 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
         },
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('userId', 'user123');
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user123');
 
-      const memory = await agent.getMemory({ runtimeContext });
+      const memory = await agent.getMemory({ requestContext });
       expect(memory).toBe(mockMemory);
       const thread = await mockMemory.getThreadById({ threadId: `user-user123` });
       expect(thread).toBeDefined();
@@ -129,8 +129,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
         name: 'generate-memory-agent',
         instructions: 'test agent',
         model: dummyModel,
-        memory: ({ runtimeContext }) => {
-          const environment = runtimeContext.get('environment');
+        memory: ({ requestContext }) => {
+          const environment = requestContext.get('environment');
           if (environment === 'test') {
             return mockMemory;
           }
@@ -139,8 +139,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
         },
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('environment', 'test');
+      const requestContext = new RequestContext();
+      requestContext.set('environment', 'test');
 
       let response;
       if (version === 'v1') {
@@ -151,7 +151,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
               id: 'thread-1',
             },
           },
-          runtimeContext,
+          requestContext,
         });
       } else {
         response = await agent.generate('test message', {
@@ -161,7 +161,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
               id: 'thread-1',
             },
           },
-          runtimeContext,
+          requestContext,
         });
       }
 
@@ -232,14 +232,14 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
         name: 'stream-memory-agent',
         instructions: 'test agent',
         model,
-        memory: ({ runtimeContext }) => {
-          const enableMemory = runtimeContext.get('enableMemory');
+        memory: ({ requestContext }) => {
+          const enableMemory = requestContext.get('enableMemory');
           return enableMemory ? mockMemory : new MockMemory({ storage: new InMemoryStore() });
         },
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('enableMemory', true);
+      const requestContext = new RequestContext();
+      requestContext.set('enableMemory', true);
 
       let stream;
 
@@ -251,7 +251,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
               id: 'thread-stream',
             },
           },
-          runtimeContext,
+          requestContext,
         });
       } else {
         stream = await agent.stream('test message', {
@@ -261,7 +261,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
               id: 'thread-stream',
             },
           },
-          runtimeContext,
+          requestContext,
         });
       }
 

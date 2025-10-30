@@ -33,11 +33,11 @@ describe('Scores Methods', () => {
     client = new MastraClient(clientOptions);
   });
 
-  describe('getScorers()', () => {
+  describe('listScorers()', () => {
     it('should fetch all available scorers', async () => {
       mockSuccessfulResponse();
 
-      await client.getScorers();
+      await client.listScorers();
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/scores/scorers`,
         expect.objectContaining({

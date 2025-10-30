@@ -12,4 +12,4 @@
 '@mastra/pg': major
 ---
 
-Add new list methods to storage API: `listMessages`, `listMessagesById`, `listThreadsByResourceIdPaginated`, and `listWorkflowRuns`. Most methods are currently wrappers around existing methods. Full implementations will be added when migrating away from legacy methods.
+Add new list methods to storage API: `listMessages`, `listMessagesById`, `listThreadsByResourceId`, and `listWorkflowRuns`. Most methods are currently wrappers around existing methods. Full implementations will be added when migrating away from legacy methods.

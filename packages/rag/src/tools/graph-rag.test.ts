@@ -1,4 +1,4 @@
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GraphRAG } from '../graph-rag';
 import { vectorQuerySearch } from '../utils';
@@ -63,25 +63,25 @@ describe('createGraphRAGTool', () => {
     expect(() => tool.inputSchema?.parse({})).toThrow();
   });
 
-  describe('runtimeContext', () => {
-    it('calls vectorQuerySearch and GraphRAG with runtimeContext params', async () => {
+  describe('requestContext', () => {
+    it('calls vectorQuerySearch and GraphRAG with requestContext params', async () => {
       const tool = createGraphRAGTool({
         id: 'test',
         model: mockModel,
         indexName: 'testIndex',
         vectorStoreName: 'testStore',
       });
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('indexName', 'anotherIndex');
-      runtimeContext.set('vectorStoreName', 'anotherStore');
-      runtimeContext.set('topK', 5);
-      runtimeContext.set('filter', { foo: 'bar' });
-      runtimeContext.set('randomWalkSteps', 99);
-      runtimeContext.set('restartProb', 0.42);
+      const requestContext = new RequestContext();
+      requestContext.set('indexName', 'anotherIndex');
+      requestContext.set('vectorStoreName', 'anotherStore');
+      requestContext.set('topK', 5);
+      requestContext.set('filter', { foo: 'bar' });
+      requestContext.set('randomWalkSteps', 99);
+      requestContext.set('restartProb', 0.42);
       const result = await tool.execute({
         context: { queryText: 'foo', topK: 2 },
         mastra: mockMastra as any,
-        runtimeContext,
+        requestContext,
       });
       expect(result.relevantContext).toEqual(['foo', 'bar']);
       expect(result.sources.length).toBe(2);

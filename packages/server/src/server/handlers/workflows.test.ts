@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { getWorkflowInfo } from '../utils';
 import {
-  getWorkflowsHandler,
+  listWorkflowsHandler,
   getWorkflowByIdHandler,
   startAsyncWorkflowHandler,
   getWorkflowRunByIdHandler,
@@ -19,7 +19,7 @@ import {
   observeStreamWorkflowHandler,
   cancelWorkflowRunHandler,
   sendWorkflowRunEventHandler,
-  getWorkflowRunsHandler,
+  listWorkflowRunsHandler,
   getWorkflowRunExecutionResultHandler,
 } from './workflows';
 
@@ -58,7 +58,6 @@ function createMockWorkflow(name: string) {
     .then(stepA)
     .commit();
 
-  // workflow.getWorkflowRuns = vi.fn();
   return workflow;
 }
 function createReusableMockWorkflow(name: string) {
@@ -111,9 +110,9 @@ describe('vNext Workflow Handlers', () => {
     });
   });
 
-  describe('getWorkflowsHandler', () => {
+  describe('listWorkflowsHandler', () => {
     it('should get all workflows successfully', async () => {
-      const result = await getWorkflowsHandler({ mastra: mockMastra });
+      const result = await listWorkflowsHandler({ mastra: mockMastra });
       expect(result).toEqual({
         'test-workflow': serializeWorkflow(mockWorkflow),
         'reusable-workflow': serializeWorkflow(reusableWorkflow),
@@ -612,15 +611,15 @@ describe('vNext Workflow Handlers', () => {
     });
   });
 
-  describe('getWorkflowRunsHandler', () => {
+  describe('listWorkflowRunsHandler', () => {
     it('should throw error when workflowId is not provided', async () => {
-      await expect(getWorkflowRunsHandler({ mastra: mockMastra })).rejects.toThrow(
+      await expect(listWorkflowRunsHandler({ mastra: mockMastra })).rejects.toThrow(
         new HTTPException(400, { message: 'Workflow ID is required' }),
       );
     });
 
     it('should get workflow runs successfully (empty)', async () => {
-      const result = await getWorkflowRunsHandler({
+      const result = await listWorkflowRunsHandler({
         mastra: mockMastra,
         workflowId: 'test-workflow',
       });
@@ -636,7 +635,7 @@ describe('vNext Workflow Handlers', () => {
         runId: 'test-run',
       });
       await run.start({ inputData: {} });
-      const result = await getWorkflowRunsHandler({
+      const result = await listWorkflowRunsHandler({
         mastra: mockMastra,
         workflowId: 'test-workflow',
       });

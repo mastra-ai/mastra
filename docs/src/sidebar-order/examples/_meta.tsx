@@ -18,10 +18,6 @@ const meta = {
     title: "Memory",
     theme: { collapsed: true },
   },
-  workflows_legacy: {
-    title: "Workflows (Legacy)",
-    display: "hidden",
-  },
   rag: {
     title: "RAG",
     theme: { collapsed: true },

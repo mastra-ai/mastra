@@ -7,8 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
   getMemoryStatusHandler,
-  getThreadsHandler,
-  getThreadsPaginatedHandler,
+  listThreadsHandler,
   getThreadByIdHandler,
   saveMessagesHandler,
   createThreadHandler,
@@ -89,56 +88,7 @@ describe('Memory Handlers', () => {
     });
   });
 
-  describe('getThreadsHandler', () => {
-    it('should throw error when memory is not initialized', async () => {
-      const mastra = new Mastra({
-        logger: false,
-        agents: {
-          'test-agent': new Agent({
-            name: 'test-agent',
-            instructions: 'test-instructions',
-            model: {} as any,
-          }),
-        },
-      });
-      await expect(getThreadsHandler({ mastra, resourceId: 'test-resource', agentId: 'test-agent' })).rejects.toThrow(
-        new HTTPException(400, { message: 'Memory is not initialized' }),
-      );
-    });
-
-    it('should throw error when resourceId is not provided', async () => {
-      const mastra = new Mastra({
-        logger: false,
-        agents: {
-          'test-agent': mockAgent,
-        },
-      });
-      await expect(getThreadsHandler({ mastra, agentId: 'test-agent' })).rejects.toThrow(
-        new HTTPException(400, { message: 'Argument "resourceId" is required' }),
-      );
-    });
-
-    it('should return threads for valid resourceId', async () => {
-      const mastra = new Mastra({
-        logger: false,
-        agents: {
-          'test-agent': mockAgent,
-        },
-      });
-
-      await mockMemory.createThread({ resourceId: 'test-resource' });
-
-      const spy = vi.spyOn(mockMemory, 'getThreadsByResourceId');
-
-      const result = await getThreadsHandler({ mastra, resourceId: 'test-resource', agentId: 'test-agent' });
-
-      expect(result[0].resourceId).toEqual('test-resource');
-
-      expect(spy).toBeCalledWith({ resourceId: 'test-resource' });
-    });
-  });
-
-  describe('getThreadsPaginatedHandler', () => {
+  describe('listThreadsHandler', () => {
     it('should throw error when memory is not initialized', async () => {
       const mastra = new Mastra({
         logger: false,
@@ -151,12 +101,12 @@ describe('Memory Handlers', () => {
         },
       });
       await expect(
-        getThreadsPaginatedHandler({
+        listThreadsHandler({
           mastra,
           resourceId: 'test-resource',
           agentId: 'test-agent',
-          page: 0,
-          perPage: 10,
+          offset: 0,
+          limit: 10,
           orderBy: 'createdAt',
           sortDirection: 'DESC',
         }),
@@ -169,11 +119,11 @@ describe('Memory Handlers', () => {
         agents: { 'test-agent': mockAgent },
       });
       await expect(
-        getThreadsPaginatedHandler({
+        listThreadsHandler({
           mastra,
           agentId: 'test-agent',
-          page: 0,
-          perPage: 10,
+          offset: 0,
+          limit: 10,
           orderBy: 'createdAt',
           sortDirection: 'DESC',
         }),
@@ -188,14 +138,14 @@ describe('Memory Handlers', () => {
 
       await mockMemory.createThread({ resourceId: 'test-resource' });
 
-      const spy = vi.spyOn(mockMemory, 'getThreadsByResourceIdPaginated');
+      const spy = vi.spyOn(mockMemory, 'listThreadsByResourceId');
 
-      const result = await getThreadsPaginatedHandler({
+      const result = await listThreadsHandler({
         mastra,
         resourceId: 'test-resource',
         agentId: 'test-agent',
-        page: 0,
-        perPage: 10,
+        offset: 0,
+        limit: 10,
         orderBy: 'createdAt',
         sortDirection: 'DESC',
       });
@@ -208,8 +158,8 @@ describe('Memory Handlers', () => {
 
       expect(spy).toBeCalledWith({
         resourceId: 'test-resource',
-        page: 0,
-        perPage: 10,
+        offset: 0,
+        limit: 10,
         orderBy: 'createdAt',
         sortDirection: 'DESC',
       });
@@ -224,14 +174,14 @@ describe('Memory Handlers', () => {
         agents: { 'test-agent': mockAgent },
       });
 
-      const spy = vi.spyOn(mockMemory, 'getThreadsByResourceIdPaginated');
+      const spy = vi.spyOn(mockMemory, 'listThreadsByResourceId');
 
-      const result = await getThreadsPaginatedHandler({
+      const result = await listThreadsHandler({
         mastra,
         resourceId: 'test-resource',
         agentId: 'test-agent',
-        page: 0,
-        perPage: 20,
+        offset: 0,
+        limit: 20,
         orderBy: 'updatedAt',
         sortDirection: 'ASC',
       });
@@ -239,8 +189,8 @@ describe('Memory Handlers', () => {
       expect(result.threads).toHaveLength(1);
       expect(spy).toHaveBeenCalledWith({
         resourceId: 'test-resource',
-        page: 0,
-        perPage: 20,
+        offset: 0,
+        limit: 20,
         orderBy: 'updatedAt',
         sortDirection: 'ASC',
       });
@@ -256,15 +206,15 @@ describe('Memory Handlers', () => {
         agents: { 'test-agent': mockAgent },
       });
 
-      const spy = vi.spyOn(mockMemory, 'getThreadsByResourceIdPaginated');
+      const spy = vi.spyOn(mockMemory, 'listThreadsByResourceId');
 
       // Test updatedAt DESC sorting
-      const result = await getThreadsPaginatedHandler({
+      const result = await listThreadsHandler({
         mastra,
         resourceId: 'test-resource',
         agentId: 'test-agent',
-        page: 0,
-        perPage: 10,
+        offset: 0,
+        limit: 10,
         orderBy: 'updatedAt',
         sortDirection: 'DESC',
       });
@@ -272,8 +222,8 @@ describe('Memory Handlers', () => {
       expect(result.threads).toHaveLength(2);
       expect(spy).toHaveBeenCalledWith({
         resourceId: 'test-resource',
-        page: 0,
-        perPage: 10,
+        offset: 0,
+        limit: 10,
         orderBy: 'updatedAt',
         sortDirection: 'DESC',
       });
@@ -286,14 +236,14 @@ describe('Memory Handlers', () => {
         agents: { 'test-agent': mockAgent },
       });
 
-      const spy = vi.spyOn(mockMemory, 'getThreadsByResourceIdPaginated');
+      const spy = vi.spyOn(mockMemory, 'listThreadsByResourceId');
 
-      const result = await getThreadsPaginatedHandler({
+      const result = await listThreadsHandler({
         mastra,
         resourceId: 'non-existent-resource',
         agentId: 'test-agent',
-        page: 0,
-        perPage: 10,
+        offset: 0,
+        limit: 10,
         orderBy: 'createdAt',
         sortDirection: 'DESC',
       });

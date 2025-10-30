@@ -144,6 +144,7 @@ const config = {
       ({
         docs: {
           path: "src/content/en/docs",
+          routeBasePath: "docs",
           sidebarPath: "./src/content/en/docs/sidebars.js",
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.

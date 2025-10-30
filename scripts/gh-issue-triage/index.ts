@@ -52,7 +52,7 @@ async function main() {
     },
   });
 
-  const tools = await mcpClient.getTools();
+  const tools = await mcpClient.listTools();
 
   const octokit = new Octokit({
     auth: GITHUB_PERSONAL_ACCESS_TOKEN,

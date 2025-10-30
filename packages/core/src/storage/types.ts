@@ -1,7 +1,6 @@
 import type { AISpanType } from '../ai-tracing';
 import type { MemoryConfig, MastraMessageV2, StorageThreadType } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
-import type { LegacyWorkflowRunState } from '../workflows/legacy';
 
 export type StoragePagination = {
   page: number;
@@ -17,21 +16,6 @@ export interface StorageColumn {
     column: string;
   };
 }
-
-export interface LegacyWorkflowRuns {
-  runs: LegacyWorkflowRun[];
-  total: number;
-}
-
-export interface LegacyWorkflowRun {
-  workflowName: string;
-  runId: string;
-  snapshot: LegacyWorkflowRunState | string;
-  createdAt: Date;
-  updatedAt: Date;
-  resourceId?: string;
-}
-
 export interface WorkflowRuns {
   runs: WorkflowRun[];
   total: number;
@@ -108,13 +92,13 @@ export type StorageListWorkflowRunsInput = {
   resourceId?: string;
 };
 
-export type StorageListThreadsByResourceIdPaginatedInput = {
+export type StorageListThreadsByResourceIdInput = {
   resourceId: string;
   limit: number;
   offset: number;
 } & ThreadSortOptions;
 
-export type StorageListThreadsByResourceIdPaginatedOutput = PaginationInfo & {
+export type StorageListThreadsByResourceIdOutput = PaginationInfo & {
   threads: StorageThreadType[];
 };
 

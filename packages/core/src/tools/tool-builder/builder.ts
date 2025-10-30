@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { AISpanType, wrapMastra } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { ToolStream } from '../stream';
@@ -153,7 +153,7 @@ export class CoreToolBuilder extends MastraBase {
     processedSchema?: z.ZodTypeAny,
   ) {
     // dont't add memory or mastra to logging
-    const { logger, mastra: _mastra, memory: _memory, runtimeContext, model, ...rest } = options;
+    const { logger, mastra: _mastra, memory: _memory, requestContext, model, ...rest } = options;
     const logModelObject = {
       modelId: model?.modelId,
       provider: model?.provider,
@@ -197,11 +197,11 @@ export class CoreToolBuilder extends MastraBase {
            * MASTRA INSTANCE TYPES IN TOOL EXECUTION:
            *
            * Full Mastra & MastraPrimitives (has getAgent, getWorkflow, etc.):
-           * - Auto-generated workflow tools from agent.getWorkflows()
+           * - Auto-generated workflow tools from agent.listWorkflows()
            * - These get this.#mastra directly and can be wrapped
            *
            * MastraPrimitives only (limited interface):
-           * - Memory tools (from memory.getTools())
+           * - Memory tools (from memory.listTools())
            * - Assigned tools (agent.tools)
            * - Toolset tools (from toolsets)
            * - Client tools (passed as tools in generate/stream options)
@@ -220,7 +220,7 @@ export class CoreToolBuilder extends MastraBase {
               mastra: wrappedMastra,
               memory: options.memory,
               runId: options.runId,
-              runtimeContext: options.runtimeContext ?? new RuntimeContext(),
+              requestContext: options.requestContext ?? new RequestContext(),
               writer: new ToolStream(
                 {
                   prefix: 'tool',

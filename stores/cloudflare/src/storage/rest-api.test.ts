@@ -986,13 +986,13 @@ describe.skip('CloudflareStore REST API', () => {
     });
   });
 
-  describe('getWorkflowRuns', () => {
+  describe('listWorkflowRuns', () => {
     const testNamespace = 'test-namespace';
     beforeEach(async () => {
       await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     });
     it('returns empty array when no workflows exist', async () => {
-      const { runs, total } = await store.getWorkflowRuns();
+      const { runs, total } = await store.listWorkflowRuns();
       expect(runs).toEqual([]);
       expect(total).toBe(0);
     });
@@ -1028,7 +1028,7 @@ describe.skip('CloudflareStore REST API', () => {
         snapshot: workflow2,
       });
 
-      const { runs, total } = await store.getWorkflowRuns({ namespace: 'test' });
+      const { runs, total } = await store.listWorkflowRuns({ namespace: 'test' });
       expect(runs).toHaveLength(2);
       expect(total).toBe(2);
       expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
@@ -1065,7 +1065,7 @@ describe.skip('CloudflareStore REST API', () => {
         snapshot: workflow2,
       });
 
-      const { runs, total } = await store.getWorkflowRuns({ namespace: 'test', workflowName: workflowName1 });
+      const { runs, total } = await store.listWorkflowRuns({ namespace: 'test', workflowName: workflowName1 });
       expect(runs).toHaveLength(1);
       expect(total).toBe(1);
       expect(runs[0]!.workflowName).toBe(workflowName1);
@@ -1131,7 +1131,7 @@ describe.skip('CloudflareStore REST API', () => {
         },
       });
 
-      const { runs } = await store.getWorkflowRuns({
+      const { runs } = await store.listWorkflowRuns({
         namespace: testNamespace,
         fromDate: yesterday,
         toDate: now,
@@ -1190,7 +1190,7 @@ describe.skip('CloudflareStore REST API', () => {
       });
 
       // Get first page
-      const page1 = await store.getWorkflowRuns({
+      const page1 = await store.listWorkflowRuns({
         namespace: testNamespace,
         limit: 2,
         offset: 0,
@@ -1205,7 +1205,7 @@ describe.skip('CloudflareStore REST API', () => {
       checkWorkflowSnapshot(secondSnapshot, stepId2, 'waiting');
 
       // Get second page
-      const page2 = await store.getWorkflowRuns({
+      const page2 = await store.listWorkflowRuns({
         namespace: testNamespace,
         limit: 2,
         offset: 2,
@@ -1264,7 +1264,7 @@ describe.skip('CloudflareStore REST API', () => {
       expect(notFound).toBeNull();
     });
   });
-  describe('getWorkflowRuns with resourceId', () => {
+  describe('listWorkflowRuns with resourceId', () => {
     const testNamespace = 'test-workflows-id';
     const workflowName = 'workflow-id-test';
     let resourceId: string;
@@ -1307,7 +1307,7 @@ describe.skip('CloudflareStore REST API', () => {
     });
 
     it('should retrieve all workflow runs by resourceId', async () => {
-      const { runs } = await store.getWorkflowRuns({
+      const { runs } = await store.listWorkflowRuns({
         namespace: testNamespace,
         resourceId,
         workflowName,
@@ -1320,7 +1320,7 @@ describe.skip('CloudflareStore REST API', () => {
     });
 
     it('should return an empty array if no workflow runs match resourceId', async () => {
-      const { runs } = await store.getWorkflowRuns({
+      const { runs } = await store.listWorkflowRuns({
         namespace: testNamespace,
         resourceId: 'non-existent-resource',
         workflowName,

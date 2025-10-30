@@ -267,8 +267,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "nvidia/qwen/qwen3-coder-480b-a35b-instruct"
       : "nvidia/black-forest-labs/flux.1-dev";

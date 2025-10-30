@@ -11,8 +11,8 @@ const MAX_STEPS = 1000;
 
 export const financialModelingAgent = new Agent({
   name: 'Financial Modeling Agent',
-  instructions: ({ runtimeContext }) => {
-    const redirectUrl = runtimeContext.get<'redirectUrl', string | undefined>('redirectUrl');
+  instructions: ({ requestContext }) => {
+    const redirectUrl = requestContext.get<'redirectUrl', string | undefined>('redirectUrl');
 
     if (redirectUrl && redirectUrl !== '<redirectUrl>') {
       return `
@@ -50,14 +50,14 @@ ${getFinancialModelingAgentPrompt(true)}
       },
     },
   }),
-  tools: async ({ runtimeContext }) => {
+  tools: async ({ requestContext }) => {
     const composio = new Composio({
       provider: new MastraProvider(),
     });
 
-    // retrieve userId and activeAccount from the runtimeContext
-    const userId = runtimeContext.get<'userId', string>('userId');
-    const activeAccount = runtimeContext.get<
+    // retrieve userId and activeAccount from the requestContext
+    const userId = requestContext.get<'userId', string>('userId');
+    const activeAccount = requestContext.get<
       'activeAccount',
       Awaited<ReturnType<typeof composio.connectedAccounts.list>>['items'][number]
     >('activeAccount');

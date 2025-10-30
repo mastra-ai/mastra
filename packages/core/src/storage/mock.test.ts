@@ -221,22 +221,20 @@ describe('InMemoryStore - Message Fetching', () => {
     store = new InMemoryStore();
   });
 
-  it('getMessages should throw when threadId is an empty string or whitespace only', async () => {
-    await expect(() => store.getMessages({ threadId: '' })).rejects.toThrowError('threadId must be a non-empty string');
+  it('getMessages should return empty array if threadId is an empty string or whitespace only', async () => {
+    const messages = await store.getMessages({ threadId: '' });
+    expect(messages).toHaveLength(0);
 
-    await expect(() => store.getMessages({ threadId: '   ' })).rejects.toThrowError(
-      'threadId must be a non-empty string',
-    );
+    const messages2 = await store.getMessages({ threadId: '   ' });
+    expect(messages2).toHaveLength(0);
   });
 
-  it('getMessagesPaginated should throw when threadId is an empty string or whitespace only', async () => {
-    await expect(() => store.getMessagesPaginated({ threadId: '' })).rejects.toThrowError(
-      'threadId must be a non-empty string',
-    );
+  it('getMessagesPaginated should return empty array if threadId is an empty string or whitespace only', async () => {
+    const result = await store.getMessagesPaginated({ threadId: '' });
+    expect(result.messages).toHaveLength(0);
 
-    await expect(() => store.getMessagesPaginated({ threadId: '   ' })).rejects.toThrowError(
-      'threadId must be a non-empty string',
-    );
+    const result2 = await store.getMessagesPaginated({ threadId: '   ' });
+    expect(result2.messages).toHaveLength(0);
   });
 });
 

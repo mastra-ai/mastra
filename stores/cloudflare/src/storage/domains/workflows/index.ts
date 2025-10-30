@@ -25,13 +25,13 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
       // runId,
       // stepId,
       // result,
-      // runtimeContext,
+      // requestContext,
     }: {
       workflowName: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
+      requestContext: Record<string, any>;
     },
   ): Promise<Record<string, StepResult<any, any, any, any>>> {
     throw new Error('Method not implemented.');
@@ -166,21 +166,14 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     return key;
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     limit = 20,
     offset = 0,
     resourceId,
     fromDate,
     toDate,
-  }: {
-    workflowName?: string;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-    fromDate?: Date;
-    toDate?: Date;
-  } = {}): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       // List all keys in the workflow snapshot table
       const prefix = this.buildWorkflowSnapshotPrefix({ workflowName });
@@ -299,9 +292,5 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
       this.logger.error(mastraError.toString());
       return null;
     }
-  }
-
-  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
-    return this.getWorkflowRuns(args);
   }
 }

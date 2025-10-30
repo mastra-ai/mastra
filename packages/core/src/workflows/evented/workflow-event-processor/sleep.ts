@@ -1,6 +1,6 @@
 import EventEmitter from 'events';
 import type { StepFlowEntry, WorkflowRunState } from '../..';
-import { RuntimeContext } from '../../../di';
+import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
 import type { StepExecutor } from '../step-executor';
 import { getStep } from './utils';
@@ -42,7 +42,7 @@ export async function processWorkflowWaitForEvent(
       stepResults: currentState?.context,
       prevResult,
       activeSteps: [],
-      runtimeContext: currentState?.runtimeContext,
+      requestContext: currentState?.requestContext,
     },
   });
 }
@@ -58,7 +58,7 @@ export async function processWorkflowSleep(
     prevResult,
     resumeData,
     parentWorkflow,
-    runtimeContext,
+    requestContext,
   }: ProcessorArgs,
   {
     pubsub,
@@ -91,7 +91,7 @@ export async function processWorkflowSleep(
     runId,
     stepResults,
     emitter: new EventEmitter() as any, // TODO
-    runtimeContext: new RuntimeContext(), // TODO
+    requestContext: new RequestContext(), // TODO
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
   });
@@ -139,7 +139,7 @@ export async function processWorkflowSleep(
           resumeData,
           parentWorkflow,
           activeSteps,
-          runtimeContext,
+          requestContext,
         },
       });
     },
@@ -158,7 +158,7 @@ export async function processWorkflowSleepUntil(
     prevResult,
     resumeData,
     parentWorkflow,
-    runtimeContext,
+    requestContext,
   }: ProcessorArgs,
   {
     pubsub,
@@ -177,7 +177,7 @@ export async function processWorkflowSleepUntil(
     runId,
     stepResults,
     emitter: new EventEmitter() as any, // TODO
-    runtimeContext: new RuntimeContext(), // TODO
+    requestContext: new RequestContext(), // TODO
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
   });
@@ -239,7 +239,7 @@ export async function processWorkflowSleepUntil(
           resumeData,
           parentWorkflow,
           activeSteps,
-          runtimeContext,
+          requestContext,
         },
       });
     },

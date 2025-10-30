@@ -40,7 +40,7 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
               type: 'object',
               properties: {
                 messages: { type: 'array', items: { type: 'object' } },
-                runtimeContext: { type: 'object', additionalProperties: true },
+                requestContext: { type: 'object', additionalProperties: true },
                 runId: { type: 'string' },
                 maxSteps: { type: 'number' },
                 threadId: { type: 'string' },
