@@ -773,32 +773,26 @@ function runStreamTest(version: 'v1' | 'v2') {
       let request;
       if (version === 'v1') {
         request = JSON.parse((await result.request).body).messages;
-        expect(request).toEqual([
-          {
-            role: 'system',
-            content: 'test!',
-          },
-          {
-            role: 'user',
-            content: 'hello!',
-          },
-          { role: 'assistant', content: 'hi, how are you?' },
-          { role: 'user', content: "I'm good, how are you?" },
-        ]);
+        // Expect 3 messages: 2 system messages (instructions + remembered), 1 user message
+        expect(request).toHaveLength(3);
+        expect(request[0].role).toBe('system');
+        expect(request[0].content).toBe('test!');
+        expect(request[1].role).toBe('system');
+        expect(request[1].content).toContain('remembered from a different conversation');
+        expect(request[1].content).toContain('hello!');
+        expect(request[1].content).toContain('hi, how are you?');
+        expect(request[2]).toEqual({ role: 'user', content: "I'm good, how are you?" });
       } else {
         request = (await result.request).body.input;
-        expect(request).toEqual([
-          {
-            role: 'system',
-            content: 'test!',
-          },
-          {
-            role: 'user',
-            content: [{ type: 'input_text', text: 'hello!' }],
-          },
-          { role: 'assistant', content: [{ type: 'output_text', text: 'hi, how are you?' }] },
-          { role: 'user', content: [{ type: 'input_text', text: "I'm good, how are you?" }] },
-        ]);
+        // Expect 3 messages: 2 system messages (instructions + remembered), 1 user message
+        expect(request).toHaveLength(3);
+        expect(request[0].role).toBe('system');
+        expect(request[0].content).toBe('test!');
+        expect(request[1].role).toBe('system');
+        expect(request[1].content).toContain('remembered from a different conversation');
+        expect(request[1].content).toContain('hello!');
+        expect(request[1].content).toContain('hi, how are you?');
+        expect(request[2]).toEqual({ role: 'user', content: [{ type: 'input_text', text: "I'm good, how are you?" }] });
       }
     });
 

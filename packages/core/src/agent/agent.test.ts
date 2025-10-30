@@ -4248,11 +4248,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(caught).toBe(true);
 
         // After interruption, check what was saved
-        const messages = await mockMemory.getMessages({
+        const result = await mockMemory.getMessages({
           threadId: 'thread-partial-rescue-generate',
           resourceId: 'resource-partial-rescue-generate',
-          format: 'v2',
         });
+        const messages = result.messages;
 
         // User message should be saved
         expect(messages.find(m => m.role === 'user')).toBeTruthy();
@@ -4315,11 +4315,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }
 
         expect(saveCallCount).toBeGreaterThan(1);
-        const messages = await mockMemory.getMessages({
+        const result = await mockMemory.getMessages({
           threadId: 'thread-echo-generate',
           resourceId: 'resource-echo-generate',
-          format: 'v2',
         });
+        const messages = result.messages;
         expect(messages.length).toBeGreaterThan(0);
 
         const assistantMsg = messages.find(m => m.role === 'assistant');
@@ -4391,11 +4391,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           );
         }
         expect(saveCallCount).toBeGreaterThan(1);
-        const messages = await mockMemory.getMessages({
+        const result = await mockMemory.getMessages({
           threadId: 'thread-multi-generate',
           resourceId: 'resource-multi-generate',
-          format: 'v2',
         });
+        const messages = result.messages;
         expect(messages.length).toBeGreaterThan(0);
         const assistantMsg = messages.find(m => m.role === 'assistant');
         expect(assistantMsg).toBeDefined();
@@ -4429,11 +4429,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
         }
 
-        const messages = await mockMemory.getMessages({
+        const result = await mockMemory.getMessages({
           threadId: 'thread-1-generate',
           resourceId: 'resource-1-generate',
-          format: 'v2',
         });
+        const messages = result.messages;
         // Check that the last message matches the expected final output
         expect(
           messages[messages.length - 1]?.content?.parts?.some(
@@ -4523,12 +4523,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(err.message).toBe('Immediate interruption');
       }
 
-      const messages = await mockMemory.getMessages({
+      const result = await mockMemory.getMessages({
         threadId: 'thread-3-generate',
         resourceId: 'resource-3-generate',
       });
 
-      expect(messages.length).toBe(0);
+      expect(result.messages.length).toBe(0);
 
       expect(saveCallCount).toBe(0);
     });
@@ -5643,14 +5643,14 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       }
       // Verify messages were saved with metadata
-      const savedMessages = await mockMemory.getMessages({
+      const result = await mockMemory.getMessages({
         threadId: 'support-thread',
         resourceId: 'customer-12345',
-        format: 'v2',
         selectBy: {
           last: 10,
         },
       });
+      const savedMessages = result.messages;
 
       expect(savedMessages.length).toBeGreaterThan(0);
 
@@ -5724,14 +5724,14 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(finalText).toBe('Response acknowledging metadata');
 
       // Verify messages were saved with metadata
-      const savedMessages = await mockMemory.getMessages({
+      const result = await mockMemory.getMessages({
         threadId: 'mobile-thread',
         resourceId: 'user-mobile',
-        format: 'v2',
         selectBy: {
           last: 10,
         },
       });
+      const savedMessages = result.messages;
 
       expect(savedMessages.length).toBeGreaterThan(0);
 
