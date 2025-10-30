@@ -1,6 +1,4 @@
-import type { UIMessageWithMetadata } from '../agent';
 import { MessageList } from '../agent/message-list';
-import type { CoreMessage } from '../llm';
 import { MastraMemory } from '../memory';
 import type { StorageThreadType, MastraDBMessage, MemoryConfig, MessageDeleteInput } from '../memory';
 import { InMemoryStore } from '../storage';
