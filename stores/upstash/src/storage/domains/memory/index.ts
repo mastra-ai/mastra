@@ -763,17 +763,12 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const list = new MessageList().add(allMessages, 'memory');
       const finalMessages = list.get.all.v2();
 
-      // Calculate hasMore
-      let hasMore: boolean;
-      if (include && include.length > 0) {
-        // When using include, check if we've returned all messages from the thread
-        // because include might bring in messages beyond the pagination window
-        const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
-        hasMore = returnedThreadMessageIds.size < total;
-      } else {
-        // Standard pagination: check if there are more pages
-        hasMore = end < total;
-      }
+      // Calculate hasMore based on pagination window
+      // If all thread messages have been returned (through pagination or include), hasMore = false
+      // Otherwise, check if there are more pages in the pagination window
+      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
+      const hasMore = limit === false ? false : allThreadMessagesReturned ? false : end < total;
 
       return {
         messages: finalMessages,

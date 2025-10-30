@@ -904,21 +904,12 @@ export class MemoryStorageD1 extends MemoryStorage {
         return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
-      // Calculate hasMore
-      let hasMore: boolean;
-      if (include && include.length > 0) {
-        // When using include, check if we've returned all messages from the thread
-        // because include might bring in messages beyond the pagination window
-        const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
-        hasMore = returnedThreadMessageIds.size < total;
-      } else {
-        // Standard pagination: check if there are more pages
-        if (perPage === Number.MAX_SAFE_INTEGER) {
-          hasMore = false; // We got all messages
-        } else {
-          hasMore = offset + paginatedCount < total;
-        }
-      }
+      // Calculate hasMore based on pagination window
+      // If all thread messages have been returned (through pagination or include), hasMore = false
+      // Otherwise, check if there are more pages in the pagination window
+      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
+      const hasMore = limit === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
 
       return {
         messages: finalMessages,
