@@ -229,7 +229,7 @@ describe('Agent Memory Tests', () => {
     (agent as any).getMemoryMessages = async (...args: any[]) => {
       getMemoryMessagesCalled = true;
       const result = await originalGetMemoryMessages.call(agent, ...args);
-      retrievedMemoryMessages = result || [];
+      retrievedMemoryMessages = result?.messages || [];
       return result;
     };
 
