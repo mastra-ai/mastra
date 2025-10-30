@@ -4,7 +4,7 @@ import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { createTool, Mastra } from '../..';
+import { Mastra } from '../../mastra';
 import { Agent } from '../../agent';
 import { RequestContext } from '../../di';
 import { EventEmitterPubSub } from '../../events/event-emitter';
@@ -13,6 +13,7 @@ import { MockStore } from '../../storage/mock';
 import type { StreamEvent, WatchEvent } from '../types';
 import { mapVariable } from '../workflow';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '.';
+import { createTool } from '../../tools';
 
 const testStorage = new MockStore();
 

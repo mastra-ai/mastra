@@ -1,13 +1,14 @@
 import EventEmitter from 'events';
-import type { Emitter, LoopConditionFunction, Mastra, Step, StepFlowEntry, StepResult } from '../..';
+import type { Mastra } from '../../mastra';
 import { MastraBase } from '../../base';
 import type { RequestContext } from '../../di';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { PubSub } from '../../events';
 import { RegisteredLogger } from '../../logger';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
-import { getStepResult } from '../step';
+import { getStepResult, type LoopConditionFunction, type Step } from '../step';
 import { validateStepInput, createDeprecationProxy, runCountDeprecationMessage } from '../utils';
+import type { Emitter, StepFlowEntry, StepResult } from '../types';
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;

@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { Mastra } from '../..';
-import type { StepFlowEntry, StepResult } from '../..';
+import { Mastra } from '../../mastra';
 import { MastraError } from '../../error';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { RequestContext } from '../../request-context';
 import { createStep } from '../workflow';
 import { StepExecutor } from './step-executor';
+import { StepFlowEntry, StepResult } from '../types';
 
 interface SleepFnContext {
   workflowId: string;

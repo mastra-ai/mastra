@@ -135,7 +135,7 @@ Setup the tool:
 In your `src/mastra/index.ts` file, register the agent:
 
 ```ts copy title="src/mastra/index.ts" {2, 5}
-import { Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core/mastra";
 import { searchAgent } from "./agents/searchAgent";
 
 export const mastra = new Mastra({
@@ -260,7 +260,7 @@ export const searchAgent = new Agent({
 In your `src/mastra/index.ts` file, register the agent:
 
 ```ts copy title="src/mastra/index.ts" {2, 5}
-import { Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core/mastra";
 import { searchAgent } from "./agents/searchAgent";
 
 export const mastra = new Mastra({

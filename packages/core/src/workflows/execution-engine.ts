@@ -1,11 +1,11 @@
 import type { WritableStream } from 'node:stream/web';
-import type { Mastra, SerializedStepFlowEntry } from '..';
+import type { Mastra } from '../mastra';
 import type { AISpan, AISpanType, TracingPolicy } from '../ai-tracing';
 import { MastraBase } from '../base';
 import type { RequestContext } from '../di';
 import { RegisteredLogger } from '../logger';
 import type { ChunkType } from '../stream/types';
-import type { Emitter, StepResult, WorkflowRunStatus } from './types';
+import type { Emitter, SerializedStepFlowEntry, StepResult, WorkflowRunStatus } from './types';
 import type { StepFlowEntry } from '.';
 
 /**

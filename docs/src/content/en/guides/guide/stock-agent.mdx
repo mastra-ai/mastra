@@ -48,7 +48,7 @@ export const stockAgent = new Agent({
 In your `src/mastra/index.ts` file, register the agent:
 
 ```ts copy title="src/mastra/index.ts" {2, 5}
-import { Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core/mastra";
 import { stockAgent } from "./agents/stockAgent";
 
 export const mastra = new Mastra({

@@ -2,7 +2,7 @@ import EventEmitter from 'events';
 import { randomUUID } from 'node:crypto';
 import { WritableStream, ReadableStream, TransformStream } from 'node:stream/web';
 import { z } from 'zod';
-import type { Mastra, WorkflowRun } from '..';
+import type { Mastra } from '../mastra';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions, AgentStreamOptions } from '../agent';
@@ -45,6 +45,7 @@ import type {
   WorkflowStreamEvent,
 } from './types';
 import { getZodErrors } from './utils';
+import type { WorkflowRun } from '../storage';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods

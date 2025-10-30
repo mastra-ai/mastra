@@ -1,6 +1,6 @@
 import EventEmitter from 'events';
 import type { StepFlowEntry, StepResult } from '../..';
-import type { Mastra } from '../../..';
+import type { Mastra } from '../../../mastra';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
 import type { StepExecutor } from '../step-executor';

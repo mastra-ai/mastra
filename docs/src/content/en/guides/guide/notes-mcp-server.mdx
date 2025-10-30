@@ -125,7 +125,7 @@ export const notes = new MCPServer({
 Register this MCP server in your Mastra instance at `src/mastra/index.ts`. The key `notes` is the public identifier for your MCP server:
 
 ```typescript copy title="src/mastra/index.ts" {4, 15-17}
-import { Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core/mastra";
 import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";
 import { notes } from "./mcp/server";
