@@ -3535,12 +3535,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     resumeData: any,
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT> & { toolCallId?: string },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    const defaultStreamOptions = await this.getDefaultOptions({
+    const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });
 
     let mergedStreamOptions = {
-      ...defaultStreamOptions,
+      ...defaultOptions,
       ...streamOptions,
     };
 
@@ -3683,14 +3683,14 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         text: 'This method does not support structured output. Please use generate() instead.',
       });
     }
-    const defaultGenerateOptions = await this.getDefaultGenerateOptionsLegacy({
+    const defaultGenerateOptionsLegacy = await this.getDefaultGenerateOptionsLegacy({
       requestContext: generateOptions.requestContext,
     });
     const mergedGenerateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
-      ...defaultGenerateOptions,
+      ...defaultGenerateOptionsLegacy,
       ...generateOptions,
       experimental_generateMessageId:
-        defaultGenerateOptions.experimental_generateMessageId || this.#mastra?.generateId?.bind(this.#mastra),
+        defaultGenerateOptionsLegacy.experimental_generateMessageId || this.#mastra?.generateId?.bind(this.#mastra),
     };
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedGenerateOptions, 'generate');
@@ -4023,15 +4023,15 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
     | (StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties)
   > {
-    const defaultStreamOptions = await this.getDefaultStreamOptionsLegacy({
+    const defaultStreamOptionsLegacy = await this.getDefaultStreamOptionsLegacy({
       requestContext: streamOptions.requestContext,
     });
 
     const mergedStreamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
-      ...defaultStreamOptions,
+      ...defaultStreamOptionsLegacy,
       ...streamOptions,
       experimental_generateMessageId:
-        defaultStreamOptions.experimental_generateMessageId || this.#mastra?.generateId?.bind(this.#mastra),
+        defaultStreamOptionsLegacy.experimental_generateMessageId || this.#mastra?.generateId?.bind(this.#mastra),
     };
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions, 'stream');
