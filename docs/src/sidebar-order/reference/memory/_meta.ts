@@ -3,8 +3,7 @@ const meta = {
   createThread: ".createThread()",
   query: ".query()",
   getThreadById: ".getThreadById()",
-  getThreadsByResourceId: ".getThreadsByResourceId()",
-  getThreadsByResourceIdPaginated: ".getThreadsByResourceIdPaginated()",
+  listThreadsByResourceId: ".listThreadsByResourceId()",
   deleteMessages: ".deleteMessages()",
 };
 

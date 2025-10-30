@@ -306,13 +306,8 @@ const sidebars = {
         { type: "doc", id: "memory/getThreadById", label: ".getThreadById()" },
         {
           type: "doc",
-          id: "memory/getThreadsByResourceId",
-          label: ".getThreadsByResourceId()",
-        },
-        {
-          type: "doc",
-          id: "memory/getThreadsByResourceIdPaginated",
-          label: ".getThreadsByResourceIdPaginated()",
+          id: "memory/listThreadsByResourceId",
+          label: ".listThreadsByResourceId()",
         },
         {
           type: "doc",

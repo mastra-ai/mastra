@@ -1234,6 +1234,16 @@
       "source": "/examples/agents/runtime-context",
       "destination": "/examples/agents/request-context",
       "permanent": true
+    },
+    {
+      "source": "/reference/memory/getThreadsByResourceId",
+      "destination": "/reference/memory/listThreadsByResourceId",
+      "permanent": true
+    },
+    {
+      "source": "/reference/memory/getThreadsByResourceIdPaginated",
+      "destination": "/reference/memory/listThreadsByResourceId",
+      "permanent": true
     }
   ]
 }

@@ -75,7 +75,7 @@ const store = new D1Store({
 
 - `saveThread(thread)`: Create or update a thread
 - `getThreadById({ threadId })`: Get a thread by ID
-- `getThreadsByResourceId({ resourceId })`: Fetch all threads associated with a resource.
+- `listThreadsByResourceId({ resourceId, offset, limit, orderBy?, sortDirection? })`: List paginated threads for a resource
 - `updateThread({ id, title, metadata })`: Update the title and/or metadata of a thread.
 - `deleteThread({ threadId })`: Delete a thread and all its messages.
 

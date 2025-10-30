@@ -221,7 +221,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       expect(page3.hasMore).toBe(false);
     });
 
-    it('should return paginated results when no pagination params for getThreadsByResourceId', async () => {
+    it('should return paginated results when no pagination params for listThreadsByResourceId', async () => {
       const resourceId = `pg-non-paginated-resource-${randomUUID()}`;
       await storage.saveThread({ thread: { ...createSampleThread(), resourceId } });
 
@@ -329,7 +329,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
   //     expect(retrievedThread?.updatedAt.toISOString()).toBe(now.toISOString());
   //   });
 
-  //   it('should handle date serialization in getThreadsByResourceId', async () => {
+  //   it('should handle date serialization in listThreadsByResourceId', async () => {
   //     const now = new Date();
   //     const thread1 = createSampleThread({ date: now });
   //     const thread2 = { ...createSampleThread({ date: now }), resourceId: thread1.resourceId };

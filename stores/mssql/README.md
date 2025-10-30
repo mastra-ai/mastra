@@ -209,13 +209,13 @@ MSSQLStore supports multiple connection methods:
 - `getThreadById({ threadId })`: Get a thread by ID
 - `updateThread({ id, title, metadata })`: Update thread title and metadata
 - `deleteThread({ threadId })`: Delete a thread and its messages
-- `getThreadsByResourceIdPaginated({ resourceId, page, perPage, orderBy?, sortDirection? })`: Get paginated threads for a resource
+- `listThreadsByResourceId({ resourceId, offset, limit, orderBy?, sortDirection? })`: List paginated threads for a resource
 
 ### Messages
 
 - `saveMessages({ messages, format? })`: Save multiple messages with atomic transaction (supports v1 and v2 formats)
 - `getMessages({ threadId, format? })`: Get all messages for a thread
-- `getMessagesById({ messageIds, format? })`: Get messages by their IDs
+- `listMessagesById({ messageIds, format? })`: Get messages by their IDs
 - `getMessagesPaginated({ threadId, format?, page?, perPage? })`: Get paginated messages for a thread
 - `updateMessages({ messages })`: Update existing messages with atomic transaction
 - `deleteMessages(messageIds)`: Delete specific messages with atomic transaction
