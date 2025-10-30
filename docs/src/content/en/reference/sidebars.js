@@ -432,11 +432,6 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "client-js/workflows-legacy",
-          label: "Workflows (Legacy) API",
-        },
-        {
-          type: "doc",
           id: "client-js/error-handling",
           label: "Error Handling",
         },

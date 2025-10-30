@@ -1169,6 +1169,21 @@
       "source": "/docs/workflows/pausing-execution",
       "destination": "/docs/workflows/suspend-and-resume",
       "permanent": true
+    },
+    {
+      "source": "/reference/client-js/workflows-legacy",
+      "destination": "/reference/client-js/workflows",
+      "permanent": true
+    },
+    {
+      "source": "/examples/workflows_legacy/:path*",
+      "destination": "/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/examples/workflows-legacy/:path*",
+      "destination": "/docs/workflows/overview",
+      "permanent": true
     }
   ]
 }
