@@ -51,7 +51,8 @@ async function applyInputProcessors(
 
   const processedMessageList = await runner.runInputProcessors(messageList, undefined, undefined, requestContext);
 
-  return processedMessageList.get.all.core();
+  // Return only the processed input messages, not all messages
+  return processedMessageList.get.input.aiV4.core();
 }
 
 let memory: Memory;
