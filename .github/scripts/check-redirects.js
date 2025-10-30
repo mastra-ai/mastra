@@ -124,19 +124,7 @@ function main() {
     console.log('');
   });
 
-  console.log('Please add redirects for these pages in docs/vercel.json\n');
-  console.log('Example redirect:');
-  console.log(
-    JSON.stringify(
-      {
-        source: missingRedirects[0].urlPath,
-        destination: '/docs', // Update with appropriate destination
-        permanent: true,
-      },
-      null,
-      2,
-    ),
-  );
+  console.log('Please add redirects for these pages to docs/vercel.json\n');
 
   // Save missing redirects for GitHub Action to use
   const output = missingRedirects.map(m => m.urlPath);
