@@ -1169,6 +1169,46 @@
       "source": "/docs/workflows/pausing-execution",
       "destination": "/docs/workflows/suspend-and-resume",
       "permanent": true
+    },
+    {
+      "source": "/reference/core/getAgents",
+      "destination": "/reference/core/listAgents",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getScorers",
+      "destination": "/reference/core/listScorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getLogs",
+      "destination": "/reference/core/listLogs",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getLogsByRunId",
+      "destination": "/reference/core/listLogsByRunId",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getWorkflows",
+      "destination": "/reference/core/listWorkflows",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getTools",
+      "destination": "/reference/agents/listTools",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getWorkflows",
+      "destination": "/reference/agents/listWorkflows",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getScorers",
+      "destination": "/reference/agents/listScorers",
+      "permanent": true
     }
   ]
 }
