@@ -4,16 +4,16 @@ import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { Mastra } from '../../mastra';
 import { Agent } from '../../agent';
 import { RequestContext } from '../../di';
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import { Mastra } from '../../mastra';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../storage';
 import { MockStore } from '../../storage/mock';
+import { createTool } from '../../tools';
 import type { StreamEvent, WatchEvent } from '../types';
 import { mapVariable } from '../workflow';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '.';
-import { createTool } from '../../tools';
 
 const testStorage = new MockStore();
 

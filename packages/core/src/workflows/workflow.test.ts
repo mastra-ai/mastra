@@ -7,14 +7,14 @@ import { MockLanguageModelV2 } from 'ai-v5/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { z as zv4 } from 'zod-v4';
-import { Mastra } from '../mastra';
 import { Agent } from '../agent';
 import { RequestContext } from '../di';
 import { MastraError } from '../error';
+import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
+import { createTool } from '../tools';
 import type { ChunkType, StreamEvent, WatchEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
-import { createTool } from '../tools';
 
 const testStorage = new MockStore();
 

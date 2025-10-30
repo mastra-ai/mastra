@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core/mastra';
 import { Agent } from '@mastra/core/agent';
 import type { UIMessageWithMetadata } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
+import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
 import { fastembed } from '@mastra/fastembed';

@@ -1,5 +1,5 @@
-import type { Mastra } from '@mastra/core/mastra';
 import { Agent } from '@mastra/core/agent';
+import type { Mastra } from '@mastra/core/mastra';
 import type { Context } from 'hono';
 import { z } from 'zod';
 

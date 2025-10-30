@@ -1,12 +1,11 @@
-import type {
-  Mastra
-} from '../../mastra';
 import type { RequestContext } from '../../di';
 import type { Event } from '../../events/types';
-import { ExecutionEngine, type ExecutionEngineOptions, type ExecutionGraph } from '../../workflows/execution-engine';
+import type { Mastra } from '../../mastra';
+import { ExecutionEngine } from '../../workflows/execution-engine';
+import type { ExecutionEngineOptions, ExecutionGraph } from '../../workflows/execution-engine';
+import type { Emitter, SerializedStepFlowEntry, StepResult } from '../types';
 import type { WorkflowEventProcessor } from './workflow-event-processor';
 import { getStep } from './workflow-event-processor/utils';
-import type { Emitter, SerializedStepFlowEntry, StepResult } from '../types';
 
 export class EventedExecutionEngine extends ExecutionEngine {
   protected eventProcessor: WorkflowEventProcessor;
