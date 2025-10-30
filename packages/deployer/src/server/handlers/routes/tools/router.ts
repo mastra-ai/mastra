@@ -74,7 +74,7 @@ export function toolsRouter(bodyLimitOptions: BodyLimitOptions, tools: Record<st
               type: 'object',
               properties: {
                 data: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                requestContext: { type: 'object' },
               },
               required: ['data'],
             },

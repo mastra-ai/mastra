@@ -1,6 +1,6 @@
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { TracingOptions } from '@mastra/core/ai-tracing';
-import type { RuntimeContext } from '@mastra/core/di';
+import type { RequestContext } from '@mastra/core/di';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import type {
   Workflow,
@@ -189,14 +189,14 @@ export async function createWorkflowRunHandler({
 
 export async function startAsyncWorkflowHandler({
   mastra,
-  runtimeContext,
+  requestContext,
   workflowId,
   runId,
   inputData,
   tracingOptions,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
 }) {
   try {
@@ -213,7 +213,7 @@ export async function startAsyncWorkflowHandler({
     const _run = await workflow.createRunAsync({ runId });
     const result = await _run.start({
       inputData,
-      runtimeContext,
+      requestContext,
       tracingOptions,
     });
     return result;
@@ -224,14 +224,14 @@ export async function startAsyncWorkflowHandler({
 
 export async function startWorkflowRunHandler({
   mastra,
-  runtimeContext,
+  requestContext,
   workflowId,
   runId,
   inputData,
   tracingOptions,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
 }) {
   try {
@@ -258,7 +258,7 @@ export async function startWorkflowRunHandler({
     const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
     void _run.start({
       inputData,
-      runtimeContext,
+      requestContext,
       tracingOptions,
     });
 
@@ -359,29 +359,29 @@ export async function watchWorkflowHandler({
 
 export async function streamWorkflowHandler({
   mastra,
-  runtimeContext,
+  requestContext,
   workflowId,
   runId,
   inputData,
   tracingOptions,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
 }) {
-  return streamVNextWorkflowHandler({ mastra, workflowId, runId, inputData, runtimeContext, tracingOptions });
+  return streamVNextWorkflowHandler({ mastra, workflowId, runId, inputData, requestContext, tracingOptions });
 }
 
 export async function streamLegacyWorkflowHandler({
   mastra,
-  runtimeContext,
+  requestContext,
   workflowId,
   runId,
   inputData,
   tracingOptions,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
 }) {
   try {
@@ -404,7 +404,7 @@ export async function streamLegacyWorkflowHandler({
     const run = await workflow.createRunAsync({ runId });
     const result = run.streamLegacy({
       inputData,
-      runtimeContext,
+      requestContext,
       onChunk: async chunk => {
         if (serverCache) {
           const cacheKey = runId;
@@ -481,7 +481,7 @@ export async function observeStreamWorkflowHandler({
 
 export async function streamVNextWorkflowHandler({
   mastra,
-  runtimeContext,
+  requestContext,
   workflowId,
   runId,
   inputData,
@@ -489,7 +489,7 @@ export async function streamVNextWorkflowHandler({
   tracingOptions,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   closeOnSuspend?: boolean;
   tracingOptions?: TracingOptions;
 }) {
@@ -513,7 +513,7 @@ export async function streamVNextWorkflowHandler({
     const run = await workflow.createRunAsync({ runId });
     const result = run.stream({
       inputData,
-      runtimeContext,
+      requestContext,
       closeOnSuspend,
       tracingOptions,
     });
@@ -621,11 +621,11 @@ export async function resumeAsyncWorkflowHandler({
   workflowId,
   runId,
   body,
-  runtimeContext,
+  requestContext,
   tracingOptions,
 }: WorkflowContext & {
   body: { step: string | string[]; resumeData?: unknown };
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
 }) {
   try {
@@ -653,7 +653,7 @@ export async function resumeAsyncWorkflowHandler({
     const result = await _run.resume({
       step: body.step,
       resumeData: body.resumeData,
-      runtimeContext,
+      requestContext,
       tracingOptions,
     });
 
@@ -668,11 +668,11 @@ export async function resumeWorkflowHandler({
   workflowId,
   runId,
   body,
-  runtimeContext,
+  requestContext,
   tracingOptions,
 }: WorkflowContext & {
   body: { step: string | string[]; resumeData?: unknown };
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
 }) {
   try {
@@ -701,7 +701,7 @@ export async function resumeWorkflowHandler({
     void _run.resume({
       step: body.step,
       resumeData: body.resumeData,
-      runtimeContext,
+      requestContext,
       tracingOptions,
     });
 
@@ -716,11 +716,11 @@ export async function resumeStreamWorkflowHandler({
   workflowId,
   runId,
   body,
-  runtimeContext,
+  requestContext,
   tracingOptions,
 }: WorkflowContext & {
   body: { step: string | string[]; resumeData?: unknown };
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
 }) {
   try {
@@ -751,7 +751,7 @@ export async function resumeStreamWorkflowHandler({
       .resumeStream({
         step: body.step,
         resumeData: body.resumeData,
-        runtimeContext,
+        requestContext,
         tracingOptions,
       })
       .fullStream.pipeThrough(
