@@ -1,16 +1,3 @@
-export * from './agent/index.warning';
-export * from './base.warning';
-export * from './deployer/index.warning';
-export * from './storage/index.warning';
-export * from './integration/index.warning';
-export * from './llm';
-export * from './mastra';
-export * from './memory/index.warning';
-export * from './relevance';
-export * from './tools/index.warning';
-export * from './tools/types';
-export * from './tts/index.warning';
-export * from './utils';
-export * from './vector/index.warning';
-export * from './workflows/index.warning';
-export * from './hooks';
+throw new Error(`No exports are available from the top-level "@mastra/core" package.
+
+Use specific subpath imports instead, e.g. "@mastra/core/agent" or "@mastra/core/memory".`);
