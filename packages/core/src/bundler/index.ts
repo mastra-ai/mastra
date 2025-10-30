@@ -40,7 +40,6 @@ export abstract class MastraBundler extends MastraBase implements IBundler {
   abstract getAllToolPaths(mastraDir: string, toolsPaths: (string | string[])[]): (string | string[])[];
   abstract prepare(outputDirectory: string): Promise<void>;
   abstract writePackageJson(outputDirectory: string, dependencies: Map<string, string>): Promise<void>;
-  abstract writeInstrumentationFile(outputDirectory: string): Promise<void>;
   abstract getEnvFiles(): Promise<string[]>;
   abstract bundle(
     entryFile: string,

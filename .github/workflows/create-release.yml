@@ -82,6 +82,7 @@ jobs:
         run: |
           pnpm changeset-cli pre exit
           pnpm changeset-cli version
+          git pull
           git add -A
           git commit -m 'chore: version - exit prerelease mode' --no-verify
           git push

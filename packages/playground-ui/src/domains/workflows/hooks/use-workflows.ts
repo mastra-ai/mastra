@@ -8,6 +8,6 @@ export const useWorkflows = () => {
 
   return useQuery({
     queryKey: ['workflows', JSON.stringify(runtimeContext)],
-    queryFn: () => client.getWorkflows(runtimeContext),
+    queryFn: () => client.listWorkflows(runtimeContext),
   });
 };

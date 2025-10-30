@@ -1,5 +1,5 @@
 ---
-title: "Branching, Merging, Conditions | Workflows | Mastra Docs"
+title: "Control Flow | Workflows | Mastra Docs"
 description: "Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements."
 ---
 
@@ -8,15 +8,15 @@ description: "Control flow in Mastra workflows allows you to manage branching, m
 When you build a workflow, you typically break down operations into smaller tasks that can be linked and reused. **Steps** provide a structured way to manage these tasks by defining inputs, outputs, and execution logic.
 
 - If the schemas match, the `outputSchema` from each step is automatically passed to the `inputSchema` of the next step.
-- If the schemas don't match, use [Input data mapping](./input-data-mapping.mdx) to transform the `outputSchema` into the expected `inputSchema`.
+- If the schemas don't match, use [Input data mapping](./input-data-mapping) to transform the `outputSchema` into the expected `inputSchema`.
 
 ## Chaining steps with `.then()`
 
 Chain steps to execute sequentially using `.then()`:
 
-![Chaining steps with .then()](/image/workflows/workflows-control-flow-then.jpg)
+![Chaining steps with .then()](/img/workflows/workflows-control-flow-then.jpg)
 
-```typescript {8-9,4-5} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {8-9,4-5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -35,9 +35,9 @@ This does what you'd expect: it executes `step1`, then it executes `step2`.
 
 Execute steps simultaneously using `.parallel()`:
 
-![Concurrent steps with .parallel()](/image/workflows/workflows-control-flow-parallel.jpg)
+![Concurrent steps with .parallel()](/img/workflows/workflows-control-flow-parallel.jpg)
 
-```typescript {9,4-5} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {9,4-5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -53,7 +53,7 @@ export const testWorkflow = createWorkflow({...})
 
 This executes `step1` and `step2` concurrently, then continues to `step3` after both complete.
 
-> See [Parallel Execution with Steps](../../examples/workflows/parallel-steps.mdx) for more information.
+> See [Parallel Execution with Steps](/docs/workflows/control-flow#simultaneous-steps-with-parallel) for more information.
 
 > 📹 Watch: How to run steps in parallel and optimize your Mastra workflow → [YouTube (3 minutes)](https://youtu.be/GQJxve5Hki4)
 
@@ -61,9 +61,9 @@ This executes `step1` and `step2` concurrently, then continues to `step3` after 
 
 Execute steps conditionally using `.branch()`:
 
-![Conditional branching with .branch()](/image/workflows/workflows-control-flow-branch.jpg)
+![Conditional branching with .branch()](/img/workflows/workflows-control-flow-branch.jpg)
 
-```typescript {8-11,4-5} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {8-11,4-5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -80,7 +80,7 @@ export const testWorkflow = createWorkflow({...})
 
 Branch conditions are evaluated sequentially, but steps with matching conditions are executed in parallel.
 
-> See [Workflow with Conditional Branching](../../examples/workflows/conditional-branching.mdx) for more information.
+> See [Conditional Branching](/docs/workflows/control-flow#conditional-logic-with-branch) for more information.
 
 ## Looping steps
 
@@ -95,9 +95,9 @@ To ensure compatibility, the loop’s initial input must either match the shape 
 
 Executes step repeatedly while a condition is true.
 
-![Repeating with .dowhile()](/image/workflows/workflows-control-flow-dowhile.jpg)
+![Repeating with .dowhile()](/img/workflows/workflows-control-flow-dowhile.jpg)
 
-```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -112,9 +112,9 @@ export const testWorkflow = createWorkflow({...})
 
 Executes step repeatedly until a condition becomes true.
 
-![Repeating with .dountil()](/image/workflows/workflows-control-flow-dountil.jpg)
+![Repeating with .dountil()](/img/workflows/workflows-control-flow-dountil.jpg)
 
-```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -133,7 +133,7 @@ Loop conditions can be implemented in different ways depending on how you want t
 
 The `inputData` for a loop step is the output of a previous step. Use the values in `inputData` to determine whether the loop should continue or stop.
 
-```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -148,7 +148,7 @@ export const testWorkflow = createWorkflow({...})
 
 The `iterationCount` tracks how many times the loop step has run. You can use this to limit the number of iterations and prevent infinite loops. Combine it with `inputData` values to stop the loop after a set number of attempts.
 
-```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -163,7 +163,7 @@ export const testWorkflow = createWorkflow({...})
 
 Use `iterationCount` to limit how many times a loop runs. If the count exceeds your threshold, throw an error to fail the step and stop the workflow.
 
-```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -183,9 +183,9 @@ export const testWorkflow = createWorkflow({...})
 
 Sequentially executes the same step for each item from the `inputSchema`.
 
-![Repeating with .foreach()](/image/workflows/workflows-control-flow-foreach.jpg)
+![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
 
-```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -200,7 +200,7 @@ export const testWorkflow = createWorkflow({...})
 
 Use `concurrency` to execute steps in parallel with a limit on the number of concurrent executions.
 
-```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -215,7 +215,7 @@ export const testWorkflow = createWorkflow({...})
 
 Use a nested workflow as a step by passing it to `.then()`. This runs each of its steps in sequence as part of the parent workflow.
 
-```typescript {4,7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {4,7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -230,7 +230,7 @@ export const testWorkflow = createWorkflow({...})
 
 Use `cloneWorkflow` to duplicate an existing workflow. This lets you reuse its structure while overriding parameters like `id`.
 
-```typescript {6,10} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {6,10} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep, cloneWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -248,13 +248,13 @@ export const testWorkflow = createWorkflow({...})
 
 The following example demonstrates how to start a run with multiple inputs. Each input will pass through the `mapStep` sequentially.
 
-```typescript {6} filename="src/test-workflow.ts" showLineNumbers copy
+```typescript {6} title="src/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
 const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
 const result = await run.start({
-  inputData: [{ number: 10 }, { number: 100 }, { number: 200 }]
+  inputData: [{ number: 10 }, { number: 100 }, { number: 200 }],
 });
 ```
 

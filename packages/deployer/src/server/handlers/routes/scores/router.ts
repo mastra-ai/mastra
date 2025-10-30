@@ -3,7 +3,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { describeRoute } from 'hono-openapi';
 import type { BodyLimitOptions } from '../../../types';
 import {
-  getScorersHandler,
+  listScorersHandler,
   getScorerHandler,
   getScoresByRunIdHandler,
   getScoresByScorerIdHandler,
@@ -26,7 +26,7 @@ export function scoresRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    getScorersHandler,
+    listScorersHandler,
   );
 
   router.get(

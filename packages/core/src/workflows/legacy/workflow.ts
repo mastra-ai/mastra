@@ -1,5 +1,3 @@
-import type { Span } from '@opentelemetry/api';
-import { context as otlpContext, trace } from '@opentelemetry/api';
 import { z } from 'zod';
 import type { MastraPrimitives } from '../../action';
 import type { Agent } from '../../agent';
@@ -95,7 +93,6 @@ export class LegacyWorkflow<
 
     if (mastra) {
       this.__registerPrimitives({
-        telemetry: mastra.getTelemetry(),
         logger: mastra.getLogger(),
       });
       this.#mastra = mastra;
@@ -112,13 +109,13 @@ export class LegacyWorkflow<
     config?: StepConfig<ReturnType<TWorkflow['toStep']>, CondStep, VarStep, TTriggerSchema, Steps>,
   ): WorkflowBuilder<this>;
   step<
-    TAgent extends Agent<any, any, any>,
+    TAgent extends Agent<any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
     Steps extends StepAction<any, any, any, any>[] = TSteps,
   >(
     next: TAgent,
-    config?: StepConfig<ReturnType<TAgent['toStep']>, CondStep, VarStep, TTriggerSchema, Steps>,
+    config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema, Steps>,
   ): WorkflowBuilder<this>;
   step<
     TStep extends StepAction<any, any, any, any>,
@@ -127,7 +124,7 @@ export class LegacyWorkflow<
     Steps extends StepAction<any, any, any, any>[] = TSteps,
   >(step: TStep, config?: StepConfig<TStep, CondStep, VarStep, TTriggerSchema, Steps>): WorkflowBuilder<this>;
   step<
-    TStepLike extends StepAction<string, any, any, any> | LegacyWorkflow<TSteps, any, any, any> | Agent<any, any, any>,
+    TStepLike extends StepAction<string, any, any, any> | LegacyWorkflow<TSteps, any, any, any> | Agent<any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
     Steps extends StepAction<any, any, any, any>[] = TSteps,
@@ -136,14 +133,14 @@ export class LegacyWorkflow<
       ? TStepLike
       : TStepLike extends LegacyWorkflow<TSteps, any, any, any>
         ? LegacyWorkflow<TSteps, any, any, any>
-        : Agent<any, any, any>,
+        : Agent<any, any>,
     config?: StepConfig<
       TStepLike extends StepAction<string, any, any, any>
         ? TStepLike
         : TStepLike extends LegacyWorkflow<TSteps, any, any, any>
           ? ReturnType<TStepLike['toStep']>
-          : TStepLike extends Agent<any, any, any>
-            ? ReturnType<TStepLike['toStep']>
+          : TStepLike extends Agent<any, any>
+            ? StepAction<string, any, any, any>
             : never,
       CondStep,
       VarStep,
@@ -389,7 +386,7 @@ export class LegacyWorkflow<
     config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema>,
   ): this;
   then<
-    TAgent extends Agent<any, any, any>,
+    TAgent extends Agent<any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(
@@ -397,7 +394,7 @@ export class LegacyWorkflow<
     config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema>,
   ): this;
   then<
-    TStep extends StepAction<string, any, any, any> | LegacyWorkflow<any, any, any, any> | Agent<any, any, any>,
+    TStep extends StepAction<string, any, any, any> | LegacyWorkflow<any, any, any, any> | Agent<any, any>,
     CondStep extends StepVariableType<any, any, any, any>,
     VarStep extends StepVariableType<any, any, any, any>,
   >(next: TStep | TStep[], config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema>) {
@@ -850,7 +847,7 @@ export class LegacyWorkflow<
   after<TWorkflow extends LegacyWorkflow<any, any, any, any>>(
     steps: TWorkflow | TWorkflow[],
   ): Omit<WorkflowBuilder<this>, 'then' | 'after'>;
-  after<TAgent extends Agent<any, any, any>>(steps: TAgent | TAgent[]): Omit<WorkflowBuilder<this>, 'then' | 'after'>;
+  after<TAgent extends Agent<any, any>>(steps: TAgent | TAgent[]): Omit<WorkflowBuilder<this>, 'then' | 'after'>;
   after<TStep extends StepAction<string, any, any, any> | LegacyWorkflow<any, any, any, any>>(
     steps: TStep | LegacyWorkflow | (TStep | LegacyWorkflow)[],
   ): Omit<WorkflowBuilder<this>, 'then' | 'after'> {
@@ -1019,10 +1016,6 @@ export class LegacyWorkflow<
     return storage.getWorkflowRuns({ workflowName: this.name, ...(args ?? {}) }) as unknown as LegacyWorkflowRuns;
   }
 
-  getExecutionSpan(runId: string) {
-    return this.#runs.get(runId)?.executionSpan;
-  }
-
   #getParentStepKey({
     loop_check = false,
     if_else_check = false,
@@ -1067,28 +1060,6 @@ export class LegacyWorkflow<
   #makeStepDef<TStepId extends TSteps[number]['id'], TSteps extends Step<any, any, any>[]>(
     stepId: TStepId,
   ): StepDef<TStepId, TSteps, any, any>[TStepId] {
-    const executeStep = (
-      handler: (data: any) => Promise<(data: any) => void>,
-      spanName: string,
-      attributes?: Record<string, string>,
-    ) => {
-      return async (data: any) => {
-        return await otlpContext.with(
-          trace.setSpan(otlpContext.active(), this.getExecutionSpan(attributes?.runId ?? data?.runId) as Span),
-          async () => {
-            if (this?.telemetry) {
-              return this.telemetry.traceMethod(handler, {
-                spanName,
-                attributes,
-              })(data);
-            } else {
-              return handler(data);
-            }
-          },
-        );
-      };
-    };
-
     // NOTE: destructuring rest breaks some injected runtime fields, like runId
     // TODO: investigate why that is exactly
     const handler = async ({ context, ...rest }: ActionContext<TSteps[number]['inputSchema']>) => {
@@ -1100,32 +1071,15 @@ export class LegacyWorkflow<
       // Merge static payload with dynamically resolved variables
       // Variables take precedence over payload values
 
-      // Only trace if telemetry is available and action exists
-      const finalAction = this.telemetry
-        ? executeStep(execute, `workflow.${this.name}.action.${stepId}`, {
-            componentName: this.name,
-            runId: rest.runId as string,
-          })
-        : execute;
-
-      return finalAction
-        ? await finalAction({
+      return execute
+        ? await execute({
             context: { ...context, inputData: { ...(context?.inputData || {}), ...(payload as {}) } },
             ...rest,
           })
         : {};
     };
 
-    // Only trace handler if telemetry is available
-
     const finalHandler = ({ context, ...rest }: ActionContext<TSteps[number]['inputSchema']>) => {
-      if (this.getExecutionSpan(rest?.runId as string)) {
-        return executeStep(handler, `workflow.${this.name}.step.${stepId}`, {
-          componentName: this.name,
-          runId: rest?.runId as string,
-        })({ context, ...rest });
-      }
-
       return handler({ context, ...rest });
     };
 
@@ -1259,10 +1213,6 @@ export class LegacyWorkflow<
   }
 
   __registerPrimitives(p: MastraPrimitives) {
-    if (p.telemetry) {
-      this.__setTelemetry(p.telemetry);
-    }
-
     if (p.logger) {
       this.__setLogger(p.logger);
     }

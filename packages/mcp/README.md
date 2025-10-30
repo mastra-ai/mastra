@@ -117,10 +117,10 @@ const mcp = new MCPClient({
 });
 
 // Get all tools from all configured servers namespaced with the server name
-const tools = await mcp.getTools();
+const tools = await mcp.listTools();
 
 // Get tools grouped into a toolset object per-server
-const toolsets = await mcp.getToolsets();
+const toolsets = await mcp.listToolsets();
 ```
 
 ## Logging
@@ -221,7 +221,7 @@ See the `examples/server-logging.ts` file for comprehensive examples of various 
 
 The MCPClient class provides two ways to access MCP tools:
 
-#### Tools (`getTools()`)
+#### Tools (`listTools()`)
 
 Use this when:
 
@@ -238,11 +238,11 @@ const agent = new Agent({
   name: 'CLI Assistant',
   instructions: 'You help users with CLI tasks',
   model: openai('gpt-4'),
-  tools: await mcp.getTools(), // Tools are fixed at agent creation
+  tools: await mcp.listTools(), // Tools are fixed at agent creation
 });
 ```
 
-#### Toolsets (`getToolsets()`)
+#### Toolsets (`listToolsets()`)
 
 Use this when:
 
@@ -284,7 +284,7 @@ const mcp = new MCPClient({
 });
 
 // Get the current toolsets configured for this user
-const toolsets = await mcp.getToolsets();
+const toolsets = await mcp.listToolsets();
 
 // Use the agent with user-specific tool configurations
 const response = await agent.generate('What is the weather in London?', {

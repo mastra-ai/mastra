@@ -29,36 +29,6 @@
         "default": "./dist/index.cjs"
       }
     },
-    "./judge": {
-      "import": {
-        "types": "./dist/metrics/judge/index.d.ts",
-        "default": "./dist/metrics/judge/index.js"
-      },
-      "require": {
-        "types": "./dist/metrics/judge/index.d.ts",
-        "default": "./dist/metrics/judge/index.cjs"
-      }
-    },
-    "./nlp": {
-      "import": {
-        "types": "./dist/metrics/nlp/index.d.ts",
-        "default": "./dist/metrics/nlp/index.js"
-      },
-      "require": {
-        "types": "./dist/metrics/nlp/index.d.ts",
-        "default": "./dist/metrics/nlp/index.cjs"
-      }
-    },
-    "./llm": {
-      "import": {
-        "types": "./dist/metrics/llm/index.d.ts",
-        "default": "./dist/metrics/llm/index.js"
-      },
-      "require": {
-        "types": "./dist/metrics/llm/index.d.ts",
-        "default": "./dist/metrics/llm/index.cjs"
-      }
-    },
     "./scorers/llm": {
       "import": {
         "types": "./dist/scorers/llm/index.d.ts",
@@ -110,7 +80,7 @@
     "string-similarity": "^4.0.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.21.0-0 <0.24.0-0",
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "ai": "^4.0.0 || ^5.0.0",
     "zod": "^3.25.0 || ^4.0.0"
   },

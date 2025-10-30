@@ -2,7 +2,7 @@ import { connect } from '@lancedb/lancedb';
 import type { Connection, ConnectionOptions } from '@lancedb/lancedb';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType, TraceType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
@@ -10,20 +10,15 @@ import type {
   PaginationInfo,
   StorageGetMessagesArg,
   StorageColumn,
-  EvalRow,
   WorkflowRuns,
   StoragePagination,
   StorageDomains,
-  StorageGetTracesPaginatedArg,
   StorageResourceType,
 } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { StoreLegacyEvalsLance } from './domains/legacy-evals';
 import { StoreMemoryLance } from './domains/memory';
 import { StoreOperationsLance } from './domains/operations';
 import { StoreScoresLance } from './domains/scores';
-import { StoreTracesLance } from './domains/traces';
 import { StoreWorkflowsLance } from './domains/workflows';
 
 export class LanceStorage extends MastraStorage {
@@ -59,10 +54,8 @@ export class LanceStorage extends MastraStorage {
       instance.stores = {
         operations: new StoreOperationsLance({ client: instance.lanceClient }),
         workflows: new StoreWorkflowsLance({ client: instance.lanceClient }),
-        traces: new StoreTracesLance({ client: instance.lanceClient, operations }),
         scores: new StoreScoresLance({ client: instance.lanceClient }),
         memory: new StoreMemoryLance({ client: instance.lanceClient, operations }),
-        legacyEvals: new StoreLegacyEvalsLance({ client: instance.lanceClient }),
       };
       return instance;
     } catch (e: any) {
@@ -90,9 +83,7 @@ export class LanceStorage extends MastraStorage {
     this.stores = {
       operations: new StoreOperationsLance({ client: this.lanceClient }),
       workflows: new StoreWorkflowsLance({ client: this.lanceClient }),
-      traces: new StoreTracesLance({ client: this.lanceClient, operations }),
       scores: new StoreScoresLance({ client: this.lanceClient }),
-      legacyEvals: new StoreLegacyEvalsLance({ client: this.lanceClient }),
       memory: new StoreMemoryLance({ client: this.lanceClient, operations }),
     };
   }
@@ -334,40 +325,6 @@ export class LanceStorage extends MastraStorage {
       }[];
   }): Promise<MastraMessageV2[]> {
     return this.stores.memory.updateMessages(_args);
-  }
-
-  async getTraceById(args: { traceId: string }): Promise<TraceType> {
-    return (this.stores as any).traces.getTraceById(args);
-  }
-
-  async getTraces(args: {
-    name?: string;
-    scope?: string;
-    page: number;
-    perPage: number;
-    attributes?: Record<string, string>;
-  }): Promise<Trace[]> {
-    return (this.stores as any).traces.getTraces(args);
-  }
-
-  async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
-    return (this.stores as any).traces.getTracesPaginated(args);
-  }
-
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
-  }
-
-  async getEvals(options: {
-    agentName?: string;
-    type?: 'test' | 'live';
-    page?: number;
-    perPage?: number;
-    fromDate?: Date;
-    toDate?: Date;
-    dateRange?: { start?: Date; end?: Date };
-  }): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
   }
 
   async getWorkflowRuns(args?: {

@@ -4,7 +4,7 @@ import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { createTool, Mastra, Telemetry } from '../..';
+import { createTool, Mastra } from '../..';
 import { Agent } from '../../agent';
 import { RuntimeContext } from '../../di';
 import { EventEmitterPubSub } from '../../events/event-emitter';
@@ -15,8 +15,6 @@ import { mapVariable } from '../workflow';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '.';
 
 const testStorage = new MockStore();
-
-globalThis.___MASTRA_TELEMETRY___ = true;
 
 describe('Workflow', () => {
   beforeEach(() => {
@@ -6845,41 +6843,6 @@ describe('Workflow', () => {
       expect(run3?.runId).toBe(run1.runId);
       expect(run3?.workflowName).toBe('test-workflow');
       expect(run3?.snapshot).toEqual(runs[0].snapshot);
-
-      await mastra.stopEventEngine();
-    });
-  });
-
-  describe('Accessing Mastra', () => {
-    it('should be able to access the deprecated mastra primitives', async () => {
-      let telemetry: Telemetry | undefined;
-      const step1 = createStep({
-        id: 'step1',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        execute: async ({ mastra }) => {
-          telemetry = mastra?.getTelemetry();
-          return {};
-        },
-      });
-
-      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
-      workflow.then(step1).commit();
-
-      const mastra = new Mastra({
-        logger: false,
-        storage: testStorage,
-        workflows: { 'test-workflow': workflow },
-        pubsub: new EventEmitterPubSub(),
-      });
-      await mastra.startEventEngine();
-
-      // Access new instance properties directly - should work without warning
-      const run = await workflow.createRunAsync();
-      await run.start({ inputData: {} });
-
-      expect(telemetry).toBeDefined();
-      expect(telemetry).toBeInstanceOf(Telemetry);
 
       await mastra.stopEventEngine();
     });

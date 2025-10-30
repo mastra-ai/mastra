@@ -7,23 +7,18 @@ import type {
   StorageColumn,
   StorageGetMessagesArg,
   StorageResourceType,
-  EvalRow,
   WorkflowRuns,
   WorkflowRun,
   PaginationInfo,
-  PaginationArgs,
-  StorageGetTracesArg,
   StoragePagination,
   StorageDomains,
 } from '@mastra/core/storage';
 
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
-import { StoreLegacyEvalsUpstash } from './domains/legacy-evals';
 import { StoreMemoryUpstash } from './domains/memory';
 import { StoreOperationsUpstash } from './domains/operations';
 import { ScoresUpstash } from './domains/scores';
-import { TracesUpstash } from './domains/traces';
 import { WorkflowsUpstash } from './domains/workflows';
 
 export interface UpstashConfig {
@@ -43,19 +38,14 @@ export class UpstashStore extends MastraStorage {
     });
 
     const operations = new StoreOperationsUpstash({ client: this.redis });
-    const traces = new TracesUpstash({ client: this.redis, operations });
     const scores = new ScoresUpstash({ client: this.redis, operations });
     const workflows = new WorkflowsUpstash({ client: this.redis, operations });
     const memory = new StoreMemoryUpstash({ client: this.redis, operations });
-    const legacyEvals = new StoreLegacyEvalsUpstash({ client: this.redis, operations });
-
     this.stores = {
       operations,
-      traces,
       scores,
       workflows,
       memory,
-      legacyEvals,
     };
   }
 
@@ -68,49 +58,6 @@ export class UpstashStore extends MastraStorage {
       deleteMessages: true,
       getScoresBySpan: true,
     };
-  }
-
-  /**
-   * @deprecated Use getEvals instead
-   */
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
-  }
-
-  /**
-   * Get all evaluations with pagination and total count
-   * @param options Pagination and filtering options
-   * @returns Object with evals array and total count
-   */
-  async getEvals(
-    options: {
-      agentName?: string;
-      type?: 'test' | 'live';
-    } & PaginationArgs,
-  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
-  }
-
-  /**
-   * @deprecated use getTracesPaginated instead
-   */
-  public async getTraces(args: StorageGetTracesArg): Promise<any[]> {
-    return this.stores.traces.getTraces(args);
-  }
-
-  public async getTracesPaginated(
-    args: {
-      name?: string;
-      scope?: string;
-      attributes?: Record<string, string>;
-      filters?: Record<string, any>;
-    } & PaginationArgs,
-  ): Promise<PaginationInfo & { traces: any[] }> {
-    return this.stores.traces.getTracesPaginated(args);
-  }
-
-  async batchTraceInsert(args: { records: Record<string, any>[] }): Promise<void> {
-    return this.stores.traces.batchTraceInsert(args);
   }
 
   async createTable({

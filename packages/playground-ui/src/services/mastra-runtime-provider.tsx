@@ -18,6 +18,7 @@ import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
 
 import { ModelSettings, MastraUIMessage, useChat } from '@mastra/react';
 import { ToolCallProvider } from './tool-call-provider';
+import { useAgentPromptExperiment } from '@/domains/agents/context';
 
 const handleFinishReason = (finishReason: string) => {
   switch (finishReason) {
@@ -155,6 +156,7 @@ export function MastraRuntimeProvider({
   children: ReactNode;
 }> &
   ChatProps) {
+  const { prompt: instructions } = useAgentPromptExperiment();
   const [isLegacyRunning, setIsLegacyRunning] = useState(false);
   const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>(() =>
     memory ? initializeMessageState(initialLegacyMessages || []) : [],
@@ -186,7 +188,6 @@ export function MastraRuntimeProvider({
     temperature,
     topK,
     topP,
-    instructions,
     chatWithGenerateLegacy,
     chatWithGenerate,
     chatWithNetwork,

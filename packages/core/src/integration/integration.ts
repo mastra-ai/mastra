@@ -20,7 +20,7 @@ export class Integration<ToolsParams = void, ApiClient = void> {
     this.workflows[name] = fn;
   }
 
-  public getWorkflows({ serialized }: { serialized?: boolean }): Record<string, Workflow> {
+  public listWorkflows({ serialized }: { serialized?: boolean }): Record<string, Workflow> {
     if (serialized) {
       return Object.entries(this.workflows).reduce((acc, [k, v]) => {
         return {
@@ -37,11 +37,11 @@ export class Integration<ToolsParams = void, ApiClient = void> {
   /**
    * TOOLS
    */
-  getStaticTools(_params?: ToolsParams): Record<string, ToolAction<any, any, any>> {
+  listStaticTools(_params?: ToolsParams): Record<string, ToolAction<any, any, any>> {
     throw new Error('Method not implemented.');
   }
 
-  async getTools(_params?: ToolsParams): Promise<Record<string, ToolAction<any, any, any>>> {
+  async listTools(_params?: ToolsParams): Promise<Record<string, ToolAction<any, any, any>>> {
     throw new Error('Method not implemented.');
   }
 

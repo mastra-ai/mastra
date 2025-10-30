@@ -24,10 +24,14 @@ interface RegistryData {
 let registryData: RegistryData | null = null;
 
 // Cache file helpers (dev mode only)
-const CACHE_DIR = path.join(os.homedir(), '.cache', 'mastra');
-const CACHE_FILE = path.join(CACHE_DIR, 'gateway-refresh-time');
-const GLOBAL_PROVIDER_REGISTRY_JSON = path.join(CACHE_DIR, 'provider-registry.json');
-const GLOBAL_PROVIDER_TYPES_DTS = path.join(CACHE_DIR, 'provider-types.generated.d.ts');
+// Use functions so we don't call os.homedir() at top level, which
+// causes an error in sandboxed environments when you merely
+// import @mastra/core. In those sandboxes, if you just don't use these
+// functions then you don't hit these errors.
+const CACHE_DIR = () => path.join(os.homedir(), '.cache', 'mastra');
+const CACHE_FILE = () => path.join(CACHE_DIR(), 'gateway-refresh-time');
+const GLOBAL_PROVIDER_REGISTRY_JSON = () => path.join(CACHE_DIR(), 'provider-registry.json');
+const GLOBAL_PROVIDER_TYPES_DTS = () => path.join(CACHE_DIR(), 'provider-types.generated.d.ts');
 
 let modelRouterCacheFailed = false;
 
@@ -38,8 +42,8 @@ let modelRouterCacheFailed = false;
 function syncGlobalCacheToLocal(): void {
   try {
     // Check if global cache files exist
-    const globalJsonExists = fs.existsSync(GLOBAL_PROVIDER_REGISTRY_JSON);
-    const globalDtsExists = fs.existsSync(GLOBAL_PROVIDER_TYPES_DTS);
+    const globalJsonExists = fs.existsSync(GLOBAL_PROVIDER_REGISTRY_JSON());
+    const globalDtsExists = fs.existsSync(GLOBAL_PROVIDER_TYPES_DTS());
 
     if (!globalJsonExists && !globalDtsExists) {
       // No global cache, nothing to sync
@@ -57,7 +61,7 @@ function syncGlobalCacheToLocal(): void {
 
     // Sync JSON file if global exists and differs from local
     if (globalJsonExists) {
-      const globalJsonContent = fs.readFileSync(GLOBAL_PROVIDER_REGISTRY_JSON, 'utf-8');
+      const globalJsonContent = fs.readFileSync(GLOBAL_PROVIDER_REGISTRY_JSON(), 'utf-8');
       let shouldCopyJson = true;
 
       if (fs.existsSync(localJsonPath)) {
@@ -72,7 +76,7 @@ function syncGlobalCacheToLocal(): void {
 
     // Sync .d.ts file if global exists and differs from local
     if (globalDtsExists) {
-      const globalDtsContent = fs.readFileSync(GLOBAL_PROVIDER_TYPES_DTS, 'utf-8');
+      const globalDtsContent = fs.readFileSync(GLOBAL_PROVIDER_TYPES_DTS(), 'utf-8');
       let shouldCopyDts = true;
 
       if (fs.existsSync(localDtsPath)) {
@@ -92,10 +96,10 @@ function syncGlobalCacheToLocal(): void {
 
 function getLastRefreshTimeFromDisk(): Date | null {
   try {
-    if (!fs.existsSync(CACHE_FILE)) {
+    if (!fs.existsSync(CACHE_FILE())) {
       return null;
     }
-    const timestamp = fs.readFileSync(CACHE_FILE, 'utf-8').trim();
+    const timestamp = fs.readFileSync(CACHE_FILE(), 'utf-8').trim();
     return new Date(parseInt(timestamp, 10));
   } catch (err) {
     console.warn('[GatewayRegistry] Failed to read cache file:', err);
@@ -106,10 +110,10 @@ function getLastRefreshTimeFromDisk(): Date | null {
 
 function saveLastRefreshTimeToDisk(date: Date): void {
   try {
-    if (!fs.existsSync(CACHE_DIR)) {
-      fs.mkdirSync(CACHE_DIR, { recursive: true });
+    if (!fs.existsSync(CACHE_DIR())) {
+      fs.mkdirSync(CACHE_DIR(), { recursive: true });
     }
-    fs.writeFileSync(CACHE_FILE, date.getTime().toString(), 'utf-8');
+    fs.writeFileSync(CACHE_FILE(), date.getTime().toString(), 'utf-8');
   } catch (err) {
     modelRouterCacheFailed = true;
     console.warn('[GatewayRegistry] Failed to write cache file:', err);
@@ -371,9 +375,9 @@ export class GatewayRegistry {
 
       // Write to global cache first (so all projects can benefit)
       try {
-        fs.mkdirSync(CACHE_DIR, { recursive: true });
-        await writeRegistryFiles(GLOBAL_PROVIDER_REGISTRY_JSON, GLOBAL_PROVIDER_TYPES_DTS, providers, models);
-        // console.debug(`[GatewayRegistry] ✅ Updated global cache at ${CACHE_DIR}`);
+        fs.mkdirSync(CACHE_DIR(), { recursive: true });
+        await writeRegistryFiles(GLOBAL_PROVIDER_REGISTRY_JSON(), GLOBAL_PROVIDER_TYPES_DTS(), providers, models);
+        // console.debug(`[GatewayRegistry] ✅ Updated global cache at ${CACHE_DIR()}`);
       } catch (error) {
         console.warn('[GatewayRegistry] Failed to write to global cache:', error);
       }

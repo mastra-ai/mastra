@@ -508,13 +508,9 @@ export const mastra = new Mastra({
     name: 'Mastra',
     level: 'info',
   }),
-  telemetry: {
-    // Telemetry is deprecated and will be removed in the Nov 4th release
-    enabled: false, 
-  },
   observability: {
     // Enables DefaultExporter and CloudExporter for AI tracing
-    default: { enabled: true }, 
+    default: { enabled: true },
   },
 });
 `,
@@ -543,10 +539,15 @@ export const checkAndInstallCoreDeps = async (addExample: boolean) => {
     spinner.start();
 
     const needsCore = (await depService.checkDependencies(['@mastra/core'])) !== `ok`;
+    const needsCli = (await depService.checkDependencies(['mastra'])) !== `ok`;
     const needsZod = (await depService.checkDependencies(['zod'])) !== `ok`;
 
     if (needsCore) {
       packages.push({ name: '@mastra/core', version: 'latest' });
+    }
+
+    if (needsCli) {
+      packages.push({ name: 'mastra', version: 'latest' });
     }
 
     if (needsZod) {

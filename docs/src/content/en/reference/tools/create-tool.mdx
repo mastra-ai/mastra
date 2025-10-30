@@ -1,5 +1,5 @@
 ---
-title: "Reference: createTool() | Tools | Mastra Docs"
+title: "Reference: createTool() | Tools & MCP | Mastra Docs"
 description: Documentation for the `createTool()` function in Mastra, used to define custom tools for agents.
 ---
 
@@ -9,7 +9,7 @@ The `createTool()` function is used to define custom tools that your Mastra agen
 
 ## Usage example
 
-```typescript filename="src/mastra/tools/reverse-tool.ts" showLineNumbers copy
+```typescript title="src/mastra/tools/reverse-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -17,19 +17,19 @@ export const tool = createTool({
   id: "test-tool",
   description: "Reverse the input string",
   inputSchema: z.object({
-    input: z.string()
+    input: z.string(),
   }),
   outputSchema: z.object({
-    output: z.string()
+    output: z.string(),
   }),
   execute: async ({ context }) => {
     const { input } = context;
     const reversed = input.split("").reverse().join("");
 
     return {
-      output: reversed
+      output: reversed,
     };
-  }
+  },
 });
 ```
 
@@ -72,37 +72,47 @@ export const tool = createTool({
       isOptional: false,
       properties: [
         {
-          parameters: [{
-            name: "context",
-            type: "z.infer<TInput>",
-            description: "The parsed input based on inputSchema"
-          }]
+          parameters: [
+            {
+              name: "context",
+              type: "z.infer<TInput>",
+              description: "The parsed input based on inputSchema",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "runtimeContext",
-            type: "RuntimeContext",
-            isOptional: true,
-            description: "Runtime context for accessing shared state and dependencies"
-          }]
+          parameters: [
+            {
+              name: "runtimeContext",
+              type: "RuntimeContext",
+              isOptional: true,
+              description:
+                "Runtime context for accessing shared state and dependencies",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "tracingContext",
-            type: "TracingContext",
-            isOptional: true,
-            description: "AI tracing context for creating child spans and adding metadata. Automatically injected when the tool is called within a traced operation."
-          }]
+          parameters: [
+            {
+              name: "tracingContext",
+              type: "TracingContext",
+              isOptional: true,
+              description:
+                "AI tracing context for creating child spans and adding metadata. Automatically injected when the tool is called within a traced operation.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "abortSignal",
-            type: "AbortSignal",
-            isOptional: true,
-            description: "Signal for aborting the tool execution"
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "abortSignal",
+              type: "AbortSignal",
+              isOptional: true,
+              description: "Signal for aborting the tool execution",
+            },
+          ],
+        },
+      ],
     },
   ]}
 />
@@ -124,7 +134,7 @@ The `createTool()` function returns a `Tool` object.
 
 ## Related
 
-- [Tools Overview](/docs/tools-mcp/overview.mdx)
-- [Using Tools with Agents](/docs/agents/using-tools-and-mcp.mdx)
-- [Tool Runtime Context](/docs/tools-mcp/overview.mdx#using-runtimecontext)
-- [Advanced Tool Usage](/docs/tools-mcp/advanced-usage.mdx)
+- [Tools Overview](/docs/tools-mcp/overview)
+- [Using Tools with Agents](/docs/agents/using-tools)
+- [Tool Runtime Context](/docs/tools-mcp/overview#using-runtimecontext)
+- [Advanced Tool Usage](/docs/tools-mcp/advanced-usage)

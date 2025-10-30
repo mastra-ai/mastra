@@ -3,8 +3,6 @@ title: "AI Tracing | Observability | Mastra Docs"
 description: "Set up AI tracing for Mastra applications"
 ---
 
-import { Callout } from "nextra/components";
-
 # AI Tracing
 
 AI Tracing provides specialized monitoring and debugging for the AI-related operations in your application. When enabled, Mastra automatically creates traces for agent runs, LLM generations, tool calls, and workflow steps with AI-specific context and metadata.
@@ -23,7 +21,7 @@ AI Traces are created by:
 
 ### Basic Config
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   // ... other config
   observability: {
@@ -36,6 +34,7 @@ export const mastra = new Mastra({
 ```
 
 When enabled, the default configuration automatically includes:
+
 - **Service Name**: `"mastra"`
 - **Sampling**: `"always"`- Sample (100% of traces)
 - **Exporters**:
@@ -47,8 +46,12 @@ When enabled, the default configuration automatically includes:
 
 This default configuration is a minimal helper that equates to this more verbose configuration:
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
-import { CloudExporter, DefaultExporter, SensitiveDataFilter } from '@mastra/core/ai-tracing';
+```ts title="src/mastra/index.ts" showLineNumbers copy
+import {
+  CloudExporter,
+  DefaultExporter,
+  SensitiveDataFilter,
+} from "@mastra/core/ai-tracing";
 
 export const mastra = new Mastra({
   // ... other config
@@ -56,23 +59,17 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: "mastra",
-        sampling: { type: 'always' },
-        processors: [
-          new SensitiveDataFilter(),
-        ],
-        exporters: [
-          new CloudExporter(),
-          new DefaultExporter(),
-        ],
-      }
-    }
+        sampling: { type: "always" },
+        processors: [new SensitiveDataFilter()],
+        exporters: [new CloudExporter(), new DefaultExporter()],
+      },
+    },
   },
   storage: new LibSQLStore({
     url: "file:./mastra.db", // Storage is required for tracing
   }),
 });
 ```
-
 
 ## Exporters
 
@@ -89,13 +86,12 @@ Mastra provides two built-in exporters that work out of the box:
 
 In addition to the internal exporters, Mastra supports integration with popular observability platforms. These exporters allow you to leverage your existing monitoring infrastructure and take advantage of platform-specific features like alerting, dashboards, and correlation with other application metrics.
 
+- **[Arize](/docs/observability/ai-tracing/exporters/arize)** - Exports traces to Arize Phoenix or Arize AX using OpenInference semantic conventions
 - **[Braintrust](/docs/observability/ai-tracing/exporters/braintrust)** - Exports traces to Braintrust's eval and observability platform
 - **[Langfuse](/docs/observability/ai-tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
-- **[LangSmith](/docs/observability/ai-tracing/exporters/langsmith)** - Pushes traces into LangSmith’s observability and evaluation toolkit
+- **[LangSmith](/docs/observability/ai-tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
 - **[OpenTelemetry](/docs/observability/ai-tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
   - Supports: Dash0, Laminar, New Relic, SigNoz, Traceloop, Zipkin, and others!
-
-- **Arize** - Coming soon!
 
 ## Sampling Strategies
 
@@ -104,20 +100,27 @@ Sampling allows you to control which traces are collected, helping you balance b
 Mastra supports four sampling strategies:
 
 ### Always Sample
+
 Collects 100% of traces. Best for development, debugging, or low-traffic scenarios where you need complete visibility.
 
 ```ts
-sampling: { type: 'always' }
+sampling: {
+  type: "always";
+}
 ```
 
 ### Never Sample
+
 Disables tracing entirely. Useful for specific environments where tracing adds no value or when you need to temporarily disable tracing without removing configuration.
 
 ```ts
-sampling: { type: 'never' }
+sampling: {
+  type: "never";
+}
 ```
 
 ### Ratio-Based Sampling
+
 Randomly samples a percentage of traces. Ideal for production environments where you want statistical insights without the cost of full tracing. The probability value ranges from 0 (no traces) to 1 (all traces).
 
 ```ts
@@ -128,6 +131,7 @@ sampling: {
 ```
 
 ### Custom Sampling
+
 Implements your own sampling logic based on runtime context, metadata, or business rules. Perfect for complex scenarios like sampling based on user tier, request type, or error conditions.
 
 ```ts
@@ -147,19 +151,19 @@ sampling: {
 
 ### Complete Example
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
     configs: {
       "10_percent": {
-        serviceName: 'my-service',
+        serviceName: "my-service",
         // Sample 10% of traces
         sampling: {
-          type: 'ratio',
-          probability: 0.1
+          type: "ratio",
+          probability: 0.1,
         },
         exporters: [new DefaultExporter()],
-      }
+      },
     },
   },
 });
@@ -170,57 +174,60 @@ export const mastra = new Mastra({
 Complex applications often require different tracing configurations for different scenarios. You might want detailed traces with full sampling during development, sampled traces sent to external providers in production, and specialized configurations for specific features or customer segments. The `configSelector` function enables dynamic configuration selection at runtime, allowing you to route traces based on request context, environment variables, feature flags, or any custom logic.
 
 This approach is particularly valuable when:
+
 - Running A/B tests with different observability requirements
 - Providing enhanced debugging for specific customers or support cases
 - Gradually rolling out new tracing providers without affecting existing monitoring
 - Optimizing costs by using different sampling rates for different request types
 - Maintaining separate trace streams for compliance or data residency requirements
 
-<Callout type="info">
+:::info
+
 Note that only a single config can be used for a specific execution. But a single config can send data to multiple exporters simultaneously.
-</Callout>
+
+:::
 
 ### Dynamic Configuration Selection
 
 Use `configSelector` to choose the appropriate tracing configuration based on runtime context:
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
     default: { enabled: true }, // Provides 'default' instance
     configs: {
       langfuse: {
-        serviceName: 'langfuse-service',
+        serviceName: "langfuse-service",
         exporters: [langfuseExporter],
       },
       braintrust: {
-        serviceName: 'braintrust-service',
+        serviceName: "braintrust-service",
         exporters: [braintrustExporter],
       },
       debug: {
-        serviceName: 'debug-service',
-        sampling: { type: 'always' },
+        serviceName: "debug-service",
+        sampling: { type: "always" },
         exporters: [new DefaultExporter()],
       },
     },
     configSelector: (context, availableTracers) => {
       // Use debug config for support requests
-      if (context.runtimeContext?.get('supportMode')) {
-        return 'debug';
+      if (context.runtimeContext?.get("supportMode")) {
+        return "debug";
       }
 
       // Route specific customers to different providers
-      const customerId = context.runtimeContext?.get('customerId');
+      const customerId = context.runtimeContext?.get("customerId");
       if (customerId && premiumCustomers.includes(customerId)) {
-        return 'braintrust';
+        return "braintrust";
       }
 
       // Route specific requests to langfuse
-      if (context.runtimeContext?.get('useExternalTracing')) {
-        return 'langfuse';
+      if (context.runtimeContext?.get("useExternalTracing")) {
+        return "langfuse";
       }
 
-      return 'default';
+      return "default";
     },
   },
 });
@@ -230,28 +237,28 @@ export const mastra = new Mastra({
 
 A common pattern is to select configurations based on deployment environment:
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
     configs: {
       development: {
-        serviceName: 'my-service-dev',
-        sampling: { type: 'always' },
+        serviceName: "my-service-dev",
+        sampling: { type: "always" },
         exporters: [new DefaultExporter()],
       },
       staging: {
-        serviceName: 'my-service-staging',
-        sampling: { type: 'ratio', probability: 0.5 },
+        serviceName: "my-service-staging",
+        sampling: { type: "ratio", probability: 0.5 },
         exporters: [langfuseExporter],
       },
       production: {
-        serviceName: 'my-service-prod',
-        sampling: { type: 'ratio', probability: 0.01 },
+        serviceName: "my-service-prod",
+        sampling: { type: "ratio", probability: 0.01 },
         exporters: [cloudExporter, langfuseExporter],
       },
     },
     configSelector: (context, availableTracers) => {
-      const env = process.env.NODE_ENV || 'development';
+      const env = process.env.NODE_ENV || "development";
       return env;
     },
   },
@@ -264,13 +271,13 @@ export const mastra = new Mastra({
 
 When you have both the default config enabled and custom configs defined, **the default config will always be used** unless you explicitly select a different config:
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
     default: { enabled: true }, // This will always be used!
     configs: {
       langfuse: {
-        serviceName: 'my-service',
+        serviceName: "my-service",
         exporters: [langfuseExporter], // This won't be reached
       },
     },
@@ -281,17 +288,21 @@ export const mastra = new Mastra({
 **Solutions:**
 
 1. **Disable the default** and use only custom configs:
+
 ```ts
 observability: {
   // comment out or remove this line to disable the default config
   // default: { enabled: true },
   configs: {
-    langfuse: { /* ... */ }
+    langfuse: {
+      /* ... */
+    }
   }
 }
 ```
 
 2. **Use a configSelector** to choose between configs:
+
 ```ts
 observability: {
   default: { enabled: true },
@@ -309,20 +320,24 @@ observability: {
 
 When creating a custom config with external exporters, you might lose access to Mastra Playground and Cloud. To maintain access while adding external exporters, include the default exporters in your custom config:
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
-import { DefaultExporter, CloudExporter } from '@mastra/core/ai-tracing';
-import { LangfuseExporter } from '@mastra/langfuse';
+```ts title="src/mastra/index.ts" showLineNumbers copy
+import { DefaultExporter, CloudExporter } from "@mastra/core/ai-tracing";
+import { ArizeExporter } from "@mastra/arize";
 
 export const mastra = new Mastra({
   observability: {
     default: { enabled: false }, // Disable default to use custom
     configs: {
       production: {
-        serviceName: 'my-service',
+        serviceName: "my-service",
         exporters: [
-          new LangfuseExporter(), // External exporter
-          new DefaultExporter(),  // Keep Playground access
-          new CloudExporter(),    // Keep Cloud access
+          new ArizeExporter({
+            // External exporter
+            endpoint: process.env.PHOENIX_ENDPOINT,
+            apiKey: process.env.PHOENIX_API_KEY,
+          }),
+          new DefaultExporter(), // Keep Playground access
+          new CloudExporter(), // Keep Cloud access
         ],
       },
     },
@@ -331,13 +346,16 @@ export const mastra = new Mastra({
 ```
 
 This configuration sends traces to all three destinations simultaneously:
-- **Langfuse** for external observability
+
+- **Arize Phoenix/AX** for external observability
 - **DefaultExporter** for local Playground access
 - **CloudExporter** for Mastra Cloud dashboard
 
-<Callout type="info">
+:::info
+
 Remember: A single trace can be sent to multiple exporters. You don't need separate configs for each exporter unless you want different sampling rates or processors.
-</Callout>
+
+:::
 
 ## Adding Custom Metadata
 
@@ -358,11 +376,11 @@ execute: async ({ inputData, tracingContext }) => {
       responseTimeMs: Date.now() - startTime,
       userTier: inputData.userTier,
       region: process.env.AWS_REGION,
-    }
+    },
   });
 
   return await response.json();
-}
+};
 ```
 
 Metadata set here will be shown in all configured exporters.
@@ -375,13 +393,13 @@ Instead of manually adding metadata to each span, you can configure Mastra to au
 
 Define which RuntimeContext keys to extract in your tracing configuration. These keys will be automatically included as metadata for all spans created with this configuration:
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
     configs: {
       default: {
-        serviceName: 'my-service',
-        runtimeContextKeys: ['userId', 'environment', 'tenantId'],
+        serviceName: "my-service",
+        runtimeContextKeys: ["userId", "environment", "tenantId"],
         exporters: [new DefaultExporter()],
       },
     },
@@ -393,13 +411,13 @@ Now when you execute agents or workflows with a RuntimeContext, these values are
 
 ```ts showLineNumbers copy
 const runtimeContext = new RuntimeContext();
-runtimeContext.set('userId', 'user-123');
-runtimeContext.set('environment', 'production');
-runtimeContext.set('tenantId', 'tenant-456');
+runtimeContext.set("userId", "user-123");
+runtimeContext.set("environment", "production");
+runtimeContext.set("tenantId", "tenant-456");
 
 // All spans in this trace automatically get userId, environment, and tenantId metadata
 const result = await agent.generate({
-  messages: [{ role: 'user', content: 'Hello' }],
+  messages: [{ role: "user", content: "Hello" }],
   runtimeContext,
 });
 ```
@@ -410,15 +428,15 @@ You can add trace-specific keys using `tracingOptions.runtimeContextKeys`. These
 
 ```ts showLineNumbers copy
 const runtimeContext = new RuntimeContext();
-runtimeContext.set('userId', 'user-123');
-runtimeContext.set('environment', 'production');
-runtimeContext.set('experimentId', 'exp-789');
+runtimeContext.set("userId", "user-123");
+runtimeContext.set("environment", "production");
+runtimeContext.set("experimentId", "exp-789");
 
 const result = await agent.generate({
-  messages: [{ role: 'user', content: 'Hello' }],
+  messages: [{ role: "user", content: "Hello" }],
   runtimeContext,
   tracingOptions: {
-    runtimeContextKeys: ['experimentId'], // Adds to configured keys
+    runtimeContextKeys: ["experimentId"], // Adds to configured keys
   },
 });
 
@@ -434,7 +452,7 @@ export const mastra = new Mastra({
   observability: {
     configs: {
       default: {
-        runtimeContextKeys: ['user.id', 'session.data.experimentId'],
+        runtimeContextKeys: ["user.id", "session.data.experimentId"],
         exporters: [new DefaultExporter()],
       },
     },
@@ -442,8 +460,8 @@ export const mastra = new Mastra({
 });
 
 const runtimeContext = new RuntimeContext();
-runtimeContext.set('user', { id: 'user-456', name: 'John Doe' });
-runtimeContext.set('session', { data: { experimentId: 'exp-999' } });
+runtimeContext.set("user", { id: "user-456", name: "John Doe" });
+runtimeContext.set("session", { data: { experimentId: "exp-999" } });
 
 // Metadata will include: { user: { id: 'user-456' }, session: { data: { experimentId: 'exp-999' } } }
 ```
@@ -463,23 +481,23 @@ When creating child spans within tools or workflow steps, you can pass the `runt
 execute: async ({ tracingContext, runtimeContext }) => {
   // Create child span WITH runtimeContext - gets metadata extraction
   const dbSpan = tracingContext.currentSpan?.createChildSpan({
-    type: 'generic',
-    name: 'database-query',
-    runtimeContext,  // Pass to enable metadata extraction
+    type: "generic",
+    name: "database-query",
+    runtimeContext, // Pass to enable metadata extraction
   });
 
-  const results = await db.query('SELECT * FROM users');
+  const results = await db.query("SELECT * FROM users");
   dbSpan?.end({ output: results });
 
   // Or create child span WITHOUT runtimeContext - no metadata extraction
   const cacheSpan = tracingContext.currentSpan?.createChildSpan({
-    type: 'generic',
-    name: 'cache-check',
+    type: "generic",
+    name: "cache-check",
     // No runtimeContext - won't extract metadata
   });
 
   return results;
-}
+};
 ```
 
 This gives you fine-grained control over which child spans include RuntimeContext metadata. Root spans (agent/workflow executions) always extract metadata automatically, while child spans only extract when you explicitly pass `runtimeContext`.
@@ -494,10 +512,10 @@ Create child spans inside a tool call or workflow step to track specific operati
 execute: async ({ input, tracingContext }) => {
   // Create another child span for the main database operation
   const querySpan = tracingContext.currentSpan?.createChildSpan({
-    type: 'generic',
-    name: 'database-query',
+    type: "generic",
+    name: "database-query",
     input: { query: input.query },
-    metadata: { database: 'production' },
+    metadata: { database: "production" },
   });
 
   try {
@@ -507,18 +525,18 @@ execute: async ({ input, tracingContext }) => {
       metadata: {
         rowsReturned: results.length,
         queryTimeMs: results.executionTime,
-        cacheHit: results.fromCache
-      }
+        cacheHit: results.fromCache,
+      },
     });
     return results;
   } catch (error) {
     querySpan?.error({
       error,
-      metadata: { retryable: isRetryableError(error) }
+      metadata: { retryable: isRetryableError(error) },
     });
     throw error;
   }
-}
+};
 ```
 
 Child spans automatically inherit the trace context from their parent, maintaining the relationship hierarchy in your observability platform.
@@ -529,20 +547,20 @@ Span processors allow you to transform, filter, or enrich trace data before it's
 
 ### Built-in Processors
 
-* [Sensitive Data Filter](/docs/observability/ai-tracing/processors/sensitive-data-filter) redacts sensitive information. It is enabled in the default observability config.
+- [Sensitive Data Filter](/docs/observability/ai-tracing/processors/sensitive-data-filter) redacts sensitive information. It is enabled in the default observability config.
 
 ### Creating Custom Processors
 
 You can create custom span processors by implementing the `AISpanProcessor` interface. Here's a simple example that converts all input text in spans to lowercase:
 
-```ts filename="src/processors/lowercase-input-processor.ts" showLineNumbers copy
-import type { AISpanProcessor, AnyAISpan } from '@mastra/core/ai-tracing';
+```ts title="src/processors/lowercase-input-processor.ts" showLineNumbers copy
+import type { AISpanProcessor, AnyAISpan } from "@mastra/core/ai-tracing";
 
 export class LowercaseInputProcessor implements AISpanProcessor {
-  name = 'lowercase-processor';
+  name = "lowercase-processor";
 
   process(span: AnyAISpan): AnyAISpan {
-    span.input = `${span.input}`.toLowerCase()
+    span.input = `${span.input}`.toLowerCase();
     return span;
   }
 
@@ -556,10 +574,7 @@ export const mastra = new Mastra({
   observability: {
     configs: {
       development: {
-        processors: [
-          new LowercaseInputProcessor(),
-          new SensitiveDataFilter(),
-        ],
+        processors: [new LowercaseInputProcessor(), new SensitiveDataFilter()],
         exporters: [new DefaultExporter()],
       },
     },
@@ -568,6 +583,7 @@ export const mastra = new Mastra({
 ```
 
 Processors are executed in the order they're defined, allowing you to chain multiple transformations. Common use cases for custom processors include:
+
 - Adding environment-specific metadata
 - Filtering out spans based on criteria
 - Normalizing data formats
@@ -585,17 +601,17 @@ Both `generate` and `stream` methods return the trace ID in their response:
 ```ts showLineNumbers copy
 // Using generate
 const result = await agent.generate({
-  messages: [{ role: 'user', content: 'Hello' }]
+  messages: [{ role: "user", content: "Hello" }],
 });
 
-console.log('Trace ID:', result.traceId);
+console.log("Trace ID:", result.traceId);
 
 // Using stream
 const streamResult = await agent.stream({
-  messages: [{ role: 'user', content: 'Tell me a story' }]
+  messages: [{ role: "user", content: "Tell me a story" }],
 });
 
-console.log('Trace ID:', streamResult.traceId);
+console.log("Trace ID:", streamResult.traceId);
 ```
 
 ### Workflow Trace IDs
@@ -604,23 +620,23 @@ Workflow executions also return trace IDs:
 
 ```ts showLineNumbers copy
 // Create a workflow run
-const run = await mastra.getWorkflow('myWorkflow').createRunAsync();
+const run = await mastra.getWorkflow("myWorkflow").createRunAsync();
 
 // Start the workflow
 const result = await run.start({
-  inputData: { data: 'process this' }
+  inputData: { data: "process this" },
 });
 
-console.log('Trace ID:', result.traceId);
+console.log("Trace ID:", result.traceId);
 
 // Or stream the workflow
 const { stream, getWorkflowState } = run.stream({
-  inputData: { data: 'process this' }
+  inputData: { data: "process this" },
 });
 
 // Get the final state which includes the trace ID
 const finalState = await getWorkflowState();
-console.log('Trace ID:', finalState.traceId);
+console.log("Trace ID:", finalState.traceId);
 ```
 
 ### Using Trace IDs
@@ -645,14 +661,14 @@ Use the `tracingOptions` parameter to specify the trace context from your parent
 ```ts showLineNumbers copy
 // Get trace context from your existing tracing system
 const parentTraceId = getCurrentTraceId(); // Your tracing system
-const parentSpanId = getCurrentSpanId();   // Your tracing system
+const parentSpanId = getCurrentSpanId(); // Your tracing system
 
 // Execute Mastra operations as part of the parent trace
-const result = await agent.generate('Analyze this data', {
+const result = await agent.generate("Analyze this data", {
   tracingOptions: {
     traceId: parentTraceId,
     parentSpanId: parentSpanId,
-  }
+  },
 });
 
 // The Mastra trace will now appear as a child in your distributed trace
@@ -663,7 +679,7 @@ const result = await agent.generate('Analyze this data', {
 Integration with OpenTelemetry allows Mastra traces to appear seamlessly in your existing observability platform:
 
 ```ts showLineNumbers copy
-import { trace } from '@opentelemetry/api';
+import { trace } from "@opentelemetry/api";
 
 // Get the current OpenTelemetry span
 const currentSpan = trace.getActiveSpan();
@@ -674,7 +690,7 @@ if (spanContext) {
     tracingOptions: {
       traceId: spanContext.traceId,
       parentSpanId: spanContext.spanId,
-    }
+    },
   });
 }
 ```
@@ -684,15 +700,15 @@ if (spanContext) {
 Workflows support the same pattern for trace propagation:
 
 ```ts showLineNumbers copy
-const workflow = mastra.getWorkflow('data-pipeline');
+const workflow = mastra.getWorkflow("data-pipeline");
 const run = await workflow.createRunAsync();
 
 const result = await run.start({
-  inputData: { data: '...' },
+  inputData: { data: "..." },
   tracingOptions: {
     traceId: externalTraceId,
     parentSpanId: externalSpanId,
-  }
+  },
 });
 ```
 
@@ -704,6 +720,7 @@ Mastra validates trace and span IDs to ensure compatibility:
 - **Span IDs**: 1-16 hexadecimal characters (OpenTelemetry uses 16)
 
 Invalid IDs are handled gracefully — Mastra logs an error and continues:
+
 - Invalid trace ID → generates a new trace ID
 - Invalid parent span ID → ignores the parent relationship
 
@@ -714,21 +731,23 @@ This ensures tracing never crashes your application, even with malformed input.
 Here's a complete example showing trace propagation in an Express application:
 
 ```ts showLineNumbers copy
-import { trace } from '@opentelemetry/api';
-import express from 'express';
+import { trace } from "@opentelemetry/api";
+import express from "express";
 
 const app = express();
 
-app.post('/api/analyze', async (req, res) => {
+app.post("/api/analyze", async (req, res) => {
   // Get current OpenTelemetry context
   const currentSpan = trace.getActiveSpan();
   const spanContext = currentSpan?.spanContext();
 
   const result = await agent.generate(req.body.message, {
-    tracingOptions: spanContext ? {
-      traceId: spanContext.traceId,
-      parentSpanId: spanContext.spanId,
-    } : undefined,
+    tracingOptions: spanContext
+      ? {
+          traceId: spanContext.traceId,
+          parentSpanId: spanContext.spanId,
+        }
+      : undefined,
   });
 
   res.json(result);
@@ -742,12 +761,14 @@ This creates a single distributed trace that includes both the HTTP request hand
 Mastra automatically creates spans for:
 
 ### Agent Operations
+
 - **Agent runs** - Complete execution with instructions and tools
 - **LLM calls** - Model interactions with tokens and parameters
 - **Tool executions** - Function calls with inputs and outputs
 - **Memory operations** - Thread and semantic recall
 
 ### Workflow Operations
+
 - **Workflow runs** - Full execution from start to finish
 - **Individual steps** - Step processing with inputs/outputs
 - **Control flow** - Conditionals, loops, parallel execution
@@ -759,27 +780,33 @@ Traces are available in multiple locations:
 
 - **Mastra Playground** - Local development environment
 - **Mastra Cloud** - Production monitoring dashboard
-- **Langfuse Dashboard** - When using Langfuse exporter
+- **Arize Phoenix / Arize AX** - When using Arize exporter
 - **Braintrust Console** - When using Braintrust exporter
+- **Langfuse Dashboard** - When using Langfuse exporter
 
 ## See Also
 
 ### Examples
+
 - [Basic AI Tracing Example](/examples/observability/basic-ai-tracing) - Working implementation
 
 ### Reference Documentation
+
 - [Configuration API](/reference/observability/ai-tracing/configuration) - ObservabilityConfig details
-- [AITracing Classes](/reference/observability/ai-tracing/ai-tracing) - Core classes and methods
+- [AITracing Classes](/reference/observability/ai-tracing/) - Core classes and methods
 - [Span Interfaces](/reference/observability/ai-tracing/span) - Span types and lifecycle
 - [Type Definitions](/reference/observability/ai-tracing/interfaces) - Complete interface reference
 
 ### Exporters
+
 - [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - Storage persistence
 - [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud integration
 - [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter) - Debug output
-- [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
+- [Arize](/reference/observability/ai-tracing/exporters/arize) - Arize Phoenix and Arize AX integration
 - [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust integration
+- [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
 - [OpenTelemetry](/reference/observability/ai-tracing/exporters/otel) - OTEL-compatible platforms
 
 ### Processors
+
 - [Sensitive Data Filter](/docs/observability/ai-tracing/processors/sensitive-data-filter) - Data redaction

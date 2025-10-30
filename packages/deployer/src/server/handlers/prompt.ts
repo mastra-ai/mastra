@@ -21,35 +21,10 @@ export async function generateSystemPromptHandler(c: Context) {
     }
 
     const mastra: Mastra<any> = c.get('mastra');
-    const agent = mastra.getAgent(agentId);
+    const agent: Agent<any> = mastra.getAgent(agentId);
 
     if (!agent) {
       return c.json({ error: 'Agent not found' }, 404);
-    }
-
-    let evalSummary = '';
-
-    try {
-      // Get both test and live evals
-      const testEvals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'test')) || [];
-      const liveEvals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'live')) || [];
-      // Format eval results for the prompt
-      const evalsMapped = [...testEvals, ...liveEvals].filter(
-        ({ instructions: evalInstructions }) => evalInstructions === instructions,
-      );
-
-      evalSummary = evalsMapped
-        .map(
-          ({ input, output, result }) => `
-          Input: ${input}\n
-          Output: ${output}\n
-          Result: ${JSON.stringify(result)}
-
-        `,
-        )
-        .join('');
-    } catch (error) {
-      mastra.getLogger().error(`Error fetching evals`, { error });
     }
 
     const ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS = `
@@ -103,7 +78,7 @@ export async function generateSystemPromptHandler(c: Context) {
     const systemPromptAgent = new Agent({
       name: 'system-prompt-enhancer',
       instructions: ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS,
-      model: agent.llm?.getModel(),
+      model: await agent.getModel(),
     });
 
     const result = await systemPromptAgent.generate(
@@ -111,13 +86,14 @@ export async function generateSystemPromptHandler(c: Context) {
             We need to improve the system prompt. 
             Current: ${instructions}
             ${comment ? `User feedback: ${comment}` : ''}
-            ${evalSummary ? `\nEvaluation Results:\n${evalSummary}` : ''}
         `,
       {
-        output: z.object({
-          new_prompt: z.string(),
-          explanation: z.string(),
-        }),
+        structuredOutput: {
+          schema: z.object({
+            new_prompt: z.string(),
+            explanation: z.string(),
+          }),
+        },
       },
     );
 

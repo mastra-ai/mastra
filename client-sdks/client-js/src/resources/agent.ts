@@ -21,7 +21,6 @@ import type { ZodType } from 'zod';
 import type {
   GenerateLegacyParams,
   GetAgentResponse,
-  GetEvalsByAgentIdResponse,
   GetToolResponse,
   ClientOptions,
   StreamParams,
@@ -203,6 +202,13 @@ export class Agent extends BaseResource {
     return this.request(`/api/agents/${this.agentId}${runtimeContextQueryString(runtimeContext)}`);
   }
 
+  enhanceInstructions(instructions: string, comment: string): Promise<{ explanation: string; new_prompt: string }> {
+    return this.request(`/api/agents/${this.agentId}/instructions/enhance`, {
+      method: 'POST',
+      body: { instructions, comment },
+    });
+  }
+
   /**
    * Generates a response from the agent
    * @param params - Generation parameters including prompt
@@ -325,7 +331,6 @@ export class Agent extends BaseResource {
     }
     const processedParams = {
       ...params,
-      output: params.output ? zodToJsonSchema(params.output) : undefined,
       runtimeContext: parseClientRuntimeContext(params.runtimeContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput
@@ -1362,7 +1367,6 @@ export class Agent extends BaseResource {
     }
     const processedParams: StreamParams<OUTPUT> = {
       ...params,
-      output: params.output ? zodToJsonSchema(params.output) : undefined,
       runtimeContext: parseClientRuntimeContext(params.runtimeContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput
@@ -1670,23 +1674,6 @@ export class Agent extends BaseResource {
   }
 
   /**
-   * Retrieves evaluation results for the agent
-   * @param runtimeContext - Optional runtime context to pass as query parameter
-   * @returns Promise containing agent evaluations
-   */
-  evals(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetEvalsByAgentIdResponse> {
-    return this.request(`/api/agents/${this.agentId}/evals/ci${runtimeContextQueryString(runtimeContext)}`);
-  }
-
-  /**
-   * Retrieves live evaluation results for the agent
-   * @param runtimeContext - Optional runtime context to pass as query parameter
-   * @returns Promise containing live agent evaluations
-   */
-  liveEvals(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetEvalsByAgentIdResponse> {
-    return this.request(`/api/agents/${this.agentId}/evals/live${runtimeContextQueryString(runtimeContext)}`);
-  }
-  /**
    * Updates the model for the agent
    * @param params - Parameters for updating the model
    * @returns Promise containing the updated model
@@ -1695,6 +1682,16 @@ export class Agent extends BaseResource {
     return this.request(`/api/agents/${this.agentId}/model`, {
       method: 'POST',
       body: params,
+    });
+  }
+
+  /**
+   * Resets the agent's model to the original model that was set during construction
+   * @returns Promise containing a success message
+   */
+  resetModel(): Promise<{ message: string }> {
+    return this.request(`/api/agents/${this.agentId}/model/reset`, {
+      method: 'POST',
     });
   }
 

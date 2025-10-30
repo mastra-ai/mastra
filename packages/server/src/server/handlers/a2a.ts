@@ -48,7 +48,7 @@ export async function getAgentCardByIdHandler({
   runtimeContext,
 }: Context & {
   runtimeContext: RuntimeContext;
-  agentId: keyof ReturnType<typeof mastra.getAgents>;
+  agentId: keyof ReturnType<typeof mastra.listAgents>;
   executionUrl?: string;
   version?: string;
   provider?: {
@@ -64,7 +64,7 @@ export async function getAgentCardByIdHandler({
 
   const [instructions, tools] = await Promise.all([
     agent.getInstructions({ runtimeContext }),
-    agent.getTools({ runtimeContext }),
+    agent.listTools({ runtimeContext }),
   ]);
 
   // Extract agent information to create the AgentCard

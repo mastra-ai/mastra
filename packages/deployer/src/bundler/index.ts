@@ -1,7 +1,6 @@
 import { existsSync } from 'node:fs';
 import { stat, writeFile } from 'node:fs/promises';
 import { dirname, join, posix } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import virtual from '@rollup/plugin-virtual';
@@ -12,8 +11,6 @@ import { glob } from 'tinyglobby';
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
-import { writeCustomInstrumentation } from '../build/customInstrumentation';
-import { writeTelemetryConfig } from '../build/telemetry';
 import { getPackageRootPath, slash } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
@@ -33,17 +30,6 @@ export abstract class Bundler extends MastraBundler {
 
     await ensureDir(join(outputDirectory, this.analyzeOutputDir));
     await ensureDir(join(outputDirectory, this.outputDir));
-  }
-
-  async writeInstrumentationFile(outputDirectory: string, customInstrumentationFile?: string) {
-    const instrumentationFile = join(outputDirectory, 'instrumentation.mjs');
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-
-    if (customInstrumentationFile) {
-      await copy(customInstrumentationFile, instrumentationFile);
-    } else {
-      await copy(join(__dirname, 'templates', 'instrumentation-template.js'), instrumentationFile);
-    }
   }
 
   async writePackageJson(
@@ -69,18 +55,6 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
-    // add telemetry dependencies
-    dependenciesMap.set('@opentelemetry/core', '^2.0.1');
-    dependenciesMap.set('@opentelemetry/api', '^1.9.0');
-    dependenciesMap.set('@opentelemetry/auto-instrumentations-node', '^0.59.0');
-    dependenciesMap.set('@opentelemetry/exporter-trace-otlp-grpc', '^0.201.0');
-    dependenciesMap.set('@opentelemetry/exporter-trace-otlp-http', '^0.201.0');
-    dependenciesMap.set('@opentelemetry/resources', '^2.0.1');
-    dependenciesMap.set('@opentelemetry/sdk-node', '^0.201.0');
-    dependenciesMap.set('@opentelemetry/sdk-trace-base', '^2.0.1');
-    dependenciesMap.set('@opentelemetry/semantic-conventions', '^1.33.0');
-    dependenciesMap.set('@opentelemetry/instrumentation', '^0.202.0');
-
     await writeFile(
       pkgPath,
       JSON.stringify(
@@ -91,7 +65,7 @@ export abstract class Bundler extends MastraBundler {
           type: 'module',
           main: 'index.mjs',
           scripts: {
-            start: 'node --import=./instrumentation.mjs --import=@opentelemetry/instrumentation/hook.mjs ./index.mjs',
+            start: 'node ./index.mjs',
           },
           author: 'Mastra',
           license: 'ISC',
@@ -191,7 +165,7 @@ export abstract class Bundler extends MastraBundler {
     );
     const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
 
-    const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
+    const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 
     if (isVirtual) {
       inputOptions.input = { index: '#entry', ...toolsInputOptions };
@@ -231,7 +205,7 @@ export abstract class Bundler extends MastraBundler {
     return [...toolsPaths, defaultPaths];
   }
 
-  async getToolsInputOptions(toolsPaths: (string | string[])[]) {
+  async listToolsInputOptions(toolsPaths: (string | string[])[]) {
     const inputs: Record<string, string> = {};
 
     for (const toolPath of toolsPaths) {
@@ -291,8 +265,7 @@ export abstract class Bundler extends MastraBundler {
 
     let analyzedBundleInfo;
     try {
-      const resolvedToolsPaths = await this.getToolsInputOptions(toolsPaths);
-
+      const resolvedToolsPaths = await this.listToolsInputOptions(toolsPaths);
       analyzedBundleInfo = await analyzeBundle(
         [serverFile, ...Object.values(resolvedToolsPaths)],
         mastraEntryFile,
@@ -324,63 +297,7 @@ export abstract class Bundler extends MastraBundler {
       );
     }
 
-    let externalDependencies: string[];
-    try {
-      const result = await writeTelemetryConfig(mastraEntryFile, join(outputDirectory, this.outputDir));
-
-      externalDependencies = result?.externalDependencies ?? [];
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new MastraError(
-        {
-          id: 'DEPLOYER_BUNDLER_TELEMETRY_FAILED',
-          text: `Failed to write telemetry config: ${message}`,
-          domain: ErrorDomain.DEPLOYER,
-          category: ErrorCategory.SYSTEM,
-        },
-        error,
-      );
-    }
-
-    const mastraFolder = dirname(mastraEntryFile);
-
-    const fileService = new FileService();
-    const customInstrumentation = fileService.getFirstExistingFileOrUndefined([
-      join(mastraFolder, 'instrumentation.js'),
-      join(mastraFolder, 'instrumentation.ts'),
-      join(mastraFolder, 'instrumentation.mjs'),
-    ]);
-
-    try {
-      if (customInstrumentation) {
-        const result = await writeCustomInstrumentation(customInstrumentation, join(outputDirectory, this.outputDir), {
-          sourcemap,
-        });
-        externalDependencies = [...externalDependencies, ...result.externalDependencies];
-        await this.writeInstrumentationFile(join(outputDirectory, this.outputDir), customInstrumentation);
-      } else {
-        await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new MastraError(
-        {
-          id: 'DEPLOYER_BUNDLER_INSTRUMENTATION_FILE_FAILED',
-          text: `Failed to write instrumentation file: ${message}, ${customInstrumentation ? ` Found custom instrumentation file: ${customInstrumentation}` : ''}`,
-          domain: ErrorDomain.DEPLOYER,
-          category: ErrorCategory.SYSTEM,
-        },
-        error,
-      );
-    }
-
     const dependenciesToInstall = new Map<string, string>();
-
-    // Add extenal dependencies from telemetry file
-    for (const external of externalDependencies) {
-      dependenciesToInstall.set(external, 'latest');
-    }
-
     for (const dep of analyzedBundleInfo.externalDependencies) {
       try {
         if (analyzedBundleInfo.workspaceMap.has(dep)) {
@@ -478,8 +395,8 @@ export const tools = [${toolsExports.join(', ')}]`,
     }
   }
 
-  async lint(entryFile: string, _outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
-    const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
+  async lint(_entryFile: string, _outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
+    const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
     const toolsLength = Object.keys(toolsInputOptions).length;
     if (toolsLength > 0) {
       this.logger.info(`Found ${toolsLength} ${toolsLength === 1 ? 'tool' : 'tools'}`);

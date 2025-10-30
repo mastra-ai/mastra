@@ -5,13 +5,12 @@ import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { ChunkType } from '@mastra/core/stream';
 import { ChunkFrom } from '@mastra/core/stream';
 import {
-  getAgentsHandler as getOriginalAgentsHandler,
+  listAgentsHandler as getOriginalListAgentsHandler,
   getAgentByIdHandler as getOriginalAgentByIdHandler,
-  getEvalsByAgentIdHandler as getOriginalEvalsByAgentIdHandler,
-  getLiveEvalsByAgentIdHandler as getOriginalLiveEvalsByAgentIdHandler,
   generateHandler as getOriginalGenerateHandler,
   streamGenerateHandler as getOriginalStreamGenerateHandler,
   updateAgentModelHandler as getOriginalUpdateAgentModelHandler,
+  resetAgentModelHandler as getOriginalResetAgentModelHandler,
   streamUIMessageHandler as getOriginalStreamUIMessageHandler,
   generateLegacyHandler as getOriginalGenerateLegacyHandler,
   streamGenerateLegacyHandler as getOriginalStreamGenerateLegacyHandler,
@@ -96,8 +95,8 @@ export const vNextBodyOptions: any = {
 };
 
 // Agent handlers
-export async function getAgentsHandler(c: Context) {
-  const serializedAgents = await getOriginalAgentsHandler({
+export async function listAgentsHandler(c: Context) {
+  const serializedAgents = await getOriginalListAgentsHandler({
     mastra: c.get('mastra'),
     runtimeContext: c.get('runtimeContext'),
   });
@@ -146,34 +145,6 @@ export async function getAgentByIdHandler(c: Context) {
     agentId,
     runtimeContext,
     isPlayground,
-  });
-
-  return c.json(result);
-}
-
-export async function getEvalsByAgentIdHandler(c: Context) {
-  const mastra: Mastra = c.get('mastra');
-  const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
-
-  const result = await getOriginalEvalsByAgentIdHandler({
-    mastra,
-    agentId,
-    runtimeContext,
-  });
-
-  return c.json(result);
-}
-
-export async function getLiveEvalsByAgentIdHandler(c: Context) {
-  const mastra: Mastra = c.get('mastra');
-  const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
-
-  const result = await getOriginalLiveEvalsByAgentIdHandler({
-    mastra,
-    agentId,
-    runtimeContext,
   });
 
   return c.json(result);
@@ -595,6 +566,22 @@ export async function updateAgentModelHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error updating agent model');
+  }
+}
+
+export async function resetAgentModelHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+
+    const result = await getOriginalResetAgentModelHandler({
+      mastra,
+      agentId,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error resetting agent model');
   }
 }
 
