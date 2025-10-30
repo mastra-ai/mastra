@@ -41,7 +41,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
-import { RuntimeContext } from '../runtime-context';
+import { RequestContext } from '../request-context';
 import type {
   ScorerRunInputForAgent,
   ScorerRunOutputForAgent,
@@ -138,6 +138,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   #instructions: DynamicAgentInstructions;
   readonly #description?: string;
   model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
+  #originalModel: DynamicArgument<MastraModelConfig> | ModelFallbacks;
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
@@ -220,8 +221,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         maxRetries: mdl.maxRetries ?? config?.maxRetries ?? 0,
         enabled: mdl.enabled ?? true,
       }));
+      this.#originalModel = [...this.model];
     } else {
       this.model = config.model;
+      this.#originalModel = config.model;
     }
 
     this.maxRetries = config.maxRetries ?? 0;
@@ -289,10 +292,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * console.log(Object.keys(agents)); // ['agent1', 'agent2']
    * ```
    */
-  public listAgents({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}) {
+  public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}) {
     const agentsToUse = this.#agents
       ? typeof this.#agents === 'function'
-        ? this.#agents({ runtimeContext })
+        ? this.#agents({ requestContext })
         : this.#agents
       : {};
 
@@ -321,11 +324,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * @internal
    */
   private async getProcessorRunner({
-    runtimeContext,
+    requestContext,
     inputProcessorOverrides,
     outputProcessorOverrides,
   }: {
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     inputProcessorOverrides?: InputProcessor[];
     outputProcessorOverrides?: OutputProcessor[];
   }): Promise<ProcessorRunner> {
@@ -334,7 +337,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       inputProcessorOverrides ??
       (this.#inputProcessors
         ? typeof this.#inputProcessors === 'function'
-          ? await this.#inputProcessors({ runtimeContext })
+          ? await this.#inputProcessors({ requestContext })
           : this.#inputProcessors
         : []);
 
@@ -342,7 +345,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       outputProcessorOverrides ??
       (this.#outputProcessors
         ? typeof this.#outputProcessors === 'function'
-          ? await this.#outputProcessors({ runtimeContext })
+          ? await this.#outputProcessors({ requestContext })
           : this.#outputProcessors
         : []);
 
@@ -360,13 +363,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Resolves and returns output processors from agent configuration.
    * @internal
    */
-  private async getResolvedOutputProcessors(runtimeContext?: RuntimeContext): Promise<OutputProcessor[]> {
+  private async getResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessor[]> {
     if (!this.#outputProcessors) {
       return [];
     }
 
     if (typeof this.#outputProcessors === 'function') {
-      return await this.#outputProcessors({ runtimeContext: runtimeContext || new RuntimeContext() });
+      return await this.#outputProcessors({ requestContext: requestContext || new RequestContext() });
     }
 
     return this.#outputProcessors;
@@ -376,13 +379,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Resolves and returns input processors from agent configuration.
    * @internal
    */
-  private async getResolvedInputProcessors(runtimeContext?: RuntimeContext): Promise<InputProcessor[]> {
+  private async getResolvedInputProcessors(requestContext?: RequestContext): Promise<InputProcessor[]> {
     if (!this.#inputProcessors) {
       return [];
     }
 
     if (typeof this.#inputProcessors === 'function') {
-      return await this.#inputProcessors({ runtimeContext: runtimeContext || new RuntimeContext() });
+      return await this.#inputProcessors({ requestContext: requestContext || new RequestContext() });
     }
 
     return this.#inputProcessors;
@@ -391,15 +394,15 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   /**
    * Returns the input processors for this agent, resolving function-based processors if necessary.
    */
-  public async getInputProcessors(runtimeContext?: RuntimeContext): Promise<InputProcessor[]> {
-    return this.getResolvedInputProcessors(runtimeContext);
+  public async getInputProcessors(requestContext?: RequestContext): Promise<InputProcessor[]> {
+    return this.getResolvedInputProcessors(requestContext);
   }
 
   /**
    * Returns the output processors for this agent, resolving function-based processors if necessary.
    */
-  public async getOutputProcessors(runtimeContext?: RuntimeContext): Promise<OutputProcessor[]> {
-    return this.getResolvedOutputProcessors(runtimeContext);
+  public async getOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessor[]> {
+    return this.getResolvedOutputProcessors(requestContext);
   }
 
   /**
@@ -428,7 +431,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * }
    * ```
    */
-  public async getMemory({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}): Promise<
+  public async getMemory({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}): Promise<
     MastraMemory | undefined
   > {
     if (!this.#memory) {
@@ -440,7 +443,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     if (typeof this.#memory !== 'function') {
       resolvedMemory = this.#memory;
     } else {
-      const result = this.#memory({ runtimeContext, mastra: this.#mastra });
+      const result = this.#memory({ requestContext, mastra: this.#mastra });
       resolvedMemory = await Promise.resolve(result);
 
       if (!resolvedMemory) {
@@ -498,16 +501,16 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    *
    * @example
    * ```typescript
-   * const workflows = await agent.getWorkflows();
+   * const workflows = await agent.listWorkflows();
    * const workflow = workflows['myWorkflow'];
    * ```
    */
-  public async getWorkflows({
-    runtimeContext = new RuntimeContext(),
-  }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any>>> {
+  public async listWorkflows({
+    requestContext = new RequestContext(),
+  }: { requestContext?: RequestContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any>>> {
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
-      workflowRecord = await Promise.resolve(this.#workflows({ runtimeContext, mastra: this.#mastra }));
+      workflowRecord = await Promise.resolve(this.#workflows({ requestContext, mastra: this.#mastra }));
     } else {
       workflowRecord = this.#workflows ?? {};
     }
@@ -521,14 +524,14 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     return workflowRecord;
   }
 
-  async getScorers({
-    runtimeContext = new RuntimeContext(),
-  }: { runtimeContext?: RuntimeContext } = {}): Promise<MastraScorers> {
+  async listScorers({
+    requestContext = new RequestContext(),
+  }: { requestContext?: RequestContext } = {}): Promise<MastraScorers> {
     if (typeof this.#scorers !== 'function') {
       return this.#scorers;
     }
 
-    const result = this.#scorers({ runtimeContext, mastra: this.#mastra });
+    const result = this.#scorers({ requestContext, mastra: this.#mastra });
     return resolveMaybePromise(result, scorers => {
       if (!scorers) {
         const mastraError = new MastraError({
@@ -559,11 +562,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * const audioStream = await voice.speak('Hello world');
    * ```
    */
-  public async getVoice({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}) {
+  public async getVoice({ requestContext }: { requestContext?: RequestContext } = {}) {
     if (this.#voice) {
       const voice = this.#voice;
-      voice?.addTools(await this.getTools({ runtimeContext }));
-      const instructions = await this.getInstructions({ runtimeContext });
+      voice?.addTools(await this.listTools({ requestContext }));
+      const instructions = await this.getInstructions({ requestContext });
       voice?.addInstructions(this.#convertInstructionsToString(instructions));
       return voice;
     } else {
@@ -581,11 +584,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * console.log(instructions); // 'You are a helpful assistant'
    * ```
    */
-  public getInstructions({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
+  public getInstructions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
     | AgentInstructions
     | Promise<AgentInstructions> {
     if (typeof this.#instructions === 'function') {
-      const result = this.#instructions({ runtimeContext, mastra: this.#mastra });
+      const result = this.#instructions({ requestContext, mastra: this.#mastra });
       return resolveMaybePromise(result, instructions => {
         if (!instructions) {
           const mastraError = new MastraError({
@@ -661,13 +664,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * ```
    */
   public getDefaultGenerateOptionsLegacy({
-    runtimeContext = new RuntimeContext(),
-  }: { runtimeContext?: RuntimeContext } = {}): AgentGenerateOptions | Promise<AgentGenerateOptions> {
+    requestContext = new RequestContext(),
+  }: { requestContext?: RequestContext } = {}): AgentGenerateOptions | Promise<AgentGenerateOptions> {
     if (typeof this.#defaultGenerateOptionsLegacy !== 'function') {
       return this.#defaultGenerateOptionsLegacy;
     }
 
-    const result = this.#defaultGenerateOptionsLegacy({ runtimeContext, mastra: this.#mastra });
+    const result = this.#defaultGenerateOptionsLegacy({ requestContext, mastra: this.#mastra });
     return resolveMaybePromise(result, options => {
       if (!options) {
         const mastraError = new MastraError({
@@ -699,13 +702,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * ```
    */
   public getDefaultStreamOptionsLegacy({
-    runtimeContext = new RuntimeContext(),
-  }: { runtimeContext?: RuntimeContext } = {}): AgentStreamOptions | Promise<AgentStreamOptions> {
+    requestContext = new RequestContext(),
+  }: { requestContext?: RequestContext } = {}): AgentStreamOptions | Promise<AgentStreamOptions> {
     if (typeof this.#defaultStreamOptionsLegacy !== 'function') {
       return this.#defaultStreamOptionsLegacy;
     }
 
-    const result = this.#defaultStreamOptionsLegacy({ runtimeContext, mastra: this.#mastra });
+    const result = this.#defaultStreamOptionsLegacy({ requestContext, mastra: this.#mastra });
     return resolveMaybePromise(result, options => {
       if (!options) {
         const mastraError = new MastraError({
@@ -737,13 +740,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * ```
    */
   public getDefaultStreamOptions<OUTPUT extends OutputSchema = undefined>({
-    runtimeContext = new RuntimeContext(),
-  }: { runtimeContext?: RuntimeContext } = {}): AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>> {
+    requestContext = new RequestContext(),
+  }: { requestContext?: RequestContext } = {}): AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>> {
     if (typeof this.#defaultStreamOptions !== 'function') {
       return this.#defaultStreamOptions as AgentExecutionOptions<OUTPUT>;
     }
 
-    const result = this.#defaultStreamOptions({ runtimeContext, mastra: this.#mastra }) as
+    const result = this.#defaultStreamOptions({ requestContext, mastra: this.#mastra }) as
       | AgentExecutionOptions<OUTPUT>
       | Promise<AgentExecutionOptions<OUTPUT>>;
 
@@ -773,18 +776,18 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    *
    * @example
    * ```typescript
-   * const tools = await agent.getTools();
+   * const tools = await agent.listTools();
    * console.log(Object.keys(tools)); // ['calculator', 'weather']
    * ```
    */
-  public getTools({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
+  public listTools({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
     | TTools
     | Promise<TTools> {
     if (typeof this.#tools !== 'function') {
       return ensureToolProperties(this.#tools) as TTools;
     }
 
-    const result = this.#tools({ runtimeContext, mastra: this.#mastra });
+    const result = this.#tools({ requestContext, mastra: this.#mastra });
 
     return resolveMaybePromise(result, tools => {
       if (!tools) {
@@ -818,22 +821,22 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * ```
    */
   public getLLM({
-    runtimeContext = new RuntimeContext(),
+    requestContext = new RequestContext(),
     model,
   }: {
-    runtimeContext?: RuntimeContext;
+    requestContext?: RequestContext;
     model?: DynamicArgument<MastraModelConfig>;
   } = {}): MastraLLM | Promise<MastraLLM> {
     // If model is provided, resolve it; otherwise use the agent's model
-    const modelToUse = this.getModel({ modelConfig: model, runtimeContext });
+    const modelToUse = this.getModel({ modelConfig: model, requestContext });
 
     return resolveMaybePromise(modelToUse, resolvedModel => {
       let llm: MastraLLM | Promise<MastraLLM>;
       if (resolvedModel.specificationVersion === 'v2') {
         const modelsPromise =
           Array.isArray(this.model) && !model
-            ? this.prepareModels(runtimeContext)
-            : this.prepareModels(runtimeContext, resolvedModel);
+            ? this.prepareModels(requestContext)
+            : this.prepareModels(requestContext, resolvedModel);
 
         llm = modelsPromise.then(models => {
           const enabledModels = models.filter(model => model.enabled);
@@ -872,10 +875,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    */
   private async resolveModelConfig(
     modelConfig: DynamicArgument<MastraModelConfig>,
-    runtimeContext: RuntimeContext,
+    requestContext: RequestContext,
   ): Promise<MastraLanguageModel> {
     try {
-      return await resolveModelConfig(modelConfig, runtimeContext, this.#mastra);
+      return await resolveModelConfig(modelConfig, requestContext, this.#mastra);
     } catch (error) {
       const mastraError = new MastraError({
         id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
@@ -907,12 +910,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * ```
    */
   public getModel({
-    runtimeContext = new RuntimeContext(),
+    requestContext = new RequestContext(),
     modelConfig = this.model,
-  }: { runtimeContext?: RuntimeContext; modelConfig?: Agent['model'] } = {}):
+  }: { requestContext?: RequestContext; modelConfig?: Agent['model'] } = {}):
     | MastraLanguageModel
     | Promise<MastraLanguageModel> {
-    if (!Array.isArray(modelConfig)) return this.resolveModelConfig(modelConfig, runtimeContext);
+    if (!Array.isArray(modelConfig)) return this.resolveModelConfig(modelConfig, requestContext);
 
     if (modelConfig.length === 0 || !modelConfig[0]) {
       const mastraError = new MastraError({
@@ -928,7 +931,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       this.logger.error(mastraError.toString());
       throw mastraError;
     }
-    return this.resolveModelConfig(modelConfig[0].model, runtimeContext);
+    return this.resolveModelConfig(modelConfig[0].model, requestContext);
   }
 
   /**
@@ -944,12 +947,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * ```
    */
   public async getModelList(
-    runtimeContext: RuntimeContext = new RuntimeContext(),
+    requestContext: RequestContext = new RequestContext(),
   ): Promise<Array<AgentModelManagerConfig> | null> {
     if (!Array.isArray(this.model)) {
       return null;
     }
-    return this.prepareModels(runtimeContext);
+    return this.prepareModels(requestContext);
   }
 
   /**
@@ -968,6 +971,16 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   __updateModel({ model }: { model: DynamicArgument<MastraModelConfig> }) {
     this.model = model;
     this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
+  }
+
+  /**
+   * Resets the agent's model to the original model set during construction.
+   * Clones arrays to prevent reordering mutations from affecting the original snapshot.
+   * @internal
+   */
+  __resetToOriginalModel() {
+    this.model = Array.isArray(this.#originalModel) ? [...this.#originalModel] : this.#originalModel;
+    this.logger.debug(`[Agents:${this.name}] Model reset to original.`, { model: this.model, name: this.name });
   }
 
   reorderModels(modelIds: string[]) {
@@ -1058,19 +1071,19 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
   async generateTitleFromUserMessage({
     message,
-    runtimeContext = new RuntimeContext(),
+    requestContext = new RequestContext(),
     tracingContext,
     model,
     instructions,
   }: {
     message: string | MessageInput;
-    runtimeContext?: RuntimeContext;
+    requestContext?: RequestContext;
     tracingContext: TracingContext;
     model?: DynamicArgument<MastraLanguageModel>;
     instructions?: DynamicArgument<string>;
   }) {
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
-    const llm = await this.getLLM({ runtimeContext, model });
+    const llm = await this.getLLM({ requestContext, model });
 
     const normMessage = new MessageList().add(message, 'user').get.all.ui().at(-1);
     if (!normMessage) {
@@ -1095,7 +1108,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     }
 
     // Resolve instructions using the dedicated method
-    const systemInstructions = await this.resolveTitleInstructions(runtimeContext, instructions);
+    const systemInstructions = await this.resolveTitleInstructions(requestContext, instructions);
 
     let text = '';
 
@@ -1120,7 +1133,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           'input',
         );
       const result = (llm as MastraLLMVNext).stream({
-        runtimeContext,
+        requestContext,
         tracingContext,
         messageList,
         agentId: this.id,
@@ -1129,7 +1142,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       text = await result.text;
     } else {
       const result = await (llm as MastraLLMV1).__text({
-        runtimeContext,
+        requestContext,
         tracingContext,
         messages: [
           {
@@ -1158,7 +1171,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
   async genTitle(
     userMessage: string | MessageInput | undefined,
-    runtimeContext: RuntimeContext,
+    requestContext: RequestContext,
     tracingContext: TracingContext,
     model?: DynamicArgument<MastraLanguageModel>,
     instructions?: DynamicArgument<string>,
@@ -1169,7 +1182,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         if (normMessage) {
           return await this.generateTitleFromUserMessage({
             message: normMessage,
-            runtimeContext,
+            requestContext,
             tracingContext,
             model,
             instructions,
@@ -1193,25 +1206,25 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Retrieves and converts memory tools to CoreTool format.
    * @internal
    */
-  private async getMemoryTools({
+  private async listMemoryTools({
     runId,
     resourceId,
     threadId,
-    runtimeContext,
+    requestContext,
     tracingContext,
     mastraProxy,
   }: {
     runId?: string;
     resourceId?: string;
     threadId?: string;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
   }) {
     let convertedMemoryTools: Record<string, CoreTool> = {};
     // Get memory tools if available
-    const memory = await this.getMemory({ runtimeContext });
-    const memoryTools = memory?.getTools?.();
+    const memory = await this.getMemory({ requestContext });
+    const memoryTools = memory?.listTools?.();
 
     if (memoryTools) {
       this.logger.debug(
@@ -1231,9 +1244,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           mastra: mastraProxy as MastraUnion | undefined,
           memory,
           agentName: this.name,
-          runtimeContext,
+          requestContext,
           tracingContext,
-          model: await this.getModel({ runtimeContext }),
+          model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options);
@@ -1248,12 +1261,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * @internal
    */
   private async __runInputProcessors({
-    runtimeContext,
+    requestContext,
     tracingContext,
     messageList,
     inputProcessorOverrides,
   }: {
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     tracingContext: TracingContext;
     messageList: MessageList;
     inputProcessorOverrides?: InputProcessor[];
@@ -1267,7 +1280,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     if (inputProcessorOverrides?.length || this.#inputProcessors) {
       const runner = await this.getProcessorRunner({
-        runtimeContext,
+        requestContext,
         inputProcessorOverrides,
       });
       try {
@@ -1302,12 +1315,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * @internal
    */
   private async __runOutputProcessors({
-    runtimeContext,
+    requestContext,
     tracingContext,
     messageList,
     outputProcessorOverrides,
   }: {
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     tracingContext: TracingContext;
     messageList: MessageList;
     outputProcessorOverrides?: OutputProcessor[];
@@ -1321,7 +1334,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     if (outputProcessorOverrides?.length || this.#outputProcessors) {
       const runner = await this.getProcessorRunner({
-        runtimeContext,
+        requestContext,
         outputProcessorOverrides,
       });
 
@@ -1354,15 +1367,15 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     threadId,
     vectorMessageSearch,
     memoryConfig,
-    runtimeContext,
+    requestContext,
   }: {
     resourceId?: string;
     threadId: string;
     vectorMessageSearch: string;
     memoryConfig?: MemoryConfig;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
   }) {
-    const memory = await this.getMemory({ runtimeContext });
+    const memory = await this.getMemory({ requestContext });
     if (!memory) {
       return [];
     }
@@ -1381,11 +1394,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Retrieves and converts assigned tools to CoreTool format.
    * @internal
    */
-  private async getAssignedTools({
+  private async listAssignedTools({
     runId,
     resourceId,
     threadId,
-    runtimeContext,
+    requestContext,
     tracingContext,
     mastraProxy,
     writableStream,
@@ -1393,7 +1406,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     runId?: string;
     resourceId?: string;
     threadId?: string;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     writableStream?: WritableStream<ChunkType>;
@@ -1402,11 +1415,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     this.logger.debug(`[Agents:${this.name}] - Assembling assigned tools`, { runId, threadId, resourceId });
 
-    const memory = await this.getMemory({ runtimeContext });
+    const memory = await this.getMemory({ requestContext });
 
     // Mastra tools passed into the Agent
 
-    const assignedTools = await this.getTools({ runtimeContext });
+    const assignedTools = await this.listTools({ requestContext });
 
     const assignedToolEntries = Object.entries(assignedTools || {});
 
@@ -1425,9 +1438,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           mastra: mastraProxy as MastraUnion | undefined,
           memory,
           agentName: this.name,
-          runtimeContext,
+          requestContext,
           tracingContext,
-          model: await this.getModel({ runtimeContext }),
+          model: await this.getModel({ requestContext }),
           writableStream,
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
@@ -1451,12 +1464,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Retrieves and converts toolset tools to CoreTool format.
    * @internal
    */
-  private async getToolsets({
+  private async listToolsets({
     runId,
     threadId,
     resourceId,
     toolsets,
-    runtimeContext,
+    requestContext,
     tracingContext,
     mastraProxy,
   }: {
@@ -1464,13 +1477,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     threadId?: string;
     resourceId?: string;
     toolsets: ToolsetsInput;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
 
-    const memory = await this.getMemory({ runtimeContext });
+    const memory = await this.getMemory({ requestContext });
     const toolsFromToolsets = Object.values(toolsets || {});
 
     if (toolsFromToolsets.length > 0) {
@@ -1489,9 +1502,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
             mastra: mastraProxy as MastraUnion | undefined,
             memory,
             agentName: this.name,
-            runtimeContext,
+            requestContext,
             tracingContext,
-            model: await this.getModel({ runtimeContext }),
+            model: await this.getModel({ requestContext }),
             tracingPolicy: this.#options?.tracingPolicy,
           };
           const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
@@ -1507,11 +1520,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Retrieves and converts client-side tools to CoreTool format.
    * @internal
    */
-  private async getClientTools({
+  private async listClientTools({
     runId,
     threadId,
     resourceId,
-    runtimeContext,
+    requestContext,
     tracingContext,
     mastraProxy,
     clientTools,
@@ -1519,13 +1532,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     runId?: string;
     threadId?: string;
     resourceId?: string;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     clientTools?: ToolsInput;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
-    const memory = await this.getMemory({ runtimeContext });
+    const memory = await this.getMemory({ requestContext });
     // Convert client tools
     const clientToolsForInput = Object.entries(clientTools || {});
     if (clientToolsForInput.length > 0) {
@@ -1543,9 +1556,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           mastra: mastraProxy as MastraUnion | undefined,
           memory,
           agentName: this.name,
-          runtimeContext,
+          requestContext,
           tracingContext,
-          model: await this.getModel({ runtimeContext }),
+          model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
         };
         const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
@@ -1560,23 +1573,23 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Retrieves and converts agent tools to CoreTool format.
    * @internal
    */
-  private async getAgentTools({
+  private async listAgentTools({
     runId,
     threadId,
     resourceId,
-    runtimeContext,
+    requestContext,
     tracingContext,
     methodType,
   }: {
     runId?: string;
     threadId?: string;
     resourceId?: string;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     tracingContext?: TracingContext;
     methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   }) {
     const convertedAgentTools: Record<string, CoreTool> = {};
-    const agents = await this.listAgents({ runtimeContext });
+    const agents = await this.listAgents({ requestContext });
 
     if (Object.keys(agents).length > 0) {
       for (const [agentName, agent] of Object.entries(agents)) {
@@ -1614,13 +1627,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
               if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v2') {
                 const generateResult = await agent.generate((context as any).prompt, {
-                  runtimeContext,
+                  requestContext,
                   tracingContext: innerTracingContext,
                 });
                 result = { text: generateResult.text };
               } else if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v1') {
                 const generateResult = await agent.generateLegacy((context as any).prompt, {
-                  runtimeContext,
+                  requestContext,
                   tracingContext: innerTracingContext,
                 });
                 result = { text: generateResult.text };
@@ -1632,7 +1645,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 const subAgentResourceId = `${slugify(this.id)}-${agentName}`;
 
                 const streamResult = await agent.stream((context as any).prompt, {
-                  runtimeContext,
+                  requestContext,
                   tracingContext: innerTracingContext,
                   ...(resourceId && threadId
                     ? {
@@ -1660,7 +1673,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               } else {
                 // streamLegacy
                 const streamResult = await agent.streamLegacy((context as any).prompt, {
-                  runtimeContext,
+                  requestContext,
                   tracingContext: innerTracingContext,
                 });
 
@@ -1710,10 +1723,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           resourceId,
           logger: this.logger,
           mastra: this.#mastra,
-          memory: await this.getMemory({ runtimeContext }),
+          memory: await this.getMemory({ requestContext }),
           agentName: this.name,
-          runtimeContext,
-          model: await this.getModel({ runtimeContext }),
+          requestContext,
+          model: await this.getModel({ requestContext }),
           tracingContext,
           tracingPolicy: this.#options?.tracingPolicy,
         };
@@ -1729,23 +1742,23 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Retrieves and converts workflow tools to CoreTool format.
    * @internal
    */
-  private async getWorkflowTools({
+  private async listWorkflowTools({
     runId,
     threadId,
     resourceId,
-    runtimeContext,
+    requestContext,
     tracingContext,
     methodType,
   }: {
     runId?: string;
     threadId?: string;
     resourceId?: string;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     tracingContext?: TracingContext;
     methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   }) {
     const convertedWorkflowTools: Record<string, CoreTool> = {};
-    const workflows = await this.getWorkflows({ runtimeContext });
+    const workflows = await this.listWorkflows({ requestContext });
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
         const toolObj = createTool({
@@ -1773,13 +1786,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               if (methodType === 'generate' || methodType === 'generateLegacy') {
                 result = await run.start({
                   inputData: context,
-                  runtimeContext,
+                  requestContext,
                   tracingContext: innerTracingContext,
                 });
               } else if (methodType === 'streamLegacy') {
                 const streamResult = run.streamLegacy({
                   inputData: context,
-                  runtimeContext,
+                  requestContext,
                   tracingContext: innerTracingContext,
                 });
 
@@ -1796,7 +1809,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 // TODO: add support for format
                 const streamResult = run.stream({
                   inputData: context,
-                  runtimeContext,
+                  requestContext,
                   tracingContext: innerTracingContext,
                 });
 
@@ -1838,10 +1851,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           resourceId,
           logger: this.logger,
           mastra: this.#mastra,
-          memory: await this.getMemory({ runtimeContext }),
+          memory: await this.getMemory({ requestContext }),
           agentName: this.name,
-          runtimeContext,
-          model: await this.getModel({ runtimeContext }),
+          requestContext,
+          model: await this.getModel({ requestContext }),
           tracingContext,
           tracingPolicy: this.#options?.tracingPolicy,
         };
@@ -1863,7 +1876,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     threadId,
     resourceId,
     runId,
-    runtimeContext,
+    requestContext,
     tracingContext,
     writableStream,
     methodType,
@@ -1873,7 +1886,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     threadId?: string;
     resourceId?: string;
     runId?: string;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
     methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
@@ -1885,59 +1898,59 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
     }
 
-    const assignedTools = await this.getAssignedTools({
+    const assignedTools = await this.listAssignedTools({
       runId,
       resourceId,
       threadId,
-      runtimeContext,
+      requestContext,
       tracingContext,
       mastraProxy,
       writableStream,
     });
 
-    const memoryTools = await this.getMemoryTools({
+    const memoryTools = await this.listMemoryTools({
       runId,
       resourceId,
       threadId,
-      runtimeContext,
+      requestContext,
       tracingContext,
       mastraProxy,
     });
 
-    const toolsetTools = await this.getToolsets({
+    const toolsetTools = await this.listToolsets({
       runId,
       resourceId,
       threadId,
-      runtimeContext,
+      requestContext,
       tracingContext,
       mastraProxy,
       toolsets: toolsets!,
     });
 
-    const clientSideTools = await this.getClientTools({
+    const clientSideTools = await this.listClientTools({
       runId,
       resourceId,
       threadId,
-      runtimeContext,
+      requestContext,
       tracingContext,
       mastraProxy,
       clientTools: clientTools!,
     });
 
-    const agentTools = await this.getAgentTools({
+    const agentTools = await this.listAgentTools({
       runId,
       resourceId,
       threadId,
-      runtimeContext,
+      requestContext,
       methodType,
       tracingContext,
     });
 
-    const workflowTools = await this.getWorkflowTools({
+    const workflowTools = await this.listWorkflowTools({
       runId,
       resourceId,
       threadId,
-      runtimeContext,
+      requestContext,
       methodType,
       tracingContext,
     });
@@ -2046,7 +2059,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     runId,
     toolsets,
     clientTools,
-    runtimeContext,
+    requestContext,
     saveQueueManager,
     writableStream,
     methodType,
@@ -2062,7 +2075,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     context?: CoreMessage[];
     runId?: string;
     messages: MessageListInput;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     saveQueueManager: SaveQueueManager;
     writableStream?: WritableStream<ChunkType>;
     methodType: 'generate' | 'stream';
@@ -2097,12 +2110,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingPolicy: this.#options?.tracingPolicy,
           tracingOptions,
           tracingContext,
-          runtimeContext,
+          requestContext,
         });
 
         const innerTracingContext: TracingContext = { currentSpan: agentAISpan };
 
-        const memory = await this.getMemory({ runtimeContext });
+        const memory = await this.getMemory({ requestContext });
 
         const toolEnhancements = [
           // toolsets
@@ -2131,7 +2144,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           threadId,
           resourceId,
           runId,
-          runtimeContext,
+          requestContext,
           tracingContext: innerTracingContext,
           writableStream,
           methodType,
@@ -2144,13 +2157,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
-          .addSystem(instructions || (await this.getInstructions({ runtimeContext })))
+          .addSystem(instructions || (await this.getInstructions({ requestContext })))
           .add(context || [], 'context');
 
         if (!memory || (!threadId && !resourceId)) {
           messageList.add(messages, 'user');
           const { tripwireTriggered, tripwireReason } = await this.__runInputProcessors({
-            runtimeContext,
+            requestContext,
             tracingContext: innerTracingContext,
             messageList,
           });
@@ -2231,7 +2244,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 threadId: threadObject.id,
                 vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
                 memoryConfig,
-                runtimeContext,
+                requestContext,
               })
             : [],
           memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
@@ -2293,7 +2306,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           .add(messages, 'user');
 
         const { tripwireTriggered, tripwireReason } = await this.__runInputProcessors({
-          runtimeContext,
+          requestContext,
           tracingContext: innerTracingContext,
           messageList,
         });
@@ -2320,7 +2333,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
-          .addSystem(instructions || (await this.getInstructions({ runtimeContext })))
+          .addSystem(instructions || (await this.getInstructions({ requestContext })))
           .addSystem(memorySystemMessage)
           .addSystem(systemMessages)
           .add(context || [], 'context')
@@ -2405,7 +2418,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           m => m.role === 'tool' && m?.content?.some(c => c?.toolName === 'updateWorkingMemory'),
         );
         // working memory updates the thread, so we need to get the latest thread if we used it
-        const memory = await this.getMemory({ runtimeContext });
+        const memory = await this.getMemory({ requestContext });
         const thread = usedWorkingMemory
           ? threadId
             ? await memory?.getThreadById({ threadId })
@@ -2461,7 +2474,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 promises.push(
                   this.genTitle(
                     userMessage,
-                    runtimeContext,
+                    requestContext,
                     { currentSpan: agentAISpan },
                     titleModel,
                     titleInstructions,
@@ -2529,7 +2542,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         await this.#runScorers({
           messageList,
           runId,
-          runtimeContext,
+          requestContext,
           structuredOutput,
           overrideScorers,
           threadId,
@@ -2568,7 +2581,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   async #runScorers({
     messageList,
     runId,
-    runtimeContext,
+    requestContext,
     structuredOutput,
     overrideScorers,
     threadId,
@@ -2577,7 +2590,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   }: {
     messageList: MessageList;
     runId: string;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     structuredOutput?: boolean;
     overrideScorers?:
       | MastraScorers
@@ -2590,7 +2603,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     try {
       scorers = overrideScorers
         ? this.resolveOverrideScorerReferences(overrideScorers)
-        : await this.getScorers({ runtimeContext });
+        : await this.listScorers({ requestContext });
     } catch (e) {
       this.logger.warn(`[Agent:${this.name}] - Failed to get scorers: ${e}`);
       return;
@@ -2613,7 +2626,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           runId,
           input: scorerInput,
           output: scorerOutput,
-          runtimeContext,
+          requestContext,
           entity: {
             id: this.id,
             name: this.name,
@@ -2824,7 +2837,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       clientTools,
       temperature,
       toolChoice = 'auto',
-      runtimeContext = new RuntimeContext(),
+      requestContext = new RequestContext(),
       tracingContext,
       tracingOptions,
       savePerStep,
@@ -2848,10 +2861,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       );
     }
     const runId = args.runId || this.#mastra?.generateId() || randomUUID();
-    const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
-    const llm = await this.getLLM({ runtimeContext });
+    const instructions = args.instructions || (await this.getInstructions({ requestContext }));
+    const llm = await this.getLLM({ requestContext });
 
-    const memory = await this.getMemory({ runtimeContext });
+    const memory = await this.getMemory({ requestContext });
     const saveQueueManager = new SaveQueueManager({
       logger: this.logger,
       memory,
@@ -2867,7 +2880,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       runId,
       toolsets,
       clientTools,
-      runtimeContext,
+      requestContext,
       saveQueueManager,
       writableStream,
       methodType,
@@ -2900,7 +2913,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           toolChoice,
           threadId,
           resourceId,
-          runtimeContext,
+          requestContext,
           onStepFinish: async (props: any) => {
             if (savePerStep) {
               if (!threadExists && memory && thread) {
@@ -2980,13 +2993,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * @internal
    */
   private async prepareModels(
-    runtimeContext: RuntimeContext,
+    requestContext: RequestContext,
     model?: DynamicArgument<MastraLanguageModel> | ModelFallbacks,
   ): Promise<Array<AgentModelManagerConfig>> {
     if (model || !Array.isArray(this.model)) {
       const modelToUse = model ?? this.model;
       const resolvedModel =
-        typeof modelToUse === 'function' ? await modelToUse({ runtimeContext, mastra: this.#mastra }) : modelToUse;
+        typeof modelToUse === 'function' ? await modelToUse({ requestContext, mastra: this.#mastra }) : modelToUse;
 
       if ((resolvedModel as MastraLanguageModel).specificationVersion !== 'v2') {
         const mastraError = new MastraError({
@@ -3014,7 +3027,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const models = await Promise.all(
       this.model.map(async modelConfig => {
-        const model = await this.resolveModelConfig(modelConfig.model, runtimeContext);
+        const model = await this.resolveModelConfig(modelConfig.model, requestContext);
 
         if (model.specificationVersion !== 'v2') {
           const mastraError = new MastraError({
@@ -3078,7 +3091,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         }
       }
     }
-    const runtimeContext = options.runtimeContext || new RuntimeContext();
+    const requestContext = options.requestContext || new RequestContext();
     const threadFromArgs = resolveThreadIdFromArgs({
       threadId: options.threadId || snapshotMemoryInfo?.threadId,
       memory: options.memory,
@@ -3093,10 +3106,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       );
     }
 
-    const llm = (await this.getLLM({ runtimeContext, model: options.model })) as MastraLLMVNext;
+    const llm = (await this.getLLM({ requestContext, model: options.model })) as MastraLLMVNext;
 
     const runId = options.runId || this.#mastra?.generateId() || randomUUID();
-    const instructions = options.instructions || (await this.getInstructions({ runtimeContext }));
+    const instructions = options.instructions || (await this.getInstructions({ requestContext }));
 
     // Set AI Tracing context
     // Note this span is ended at the end of #executeOnFinish
@@ -3116,10 +3129,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingPolicy: this.#options?.tracingPolicy,
       tracingOptions: options.tracingOptions,
       tracingContext: options.tracingContext,
-      runtimeContext,
+      requestContext,
     });
 
-    const memory = await this.getMemory({ runtimeContext });
+    const memory = await this.getMemory({ requestContext });
 
     const saveQueueManager = new SaveQueueManager({
       logger: this.logger,
@@ -3157,7 +3170,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       threadFromArgs,
       resourceId,
       runId,
-      runtimeContext,
+      requestContext,
       agentAISpan: agentAISpan!,
       methodType,
       format: format as FORMAT,
@@ -3190,7 +3203,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     resourceId,
     memoryConfig,
     outputText,
-    runtimeContext,
+    requestContext,
     agentAISpan,
     runId,
     messageList,
@@ -3228,7 +3241,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       m => m.role === 'tool' && m.content.some(c => c.toolName === 'updateWorkingMemory'),
     );
     // working memory updates the thread, so we need to get the latest thread if we used it
-    const memory = await this.getMemory({ runtimeContext });
+    const memory = await this.getMemory({ requestContext });
     const thread = usedWorkingMemory ? (threadId ? await memory?.getThreadById({ threadId }) : undefined) : threadAfter;
 
     if (memory && resourceId && thread && !readOnlyMemory) {
@@ -3282,7 +3295,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
             promises.push(
               this.genTitle(
                 userMessage,
-                runtimeContext,
+                requestContext,
                 { currentSpan: agentAISpan },
                 titleModel,
                 titleInstructions,
@@ -3349,7 +3362,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     await this.#runScorers({
       messageList,
       runId,
-      runtimeContext,
+      requestContext,
       structuredOutput,
       overrideScorers,
       tracingContext: { currentSpan: agentAISpan },
@@ -3387,11 +3400,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    */
   async network(messages: MessageListInput, options?: MultiPrimitiveExecutionOptions) {
     const runId = options?.runId || this.#mastra?.generateId() || randomUUID();
-    const runtimeContextToUse = options?.runtimeContext || new RuntimeContext();
+    const requestContextToUse = options?.requestContext || new RequestContext();
 
     return await networkLoop({
       networkName: this.name,
-      runtimeContext: runtimeContextToUse,
+      requestContext: requestContextToUse,
       runId,
       routingAgent: this,
       routingAgentOptions: {
@@ -3435,7 +3448,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     const defaultStreamOptions = await this.getDefaultStreamOptions<OUTPUT>({
-      runtimeContext: streamOptions?.runtimeContext,
+      requestContext: streamOptions?.requestContext,
     });
     const mergedStreamOptions = {
       ...defaultStreamOptions,
@@ -3443,7 +3456,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     };
 
     const llm = await this.getLLM({
-      runtimeContext: mergedStreamOptions.runtimeContext,
+      requestContext: mergedStreamOptions.requestContext,
     });
 
     const modelInfo = llm.getModel();
@@ -3523,7 +3536,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT> & { toolCallId?: string },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     const defaultStreamOptions = await this.getDefaultStreamOptions({
-      runtimeContext: streamOptions?.runtimeContext,
+      requestContext: streamOptions?.requestContext,
     });
 
     let mergedStreamOptions = {
@@ -3532,7 +3545,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     };
 
     const llm = await this.getLLM({
-      runtimeContext: mergedStreamOptions.runtimeContext,
+      requestContext: mergedStreamOptions.requestContext,
     });
 
     if (llm.getModel().specificationVersion !== 'v2') {
@@ -3671,7 +3684,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       });
     }
     const defaultGenerateOptions = await this.getDefaultGenerateOptionsLegacy({
-      runtimeContext: generateOptions.runtimeContext,
+      requestContext: generateOptions.requestContext,
     });
     const mergedGenerateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
       ...defaultGenerateOptions,
@@ -3751,7 +3764,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       });
 
       const outputProcessorResult = await this.__runOutputProcessors({
-        runtimeContext: mergedGenerateOptions.runtimeContext || new RuntimeContext(),
+        requestContext: mergedGenerateOptions.requestContext || new RequestContext(),
         tracingContext,
         outputProcessorOverrides: finalOutputProcessors,
         messageList: new MessageList({
@@ -3872,7 +3885,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const outputText = JSON.stringify(result.object);
 
     const outputProcessorResult = await this.__runOutputProcessors({
-      runtimeContext: mergedGenerateOptions.runtimeContext || new RuntimeContext(),
+      requestContext: mergedGenerateOptions.requestContext || new RequestContext(),
       tracingContext,
       messageList: new MessageList({
         threadId: llmOptions.threadId || '',
@@ -4011,7 +4024,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     | (StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties)
   > {
     const defaultStreamOptions = await this.getDefaultStreamOptionsLegacy({
-      runtimeContext: streamOptions.runtimeContext,
+      requestContext: streamOptions.requestContext,
     });
 
     const mergedStreamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
@@ -4117,7 +4130,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         ...llmOptions,
         experimental_output,
         tracingContext,
-        outputProcessors: await this.getResolvedOutputProcessors(mergedStreamOptions.runtimeContext),
+        outputProcessors: await this.getResolvedOutputProcessors(mergedStreamOptions.requestContext),
         onFinish: async result => {
           try {
             const outputText = result.text;
@@ -4214,7 +4227,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * @internal
    */
   async resolveTitleInstructions(
-    runtimeContext: RuntimeContext,
+    requestContext: RequestContext,
     instructions?: DynamicArgument<string>,
   ): Promise<string> {
     const DEFAULT_TITLE_INSTRUCTIONS = `
@@ -4231,7 +4244,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     if (typeof instructions === 'string') {
       return instructions;
     } else {
-      const result = instructions({ runtimeContext, mastra: this.#mastra });
+      const result = instructions({ requestContext, mastra: this.#mastra });
       return resolveMaybePromise(result, resolvedInstructions => {
         return resolvedInstructions || DEFAULT_TITLE_INSTRUCTIONS;
       });

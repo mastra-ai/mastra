@@ -3,7 +3,7 @@ const meta = {
   "system-prompt": "Changing the System Prompt",
   "supervisor-agent": "Supervisor Agent",
   "image-analysis": "Image Analysis",
-  "runtime-context": "Runtime Context",
+  "request-context": "Request Context",
   "deploying-mcp-server": "Deploying an MCPServer",
   "ai-sdk-v5-integration": "AI SDK v5 Integration",
   "whatsapp-chat-bot": "WhatsApp Chat Bot",

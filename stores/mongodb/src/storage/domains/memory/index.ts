@@ -10,7 +10,15 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StorageGetMessagesArg, StorageResourceType } from '@mastra/core/storage';
+import type {
+  PaginationInfo,
+  StorageGetMessagesArg,
+  StorageResourceType,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
+} from '@mastra/core/storage';
 import type { StoreOperationsMongoDB } from '../operations';
 import { formatDateForMongoDB } from '../utils';
 
@@ -155,27 +163,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
     if (messageIds.length === 0) return [];
     try {
       const collection = await this.operations.getCollection(TABLE_MESSAGES);
@@ -185,7 +173,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         .toArray();
 
       const list = new MessageList().add(rawMessages.map(this.parseRow), 'memory');
-      if (format === `v1`) return list.get.all.v1();
       return list.get.all.v2();
     } catch (error) {
       throw new MastraError(
@@ -198,6 +185,180 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         error,
       );
     }
+  }
+
+  public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+
+    if (!threadId.trim()) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_LIST_MESSAGES_INVALID_THREAD_ID',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        new Error('threadId must be a non-empty string'),
+      );
+    }
+
+    try {
+      // Determine how many results to return
+      // Default pagination is always 40 unless explicitly specified
+      let perPage = 40;
+      if (limit !== undefined) {
+        if (limit === false) {
+          // limit: false means get ALL messages
+          perPage = Number.MAX_SAFE_INTEGER;
+        } else if (limit === 0) {
+          // limit: 0 means return zero results
+          perPage = 0;
+        } else if (typeof limit === 'number' && limit > 0) {
+          perPage = limit;
+        }
+      }
+
+      // Convert offset to page for pagination metadata
+      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
+
+      // Determine sort field and direction
+      const sortField = orderBy?.field || 'createdAt';
+      const sortDirection = orderBy?.direction || 'DESC';
+      const sortOrder = sortDirection === 'ASC' ? 1 : -1;
+
+      const collection = await this.operations.getCollection(TABLE_MESSAGES);
+
+      // Build query conditions
+      const query: any = { thread_id: threadId };
+
+      if (resourceId) {
+        query.resourceId = resourceId;
+      }
+
+      if (filter?.dateRange?.start) {
+        query.createdAt = { ...query.createdAt, $gte: filter.dateRange.start };
+      }
+
+      if (filter?.dateRange?.end) {
+        query.createdAt = { ...query.createdAt, $lte: filter.dateRange.end };
+      }
+
+      // Get total count
+      const total = await collection.countDocuments(query);
+
+      // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      const sortObj: any = { [sortField]: sortOrder };
+      let cursor = collection.find(query).sort(sortObj).skip(offset);
+
+      // Only apply limit if not unlimited and perPage > 0
+      // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
+      // So we skip limit when perPage === 0 and handle it by returning empty array
+      if (limit !== false && perPage > 0) {
+        cursor = cursor.limit(perPage);
+      }
+
+      const dataResult = await cursor.toArray();
+
+      // If perPage is 0, return empty array regardless of query results
+      if (perPage === 0) {
+        return {
+          messages: [],
+          total,
+          page,
+          perPage: 0,
+          hasMore: false,
+        };
+      }
+      const messages: any[] = dataResult.map((row: any) => this.parseRow(row));
+
+      if (total === 0 && messages.length === 0) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      // Step 2: Add included messages with context (if any), excluding duplicates
+      const messageIds = new Set(messages.map(m => m.id));
+      if (include && include.length > 0) {
+        const selectBy = { include };
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
+        if (includeMessages) {
+          // Deduplicate: only add messages that aren't already in the paginated results
+          for (const includeMsg of includeMessages) {
+            if (!messageIds.has(includeMsg.id)) {
+              messages.push(includeMsg);
+              messageIds.add(includeMsg.id);
+            }
+          }
+        }
+      }
+
+      // Use MessageList for proper deduplication and format conversion to V2
+      const list = new MessageList().add(messages, 'memory');
+      let finalMessages = list.get.all.v2();
+
+      // Sort all messages (paginated + included) for final output
+      finalMessages = finalMessages.sort((a, b) => {
+        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
+        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
+
+      // Calculate hasMore based on pagination window
+      // If all thread messages have been returned (through pagination or include), hasMore = false
+      // Otherwise, check if there are more pages in the pagination window
+      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
+      const hasMore = limit === false ? false : allThreadMessagesReturned ? false : offset + dataResult.length < total;
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage,
+        hasMore,
+      };
+    } catch (error) {
+      const errorPerPage = limit === false ? Number.MAX_SAFE_INTEGER : limit === 0 ? 0 : limit || 40;
+      const mastraError = new MastraError(
+        {
+          id: 'MONGODB_STORE_LIST_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+            resourceId: resourceId ?? '',
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      return {
+        messages: [],
+        total: 0,
+        page: errorPerPage === 0 ? 0 : Math.floor(offset / errorPerPage),
+        perPage: errorPerPage,
+        hasMore: false,
+      };
+    }
+  }
+
+  /**
+   * @todo When migrating from getThreadsByResourceIdPaginated to this method,
+   * implement orderBy and sortDirection support for full sorting capabilities
+   */
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, limit, offset } = args;
+    const page = Math.floor(offset / limit);
+    const perPage = limit;
+    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
   }
 
   public async getMessagesPaginated(

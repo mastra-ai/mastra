@@ -35,6 +35,11 @@ import type {
   StorageIndexStats,
   UpdateAISpanRecord,
   CreateAISpanRecord,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListWorkflowRunsInput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
 } from './types';
 
 export type StorageDomains = {
@@ -247,14 +252,56 @@ export abstract class MastraStorage extends MastraBase {
     selectBy,
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]>;
-  abstract getMessagesById({ messageIds }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  abstract getMessagesById({ messageIds }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
-  abstract getMessagesById({
-    messageIds,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]>;
+
+  async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    if (this.stores?.memory) {
+      return this.stores.memory.listMessages(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_MESSAGES_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing messages is not implemented by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
+    if (this.stores?.workflows) {
+      return this.stores.workflows.listWorkflowRuns(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_WORKFLOW_RUNS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing workflow runs is not implemented by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    if (this.stores?.memory) {
+      return this.stores.memory.listThreadsByResourceId(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_THREADS_BY_RESOURCE_ID_PAGINATED_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing threads by resource ID paginated is not implemented by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
+    if (this.stores?.memory) {
+      return this.stores.memory.listMessagesById({ messageIds });
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_MESSAGES_BY_ID_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing messages by ID is not implemented by this storage adapter (${this.constructor.name})`,
+    });
+  }
 
   abstract saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   abstract saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
@@ -388,7 +435,7 @@ export abstract class MastraStorage extends MastraBase {
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>>;
 
   abstract updateWorkflowState({
@@ -482,15 +529,6 @@ export abstract class MastraStorage extends MastraBase {
       details: { traceId, spanId },
     });
   }
-
-  abstract getWorkflowRuns(args?: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns>;
 
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
 

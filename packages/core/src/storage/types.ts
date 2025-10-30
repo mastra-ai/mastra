@@ -1,7 +1,6 @@
 import type { AISpanType } from '../ai-tracing';
-import type { MemoryConfig } from '../memory/types';
+import type { MemoryConfig, MastraMessageV2, StorageThreadType } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
-import type { LegacyWorkflowRunState } from '../workflows/legacy';
 
 export type StoragePagination = {
   page: number;
@@ -17,21 +16,6 @@ export interface StorageColumn {
     column: string;
   };
 }
-
-export interface LegacyWorkflowRuns {
-  runs: LegacyWorkflowRun[];
-  total: number;
-}
-
-export interface LegacyWorkflowRun {
-  workflowName: string;
-  runId: string;
-  snapshot: LegacyWorkflowRunState | string;
-  createdAt: Date;
-  updatedAt: Date;
-  resourceId?: string;
-}
-
 export interface WorkflowRuns {
   runs: WorkflowRun[];
   total: number;
@@ -71,6 +55,52 @@ export type PaginationInfo = {
 };
 
 export type MastraMessageFormat = 'v1' | 'v2';
+
+export type StorageListMessagesInput = {
+  threadId: string;
+  resourceId?: string;
+  include?: {
+    id: string;
+    threadId?: string;
+    withPreviousMessages?: number;
+    withNextMessages?: number;
+  }[];
+  limit?: number | false;
+  offset?: number;
+  filter?: {
+    dateRange?: {
+      start?: Date;
+      end?: Date;
+    };
+  };
+  orderBy?: {
+    field: 'createdAt';
+    direction: 'ASC' | 'DESC';
+  };
+};
+
+export type StorageListMessagesOutput = PaginationInfo & {
+  messages: MastraMessageV2[];
+};
+
+export type StorageListWorkflowRunsInput = {
+  workflowName?: string;
+  fromDate?: Date;
+  toDate?: Date;
+  limit?: number;
+  offset?: number;
+  resourceId?: string;
+};
+
+export type StorageListThreadsByResourceIdInput = {
+  resourceId: string;
+  limit: number;
+  offset: number;
+} & ThreadSortOptions;
+
+export type StorageListThreadsByResourceIdOutput = PaginationInfo & {
+  threads: StorageThreadType[];
+};
 
 export type StorageGetMessagesArg = {
   threadId: string;
