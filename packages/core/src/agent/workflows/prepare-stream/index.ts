@@ -117,7 +117,6 @@ export function createPrepareStreamWorkflow<
     memoryConfig,
     saveQueueManager,
     agentAISpan,
-    instructions,
     agentId,
   });
 
