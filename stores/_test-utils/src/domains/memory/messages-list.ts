@@ -58,7 +58,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         }),
       ];
 
-      await storage.saveMessages({ messages, format: 'v2' });
+      await storage.saveMessages({ messages });
     });
 
     it('should list all messages for a thread without pagination', async () => {
@@ -114,7 +114,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         content: { content: 'Different Resource' },
         createdAt: new Date(),
       });
-      await storage.saveMessages({ messages: [differentResourceMessage], format: 'v2' });
+      await storage.saveMessages({ messages: [differentResourceMessage] });
 
       const result = await storage.listMessages({
         threadId: thread.id,
@@ -151,7 +151,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         }),
       ];
 
-      await storage.saveMessages({ messages: dateMessages, format: 'v2' });
+      await storage.saveMessages({ messages: dateMessages });
 
       const result = await storage.listMessages({
         threadId: dateThread.id,
@@ -374,7 +374,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         }),
       );
 
-      await storage.saveMessages({ messages: dateMessages, format: 'v2' });
+      await storage.saveMessages({ messages: dateMessages });
 
       // Get messages from the last 5 seconds, paginated
       const cutoffDate = new Date(now.getTime() + 5000);
@@ -416,7 +416,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
             createdAt: new Date(Date.now() + 10000 + i * 1000),
           }),
         );
-        await storage.saveMessages({ messages: manyMessages, format: 'v2' });
+        await storage.saveMessages({ messages: manyMessages });
 
         const result = await storage.listMessages({
           threadId: thread.id,
@@ -488,7 +488,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
             createdAt: new Date(now.getTime() + i * 1000),
           }),
         );
-        await storage.saveMessages({ messages: dateMessages, format: 'v2' });
+        await storage.saveMessages({ messages: dateMessages });
 
         const cutoffDate = new Date(now.getTime() + 4000);
         const result = await storage.listMessages({
@@ -516,7 +516,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           }),
         );
 
-        await storage.saveMessages({ messages: otherMessages, format: 'v2' });
+        await storage.saveMessages({ messages: otherMessages });
 
         const result = await storage.listMessages({
           threadId: thread.id,
