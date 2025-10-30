@@ -77,6 +77,7 @@ type WithoutMethods<T> = {
 export type NetworkStreamParams = {
   messages: MessageListInput;
 } & MultiPrimitiveExecutionOptions;
+
 export interface GetAgentResponse {
   name: string;
   instructions: AgentInstructions;
@@ -86,8 +87,7 @@ export interface GetAgentResponse {
   provider: string;
   modelId: string;
   modelVersion: string;
-  defaultGenerateOptions: WithoutMethods<AgentGenerateOptions>;
-  defaultStreamOptions: WithoutMethods<AgentStreamOptions>;
+  defaultOptions: WithoutMethods<AgentExecutionOptions>;
   modelList:
     | Array<{
         id: string;
@@ -100,6 +100,8 @@ export interface GetAgentResponse {
         };
       }>
     | undefined;
+  defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
+  defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
