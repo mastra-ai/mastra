@@ -20,27 +20,25 @@ function getTextContent(message: any): string {
   if (typeof message.content === 'string') {
     return message.content;
   }
-  
+
   if (message.content && typeof message.content === 'object') {
     // Handle format 2 (MastraMessageContentV2)
     if (message.content.parts && Array.isArray(message.content.parts)) {
-      const textParts = message.content.parts
-        .filter((part: any) => part.type === 'text')
-        .map((part: any) => part.text);
+      const textParts = message.content.parts.filter((part: any) => part.type === 'text').map((part: any) => part.text);
       return textParts.join(' ');
     }
-    
+
     // Handle direct text property
     if (message.content.text) {
       return message.content.text;
     }
-    
+
     // Handle nested content property
     if (message.content.content && typeof message.content.content === 'string') {
       return message.content.content;
     }
   }
-  
+
   return '';
 }
 
@@ -252,8 +250,7 @@ describe('Agent Memory Tests', () => {
 
     // Verify that the retrieved messages contain content from the first thread
     const hasMessagesFromFirstThread = retrievedMemoryMessages.some(
-      msg =>
-        msg.threadId === thread1Id || getTextContent(msg).toLowerCase().includes('cat'),
+      msg => msg.threadId === thread1Id || getTextContent(msg).toLowerCase().includes('cat'),
     );
     expect(hasMessagesFromFirstThread).toBe(true);
     expect(secondResponse.text.toLowerCase()).toMatch(/(cat|animal|discuss)/);
