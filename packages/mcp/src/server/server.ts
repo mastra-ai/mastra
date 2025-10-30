@@ -764,9 +764,13 @@ export class MCPServer extends MCPServerBase {
           );
           try {
             // Clone RequestContext to prevent auth context leakage between concurrent invocations
-            const isolatedContext = new RequestContext(
-              requestContext ? (Array.from(requestContext.entries()) as any) : undefined,
-            );
+            // Create a new isolated context by copying entries from the base context
+            const isolatedContext = new RequestContext();
+            if (requestContext) {
+              for (const [key, value] of requestContext.entries()) {
+                isolatedContext.set(key, value);
+              }
+            }
 
             // Store MCP context in the isolated RequestContext
             if (mcp) {
