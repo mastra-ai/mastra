@@ -313,7 +313,7 @@ export interface GetMemoryThreadMessagesResponse {
 }
 
 export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
-  messages: MastraMessageV1[] | MastraDBMessage[];
+  messages: MastraDBMessage[];
 };
 
 export interface GetLogsParams {

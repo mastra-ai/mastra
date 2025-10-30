@@ -329,20 +329,9 @@ export abstract class MastraMemory extends MastraBase {
    * @returns Promise resolving to the saved messages
    */
   abstract saveMessages(args: {
-    messages: (MastraMessageV1 | MastraDBMessage)[] | MastraMessageV1[] | MastraDBMessage[];
+    messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
-    format?: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  abstract saveMessages(args: {
-    messages: (MastraMessageV1 | MastraDBMessage)[] | MastraMessageV1[] | MastraDBMessage[];
-    memoryConfig?: MemoryConfig | undefined;
-    format: 'v2';
-  }): Promise<MastraDBMessage[]>;
-  abstract saveMessages(args: {
-    messages: (MastraMessageV1 | MastraDBMessage)[] | MastraMessageV1[] | MastraDBMessage[];
-    memoryConfig?: MemoryConfig | undefined;
-    format?: 'v1' | 'v2';
-  }): Promise<MastraDBMessage[] | MastraMessageV1[]>;
+  }): Promise<{ messages: MastraDBMessage[] }>;
 
   /**
    * Retrieves all messages for a specific thread
@@ -440,9 +429,13 @@ export abstract class MastraMemory extends MastraBase {
       toolCallIds,
     };
 
-    const savedMessages = await this.saveMessages({ messages: [message], memoryConfig: config });
-    const list = new MessageList({ threadId, resourceId }).add(savedMessages[0]!, 'memory');
-    return list.get.all.v1()[0]!;
+    // Convert V1 message to DB format before saving
+    const list = new MessageList({ threadId, resourceId }).add(message, 'memory');
+    const dbMessage = list.get.all.db()[0]!;
+    
+    const savedMessages = await this.saveMessages({ messages: [dbMessage], memoryConfig: config });
+    const resultList = new MessageList({ threadId, resourceId }).add(savedMessages.messages[0]!, 'memory');
+    return resultList.get.all.v1()[0]!;
   }
 
   /**

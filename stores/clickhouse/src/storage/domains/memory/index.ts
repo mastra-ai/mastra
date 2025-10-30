@@ -23,14 +23,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     this.operations = operations;
   }
 
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraDBMessage[]>;
   public async getMessages({
     threadId,
     resourceId,
     selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
+  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
@@ -155,9 +152,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         }
       });
 
-      const list = new MessageList({ threadId, resourceId }).add(messages, 'memory');
-      if (format === `v2`) return list.get.all.db();
-      return list.get.all.v1();
+      const list = new MessageList({ threadId, resourceId }).add(messages as MastraMessageV1[] | MastraDBMessage[], 'memory');
+      return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
         {
@@ -173,26 +169,10 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
   public async getMessagesById({
     messageIds,
-    format,
   }: {
     messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraDBMessage[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
-    if (messageIds.length === 0) return [];
+  }): Promise<{ messages: MastraDBMessage[] }> {
+    if (messageIds.length === 0) return { messages: [] };
 
     try {
       const result = await this.client.query({
@@ -235,9 +215,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         }
       });
 
-      const list = new MessageList().add(messages, 'memory');
-      if (format === `v1`) return list.get.all.v1();
-      return list.get.all.db();
+      const list = new MessageList().add(messages as MastraMessageV1[] | MastraDBMessage[], 'memory');
+      return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
         {
@@ -251,13 +230,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     }
   }
 
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraDBMessage[]; format: 'v2' }): Promise<MastraDBMessage[]>;
   async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraDBMessage[]; format: 'v2' },
-  ): Promise<MastraDBMessage[] | MastraMessageV1[]> {
-    const { messages, format = 'v1' } = args;
-    if (messages.length === 0) return messages;
+    args: { messages: MastraDBMessage[] },
+  ): Promise<{ messages: MastraDBMessage[] }> {
+    const { messages } = args;
+    if (messages.length === 0) return { messages };
 
     for (const message of messages) {
       const resourceId = message.resourceId;
@@ -422,10 +399,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         }),
       ]);
 
-      const list = new MessageList().add(messages, 'memory');
+      const list = new MessageList().add(messages as MastraMessageV1[] | MastraDBMessage[], 'memory');
 
-      if (format === `v2`) return list.get.all.db();
-      return list.get.all.v1();
+      return { messages: list.get.all.db() };
     } catch (error: any) {
       throw new MastraError(
         {
@@ -746,9 +722,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
   }
 
   async getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraDBMessage[] }> {
-    const { threadId, resourceId, selectBy, format = 'v1' } = args;
+    args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
+    const { threadId, resourceId, selectBy } = args;
     const page = selectBy?.pagination?.page || 0;
     const perPageInput = selectBy?.pagination?.perPage;
     const perPage =
@@ -936,7 +912,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       }
 
       return {
-        messages: format === 'v2' ? messages : (messages as unknown as MastraMessageV1[]),
+        messages,
         total,
         page,
         perPage,
