@@ -298,9 +298,7 @@ describe('Agent Memory Tests', () => {
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
       const { messages } = await agentMemory.query({ threadId });
-      const userMessages = messages
-        .filter((m: any) => m.role === 'user')
-        .map((m: any) => getTextContent(m));
+      const userMessages = messages.filter((m: any) => m.role === 'user').map((m: any) => getTextContent(m));
 
       expect(userMessages).toEqual(expect.arrayContaining(['First message', 'Second message']));
     });
