@@ -1,10 +1,12 @@
 import ErrorBoundary from "@docusaurus/ErrorBoundary";
+import Head from "@docusaurus/Head";
 import {
   PageMetadata,
   SkipToContentFallbackId,
   ThemeClassNames,
 } from "@docusaurus/theme-common";
 import { useKeyboardNavigation } from "@docusaurus/theme-common/internal";
+import { useLocation } from "@docusaurus/router";
 import AnnouncementBar from "@theme/AnnouncementBar";
 import ErrorPageContent from "@theme/ErrorPageContent";
 import Footer from "@theme/Footer";
@@ -28,9 +30,24 @@ export default function Layout(props: Props): ReactNode {
 
   useKeyboardNavigation();
 
+  const location = useLocation();
+  const cleanPath = location.pathname.replace(/^\/ja\//, "/");
+  const canonicalUrl = `https://mastra.ai${cleanPath}`;
+
   return (
     <LayoutProvider>
       <PageMetadata title={title} description={description} />
+
+      <Head>
+        <link rel="canonical" href={canonicalUrl} />
+        <link rel="alternate" hrefLang="en" href={canonicalUrl} />
+        <link
+          rel="alternate"
+          hrefLang="ja"
+          href={`https://mastra.ai/ja${cleanPath}`}
+        />
+        <link rel="alternate" hrefLang="x-default" href={canonicalUrl} />
+      </Head>
 
       <SkipToContent />
 
