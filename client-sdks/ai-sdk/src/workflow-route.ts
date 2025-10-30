@@ -6,6 +6,7 @@ import { toAISdkFormat } from './to-ai-sdk-format';
 
 type WorkflowRouteBody = {
   inputData?: Record<string, any>;
+  resumeData?: Record<string, any>;
   runtimeContext?: RuntimeContext;
   tracingOptions?: TracingOptions;
 };
@@ -64,7 +65,7 @@ export function workflowRoute({
       },
     },
     handler: async c => {
-      const { inputData, ...rest } = (await c.req.json()) as WorkflowRouteBody;
+      const { inputData, resumeData, ...rest } = (await c.req.json()) as WorkflowRouteBody;
       const mastra = c.get('mastra');
 
       let workflowToUse: string | undefined = workflow;
@@ -90,7 +91,10 @@ export function workflowRoute({
       }
 
       const run = await workflowObj.createRunAsync();
-      const stream = run.streamVNext({ inputData, ...rest });
+
+      const stream = resumeData
+        ? run.resumeStreamVNext({ resumeData, ...rest })
+        : run.streamVNext({ inputData, ...rest });
 
       const uiMessageStream = createUIMessageStream({
         execute: async ({ writer }) => {
