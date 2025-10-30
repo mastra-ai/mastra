@@ -27,15 +27,15 @@ describe('MessageList - File URL Handling', () => {
     messageList.add(v2Message, 'user');
 
     // Get V3 messages to see internal representation
-    const v3Messages = messageList.get.all.v3();
-    const v3FilePart = v3Messages[0].content.parts.find((p: any) => p.type === 'file');
+    const v5Messages = messageList.get.all.aiV5.ui();
+    const v5FilePart = v5Messages[0].parts.find((p: any) => p.type === 'file');
 
     // V3 should have URL in the url field
-    expect(v3FilePart).toBeDefined();
-    expect(v3FilePart?.type).toBe('file');
-    expect((v3FilePart as any)?.url).toBe(imageUrl);
+    expect(v5FilePart).toBeDefined();
+    expect(v5FilePart?.type).toBe('file');
+    expect((v5FilePart as any)?.url).toBe(imageUrl);
     // Should NOT have malformed data URI
-    expect((v3FilePart as any)?.url).not.toContain('data:image/png;base64,https://');
+    expect((v5FilePart as any)?.url).not.toContain('data:image/png;base64,https://');
 
     // Get V2 messages back (used by InputProcessors)
     const v2MessagesBack = messageList.get.all.v2();
@@ -136,24 +136,24 @@ describe('MessageList - File URL Handling', () => {
       const list = new MessageList();
       list.add(msg, 'user');
 
-      const v3Messages = list.get.all.v3();
-      const v3FilePart = v3Messages[0].content.parts.find((p: any) => p.type === 'file');
+      const v5Messages = list.get.all.aiV5.ui();
+      const v5FilePart = v5Messages[0].parts.find((p: any) => p.type === 'file');
 
       const v2Messages = list.get.all.v2();
       const v2FilePart = v2Messages[0].content.parts?.find((p: any) => p.type === 'file');
 
       if (msg.id === 'url-msg') {
         // URL should be preserved as-is
-        expect((v3FilePart as any)?.url).toBe(imageUrl);
+        expect((v5FilePart as any)?.url).toBe(imageUrl);
         expect((v2FilePart as any)?.data).toBe(imageUrl);
       } else if (msg.id === 'base64-msg') {
         // Base64 gets wrapped in data URI for V3, but comes back as base64 in V2
-        expect((v3FilePart as any)?.url).toContain('data:image/png;base64,');
+        expect((v5FilePart as any)?.url).toContain('data:image/png;base64,');
         // V2 gets back the base64 without data URI wrapper
         expect((v2FilePart as any)?.data).toBe(base64Data);
       } else if (msg.id === 'datauri-msg') {
         // Data URI should be preserved throughout
-        expect((v3FilePart as any)?.url).toBe(dataUri);
+        expect((v5FilePart as any)?.url).toBe(dataUri);
         expect((v2FilePart as any)?.data).toBe(dataUri);
       }
     });
