@@ -8,10 +8,6 @@ export type { NetworkRouteOptions } from './network-route';
 export type { NetworkDataPart } from './transformers';
 export type { AgentDataPart } from './transformers';
 
-// Export message conversion functions (default to V5)
-export { toAISdkV5Messages as toAISdkMessages } from './convert-messages';
-
-// Export stream conversion (V5 only)
 export { toAISdkV5Stream as toAISdkStream } from './convert-streams';
 
 // Deprecated exports
