@@ -15,4 +15,4 @@
 '@mastra/pg': major
 ---
 
-Update handlers to use `listWorkflowRuns` instead of `getWorkflowRuns`. Fix type names from `StorageListThreadsByResourceIdPaginatedInput/Output` to `StorageListThreadsByResourceIdInput/Output`.
+Update handlers to use `listWorkflowRuns` instead of `getWorkflowRuns`. Fix type names from `StoragelistThreadsByResourceIdInput/Output` to `StorageListThreadsByResourceIdInput/Output`.
