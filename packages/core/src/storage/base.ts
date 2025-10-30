@@ -38,8 +38,8 @@ import type {
   StorageListMessagesInput,
   StorageListMessagesOutput,
   StorageListWorkflowRunsInput,
-  StoragelistThreadsByResourceIdInput,
-  StoragelistThreadsByResourceIdOutput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
 } from './types';
 
 export type StorageDomains = {
@@ -286,8 +286,8 @@ export abstract class MastraStorage extends MastraBase {
   }
 
   async listThreadsByResourceId(
-    args: StoragelistThreadsByResourceIdInput,
-  ): Promise<StoragelistThreadsByResourceIdOutput> {
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
     if (this.stores?.memory) {
       return this.stores.memory.listThreadsByResourceId(args);
     }

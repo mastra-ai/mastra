@@ -773,7 +773,7 @@ export async function resumeStreamWorkflowHandler({
   }
 }
 
-export async function getWorkflowRunsHandler({
+export async function listWorkflowRunsHandler({
   mastra,
   workflowId,
   fromDate,
@@ -799,7 +799,7 @@ export async function getWorkflowRunsHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
-    const workflowRuns = (await workflow.getWorkflowRuns({ fromDate, toDate, limit, offset, resourceId })) || {
+    const workflowRuns = (await workflow.listWorkflowRuns({ fromDate, toDate, limit, offset, resourceId })) || {
       runs: [],
       total: 0,
     };

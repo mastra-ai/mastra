@@ -10,8 +10,8 @@ import type {
   ThreadSortOptions,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StoragelistThreadsByResourceIdInput,
-  StoragelistThreadsByResourceIdOutput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
 } from '../../types';
 
 export abstract class MemoryStorage extends MastraBase {
@@ -93,8 +93,8 @@ export abstract class MemoryStorage extends MastraBase {
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
 
   abstract listThreadsByResourceId(
-    args: StoragelistThreadsByResourceIdInput,
-  ): Promise<StoragelistThreadsByResourceIdOutput>;
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput>;
 
   abstract getMessagesPaginated(
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },

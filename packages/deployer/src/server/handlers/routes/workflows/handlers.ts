@@ -10,7 +10,7 @@ import {
   streamVNextWorkflowHandler as getOriginalStreamVNextWorkflowHandler,
   resumeAsyncWorkflowHandler as getOriginalResumeAsyncWorkflowHandler,
   resumeWorkflowHandler as getOriginalResumeWorkflowHandler,
-  getWorkflowRunsHandler as getOriginalGetWorkflowRunsHandler,
+  listWorkflowRunsHandler as getOriginalListWorkflowRunsHandler,
   getWorkflowRunByIdHandler as getOriginalGetWorkflowRunByIdHandler,
   getWorkflowRunExecutionResultHandler as getOriginalGetWorkflowRunExecutionResultHandler,
   cancelWorkflowRunHandler as getOriginalCancelWorkflowRunHandler,
@@ -459,12 +459,12 @@ export async function resumeWorkflowHandler(c: Context) {
   }
 }
 
-export async function getWorkflowRunsHandler(c: Context) {
+export async function listWorkflowRunsHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
     const { fromDate, toDate, limit, offset, resourceId } = c.req.query();
-    const workflowRuns = await getOriginalGetWorkflowRunsHandler({
+    const workflowRuns = await getOriginalListWorkflowRunsHandler({
       mastra,
       workflowId,
       fromDate: fromDate ? new Date(fromDate) : undefined,
