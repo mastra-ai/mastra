@@ -688,27 +688,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
     if (messageIds.length === 0) return [];
     const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
     const messages: any[] = [];
@@ -740,7 +720,6 @@ export class MemoryStorageD1 extends MemoryStorage {
       });
       this.logger.debug(`Retrieved ${messages.length} messages`);
       const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraMessageV2[], 'memory');
-      if (format === `v1`) return list.get.all.v1();
       return list.get.all.v2();
     } catch (error) {
       const mastraError = new MastraError(
@@ -759,16 +738,215 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
   }
 
-  public async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    throw new Error(
-      `listMessages is not yet implemented by this storage adapter (${this.constructor.name}). ` +
-        `This method is currently being rolled out across all storage adapters. ` +
-        `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
-    );
-  }
+  public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
 
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
-    return this.getMessagesById({ messageIds, format: 'v2' });
+    if (!threadId.trim()) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_CLOUDFLARE_D1_LIST_MESSAGES_INVALID_THREAD_ID',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        new Error('threadId must be a non-empty string'),
+      );
+    }
+
+    try {
+      // Determine how many results to return
+      // Default pagination is always 40 unless explicitly specified
+      let perPage = 40;
+      if (limit !== undefined) {
+        if (limit === false) {
+          // limit: false means get ALL messages
+          perPage = Number.MAX_SAFE_INTEGER;
+        } else if (limit === 0) {
+          // limit: 0 means return zero results
+          perPage = 0;
+        } else if (typeof limit === 'number' && limit > 0) {
+          perPage = limit;
+        }
+      }
+
+      // Convert offset to page for pagination metadata
+      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
+
+      // Determine sort field and direction
+      const sortField = orderBy?.field || 'createdAt';
+      const sortDirection = orderBy?.direction || 'DESC';
+
+      const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
+
+      // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      let query = `
+        SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
+        FROM ${fullTableName}
+        WHERE thread_id = ?
+      `;
+      const queryParams: any[] = [threadId];
+
+      if (resourceId) {
+        query += ` AND resourceId = ?`;
+        queryParams.push(resourceId);
+      }
+
+      const dateRange = filter?.dateRange;
+      if (dateRange?.start) {
+        const startDate =
+          dateRange.start instanceof Date ? serializeDate(dateRange.start) : serializeDate(new Date(dateRange.start));
+        query += ` AND createdAt >= ?`;
+        queryParams.push(startDate);
+      }
+
+      if (dateRange?.end) {
+        const endDate =
+          dateRange.end instanceof Date ? serializeDate(dateRange.end) : serializeDate(new Date(dateRange.end));
+        query += ` AND createdAt <= ?`;
+        queryParams.push(endDate);
+      }
+
+      // Build ORDER BY clause
+      const orderByField = sortField === 'createdAt' ? 'createdAt' : `"${sortField}"`;
+      const orderByDirection = sortDirection === 'ASC' ? 'ASC' : 'DESC';
+      query += ` ORDER BY ${orderByField} ${orderByDirection}`;
+
+      // Apply pagination
+      if (perPage !== Number.MAX_SAFE_INTEGER) {
+        query += ` LIMIT ? OFFSET ?`;
+        queryParams.push(perPage, offset);
+      }
+
+      const results = await this.operations.executeQuery({ sql: query, params: queryParams });
+
+      // Parse message content
+      const paginatedMessages = (isArrayOfRecords(results) ? results : []).map((message: Record<string, any>) => {
+        const processedMsg: Record<string, any> = {};
+        for (const [key, value] of Object.entries(message)) {
+          if (key === `type` && value === `v2`) continue;
+          processedMsg[key] = deserializeValue(value);
+        }
+        return processedMsg;
+      });
+
+      const paginatedCount = paginatedMessages.length;
+
+      // Get total count
+      let countQuery = `SELECT count() as count FROM ${fullTableName} WHERE thread_id = ?`;
+      const countParams: any[] = [threadId];
+
+      if (resourceId) {
+        countQuery += ` AND resourceId = ?`;
+        countParams.push(resourceId);
+      }
+
+      if (dateRange?.start) {
+        const startDate =
+          dateRange.start instanceof Date ? serializeDate(dateRange.start) : serializeDate(new Date(dateRange.start));
+        countQuery += ` AND createdAt >= ?`;
+        countParams.push(startDate);
+      }
+
+      if (dateRange?.end) {
+        const endDate =
+          dateRange.end instanceof Date ? serializeDate(dateRange.end) : serializeDate(new Date(dateRange.end));
+        countQuery += ` AND createdAt <= ?`;
+        countParams.push(endDate);
+      }
+
+      const countResult = (await this.operations.executeQuery({ sql: countQuery, params: countParams })) as {
+        count: number;
+      }[];
+      const total = Number(countResult[0]?.count ?? 0);
+
+      if (total === 0 && paginatedCount === 0) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      // Step 2: Add included messages with context (if any), excluding duplicates
+      const messageIds = new Set(paginatedMessages.map((m: Record<string, any>) => m.id as string));
+      let includeMessages: MastraMessageV2[] = [];
+
+      if (include && include.length > 0) {
+        // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
+        const selectBy = { include };
+        const includeResult = (await this._getIncludedMessages(threadId, selectBy)) as MastraMessageV2[];
+        if (Array.isArray(includeResult)) {
+          includeMessages = includeResult;
+
+          // Deduplicate: only add messages that aren't already in the paginated results
+          for (const includeMsg of includeMessages) {
+            if (!messageIds.has(includeMsg.id)) {
+              paginatedMessages.push(includeMsg);
+              messageIds.add(includeMsg.id);
+            }
+          }
+        }
+      }
+
+      // Use MessageList for proper deduplication and format conversion to V2
+      const list = new MessageList().add(paginatedMessages as MastraMessageV1[] | MastraMessageV2[], 'memory');
+      let finalMessages = list.get.all.v2();
+
+      // Sort all messages (paginated + included) for final output
+      finalMessages = finalMessages.sort((a, b) => {
+        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
+        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+
+        // Handle tiebreaker for stable sorting
+        if (aValue === bValue) {
+          return a.id.localeCompare(b.id);
+        }
+
+        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
+
+      // Calculate hasMore based on pagination window
+      // If all thread messages have been returned (through pagination or include), hasMore = false
+      // Otherwise, check if there are more pages in the pagination window
+      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
+      const hasMore = limit === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage,
+        hasMore,
+      };
+    } catch (error: any) {
+      const mastraError = new MastraError(
+        {
+          id: 'CLOUDFLARE_D1_STORAGE_LIST_MESSAGES_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to list messages for thread ${threadId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          details: {
+            threadId,
+            resourceId: resourceId ?? '',
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      return {
+        messages: [],
+        total: 0,
+        page: Math.floor(offset / (limit === false ? Number.MAX_SAFE_INTEGER : limit || 40)),
+        perPage: limit === false ? Number.MAX_SAFE_INTEGER : limit || 40,
+        hasMore: false,
+      };
+    }
   }
 
   /**
