@@ -7,7 +7,7 @@ import type { z } from 'zod';
 import type { MastraUnion } from '../../action';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
-import type { RuntimeContext } from '../../runtime-context';
+import type { RequestContext } from '../../request-context';
 import { createMastraProxy } from '../../utils';
 import type { LegacyStep as Step } from './step';
 import type {
@@ -48,7 +48,7 @@ export class Machine<
 > extends EventEmitter {
   logger: IMastraLogger;
   #mastra?: Mastra;
-  #runtimeContext: RuntimeContext;
+  #requestContext: RequestContext;
   #workflowInstance: WorkflowInstance;
 
   #stepGraph: StepGraph;
@@ -64,7 +64,7 @@ export class Machine<
   constructor({
     logger,
     mastra,
-    runtimeContext,
+    requestContext,
     workflowInstance,
     name,
     runId,
@@ -75,7 +75,7 @@ export class Machine<
   }: {
     logger: IMastraLogger;
     mastra?: Mastra;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     workflowInstance: WorkflowInstance;
     name: string;
     runId: string;
@@ -88,7 +88,7 @@ export class Machine<
 
     this.#mastra = mastra;
     this.#workflowInstance = workflowInstance;
-    this.#runtimeContext = runtimeContext;
+    this.#requestContext = requestContext;
     this.logger = logger;
 
     this.#runId = runId;
@@ -406,7 +406,7 @@ export class Machine<
             },
             runId: this.#runId,
             mastra: mastraProxy as MastraUnion | undefined,
-            runtimeContext: this.#runtimeContext,
+            requestContext: this.#requestContext,
           });
         } catch (error) {
           this.logger.debug(`Step ${stepNode.id} failed`, {
@@ -526,7 +526,7 @@ export class Machine<
           };
         }) => {
           const { parentStepId, context } = input;
-          const result = await this.#workflowInstance.runMachine(parentStepId, context, this.#runtimeContext);
+          const result = await this.#workflowInstance.runMachine(parentStepId, context, this.#requestContext);
           return Promise.resolve({
             steps: result.reduce((acc, r) => {
               return { ...acc, ...r?.results };

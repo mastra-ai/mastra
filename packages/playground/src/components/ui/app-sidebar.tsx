@@ -148,8 +148,8 @@ const mainNavigation: NavSection[] = [
       },
 
       {
-        name: 'Runtime Context',
-        url: '/runtime-context',
+        name: 'Request Context',
+        url: '/request-context',
         icon: <GlobeIcon />,
       },
     ],

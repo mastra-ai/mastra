@@ -31,12 +31,12 @@ export async function getMemoryStatusHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
 
     const result = await getOriginalMemoryStatusHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
     });
 
     return c.json(result);
@@ -49,12 +49,12 @@ export async function getMemoryConfigHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
 
     const result = await getOriginalMemoryConfigHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
     });
 
     return c.json(result);
@@ -72,7 +72,7 @@ export async function listThreadsHandler(c: Context) {
     const limit = parseInt(c.req.query('limit') || '100', 10);
     const orderBy = c.req.query('orderBy') as ThreadOrderBy | undefined;
     const sortDirection = c.req.query('sortDirection') as ThreadSortDirection | undefined;
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
 
     const result = await getOriginalListThreadsHandler({
       mastra,
@@ -82,7 +82,7 @@ export async function listThreadsHandler(c: Context) {
       limit,
       orderBy,
       sortDirection,
-      runtimeContext,
+      requestContext,
     });
 
     return c.json(result);
@@ -96,13 +96,13 @@ export async function getThreadByIdHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
     const threadId = c.req.param('threadId');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
 
     const result = await getOriginalThreadByIdHandler({
       mastra,
       agentId,
       threadId,
-      runtimeContext,
+      requestContext,
     });
 
     return c.json(result);
@@ -116,13 +116,13 @@ export async function saveMessagesHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
     const body = await c.req.json();
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
 
     const result = await getOriginalSaveMessagesHandler({
       mastra,
       agentId,
       body,
-      runtimeContext,
+      requestContext,
     });
 
     return c.json(result);
@@ -136,13 +136,13 @@ export async function createThreadHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
     const body = await c.req.json();
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
 
     const result = await getOriginalCreateThreadHandler({
       mastra,
       agentId,
       body,
-      runtimeContext,
+      requestContext,
     });
 
     return c.json(result);
@@ -157,14 +157,14 @@ export async function updateThreadHandler(c: Context) {
     const agentId = c.req.query('agentId');
     const threadId = c.req.param('threadId');
     const body = await c.req.json();
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
 
     const result = await getOriginalUpdateThreadHandler({
       mastra,
       agentId,
       threadId,
       body,
-      runtimeContext,
+      requestContext,
     });
 
     return c.json(result);
@@ -178,13 +178,13 @@ export async function deleteThreadHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
     const threadId = c.req.param('threadId');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
 
     const result = await getOriginalDeleteThreadHandler({
       mastra,
       agentId,
       threadId,
-      runtimeContext,
+      requestContext,
     });
 
     return c.json(result);
@@ -199,14 +199,14 @@ export async function getMessagesHandler(c: Context) {
     const agentId = c.req.query('agentId');
     const threadId = c.req.param('threadId');
     const limit = parseLimit(c.req.query('limit'));
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
 
     const result = await getOriginalGetMessagesHandler({
       mastra,
       agentId,
       threadId,
       limit,
-      runtimeContext,
+      requestContext,
     });
 
     return c.json(result);
@@ -254,14 +254,14 @@ export async function updateWorkingMemoryHandler(c: Context) {
     const agentId = c.req.query('agentId');
     const threadId = c.req.param('threadId');
     const body = await c.req.json();
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
 
     const result = await getOriginalUpdateWorkingMemoryHandler({
       mastra,
       agentId,
       threadId,
       body,
-      runtimeContext,
+      requestContext,
     });
 
     return c.json(result);
@@ -276,14 +276,14 @@ export async function getWorkingMemoryHandler(c: Context) {
     const agentId = c.req.query('agentId');
     const threadId = c.req.param('threadId');
     const resourceId = c.req.query('resourceId');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
 
     const result = await getOriginalGetWorkingMemoryHandler({
       mastra,
       agentId,
       threadId,
       resourceId,
-      runtimeContext,
+      requestContext,
     });
 
     return c.json(result);
@@ -301,7 +301,7 @@ export async function searchMemoryHandler(c: Context) {
     const threadId = c.req.query('threadId');
     const limit = parseLimit(c.req.query('limit'));
     const memoryConfig = c.req.query('memoryConfig') ? JSON.parse(c.req.query('memoryConfig')!) : undefined;
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
 
     const result = await getOriginalSearchMemoryHandler({
       mastra,
@@ -311,7 +311,7 @@ export async function searchMemoryHandler(c: Context) {
       threadId,
       limit,
       memoryConfig,
-      runtimeContext,
+      requestContext,
     });
 
     return c.json(result);
@@ -324,7 +324,7 @@ export async function deleteMessagesHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const body = await c.req.json();
     const messageIds = body?.messageIds;
 
@@ -332,7 +332,7 @@ export async function deleteMessagesHandler(c: Context) {
       mastra,
       agentId,
       messageIds,
-      runtimeContext,
+      requestContext,
     });
 
     return c.json(result);

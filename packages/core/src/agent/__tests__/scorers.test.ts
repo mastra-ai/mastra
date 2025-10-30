@@ -243,7 +243,7 @@ function scorersTests(version: 'v1' | 'v2') {
         runId: expect.any(String),
         input: expect.any(Object),
         output: expect.any(Object),
-        runtimeContext: expect.any(Object),
+        requestContext: expect.any(Object),
         entity: expect.objectContaining({
           id: 'Test Agent',
           name: 'Test Agent',

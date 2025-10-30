@@ -7,11 +7,11 @@ import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useMemory = (agentId?: string) => {
   const client = useMastraClient();
-  const { runtimeContext } = usePlaygroundStore();
+  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
     queryKey: ['memory', agentId],
-    queryFn: () => (agentId ? client.getMemoryStatus(agentId, runtimeContext) : null),
+    queryFn: () => (agentId ? client.getMemoryStatus(agentId, requestContext) : null),
     enabled: Boolean(agentId),
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
@@ -21,11 +21,11 @@ export const useMemory = (agentId?: string) => {
 
 export const useMemoryConfig = (agentId?: string) => {
   const client = useMastraClient();
-  const { runtimeContext } = usePlaygroundStore();
+  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
     queryKey: ['memory', 'config', agentId],
-    queryFn: () => (agentId ? client.getMemoryConfig({ agentId, runtimeContext }) : null),
+    queryFn: () => (agentId ? client.getMemoryConfig({ agentId, requestContext }) : null),
     enabled: Boolean(agentId),
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
@@ -44,13 +44,13 @@ export const useThreads = ({
   isMemoryEnabled: boolean;
 }) => {
   const client = useMastraClient();
-  const { runtimeContext } = usePlaygroundStore();
+  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
     queryKey: ['memory', 'threads', resourceId, agentId],
     queryFn: async () => {
       if (!isMemoryEnabled) return null;
-      const result = await client.listMemoryThreads({ resourceId, agentId, runtimeContext });
+      const result = await client.listMemoryThreads({ resourceId, agentId, requestContext });
       return result.threads;
     },
     enabled: Boolean(isMemoryEnabled),
@@ -64,12 +64,12 @@ export const useThreads = ({
 export const useDeleteThread = () => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { runtimeContext } = usePlaygroundStore();
+  const { requestContext } = usePlaygroundStore();
 
   return useMutation({
     mutationFn: ({ threadId, agentId }: { threadId: string; agentId: string }) => {
       const thread = client.getMemoryThread({ threadId, agentId });
-      return thread.delete({ runtimeContext });
+      return thread.delete({ requestContext });
     },
     onSuccess: (_, variables) => {
       const { agentId } = variables;
@@ -93,11 +93,11 @@ export const useMemorySearch = ({
   resourceId: string;
   threadId?: string;
 }) => {
-  const { runtimeContext } = usePlaygroundStore();
+  const { requestContext } = usePlaygroundStore();
   const client = useMastraClient();
   return useMutation({
     mutationFn: async ({ searchQuery, memoryConfig }: { searchQuery: string; memoryConfig?: MemorySearchParams }) => {
-      return client.searchMemory({ agentId, resourceId, threadId, searchQuery, memoryConfig, runtimeContext });
+      return client.searchMemory({ agentId, resourceId, threadId, searchQuery, memoryConfig, requestContext });
     },
   });
 };
