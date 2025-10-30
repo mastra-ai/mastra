@@ -2206,7 +2206,7 @@ export class MessageList {
               type: `tool-${toolName}`,
               toolCallId: toolInvPart.toolCallId,
               input: toolInvPart.args,
-              state: 'call' as const,
+              state: 'input-available' as const,
               callProviderMetadata: toolInvPart.providerMetadata,
             } as unknown as AIV5Type.ToolUIPart);
           }
