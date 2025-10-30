@@ -203,15 +203,12 @@ export class StoreMemoryLance extends MemoryStorage {
     };
   }
 
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraDBMessage[]>;
   public async getMessages({
     threadId,
     resourceId,
     selectBy,
-    format,
     threadConfig,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
+  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
@@ -262,9 +259,11 @@ export class StoreMemoryLance extends MemoryStorage {
         await getTableSchema({ tableName: TABLE_MESSAGES, client: this.client }),
       );
 
-      const list = new MessageList({ threadId, resourceId }).add(messages.map(this.normalizeMessage), 'memory');
-      if (format === 'v2') return list.get.all.db();
-      return list.get.all.v1();
+      const list = new MessageList({ threadId, resourceId }).add(
+        messages.map(this.normalizeMessage) as (MastraMessageV1 | MastraDBMessage)[],
+        'memory',
+      );
+      return { messages: list.get.all.db() };
     } catch (error: any) {
       throw new MastraError(
         {
@@ -283,26 +282,10 @@ export class StoreMemoryLance extends MemoryStorage {
 
   public async getMessagesById({
     messageIds,
-    format,
   }: {
     messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraDBMessage[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
-    if (messageIds.length === 0) return [];
+  }): Promise<{ messages: MastraDBMessage[] }> {
+    if (messageIds.length === 0) return { messages: [] };
     try {
       const table = await this.client.openTable(TABLE_MESSAGES);
 
@@ -314,9 +297,11 @@ export class StoreMemoryLance extends MemoryStorage {
         await getTableSchema({ tableName: TABLE_MESSAGES, client: this.client }),
       );
 
-      const list = new MessageList().add(messages.map(this.normalizeMessage), 'memory');
-      if (format === `v1`) return list.get.all.v1();
-      return list.get.all.db();
+      const list = new MessageList().add(
+        messages.map(this.normalizeMessage) as (MastraMessageV1 | MastraDBMessage)[],
+        'memory',
+      );
+      return { messages: list.get.all.db() };
     } catch (error: any) {
       throw new MastraError(
         {
@@ -332,15 +317,11 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraDBMessage[]; format: 'v2' }): Promise<MastraDBMessage[]>;
-  async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraDBMessage[]; format: 'v2' },
-  ): Promise<MastraDBMessage[] | MastraMessageV1[]> {
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     try {
-      const { messages, format = 'v1' } = args;
+      const { messages } = args;
       if (messages.length === 0) {
-        return [];
+        return { messages: [] };
       }
 
       const threadId = messages[0]?.threadId;
@@ -384,9 +365,8 @@ export class StoreMemoryLance extends MemoryStorage {
       const updateRecord = { id: threadId, updatedAt: currentTime };
       await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([updateRecord]);
 
-      const list = new MessageList().add(messages, 'memory');
-      if (format === `v2`) return list.get.all.db();
-      return list.get.all.v1();
+      const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
+      return { messages: list.get.all.db() };
     } catch (error: any) {
       throw new MastraError(
         {
@@ -524,9 +504,9 @@ export class StoreMemoryLance extends MemoryStorage {
   }
 
   async getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraDBMessage[] }> {
-    const { threadId, resourceId, selectBy, format = 'v1' } = args;
+    args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
+    const { threadId, resourceId, selectBy } = args;
     const page = selectBy?.pagination?.page ?? 0;
     const perPage = selectBy?.pagination?.perPage ?? 10;
 
@@ -663,9 +643,9 @@ export class StoreMemoryLance extends MemoryStorage {
         };
       });
 
-      const list = new MessageList().add(formattedMessages, 'memory');
+      const list = new MessageList().add(formattedMessages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
       return {
-        messages: format === 'v2' ? list.get.all.db() : list.get.all.v1(),
+        messages: list.get.all.db(),
         total: total, // Total should be the count of messages matching the filters
         page,
         perPage,
