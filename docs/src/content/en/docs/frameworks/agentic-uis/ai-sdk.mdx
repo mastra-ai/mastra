@@ -1,9 +1,10 @@
 ---
-title: "Using with Vercel AI SDK"
+title: "Using Vercel AI SDK | Frameworks | Mastra Docs"
 description: "Learn how Mastra leverages the Vercel AI SDK library and how you can leverage it further with Mastra"
 ---
 
-import { Callout, Tabs } from "nextra/components";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # Using Vercel AI SDK
 
@@ -13,7 +14,7 @@ Mastra integrates with [Vercel's AI SDK](https://sdk.vercel.ai) to support model
 
 When creating agents in Mastra, you can specify any AI SDK-supported model.
 
-```typescript {6} filename="agents/weather-agent.ts" copy
+```typescript {6} title="agents/weather-agent.ts" copy
 import { Agent } from "@mastra/core/agent";
 
 export const weatherAgent = new Agent({
@@ -29,43 +30,43 @@ export const weatherAgent = new Agent({
 
 The recommended way of using Mastra and AI SDK together is by installing the `@mastra/ai-sdk` package. `@mastra/ai-sdk` provides custom API routes and utilities for streaming Mastra agents in AI SDK-compatible formats. Including chat, workflow, and network route handlers, along with utilities and exported types for UI integrations.
 
-<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
-  <Tabs.Tab>
+<Tabs>
+  <TabItem value="npm" label="npm">
     ```bash copy
     npm install @mastra/ai-sdk
     ```
-  </Tabs.Tab>
-  <Tabs.Tab>
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
     ```bash copy
     pnpm add @mastra/ai-sdk
     ```
-  </Tabs.Tab>
-  <Tabs.Tab>
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
     ```bash copy
     yarn add @mastra/ai-sdk
     ```
-  </Tabs.Tab>
-  <Tabs.Tab>
+  </TabItem>
+  <TabItem value="bun" label="bun">
     ```bash copy
     bun add @mastra/ai-sdk
     ```
-  </Tabs.Tab>
+  </TabItem>
 </Tabs>
 
 ### `chatRoute()`
 
 When setting up a [custom API route](/docs/server-db/custom-api-routes), use the `chatRoute()` utility to create a route handler that automatically formats the agent stream into an AI SDK-compatible format.
 
-```typescript filename="src/mastra/index.ts" copy
-import { Mastra } from '@mastra/core/mastra';
-import { chatRoute } from '@mastra/ai-sdk';
+```typescript title="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core/mastra";
+import { chatRoute } from "@mastra/ai-sdk";
 
 export const mastra = new Mastra({
   server: {
     apiRoutes: [
       chatRoute({
-        path: '/chat',
-        agent: 'weatherAgent',
+        path: "/chat",
+        agent: "weatherAgent",
       }),
     ],
   },
@@ -75,51 +76,49 @@ export const mastra = new Mastra({
 Once you have your `/chat` API route set up, you can call the `useChat()` hook in your application.
 
 ```typescript
-const { error, status, sendMessage, messages, regenerate, stop } =
-  useChat({
-    transport: new DefaultChatTransport({
-      api: 'http://localhost:4111/chat',
-    }),
-  });
+const { error, status, sendMessage, messages, regenerate, stop } = useChat({
+  transport: new DefaultChatTransport({
+    api: "http://localhost:4111/chat",
+  }),
+});
 ```
 
 Pass extra agent stream execution options:
 
 ```typescript
-const { error, status, sendMessage, messages, regenerate, stop } =
-  useChat({
-    transport: new DefaultChatTransport({
-      api: 'http://localhost:4111/chat',
-      prepareSendMessagesRequest({ messages }) {
-        return {
-          body: {
-            messages,
-            // Pass memory config
-            memory: {
-              thread: "user-1",
-              resource: "user-1"
-            }
+const { error, status, sendMessage, messages, regenerate, stop } = useChat({
+  transport: new DefaultChatTransport({
+    api: "http://localhost:4111/chat",
+    prepareSendMessagesRequest({ messages }) {
+      return {
+        body: {
+          messages,
+          // Pass memory config
+          memory: {
+            thread: "user-1",
+            resource: "user-1",
           },
-        }
-      }
-    }),
-  });
+        },
+      };
+    },
+  }),
+});
 ```
 
 ### `workflowRoute()`
 
 Use the `workflowRoute()` utility to create a route handler that automatically formats the workflow stream into an AI SDK-compatible format.
 
-```typescript filename="src/mastra/index.ts" copy
-import { Mastra } from '@mastra/core/mastra';
-import { workflowRoute } from '@mastra/ai-sdk';
+```typescript title="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core/mastra";
+import { workflowRoute } from "@mastra/ai-sdk";
 
 export const mastra = new Mastra({
   server: {
     apiRoutes: [
       workflowRoute({
-        path: '/workflow',
-        agent: 'weatherAgent',
+        path: "/workflow",
+        agent: "weatherAgent",
       }),
     ],
   },
@@ -129,37 +128,36 @@ export const mastra = new Mastra({
 Once you have your `/workflow` API route set up, you can call the `useChat()` hook in your application.
 
 ```typescript
-const { error, status, sendMessage, messages, regenerate, stop } =
-  useChat({
-    transport: new DefaultChatTransport({
-      api: 'http://localhost:4111/workflow',
-      prepareSendMessagesRequest({messages}) {
-          return {
-            body: {
-              inputData: {
-               city: messages[messages.length - 1].parts[0].text
-              }
-            }
-          }
-        }
-    }),
-  });
+const { error, status, sendMessage, messages, regenerate, stop } = useChat({
+  transport: new DefaultChatTransport({
+    api: "http://localhost:4111/workflow",
+    prepareSendMessagesRequest({ messages }) {
+      return {
+        body: {
+          inputData: {
+            city: messages[messages.length - 1].parts[0].text,
+          },
+        },
+      };
+    },
+  }),
+});
 ```
 
 ### `networkRoute()`
 
 Use the `networkRoute()` utility to create a route handler that automatically formats the agent network stream into an AI SDK-compatible format.
 
-```typescript filename="src/mastra/index.ts" copy
-import { Mastra } from '@mastra/core/mastra';
-import { networkRoute } from '@mastra/ai-sdk';
+```typescript title="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core/mastra";
+import { networkRoute } from "@mastra/ai-sdk";
 
 export const mastra = new Mastra({
   server: {
     apiRoutes: [
       networkRoute({
-        path: '/network',
-        agent: 'weatherAgent',
+        path: "/network",
+        agent: "weatherAgent",
       }),
     ],
   },
@@ -169,12 +167,11 @@ export const mastra = new Mastra({
 Once you have your `/network` API route set up, you can call the `useChat()` hook in your application.
 
 ```typescript
-const { error, status, sendMessage, messages, regenerate, stop } =
-  useChat({
-    transport: new DefaultChatTransport({
-      api: 'http://localhost:4111/network',
-    }),
-  });
+const { error, status, sendMessage, messages, regenerate, stop } = useChat({
+  transport: new DefaultChatTransport({
+    api: "http://localhost:4111/network",
+  }),
+});
 ```
 
 ### Custom UI
@@ -192,7 +189,7 @@ The `@mastra/ai-sdk` package transforms and emits Mastra streams (e.g workflow, 
 
 Here's an example: For a [nested agent stream within a tool](/docs/streaming/tool-streaming#tool-using-an-agent), `data-tool-agent` UI message parts will be emitted and can be leveraged on the client as documented below:
 
-```typescript filename="app/page.tsx" copy
+```typescript title="app/page.tsx" copy
 "use client";
 
 import { useChat } from "@ai-sdk/react";
@@ -228,16 +225,16 @@ export default function Page() {
 }
 ```
 
-```typescript filename="ui/agent-tool.ts" copy
+```typescript title="ui/agent-tool.ts" copy
 import { Tool, ToolContent, ToolHeader, ToolOutput } from "../ai-elements/tool";
 import type { AgentDataPart } from "@mastra/ai-sdk";
 
 export const AgentTool = ({ id, text, status }: AgentDataPart) => {
   return (
     <Tool>
-      <ToolHeader 
-        type={`${id}`} 
-        state={status === 'finished' ? 'output-available' : 'input-available'} 
+      <ToolHeader
+        type={`${id}`}
+        state={status === 'finished' ? 'output-available' : 'input-available'}
       />
       <ToolContent>
         <ToolOutput output={text} />
@@ -246,7 +243,9 @@ export const AgentTool = ({ id, text, status }: AgentDataPart) => {
   );
 };
 ```
+
 ### Custom Tool streaming
+
 To stream custom data parts from within your tool execution function, use the
 `writer.custom()` method.
 
@@ -283,10 +282,10 @@ For more information about tool streaming see [Tool streaming documentation](/do
 
 To manually transform Mastra's streams to AI SDK-compatible format, use the `toAISdkFormat()` utility.
 
-```typescript filename="app/api/chat/route.ts" copy {3,13}
+```typescript title="app/api/chat/route.ts" copy {3,13}
 import { mastra } from "../../mastra";
-import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
-import { toAISdkFormat } from '@mastra/ai-sdk'
+import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
+import { toAISdkFormat } from "@mastra/ai-sdk";
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
@@ -296,7 +295,7 @@ export async function POST(req: Request) {
   // Transform stream into AI SDK format and create UI messages stream
   const uiMessageStream = createUIMessageStream({
     execute: async ({ writer }) => {
-      for await (const part of toAISdkFormat(stream, { from: 'agent' })!) {
+      for await (const part of toAISdkFormat(stream, { from: "agent" })!) {
         writer.write(part);
       }
     },
@@ -313,27 +312,34 @@ export async function POST(req: Request) {
 
 If you have a client-side `response` from `agent.stream(...)` and want AI SDK-formatted parts without custom SSE parsing, wrap `response.processDataStream` into a `ReadableStream<ChunkType>` and pipe it through `toAISdkFormat`:
 
-```typescript filename="client-stream-to-ai-sdk.ts" copy
-import { createUIMessageStream } from 'ai';
-import { toAISdkFormat } from '@mastra/ai-sdk';
-import type { ChunkType, MastraModelOutput } from '@mastra/core/stream';
+```typescript title="client-stream-to-ai-sdk.ts" copy
+import { createUIMessageStream } from "ai";
+import { toAISdkFormat } from "@mastra/ai-sdk";
+import type { ChunkType, MastraModelOutput } from "@mastra/core/stream";
 
 // Client SDK agent stream
-const response = await agent.stream({ messages: 'What is the weather in Tokyo' });
+const response = await agent.stream({
+  messages: "What is the weather in Tokyo",
+});
 
 const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
   start(controller) {
-    response.processDataStream({
-      onChunk: async (chunk) => {
-        controller.enqueue(chunk as ChunkType);
-      },
-    }).finally(() => controller.close());
+    response
+      .processDataStream({
+        onChunk: async (chunk) => {
+          controller.enqueue(chunk as ChunkType);
+        },
+      })
+      .finally(() => controller.close());
   },
 });
 
 const uiMessageStream = createUIMessageStream({
   execute: async ({ writer }) => {
-    for await (const part of toAISdkFormat(chunkStream as unknown as MastraModelOutput, { from: 'agent' })) {
+    for await (const part of toAISdkFormat(
+      chunkStream as unknown as MastraModelOutput,
+      { from: "agent" },
+    )) {
       writer.write(part);
     }
   },
@@ -350,35 +356,34 @@ Mastra supports AI SDK UI hooks for connecting frontend components directly to a
 
 Install the required AI SDK React package:
 
-<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
-  <Tabs.Tab>
+<Tabs>
+  <TabItem value="npm" label="npm">
     ```bash copy
     npm install @ai-sdk/react
     ```
-  </Tabs.Tab>
-  <Tabs.Tab>
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
     ```bash copy
     pnpm add @ai-sdk/react
     ```
-  </Tabs.Tab>
-  <Tabs.Tab>
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
     ```bash copy
     yarn add @ai-sdk/react
     ```
-  </Tabs.Tab>
-  <Tabs.Tab>
+  </TabItem>
+  <TabItem value="bun" label="bun">
     ```bash copy
     bun add @ai-sdk/react
     ```
-  </Tabs.Tab>
+  </TabItem>
 </Tabs>
-
 
 ### Using `useChat()`
 
 The `useChat()` hook handles real-time chat interactions between your frontend and a Mastra agent, enabling you to send prompts and receive streaming responses over HTTP.
 
-```typescript {8-12} filename="app/test/chat.tsx" copy
+```typescript {8-12} title="app/test/chat.tsx" copy
 "use client";
 
 import { useChat } from "@ai-sdk/react";
@@ -411,25 +416,25 @@ export function Chat() {
 
 Requests sent using the `useChat()` hook are handled by a standard server route. This example shows how to define a POST route using a Next.js Route Handler.
 
-```typescript filename="app/api/chat/route.ts" copy
+```typescript title="app/api/chat/route.ts" copy
 import { mastra } from "../../mastra";
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
   const myAgent = mastra.getAgent("weatherAgent");
-  const stream = await myAgent.stream(messages, { format: 'aisdk' });
+  const stream = await myAgent.stream(messages, { format: "aisdk" });
 
-  return stream.toUIMessageStreamResponse()
+  return stream.toUIMessageStreamResponse();
 }
 ```
 
-> When using `useChat()` with agent memory, refer to the [Agent Memory section](/docs/agents/agent-memory#usechat) for key implementation details.
+> When using `useChat()` with agent memory, refer to the [Agent Memory section](/docs/agents/agent-memory) for key implementation details.
 
 ### Using `useCompletion()`
 
 The `useCompletion()` hook handles single-turn completions between your frontend and a Mastra agent, allowing you to send a prompt and receive a streamed response over HTTP.
 
-```typescript {6-8} filename="app/test/completion.tsx" copy
+```typescript {6-8} title="app/test/completion.tsx" copy
 "use client";
 
 import { useCompletion } from "@ai-sdk/react";
@@ -452,23 +457,25 @@ export function Completion() {
 
 Requests sent using the `useCompletion()` hook are handled by a standard server route. This example shows how to define a POST route using a Next.js Route Handler.
 
-```typescript filename="app/api/completion/route.ts" copy
+```typescript title="app/api/completion/route.ts" copy
 import { mastra } from "../../../mastra";
 
 export async function POST(req: Request) {
   const { prompt } = await req.json();
   const myAgent = mastra.getAgent("weatherAgent");
-  const stream = await myAgent.stream([{ role: "user", content: prompt }], { format: 'aisdk' });
+  const stream = await myAgent.stream([{ role: "user", content: prompt }], {
+    format: "aisdk",
+  });
 
-  return stream.toUIMessageStreamResponse()
+  return stream.toUIMessageStreamResponse();
 }
 ```
 
 ### Passing additional data
 
-`sendMessage()` allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as `RuntimeContext`.
+`sendMessage()` allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as `RequestContext`.
 
-```typescript {16-26} filename="app/test/chat-extra.tsx" copy
+```typescript {16-26} title="app/test/chat-extra.tsx" copy
 "use client";
 
 import { useChat } from "@ai-sdk/react";
@@ -509,32 +516,35 @@ export function ChatExtra() {
 }
 ```
 
-```typescript {8,12} filename="app/api/chat-extra/route.ts" copy
+```typescript {8,12} title="app/api/chat-extra/route.ts" copy
 import { mastra } from "../../../mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 
 export async function POST(req: Request) {
   const { messages, data } = await req.json();
   const myAgent = mastra.getAgent("weatherAgent");
 
-  const runtimeContext = new RuntimeContext();
+  const requestContext = new RequestContext();
 
   if (data) {
     for (const [key, value] of Object.entries(data)) {
-      runtimeContext.set(key, value);
+      requestContext.set(key, value);
     }
   }
 
-  const stream = await myAgent.stream(messages, { runtimeContext, format: 'aisdk'  });
+  const stream = await myAgent.stream(messages, {
+    requestContext,
+    format: "aisdk",
+  });
   return stream.toUIMessageStreamResponse();
 }
 ```
 
-### Handling `runtimeContext` with `server.middleware`
+### Handling `requestContext` with `server.middleware`
 
-You can also populate the `RuntimeContext` by reading custom data in a server middleware:
+You can also populate the `RequestContext` by reading custom data in a server middleware:
 
-```typescript {8,17} filename="mastra/index.ts" copy
+```typescript {8,17} title="mastra/index.ts" copy
 import { Mastra } from "@mastra/core/mastra";
 
 export const mastra = new Mastra({
@@ -542,7 +552,7 @@ export const mastra = new Mastra({
   server: {
     middleware: [
       async (c, next) => {
-        const runtimeContext = c.get("runtimeContext");
+        const requestContext = c.get("requestContext");
 
         if (c.req.method === "POST") {
           try {
@@ -551,11 +561,10 @@ export const mastra = new Mastra({
 
             if (body?.data) {
               for (const [key, value] of Object.entries(body.data)) {
-                runtimeContext.set(key, value);
+                requestContext.set(key, value);
               }
             }
-          } catch {
-          }
+          } catch {}
         }
         await next();
       },
@@ -564,7 +573,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> You can then access this data in your tools via the `runtimeContext` parameter. See the [Runtime Context documentation](/docs/server-db/runtime-context) for more details.
+> You can then access this data in your tools via the `requestContext` parameter. See the [Request Context documentation](/docs/server-db/request-context) for more details.
 
 ## Migrating from AI SDK v4 to v5
 
@@ -584,13 +593,13 @@ Mastra automatically handles AI SDK v4 data using its internal `MessageList` cla
 For cases where you need to manually convert messages between AI SDK and Mastra formats, use the `convertMessages()` utility:
 
 ```typescript
-import { convertMessages } from '@mastra/core/agent';
+import { convertMessages } from "@mastra/core/agent";
 
 // Convert AI SDK v4 messages to v5
-const aiv5Messages = convertMessages(aiv4Messages).to('AIV5.UI');
+const aiv5Messages = convertMessages(aiv4Messages).to("AIV5.UI");
 
 // Convert Mastra messages to AI SDK v5
-const aiv5Messages = convertMessages(mastraMessages).to('AIV5.Core');
+const aiv5Messages = convertMessages(mastraMessages).to("AIV5.Core");
 
 // Supported output formats:
 // 'Mastra.V2', 'AIV4.UI', 'AIV5.UI', 'AIV5.Core', 'AIV5.Model'
@@ -606,7 +615,7 @@ When using tools with TypeScript in AI SDK v5, Mastra provides type inference he
 
 The `InferUITool` type helper infers the input and output types of a single Mastra tool:
 
-```typescript filename="app/types.ts" copy
+```typescript title="app/types.ts" copy
 import { InferUITool, createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -641,7 +650,7 @@ type WeatherUITool = InferUITool<typeof weatherTool>;
 
 The `InferUITools` type helper infers the input and output types of multiple tools:
 
-```typescript filename="app/mastra/tools.ts" copy
+```typescript title="app/mastra/tools.ts" copy
 import { InferUITools, createTool } from "@mastra/core/tools";
 import { z } from "zod";
 

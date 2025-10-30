@@ -18,11 +18,11 @@ await agent.getModel();
 <PropertiesTable
   content={[
     {
-      name: "{ runtimeContext = new RuntimeContext() }",
-      type: "{ runtimeContext?: RuntimeContext }",
+      name: "{ requestContext = new RequestContext() }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
-      description: "Optional configuration object containing runtime context.",
+      defaultValue: "new RequestContext()",
+      description: "Optional configuration object containing request context.",
     },
   ]}
 />
@@ -34,7 +34,8 @@ await agent.getModel();
     {
       name: "model",
       type: "MastraLanguageModel | Promise<MastraLanguageModel>",
-      description: "The language model configured for the agent, either as a direct instance or a promise that resolves to the model.",
+      description:
+        "The language model configured for the agent, either as a direct instance or a promise that resolves to the model.",
     },
   ]}
 />
@@ -43,7 +44,7 @@ await agent.getModel();
 
 ```typescript copy
 await agent.getModel({
-  runtimeContext: new RuntimeContext()
+  requestContext: new RequestContext(),
 });
 ```
 
@@ -52,16 +53,17 @@ await agent.getModel({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       defaultValue: "undefined",
-      description: "Runtime context for dependency injection and contextual information.",
+      description:
+        "Request Context for dependency injection and contextual information.",
     },
   ]}
 />
 
 ## Related
 
-- [Agents overview](../../docs/agents/overview.mdx)
-- [Runtime Context](../../docs/server-db/runtime-context.mdx)
+- [Agents overview](/docs/agents/overview)
+- [Request Context](/docs/server-db/request-context)

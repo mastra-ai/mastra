@@ -109,13 +109,13 @@ describe('FileTransport', () => {
     });
   });
 
-  describe('getLogs and getLogsByRunId', () => {
-    it('should return empty array for getLogs', async () => {
-      const logs = await fileLogger.getLogs();
+  describe('listLogs and listLogsByRunId', () => {
+    it('should return empty array for listLogs', async () => {
+      const logs = await fileLogger.listLogs();
       expect(logs.total).toBeGreaterThan(0);
     });
 
-    it('should return empty array for getLogsByRunId', async () => {
+    it('should return empty array for listLogsByRunId', async () => {
       const logger = new PinoLogger({
         name: 'test-logger',
         level: LogLevel.INFO,
@@ -124,7 +124,7 @@ describe('FileTransport', () => {
         },
       });
 
-      let logs = await fileLogger.getLogsByRunId({ runId: 'test-run-id' });
+      let logs = await fileLogger.listLogsByRunId({ runId: 'test-run-id' });
       expect(logs.total).toBe(0);
 
       logger.info('test info message', {
@@ -133,7 +133,7 @@ describe('FileTransport', () => {
 
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      logs = await fileLogger.getLogsByRunId({ runId: 'test-run-id' });
+      logs = await fileLogger.listLogsByRunId({ runId: 'test-run-id' });
       expect(logs.total).toBe(1);
     });
   });

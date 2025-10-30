@@ -87,15 +87,14 @@ const processor = new BatchPartsProcessor({
 
 ## Extended usage example
 
-```typescript filename="src/mastra/agents/batched-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
+```typescript title="src/mastra/agents/batched-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { BatchPartsProcessor } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "batched-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   outputProcessors: [
     new BatchPartsProcessor({
       batchSize: 5,
@@ -108,4 +107,4 @@ export const agent = new Agent({
 
 ## Related
 
-- [Output Processors documentation](/docs/agents/output-processors)
+- [Guardrails](/docs/agents/guardrails)

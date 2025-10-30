@@ -3,7 +3,7 @@ title: "Example: Using the Vector Query Tool | RAG | Mastra Docs"
 description: Example of implementing a basic RAG system in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 
-import { GithubLink } from "@/components/github-link";
+import GithubLink from "@site/src/components/GithubLink";
 
 # Using the Vector Query Tool
 
@@ -26,7 +26,7 @@ The system implements RAG using Mastra and OpenAI. Here's what it does:
 
 Make sure to set up your environment variables:
 
-```bash filename=".env"
+```bash title=".env"
 OPENAI_API_KEY=your_openai_api_key_here
 POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
@@ -35,7 +35,7 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 
 Import the necessary dependencies:
 
-```typescript copy showLineNumbers filename="src/index.ts"
+```typescript copy showLineNumbers title="src/index.ts"
 import { openai } from "@ai-sdk/openai";
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
@@ -47,7 +47,7 @@ import { PgVector } from "@mastra/pg";
 
 Create a tool that can query the vector database:
 
-```typescript copy showLineNumbers{7} filename="src/index.ts"
+```typescript copy showLineNumbers{7} title="src/index.ts"
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
@@ -59,7 +59,7 @@ const vectorQueryTool = createVectorQueryTool({
 
 Set up the Mastra agent that will handle the responses:
 
-```typescript copy showLineNumbers{13} filename="src/index.ts"
+```typescript copy showLineNumbers{13} title="src/index.ts"
 export const ragAgent = new Agent({
   name: "RAG Agent",
   instructions:
@@ -75,7 +75,7 @@ export const ragAgent = new Agent({
 
 Instantiate PgVector and Mastra with all components:
 
-```typescript copy showLineNumbers{23} filename="src/index.ts"
+```typescript copy showLineNumbers{23} title="src/index.ts"
 const pgVector = new PgVector({
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
@@ -90,7 +90,7 @@ const agent = mastra.getAgent("ragAgent");
 
 ## Example Usage
 
-```typescript copy showLineNumbers{32} filename="src/index.ts"
+```typescript copy showLineNumbers{32} title="src/index.ts"
 const prompt = `
 [Insert query based on document here]
 Please base your answer only on the context provided in the tool. 

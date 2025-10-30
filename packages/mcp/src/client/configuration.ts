@@ -56,7 +56,7 @@ export interface MCPClientOptions {
  *   name: 'Multi-tool Agent',
  *   instructions: 'You have access to multiple tools.',
  *   model: 'openai/gpt-4o',
- *   tools: await mcp.getTools(),
+ *   tools: await mcp.listTools(),
  * });
  * ```
  */
@@ -686,11 +686,11 @@ To fix this you have three different options:
    *   name: 'Multi-tool Agent',
    *   instructions: 'You have access to weather and stock tools.',
    *   model: 'openai/gpt-4',
-   *   tools: await mcp.getTools(), // weather_getWeather, stockPrice_getPrice
+   *   tools: await mcp.listTools(), // weather_getWeather, stockPrice_getPrice
    * });
    * ```
    */
-  public async getTools() {
+  public async listTools() {
     this.addToInstanceCache();
     const connectedTools: Record<string, any> = {}; // <- any because we don't have proper tool schemas
 
@@ -717,7 +717,7 @@ To fix this you have three different options:
   /**
    * Returns toolsets organized by server name for dynamic tool injection.
    *
-   * Unlike getTools(), this returns tools grouped by server without namespacing.
+   * Unlike listTools(), this returns tools grouped by server without namespacing.
    * This is intended to be passed dynamically to the generate() or stream() method.
    *
    * @returns Object mapping server names to their tool collections
@@ -732,11 +732,11 @@ To fix this you have three different options:
    * });
    *
    * const response = await agent.stream(prompt, {
-   *   toolsets: await mcp.getToolsets(), // { weather: {...}, stockPrice: {...} }
+   *   toolsets: await mcp.listToolsets(), // { weather: {...}, stockPrice: {...} }
    * });
    * ```
    */
-  public async getToolsets() {
+  public async listToolsets() {
     this.addToInstanceCache();
     const connectedToolsets: Record<string, Record<string, any>> = {}; // <- any because we don't have proper tool schemas
 

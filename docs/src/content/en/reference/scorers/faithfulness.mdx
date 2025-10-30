@@ -1,5 +1,5 @@
 ---
-title: "Reference: Faithfulness | Scorers | Mastra Docs"
+title: "Reference: Faithfulness Scorer | Scorers | Mastra Docs"
 description: Documentation for the Faithfulness Scorer in Mastra, which evaluates the factual accuracy of LLM outputs compared to the provided context.
 ---
 
@@ -23,14 +23,16 @@ The `createFaithfulnessScorer()` function accepts a single options object with t
       name: "context",
       type: "string[]",
       required: true,
-      description: "Array of context chunks against which the output's claims will be verified.",
+      description:
+        "Array of context chunks against which the output's claims will be verified.",
     },
     {
       name: "scale",
       type: "number",
       required: false,
       defaultValue: "1",
-      description: "The maximum score value. The final score will be normalized to this scale.",
+      description:
+        "The maximum score value. The final score will be normalized to this scale.",
     },
   ]}
 />
@@ -54,32 +56,38 @@ This function returns an instance of the MastraScorer class. The `.run()` method
     {
       name: "preprocessPrompt",
       type: "string",
-      description: "The prompt sent to the LLM for the preprocess step (optional).",
+      description:
+        "The prompt sent to the LLM for the preprocess step (optional).",
     },
     {
       name: "analyzeStepResult",
       type: "object",
-      description: "Object with verdicts: { verdicts: Array<{ verdict: 'yes' | 'no' | 'unsure', reason: string }> }",
+      description:
+        "Object with verdicts: { verdicts: Array<{ verdict: 'yes' | 'no' | 'unsure', reason: string }> }",
     },
     {
       name: "analyzePrompt",
       type: "string",
-      description: "The prompt sent to the LLM for the analyze step (optional).",
+      description:
+        "The prompt sent to the LLM for the analyze step (optional).",
     },
     {
       name: "score",
       type: "number",
-      description: "A score between 0 and the configured scale, representing the proportion of claims that are supported by the context.",
+      description:
+        "A score between 0 and the configured scale, representing the proportion of claims that are supported by the context.",
     },
     {
       name: "reason",
       type: "string",
-      description: "A detailed explanation of the score, including which claims were supported, contradicted, or marked as unsure.",
+      description:
+        "A detailed explanation of the score, including which claims were supported, contradicted, or marked as unsure.",
     },
     {
       name: "generateReasonPrompt",
       type: "string",
-      description: "The prompt sent to the LLM for the generateReason step (optional).",
+      description:
+        "The prompt sent to the LLM for the generateReason step (optional).",
     },
   ]}
 />
@@ -120,7 +128,7 @@ A faithfulness score between 0 and 1:
 
 In this example, the response closely aligns with the context. Each statement in the output is verifiable and supported by the provided context entries, resulting in a high score.
 
-```typescript filename="src/example-high-faithfulness.ts" showLineNumbers copy
+```typescript title="src/example-high-faithfulness.ts" showLineNumbers copy
 import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
 
 const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
@@ -157,7 +165,7 @@ The output receives a score of 1 because all the information it provides can be 
 
 In this example, there are a mix of supported and unsupported claims. Some parts of the response are backed by the context, while others introduce new information not found in the source material.
 
-```typescript filename="src/example-mixed-faithfulness.ts" showLineNumbers copy
+```typescript title="src/example-mixed-faithfulness.ts" showLineNumbers copy
 import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
 
 const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
@@ -194,7 +202,7 @@ The score is lower because only a portion of the response is verifiable. While s
 
 In this example, the response directly contradicts the context. None of the claims are supported, and several conflict with the facts provided.
 
-```typescript filename="src/example-low-faithfulness.ts" showLineNumbers copy
+```typescript title="src/example-low-faithfulness.ts" showLineNumbers copy
 import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
 
 const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {

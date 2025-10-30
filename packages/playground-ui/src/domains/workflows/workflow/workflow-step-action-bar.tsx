@@ -15,7 +15,6 @@ export interface WorkflowStepActionBarProps {
   stepName: string;
   mapConfig?: string;
   event?: string;
-  onShowTrace?: () => void;
   onShowNestedGraph?: () => void;
   onSendEvent?: WorkflowSendEventFormProps['onSendEvent'];
   runId?: string;
@@ -30,7 +29,6 @@ export const WorkflowStepActionBar = ({
   mapConfig,
   stepName,
   event,
-  onShowTrace,
   onShowNestedGraph,
   onSendEvent,
   runId,
@@ -139,8 +137,6 @@ export const WorkflowStepActionBar = ({
               </Dialog>
             </>
           )}
-
-          {onShowTrace && <Button onClick={onShowTrace}>Show trace</Button>}
 
           {showEventForm && (
             <>

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { createTool } from './tool';
+import { RequestContext } from '../request-context';
 
 describe('Tool Input Validation Integration Tests', () => {
   describe('createTool validation', () => {
@@ -221,7 +222,7 @@ describe('Tool Input Validation Integration Tests', () => {
       });
 
       // BREAKING CHANGE v1.0: Pass raw data directly
-      const result = await tool.execute({ name: 'test' });
+      const result = await tool.execute({ name: 'test'}, { runId: 'test-run' });
 
       expect(result).toEqual({ result: 'test' });
     });
