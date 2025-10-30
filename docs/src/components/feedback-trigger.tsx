@@ -26,7 +26,7 @@ export const FeedbackTrigger: React.FC = () => {
           onClick={handleOpen}
           className="bg-(--mastra-surface-3) w-full rounded-xl hover:opacity-90 h-8 justify-center flex items-center px-4 text-sm font-normal"
         >
-          Question? Give us feedback
+          Share feedback
         </Button>
       ) : (
         <FeedbackForm
