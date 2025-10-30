@@ -224,10 +224,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
 
         // Should find the weather-related messages due to semantic similarity
-        expect(weatherQuery.messages).toEqual([
-          expect.objectContaining({ content: 'The weather is nice today' }),
-          expect.objectContaining({ content: "Yes, it's sunny and warm" }),
-        ]);
+        expect(weatherQuery.messages.length).toBe(2);
+        expect(getTextContent(weatherQuery.messages[0])).toBe('The weather is nice today');
+        expect(getTextContent(weatherQuery.messages[1])).toBe("Yes, it's sunny and warm");
 
         // Search for location-related messages
         const locationQuery = await memory.rememberMessages({
@@ -244,10 +243,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
 
         // Should find the Paris-related messages
-        expect(locationQuery.messages).toEqual([
-          expect.objectContaining({ content: "What's the capital of France?" }),
-          expect.objectContaining({ content: 'The capital of France is Paris' }),
-        ]);
+        expect(locationQuery.messages.length).toBe(2);
+        expect(getTextContent(locationQuery.messages[0])).toBe("What's the capital of France?");
+        expect(getTextContent(locationQuery.messages[1])).toBe('The capital of France is Paris');
 
         // Search for location-related messages
         const locationQuery2 = await memory.rememberMessages({

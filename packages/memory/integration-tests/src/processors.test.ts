@@ -22,6 +22,23 @@ function v2ToCoreMessages(messages: MastraDBMessage[] | UIMessage[]): CoreMessag
   return new MessageList().add(messages, 'memory').get.all.core();
 }
 
+// Helper function to extract text content from MastraDBMessage
+function getTextContent(message: any): string {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+  if (message.content?.parts && Array.isArray(message.content.parts)) {
+    return message.content.parts.map((p: any) => p.text || '').join('');
+  }
+  if (message.content?.text) {
+    return message.content.text;
+  }
+  if (typeof message.content?.content === 'string') {
+    return message.content.content;
+  }
+  return '';
+}
+
 let memory: Memory;
 let storage: LibSQLStore;
 let vector: LibSQLVector;
@@ -304,9 +321,10 @@ describe('Memory with Processors', () => {
       throw new Error(`responseMessages should be an array`);
     }
 
-    const userMessagesByContent = responseMessages.filter(m => m.content === userMessage);
-    expect(userMessagesByContent).toEqual([expect.objectContaining({ role: 'user', content: userMessage })]); // should only be one
+    const userMessagesByContent = responseMessages.filter(m => getTextContent(m) === userMessage);
     expect(userMessagesByContent.length).toBe(1); // if there's more than one we have duplicate messages
+    expect(userMessagesByContent[0].role).toBe('user');
+    expect(getTextContent(userMessagesByContent[0])).toBe(userMessage);
 
     const userMessage2 = 'Tell me something else interesting about space';
 
@@ -328,9 +346,10 @@ describe('Memory with Processors', () => {
       throw new Error(`responseMessages should be an array`);
     }
 
-    const userMessagesByContent2 = responseMessages2.filter((m: CoreMessage) => m.content === userMessage2);
-    expect(userMessagesByContent2).toEqual([expect.objectContaining({ role: 'user', content: userMessage2 })]); // should only be one
+    const userMessagesByContent2 = responseMessages2.filter((m: CoreMessage) => getTextContent(m) === userMessage2);
     expect(userMessagesByContent2.length).toBe(1); // if there's more than one we have duplicate messages
+    expect(userMessagesByContent2[0].role).toBe('user');
+    expect(getTextContent(userMessagesByContent2[0])).toBe(userMessage2);
 
     // make sure all user messages are there
     const allUserMessages = responseMessages2.filter((m: CoreMessage) => m.role === 'user');
