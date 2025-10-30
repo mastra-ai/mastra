@@ -4,4 +4,4 @@
 'mastra': minor
 ---
 
-Add shared getAllToolPaths fn to the deployer base class
+Update peer dependencies to match core package version bump (0.22.3)
