@@ -68,7 +68,7 @@ export const DateTimeCell = ({ dateTime, ...props }: DateTimeCellProps) => {
 export interface EntryCellProps extends Omit<CellProps, 'children'> {
   name: React.ReactNode;
   description?: React.ReactNode;
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   meta?: React.ReactNode;
 }
 
@@ -76,9 +76,11 @@ export const EntryCell = ({ name, description, icon, meta, ...props }: EntryCell
   return (
     <Cell {...props}>
       <div className="flex items-center gap-[14px]">
-        <Icon size="lg" className="text-icon5">
-          {icon}
-        </Icon>
+        {icon && (
+          <Icon size="lg" className="text-icon5">
+            {icon}
+          </Icon>
+        )}
 
         <div className="flex flex-col gap-0">
           <Txt as="span" variant="ui-md" className="text-icon6 font-medium !leading-tight">

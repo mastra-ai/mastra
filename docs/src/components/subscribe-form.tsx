@@ -1,4 +1,3 @@
-"use client";
 import { useForm } from "react-hook-form";
 import {
   Form,
@@ -7,19 +6,19 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/components/ui/forms";
-import Spinner from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
+} from "@site/src/components/ui/forms";
+import { Spinner } from "./spinner";
+import { cn } from "../css/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { T, Var } from "gt-next/client";
-import { AlertCircle } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "./custom-toast";
-import { z } from "zod";
+import { z } from "zod/v4";
+import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
+import { Button } from "./ui/button";
 
 export const formSchema = z.object({
-  email: z.string().email(),
+  email: z.email(),
 });
 
 const buttonCopy = ({
@@ -32,12 +31,12 @@ const buttonCopy = ({
 }) => ({
   idle: idleIcon ? idleIcon : "Subscribe",
   loading: (
-    <Spinner className="w-4 h-4 !duration-300 dark:text-white text-black" />
+    <Spinner className="w-4 h-4 duration-300! dark:text-white text-black" />
   ),
   success: successIcon ? successIcon : "Subscribed!",
 });
 
-export const SubscribeForm = ({
+const SubscribeForm = ({
   idleIcon,
   successIcon,
   placeholder,
@@ -56,6 +55,12 @@ export const SubscribeForm = ({
   inputClassName?: string;
   buttonClassName?: string;
 }) => {
+  const { siteConfig } = useDocusaurusContext();
+  const { hsPortalId, hsFormGuid } = siteConfig.customFields as {
+    hsPortalId?: string;
+    hsFormGuid?: string;
+  };
+
   const [buttonState, setButtonState] = useState("idle");
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -78,7 +83,7 @@ export const SubscribeForm = ({
     setButtonState("loading");
     try {
       const response = await fetch(
-        `https://api.hsforms.com/submissions/v3/integration/submit/${process.env.NEXT_PUBLIC_HS_PORTAL_ID}/${process.env.NEXT_PUBLIC_HS_FORM_GUID}`,
+        `https://api.hsforms.com/submissions/v3/integration/submit/${hsPortalId}/${hsFormGuid}`,
         {
           method: "POST",
           headers: {
@@ -122,10 +127,7 @@ export const SubscribeForm = ({
   return (
     <Form {...form}>
       <form
-        className={cn(
-          "mt-[2.38rem] items-end flex flex-col md:flex-row w-full gap-2 ",
-          className,
-        )}
+        className={cn("items-end flex flex-col w-full gap-2 ", className)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
@@ -139,11 +141,9 @@ export const SubscribeForm = ({
           render={({ field }) => (
             <FormItem className="flex-1 w-full">
               {showLabel ? (
-                <T id="components.subscribe_form.0">
-                  <FormLabel className="text-[13px] mb-[0.69rem] block text-gray-500 dark:text-[#E6E6E6]">
-                    <Var>{label || "Mastra Newsletter"}</Var>
-                  </FormLabel>
-                </T>
+                <FormLabel className="text-[13px] mb-[0.69rem] block text-gray-500 dark:text-[#E6E6E6]">
+                  {label || "Mastra Newsletter"}
+                </FormLabel>
               ) : null}
 
               <FormControl>
@@ -151,24 +151,39 @@ export const SubscribeForm = ({
                   placeholder={placeholder || "you@example.com"}
                   {...field}
                   className={cn(
-                    "bg-transparent dark:text-white placeholder:text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none focus:ring-1 h-[35px] focus:ring-[hsl(var(--tag-green))] w-full py-[0.56rem] px-4 dark:border-[#343434] border border-[var(--light-border-muted)] rounded-md",
+                    "bg-transparent dark:text-white focus-visible:border-green-500 placeholder:text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none h-[35px] focus:ring-2 focus:ring-(--mastra-green-accent)/50 w-full py-[0.56rem] px-4 dark:border-[#343434] border border-(--border) rounded-[10px]",
                     inputClassName,
                   )}
                 />
               </FormControl>
               <span className="flex gap-2 items-center">
                 {form.formState.errors.email && (
-                  <AlertCircle size={12} className="text-red-500" />
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-red-500"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" x2="12" y1="8" y2="12" />
+                    <line x1="12" x2="12.01" y1="16" y2="16" />
+                  </svg>
                 )}
-                <FormMessage className="text-red-500" />
+                <FormMessage className="text-red-500 mb-0!" />
               </span>
             </FormItem>
           )}
         />
 
-        <button
+        <Button
           className={cn(
-            "dark:bg-[#121212] bg-[var(--light-color-surface-3)] w-full rounded-md hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-[var(--light-color-text-5)] dark:text-white text-[14px]",
+            "bg-(--mastra-surface-3) w-full rounded-[10px] hover:opacity-90 h-[32px] justify-center flex items-center px-4  dark:text-white text-[14px]",
             buttonClassName,
           )}
           onClick={(e) => {
@@ -193,8 +208,10 @@ export const SubscribeForm = ({
               }
             </motion.span>
           </AnimatePresence>
-        </button>
+        </Button>
       </form>
     </Form>
   );
 };
+
+export default SubscribeForm;

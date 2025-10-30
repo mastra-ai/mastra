@@ -7,24 +7,53 @@ import type { MastraMessageV1 } from '../../../memory/types';
 import type { MastraMessageContentV2, MastraMessageV2 } from '../../message-list';
 import { attachmentsToParts } from './attachments-to-parts';
 
-const makePushOrCombine = (v1Messages: MastraMessageV1[]) => (msg: MastraMessageV1) => {
-  const previousMessage = v1Messages.at(-1);
-  if (
-    msg.role === previousMessage?.role &&
-    Array.isArray(previousMessage.content) &&
-    Array.isArray(msg.content) &&
-    // we were creating new messages for tool calls before and not appending to the assistant message
-    // so don't append here so everything works as before
-    (msg.role !== `assistant` || (msg.role === `assistant` && msg.content.at(-1)?.type !== `tool-call`))
-  ) {
-    for (const part of msg.content) {
-      // @ts-ignore needs type gymnastics? msg.content and previousMessage.content are the same type here since both are arrays
-      // I'm not sure what's adding `never` to the union but this code definitely works..
-      previousMessage.content.push(part);
+const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
+  // Track how many times each ID has been used to create unique IDs for split messages
+  const idUsageCount = new Map<string, number>();
+
+  // Pattern to detect if an ID already has our split suffix
+  const SPLIT_SUFFIX_PATTERN = /__split-\d+$/;
+
+  return (msg: MastraMessageV1) => {
+    const previousMessage = v1Messages.at(-1);
+    if (
+      msg.role === previousMessage?.role &&
+      Array.isArray(previousMessage.content) &&
+      Array.isArray(msg.content) &&
+      // we were creating new messages for tool calls before and not appending to the assistant message
+      // so don't append here so everything works as before
+      (msg.role !== `assistant` || (msg.role === `assistant` && msg.content.at(-1)?.type !== `tool-call`))
+    ) {
+      for (const part of msg.content) {
+        // @ts-ignore needs type gymnastics? msg.content and previousMessage.content are the same type here since both are arrays
+        // I'm not sure what's adding `never` to the union but this code definitely works..
+        previousMessage.content.push(part);
+      }
+    } else {
+      // When pushing a new message, check if we need to deduplicate the ID
+      let baseId = msg.id;
+
+      // Check if this ID already has a split suffix and extract the base ID
+      const hasSplitSuffix = SPLIT_SUFFIX_PATTERN.test(baseId);
+      if (hasSplitSuffix) {
+        // This ID already has a split suffix, don't add another one
+        v1Messages.push(msg);
+        return;
+      }
+
+      const currentCount = idUsageCount.get(baseId) || 0;
+
+      // If we've seen this ID before, append our unique split suffix
+      if (currentCount > 0) {
+        msg.id = `${baseId}__split-${currentCount}`;
+      }
+
+      // Increment the usage count for this base ID
+      idUsageCount.set(baseId, currentCount + 1);
+
+      v1Messages.push(msg);
     }
-  } else {
-    v1Messages.push(msg);
-  }
+  };
 };
 export function convertToV1Messages(messages: Array<MastraMessageV2>) {
   const v1Messages: MastraMessageV1[] = [];
@@ -36,6 +65,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
     if (!message?.content) continue;
     const { content, experimental_attachments: inputAttachments = [], parts: inputParts } = message.content;
     const { role } = message;
+
     const fields = {
       id: message.id,
       createdAt: message.createdAt,
@@ -133,12 +163,15 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
                   break;
                 }
                 case 'tool-invocation':
-                  content.push({
-                    type: 'tool-call' as const,
-                    toolCallId: part.toolInvocation.toolCallId,
-                    toolName: part.toolInvocation.toolName,
-                    args: part.toolInvocation.args,
-                  });
+                  // Skip updateWorkingMemory tool calls as they should not be visible in history
+                  if (part.toolInvocation.toolName !== 'updateWorkingMemory') {
+                    content.push({
+                      type: 'tool-call' as const,
+                      toolCallId: part.toolInvocation.toolCallId,
+                      toolName: part.toolInvocation.toolName,
+                      args: part.toolInvocation.args,
+                    });
+                  }
                   break;
               }
             }
@@ -147,36 +180,36 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
               role: 'assistant',
               ...fields,
               type: content.some(c => c.type === `tool-call`) ? 'tool-call' : 'text',
-              // content: content,
               content:
                 typeof content !== `string` &&
                 Array.isArray(content) &&
                 content.length === 1 &&
                 content[0]?.type === `text`
-                  ? message?.content?.content || content
+                  ? content[0].text
                   : content,
             });
 
             // check if there are tool invocations with results in the block
             const stepInvocations = block
               .filter(part => `type` in part && part.type === 'tool-invocation')
-              .map(part => part.toolInvocation);
+              .map(part => part.toolInvocation)
+              .filter(ti => ti.toolName !== 'updateWorkingMemory');
 
-            // tool message with tool results
-            if (stepInvocations.length > 0) {
+            // Only create tool-result message if there are actual results
+            const invocationsWithResults = stepInvocations.filter(ti => ti.state === 'result' && 'result' in ti);
+
+            if (invocationsWithResults.length > 0) {
               pushOrCombine({
                 role: 'tool',
                 ...fields,
                 type: 'tool-result',
-                // @ts-ignore
-                content: stepInvocations.map(toolInvocation => {
-                  const { toolCallId, toolName } = toolInvocation;
+                content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
+                  const { toolCallId, toolName, result } = toolInvocation;
                   return {
                     type: 'tool-result',
                     toolCallId,
                     toolName,
-                    // @ts-ignore
-                    result: toolInvocation.result,
+                    result,
                   };
                 }),
               });
@@ -192,7 +225,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
             switch (part.type) {
               case 'text': {
                 if (blockHasToolInvocations) {
-                  processBlock(); // text must come before tool invocations
+                  processBlock(); // text must come after tool invocations
                 }
                 block.push(part);
                 break;
@@ -203,7 +236,11 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
                 break;
               }
               case 'tool-invocation': {
-                if ((part.toolInvocation.step ?? 0) !== currentStep) {
+                // If we have non-tool content (text/file/reasoning) in the block, process it first
+                const hasNonToolContent = block.some(
+                  p => p.type === 'text' || p.type === 'file' || p.type === 'reasoning',
+                );
+                if (hasNonToolContent || (part.toolInvocation.step ?? 0) !== currentStep) {
                   processBlock();
                 }
                 block.push(part);
@@ -214,6 +251,77 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
           }
 
           processBlock();
+
+          // Check if there are toolInvocations that weren't processed from parts
+          const toolInvocations = message.content.toolInvocations;
+          if (toolInvocations && toolInvocations.length > 0) {
+            // Find tool invocations that weren't already processed from parts
+            const processedToolCallIds = new Set<string>();
+            for (const part of message.content.parts) {
+              if (part.type === 'tool-invocation' && part.toolInvocation.toolCallId) {
+                processedToolCallIds.add(part.toolInvocation.toolCallId);
+              }
+            }
+
+            const unprocessedToolInvocations = toolInvocations.filter(
+              ti => !processedToolCallIds.has(ti.toolCallId) && ti.toolName !== 'updateWorkingMemory',
+            );
+
+            if (unprocessedToolInvocations.length > 0) {
+              // Group by step, handling undefined steps
+              const invocationsByStep = new Map<number, typeof unprocessedToolInvocations>();
+
+              for (const inv of unprocessedToolInvocations) {
+                const step = inv.step ?? 0;
+                if (!invocationsByStep.has(step)) {
+                  invocationsByStep.set(step, []);
+                }
+                invocationsByStep.get(step)!.push(inv);
+              }
+
+              // Process each step
+              const sortedSteps = Array.from(invocationsByStep.keys()).sort((a, b) => a - b);
+
+              for (const step of sortedSteps) {
+                const stepInvocations = invocationsByStep.get(step)!;
+
+                // Create tool-call message for all invocations (calls and results)
+                pushOrCombine({
+                  role: 'assistant',
+                  ...fields,
+                  type: 'tool-call',
+                  content: [
+                    ...stepInvocations.map(({ toolCallId, toolName, args }) => ({
+                      type: 'tool-call' as const,
+                      toolCallId,
+                      toolName,
+                      args,
+                    })),
+                  ],
+                });
+
+                // Only create tool-result message if there are actual results
+                const invocationsWithResults = stepInvocations.filter(ti => ti.state === 'result' && 'result' in ti);
+
+                if (invocationsWithResults.length > 0) {
+                  pushOrCombine({
+                    role: 'tool',
+                    ...fields,
+                    type: 'tool-result',
+                    content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
+                      const { toolCallId, toolName, result } = toolInvocation;
+                      return {
+                        type: 'tool-result',
+                        toolCallId,
+                        toolName,
+                        result,
+                      };
+                    }),
+                  });
+                }
+              }
+            }
+          }
 
           break;
         }
@@ -230,7 +338,9 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
         }, 0);
 
         for (let i = 0; i <= maxStep; i++) {
-          const stepInvocations = toolInvocations.filter(toolInvocation => (toolInvocation.step ?? 0) === i);
+          const stepInvocations = toolInvocations.filter(
+            toolInvocation => (toolInvocation.step ?? 0) === i && toolInvocation.toolName !== 'updateWorkingMemory',
+          );
 
           if (stepInvocations.length === 0) {
             continue;
@@ -252,27 +362,25 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
             ],
           });
 
-          // tool message with tool results
-          pushOrCombine({
-            role: 'tool',
-            ...fields,
-            type: 'tool-result',
-            content: stepInvocations.map((toolInvocation): ToolResultPart => {
-              if (!('result' in toolInvocation)) {
-                // @ts-ignore
-                return toolInvocation;
-              }
+          // Only create tool-result message if there are actual results
+          const invocationsWithResults = stepInvocations.filter(ti => ti.state === 'result' && 'result' in ti);
 
-              const { toolCallId, toolName, result } = toolInvocation;
-
-              return {
-                type: 'tool-result',
-                toolCallId,
-                toolName,
-                result,
-              };
-            }),
-          });
+          if (invocationsWithResults.length > 0) {
+            pushOrCombine({
+              role: 'tool',
+              ...fields,
+              type: 'tool-result',
+              content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
+                const { toolCallId, toolName, result } = toolInvocation;
+                return {
+                  type: 'tool-result',
+                  toolCallId,
+                  toolName,
+                  result,
+                };
+              }),
+            });
+          }
         }
 
         if (content && !isLastMessage) {

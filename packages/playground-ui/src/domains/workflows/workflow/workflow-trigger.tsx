@@ -11,17 +11,18 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
-import { WorkflowRunContext } from '../context/workflow-run-context';
+import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { toast } from 'sonner';
 import { usePlaygroundStore } from '@/store/playground-store';
 import { Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
 
-import { GetWorkflowResponse, WorkflowWatchResult } from '@mastra/client-js';
+import { GetWorkflowResponse } from '@mastra/client-js';
 import { SyntaxHighlighter } from '@/components/ui/syntax-highlighter';
 import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/components/ui/dialog';
 import { WorkflowStatus } from './workflow-status';
 import { WorkflowInputData } from './workflow-input-data';
+import { isObjectEmpty } from '@/lib/object';
 
 interface SuspendedStep {
   stepId: string;
@@ -31,8 +32,9 @@ interface SuspendedStep {
   isLoading: boolean;
 }
 
-interface WorkflowTriggerProps {
+export interface WorkflowTriggerProps {
   workflowId: string;
+  paramsRunId?: string;
   setRunId?: (runId: string) => void;
   workflow?: GetWorkflowResponse;
   isLoading?: boolean;
@@ -44,30 +46,28 @@ interface WorkflowTriggerProps {
     workflowId,
     runId,
     inputData,
-    runtimeContext,
+    requestContext,
   }: {
     workflowId: string;
     runId: string;
     inputData: Record<string, unknown>;
-    runtimeContext: Record<string, unknown>;
+    requestContext: Record<string, unknown>;
   }) => Promise<void>;
+  observeWorkflowStream?: ({ workflowId, runId }: { workflowId: string; runId: string }) => void;
   resumeWorkflow: ({
     workflowId,
     step,
     runId,
     resumeData,
-    runtimeContext,
+    requestContext,
   }: {
     workflowId: string;
     step: string | string[];
     runId: string;
     resumeData: Record<string, unknown>;
-    runtimeContext: Record<string, unknown>;
-  }) => Promise<{
-    message: string;
-  }>;
-  streamResult: WorkflowWatchResult | null;
-  isResumingWorkflow: boolean;
+    requestContext: Record<string, unknown>;
+  }) => Promise<void>;
+  streamResult: WorkflowRunStreamResult | null;
   isCancellingWorkflowRun: boolean;
   cancelWorkflowRun: ({ workflowId, runId }: { workflowId: string; runId: string }) => Promise<{
     message: string;
@@ -76,22 +76,22 @@ interface WorkflowTriggerProps {
 
 export function WorkflowTrigger({
   workflowId,
+  paramsRunId,
   setRunId,
   workflow,
   isLoading,
   createWorkflowRun,
   resumeWorkflow,
   streamWorkflow,
+  observeWorkflowStream,
   isStreamingWorkflow,
   streamResult,
-  isResumingWorkflow,
   isCancellingWorkflowRun,
   cancelWorkflowRun,
 }: WorkflowTriggerProps) {
-  const { runtimeContext } = usePlaygroundStore();
-  const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
+  const { requestContext } = usePlaygroundStore();
+  const { result, setResult, payload, setPayload, setRunId: setContextRunId } = useContext(WorkflowRunContext);
 
-  const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [innerRunId, setInnerRunId] = useState<string>('');
   const [cancelResponse, setCancelResponse] = useState<{ message: string } | null>(null);
@@ -110,8 +110,9 @@ export function WorkflowTrigger({
 
       setRunId?.(runId);
       setInnerRunId(runId);
+      setContextRunId(runId);
 
-      streamWorkflow({ workflowId, runId, inputData: data, runtimeContext });
+      streamWorkflow({ workflowId, runId, inputData: data, requestContext });
     } catch (err) {
       setIsRunning(false);
       toast.error('Error executing workflow');
@@ -133,7 +134,7 @@ export function WorkflowTrigger({
       runId,
       resumeData,
       workflowId,
-      runtimeContext,
+      requestContext,
     });
   };
 
@@ -144,23 +145,26 @@ export function WorkflowTrigger({
 
   const streamResultToUse = result ?? streamResult;
 
+  const suspendedSteps = Object.entries(streamResultToUse?.steps || {})
+    .filter(([_, { status }]) => status === 'suspended')
+    .map(([stepId, { payload }]) => ({
+      stepId,
+      runId: innerRunId,
+      suspendPayload: payload,
+      isLoading: false,
+    }));
+
+  useEffect(() => {
+    if (paramsRunId && observeWorkflowStream) {
+      observeWorkflowStream({ workflowId, runId: paramsRunId });
+      setInnerRunId(paramsRunId);
+      setContextRunId(paramsRunId);
+    }
+  }, [paramsRunId]);
+
   useEffect(() => {
     setIsRunning(isStreamingWorkflow);
   }, [isStreamingWorkflow]);
-
-  useEffect(() => {
-    if (!streamResultToUse?.payload?.workflowState?.steps || !result?.runId) return;
-
-    const suspended = Object.entries(streamResultToUse.payload.workflowState.steps)
-      .filter(([_, { status }]) => status === 'suspended')
-      .map(([stepId, { payload }]) => ({
-        stepId,
-        runId: result.runId,
-        suspendPayload: payload,
-        isLoading: false,
-      }));
-    setSuspendedSteps(suspended);
-  }, [streamResultToUse, result]);
 
   useEffect(() => {
     if (streamResult) {
@@ -185,7 +189,7 @@ export function WorkflowTrigger({
 
   const zodInputSchema = triggerSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(triggerSchema))) : null;
 
-  const workflowActivePaths = streamResultToUse?.payload?.workflowState?.steps ?? {};
+  const workflowActivePaths = streamResultToUse?.steps ?? {};
   const hasWorkflowActivePaths = Object.values(workflowActivePaths).length > 0;
 
   const doneStatuses = ['success', 'failed', 'canceled'];
@@ -193,7 +197,7 @@ export function WorkflowTrigger({
   return (
     <div className="h-full pt-3 pb-12">
       <div className="space-y-4 px-5 pb-5 border-b-sm border-border1">
-        {(isResumingWorkflow || (isSuspendedSteps && isStreamingWorkflow)) && (
+        {isSuspendedSteps && isStreamingWorkflow && (
           <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b-sm border-border1">
             <Icon>
               <Loader2 className="animate-spin text-icon6" />
@@ -214,8 +218,9 @@ export function WorkflowTrigger({
                   setPayload(data);
                   handleExecuteWorkflow(data);
                 }}
+                withoutSubmit={!!paramsRunId}
               />
-            ) : (
+            ) : !!paramsRunId ? null : (
               <Button
                 className="w-full"
                 variant="light"
@@ -249,7 +254,7 @@ export function WorkflowTrigger({
                   {step.stepId}
                 </Text>
                 {step.suspendPayload && (
-                  <div>
+                  <div data-testid="suspended-payload">
                     <CodeBlockDemo
                       className="w-full overflow-x-auto p-2"
                       code={JSON.stringify(step.suspendPayload, null, 2)}
@@ -259,8 +264,8 @@ export function WorkflowTrigger({
                 )}
                 <WorkflowInputData
                   schema={stepSchema}
-                  isSubmitLoading={isResumingWorkflow}
-                  submitButtonLabel="Resume"
+                  isSubmitLoading={isStreamingWorkflow}
+                  submitButtonLabel="Resume workflow"
                   onSubmit={data => {
                     const stepIds = step.stepId?.split('.');
                     handleResumeWorkflow({
@@ -276,7 +281,7 @@ export function WorkflowTrigger({
             );
           })}
 
-        {result?.runId && (
+        {result?.status === 'running' && (
           <Button
             variant="light"
             className="w-full"
@@ -285,7 +290,7 @@ export function WorkflowTrigger({
             disabled={
               !!cancelResponse?.message ||
               isCancellingWorkflowRun ||
-              (result?.payload?.workflowState?.status && doneStatuses.includes(result?.payload?.workflowState?.status))
+              (result?.status && doneStatuses.includes(result?.status))
             }
           >
             {isCancellingWorkflowRun ? (
@@ -311,8 +316,13 @@ export function WorkflowTrigger({
               <div className="px-4 flex flex-col gap-4">
                 {Object.entries(workflowActivePaths)
                   .filter(([key, _]) => key !== 'input' && !key.endsWith('.input'))
-                  .map(([stepId, { status, output }]) => {
-                    return <WorkflowStatus key={stepId} stepId={stepId} status={status} result={output ?? {}} />;
+                  .map(([stepId, step]) => {
+                    const { status } = step;
+                    let output = {};
+                    if (step.status === 'success') {
+                      output = step.output;
+                    }
+                    return <WorkflowStatus key={stepId} stepId={stepId} status={status} result={output} />;
                   })}
               </div>
             </div>
@@ -320,7 +330,7 @@ export function WorkflowTrigger({
         )}
       </div>
 
-      {result && (
+      {result && !isObjectEmpty(result) && (
         <div className="p-5 border-b-sm border-border1">
           <WorkflowJsonDialog result={result} />
         </div>

@@ -1,11 +1,21 @@
 {
   "name": "@mastra/evals",
-  "version": "0.10.5",
+  "version": "0.14.1",
   "description": "",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/evals"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -15,45 +25,45 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
-    "./judge": {
+    "./scorers/llm": {
       "import": {
-        "types": "./dist/metrics/judge/index.d.ts",
-        "default": "./dist/metrics/judge/index.js"
+        "types": "./dist/scorers/llm/index.d.ts",
+        "default": "./dist/scorers/llm/index.js"
       },
       "require": {
-        "types": "./dist/metrics/judge/index.d.cts",
-        "default": "./dist/metrics/judge/index.cjs"
+        "types": "./dist/scorers/llm/index.d.ts",
+        "default": "./dist/scorers/llm/index.cjs"
       }
     },
-    "./nlp": {
+    "./scorers/code": {
       "import": {
-        "types": "./dist/metrics/nlp/index.d.ts",
-        "default": "./dist/metrics/nlp/index.js"
+        "types": "./dist/scorers/code/index.d.ts",
+        "default": "./dist/scorers/code/index.js"
       },
       "require": {
-        "types": "./dist/metrics/nlp/index.d.cts",
-        "default": "./dist/metrics/nlp/index.cjs"
+        "types": "./dist/scorers/code/index.d.ts",
+        "default": "./dist/scorers/code/index.cjs"
       }
     },
-    "./llm": {
+    "./scorers/utils": {
       "import": {
-        "types": "./dist/metrics/llm/index.d.ts",
-        "default": "./dist/metrics/llm/index.js"
+        "types": "./dist/scorers/utils.d.ts",
+        "default": "./dist/scorers/utils.js"
       },
       "require": {
-        "types": "./dist/metrics/llm/index.d.cts",
-        "default": "./dist/metrics/llm/index.cjs"
+        "types": "./dist/scorers/utils.d.ts",
+        "default": "./dist/scorers/utils.cjs"
       }
     },
     "./package.json": "./package.json"
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "pnpm check && tsup src/index.ts src/metrics/judge/index.ts src/metrics/llm/index.ts src/metrics/nlp/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
+    "build": "pnpm check && tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm build --watch",
     "test": "vitest",
     "lint": "eslint ."
@@ -64,18 +74,18 @@
   "dependencies": {
     "compromise": "^14.14.4",
     "difflib": "^0.2.4",
-    "fs-extra": "^11.3.0",
+    "fs-extra": "^11.3.2",
     "keyword-extractor": "^0.0.28",
     "sentiment": "^5.0.2",
-    "string-similarity": "^4.0.4",
-    "zod": "^3.25.67"
+    "string-similarity": "^4.0.4"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.10.1-alpha.0",
-    "ai": "^4.0.0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "ai": "^4.0.0 || ^5.0.0",
+    "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "latest",
+    "@ai-sdk/openai": "^1.3.24",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
@@ -83,11 +93,13 @@
     "@types/fs-extra": "^11.0.4",
     "@types/sentiment": "^5.0.4",
     "@types/string-similarity": "^4.0.2",
-    "ai": "^4.3.16",
+    "ai": "^4.3.19",
     "dotenv": "^17.0.0",
-    "eslint": "^9.30.1",
+    "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@internal/types-builder": "workspace:*",
+    "zod": "^3.25.76"
   }
 }

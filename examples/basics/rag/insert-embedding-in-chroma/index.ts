@@ -5,15 +5,17 @@ import { embedMany } from 'ai';
 
 const doc = MDocument.fromText('Your text content...');
 
-const chunks = await doc.chunk();
+const chunks: { text: string }[] = await doc.chunk();
 
 const { embeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.textEmbeddingModel('text-embedding-3-small'),
   values: chunks.map(chunk => chunk.text),
 });
 
 const chroma = new ChromaVector({
-  path: process.env.CHROMA_DB_PATH!,
+  apiKey: process.env.CHROMA_API_KEY,
+  tenant: process.env.CHROMA_TENANT,
+  database: process.env.CHROMA_DATABASE,
 });
 
 await chroma.createIndex({

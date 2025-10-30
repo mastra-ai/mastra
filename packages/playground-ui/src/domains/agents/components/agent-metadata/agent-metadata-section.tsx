@@ -5,11 +5,12 @@ import { useLinkComponent } from '@/lib/framework';
 import { InfoIcon } from 'lucide-react';
 
 export interface AgentMetadataSectionProps {
-  title: string;
+  title: string | React.ReactNode;
   children: React.ReactNode;
   hint?: {
     link: string;
     title: string;
+    icon?: React.ReactNode;
   };
 }
 
@@ -22,10 +23,10 @@ export const AgentMetadataSection = ({ title, children, hint }: AgentMetadataSec
         {hint && (
           <TooltipProvider>
             <Tooltip>
-              <TooltipTrigger>
+              <TooltipTrigger asChild>
                 <Link href={hint.link} target="_blank" rel="noopener noreferrer">
                   <Icon className="text-icon3" size="sm">
-                    <InfoIcon />
+                    {hint.icon || <InfoIcon />}
                   </Icon>
                 </Link>
               </TooltipTrigger>

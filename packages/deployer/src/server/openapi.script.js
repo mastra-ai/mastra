@@ -12,7 +12,7 @@ async function pullOpenApiSpec() {
     const outputPath = path.join(__dirname, 'openapi.json');
 
     fs.writeFileSync(outputPath, text);
-    console.log('Successfully pulled and saved OpenAPI spec');
+    console.info('Successfully pulled and saved OpenAPI spec');
   } catch (error) {
     console.error('Failed to pull OpenAPI spec:', error);
     process.exit(1);

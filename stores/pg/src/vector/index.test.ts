@@ -1,7 +1,9 @@
-import type { QueryResult } from '@mastra/core';
+import { createVectorTestSuite } from '@internal/storage-test-utils';
+import type { QueryResult } from '@mastra/core/vector';
 import * as pg from 'pg';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 
+import type { PgVectorConfig } from '../shared/config';
 import { PgVector } from '.';
 
 describe('PgVector', () => {
@@ -154,18 +156,6 @@ describe('PgVector', () => {
     await vectorDB.disconnect();
   });
 
-  // --- Validation tests ---
-  describe('Validation', () => {
-    it('throws if connectionString is empty', () => {
-      expect(() => new PgVector({ connectionString: '' })).toThrow(
-        /connectionString must be provided and cannot be empty/,
-      );
-    });
-    it('does not throw on non-empty connection string', () => {
-      expect(() => new PgVector({ connectionString })).not.toThrow();
-    });
-  });
-
   // Index Management Tests
   describe('Index Management', () => {
     describe('createIndex', () => {
@@ -191,6 +181,11 @@ describe('PgVector', () => {
       });
 
       it('should create index with flat type', async () => {
+        // Clean up from previous test since they share the same index name
+        try {
+          await vectorDB.deleteIndex({ indexName: testIndexName2 });
+        } catch {}
+
         await vectorDB.createIndex({
           indexName: testIndexName2,
           dimension: 3,
@@ -226,6 +221,291 @@ describe('PgVector', () => {
       });
     });
 
+    describe('Index Recreation Logic', () => {
+      const testRecreateIndex = 'test_recreate_index';
+
+      beforeEach(async () => {
+        // Clean up any existing index
+        try {
+          await vectorDB.deleteIndex({ indexName: testRecreateIndex });
+        } catch {}
+      });
+
+      afterAll(async () => {
+        try {
+          await vectorDB.deleteIndex({ indexName: testRecreateIndex });
+        } catch {}
+      });
+
+      it('should not recreate index if configuration matches', async () => {
+        // Create index first time
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 128,
+          metric: 'cosine',
+          indexConfig: {
+            type: 'ivfflat',
+            ivf: { lists: 100 },
+          },
+        });
+
+        // Get initial stats
+        const stats1 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats1.type).toBe('ivfflat');
+        expect(stats1.config.lists).toBe(100);
+
+        // Try to create again with same config - should not recreate
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 128,
+          metric: 'cosine',
+          indexConfig: {
+            type: 'ivfflat',
+            ivf: { lists: 100 },
+          },
+        });
+
+        // Verify index wasn't recreated (config should be identical)
+        const stats2 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats2.type).toBe('ivfflat');
+        expect(stats2.config.lists).toBe(100);
+        expect(stats2.metric).toBe('cosine');
+      });
+
+      it('should recreate index if configuration changes', async () => {
+        // Create index with initial config
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 64,
+          metric: 'cosine',
+          indexConfig: {
+            type: 'ivfflat',
+            ivf: { lists: 50 },
+          },
+        });
+
+        // Verify initial configuration
+        const stats1 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats1.type).toBe('ivfflat');
+        expect(stats1.config.lists).toBe(50);
+
+        // Build again with different config - should recreate
+        // We need to use buildIndex to trigger the setupIndex logic
+        await vectorDB.buildIndex({
+          indexName: testRecreateIndex,
+          metric: 'cosine',
+          indexConfig: {
+            type: 'ivfflat',
+            ivf: { lists: 200 },
+          },
+        });
+
+        // Verify configuration changed
+        const stats2 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats2.type).toBe('ivfflat');
+        expect(stats2.config.lists).toBe(200);
+      });
+
+      it('should preserve existing index when no config provided', async () => {
+        // Create HNSW index with specific config
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 512,
+          metric: 'dotproduct',
+          indexConfig: {
+            type: 'hnsw',
+            hnsw: { m: 32, efConstruction: 128 },
+          },
+        });
+
+        const stats1 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats1.type).toBe('hnsw');
+        expect(stats1.config.m).toBe(32);
+        expect(stats1.metric).toBe('dotproduct');
+
+        // Call create again WITHOUT indexConfig - should preserve HNSW
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 512,
+          metric: 'dotproduct',
+        });
+
+        // Verify index was NOT recreated - still HNSW
+        const stats2 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats2.type).toBe('hnsw');
+        expect(stats2.config.m).toBe(32);
+        expect(stats2.metric).toBe('dotproduct');
+      });
+
+      it('should handle switching from ivfflat to hnsw', async () => {
+        // Create with ivfflat
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 256,
+          metric: 'euclidean',
+          indexConfig: {
+            type: 'ivfflat',
+            ivf: { lists: 100 },
+          },
+        });
+
+        const stats1 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats1.type).toBe('ivfflat');
+
+        // Switch to hnsw
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 256,
+          metric: 'euclidean',
+          indexConfig: {
+            type: 'hnsw',
+            hnsw: { m: 16, efConstruction: 64 },
+          },
+        });
+
+        const stats2 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats2.type).toBe('hnsw');
+        expect(stats2.config.m).toBe(16);
+        expect(stats2.config.efConstruction).toBe(64);
+      });
+
+      it('should create ivfflat index when no index exists and config is empty', async () => {
+        const testNewIndex = 'test_no_index_empty_config';
+
+        // Create without any config - should default to ivfflat
+        await vectorDB.createIndex({
+          indexName: testNewIndex,
+          dimension: 128,
+          metric: 'cosine',
+        });
+
+        const stats = await vectorDB.describeIndex({ indexName: testNewIndex });
+        expect(stats.type).toBe('ivfflat');
+
+        // Cleanup
+        await vectorDB.deleteIndex({ indexName: testNewIndex });
+      });
+
+      it('should stay flat when explicitly requested', async () => {
+        const testFlatIndex = 'test_explicit_flat';
+
+        // Create with explicit flat config
+        await vectorDB.createIndex({
+          indexName: testFlatIndex,
+          dimension: 64,
+          metric: 'cosine',
+          indexConfig: { type: 'flat' },
+        });
+
+        // Try to create again with empty config - should stay flat since that's what exists
+        await vectorDB.createIndex({
+          indexName: testFlatIndex,
+          dimension: 64,
+          metric: 'cosine',
+          indexConfig: { type: 'flat' },
+        });
+
+        const stats = await vectorDB.describeIndex({ indexName: testFlatIndex });
+        expect(stats.type).toBe('flat');
+
+        // Cleanup
+        await vectorDB.deleteIndex({ indexName: testFlatIndex });
+      });
+
+      it('should recreate index when only metric changes', async () => {
+        const testMetricChange = 'test_metric_change';
+
+        // Create with cosine metric
+        await vectorDB.createIndex({
+          indexName: testMetricChange,
+          dimension: 128,
+          metric: 'cosine',
+          indexConfig: { type: 'ivfflat' },
+        });
+
+        const stats1 = await vectorDB.describeIndex({ indexName: testMetricChange });
+        expect(stats1.metric).toBe('cosine');
+
+        // Recreate with dotproduct metric - should trigger recreation
+        await vectorDB.createIndex({
+          indexName: testMetricChange,
+          dimension: 128,
+          metric: 'dotproduct',
+          indexConfig: { type: 'ivfflat' },
+        });
+
+        const stats2 = await vectorDB.describeIndex({ indexName: testMetricChange });
+        expect(stats2.metric).toBe('dotproduct');
+
+        // Cleanup
+        await vectorDB.deleteIndex({ indexName: testMetricChange });
+      });
+
+      it('should recreate index when HNSW parameters change', async () => {
+        const testHnswParams = 'test_hnsw_param_change';
+
+        // Create HNSW with initial parameters
+        await vectorDB.createIndex({
+          indexName: testHnswParams,
+          dimension: 128,
+          metric: 'cosine',
+          indexConfig: {
+            type: 'hnsw',
+            hnsw: { m: 16, efConstruction: 64 },
+          },
+        });
+
+        // Add a test vector to ensure index is built
+        const testVector = new Array(128).fill(0).map((_, i) => i / 128);
+        await vectorDB.upsert({
+          indexName: testHnswParams,
+          vectors: [testVector],
+        });
+
+        const stats1 = await vectorDB.describeIndex({ indexName: testHnswParams });
+        expect(stats1.type).toBe('hnsw');
+        expect(stats1.config.m).toBe(16);
+
+        // Use buildIndex instead of createIndex to avoid issues with table recreation
+        await vectorDB.buildIndex({
+          indexName: testHnswParams,
+          metric: 'cosine',
+          indexConfig: {
+            type: 'hnsw',
+            hnsw: { m: 32, efConstruction: 64 },
+          },
+        });
+
+        const stats2 = await vectorDB.describeIndex({ indexName: testHnswParams });
+        expect(stats2.type).toBe('hnsw');
+        expect(stats2.config.m).toBe(32);
+        expect(stats2.config.efConstruction).toBe(64);
+
+        // Cleanup
+        await vectorDB.deleteIndex({ indexName: testHnswParams });
+      });
+
+      it('should handle dimension properly when using buildIndex', async () => {
+        // Create index
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 384,
+          metric: 'cosine',
+        });
+
+        // Build the index (which calls setupIndex internally)
+        await vectorDB.buildIndex({
+          indexName: testRecreateIndex,
+          metric: 'cosine',
+          indexConfig: { type: 'ivfflat' },
+        });
+
+        // Verify it maintains correct dimension
+        const stats = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats.dimension).toBe(384);
+      });
+    });
+
     describe('listIndexes', () => {
       const indexName = 'test_query_3';
       beforeAll(async () => {
@@ -245,6 +525,92 @@ describe('PgVector', () => {
         await vectorDB.deleteIndex({ indexName });
         const indexes = await vectorDB.listIndexes();
         expect(indexes).not.toContain(indexName);
+      });
+    });
+
+    describe('listIndexes with external vector tables (Issue #6691)', () => {
+      const mastraIndexName = 'mastra_managed_table';
+      const externalTableName = 'dam_embedding_collections';
+      let client: pg.PoolClient;
+
+      beforeAll(async () => {
+        // Get a client to create an external table
+        client = await vectorDB.pool.connect();
+
+        // Create an external table with vector column that is NOT managed by PgVector
+        // This simulates a real-world scenario where other applications use pgvector
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS ${externalTableName} (
+            id SERIAL PRIMARY KEY,
+            name TEXT,
+            centroid_embedding vector(1536),
+            created_at TIMESTAMP DEFAULT NOW()
+          )
+        `);
+
+        // Create a Mastra-managed index
+        await vectorDB.createIndex({
+          indexName: mastraIndexName,
+          dimension: 128,
+        });
+      });
+
+      afterAll(async () => {
+        // Clean up
+        try {
+          await vectorDB.deleteIndex({ indexName: mastraIndexName });
+        } catch {
+          // Ignore if already deleted
+        }
+
+        try {
+          await client.query(`DROP TABLE IF EXISTS ${externalTableName}`);
+        } catch {
+          // Ignore errors
+        }
+
+        client.release();
+      });
+
+      it('should handle initialization when external vector tables exist', async () => {
+        // This test verifies the fix for issue #6691
+        // When PgVector is initialized, it should only discover Mastra-managed tables
+        // and ignore external tables with vector columns
+
+        // Create a new PgVector instance to trigger initialization
+        const newVectorDB = new PgVector({ connectionString });
+
+        // Give initialization time to complete
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // The initialization should not throw errors even with external tables present
+        const indexes = await newVectorDB.listIndexes();
+
+        // FIXED: Now correctly returns only Mastra-managed tables
+        expect(indexes).toContain(mastraIndexName);
+        expect(indexes).not.toContain(externalTableName); // Fixed!
+
+        // Describing the external table should fail since it's not managed by Mastra
+        await expect(async () => {
+          await newVectorDB.describeIndex({ indexName: externalTableName });
+        }).rejects.toThrow();
+
+        // But describing the Mastra table should work
+        const mastraTableInfo = await newVectorDB.describeIndex({ indexName: mastraIndexName });
+        expect(mastraTableInfo.dimension).toBe(128);
+
+        await newVectorDB.disconnect();
+      });
+
+      it('should only return Mastra-managed tables from listIndexes', async () => {
+        // This test verifies listIndexes only returns tables with the exact Mastra structure
+        const indexes = await vectorDB.listIndexes();
+
+        // Should include Mastra-managed tables
+        expect(indexes).toContain(mastraIndexName);
+
+        // Should NOT include external tables - FIXED!
+        expect(indexes).not.toContain(externalTableName);
       });
     });
 
@@ -536,7 +902,7 @@ describe('PgVector', () => {
           const metadata = [
             { type: 'a', value: 1 },
             { type: 'b', value: 2 },
-            { type: 'a', value: 3 },
+            { type: 'c', value: 3 },
           ];
           await vectorDB.upsert({ indexName, vectors, metadata });
         });
@@ -1510,6 +1876,39 @@ describe('PgVector', () => {
         // Cleanup
         await vectorDB.deleteIndex({ indexName: duplicateIndexName });
       });
+
+      it('should handle index creation with invalid parameters', async () => {
+        // Invalid index name (SQL injection attempt)
+        await expect(
+          vectorDB.createIndex({
+            indexName: "'; DROP TABLE users; --",
+            dimension: 128,
+            metric: 'cosine',
+          }),
+        ).rejects.toThrow('Invalid index name');
+
+        // Invalid dimension
+        await expect(
+          vectorDB.createIndex({
+            indexName: 'test_invalid_dim',
+            dimension: -1,
+            metric: 'cosine',
+          }),
+        ).rejects.toThrow('Dimension must be a positive integer');
+
+        // Invalid HNSW parameters
+        await expect(
+          vectorDB.createIndex({
+            indexName: 'test_invalid_hnsw',
+            dimension: 128,
+            metric: 'cosine',
+            indexConfig: {
+              type: 'hnsw',
+              hnsw: { m: -1, efConstruction: 64 },
+            },
+          }),
+        ).rejects.toThrow();
+      });
     });
 
     describe('Edge Cases and Special Values', () => {
@@ -1988,6 +2387,95 @@ describe('PgVector', () => {
         expect(results[0]?.score).toBeCloseTo(1, 5);
         expect(results[1]?.score).toBeGreaterThan(0.9);
       });
+
+      // NEW TEST: Reproduce the SET LOCAL bug
+      it('should verify that ef_search parameter is actually being set (reproduces SET LOCAL bug)', async () => {
+        const client = await vectorDB.pool.connect();
+        try {
+          // Test current behavior: SET LOCAL without transaction should have no effect
+          await client.query('SET LOCAL hnsw.ef_search = 500');
+
+          // Check if the parameter was actually set
+          const result = await client.query('SHOW hnsw.ef_search');
+          const currentValue = result.rows[0]['hnsw.ef_search'];
+
+          // The value should still be the default (not 500)
+          expect(parseInt(currentValue)).not.toBe(500);
+
+          // Now test with proper transaction
+          await client.query('BEGIN');
+          await client.query('SET LOCAL hnsw.ef_search = 500');
+
+          const resultInTransaction = await client.query('SHOW hnsw.ef_search');
+          const valueInTransaction = resultInTransaction.rows[0]['hnsw.ef_search'];
+
+          // This should work because we're in a transaction
+          expect(parseInt(valueInTransaction)).toBe(500);
+
+          await client.query('ROLLBACK');
+
+          // After rollback, should return to default
+          const resultAfterRollback = await client.query('SHOW hnsw.ef_search');
+          const valueAfterRollback = resultAfterRollback.rows[0]['hnsw.ef_search'];
+          expect(parseInt(valueAfterRollback)).not.toBe(500);
+        } finally {
+          client.release();
+        }
+      });
+
+      // Verify the fix works - ef parameter is properly applied in query method
+      it('should properly apply ef parameter using transactions (verifies fix)', async () => {
+        const client = await vectorDB.pool.connect();
+        const queryCommands: string[] = [];
+
+        // Spy on the client query method to capture all SQL commands
+        const originalClientQuery = client.query;
+        const clientQuerySpy = vi.fn().mockImplementation((query, ...args) => {
+          if (typeof query === 'string') {
+            queryCommands.push(query);
+          }
+          return originalClientQuery.call(client, query, ...args);
+        });
+        client.query = clientQuerySpy;
+
+        try {
+          // Manually release the client so query() can get a fresh one
+          client.release();
+
+          await vectorDB.query({
+            indexName,
+            queryVector: [1, 0, 0],
+            topK: 2,
+            ef: 128,
+          });
+
+          const testClient = await vectorDB.pool.connect();
+          try {
+            // Test that SET LOCAL works within a transaction
+            await testClient.query('BEGIN');
+            await testClient.query('SET LOCAL hnsw.ef_search = 256');
+
+            const result = await testClient.query('SHOW hnsw.ef_search');
+            const value = result.rows[0]['hnsw.ef_search'];
+            expect(parseInt(value)).toBe(256);
+
+            await testClient.query('ROLLBACK');
+
+            // After rollback, should revert
+            const resultAfter = await testClient.query('SHOW hnsw.ef_search');
+            const valueAfter = resultAfter.rows[0]['hnsw.ef_search'];
+            expect(parseInt(valueAfter)).not.toBe(256);
+          } finally {
+            testClient.release();
+          }
+        } finally {
+          // Restore original function if client is still connected
+          if (client.query === clientQuerySpy) {
+            client.query = originalClientQuery;
+          }
+          clientQuerySpy.mockRestore();
+        }
+      });
     });
 
     describe('IVF Parameters', () => {
@@ -2077,6 +2565,43 @@ describe('PgVector', () => {
 
       await vectorDB.deleteIndex({ indexName });
     });
+
+    it('should handle concurrent index recreation with different configs', async () => {
+      const indexName = 'concurrent_recreate_test';
+
+      // Create initial index
+      await vectorDB.createIndex({
+        indexName,
+        dimension: 128,
+        metric: 'cosine',
+        indexConfig: { type: 'ivfflat' },
+      });
+
+      // Attempt concurrent recreations with different configs
+      const configs = [
+        { type: 'hnsw' as const, hnsw: { m: 16, efConstruction: 64 } },
+        { type: 'hnsw' as const, hnsw: { m: 32, efConstruction: 128 } },
+        { type: 'ivfflat' as const, ivf: { lists: 50 } },
+        { type: 'hnsw' as const, hnsw: { m: 8, efConstruction: 32 } },
+      ];
+
+      const promises = configs.map(config =>
+        vectorDB.buildIndex({
+          indexName,
+          metric: 'cosine',
+          indexConfig: config,
+        }),
+      );
+
+      // All should complete without error (mutex prevents race conditions)
+      await expect(Promise.all(promises)).resolves.not.toThrow();
+
+      // One of the configs should have won
+      const stats = await vectorDB.describeIndex({ indexName });
+      expect(['hnsw', 'ivfflat']).toContain(stats.type);
+
+      await vectorDB.deleteIndex({ indexName });
+    });
   });
 
   describe('Schema Support', () => {
@@ -2100,6 +2625,19 @@ describe('PgVector', () => {
         client.release();
       }
 
+      // Create another schema
+      const anotherSchema = 'another_schema';
+      const anotherSchemaClient = await vectorDB['pool'].connect();
+      try {
+        await anotherSchemaClient.query(`CREATE SCHEMA IF NOT EXISTS ${anotherSchema}`);
+        await anotherSchemaClient.query('COMMIT');
+      } catch (e) {
+        await anotherSchemaClient.query('ROLLBACK');
+        throw e;
+      } finally {
+        anotherSchemaClient.release();
+      }
+
       // Now create the custom schema vectorDB instance
       customSchemaVectorDB = new PgVector({
         connectionString,
@@ -2115,10 +2653,11 @@ describe('PgVector', () => {
         // Ignore errors if index doesn't exist
       }
 
-      // Drop schema using the default vectorDB connection
+      // Drop schemas using the default vectorDB connection
       const client = await vectorDB['pool'].connect();
       try {
         await client.query(`DROP SCHEMA IF EXISTS ${customSchema} CASCADE`);
+        await client.query(`DROP SCHEMA IF EXISTS another_schema CASCADE`);
         await client.query('COMMIT');
       } catch (e) {
         await client.query('ROLLBACK');
@@ -2130,18 +2669,6 @@ describe('PgVector', () => {
       // Disconnect in reverse order
       await customSchemaVectorDB.disconnect();
       await vectorDB.disconnect();
-    });
-
-    describe('Constructor', () => {
-      it('should accept config object with connectionString', () => {
-        const db = new PgVector({ connectionString });
-        expect(db).toBeInstanceOf(PgVector);
-      });
-
-      it('should accept config object with schema', () => {
-        const db = new PgVector({ connectionString, schemaName: customSchema });
-        expect(db).toBeInstanceOf(PgVector);
-      });
     });
 
     describe('Schema Operations', () => {
@@ -2172,6 +2699,27 @@ describe('PgVector', () => {
           await vectorDB.deleteIndex({ indexName: testIndexName });
         } catch {
           // Ignore if doesn't exist
+        }
+
+        // Ensure vector extension is back in public schema for other tests
+        const client = await vectorDB.pool.connect();
+        try {
+          const result = await client.query(`
+            SELECT n.nspname as schema_name
+            FROM pg_extension e
+            JOIN pg_namespace n ON e.extnamespace = n.oid
+            WHERE e.extname = 'vector'
+          `);
+
+          if (result.rows.length > 0 && result.rows[0].schema_name !== 'public') {
+            // Extension is not in public, move it back
+            await client.query(`DROP EXTENSION IF EXISTS vector CASCADE`);
+            await client.query(`CREATE EXTENSION vector`);
+          }
+        } catch {
+          // Ignore errors, extension might not exist
+        } finally {
+          client.release();
         }
       });
 
@@ -2299,6 +2847,194 @@ describe('PgVector', () => {
           topK: 1,
         });
         expect(results).toHaveLength(0);
+      });
+
+      it('should handle vector extension in public schema with custom table schema', async () => {
+        // Ensure vector extension is in public schema
+        const client = await vectorDB.pool.connect();
+        await client.query(`CREATE SCHEMA IF NOT EXISTS ${customSchema}`);
+        client.release();
+
+        // This should not throw "type vector does not exist"
+        await customSchemaVectorDB.createIndex({
+          indexName: testIndexName,
+          dimension: 3,
+        });
+
+        // Verify it works with some data
+        const testVectors = [
+          [1, 2, 3],
+          [4, 5, 6],
+        ];
+        const ids = await customSchemaVectorDB.upsert({
+          indexName: testIndexName,
+          vectors: testVectors,
+        });
+
+        expect(ids).toHaveLength(2);
+
+        const results = await customSchemaVectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 2, 3],
+          topK: 1,
+        });
+
+        expect(results).toHaveLength(1);
+        expect(results[0].score).toBeGreaterThan(0.99);
+      });
+
+      it('should handle vector extension in the same custom schema', async () => {
+        const client = await vectorDB.pool.connect();
+
+        // Create custom schema and install vector extension there
+        await client.query(`CREATE SCHEMA IF NOT EXISTS ${customSchema}`);
+        await client.query(`DROP EXTENSION IF EXISTS vector CASCADE`);
+        await client.query(`CREATE EXTENSION vector SCHEMA ${customSchema}`);
+        client.release();
+
+        // Create a new PgVector instance to detect the new extension location
+        const localSchemaVectorDB = new PgVector({
+          connectionString,
+          schemaName: customSchema,
+        });
+
+        try {
+          // Should work with extension in same schema
+          await localSchemaVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 3,
+          });
+
+          const testVectors = [[7, 8, 9]];
+          const ids = await localSchemaVectorDB.upsert({
+            indexName: testIndexName,
+            vectors: testVectors,
+          });
+
+          expect(ids).toHaveLength(1);
+        } finally {
+          // Clean up the local instance
+          await localSchemaVectorDB.disconnect();
+        }
+
+        // Clean up - reinstall in public for other tests
+        const cleanupClient = await vectorDB.pool.connect();
+        await cleanupClient.query(`DROP EXTENSION IF EXISTS vector CASCADE`);
+        await cleanupClient.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+        cleanupClient.release();
+      });
+
+      it('should handle vector extension in a different schema than tables', async () => {
+        const client = await vectorDB.pool.connect();
+
+        // Create two schemas
+        await client.query(`CREATE SCHEMA IF NOT EXISTS another_schema`);
+        await client.query(`CREATE SCHEMA IF NOT EXISTS ${customSchema}`);
+
+        // Install vector extension in another_schema
+        await client.query(`DROP EXTENSION IF EXISTS vector CASCADE`);
+        await client.query(`CREATE EXTENSION vector SCHEMA another_schema`);
+        client.release();
+
+        // Create a new PgVector instance to detect the new extension location
+        const localSchemaVectorDB = new PgVector({
+          connectionString,
+          schemaName: customSchema,
+        });
+
+        try {
+          // Should detect and use vector extension from another_schema
+          await localSchemaVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 3,
+          });
+
+          const testVectors = [[10, 11, 12]];
+          const ids = await localSchemaVectorDB.upsert({
+            indexName: testIndexName,
+            vectors: testVectors,
+          });
+
+          expect(ids).toHaveLength(1);
+        } finally {
+          // Clean up the local instance
+          await localSchemaVectorDB.disconnect();
+        }
+
+        // Clean up - reinstall in public for other tests
+        const cleanupClient = await vectorDB.pool.connect();
+        await cleanupClient.query(`DROP EXTENSION IF EXISTS vector CASCADE`);
+        await cleanupClient.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+        cleanupClient.release();
+      });
+
+      it('should detect existing vector extension without trying to reinstall', async () => {
+        const client = await vectorDB.pool.connect();
+
+        // Ensure vector is installed in public
+        await client.query(`DROP EXTENSION IF EXISTS vector CASCADE`);
+        await client.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+        await client.query(`CREATE SCHEMA IF NOT EXISTS ${customSchema}`);
+
+        // Verify extension exists
+        const result = await client.query(`
+          SELECT EXISTS (
+            SELECT 1 FROM pg_extension WHERE extname = 'vector'
+          ) as exists
+        `);
+        expect(result.rows[0].exists).toBe(true);
+
+        client.release();
+
+        // Create index should work without errors since extension exists
+        await customSchemaVectorDB.createIndex({
+          indexName: testIndexName,
+          dimension: 3,
+        });
+
+        // Verify the index was created successfully
+        const indexes = await customSchemaVectorDB.listIndexes();
+        expect(indexes).toContain(testIndexName);
+      });
+
+      it('should handle update operations with custom schema and qualified vector type', async () => {
+        const client = await vectorDB.pool.connect();
+        await client.query(`CREATE SCHEMA IF NOT EXISTS ${customSchema}`);
+        client.release();
+
+        await customSchemaVectorDB.createIndex({
+          indexName: testIndexName,
+          dimension: 3,
+        });
+
+        // Insert initial vector
+        const [id] = await customSchemaVectorDB.upsert({
+          indexName: testIndexName,
+          vectors: [[1, 2, 3]],
+          metadata: [{ original: true }],
+        });
+
+        // Update the vector
+        await customSchemaVectorDB.updateVector({
+          indexName: testIndexName,
+          id,
+          update: {
+            vector: [4, 5, 6],
+            metadata: { updated: true },
+          },
+        });
+
+        // Query and verify update
+        const results = await customSchemaVectorDB.query({
+          indexName: testIndexName,
+          queryVector: [4, 5, 6],
+          topK: 1,
+          includeVector: true,
+        });
+
+        expect(results[0].id).toBe(id);
+        expect(results[0].vector).toEqual([4, 5, 6]);
+        expect(results[0].metadata).toEqual({ updated: true });
       });
     });
   });
@@ -2544,6 +3280,7 @@ describe('PgVector', () => {
 
           expect(warnSpy).toHaveBeenCalledWith(
             expect.stringContaining('Could not install vector extension. This requires superuser privileges'),
+            expect.objectContaining({ error: expect.any(Error) }),
           );
 
           warnSpy.mockRestore();
@@ -2560,19 +3297,193 @@ describe('PgVector', () => {
         });
 
         try {
-          const debugSpy = vi.spyOn(restrictedDB['logger'], 'debug');
+          const infoSpy = vi.spyOn(restrictedDB['logger'], 'info');
 
           await restrictedDB.createIndex({ indexName: 'test', dimension: 3 });
 
-          expect(debugSpy).toHaveBeenCalledWith('Vector extension already installed, skipping installation');
+          // The new code logs that it found the extension in a schema
+          expect(infoSpy).toHaveBeenCalledWith(
+            expect.stringMatching(/Vector extension (already installed|found) in schema:/),
+          );
 
-          debugSpy.mockRestore();
+          infoSpy.mockRestore();
         } finally {
           // Ensure we wait for any pending operations before disconnecting
           await new Promise(resolve => setTimeout(resolve, 100));
           await restrictedDB.disconnect();
         }
       });
+    });
+  });
+});
+
+// --- Validation tests ---
+describe('Validation', () => {
+  const customSchema = 'custom_schema';
+  const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+  describe('Connection String Config', () => {
+    it('throws if connectionString is empty', () => {
+      expect(() => new PgVector({ connectionString: '' })).toThrow(
+        /connectionString must be provided and cannot be empty/,
+      );
+    });
+    it('does not throw on non-empty connection string', () => {
+      expect(() => new PgVector({ connectionString })).not.toThrow();
+    });
+  });
+
+  describe('TCP Host Config', () => {
+    const validConfig = {
+      host: 'localhost',
+      port: 5434,
+      database: 'mastra',
+      user: 'postgres',
+      password: 'postgres',
+    };
+
+    it('throws if host is missing or empty', () => {
+      expect(() => new PgVector({ ...validConfig, host: '' })).toThrow(/host must be provided and cannot be empty/);
+      const { host, ...rest } = validConfig;
+      expect(() => new PgVector(rest as any)).toThrow(/invalid config/);
+    });
+
+    it('throws if database is missing or empty', () => {
+      expect(() => new PgVector({ ...validConfig, database: '' })).toThrow(
+        /database must be provided and cannot be empty/,
+      );
+      const { database, ...rest } = validConfig;
+      expect(() => new PgVector(rest as any)).toThrow(/invalid config/);
+    });
+
+    it('throws if user is missing or empty', () => {
+      expect(() => new PgVector({ ...validConfig, user: '' })).toThrow(/user must be provided and cannot be empty/);
+      const { user, ...rest } = validConfig;
+      expect(() => new PgVector(rest as any)).toThrow(/invalid config/);
+    });
+
+    it('throws if password is missing or empty', () => {
+      expect(() => new PgVector({ ...validConfig, password: '' })).toThrow(
+        /password must be provided and cannot be empty/,
+      );
+      const { password, ...rest } = validConfig;
+      expect(() => new PgVector(rest as any)).toThrow(/invalid config/);
+    });
+
+    it('does not throw on valid host config', () => {
+      expect(() => new PgVector(validConfig)).not.toThrow();
+    });
+  });
+
+  describe('Cloud SQL Connector Config', () => {
+    it('accepts config with stream property (Cloud SQL connector)', () => {
+      const connectorConfig = {
+        user: 'test-user',
+        database: 'test-db',
+        ssl: { rejectUnauthorized: false },
+        stream: () => ({}),
+      };
+      expect(() => new PgVector(connectorConfig as any)).not.toThrow();
+    });
+
+    it('accepts config with password function (IAM auth)', () => {
+      const iamConfig = {
+        user: 'test-user',
+        database: 'test-db',
+        host: 'localhost',
+        port: 5432,
+        password: () => Promise.resolve('dynamic-token'),
+        ssl: { rejectUnauthorized: false },
+      };
+      expect(() => new PgVector(iamConfig as any)).not.toThrow();
+    });
+
+    it('accepts generic pg ClientConfig', () => {
+      const clientConfig = {
+        user: 'test-user',
+        database: 'test-db',
+        application_name: 'test-app',
+        ssl: { rejectUnauthorized: false },
+        stream: () => ({}),
+      };
+      expect(() => new PgVector(clientConfig as any)).not.toThrow();
+    });
+  });
+
+  describe('SSL Configuration', () => {
+    it('accepts connectionString with ssl: true', () => {
+      expect(() => new PgVector({ connectionString, ssl: true })).not.toThrow();
+    });
+
+    it('accepts connectionString with ssl object', () => {
+      expect(
+        () =>
+          new PgVector({
+            connectionString,
+            ssl: { rejectUnauthorized: false },
+          }),
+      ).not.toThrow();
+    });
+
+    it('accepts host config with ssl: true', () => {
+      const config = {
+        host: 'localhost',
+        port: 5434,
+        database: 'mastra',
+        user: 'postgres',
+        password: 'postgres',
+        ssl: true,
+      };
+      expect(() => new PgVector(config)).not.toThrow();
+    });
+
+    it('accepts host config with ssl object', () => {
+      const config = {
+        host: 'localhost',
+        port: 5434,
+        database: 'mastra',
+        user: 'postgres',
+        password: 'postgres',
+        ssl: { rejectUnauthorized: false },
+      };
+      expect(() => new PgVector(config)).not.toThrow();
+    });
+  });
+
+  describe('Pool Options', () => {
+    it('accepts pgPoolOptions with connectionString', () => {
+      const config = {
+        connectionString,
+        pgPoolOptions: {
+          max: 30,
+          idleTimeoutMillis: 60000,
+          connectionTimeoutMillis: 5000,
+        },
+      };
+      expect(() => new PgVector(config)).not.toThrow();
+    });
+
+    it('accepts pgPoolOptions with host config', () => {
+      const config = {
+        host: 'localhost',
+        port: 5434,
+        database: 'mastra',
+        user: 'postgres',
+        password: 'postgres',
+        pgPoolOptions: {
+          max: 30,
+          idleTimeoutMillis: 60000,
+        },
+      };
+      expect(() => new PgVector(config)).not.toThrow();
+    });
+
+    it('accepts max and idleTimeoutMillis directly', () => {
+      const config = {
+        connectionString,
+        max: 30,
+        idleTimeoutMillis: 60000,
+      };
+      expect(() => new PgVector(config)).not.toThrow();
     });
   });
 
@@ -2615,5 +3526,146 @@ describe('PgVector', () => {
       expect(db['pool'].options.connectionTimeoutMillis).toBe(2000);
       expect(db['pool'].options.ssl).toBe(false);
     });
+  });
+
+  describe('Schema Configuration', () => {
+    it('accepts schemaName with connectionString', () => {
+      expect(() => new PgVector({ connectionString, schemaName: 'custom_schema' })).not.toThrow();
+    });
+
+    it('accepts schemaName with host config', () => {
+      const config = {
+        host: 'localhost',
+        port: 5434,
+        database: 'mastra',
+        user: 'postgres',
+        password: 'postgres',
+        schemaName: 'custom_schema',
+      };
+      expect(() => new PgVector(config)).not.toThrow();
+    });
+  });
+
+  describe('Invalid Config', () => {
+    it('throws on invalid config (missing required fields)', () => {
+      expect(() => new PgVector({ user: 'test' } as any)).toThrow(/invalid config/);
+    });
+
+    it('throws on completely empty config', () => {
+      expect(() => new PgVector({} as any)).toThrow(/invalid config/);
+    });
+  });
+
+  describe('PgVectorConfig Support', () => {
+    it('should accept PgVectorConfig with connectionString', () => {
+      const config: PgVectorConfig = {
+        connectionString,
+        schemaName: customSchema,
+        max: 10,
+        idleTimeoutMillis: 15000,
+      };
+      const db = new PgVector(config);
+      expect(db).toBeInstanceOf(PgVector);
+    });
+
+    it('should accept PgVectorConfig with individual connection parameters', () => {
+      const config: PgVectorConfig = {
+        host: 'localhost',
+        port: 5434,
+        database: 'mastra',
+        user: 'postgres',
+        password: 'postgres',
+        schemaName: customSchema,
+        max: 15,
+        idleTimeoutMillis: 20000,
+      };
+      const db = new PgVector(config);
+      expect(db).toBeInstanceOf(PgVector);
+    });
+
+    it('should accept PgVectorConfig with SSL configuration', () => {
+      const config: PgVectorConfig = {
+        host: 'localhost',
+        port: 5434,
+        database: 'mastra',
+        user: 'postgres',
+        password: 'postgres',
+        ssl: true,
+        schemaName: customSchema,
+      };
+      const db = new PgVector(config);
+      expect(db).toBeInstanceOf(PgVector);
+    });
+
+    it('should maintain backward compatibility with legacy config', () => {
+      const legacyConfig = {
+        connectionString,
+        schemaName: customSchema,
+        pgPoolOptions: {
+          max: 5,
+          idleTimeoutMillis: 10000,
+        },
+      };
+      const db = new PgVector(legacyConfig);
+      expect(db).toBeInstanceOf(PgVector);
+    });
+
+    it('should work with PgVectorConfig for actual database operations', async () => {
+      const config: PgVectorConfig = {
+        connectionString,
+        schemaName: customSchema,
+        max: 5,
+        idleTimeoutMillis: 10000,
+      };
+      const db = new PgVector(config);
+
+      try {
+        // Test basic operations
+        await db.createIndex({
+          indexName: 'postgres_config_test',
+          dimension: 3,
+          metric: 'cosine',
+        });
+
+        await db.upsert({
+          indexName: 'postgres_config_test',
+          vectors: [[1, 2, 3]],
+          metadata: [{ test: 'postgres_config' }],
+        });
+
+        const results = await db.query({
+          indexName: 'postgres_config_test',
+          queryVector: [1, 2, 3],
+          topK: 1,
+        });
+
+        expect(results).toHaveLength(1);
+        expect(results[0].metadata).toEqual({ test: 'postgres_config' });
+
+        await db.deleteIndex({ indexName: 'postgres_config_test' });
+      } finally {
+        await db.disconnect();
+      }
+    });
+  });
+});
+
+// Metadata filtering tests for Memory system
+describe('PgVector Metadata Filtering', () => {
+  const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+  const metadataVectorDB = new PgVector({ connectionString });
+
+  createVectorTestSuite({
+    vector: metadataVectorDB,
+    createIndex: async (indexName: string) => {
+      // Using dimension 4 as required by the metadata filtering test vectors
+      await metadataVectorDB.createIndex({ indexName, dimension: 4 });
+    },
+    deleteIndex: async (indexName: string) => {
+      await metadataVectorDB.deleteIndex({ indexName });
+    },
+    waitForIndexing: async () => {
+      // PG doesn't need to wait for indexing
+    },
   });
 });

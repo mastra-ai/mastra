@@ -10,12 +10,12 @@ import '@assistant-ui/react-markdown/styles/dot.css';
 import { CheckIcon, CopyIcon } from 'lucide-react';
 import { FC, ImgHTMLAttributes, memo, useEffect, useState } from 'react';
 import remarkGfm from 'remark-gfm';
-import { makePrismAsyncSyntaxHighlighter } from '@assistant-ui/react-syntax-highlighter';
+import { makePrismAsyncLightSyntaxHighlighter } from '@assistant-ui/react-syntax-highlighter';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
 import { cn } from '@/lib/utils';
 
-const SyntaxHighlighter = makePrismAsyncSyntaxHighlighter({
+const SyntaxHighlighter = makePrismAsyncLightSyntaxHighlighter({
   style: coldarkDark,
   customStyle: {
     margin: 0,

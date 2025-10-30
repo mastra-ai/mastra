@@ -28,19 +28,21 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
     inputSchema,
     outputSchema,
     description: toolDescription,
-    execute: async ({ context, mastra, runtimeContext }) => {
-      const indexName: string = runtimeContext.get('indexName') ?? options.indexName;
-      const vectorStoreName: string = runtimeContext.get('vectorStoreName') ?? options.vectorStoreName;
+    execute: async ({ context, mastra, requestContext }) => {
+      const indexName: string = requestContext.get('indexName') ?? options.indexName;
+      const vectorStoreName: string = requestContext.get('vectorStoreName') ?? options.vectorStoreName;
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
       if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`);
-      const includeSources: boolean = runtimeContext.get('includeSources') ?? options.includeSources ?? true;
-      const randomWalkSteps: number | undefined = runtimeContext.get('randomWalkSteps') ?? graphOptions.randomWalkSteps;
-      const restartProb: number | undefined = runtimeContext.get('restartProb') ?? graphOptions.restartProb;
-      const topK: number = runtimeContext.get('topK') ?? context.topK ?? 10;
-      const filter: Record<string, any> = runtimeContext.get('filter') ?? context.filter;
+      const includeSources: boolean = requestContext.get('includeSources') ?? options.includeSources ?? true;
+      const randomWalkSteps: number | undefined = requestContext.get('randomWalkSteps') ?? graphOptions.randomWalkSteps;
+      const restartProb: number | undefined = requestContext.get('restartProb') ?? graphOptions.restartProb;
+      const topK: number = requestContext.get('topK') ?? context.topK ?? 10;
+      const filter: Record<string, any> = requestContext.get('filter') ?? context.filter;
       const queryText = context.queryText;
+      const providerOptions: Record<string, Record<string, any>> | undefined =
+        requestContext.get('providerOptions') ?? options.providerOptions;
 
-      const enableFilter = !!runtimeContext.get('filter') || (options.enableFilter ?? false);
+      const enableFilter = !!requestContext.get('filter') || (options.enableFilter ?? false);
 
       const logger = mastra?.getLogger();
       if (!logger) {
@@ -92,6 +94,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
           queryFilter: Object.keys(queryFilter || {}).length > 0 ? queryFilter : undefined,
           topK: topKValue,
           includeVectors: true,
+          providerOptions,
         });
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });

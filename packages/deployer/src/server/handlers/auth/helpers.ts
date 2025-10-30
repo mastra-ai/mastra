@@ -3,12 +3,41 @@ import type { HonoRequest } from 'hono';
 import { defaultAuthConfig } from './defaults';
 
 export const isDevPlaygroundRequest = (req: HonoRequest): boolean => {
-  return req.header('x-mastra-dev-playground') === 'true' && (req.header('referer')?.includes('localhost') ?? false);
+  return req.header('x-mastra-dev-playground') === 'true' && process.env.MASTRA_DEV === 'true';
 };
 
-export const isProtectedPath = (path: string, method: string, authConfig: MastraAuthConfig): boolean => {
+export const isCustomRoutePublic = (
+  path: string,
+  method: string,
+  customRouteAuthConfig?: Map<string, boolean>,
+): boolean => {
+  if (!customRouteAuthConfig) {
+    return false;
+  }
+
+  // Check exact match first
+  const routeKey = `${method}:${path}`;
+  if (customRouteAuthConfig.has(routeKey)) {
+    return !customRouteAuthConfig.get(routeKey); // Return true if requiresAuth is false
+  }
+
+  // Check ALL method
+  const allRouteKey = `ALL:${path}`;
+  if (customRouteAuthConfig.has(allRouteKey)) {
+    return !customRouteAuthConfig.get(allRouteKey);
+  }
+
+  return false;
+};
+
+export const isProtectedPath = (
+  path: string,
+  method: string,
+  authConfig: MastraAuthConfig,
+  customRouteAuthConfig?: Map<string, boolean>,
+): boolean => {
   const protectedAccess = [...(defaultAuthConfig.protected || []), ...(authConfig.protected || [])];
-  return isAnyMatch(path, method, protectedAccess);
+  return isAnyMatch(path, method, protectedAccess) || !isCustomRoutePublic(path, method, customRouteAuthConfig);
 };
 
 export const canAccessPublicly = (path: string, method: string, authConfig: MastraAuthConfig): boolean => {
@@ -67,7 +96,6 @@ export const pathMatchesRule = (path: string, rulePath: string | RegExp | string
   }
 
   if (rulePath instanceof RegExp) {
-    console.log('rulePath', rulePath, path, rulePath.test(path));
     return rulePath.test(path);
   }
 

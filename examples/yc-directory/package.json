@@ -10,20 +10,20 @@
   },
   "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "description": "",
   "dependencies": {
     "@mastra/core": "latest",
     "@mastra/loggers": "latest",
     "@mastra/evals": "latest",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@ai-sdk/openai": "latest",
     "@types/node": "^20.17.57",
     "mastra": "latest",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.3"
   },
   "pnpm": {
     "overrides": {

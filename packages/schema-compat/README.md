@@ -142,7 +142,3 @@ pnpm test
 # Run tests in watch mode
 pnpm test --watch
 ```
-
-## License
-
-Elastic-2.0

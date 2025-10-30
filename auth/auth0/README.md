@@ -83,7 +83,3 @@ const isAuthorized = await auth0Provider.authorizeUser(user);
 - Node.js 16 or higher
 - Auth0 account and configured application
 - Valid Auth0 domain and API identifier
-
-## License
-
-MIT

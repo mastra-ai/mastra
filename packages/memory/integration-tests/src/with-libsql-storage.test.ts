@@ -23,9 +23,7 @@ describe('Memory with LibSQL Integration', () => {
       topK: 3,
       messageRange: 2,
     },
-    threads: {
-      generateTitle: false,
-    },
+    generateTitle: false,
   };
   const memory = new Memory({
     storage: new LibSQLStore({
@@ -42,5 +40,8 @@ describe('Memory with LibSQL Integration', () => {
     storageTypeForWorker: StorageType.LibSQL,
     storageConfigForWorker: { url: 'file:libsql-test.db' },
     memoryOptionsForWorker: memoryOptions,
+    vectorConfigForWorker: {
+      connectionUrl: 'file:libsql-test.db',
+    },
   });
 });

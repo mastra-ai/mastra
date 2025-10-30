@@ -1,3 +1,4 @@
+import type { RequestContext } from '@mastra/core/request-context';
 import type {
   CreateIndexParams,
   GetVectorIndexResponse,
@@ -6,6 +7,7 @@ import type {
   ClientOptions,
   UpsertVectorParams,
 } from '../types';
+import { requestContextQueryString } from '../utils';
 
 import { BaseResource } from './base';
 
@@ -20,10 +22,13 @@ export class Vector extends BaseResource {
   /**
    * Retrieves details about a specific vector index
    * @param indexName - Name of the index to get details for
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing vector index details
    */
-  details(indexName: string): Promise<GetVectorIndexResponse> {
-    return this.request(`/api/vector/${this.vectorName}/indexes/${indexName}`);
+  details(indexName: string, requestContext?: RequestContext | Record<string, any>): Promise<GetVectorIndexResponse> {
+    return this.request(
+      `/api/vector/${this.vectorName}/indexes/${indexName}${requestContextQueryString(requestContext)}`,
+    );
   }
 
   /**
@@ -39,10 +44,11 @@ export class Vector extends BaseResource {
 
   /**
    * Retrieves a list of all available indexes
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing array of index names
    */
-  getIndexes(): Promise<{ indexes: string[] }> {
-    return this.request(`/api/vector/${this.vectorName}/indexes`);
+  getIndexes(requestContext?: RequestContext | Record<string, any>): Promise<{ indexes: string[] }> {
+    return this.request(`/api/vector/${this.vectorName}/indexes${requestContextQueryString(requestContext)}`);
   }
 
   /**

@@ -33,9 +33,30 @@ async function fetchBlogPosts(): Promise<string> {
   return 'Mastra.ai Blog Posts:\n\n' + blogLinks.join('\n');
 }
 
+// Helper function to validate URL against allowed domain
+function validateBlogUrl(url: string): boolean {
+  try {
+    const inputUrl = new URL(url);
+    const baseUrl = new URL(BLOG_BASE_URL);
+
+    // Check if the hostname matches exactly
+    return inputUrl.hostname === baseUrl.hostname;
+  } catch {
+    // Invalid URL format
+    return false;
+  }
+}
+
 // Helper function to fetch a single blog post as markdown
 async function fetchBlogPost(url: string): Promise<string> {
   void logger.debug(`Fetching blog post: ${url}`);
+
+  // Validate URL before making the request
+  if (!validateBlogUrl(url)) {
+    void logger.error(`Rejected request to unauthorized domain: ${url}`);
+    return `URL must be from the same domain as ${BLOG_BASE_URL}`;
+  }
+
   const response = await fetch(url);
   if (!response.ok) {
     if (response.status === 429) {

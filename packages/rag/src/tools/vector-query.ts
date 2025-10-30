@@ -1,5 +1,5 @@
 import { createTool } from '@mastra/core/tools';
-import type { EmbeddingModel } from 'ai';
+import type { MastraVector, MastraEmbeddingModel } from '@mastra/core/vector';
 import { z } from 'zod';
 
 import { rerank, rerankWithScorer } from '../rerank';
@@ -11,7 +11,9 @@ import type { VectorQueryToolOptions } from './types';
 
 export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
   const { id, description } = options;
-  const toolId = id || `VectorQuery ${options.vectorStoreName} ${options.indexName} Tool`;
+  const storeName = options['vectorStoreName'] ? options.vectorStoreName : 'DirectVectorStore';
+
+  const toolId = id || `VectorQuery ${storeName} ${options.indexName} Tool`;
   const toolDescription = description || defaultVectorQueryDescription();
   const inputSchema = options.enableFilter ? filterSchema : z.object(baseSchema).passthrough();
 
@@ -20,22 +22,25 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
     description: toolDescription,
     inputSchema,
     outputSchema,
-    execute: async ({ context, mastra, runtimeContext }) => {
-      const indexName: string = runtimeContext.get('indexName') ?? options.indexName;
-      const vectorStoreName: string = runtimeContext.get('vectorStoreName') ?? options.vectorStoreName;
-      const includeVectors: boolean = runtimeContext.get('includeVectors') ?? options.includeVectors ?? false;
-      const includeSources: boolean = runtimeContext.get('includeSources') ?? options.includeSources ?? true;
-      const reranker: RerankConfig = runtimeContext.get('reranker') ?? options.reranker;
-      const databaseConfig = runtimeContext.get('databaseConfig') ?? options.databaseConfig;
-      const model: EmbeddingModel<string> = runtimeContext.get('model') ?? options.model;
+    execute: async ({ context, mastra, requestContext }) => {
+      const indexName: string = requestContext.get('indexName') ?? options.indexName;
+      const vectorStoreName: string =
+        'vectorStore' in options ? storeName : (requestContext.get('vectorStoreName') ?? storeName);
+      const includeVectors: boolean = requestContext.get('includeVectors') ?? options.includeVectors ?? false;
+      const includeSources: boolean = requestContext.get('includeSources') ?? options.includeSources ?? true;
+      const reranker: RerankConfig = requestContext.get('reranker') ?? options.reranker;
+      const databaseConfig = requestContext.get('databaseConfig') ?? options.databaseConfig;
+      const model: MastraEmbeddingModel<string> = requestContext.get('model') ?? options.model;
+      const providerOptions: Record<string, Record<string, any>> | undefined =
+        requestContext.get('providerOptions') ?? options.providerOptions;
 
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
-      if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`);
+      if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`); // won't fire
 
-      const topK: number = runtimeContext.get('topK') ?? context.topK ?? 10;
-      const filter: Record<string, any> = runtimeContext.get('filter') ?? context.filter;
+      const topK: number = requestContext.get('topK') ?? context.topK ?? 10;
+      const filter: Record<string, any> = requestContext.get('filter') ?? context.filter;
       const queryText = context.queryText;
-      const enableFilter = !!runtimeContext.get('filter') || (options.enableFilter ?? false);
+      const enableFilter = !!requestContext.get('filter') || (options.enableFilter ?? false);
 
       const logger = mastra?.getLogger();
       if (!logger) {
@@ -54,8 +59,12 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
               ? Number(topK)
               : 10;
 
-        const vectorStore = mastra?.getVector(vectorStoreName);
-
+        let vectorStore: MastraVector | undefined = undefined;
+        if ('vectorStore' in options) {
+          vectorStore = options.vectorStore;
+        } else if (mastra) {
+          vectorStore = mastra.getVector(vectorStoreName);
+        }
         if (!vectorStore) {
           if (logger) {
             logger.error('Vector store not found', { vectorStoreName });
@@ -90,6 +99,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
           topK: topKValue,
           includeVectors,
           databaseConfig,
+          providerOptions,
         });
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });

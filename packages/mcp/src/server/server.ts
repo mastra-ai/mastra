@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import type * as http from 'node:http';
-import type { InternalCoreTool } from '@mastra/core';
-import { createTool, makeCoreTool } from '@mastra/core';
 import type { ToolsInput, Agent } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { MCPServerBase } from '@mastra/core/mcp';
@@ -9,12 +7,13 @@ import type {
   MCPServerConfig,
   ServerInfo,
   ServerDetailInfo,
-  ConvertedTool,
   MCPServerHonoSSEOptions,
   MCPServerSSEOptions,
-  MCPToolType,
 } from '@mastra/core/mcp';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
+import { createTool } from '@mastra/core/tools';
+import type { InternalCoreTool, MCPToolType, MastraToolInvocationOptions } from '@mastra/core/tools';
+import { makeCoreTool } from '@mastra/core/utils';
 import type { Workflow } from '@mastra/core/workflows';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -31,6 +30,7 @@ import {
   UnsubscribeRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
+  SetLevelRequestSchema,
   PromptSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type {
@@ -42,6 +42,7 @@ import type {
   CallToolResult,
   ElicitResult,
   ElicitRequest,
+  LoggingLevel,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
@@ -49,7 +50,35 @@ import { SSETransport } from 'hono-mcp-server-sse-transport';
 import { z } from 'zod';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
-import type { MCPServerPrompts, MCPServerResources, ElicitationActions, MCPTool } from './types';
+import type { MCPServerPrompts, MCPServerResources, ElicitationActions } from './types';
+/**
+ * MCPServer exposes Mastra tools, agents, and workflows as a Model Context Protocol (MCP) server.
+ *
+ * This class allows any MCP client (like Cursor, Windsurf, or Claude Desktop) to connect and use your
+ * Mastra capabilities. It supports both stdio (subprocess) and SSE (HTTP) MCP transports.
+ *
+ * @example
+ * ```typescript
+ * import { MCPServer } from '@mastra/mcp';
+ * import { createTool } from '@mastra/core/tools';
+ * import { z } from 'zod';
+ *
+ * const weatherTool = createTool({
+ *   id: 'getWeather',
+ *   description: 'Gets the current weather for a location.',
+ *   inputSchema: z.object({ location: z.string() }),
+ *   execute: async ({ context }) => `Weather in ${context.location} is sunny.`,
+ * });
+ *
+ * const server = new MCPServer({
+ *   name: 'My Weather Server',
+ *   version: '1.0.0',
+ *   tools: { weatherTool },
+ * });
+ *
+ * await server.startStdio();
+ * ```
+ */
 export class MCPServer extends MCPServerBase {
   private server: Server;
   private stdioTransport?: StdioServerTransport;
@@ -65,41 +94,143 @@ export class MCPServer extends MCPServerBase {
   private definedPrompts?: Prompt[];
   private promptOptions?: MCPServerPrompts;
   private subscriptions: Set<string> = new Set();
+  private currentLoggingLevel: LoggingLevel | undefined;
+
+  /**
+   * Provides methods to notify clients about resource changes.
+   *
+   * @example
+   * ```typescript
+   * // Notify that a specific resource was updated
+   * await server.resources.notifyUpdated({ uri: 'file://data.txt' });
+   *
+   * // Notify that the resource list changed
+   * await server.resources.notifyListChanged();
+   * ```
+   */
   public readonly resources: ServerResourceActions;
+
+  /**
+   * Provides methods to notify clients about prompt changes.
+   *
+   * @example
+   * ```typescript
+   * // Notify that the prompt list changed
+   * await server.prompts.notifyListChanged();
+   * ```
+   */
   public readonly prompts: ServerPromptActions;
+
+  /**
+   * Provides methods for interactive user input collection during tool execution.
+   *
+   * @example
+   * ```typescript
+   * // Within a tool's execute function
+   * const result = await options.elicitation.sendRequest({
+   *   message: 'Please provide your email address',
+   *   requestedSchema: {
+   *     type: 'object',
+   *     properties: {
+   *       email: { type: 'string', format: 'email' }
+   *     },
+   *     required: ['email']
+   *   }
+   * });
+   * ```
+   */
   public readonly elicitation: ElicitationActions;
 
   /**
-   * Get the current stdio transport.
+   * Gets the stdio transport instance if the server was started using stdio.
+   *
+   * This is primarily for internal checks or testing purposes.
+   *
+   * @returns The stdio transport instance, or undefined if not using stdio transport
    */
   public getStdioTransport(): StdioServerTransport | undefined {
     return this.stdioTransport;
   }
 
   /**
-   * Get the current SSE transport.
+   * Gets the SSE transport instance if the server was started using SSE.
+   *
+   * This is primarily for internal checks or testing purposes.
+   *
+   * @returns The SSE transport instance, or undefined if not using SSE transport
    */
   public getSseTransport(): SSEServerTransport | undefined {
     return this.sseTransport;
   }
 
   /**
-   * Get the current SSE Hono transport.
+   * Gets the Hono SSE transport instance for a specific session.
+   *
+   * This is primarily for internal checks or testing purposes.
+   *
+   * @param sessionId - The session identifier
+   * @returns The Hono SSE transport instance, or undefined if session not found
    */
   public getSseHonoTransport(sessionId: string): SSETransport | undefined {
     return this.sseHonoTransports.get(sessionId);
   }
 
   /**
-   * Get the current server instance.
+   * Gets the underlying MCP SDK Server instance.
+   *
+   * This provides access to the low-level server instance for advanced use cases.
+   *
+   * @returns The Server instance from @modelcontextprotocol/sdk
    */
   public getServer(): Server {
     return this.server;
   }
 
   /**
-   * Construct a new MCPServer instance.
-   * @param opts - Configuration options for the server, including registry metadata.
+   * Creates a new MCPServer instance.
+   *
+   * The server exposes tools, agents, and workflows to MCP clients. Agents are automatically
+   * converted to tools named `ask_<agentKey>`, and workflows become tools named `run_<workflowKey>`.
+   *
+   * @param opts - Configuration options for the server
+   * @param opts.name - Descriptive name for the server (e.g., 'My Weather Server')
+   * @param opts.version - Semantic version of the server (e.g., '1.0.0')
+   * @param opts.tools - Object mapping tool names to tool definitions
+   * @param opts.agents - Optional object mapping agent identifiers to Agent instances
+   * @param opts.workflows - Optional object mapping workflow identifiers to Workflow instances
+   * @param opts.resources - Optional resource configuration for exposing data and content
+   * @param opts.prompts - Optional prompt configuration for exposing reusable templates
+   * @param opts.id - Optional unique identifier (generated if not provided)
+   * @param opts.description - Optional description of what the server does
+   *
+   * @example
+   * ```typescript
+   * import { MCPServer } from '@mastra/mcp';
+   * import { Agent } from '@mastra/core/agent';
+   * import { createTool } from '@mastra/core/tools';
+   * import { z } from 'zod';
+   *
+   * const myAgent = new Agent({
+   *   name: 'Helper',
+   *   description: 'A helpful assistant',
+   *   instructions: 'You are helpful.',
+   *   model: 'openai/gpt-4o-mini',
+   * });
+   *
+   * const server = new MCPServer({
+   *   name: 'My Server',
+   *   version: '1.0.0',
+   *   tools: {
+   *     weatherTool: createTool({
+   *       id: 'getWeather',
+   *       description: 'Gets weather',
+   *       inputSchema: z.object({ location: z.string() }),
+   *       execute: async ({ context }) => `Sunny in ${context.location}`,
+   *     })
+   *   },
+   *   agents: { myAgent },
+   * });
+   * ```
    */
   constructor(opts: MCPServerConfig & { resources?: MCPServerResources; prompts?: MCPServerPrompts }) {
     super(opts);
@@ -218,7 +349,7 @@ export class MCPServer extends MCPServerBase {
       return {
         tools: Object.values(this.convertedTools).map(tool => {
           const toolSpec: any = {
-            name: tool.name,
+            name: tool.id || 'unknown',
             description: tool.description,
             inputSchema: tool.parameters.jsonSchema,
           };
@@ -234,7 +365,7 @@ export class MCPServer extends MCPServerBase {
     serverInstance.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       const startTime = Date.now();
       try {
-        const tool = this.convertedTools[request.params.name] as MCPTool;
+        const tool = this.convertedTools[request.params.name];
         if (!tool) {
           this.logger.warn(`CallTool: Unknown tool '${request.params.name}' requested.`);
           return {
@@ -248,9 +379,25 @@ export class MCPServer extends MCPServerBase {
           this.logger.warn(`CallTool: Invalid tool arguments for '${request.params.name}'`, {
             errors: validation.error,
           });
+
+          // Format validation errors for agent understanding
+          let errorMessages = 'Validation failed';
+          if ('errors' in validation.error && Array.isArray(validation.error.errors)) {
+            errorMessages = validation.error.errors
+              .map((e: any) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+              .join('\n');
+          } else if (validation.error instanceof Error) {
+            errorMessages = validation.error.message;
+          }
+
           return {
-            content: [{ type: 'text', text: `Invalid tool arguments: ${JSON.stringify(validation.error)}` }],
-            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(request.params.arguments, null, 2)}`,
+              },
+            ],
+            isError: true, // Set to true so the LLM sees the error and can self-correct
           };
         }
         if (!tool.execute) {
@@ -268,12 +415,24 @@ export class MCPServer extends MCPServerBase {
           },
         };
 
-        const result = await tool.execute(validation?.value, {
+        const mcpOptions: MastraToolInvocationOptions = {
           messages: [],
           toolCallId: '',
-          elicitation: sessionElicitation,
-          extra,
-        });
+          // Pass MCP-specific context through the mcp property
+          mcp: {
+            elicitation: sessionElicitation,
+            extra,
+          },
+          // @ts-ignore this is to let people know that the elicitation and extra keys are now nested under mcp.elicitation and mcp.extra in tool arguments
+          get elicitation() {
+            throw new Error(`The "elicitation" key is now nested under "mcp.elicitation" in tool arguments`);
+          },
+          get extra() {
+            throw new Error(`The "extra" key is now nested under "mcp.extra" in tool arguments`);
+          },
+        };
+
+        const result = await tool.execute(validation?.value ?? request.params.arguments ?? {}, mcpOptions);
 
         this.logger.debug(`CallTool: Tool '${request.params.name}' executed successfully with result:`, result);
         const duration = Date.now() - startTime;
@@ -342,6 +501,13 @@ export class MCPServer extends MCPServerBase {
       }
     });
 
+    // Set logging level handler
+    serverInstance.setRequestHandler(SetLevelRequestSchema, async request => {
+      this.currentLoggingLevel = request.params.level;
+      this.logger.debug(`Logging level set to: ${request.params.level}`);
+      return {};
+    });
+
     // Register resource handlers if resources are configured
     if (this.resourceOptions) {
       this.registerResourceHandlersOnServer(serverInstance);
@@ -362,13 +528,13 @@ export class MCPServer extends MCPServerBase {
 
     // List resources handler
     if (capturedResourceOptions.listResources) {
-      serverInstance.setRequestHandler(ListResourcesRequestSchema, async () => {
+      serverInstance.setRequestHandler(ListResourcesRequestSchema, async (_request, extra) => {
         this.logger.debug('Handling ListResources request');
         if (this.definedResources) {
           return { resources: this.definedResources };
         } else {
           try {
-            const resources = await capturedResourceOptions.listResources!();
+            const resources = await capturedResourceOptions.listResources!({ extra });
             this.definedResources = resources;
             this.logger.debug(`Fetched and cached ${this.definedResources.length} resources.`);
             return { resources: this.definedResources };
@@ -382,13 +548,13 @@ export class MCPServer extends MCPServerBase {
 
     // Read resource handler
     if (capturedResourceOptions.getResourceContent) {
-      serverInstance.setRequestHandler(ReadResourceRequestSchema, async request => {
+      serverInstance.setRequestHandler(ReadResourceRequestSchema, async (request, extra) => {
         const startTime = Date.now();
         const uri = request.params.uri;
         this.logger.debug(`Handling ReadResource request for URI: ${uri}`);
 
         if (!this.definedResources) {
-          const resources = await this.resourceOptions?.listResources?.();
+          const resources = await this.resourceOptions?.listResources?.({ extra });
           if (!resources) throw new Error('Failed to load resources');
           this.definedResources = resources;
         }
@@ -401,7 +567,7 @@ export class MCPServer extends MCPServerBase {
         }
 
         try {
-          const resourcesOrResourceContent = await capturedResourceOptions.getResourceContent({ uri });
+          const resourcesOrResourceContent = await capturedResourceOptions.getResourceContent({ uri, extra });
           const resourcesContent = Array.isArray(resourcesOrResourceContent)
             ? resourcesOrResourceContent
             : [resourcesOrResourceContent];
@@ -435,13 +601,13 @@ export class MCPServer extends MCPServerBase {
 
     // Resource templates handler
     if (capturedResourceOptions.resourceTemplates) {
-      serverInstance.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+      serverInstance.setRequestHandler(ListResourceTemplatesRequestSchema, async (_request, extra) => {
         this.logger.debug('Handling ListResourceTemplates request');
         if (this.definedResourceTemplates) {
           return { resourceTemplates: this.definedResourceTemplates };
         } else {
           try {
-            const templates = await capturedResourceOptions.resourceTemplates!();
+            const templates = await capturedResourceOptions.resourceTemplates!({ extra });
             this.definedResourceTemplates = templates;
             this.logger.debug(`Fetched and cached ${this.definedResourceTemplates.length} resource templates.`);
             return { resourceTemplates: this.definedResourceTemplates };
@@ -478,7 +644,7 @@ export class MCPServer extends MCPServerBase {
 
     // List prompts handler
     if (capturedPromptOptions.listPrompts) {
-      serverInstance.setRequestHandler(ListPromptsRequestSchema, async () => {
+      serverInstance.setRequestHandler(ListPromptsRequestSchema, async (_request, extra) => {
         this.logger.debug('Handling ListPrompts request');
         if (this.definedPrompts) {
           return {
@@ -486,7 +652,7 @@ export class MCPServer extends MCPServerBase {
           };
         } else {
           try {
-            const prompts = await capturedPromptOptions.listPrompts();
+            const prompts = await capturedPromptOptions.listPrompts({ extra });
             for (const prompt of prompts) {
               PromptSchema.parse(prompt);
             }
@@ -509,11 +675,11 @@ export class MCPServer extends MCPServerBase {
     if (capturedPromptOptions.getPromptMessages) {
       serverInstance.setRequestHandler(
         GetPromptRequestSchema,
-        async (request: { params: { name: string; version?: string; arguments?: any } }) => {
+        async (request: { params: { name: string; version?: string; arguments?: any } }, extra) => {
           const startTime = Date.now();
           const { name, version, arguments: args } = request.params;
           if (!this.definedPrompts) {
-            const prompts = await this.promptOptions?.listPrompts?.();
+            const prompts = await this.promptOptions?.listPrompts?.({ extra });
             if (!prompts) throw new Error('Failed to load prompts');
             this.definedPrompts = prompts;
           }
@@ -537,7 +703,7 @@ export class MCPServer extends MCPServerBase {
           try {
             let messages: any[] = [];
             if (capturedPromptOptions.getPromptMessages) {
-              messages = await capturedPromptOptions.getPromptMessages({ name, version, args });
+              messages = await capturedPromptOptions.getPromptMessages({ name, version, args, extra });
             }
             const duration = Date.now() - startTime;
             this.logger.info(
@@ -556,9 +722,9 @@ export class MCPServer extends MCPServerBase {
 
   private convertAgentsToTools(
     agentsConfig?: Record<string, Agent>,
-    definedConvertedTools?: Record<string, ConvertedTool>,
-  ): Record<string, ConvertedTool> {
-    const agentTools: Record<string, ConvertedTool> = {};
+    definedConvertedTools?: Record<string, InternalCoreTool>,
+  ): Record<string, InternalCoreTool> {
+    const agentTools: Record<string, InternalCoreTool> = {};
     if (!agentsConfig) {
       return agentTools;
     }
@@ -592,12 +758,12 @@ export class MCPServer extends MCPServerBase {
         inputSchema: z.object({
           message: z.string().describe('The question or input for the agent.'),
         }),
-        execute: async ({ context, runtimeContext }) => {
+        execute: async ({ context, requestContext, tracingContext }) => {
           this.logger.debug(
             `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${context.message}"`,
           );
           try {
-            const response = await agent.generate(context.message, { runtimeContext });
+            const response = await agent.generate(context.message, { requestContext, tracingContext });
             return response;
           } catch (error) {
             this.logger.error(`Error executing agent tool '${agentToolName}' for agent '${agent.name}':`, error);
@@ -610,18 +776,19 @@ export class MCPServer extends MCPServerBase {
         name: agentToolName,
         logger: this.logger,
         mastra: this.mastra,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
+        tracingContext: {},
         description: agentToolDefinition.description,
       };
       const coreTool = makeCoreTool(agentToolDefinition, options) as InternalCoreTool;
 
       agentTools[agentToolName] = {
-        name: agentToolName,
-        description: coreTool.description,
-        parameters: coreTool.parameters,
-        execute: coreTool.execute!,
-        toolType: 'agent',
-      };
+        ...coreTool,
+        id: agentToolName,
+        mcp: {
+          toolType: 'agent',
+        },
+      } as InternalCoreTool;
       this.logger.info(`Registered agent '${agent.name}' (key: '${agentKey}') as tool: '${agentToolName}'`);
     }
     return agentTools;
@@ -629,9 +796,9 @@ export class MCPServer extends MCPServerBase {
 
   private convertWorkflowsToTools(
     workflowsConfig?: Record<string, Workflow>,
-    definedConvertedTools?: Record<string, ConvertedTool>,
-  ): Record<string, ConvertedTool> {
-    const workflowTools: Record<string, ConvertedTool> = {};
+    definedConvertedTools?: Record<string, InternalCoreTool>,
+  ): Record<string, InternalCoreTool> {
+    const workflowTools: Record<string, InternalCoreTool> = {};
     if (!workflowsConfig) {
       return workflowTools;
     }
@@ -664,15 +831,15 @@ export class MCPServer extends MCPServerBase {
         id: workflowToolName,
         description: `Run workflow '${workflowKey}'. Workflow description: ${workflowDescription}`,
         inputSchema: workflow.inputSchema,
-        execute: async ({ context, runtimeContext }) => {
+        execute: async ({ context, requestContext, tracingContext }) => {
           this.logger.debug(
             `Executing workflow tool '${workflowToolName}' for workflow '${workflow.id}' with input:`,
             context,
           );
           try {
-            const run = workflow.createRun({ runId: runtimeContext?.get('runId') });
+            const run = await workflow.createRunAsync({ runId: requestContext?.get('runId') });
 
-            const response = await run.start({ inputData: context, runtimeContext });
+            const response = await run.start({ inputData: context, requestContext, tracingContext });
 
             return response;
           } catch (error) {
@@ -689,20 +856,20 @@ export class MCPServer extends MCPServerBase {
         name: workflowToolName,
         logger: this.logger,
         mastra: this.mastra,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
+        tracingContext: {},
         description: workflowToolDefinition.description,
       };
 
       const coreTool = makeCoreTool(workflowToolDefinition, options) as InternalCoreTool;
 
       workflowTools[workflowToolName] = {
-        name: workflowToolName,
-        description: coreTool.description,
-        parameters: coreTool.parameters,
-        outputSchema: coreTool.outputSchema,
-        execute: coreTool.execute!,
-        toolType: 'workflow',
-      };
+        ...coreTool,
+        id: workflowToolName,
+        mcp: {
+          toolType: 'workflow',
+        },
+      } as InternalCoreTool;
       this.logger.info(`Registered workflow '${workflow.id}' (key: '${workflowKey}') as tool: '${workflowToolName}'`);
     }
     return workflowTools;
@@ -720,8 +887,8 @@ export class MCPServer extends MCPServerBase {
     tools: ToolsInput,
     agentsConfig?: Record<string, Agent>,
     workflowsConfig?: Record<string, Workflow>,
-  ): Record<string, ConvertedTool> {
-    const definedConvertedTools: Record<string, ConvertedTool> = {};
+  ): Record<string, InternalCoreTool> {
+    const definedConvertedTools: Record<string, InternalCoreTool> = {};
 
     for (const toolName of Object.keys(tools)) {
       const toolInstance = tools[toolName];
@@ -737,7 +904,8 @@ export class MCPServer extends MCPServerBase {
 
       const options = {
         name: toolName,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
+        tracingContext: {},
         mastra: this.mastra,
         logger: this.logger,
         description: toolInstance?.description,
@@ -746,18 +914,15 @@ export class MCPServer extends MCPServerBase {
       const coreTool = makeCoreTool(toolInstance, options) as InternalCoreTool;
 
       definedConvertedTools[toolName] = {
-        name: toolName,
-        description: coreTool.description,
-        parameters: coreTool.parameters,
-        outputSchema: coreTool.outputSchema,
-        execute: coreTool.execute!,
-      };
+        ...coreTool,
+        id: toolName,
+      } as InternalCoreTool;
       this.logger.info(`Registered explicit tool: '${toolName}'`);
     }
     this.logger.info(`Total defined tools registered: ${Object.keys(definedConvertedTools).length}`);
 
-    let agentDerivedTools: Record<string, ConvertedTool> = {};
-    let workflowDerivedTools: Record<string, ConvertedTool> = {};
+    let agentDerivedTools: Record<string, InternalCoreTool> = {};
+    let workflowDerivedTools: Record<string, InternalCoreTool> = {};
     try {
       agentDerivedTools = this.convertAgentsToTools(agentsConfig, definedConvertedTools);
       workflowDerivedTools = this.convertWorkflowsToTools(workflowsConfig, definedConvertedTools);
@@ -791,7 +956,23 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Start the MCP server using stdio transport (for Windsurf integration).
+   * Starts the MCP server using standard input/output (stdio) transport.
+   *
+   * This is typically used when running the server as a command-line program that MCP clients
+   * spawn as a subprocess (e.g., integration with Windsurf, Cursor, or Claude Desktop).
+   *
+   * @throws {MastraError} If the stdio connection fails
+   *
+   * @example
+   * ```typescript
+   * const server = new MCPServer({
+   *   name: 'My Server',
+   *   version: '1.0.0',
+   *   tools: { weatherTool },
+   * });
+   *
+   * await server.startStdio();
+   * ```
    */
   public async startStdio(): Promise<void> {
     this.stdioTransport = new StdioServerTransport();
@@ -816,14 +997,38 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Handles MCP-over-SSE protocol for user-provided HTTP servers.
-   * Call this from your HTTP server for both the SSE and message endpoints.
+   * Integrates the MCP server with an existing HTTP server using Server-Sent Events (SSE).
    *
-   * @param url Parsed URL of the incoming request
-   * @param ssePath Path for establishing the SSE connection (e.g. '/sse')
-   * @param messagePath Path for POSTing client messages (e.g. '/message')
-   * @param req Incoming HTTP request
-   * @param res HTTP response (must support .write/.end)
+   * Call this method from your web server's request handler for both the SSE and message paths.
+   * This enables web-based MCP clients to connect to your server.
+   *
+   * @param options - Configuration for SSE integration
+   * @param options.url - Parsed URL of the incoming request
+   * @param options.ssePath - Path for establishing SSE connection (e.g., '/sse')
+   * @param options.messagePath - Path for POSTing client messages (e.g., '/message')
+   * @param options.req - Incoming HTTP request object
+   * @param options.res - HTTP response object (must support .write/.end)
+   *
+   * @throws {MastraError} If SSE connection setup fails
+   *
+   * @example
+   * ```typescript
+   * import http from 'http';
+   *
+   * const httpServer = http.createServer(async (req, res) => {
+   *   await server.startSSE({
+   *     url: new URL(req.url || '', `http://localhost:1234`),
+   *     ssePath: '/sse',
+   *     messagePath: '/message',
+   *     req,
+   *     res,
+   *   });
+   * });
+   *
+   * httpServer.listen(1234, () => {
+   *   console.log('MCP server listening on http://localhost:1234/sse');
+   * });
+   * ```
    */
   public async startSSE({ url, ssePath, messagePath, req, res }: MCPServerSSEOptions): Promise<void> {
     try {
@@ -866,13 +1071,37 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Handles MCP-over-SSE protocol for user-provided HTTP servers.
-   * Call this from your HTTP server for both the SSE and message endpoints.
+   * Integrates the MCP server with a Hono web framework using Server-Sent Events (SSE).
    *
-   * @param url Parsed URL of the incoming request
-   * @param ssePath Path for establishing the SSE connection (e.g. '/sse')
-   * @param messagePath Path for POSTing client messages (e.g. '/message')
-   * @param context Incoming Hono context
+   * Call this method from your Hono server's request handler for both the SSE and message paths.
+   * This enables Hono-based web applications to expose MCP servers.
+   *
+   * @param options - Configuration for Hono SSE integration
+   * @param options.url - Parsed URL of the incoming request
+   * @param options.ssePath - Path for establishing SSE connection (e.g., '/hono-sse')
+   * @param options.messagePath - Path for POSTing client messages (e.g., '/message')
+   * @param options.context - Hono context object
+   *
+   * @throws {MastraError} If Hono SSE connection setup fails
+   *
+   * @example
+   * ```typescript
+   * import { Hono } from 'hono';
+   *
+   * const app = new Hono();
+   *
+   * app.all('*', async (c) => {
+   *   const url = new URL(c.req.url);
+   *   return await server.startHonoSSE({
+   *     url,
+   *     ssePath: '/hono-sse',
+   *     messagePath: '/message',
+   *     context: c,
+   *   });
+   * });
+   *
+   * export default app;
+   * ```
    */
   public async startHonoSSE({ url, ssePath, messagePath, context }: MCPServerHonoSSEOptions) {
     try {
@@ -923,14 +1152,46 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Handles MCP-over-StreamableHTTP protocol for user-provided HTTP servers.
-   * Call this from your HTTP server for the streamable HTTP endpoint.
+   * Integrates the MCP server with an existing HTTP server using streamable HTTP transport.
    *
-   * @param url Parsed URL of the incoming request
-   * @param httpPath Path for establishing the streamable HTTP connection (e.g. '/mcp')
-   * @param req Incoming HTTP request
-   * @param res HTTP response (must support .write/.end)
-   * @param options Optional options to pass to the transport (e.g. sessionIdGenerator)
+   * This is the recommended modern transport method, providing better session management and
+   * reliability compared to SSE. Call this from your HTTP server's request handler.
+   *
+   * @param options - Configuration for HTTP integration
+   * @param options.url - Parsed URL of the incoming request
+   * @param options.httpPath - Path for the MCP endpoint (e.g., '/mcp')
+   * @param options.req - Incoming HTTP request (http.IncomingMessage)
+   * @param options.res - HTTP response object (http.ServerResponse)
+   * @param options.options - Optional transport options
+   * @param options.options.sessionIdGenerator - Function to generate unique session IDs (defaults to randomUUID)
+   * @param options.options.onsessioninitialized - Callback when a new session is initialized
+   * @param options.options.enableJsonResponse - If true, return JSON instead of SSE streaming
+   * @param options.options.eventStore - Event store for message resumability
+   *
+   * @throws {MastraError} If HTTP connection setup fails
+   *
+   * @example
+   * ```typescript
+   * import http from 'http';
+   * import { randomUUID } from 'crypto';
+   *
+   * const httpServer = http.createServer(async (req, res) => {
+   *   await server.startHTTP({
+   *     url: new URL(req.url || '', 'http://localhost:1234'),
+   *     httpPath: '/mcp',
+   *     req,
+   *     res,
+   *     options: {
+   *       sessionIdGenerator: () => randomUUID(),
+   *       onsessioninitialized: (sessionId) => {
+   *         console.log(`New MCP session: ${sessionId}`);
+   *       },
+   *     },
+   *   });
+   * });
+   *
+   * httpServer.listen(1234);
+   * ```
    */
   public async startHTTP({
     url,
@@ -1121,6 +1382,27 @@ export class MCPServer extends MCPServerBase {
     }
   }
 
+  /**
+   * Establishes the SSE connection for the MCP server.
+   *
+   * This is a lower-level method called internally by `startSSE()`. In most cases,
+   * you should use `startSSE()` instead which handles both connection establishment
+   * and message routing.
+   *
+   * @param params - Connection parameters
+   * @param params.messagePath - Path for POST requests from the client
+   * @param params.res - HTTP response object for the SSE stream
+   * @throws {MastraError} If SSE connection establishment fails
+   *
+   * @example
+   * ```typescript
+   * // Usually called internally by startSSE()
+   * await server.connectSSE({
+   *   messagePath: '/message',
+   *   res: response
+   * });
+   * ```
+   */
   public async connectSSE({
     messagePath,
     res,
@@ -1159,6 +1441,27 @@ export class MCPServer extends MCPServerBase {
     }
   }
 
+  /**
+   * Establishes the Hono SSE connection for the MCP server.
+   *
+   * This is a lower-level method called internally by `startHonoSSE()`. In most cases,
+   * you should use `startHonoSSE()` instead which handles both connection establishment
+   * and message routing.
+   *
+   * @param params - Connection parameters
+   * @param params.messagePath - Path for POST requests from the client
+   * @param params.stream - Hono SSE streaming API object
+   * @throws {MastraError} If Hono SSE connection establishment fails
+   *
+   * @example
+   * ```typescript
+   * // Usually called internally by startHonoSSE()
+   * await server.connectHonoSSE({
+   *   messagePath: '/message',
+   *   stream: sseStream
+   * });
+   * ```
+   */
   public async connectHonoSSE({ messagePath, stream }: { messagePath: string; stream: SSEStreamingApi }) {
     this.logger.debug('Received SSE connection');
     const sseTransport = new SSETransport(messagePath, stream);
@@ -1181,10 +1484,10 @@ export class MCPServer extends MCPServerBase {
       while (true) {
         // This will keep the connection alive
         // You can also await for a promise that never resolves
+        await stream.sleep(60_000);
         const sessionIds = Array.from(this.sseHonoTransports.keys() || []);
         this.logger.debug('Active Hono SSE sessions:', { sessionIds });
         await stream.write(':keep-alive\n\n');
-        await stream.sleep(60_000);
       }
     } catch (e) {
       const mastraError = new MastraError(
@@ -1205,7 +1508,21 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Close the MCP server and all its connections
+   * Closes the MCP server and releases all resources.
+   *
+   * This method cleanly shuts down all active transports (stdio, SSE, HTTP) and their
+   * associated connections. Call this when your application is shutting down.
+   *
+   * @throws {MastraError} If closing the server fails
+   *
+   * @example
+   * ```typescript
+   * // Graceful shutdown
+   * process.on('SIGTERM', async () => {
+   *   await server.close();
+   *   process.exit(0);
+   * });
+   * ```
    */
   async close() {
     try {
@@ -1255,8 +1572,19 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Gets the basic information about the server, conforming to the Server schema.
-   * @returns ServerInfo object.
+   * Gets basic information about the server.
+   *
+   * Returns metadata including server ID, name, description, repository, and version details.
+   * This information conforms to the MCP Server schema.
+   *
+   * @returns Server information object
+   *
+   * @example
+   * ```typescript
+   * const info = server.getServerInfo();
+   * console.log(`${info.name} v${info.version_detail.version}`);
+   * // Output: My Weather Server v1.0.0
+   * ```
    */
   public getServerInfo(): ServerInfo {
     return {
@@ -1273,8 +1601,19 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Gets detailed information about the server, conforming to the ServerDetail schema.
-   * @returns ServerDetailInfo object.
+   * Gets detailed information about the server including packaging and deployment metadata.
+   *
+   * Returns extended server information with package details, remotes, and deployment configurations.
+   * This information conforms to the MCP ServerDetail schema.
+   *
+   * @returns Detailed server information object
+   *
+   * @example
+   * ```typescript
+   * const detail = server.getServerDetail();
+   * console.log(detail.package_canonical); // 'npm'
+   * console.log(detail.packages); // Package installation info
+   * ```
    */
   public getServerDetail(): ServerDetailInfo {
     return {
@@ -1286,9 +1625,21 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Gets a list of tools provided by this MCP server, including their schemas.
-   * This leverages the same tool information used by the internal ListTools MCP request.
-   * @returns An object containing an array of tool information.
+   * Gets a list of all tools provided by this MCP server with their schemas.
+   *
+   * Returns information about all registered tools including explicit tools, agent-derived tools,
+   * and workflow-derived tools. Includes input/output schemas and tool types.
+   *
+   * @returns Object containing array of tool information
+   *
+   * @example
+   * ```typescript
+   * const toolList = server.getToolListInfo();
+   * toolList.tools.forEach(tool => {
+   *   console.log(`${tool.name}: ${tool.description}`);
+   *   console.log(`Type: ${tool.toolType || 'tool'}`);
+   * });
+   * ```
    */
   public getToolListInfo(): {
     tools: Array<{ name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType }>;
@@ -1297,19 +1648,32 @@ export class MCPServer extends MCPServerBase {
     return {
       tools: Object.entries(this.convertedTools).map(([toolId, tool]) => ({
         id: toolId,
-        name: tool.name,
+        name: tool.id || toolId,
         description: tool.description,
         inputSchema: tool.parameters?.jsonSchema || tool.parameters,
         outputSchema: tool.outputSchema?.jsonSchema || tool.outputSchema,
-        toolType: tool.toolType,
+        toolType: tool.mcp?.toolType,
       })),
     };
   }
 
   /**
    * Gets information for a specific tool provided by this MCP server.
-   * @param toolId The ID/name of the tool to retrieve.
-   * @returns Tool information (name, description, inputSchema) or undefined if not found.
+   *
+   * Returns detailed information about a single tool including its name, description, schemas, and type.
+   * Returns undefined if the tool is not found.
+   *
+   * @param toolId - The ID/name of the tool to retrieve
+   * @returns Tool information object or undefined if not found
+   *
+   * @example
+   * ```typescript
+   * const toolInfo = server.getToolInfo('getWeather');
+   * if (toolInfo) {
+   *   console.log(toolInfo.description);
+   *   console.log(toolInfo.inputSchema);
+   * }
+   * ```
    */
   public getToolInfo(
     toolId: string,
@@ -1321,21 +1685,35 @@ export class MCPServer extends MCPServerBase {
     }
     this.logger.debug(`Getting info for tool '${toolId}' on MCPServer '${this.name}'`);
     return {
-      name: tool.name,
+      name: tool.id || toolId,
       description: tool.description,
       inputSchema: tool.parameters?.jsonSchema || tool.parameters,
       outputSchema: tool.outputSchema?.jsonSchema || tool.outputSchema,
-      toolType: tool.toolType,
+      toolType: tool.mcp?.toolType,
     };
   }
 
   /**
    * Executes a specific tool provided by this MCP server.
-   * @param toolId The ID/name of the tool to execute.
-   * @param args The arguments to pass to the tool's execute function.
-   * @param executionContext Optional context for the tool execution.
-   * @returns A promise that resolves to the result of the tool execution.
-   * @throws Error if the tool is not found, validation fails, or execution fails.
+   *
+   * This method validates the tool arguments against the input schema and executes the tool.
+   * If validation fails, returns an error object instead of throwing.
+   *
+   * @param toolId - The ID/name of the tool to execute
+   * @param args - The arguments to pass to the tool's execute function
+   * @param executionContext - Optional context including messages and toolCallId
+   * @returns Promise resolving to the tool execution result
+   * @throws {MastraError} If the tool is not found or execution fails
+   *
+   * @example
+   * ```typescript
+   * const result = await server.executeTool(
+   *   'getWeather',
+   *   { location: 'London' },
+   *   { toolCallId: 'call_123' }
+   * );
+   * console.log(result);
+   * ```
    */
   public async executeTool(
     toolId: string,
@@ -1356,12 +1734,17 @@ export class MCPServer extends MCPServerBase {
         const validation = tool.parameters.safeParse(args ?? {});
         if (!validation.success) {
           const errorMessages = validation.error.errors
-            .map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`)
-            .join(', ');
+            .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+            .join('\n');
           this.logger.warn(`ExecuteTool: Invalid tool arguments for '${toolId}': ${errorMessages}`, {
             errors: validation.error.format(),
           });
-          throw new z.ZodError(validation.error.issues);
+          // Return validation error as a result instead of throwing
+          return {
+            error: true,
+            message: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(args, null, 2)}`,
+            validationErrors: validation.error.format(),
+          };
         }
         validatedArgs = validation.data;
       } else {

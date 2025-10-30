@@ -41,7 +41,9 @@ export { deployer };
 `;
 
 exports[`getDeployer > should be able to extract the deployer from ./plugins/__fixtures__/empty-mastra.js 1`] = `
-"
+"const deployer = {};
+
+export { deployer };
 "
 `;
 
@@ -52,6 +54,19 @@ function getDeployer() {
   return testDeployer;
 }
 const deployer = getDeployer();
+
+export { deployer };
+"
+`;
+
+exports[`getDeployer > should support json imports 1`] = `
+"import { TestDeployer } from '@mastra/deployer/test';
+
+var name = "example-json-name";
+
+const deployer = new TestDeployer({
+  name
+});
 
 export { deployer };
 "

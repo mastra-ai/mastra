@@ -1,9 +1,10 @@
 import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
 
 import { WorkflowWatchResult } from '@mastra/client-js';
+import { StreamChunk } from '@/types';
+import { WorkflowRunStreamResult } from './context/workflow-run-context';
 
-export function convertWorkflowRunStateToWatchResult(runState: WorkflowRunState): WorkflowWatchResult {
-  const runId = runState.runId;
+export function convertWorkflowRunStateToStreamResult(runState: WorkflowRunState): WorkflowRunStreamResult {
   // Extract step information from the context
   const steps: Record<string, any> = {};
   const context = runState.context || {};
@@ -26,39 +27,27 @@ export function convertWorkflowRunStateToWatchResult(runState: WorkflowRunState)
     }
   });
 
-  // Determine the overall workflow status
-  const status = determineWorkflowStatus(steps);
+  const suspendedStepIds = Object.entries(steps as Record<string, StepResult<any, any, any, any>>).flatMap(
+    ([stepId, stepResult]) => {
+      if (stepResult?.status === 'suspended') {
+        const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
+        return nestedPath ? [[stepId, ...nestedPath]] : [[stepId]];
+      }
+
+      return [];
+    },
+  );
+
+  const suspendedStep = suspendedStepIds?.[0]?.[0];
+
+  const suspendPayload = suspendedStep ? steps[suspendedStep]?.suspendPayload : undefined;
 
   return {
-    type: 'watch',
-    payload: {
-      workflowState: {
-        status,
-        steps,
-        result: runState.value,
-        payload: context.input,
-        error: undefined,
-      },
-    },
-    eventTimestamp: new Date(runState.timestamp),
-    runId,
-  };
-}
-
-function determineWorkflowStatus(steps: Record<string, any>): 'running' | 'success' | 'failed' | 'suspended' {
-  const stepStatuses = Object.values(steps).map(step => step.status);
-
-  if (stepStatuses.includes('failed')) {
-    return 'failed';
-  }
-
-  if (stepStatuses.includes('suspended')) {
-    return 'suspended';
-  }
-
-  if (stepStatuses.every(status => status === 'success')) {
-    return 'success';
-  }
-
-  return 'running';
+    input: context.input,
+    steps: steps,
+    status: runState.status,
+    ...(runState.status === 'success' ? { result: runState.result } : {}),
+    ...(runState.status === 'failed' ? { error: runState.error } : {}),
+    ...(runState.status === 'suspended' ? { suspended: suspendedStepIds, suspendPayload: suspendPayload } : {}),
+  } as WorkflowRunStreamResult;
 }

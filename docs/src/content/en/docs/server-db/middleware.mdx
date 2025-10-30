@@ -1,5 +1,5 @@
 ---
-title: "Middleware"
+title: "Middleware | Server & DB | Mastra Docs"
 description: "Apply custom middleware functions to intercept requests."
 ---
 
@@ -142,3 +142,36 @@ be inspected by middleware to tailor behaviour:
 - `x-mastra-cloud`: request originates from Mastra Cloud
 - `x-mastra-client-type`: identifies the client SDK, e.g. `js` or `python`
 - `x-mastra-dev-playground`: request triggered from a local playground
+
+### Setting `requestContext`
+
+You can populate `requestContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { RequestContext } from "@mastra/core/request-context";
+import { testWeatherAgent } from "./agents/test-weather-agent";
+
+export const mastra = new Mastra({
+  agents: { testWeatherAgent },
+  server: {
+    middleware: [
+      async (context, next) => {
+        const country = context.req.header("CF-IPCountry");
+        const requestContext = context.get("requestContext");
+
+        requestContext.set(
+          "temperature-unit",
+          country === "US" ? "fahrenheit" : "celsius",
+        );
+
+        await next();
+      },
+    ],
+  },
+});
+```
+
+# Related
+
+- [Request Context](./request-context)

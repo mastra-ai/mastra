@@ -1,11 +1,11 @@
-import { GetLegacyWorkflowResponse, GetWorkflowResponse } from '@mastra/client-js';
+import { GetWorkflowResponse } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
 
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import { ScrollableContainer } from '@/components/scrollable-container';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -13,43 +13,28 @@ import { columns } from './columns';
 import { WorkflowTableData } from './types';
 import { WorkflowCoinIcon, WorkflowIcon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
+import { Searchbar, SearchbarWrapper } from '@/components/ui/searchbar';
 
 export interface WorkflowTableProps {
-  workflows?: Record<string, GetWorkflowResponse>;
-  legacyWorkflows?: Record<string, GetLegacyWorkflowResponse>;
+  workflows: Record<string, GetWorkflowResponse>;
   isLoading: boolean;
-  computeLink: (agentId: string) => string;
 }
 
-export function WorkflowTable({ workflows, legacyWorkflows, isLoading, computeLink }: WorkflowTableProps) {
-  const { navigate } = useLinkComponent();
+export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
+  const [search, setSearch] = useState('');
+  const { navigate, paths } = useLinkComponent();
   const workflowData: WorkflowTableData[] = useMemo(() => {
     const _workflowsData = Object.keys(workflows ?? {}).map(key => {
-      const workflow = workflows?.[key];
+      const workflow = workflows[key as keyof typeof workflows];
 
       return {
         id: key,
-        name: workflow?.name || 'N/A',
-        stepsCount: Object.keys(workflow?.steps ?? {})?.length,
-        isLegacy: false,
-        link: computeLink(key),
+        ...workflow,
       };
     });
 
-    const legacyWorkflowsData = Object.keys(legacyWorkflows ?? {}).map(key => {
-      const workflow = legacyWorkflows?.[key];
-
-      return {
-        id: key,
-        name: workflow?.name || 'N/A',
-        stepsCount: Object.keys(workflow?.steps ?? {})?.length,
-        isLegacy: true,
-        link: computeLink(key),
-      };
-    });
-
-    return [..._workflowsData, ...legacyWorkflowsData];
-  }, [workflows, legacyWorkflows]);
+    return _workflowsData;
+  }, [workflows]);
 
   const table = useReactTable({
     data: workflowData,
@@ -57,42 +42,52 @@ export function WorkflowTable({ workflows, legacyWorkflows, isLoading, computeLi
     getCoreRowModel: getCoreRowModel(),
   });
 
-  if (isLoading) return <WorkflowTableSkeleton />;
-
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows.concat();
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && !isLoading) {
     return <EmptyWorkflowsTable />;
   }
 
+  const filteredRows = rows.filter(row => row.original.name.toLowerCase().includes(search.toLowerCase()));
+
   return (
-    <ScrollableContainer>
-      <Table>
-        <Thead className="sticky top-0">
-          {ths.headers.map(header => (
-            <Th key={header.id} style={{ width: header.index === 0 ? 'auto' : header.column.getSize() }}>
-              {flexRender(header.column.columnDef.header, header.getContext())}
-            </Th>
-          ))}
-        </Thead>
-        <Tbody>
-          {rows.map(row => (
-            <Row key={row.id} onClick={() => navigate(row.original.link)}>
-              {row.getVisibleCells().map(cell => (
-                <React.Fragment key={cell.id}>
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </React.Fragment>
+    <div>
+      <SearchbarWrapper>
+        <Searchbar onSearch={setSearch} label="Search workflows" placeholder="Search workflows" />
+      </SearchbarWrapper>
+
+      {isLoading ? (
+        <WorkflowTableSkeleton />
+      ) : (
+        <ScrollableContainer>
+          <Table>
+            <Thead className="sticky top-0">
+              {ths.headers.map(header => (
+                <Th key={header.id} style={{ width: header.index === 0 ? 'auto' : header.column.getSize() }}>
+                  {flexRender(header.column.columnDef.header, header.getContext())}
+                </Th>
               ))}
-            </Row>
-          ))}
-        </Tbody>
-      </Table>
-    </ScrollableContainer>
+            </Thead>
+            <Tbody>
+              {filteredRows.map(row => (
+                <Row key={row.id} onClick={() => navigate(paths.workflowLink(row.original.id))}>
+                  {row.getVisibleCells().map(cell => (
+                    <React.Fragment key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </React.Fragment>
+                  ))}
+                </Row>
+              ))}
+            </Tbody>
+          </Table>
+        </ScrollableContainer>
+      )}
+    </div>
   );
 }
 
-export const WorkflowTableSkeleton = () => (
+const WorkflowTableSkeleton = () => (
   <Table>
     <Thead>
       <Th>Name</Th>
@@ -113,7 +108,7 @@ export const WorkflowTableSkeleton = () => (
   </Table>
 );
 
-export const EmptyWorkflowsTable = () => (
+const EmptyWorkflowsTable = () => (
   <div className="flex h-full items-center justify-center">
     <EmptyState
       iconSlot={<WorkflowCoinIcon />}

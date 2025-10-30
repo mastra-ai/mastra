@@ -1,21 +1,20 @@
-import type { MastraVector, QueryResult, QueryVectorParams } from '@mastra/core/vector';
+import type { MastraVector, MastraEmbeddingModel, QueryResult, QueryVectorParams } from '@mastra/core/vector';
+import { embedV1, embedV2 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
-import { embed } from 'ai';
-import type { EmbeddingModel } from 'ai';
-import type { DatabaseConfig } from '../tools/types';
+import type { DatabaseConfig, ProviderOptions } from '../tools/types';
 
-interface VectorQuerySearchParams {
+type VectorQuerySearchParams = {
   indexName: string;
   vectorStore: MastraVector;
   queryText: string;
-  model: EmbeddingModel<string>;
+  model: MastraEmbeddingModel<string>;
   queryFilter?: VectorFilter;
   topK: number;
   includeVectors?: boolean;
   maxRetries?: number;
   /** Database-specific configuration options */
   databaseConfig?: DatabaseConfig;
-}
+} & ProviderOptions;
 
 interface VectorQuerySearchResult {
   results: QueryResult[];
@@ -41,12 +40,26 @@ export const vectorQuerySearch = async ({
   includeVectors = false,
   maxRetries = 2,
   databaseConfig = {},
+  providerOptions,
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
-  const { embedding } = await embed({
-    value: queryText,
-    model,
-    maxRetries,
-  });
+  let embeddingResult;
+
+  if (model.specificationVersion === 'v2') {
+    embeddingResult = await embedV2({
+      model: model,
+      value: queryText,
+      maxRetries,
+      ...(providerOptions && { providerOptions }),
+    });
+  } else {
+    embeddingResult = await embedV1({
+      value: queryText,
+      model: model,
+      maxRetries,
+    });
+  }
+
+  const embedding = embeddingResult.embedding;
 
   // Build query parameters with database-specific configurations
   const queryParams: QueryVectorParams = {

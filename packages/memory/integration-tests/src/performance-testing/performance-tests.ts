@@ -67,7 +67,7 @@ export function getPerformanceTests(memory: Memory) {
         threads.push(thread);
 
         if ((i + 1) % 10 === 0) {
-          console.log(`Created ${i + 1}/${threadCount} threads...`);
+          console.info(`Created ${i + 1}/${threadCount} threads...`);
         }
       }
 
@@ -108,12 +108,12 @@ export function getPerformanceTests(memory: Memory) {
         }
 
         if ((i + 1) % 10 === 0) {
-          console.log(`Processed ${i + 1}/${threadCount} threads (${(i + 1) * messagesPerThread} total messages)...`);
+          console.info(`Processed ${i + 1}/${threadCount} threads (${(i + 1) * messagesPerThread} total messages)...`);
         }
       }
 
       console.timeEnd('Data setup');
-      console.log(`Total messages created: ${threadCount * messagesPerThread}`);
+      console.info(`Total messages created: ${threadCount * messagesPerThread}`);
 
       // Measure query time for each thread with different search patterns
       const searchQueries = [
@@ -126,7 +126,7 @@ export function getPerformanceTests(memory: Memory) {
 
       const queryStats: Record<string, number[]> = {};
 
-      console.log('\nRunning queries...');
+      console.info('\nRunning queries...');
       for (const searchQuery of searchQueries) {
         queryStats[searchQuery] = [];
         console.time(`Query: ${searchQuery}`);
@@ -169,10 +169,10 @@ export function getPerformanceTests(memory: Memory) {
         };
       });
 
-      console.log('\nVector Query Performance by Search Pattern:');
+      console.info('\nVector Query Performance by Search Pattern:');
       console.table(stats);
 
-      console.log('\nTest Configuration:', {
+      console.info('\nTest Configuration:', {
         totalThreads: threadCount,
         messagesPerThread,
         totalMessages: threadCount * messagesPerThread,

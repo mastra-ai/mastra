@@ -1,6 +1,6 @@
 {
   "name": "@mastra/upstash",
-  "version": "0.12.1",
+  "version": "0.15.6",
   "description": "Upstash provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -12,7 +12,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -23,12 +23,12 @@
     "test": "vitest run",
     "posttest": "docker compose down",
     "lint": "eslint .",
-    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
-    "build:watch": "pnpm build --watch"
+    "build": "tsup --silent --config tsup.config.ts",
+    "build:watch": "tsup --watch --silent --config tsup.config.ts"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
-    "@upstash/redis": "^1.35.0",
+    "@upstash/redis": "^1.35.5",
     "@upstash/vector": "^1.2.2"
   },
   "devDependencies": {
@@ -38,12 +38,26 @@
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
     "dotenv": "^17.0.0",
-    "eslint": "^9.30.1",
+    "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.11.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "stores/upstash"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

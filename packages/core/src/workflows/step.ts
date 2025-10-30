@@ -1,26 +1,42 @@
 import type { z } from 'zod';
-import type { Emitter, Mastra } from '..';
-import type { RuntimeContext } from '../di';
-import type { EMITTER_SYMBOL } from './constants';
+import type { TracingContext } from '../ai-tracing';
+import type { Mastra } from '../mastra';
+import type { RequestContext } from '../request-context';
+import type { MastraScorers } from '../scores';
+import type { ChunkType } from '../stream/types';
+import type { ToolStream } from '../tools/stream';
+import type { DynamicArgument } from '../types';
+import type { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
+import type { Emitter, StepResult } from './types';
 import type { Workflow } from './workflow';
 
-// Define a type for the execute function
-export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (params: {
+export type SuspendOptions = {
+  resumeLabel?: string | string[];
+};
+
+export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = {
   runId: string;
+  resourceId?: string;
+  workflowId: string;
   mastra: Mastra;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   inputData: TStepInput;
+  state: TState;
+  setState(state: TState): void;
   resumeData?: TResumeSchema;
+  /** @deprecated This parameter will be removed on November 4th, 2025. Use `retryCount` instead. */
   runCount: number;
+  retryCount: number;
+  tracingContext: TracingContext;
   getInitData<T extends z.ZodType<any>>(): z.infer<T>;
   getInitData<T extends Workflow<any, any, any, any, any>>(): T extends undefined
     ? unknown
     : z.infer<NonNullable<T['inputSchema']>>;
-  getStepResult<T extends Step<any, any, any>>(
+  getStepResult<T extends Step<any, any, any, any, any, any>>(
     stepId: T,
   ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
-  // TODO: should this be a schema you can define on the step?
-  suspend(suspendPayload: TSuspendSchema): Promise<any>;
+  getStepResult(stepId: string): any;
+  suspend(suspendPayload: TSuspendSchema, suspendOptions?: SuspendOptions): Promise<any>;
   bail(result: any): any;
   abort(): any;
   resume?: {
@@ -28,13 +44,31 @@ export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSche
     resumePayload: any;
   };
   [EMITTER_SYMBOL]: Emitter;
+  [STREAM_FORMAT_SYMBOL]: 'legacy' | 'vnext' | undefined;
   engine: EngineType;
   abortSignal: AbortSignal;
-}) => Promise<TStepOutput>;
+  writer: ToolStream<ChunkType>;
+  validateSchemas?: boolean;
+};
+
+export type ExecuteFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
+  params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
+) => Promise<TStepOutput>;
+
+export type ConditionFunction<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = (
+  params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
+) => Promise<boolean>;
+
+export type LoopConditionFunction<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = (
+  params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> & {
+    iterationCount: number;
+  },
+) => Promise<boolean>;
 
 // Define a Step interface
 export interface Step<
   TStepId extends string = string,
+  TState extends z.ZodObject<any> = z.ZodObject<any>,
   TSchemaIn extends z.ZodType<any> = z.ZodType<any>,
   TSchemaOut extends z.ZodType<any> = z.ZodType<any>,
   TResumeSchema extends z.ZodType<any> = z.ZodType<any>,
@@ -47,12 +81,31 @@ export interface Step<
   outputSchema: TSchemaOut;
   resumeSchema?: TResumeSchema;
   suspendSchema?: TSuspendSchema;
+  stateSchema?: TState;
   execute: ExecuteFunction<
+    z.infer<TState>,
     z.infer<TSchemaIn>,
     z.infer<TSchemaOut>,
     z.infer<TResumeSchema>,
     z.infer<TSuspendSchema>,
     TEngineType
   >;
+  scorers?: DynamicArgument<MastraScorers>;
   retries?: number;
+  component?: string;
 }
+
+export const getStepResult = (stepResults: Record<string, StepResult<any, any, any, any>>, step: any) => {
+  let result;
+  if (typeof step === 'string') {
+    result = stepResults[step];
+  } else {
+    if (!step?.id) {
+      return null;
+    }
+
+    result = stepResults[step.id];
+  }
+
+  return result?.status === 'success' ? result.output : null;
+};

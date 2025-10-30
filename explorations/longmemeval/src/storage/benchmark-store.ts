@@ -2,13 +2,11 @@ import { MastraStorage } from '@mastra/core/storage';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2 } from '@mastra/core/agent';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
-import type { Trace } from '@mastra/core/telemetry';
 import type {
   TABLE_NAMES,
   StorageColumn,
   StorageGetMessagesArg,
   StorageResourceType,
-  EvalRow,
   WorkflowRun,
   WorkflowRuns,
   PaginationInfo,
@@ -21,7 +19,6 @@ type DBMode = 'read' | 'read-write';
 export class BenchmarkStore extends MastraStorage {
   private data: Record<TABLE_NAMES, Map<string, any>> = {
     mastra_workflow_snapshot: new Map(),
-    mastra_evals: new Map(),
     mastra_messages: new Map(),
     mastra_threads: new Map(),
     mastra_traces: new Map(),
@@ -183,6 +180,8 @@ export class BenchmarkStore extends MastraStorage {
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
   ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     const { threadId, resourceId, selectBy, format = 'v1' } = args;
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
     let messages: any[] = [];
     const includedMessageIds = new Set<string>();
 
@@ -401,35 +400,6 @@ export class BenchmarkStore extends MastraStorage {
     return parsedRun as WorkflowRun;
   }
 
-  async getTracesPaginated({
-    name,
-    scope,
-    attributes,
-    page,
-    perPage,
-    fromDate,
-    toDate,
-  }: {
-    name?: string;
-    scope?: string;
-    attributes?: Record<string, string>;
-    page: number;
-    perPage: number;
-    fromDate?: Date;
-    toDate?: Date;
-  }): Promise<PaginationInfo & { traces: Trace[] }> {
-    const traces = await this.getTraces({ name, scope, page, perPage, attributes, fromDate, toDate });
-    const total = Array.from(this.data.mastra_traces.values()).length;
-
-    return {
-      traces,
-      total,
-      page,
-      perPage,
-      hasMore: total > (page + 1) * perPage,
-    };
-  }
-
   async getThreadsByResourceIdPaginated(args: {
     resourceId: string;
     page: number;
@@ -452,6 +422,8 @@ export class BenchmarkStore extends MastraStorage {
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
     const { threadId, selectBy, format = 'v1' } = args;
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
     const { page = 0, perPage = 40 } = selectBy?.pagination || {};
 
     // Get all messages

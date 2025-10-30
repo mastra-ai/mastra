@@ -1,10 +1,10 @@
 import type { Query } from 'sift';
 import type { z } from 'zod';
-
-import type { Mastra } from '../..';
-import type { IAction, IExecutionContext, MastraUnion } from '../../action';
+import type { IExecutionContext, MastraUnion } from '../../action';
 import type { BaseLogMessage, RegisteredLogger } from '../../logger';
-import type { RuntimeContext } from '../../runtime-context';
+import type { Mastra } from '../../mastra';
+import type { RequestContext } from '../../request-context';
+import type { ZodLikeSchema, InferZodLikeSchema } from '../../types/zod-compat';
 import type { LegacyStep as Step } from './step';
 import type { LegacyWorkflow } from './workflow';
 
@@ -30,26 +30,30 @@ export interface WorkflowOptions<
 }
 
 export interface StepExecutionContext<
-  TSchemaIn extends z.ZodSchema | undefined = undefined,
+  TSchemaIn extends ZodLikeSchema | undefined = undefined,
   TContext extends WorkflowContext = WorkflowContext,
-> extends IExecutionContext<TSchemaIn> {
-  context: TSchemaIn extends z.ZodSchema ? { inputData: z.infer<TSchemaIn> } & TContext : TContext;
+> extends Omit<IExecutionContext<TSchemaIn>, 'context'> {
+  context: TSchemaIn extends ZodLikeSchema ? { inputData: InferZodLikeSchema<TSchemaIn> } & TContext : TContext;
   suspend: (payload?: unknown, softSuspend?: any) => Promise<void>;
   runId: string;
   emit: (event: string, data: any) => void;
   mastra?: MastraUnion;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
 }
 
 export interface StepAction<
   TId extends string,
-  TSchemaIn extends z.ZodSchema | undefined,
-  TSchemaOut extends z.ZodSchema | undefined,
+  TSchemaIn extends ZodLikeSchema | undefined,
+  TSchemaOut extends ZodLikeSchema | undefined,
   TContext extends StepExecutionContext<TSchemaIn>,
-> extends IAction<TId, TSchemaIn, TSchemaOut, TContext> {
+> {
+  id: TId;
+  description?: string;
+  inputSchema?: TSchemaIn;
+  outputSchema?: TSchemaOut;
   mastra?: Mastra;
-  payload?: TSchemaIn extends z.ZodSchema ? Partial<z.infer<TSchemaIn>> : unknown;
-  execute: (context: TContext) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
+  payload?: TSchemaIn extends ZodLikeSchema ? Partial<InferZodLikeSchema<TSchemaIn>> : unknown;
+  execute: (context: TContext) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
   retryConfig?: RetryConfig;
   workflow?: LegacyWorkflow;
   workflowId?: string;

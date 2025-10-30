@@ -1,5 +1,5 @@
-import { MastraClient } from './client';
 import z from 'zod';
+import { MastraClient } from './client';
 // import type { WorkflowRunResult } from './types';
 
 // Agent
@@ -14,44 +14,27 @@ import z from 'zod';
     const agent = client.getAgent('weatherAgent');
     const response = await agent.stream({
       messages: 'what is the weather in new york?',
-      output: z.object({
-        weather: z.string(),
-        temperature: z.number(),
-        humidity: z.number(),
-        windSpeed: z.number(),
-        windDirection: z.string(),
-        windGust: z.number(),
-        windChill: z.number(),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          weather: z.string(),
+          temperature: z.number(),
+          humidity: z.number(),
+          windSpeed: z.number(),
+          windDirection: z.string(),
+          windGust: z.number(),
+          windChill: z.number(),
+        }),
+      },
     });
 
-    // Process data stream - unstructured output
-
-    // response.processDataStream({
-    //   onTextPart: text => {
-    //     process.stdout.write(text);
-    //   },
-    //   onFilePart: file => {
-    //     console.log(file);
-    //   },
-    //   onDataPart: data => {
-    //     console.log(data);
-    //   },
-    //   onErrorPart: error => {
-    //     console.error(error);
-    //   },
-    //   onToolCallPart(streamPart) {
-    //     console.log(streamPart);
-    //   },
-    // });
-
-    // Process text stream - structured output
-
-    // response.processTextStream({
-    //   onTextPart: text => {
-    //     process.stdout.write(text);
-    //   },
-    // });
+    // Process data stream
+    response.processDataStream({
+      onChunk: async chunk => {
+        if (chunk.type === 'text-delta') {
+          console.log(chunk.payload.text);
+        }
+      },
+    });
 
     // read the response body directly
 
@@ -73,21 +56,19 @@ import z from 'zod';
 //   });
 
 //   try {
-//     const workflowId = 'myWorkflow';
+//     const workflowId = 'weatherWorkflow';
 //     const workflow = client.getWorkflow(workflowId);
 
-//     const { runId } = await workflow.createRun();
+//     const run = await workflow.createRunAsync();
 
-//     workflow.watch({ runId }, record => {
-//       console.log(new Date().toTimeString(), record);
-//     });
-
-//     await workflow.start({
-//       runId,
-//       triggerData: {
+//     const stream = await run.stream({
+//       inputData: {
 //         city: 'New York',
 //       },
 //     });
+//     for await (const chunk of stream) {
+//       console.log(JSON.stringify(chunk, null, 2));
+//     }
 
 //   } catch (e) {
 //     console.error('Workflow error:', e);

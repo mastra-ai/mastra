@@ -1,4 +1,5 @@
-import type { EmbeddingModel } from 'ai';
+import type { MastraVector, MastraEmbeddingModel } from '@mastra/core/vector';
+
 import type { RerankConfig } from '../rerank';
 
 export interface PineconeConfig {
@@ -56,22 +57,30 @@ export type VectorQueryToolOptions = {
   id?: string;
   description?: string;
   indexName: string;
-  vectorStoreName: string;
-  model: EmbeddingModel<string>;
+  model: MastraEmbeddingModel<string>;
   enableFilter?: boolean;
   includeVectors?: boolean;
   includeSources?: boolean;
   reranker?: RerankConfig;
   /** Database-specific configuration options */
   databaseConfig?: DatabaseConfig;
-};
+} & ProviderOptions &
+  (
+    | {
+        vectorStoreName: string;
+      }
+    | {
+        vectorStoreName?: string;
+        vectorStore: MastraVector;
+      }
+  );
 
 export type GraphRagToolOptions = {
   id?: string;
   description?: string;
   indexName: string;
   vectorStoreName: string;
-  model: EmbeddingModel<string>;
+  model: MastraEmbeddingModel<string>;
   enableFilter?: boolean;
   includeSources?: boolean;
   graphOptions?: {
@@ -80,6 +89,21 @@ export type GraphRagToolOptions = {
     restartProb?: number;
     threshold?: number;
   };
+} & ProviderOptions;
+
+export type ProviderOptions = {
+  /**
+   * Provider-specific options for the embedding model (e.g., outputDimensionality).
+   *
+   * ⚠️  **IMPORTANT**: `providerOptions` only work with AI SDK v2 models.
+   *
+   * **For v1 models**: Configure options when creating the model:
+   * ✅ const model = openai.embedding('text-embedding-3-small', { dimensions: 512 });
+   *
+   * **For v2 models**: Use providerOptions:
+   * ✅ providerOptions: { openai: { dimensions: 512 } }
+   */
+  providerOptions?: Record<string, Record<string, any>>;
 };
 
 /**

@@ -43,33 +43,33 @@ const userChoice = await new Promise<string>(resolve => {
   });
 });
 
-let resourceId: string;
+let resource: string;
 let userName: string;
 
 switch (userChoice) {
   case '1':
-    resourceId = USERS.alice;
+    resource = USERS.alice;
     userName = 'Alice';
     break;
   case '2':
-    resourceId = USERS.bob;
+    resource = USERS.bob;
     userName = 'Bob';
     break;
   case '3':
-    resourceId = USERS.demo;
+    resource = USERS.demo;
     userName = 'Demo User';
     break;
   default:
-    resourceId = `user-${randomUUID()}`;
+    resource = `user-${randomUUID()}`;
     userName = 'Random User';
 }
 
 // Always generate a new thread ID to demonstrate cross-thread persistence
-const threadId = randomUUID();
+const thread = randomUUID();
 
 console.log(chalk.green(`\n✅ Simulating: ${userName}`));
-console.log(chalk.gray(`📧 Resource ID: ${resourceId}`));
-console.log(chalk.gray(`🧵 Thread ID: ${threadId}`));
+console.log(chalk.gray(`📧 Resource ID: ${resource}`));
+console.log(chalk.gray(`🧵 Thread ID: ${thread}`));
 console.log(chalk.bold.yellow('\n💡 TIP: Run this example multiple times with the same user choice'));
 console.log(chalk.bold.yellow('   to see how working memory persists across conversation threads!\n'));
 
@@ -107,7 +107,7 @@ async function main() {
         If this is a returning user, greet them warmly and reference what you remember!`,
         },
       ],
-      { threadId, resourceId },
+      { memory: { thread, resource } },
     ),
   );
 
@@ -124,7 +124,7 @@ async function main() {
       break;
     }
 
-    await logResponse(await agent.stream(userInput, { threadId, resourceId }));
+    await logResponse(await agent.stream(userInput, { memory: { thread, resource } }));
   }
 
   rl.close();

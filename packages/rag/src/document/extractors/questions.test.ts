@@ -9,7 +9,7 @@ const openai = createOpenAI({
 
 const model = openai('gpt-4o');
 
-vi.setConfig({ testTimeout: 10_000, hookTimeout: 10_000 });
+vi.setConfig({ testTimeout: 100_000, hookTimeout: 100_000 });
 
 describe('QuestionsAnsweredExtractor', () => {
   it('can use a custom model for questions extraction', async () => {

@@ -9,12 +9,12 @@
   },
   "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "description": "",
   "dependencies": {
     "@ai-sdk/openai": "latest",
     "@mastra/core": "latest",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

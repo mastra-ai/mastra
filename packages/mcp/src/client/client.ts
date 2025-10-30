@@ -1,6 +1,6 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { MastraBase } from '@mastra/core/base';
-import type { RuntimeContext } from '@mastra/core/di';
+import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
 import { isZodType } from '@mastra/core/utils';
@@ -36,7 +36,8 @@ import {
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { z } from 'zod';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
-import type { JSONSchema } from 'zod-from-json-schema';
+import { convertJsonSchemaToZod as convertJsonSchemaToZodV3 } from 'zod-from-json-schema-v3';
+import type { JSONSchema } from 'zod-from-json-schema-v3';
 import { ElicitationClientActions } from './elicitationActions';
 import { PromptClientActions } from './promptActions';
 import { ResourceClientActions } from './resourceActions';
@@ -44,55 +45,121 @@ import { ResourceClientActions } from './resourceActions';
 // Re-export MCP SDK LoggingLevel for convenience
 export type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 
+/**
+ * Log message structure for MCP client logging.
+ */
 export interface LogMessage {
+  /** Logging level (debug, info, warning, error, etc.) */
   level: LoggingLevel;
+  /** Log message content */
   message: string;
+  /** Timestamp when the log was created */
   timestamp: Date;
+  /** Name of the MCP server that generated the log */
   serverName: string;
+  /** Optional additional details */
   details?: Record<string, any>;
-  runtimeContext?: RuntimeContext | null;
+  requestContext?: RequestContext | null;
 }
 
+/**
+ * Handler function for processing log messages from MCP servers.
+ */
 export type LogHandler = (logMessage: LogMessage) => void;
 
-// Elicitation handler type
+/**
+ * Handler function for processing elicitation requests from MCP servers.
+ *
+ * @param request - The elicitation request parameters including message and schema
+ * @returns Promise resolving to the user's response (accept/decline/cancel with optional content)
+ */
 export type ElicitationHandler = (request: ElicitRequest['params']) => Promise<ElicitResult>;
 
-// Base options common to all server definitions
+/**
+ * Base options common to all MCP server definitions.
+ */
 type BaseServerOptions = {
+  /** Optional handler for server log messages */
   logger?: LogHandler;
+  /** Optional timeout in milliseconds for server operations */
   timeout?: number;
+  /** Optional client capabilities to advertise to the server */
   capabilities?: ClientCapabilities;
+  /** Whether to enable server log forwarding (default: true) */
   enableServerLogs?: boolean;
 };
 
+/**
+ * Configuration for MCP servers using stdio (subprocess) transport.
+ *
+ * Used when the MCP server is spawned as a subprocess that communicates via stdin/stdout.
+ */
 type StdioServerDefinition = BaseServerOptions & {
-  command: string; // 'command' is required for Stdio
+  /** Command to execute (e.g., 'node', 'python', 'npx') */
+  command: string;
+  /** Optional arguments to pass to the command */
   args?: string[];
+  /** Optional environment variables for the subprocess */
   env?: Record<string, string>;
 
-  url?: never; // Exclude 'url' for Stdio
-  requestInit?: never; // Exclude HTTP options for Stdio
-  eventSourceInit?: never; // Exclude HTTP options for Stdio
-  reconnectionOptions?: never; // Exclude Streamable HTTP specific options
-  sessionId?: never; // Exclude Streamable HTTP specific options
+  url?: never;
+  requestInit?: never;
+  eventSourceInit?: never;
+  authProvider?: never;
+  reconnectionOptions?: never;
+  sessionId?: never;
 };
 
-// HTTP Server Definition (Streamable HTTP or SSE fallback)
+/**
+ * Configuration for MCP servers using HTTP-based transport (Streamable HTTP or SSE fallback).
+ *
+ * Used when connecting to remote MCP servers over HTTP. The client will attempt Streamable HTTP
+ * transport first and fall back to SSE if that fails.
+ */
 type HttpServerDefinition = BaseServerOptions & {
-  url: URL; // 'url' is required for HTTP
+  /** URL of the MCP server endpoint */
+  url: URL;
 
-  command?: never; // Exclude 'command' for HTTP
-  args?: never; // Exclude Stdio options for HTTP
-  env?: never; // Exclude Stdio options for HTTP
+  command?: never;
+  args?: never;
+  env?: never;
 
-  // Include relevant options from SDK HTTP transport types
+  /** Optional request configuration for HTTP requests */
   requestInit?: StreamableHTTPClientTransportOptions['requestInit'];
+  /** Optional configuration for SSE fallback (required when using custom headers with SSE) */
   eventSourceInit?: SSEClientTransportOptions['eventSourceInit'];
+  /** Optional authentication provider for HTTP requests */
+  authProvider?: StreamableHTTPClientTransportOptions['authProvider'];
+  /** Optional reconnection configuration for Streamable HTTP */
   reconnectionOptions?: StreamableHTTPClientTransportOptions['reconnectionOptions'];
+  /** Optional session ID for Streamable HTTP */
   sessionId?: StreamableHTTPClientTransportOptions['sessionId'];
 };
 
+/**
+ * Configuration for connecting to an MCP server.
+ *
+ * Either stdio-based (subprocess) or HTTP-based (remote server). The transport type is
+ * automatically detected based on whether `command` or `url` is provided.
+ *
+ * @example
+ * ```typescript
+ * // Stdio server
+ * const stdioServer: MastraMCPServerDefinition = {
+ *   command: 'npx',
+ *   args: ['tsx', 'server.ts'],
+ *   env: { API_KEY: 'secret' }
+ * };
+ *
+ * // HTTP server
+ * const httpServer: MastraMCPServerDefinition = {
+ *   url: new URL('http://localhost:8080/mcp'),
+ *   requestInit: {
+ *     headers: { Authorization: 'Bearer token' }
+ *   }
+ * };
+ * ```
+ */
 export type MastraMCPServerDefinition = StdioServerDefinition | HttpServerDefinition;
 
 /**
@@ -118,14 +185,32 @@ function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'info' | 
   }
 }
 
+/**
+ * Options for creating an internal MCP client instance.
+ *
+ * @internal
+ */
 export type InternalMastraMCPClientOptions = {
+  /** Name identifier for this client */
   name: string;
+  /** Server connection configuration */
   server: MastraMCPServerDefinition;
+  /** Optional client capabilities */
   capabilities?: ClientCapabilities;
+  /** Optional client version */
   version?: string;
+  /** Optional timeout in milliseconds */
   timeout?: number;
 };
 
+/**
+ * Internal MCP client implementation for connecting to a single MCP server.
+ *
+ * This class handles the low-level connection, transport management, and protocol
+ * communication with an MCP server. Most users should use MCPClient instead.
+ *
+ * @internal
+ */
 export class InternalMastraMCPClient extends MastraBase {
   name: string;
   private client: Client;
@@ -134,10 +219,18 @@ export class InternalMastraMCPClient extends MastraBase {
   private enableServerLogs?: boolean;
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
-  private currentOperationContext: RuntimeContext | null = null;
+  private currentOperationContext: RequestContext | null = null;
+
+  /** Provides access to resource operations (list, read, subscribe, etc.) */
   public readonly resources: ResourceClientActions;
+  /** Provides access to prompt operations (list, get, notifications) */
   public readonly prompts: PromptClientActions;
+  /** Provides access to elicitation operations (request handling) */
   public readonly elicitation: ElicitationClientActions;
+
+  /**
+   * @internal
+   */
   constructor({
     name,
     version = '1.0.0',
@@ -167,7 +260,6 @@ export class InternalMastraMCPClient extends MastraBase {
     // Set up log message capturing
     this.setupLogging();
 
-
     this.resources = new ResourceClientActions({ client: this, logger: this.logger });
     this.prompts = new PromptClientActions({ client: this, logger: this.logger });
     this.elicitation = new ElicitationClientActions({ client: this, logger: this.logger });
@@ -196,7 +288,7 @@ export class InternalMastraMCPClient extends MastraBase {
         timestamp: new Date(),
         serverName: this.name,
         details,
-        runtimeContext: this.currentOperationContext,
+        requestContext: this.currentOperationContext,
       });
     }
   }
@@ -237,7 +329,7 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async connectHttp(url: URL) {
-    const { requestInit, eventSourceInit } = this.serverConfig;
+    const { requestInit, eventSourceInit, authProvider } = this.serverConfig;
 
     this.log('debug', `Attempting to connect to URL: ${url}`);
 
@@ -251,6 +343,7 @@ export class InternalMastraMCPClient extends MastraBase {
         const streamableTransport = new StreamableHTTPClientTransport(url, {
           requestInit,
           reconnectionOptions: this.serverConfig.reconnectionOptions,
+          authProvider: authProvider,
         });
         await this.client.connect(streamableTransport, {
           timeout:
@@ -269,7 +362,7 @@ export class InternalMastraMCPClient extends MastraBase {
       this.log('debug', 'Falling back to deprecated HTTP+SSE transport...');
       try {
         // Fallback to SSE transport
-        const sseTransport = new SSEClientTransport(url, { requestInit, eventSourceInit });
+        const sseTransport = new SSEClientTransport(url, { requestInit, eventSourceInit, authProvider });
         await this.client.connect(sseTransport, { timeout: this.serverConfig.timeout ?? this.timeout });
         this.transport = sseTransport;
         this.log('debug', 'Successfully connected using deprecated HTTP+SSE transport.');
@@ -285,6 +378,17 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private isConnected: Promise<boolean> | null = null;
 
+  /**
+   * Connects to the MCP server using the configured transport.
+   *
+   * Automatically detects transport type based on configuration (stdio vs HTTP).
+   * Safe to call multiple times - returns existing connection if already connected.
+   *
+   * @returns Promise resolving to true when connected
+   * @throws {MastraError} If connection fails
+   *
+   * @internal
+   */
   async connect() {
     // If a connection attempt is in progress, wait for it.
     if (await this.isConnected) {
@@ -315,7 +419,6 @@ export class InternalMastraMCPClient extends MastraBase {
             originalOnClose();
           }
         };
-
       } catch (e) {
         this.isConnected = null;
         reject(e);
@@ -336,8 +439,13 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
-   * Get the current session ID if using the Streamable HTTP transport.
-   * Returns undefined if not connected or not using Streamable HTTP.
+   * Gets the current session ID if using Streamable HTTP transport.
+   *
+   * Returns undefined if not connected or not using Streamable HTTP transport.
+   *
+   * @returns Session ID string or undefined
+   *
+   * @internal
    */
   get sessionId(): string | undefined {
     if (this.transport instanceof StreamableHTTPClientTransport) {
@@ -463,12 +571,12 @@ export class InternalMastraMCPClient extends MastraBase {
 
   setElicitationRequestHandler(handler: ElicitationHandler): void {
     this.log('debug', 'Setting elicitation request handler');
-    this.client.setRequestHandler(ElicitRequestSchema, async (request) => {
+    this.client.setRequestHandler(ElicitRequestSchema, async request => {
       this.log('debug', `Received elicitation request: ${request.params.message}`);
       return handler(request.params);
     });
   }
-  
+
   private async convertInputSchema(
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'] | JSONSchema,
   ): Promise<z.ZodType> {
@@ -477,8 +585,14 @@ export class InternalMastraMCPClient extends MastraBase {
     }
 
     try {
-      await $RefParser.dereference(inputSchema)
-      return convertJsonSchemaToZod(inputSchema as JSONSchema);
+      await $RefParser.dereference(inputSchema);
+      const jsonSchemaToConvert = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema;
+      if ('toJSONSchema' in z) {
+        //@ts-expect-error - zod type issue
+        return convertJsonSchemaToZod(jsonSchemaToConvert);
+      } else {
+        return convertJsonSchemaToZodV3(jsonSchemaToConvert);
+      }
     } catch (error: unknown) {
       let errorDetails: string | undefined;
       if (error instanceof Error) {
@@ -508,14 +622,20 @@ export class InternalMastraMCPClient extends MastraBase {
   private async convertOutputSchema(
     outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'] | JSONSchema,
   ): Promise<z.ZodType | undefined> {
-    if (!outputSchema) return
+    if (!outputSchema) return;
     if (isZodType(outputSchema)) {
       return outputSchema;
     }
 
     try {
-      await $RefParser.dereference(outputSchema)
-      return convertJsonSchemaToZod(outputSchema as JSONSchema);
+      await $RefParser.dereference(outputSchema);
+      const jsonSchemaToConvert = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema;
+      if ('toJSONSchema' in z) {
+        //@ts-expect-error - zod type issue
+        return convertJsonSchemaToZod(jsonSchemaToConvert);
+      } else {
+        return convertJsonSchemaToZodV3(jsonSchemaToConvert);
+      }
     } catch (error: unknown) {
       let errorDetails: string | undefined;
       if (error instanceof Error) {
@@ -554,9 +674,9 @@ export class InternalMastraMCPClient extends MastraBase {
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
           outputSchema: await this.convertOutputSchema(tool.outputSchema),
-          execute: async ({ context, runtimeContext }: { context: any; runtimeContext?: RuntimeContext | null }) => {
+          execute: async ({ context, requestContext }: { context: any; requestContext?: RequestContext | null }) => {
             const previousContext = this.currentOperationContext;
-            this.currentOperationContext = runtimeContext || null; // Set current context
+            this.currentOperationContext = requestContext || null; // Set current context
             try {
               this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: context });
               const res = await this.client.callTool(
@@ -607,8 +727,13 @@ export class InternalMastraMCPClient extends MastraBase {
 export class MastraMCPClient extends InternalMastraMCPClient {
   constructor(args: InternalMastraMCPClientOptions) {
     super(args);
-    this.logger.warn(
-      '[DEPRECATION] MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.',
+    throw new MastraError(
+      {
+        id: 'MASTRA_MCP_CLIENT_DEPRECATED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.USER,
+        text: '[DEPRECATION] MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.',
+      },
     );
   }
 }

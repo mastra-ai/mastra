@@ -1,10 +1,14 @@
 {
   "name": "@mastra/inngest",
-  "version": "0.11.4",
+  "version": "0.17.0",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
   "exports": {
     ".": {
       "import": {
@@ -12,44 +16,54 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
+    "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm build --watch",
-    "test": "docker-compose up -d && vitest run --no-isolate --bail=1 --retry=1 && docker-compose down",
+    "test": "docker-compose up -d && vitest run --no-isolate --retry=1 && docker-compose down",
     "lint": "eslint ."
   },
   "dependencies": {
-    "@inngest/realtime": "^0.3.1",
+    "@inngest/realtime": "^0.4.4",
     "@opentelemetry/api": "^1.9.0",
-    "inngest": "^3.40.0",
-    "zod": "^3.25.67"
+    "inngest": "^3.44.3"
   },
   "devDependencies": {
-    "inngest-cli": "1.8.2",
-    "@ai-sdk/openai": "^1.3.22",
-    "@hono/node-server": "^1.14.4",
+    "inngest-cli": "^1.12.1",
+    "@ai-sdk/openai": "^1.3.24",
+    "@hono/node-server": "^1.19.5",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/deployer": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
-    "ai": "^4.3.16",
-    "eslint": "^9.30.1",
+    "ai": "^4.3.19",
+    "eslint": "^9.37.0",
     "execa": "^9.6.0",
     "get-port": "7.1.0",
-    "hono": "^4.8.4",
+    "hono": "^4.9.7",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.11-0 <0.11.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "workflows/inngest"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

@@ -1,53 +1,77 @@
-import { ToolCallContentPartComponent } from '@assistant-ui/react';
-import { ChevronUpIcon } from 'lucide-react';
-import { useState } from 'react';
+import { ToolCallMessagePartProps } from '@assistant-ui/react';
 
-import { Badge } from '@/ds/components/Badge';
-import { Icon, ToolsIcon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
-import { SyntaxHighlighter } from '../../ui/syntax-highlighter';
+import { ToolBadge } from './badges/tool-badge';
+import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
+import { WorkflowRunProvider } from '@/domains/workflows';
+import { MastraUIMessage } from '@mastra/react';
+import { useToolCall } from '@/services/tool-call-provider';
+import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 
-export const ToolFallback: ToolCallContentPartComponent = ({ toolName, argsText, result }) => {
-  const [isCollapsed, setIsCollapsed] = useState(true);
+export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
+  metadata?: MastraUIMessage['metadata'];
+}
 
-  let argSlot;
-  try {
-    const parsedArgs = JSON.parse(argsText);
-    argSlot = <SyntaxHighlighter data={parsedArgs} />;
-  } catch {
-    argSlot = <pre className="whitespace-pre-wrap">{argsText}</pre>;
+export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackProps) => {
+  return (
+    <WorkflowRunProvider>
+      <ToolFallbackInner toolName={toolName} result={result} args={args} {...props} />
+    </WorkflowRunProvider>
+  );
+};
+
+const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...props }: ToolFallbackProps) => {
+  // We need to handle the stream data even if the workflow is not resolved yet
+  // The response from the fetch request resolving the workflow might theoretically
+  // be resolved after we receive the first stream event
+
+  const isAgent = (metadata?.mode === 'network' && metadata.from === 'AGENT') || toolName.startsWith('agent-');
+  const isWorkflow = (metadata?.mode === 'network' && metadata.from === 'WORKFLOW') || toolName.startsWith('workflow-');
+
+  const agentToolName = toolName.startsWith('agent-') ? toolName.substring('agent-'.length) : toolName;
+  const workflowToolName = toolName.startsWith('workflow-') ? toolName.substring('workflow-'.length) : toolName;
+
+  const requireApprovalMetadata = metadata?.mode === 'stream' && metadata?.requireApprovalMetadata;
+
+  const toolApprovalMetadata = requireApprovalMetadata ? requireApprovalMetadata?.[toolCallId] : undefined;
+
+  useWorkflowStream(result);
+
+  if (isAgent) {
+    return (
+      <AgentBadgeWrapper
+        agentId={agentToolName}
+        result={result}
+        metadata={metadata}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
+      />
+    );
+  }
+
+  if (isWorkflow) {
+    const isStreaming = metadata?.mode === 'stream' || metadata?.mode === 'network';
+
+    return (
+      <WorkflowBadge
+        workflowId={workflowToolName}
+        isStreaming={isStreaming}
+        result={result}
+        metadata={metadata}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
+      />
+    );
   }
 
   return (
-    <div className="mb-2">
-      <button onClick={() => setIsCollapsed(s => !s)} className="flex items-center gap-2">
-        <Icon>
-          <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
-        </Icon>
-        <Badge icon={<ToolsIcon className="text-[#ECB047]" />}>{toolName}</Badge>
-      </button>
-
-      {!isCollapsed && (
-        <div className="pt-2">
-          <div className="border-sm border-border1 rounded-lg bg-surface4">
-            <div className="px-4 border-b-sm border-border1 py-2">
-              <p className="font-medium pb-2">Tool arguments</p>
-              {argSlot}
-            </div>
-
-            {result !== undefined && (
-              <div className="px-4 py-2">
-                <p className="font-medium pb-2">Tool result</p>
-                {typeof result === 'string' ? (
-                  <pre className="whitespace-pre-wrap">{result}</pre>
-                ) : (
-                  <SyntaxHighlighter data={result} />
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+    <ToolBadge
+      toolName={toolName}
+      args={args}
+      result={result}
+      toolOutput={result?.toolOutput || []}
+      metadata={metadata}
+      toolCallId={toolCallId}
+      toolApprovalMetadata={toolApprovalMetadata}
+    />
   );
 };

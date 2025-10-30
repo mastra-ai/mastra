@@ -25,7 +25,7 @@ Your template folder **must** include the following files:
   "version": "1.0.0",
   "description": "A template that demonstrates how to build an OpenAI-powered agent using Mastra.",
   "main": "index.js",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "type": "module",
 
   "scripts": {
@@ -85,10 +85,6 @@ The overview of the template.
 
 - `OPENAI_API_KEY`: Your OpenAI API key. [https://platform.openai.com/api-keys](https://platform.openai.com/api-keys)
 - `OTHER_REQUIRED_VARIABLE`: Description of what this variable is for.
-
----
-
-For more guidance, check out the [weather-agent](./weather-agent/) template.
 ```
 
 ## 3. Additional Recommendations

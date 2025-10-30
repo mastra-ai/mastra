@@ -1,4 +1,3 @@
-import { Colors } from '@/ds/tokens';
 import { jsonLanguage } from '@codemirror/lang-json';
 import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
@@ -14,7 +13,7 @@ export const useCodemirrorTheme = () => {
           fontSize: '0.8rem',
           lineHighlight: 'transparent',
           gutterBackground: 'transparent',
-          gutterForeground: Colors.surface3,
+          gutterForeground: '#939393',
           background: 'transparent',
         },
         styles: [{ tag: [t.className, t.propertyName] }],

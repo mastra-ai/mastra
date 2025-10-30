@@ -12,7 +12,7 @@ import type {
   UpdateVectorParams,
 } from '@mastra/core/vector';
 import { QdrantClient } from '@qdrant/js-client-rest';
-import type { Schemas } from '@qdrant/js-client-rest';
+import type { QdrantClientParams, Schemas } from '@qdrant/js-client-rest';
 
 import { QdrantFilterTranslator } from './filter';
 import type { QdrantVectorFilter } from './filter';
@@ -35,21 +35,14 @@ export class QdrantVector extends MastraVector {
    * @param apiKey - The API key for Qdrant.
    * @param https - Whether to use HTTPS.
    */
-  constructor({ url, apiKey, https }: { url: string; apiKey?: string; https?: boolean }) {
+  constructor({ url, apiKey, https, ...rest }: QdrantClientParams) {
     super();
-    const baseClient = new QdrantClient({
+    this.client = new QdrantClient({
       url,
       apiKey,
       https,
+      ...rest,
     });
-    const telemetry = this.__getTelemetry();
-    this.client =
-      telemetry?.traceClass(baseClient, {
-        spanNamePrefix: 'qdrant-vector',
-        attributes: {
-          'vector.type': 'qdrant',
-        },
-      }) ?? baseClient;
   }
 
   async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {

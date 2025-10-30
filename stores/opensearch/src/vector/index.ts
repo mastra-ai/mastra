@@ -1,3 +1,4 @@
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type {
   CreateIndexParams,
   DeleteIndexParams,
@@ -8,8 +9,7 @@ import type {
   QueryVectorParams,
   UpdateVectorParams,
   UpsertVectorParams,
-} from '@mastra/core';
-import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+} from '@mastra/core/vector';
 import { MastraVector } from '@mastra/core/vector';
 import { Client as OpenSearchClient } from '@opensearch-project/opensearch';
 import { OpenSearchFilterTranslator } from './filter';
@@ -363,11 +363,9 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
       // Update vector if provided
       if (update.vector) {
         // Get index stats to check dimension
-        console.log(`1`);
         const indexInfo = await this.describeIndex({ indexName });
 
         // Validate vector dimensions
-        console.log(`2`);
         this.validateVectorDimensions([update.vector], indexInfo.dimension);
 
         updatedDoc.embedding = update.vector;
@@ -383,7 +381,6 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
       }
 
       // Update the document
-      console.log(`3`);
       await this.client.index({
         index: indexName,
         id: id,

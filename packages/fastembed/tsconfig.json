@@ -1,6 +1,6 @@
 {
   "extends": "../../tsconfig.json",
-  "include": ["src"],
+  "include": ["src", "tsup.config.ts"],
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src"

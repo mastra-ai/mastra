@@ -22,7 +22,7 @@ async function runContentWorkflow() {
     }
 
     // Create a run instance
-    const run = workflow.createRun();
+    const run = await workflow.createRunAsync();
 
     // Execute with test data
     const result = await run.start({
@@ -63,7 +63,7 @@ npx tsx src/run-workflow.ts
 ## Key Methods
 
 - **`mastra.getWorkflow(id)`**: Gets a registered workflow by ID
-- **`workflow.createRun()`**: Creates a new execution instance
+- **`workflow.createRunAsync()`**: Creates a new execution instance
 - **`run.start(inputData)`**: Executes the workflow with provided data
 
 ## Return Value

@@ -1,10 +1,11 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "0.11.7-alpha.0",
+  "version": "0.12.12",
   "description": "",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -15,15 +16,15 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
-    "build:watch": "pnpm build --watch",
+    "build": "tsup --silent --config tsup.config.ts",
+    "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint ."
   },
@@ -32,8 +33,8 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/deployer": "workspace:^",
-    "@rollup/plugin-virtual": "^3.0.2",
-    "fs-extra": "^11.3.0"
+    "@rollup/plugin-virtual": "3.0.2",
+    "fs-extra": "^11.3.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -41,12 +42,22 @@
     "@microsoft/api-extractor": "^7.52.8",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.19.0",
-    "eslint": "^9.30.1",
+    "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@internal/types-builder": "workspace:*"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "deployers/vercel"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.10.1-alpha.0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   }
 }

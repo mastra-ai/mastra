@@ -1,6 +1,7 @@
 // To setup a Qdrant server, run:
 // docker run -p 6333:6333 qdrant/qdrant
-import type { QueryResult } from '@mastra/core';
+import { createVectorTestSuite } from '@internal/storage-test-utils';
+import type { QueryResult } from '@mastra/core/vector';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
 
 import type { QdrantVectorFilter } from './filter';
@@ -953,5 +954,24 @@ describe('QdrantVector', () => {
       expect(results).toHaveLength(numQueries);
       console.log(`${numQueries} concurrent queries took ${duration}ms`);
     }, 50000);
+  });
+});
+
+// Metadata filtering tests for Memory system
+describe('Qdrant Metadata Filtering', () => {
+  const qdrantVector = new QdrantVector({ url: 'http://localhost:6333/' });
+
+  createVectorTestSuite({
+    vector: qdrantVector,
+    createIndex: async (indexName: string) => {
+      await qdrantVector.createIndex({ indexName, dimension: 4 });
+    },
+    deleteIndex: async (indexName: string) => {
+      await qdrantVector.deleteIndex({ indexName });
+    },
+    waitForIndexing: async () => {
+      // Qdrant indexes immediately
+      await new Promise(resolve => setTimeout(resolve, 100));
+    },
   });
 });

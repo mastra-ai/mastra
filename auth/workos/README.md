@@ -72,7 +72,3 @@ Verifies a JWT token using WorkOS JWKS and returns the user information if valid
 ### `authorizeUser(user: WorkosUser): Promise<boolean>`
 
 Checks if a user has admin privileges by verifying their organization memberships and roles.
-
-## License
-
-MIT

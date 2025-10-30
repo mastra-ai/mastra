@@ -1,6 +1,6 @@
 # Insert embedding in Chroma
 
-This example demonstrates how to store embeddings in Chroma using Mastra. It shows how to:
+This example demonstrates how to store embeddings in [Chroma](https://docs.trychroma.com/docs/overview/getting-started) using Mastra. It shows how to:
 
 1. Create a document and chunk it
 2. Generate embeddings using OpenAI
@@ -12,7 +12,7 @@ This example demonstrates how to store embeddings in Chroma using Mastra. It sho
 - Node.js v20.0+
 - pnpm (recommended) or npm
 - OpenAI API key
-- Chroma database
+- Optional: Chroma Cloud API key
 
 ## Getting Started
 
@@ -23,26 +23,38 @@ This example demonstrates how to store embeddings in Chroma using Mastra. It sho
    cd examples/basics/rag/insert-embedding-in-chroma
    ```
 
-2. Copy the environment variables file and add your OpenAI API key:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-   Then edit `.env` and add your OpenAI API key and Chroma database path:
-
-   ```env
-   OPENAI_API_KEY=sk-your-api-key-here
-   CHROMA_DB_PATH=path/to/your/chroma/db
-   ```
-
-3. Install dependencies:
+2. Install dependencies:
 
    ```
    pnpm install
    ```
 
-4. Run the example:
+3. Copy the environment variables file and add your OpenAI API key:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Then edit `.env` and add your OpenAI API key:
+
+   ```env
+   OPENAI_API_KEY=sk-your-api-key-here
+   ```
+
+   If you want to use [Chroma Cloud](https://trychroma.com/signup), add your Chroma Cloud API Key, tenant, and database. When you install your dependencies, you get the [Chroma CLI](https://docs.trychroma.com/docs/cli/db), which can output these variables for you with `chroma db connect [DB-NAME] --env-file`
+
+   ```env
+   CHROMA_API_KEY=your-chroma-cloud-api-key
+   CHROMA_TENANT=your-tenant-id
+   CHROMA_DATABASE=your-database-name
+   ```
+
+4. Set up your Chroma server.
+   - If you are using Chroma Cloud, you are ready to go.
+   - For running locally, start a Chroma server with the CLI: `chroma run`. See more configurations on the [Chroma docs](https://docs.trychroma.com/docs/cli/run).
+   - If you deployed a Chroma server yourself, edit the `ChromaVector` instantiation with your specific connection requirements.
+
+5. Run the example:
 
    ```bash
    pnpm start

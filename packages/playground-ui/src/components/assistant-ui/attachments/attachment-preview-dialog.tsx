@@ -4,15 +4,26 @@ import { useState } from 'react';
 
 interface PdfEntryProps {
   data: string;
+  url?: string;
 }
 
-export const PdfEntry = ({ data }: PdfEntryProps) => {
+const ctaClassName = 'h-full w-full flex items-center justify-center';
+
+export const PdfEntry = ({ data, url }: PdfEntryProps) => {
   const [open, setOpen] = useState(false);
+
+  if (url) {
+    return (
+      <a href={url} className={ctaClassName} target="_blank" rel="noreferrer noopener">
+        <FileText className="text-accent2" aria-label="View PDF" />
+      </a>
+    );
+  }
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="h-full w-full flex items-center justify-center" type="button">
-        <FileText className="text-accent2" />
+      <button onClick={() => setOpen(true)} className={ctaClassName} type="button">
+        <FileText className="text-accent2" aria-label="View PDF" />
       </button>
 
       <PdfPreviewDialog data={data} open={open} onOpenChange={setOpen} />
@@ -48,7 +59,7 @@ export const ImageEntry = ({ src }: ImageEntryProps) => {
 
   return (
     <>
-      <button onClick={() => setOpen(true)} type="button" className="h-full w-full flex items-center justify-center">
+      <button onClick={() => setOpen(true)} type="button" className={ctaClassName}>
         <img src={src} className="object-cover aspect-ratio max-h-[140px] max-w-[320px]" alt="Preview" />
       </button>
       <ImagePreviewDialog src={src} open={open} onOpenChange={setOpen} />
@@ -82,13 +93,13 @@ interface TxtEntryProps {
 export const TxtEntry = ({ data }: TxtEntryProps) => {
   const [open, setOpen] = useState(false);
 
-  // assistant-ui wraps txt related files with somethign like <attachment name=text.txt>
+  // assistant-ui wraps txt related files with something like <attachment name=text.txt>
   // We remove the <attachment> tag and everything inside it
   const formattedContent = data.replace(/<attachment[^>]*>/, '').replace(/<\/attachment>/g, '');
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="h-full w-full flex items-center justify-center" type="button">
+      <button onClick={() => setOpen(true)} className={ctaClassName} type="button">
         <FileText className="text-icon3" />
       </button>
       <TxtPreviewDialog data={formattedContent} open={open} onOpenChange={setOpen} />

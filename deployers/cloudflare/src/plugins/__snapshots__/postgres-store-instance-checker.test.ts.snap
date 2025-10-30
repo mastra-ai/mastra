@@ -1,0 +1,38 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Check PostgresStore instance > should bundle without error 1`] = `
+"import { createLogger } from '@mastra/core/logger';
+import { Mastra } from '@mastra/core/mastra';
+import { createApiRoute } from '@mastra/core/server';
+import { TestDeployer } from '@mastra/deployer/test';
+import { PostgresStore } from '@mastra/pg';
+import { weatherAgent } from '@/agents';
+
+const mastra = new Mastra({
+  agents: {
+    weatherAgent
+  },
+  storage: new PostgresStore({
+    connectionString: process.env.DATABASE_URL
+  }),
+  logger: createLogger({
+    name: "Mastra",
+    level: "info"
+  }),
+  server: {
+    port: 3e3,
+    timeout: 5e3,
+    apiRoutes: [createApiRoute({
+      path: "/hello",
+      method: "get",
+      handler: async (req, res) => {
+        res.send("Hello World");
+      }
+    })]
+  },
+  deployer: new TestDeployer()
+});
+
+export { mastra };
+"
+`;

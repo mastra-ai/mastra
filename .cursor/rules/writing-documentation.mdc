@@ -1,10 +1,12 @@
 ---
-description: 
-globs: 
+description:
+globs:
 alwaysApply: false
 ---
-1. When writing developer documentation, do not use adjectives like "powerful" or "built-in" . These read like marketing copy, and developers don't like that. 
+
+1. When writing developer documentation, do not use adjectives like "powerful" or "built-in" . These read like marketing copy, and developers don't like that.
 2. When writing developer documentation, do not use "complete" or "out-of-the-box", or "hands-on" either. Do not use overly enthusiastic exhortations, such as "Check out" or "Learn more" or "Explore". Do not use words like "essential" or "offers".
 3. When writing developer documentation, do not use "your needs", "production-ready", "makes it easy", or "choose the right...solution". These are marketing jargon, and developers don't like that.
-4. When writing developer documentation, do not use phrases like "without changing your code", "automatically handles", 
+4. When writing developer documentation, do not use phrases like "without changing your code", "automatically handles",
 5. In general, avoid phrasing that feels like it glides between benefits without diving into details. For example, this is a bad sentence: "This makes it easy to build AI applications that maintain meaningful conversations and remember important details, whether you're building a simple chatbot or a sophisticated AI assistant." WE ARE WRITING FOR ENGINEERS WE NEED TO GET DOWN TO THE NUTS AND BOLTS.
+6. All H1 headings (# Heading) must use title case format, capitalizing the first letter of each major word. Examples: "Getting Started", "Human In-the-Loop Workflow", "Agent as a Step".

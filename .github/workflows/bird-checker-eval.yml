@@ -23,23 +23,12 @@ jobs:
     steps:
       - name: Checkout
         id: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
-        with:
-          run_install: false
-
-      - name: Setup Node.js 20.x
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20.19.1
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Run Bird Checker evals
         uses: braintrustdata/eval-action@v1

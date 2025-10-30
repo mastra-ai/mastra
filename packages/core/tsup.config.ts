@@ -1,4 +1,8 @@
+import fs from 'fs';
+import path from 'path';
+
 import babel from '@babel/core';
+import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
 import type { Options } from 'tsup';
 
@@ -8,7 +12,7 @@ type Plugin = NonNullable<Options['plugins']>[number];
 
 let treeshakeDecorators = {
   name: 'treeshake-decorators',
-  renderChunk(code, info) {
+  renderChunk(code: string, info: { path: string }) {
     if (!code.includes('__decoratorStart')) {
       return null;
     }
@@ -44,21 +48,51 @@ export default defineConfig({
     'src/utils.ts',
     '!src/action/index.ts',
     'src/*/index.ts',
+    'src/tools/is-vercel-tool.ts',
     'src/workflows/legacy/index.ts',
     'src/workflows/constants.ts',
+    'src/workflows/evented/index.ts',
     'src/network/index.ts',
     'src/network/vNext/index.ts',
-    'src/storage/libsql/index.ts',
-    'src/vector/libsql/index.ts',
     'src/vector/filter/index.ts',
-    'src/telemetry/otel-vendor.ts',
+    'src/test-utils/llm-mock.ts',
+    'src/processors/index.ts',
+    'src/zod-to-json.ts',
+    'src/scores/scoreTraces/index.ts',
   ],
   format: ['esm', 'cjs'],
   clean: true,
-  dts: true,
+  dts: false,
   splitting: true,
   treeshake: {
     preset: 'smallest',
   },
   plugins: [treeshakeDecorators],
+  sourcemap: true,
+  onSuccess: async () => {
+    await generateTypes(process.cwd());
+
+    // Copy provider-registry.json to dist folder
+    const srcJson = path.join(process.cwd(), 'src/llm/model/provider-registry.json');
+    const distJson = path.join(process.cwd(), 'dist/provider-registry.json');
+
+    if (fs.existsSync(srcJson)) {
+      fs.copyFileSync(srcJson, distJson);
+      console.info('✓ Copied provider-registry.json to dist/');
+    }
+
+    // Copy provider-types.generated.d.ts to dist/llm/model/ folder
+    const srcDts = path.join(process.cwd(), 'src/llm/model/provider-types.generated.d.ts');
+    const distDtsDir = path.join(process.cwd(), 'dist/llm/model');
+    const distDts = path.join(distDtsDir, 'provider-types.generated.d.ts');
+
+    if (fs.existsSync(srcDts)) {
+      // Ensure directory exists
+      if (!fs.existsSync(distDtsDir)) {
+        fs.mkdirSync(distDtsDir, { recursive: true });
+      }
+      fs.copyFileSync(srcDts, distDts);
+      console.info('✓ Copied provider-types.generated.d.ts to dist/llm/model/');
+    }
+  },
 });

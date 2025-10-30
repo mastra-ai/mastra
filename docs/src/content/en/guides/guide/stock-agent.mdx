@@ -1,72 +1,76 @@
 ---
-title: "Building an AI Stock Agent | Mastra Agents | Guides"
+title: "Guide: Building an AI Stock Agent | Mastra Agents | Guides"
 description: Guide on creating a simple stock agent in Mastra to fetch the last day's closing stock price for a given symbol.
 ---
 
-import { Steps } from "nextra/components";
-import YouTube from "@/components/youtube";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import YouTube from "@site/src/components/YouTube-player";
 
-# Stock Agent
+# Building an AI Stock Agent
 
-We're going to create a simple agent that fetches the last day's closing stock price for a given symbol. This example will show you how to create a tool, add it to an agent, and use the agent to fetch stock prices.
+In this guide, you're going to create a simple agent that fetches the last day's closing stock price for a given symbol. You'll learn how to create a tool, add it to an agent, and use the agent to fetch stock prices.
 
 <YouTube id="rIaZ4l7y9wo" />
 
-## Project Structure
+## Prerequisites
 
-```
-stock-price-agent/
-├── src/
-│   ├── agents/
-│   │   └── stockAgent.ts
-│   ├── tools/
-│   │   └── stockPrices.ts
-│   └── index.ts
-├── package.json
-└── .env
-```
+- Node.js `v20.0` or later installed
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
----
+## Creating the Agent
+
+To create an agent in Mastra use the `Agent` class to define it and then register it with Mastra.
 
 <Steps>
-## Initialize the Project and Install Dependencies
 
-First, create a new directory for your project and navigate into it:
+<StepItem>
 
-```bash
-mkdir stock-price-agent
-cd stock-price-agent
+Create a new file `src/mastra/agents/stockAgent.ts` and define your agent:
+
+```ts copy title="src/mastra/agents/stockAgent.ts"
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+export const stockAgent = new Agent({
+  name: "Stock Agent",
+  instructions:
+    "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
+  model: openai("gpt-4o-mini"),
+});
 ```
 
-Initialize a new Node.js project and install the required dependencies:
+</StepItem>
 
-```bash copy
-npm init -y
-npm install @mastra/core@latest zod @ai-sdk/openai
+<StepItem>
+
+In your `src/mastra/index.ts` file, register the agent:
+
+```ts copy title="src/mastra/index.ts" {2, 5}
+import { Mastra } from "@mastra/core";
+import { stockAgent } from "./agents/stockAgent";
+
+export const mastra = new Mastra({
+  agents: { stockAgent },
+});
 ```
 
-Set Up Environment Variables
+</StepItem>
 
-Create a `.env` file at the root of your project to store your OpenAI API key.
+</Steps>
 
-```bash filename=".env" copy
-OPENAI_API_KEY=your_openai_api_key
-```
+## Creating the Stock Price Tool
 
-Create the necessary directories and files:
+So far the Stock Agent doesn't know anything about the current stock prices. To change this, create a tool and add it to the agent.
 
-```bash
-mkdir -p src/agents src/tools
-touch src/agents/stockAgent.ts src/tools/stockPrices.ts src/index.ts
-```
+<Steps>
 
----
+<StepItem>
 
-## Create the Stock Price Tool
+Create a new file `src/mastra/tools/stockPrices.ts`. Inside, add a `stockPrices` tool that will fetch the last day's closing stock price for a given symbol:
 
-Next, we'll create a tool that fetches the last day's closing stock price for a given symbol.
-
-```ts filename="src/tools/stockPrices.ts"
+```ts title="src/mastra/tools/stockPrices.ts"
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -93,70 +97,65 @@ export const stockPrices = createTool({
 });
 ```
 
----
+</StepItem>
 
-## Add the Tool to an Agent
+<StepItem>
 
-We'll create an agent and add the `stockPrices` tool to it.
+Inside `src/mastra/agents/stockAgent.ts` import your newly created `stockPrices` tool and add it to the agent.
 
-```ts filename="src/agents/stockAgent.ts"
-import { Agent } from "@mastra/core/agent";
+```ts copy title="src/mastra/agents/stockAgent.ts" {3, 10-12}
 import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { stockPrices } from "../tools/stockPrices";
 
-import * as tools from "../tools/stockPrices";
-
-export const stockAgent = new Agent<typeof tools>({
+export const stockAgent = new Agent({
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
   model: openai("gpt-4o-mini"),
   tools: {
-    stockPrices: tools.stockPrices,
+    stockPrices,
   },
 });
 ```
 
----
+</StepItem>
 
-## Set Up the Mastra Instance
+</Steps>
 
-We need to initialize the Mastra instance with our agent and tool.
+## Running the Agent Server
 
-```ts filename="src/index.ts"
-import { Mastra } from "@mastra/core";
+Learn how to interact with your agent through Mastra's API.
 
-import { stockAgent } from "./agents/stockAgent";
+<Steps>
 
-export const mastra = new Mastra({
-  agents: { stockAgent },
-});
+<StepItem>
+
+You can run your agent as a service using the `mastra dev` command:
+
+```bash copy
+mastra dev
 ```
 
-## Serve the Application
+This will start a server exposing endpoints to interact with your registered agents. Within the [playground](/docs/getting-started/studio) you can test your `stockAgent` and `stockPrices` tool through a UI.
 
-Instead of running the application directly, we'll use the `mastra dev` command to start the server. This will expose your agent via REST API endpoints, allowing you to interact with it over HTTP.
+</StepItem>
 
-In your terminal, start the Mastra server by running:
+<StepItem>
 
-```bash
-mastra dev --dir src
-```
-
-This command will allow you to test your stockPrices tool and your stockAgent within the playground.
-
-This will also start the server and make your agent available at:
+By default, `mastra dev` runs on `http://localhost:4111`. Your Stock agent will be available at:
 
 ```
-http://localhost:4111/api/agents/stockAgent/generate
+POST http://localhost:4111/api/agents/stockAgent/generate
 ```
 
----
+</StepItem>
 
-## Test the Agent with cURL
+<StepItem>
 
-Now that your server is running, you can test your agent's endpoint using `curl`:
+You can interact with the agent using `curl` from the command line:
 
-```bash
+```bash copy
 curl -X POST http://localhost:4111/api/agents/stockAgent/generate \
   -H "Content-Type: application/json" \
   -d '{
@@ -178,5 +177,7 @@ You should receive a JSON response similar to:
 ```
 
 This indicates that your agent successfully processed the request, used the `stockPrices` tool to fetch the stock price, and returned the result.
+
+</StepItem>
 
 </Steps>

@@ -2,10 +2,14 @@
   "$schema": "https://turbo.build/schema.json",
   "extends": ["//"],
   "tasks": {
-    "build": {
+    "build:lib": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "src/playground/dist/**"],
-      "inputs": ["$TURBO_DEFAULT$", "./tsup.config.js"]
+      "outputs": ["dist/**"],
+      "inputs": ["$TURBO_DEFAULT$", "./tsup.config.ts"]
+    },
+    "build": {
+      "dependsOn": ["^build", "build:lib", "@internal/playground#build"],
+      "outputs": ["dist/**"]
     }
   }
 }

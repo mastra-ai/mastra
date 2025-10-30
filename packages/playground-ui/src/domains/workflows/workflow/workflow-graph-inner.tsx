@@ -1,12 +1,4 @@
-import {
-  ReactFlow,
-  MiniMap,
-  Background,
-  useNodesState,
-  useEdgesState,
-  BackgroundVariant,
-  NodeProps,
-} from '@xyflow/react';
+import { ReactFlow, Background, useNodesState, useEdgesState, BackgroundVariant, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { GetWorkflowResponse } from '@mastra/client-js';
 
@@ -25,26 +17,22 @@ export interface WorkflowGraphInnerProps {
   workflow: {
     stepGraph: GetWorkflowResponse['stepGraph'];
   };
-  onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
+
   onSendEvent?: WorkflowSendEventFormProps['onSendEvent'];
 }
 
-export function WorkflowGraphInner({ workflow, onShowTrace, onSendEvent }: WorkflowGraphInnerProps) {
+export function WorkflowGraphInner({ workflow, onSendEvent }: WorkflowGraphInnerProps) {
   const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges(workflow);
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);
   const { steps, runId } = useCurrentRun();
 
   const nodeTypes = {
-    'default-node': (props: NodeProps<DefaultNode>) => (
-      <WorkflowDefaultNode onShowTrace={onShowTrace} onSendEvent={onSendEvent} {...props} />
-    ),
+    'default-node': (props: NodeProps<DefaultNode>) => <WorkflowDefaultNode onSendEvent={onSendEvent} {...props} />,
     'condition-node': WorkflowConditionNode,
     'after-node': WorkflowAfterNode,
     'loop-result-node': WorkflowLoopResultNode,
-    'nested-node': (props: NodeProps<NestedNode>) => (
-      <WorkflowNestedNode onShowTrace={onShowTrace} onSendEvent={onSendEvent} {...props} />
-    ),
+    'nested-node': (props: NodeProps<NestedNode>) => <WorkflowNestedNode onSendEvent={onSendEvent} {...props} />,
   };
 
   return (
@@ -58,7 +46,11 @@ export function WorkflowGraphInner({ workflow, onShowTrace, onSendEvent }: Workf
             stroke:
               steps[e.data?.previousStepId as string]?.status === 'success' && steps[e.data?.nextStepId as string]
                 ? '#22c55e'
-                : undefined,
+                : e.data?.conditionNode &&
+                    !steps[e.data?.previousStepId as string] &&
+                    Boolean(steps[e.data?.nextStepId as string]?.status)
+                  ? '#22c55e'
+                  : undefined,
           },
         }))}
         nodeTypes={nodeTypes}
@@ -71,7 +63,7 @@ export function WorkflowGraphInner({ workflow, onShowTrace, onSendEvent }: Workf
         maxZoom={1}
       >
         <ZoomSlider position="bottom-left" />
-        <MiniMap pannable zoomable maskColor="#121212" bgColor="#171717" nodeColor="#2c2c2c" />
+
         <Background variant={BackgroundVariant.Dots} gap={12} size={0.5} />
       </ReactFlow>
     </div>

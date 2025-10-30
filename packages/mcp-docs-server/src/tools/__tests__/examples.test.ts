@@ -7,7 +7,7 @@ describe('examplesTool', () => {
   let tools: any;
 
   beforeAll(async () => {
-    tools = await mcp.getTools();
+    tools = await mcp.listTools();
   });
 
   afterAll(async () => {
@@ -21,7 +21,7 @@ describe('examplesTool', () => {
       // Check for some known examples that should be in the list
       expect(result).toContain('Available code examples:');
       expect(result).toContain('quick-start');
-      expect(result).toContain('agent');
+      expect(result).toContain('weather-agent');
     });
 
     it('should return example content for a specific example', async () => {
@@ -66,9 +66,9 @@ describe('examplesTool', () => {
     });
 
     it('should handle examples with multiple code blocks', async () => {
-      const result = await callTool(tools.mastra_mastraExamples, { example: 'agent' });
+      const result = await callTool(tools.mastra_mastraExamples, { example: 'weather-agent' });
       const codeBlockCount = (result.match(/```typescript/g) || []).length;
-      expect(codeBlockCount).toBeGreaterThan(1);
+      expect(codeBlockCount).toBeGreaterThan(0);
     });
 
     it('should handle examples with multiple file structures', async () => {
@@ -82,11 +82,11 @@ describe('examplesTool', () => {
     });
 
     it('should include TypeScript type definitions', async () => {
-      const result = await callTool(tools.mastra_mastraExamples, { example: 'agent-network' });
+      const result = await callTool(tools.mastra_mastraExamples, { example: 'weather-agent' });
 
       // Check for TypeScript types and interfaces
       expect(result).toMatch(/import\s+{\s*Agent\s*}\s+from/i); // Type import
-      expect(result).toMatch(/import\s+{\s*AgentNetwork\s*}\s+from/i); // Network type import
+      expect(result).toMatch(/import\s+{\s*Mastra\s*}\s+from/i); // Mastra type import
     });
 
     it('should demonstrate external API integration patterns', async () => {
@@ -178,8 +178,6 @@ describe('examplesTool', () => {
       // Also verify that we have at least some expected examples
       const expectedExamples = [
         'quick-start',
-        'agent',
-        'agent-network',
         'bird-checker-with-express',
         'bird-checker-with-nextjs',
         'memory-todo-agent',

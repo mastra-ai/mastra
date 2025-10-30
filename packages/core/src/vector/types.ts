@@ -1,5 +1,16 @@
 import type { VectorFilter } from './filter';
 
+/**
+ * Generic sparse vector structure
+ * Represents high-dimensional vectors with only non-zero values stored
+ */
+export interface SparseVector {
+  /** Array of dimension indices for non-zero values */
+  indices: number[];
+  /** Array of values corresponding to the indices */
+  values: number[];
+}
+
 export interface QueryResult {
   id: string;
   score: number;
@@ -24,6 +35,8 @@ export interface UpsertVectorParams {
   vectors: number[][];
   metadata?: Record<string, any>[];
   ids?: string[];
+  /** Optional array of sparse vectors for hybrid search */
+  sparseVectors?: SparseVector[];
 }
 
 export interface CreateIndexParams {
@@ -38,6 +51,8 @@ export interface QueryVectorParams<Filter = VectorFilter> {
   topK?: number;
   filter?: Filter;
   includeVector?: boolean;
+  /** Optional sparse vector for hybrid query */
+  sparseVector?: SparseVector;
 }
 
 export interface DescribeIndexParams {

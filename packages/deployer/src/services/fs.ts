@@ -21,7 +21,7 @@ export class FileService {
     const fileString = fs.readFileSync(filePath, 'utf8');
 
     if (fs.existsSync(outputFilePath) && !replaceIfExists) {
-      console.log(`${outputFilePath} already exists`);
+      console.info(`${outputFilePath} already exists`);
       return false;
     }
 

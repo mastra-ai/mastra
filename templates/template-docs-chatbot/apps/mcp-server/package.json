@@ -1,0 +1,36 @@
+{
+  "name": "@templates/mcp-server",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "vitest"
+  },
+  "keywords": [
+    "mcp",
+    "server",
+    "documentation",
+    "mastra"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "description": "A standalone MCP server for documentation tools that can be consumed by any MCP client",
+  "type": "module",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/mcp": "latest",
+    "zod": "^3.25.76",
+    "dotenv": "^17.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

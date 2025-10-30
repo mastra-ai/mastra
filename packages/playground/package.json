@@ -1,0 +1,53 @@
+{
+  "name": "@internal/playground",
+  "private": true,
+  "version": "0.0.5",
+  "type": "module",
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/playground"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:watch": "vite build --watch",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@lukeed/uuid": "^2.0.1",
+    "@mastra/client-js": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@mastra/react": "workspace:*",
+    "@mastra/playground-ui": "workspace:^",
+    "@tanstack/react-query": "^5.81.5",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.522.0",
+    "next-themes": "^0.4.6",
+    "posthog-js": "^1.262.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-router": "^7.6.3",
+    "tailwind-merge": "^2.6.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.37.0",
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.4",
+    "autoprefixer": "^10.4.21",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^15.15.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.18",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.38.0",
+    "vite": "^7.1.9"
+  }
+}

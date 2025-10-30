@@ -1,15 +1,17 @@
 packages:
-  - "packages/*"
-  - "deployers/*"
-  - "stores/*"
-  - "voice/*"
-  - "workflows/*"
-  - "client-sdks/*"
-  - "!packages/cli/admin"
-  - "integrations/*"
-  - "examples/dane"
-  - "packages/cli/src/playground"
-  - "packages/*/integration-tests"
-  - "packages/cloud"
-  - "auth/*"
-  - "explorations/longmemeval"
+  - packages/*
+  - deployers/*
+  - stores/*
+  - voice/*
+  - workflows/*
+  - pubsub/*
+  - client-sdks/*
+  - integrations/*
+  - examples/dane
+  - auth/*
+  - observability/*
+  - explorations/longmemeval
+  - explorations/agent-builder-gh-repro
+
+patchedDependencies:
+  '@changesets/get-dependents-graph': patches/@changesets__get-dependents-graph.patch

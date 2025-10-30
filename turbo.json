@@ -7,13 +7,15 @@
       "env": ["RAPID_API_KEY", "ANTHROPIC_API_KEY"]
     },
     "lint": {
-      "dependsOn": ["^lint"]
+      "dependsOn": []
     },
     "clean": {
       "cache": false
     },
-    "//#generate:root": {
-      "cache": false
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
     }
   }
 }

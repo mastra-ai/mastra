@@ -1,41 +1,28 @@
-import child_process from 'node:child_process';
-import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
 
 import { DepsService } from '../../services/service.deps';
-import { getPackageManagerInstallCommand } from '../utils';
 
 import { installMastraDocsMCPServer } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
-import {
-  createComponentsDir,
-  createMastraDir,
-  getAISDKPackage,
-  getAPIKey,
-  writeAPIKey,
-  writeCodeSample,
-  writeIndexFile,
-} from './utils';
-import type { Components, LLMProvider } from './utils';
+import { createComponentsDir, createMastraDir, getAPIKey, writeAPIKey, writeCodeSample, writeIndexFile } from './utils';
+import type { Component, LLMProvider } from './utils';
 
 const s = p.spinner();
 
-const exec = util.promisify(child_process.exec);
-
 export const init = async ({
-  directory,
-  addExample = false,
+  directory = 'src/',
   components,
   llmProvider = 'openai',
   llmApiKey,
+  addExample = false,
   configureEditorWithDocsMCP,
 }: {
-  directory: string;
-  components: string[];
-  llmProvider: LLMProvider;
-  addExample: boolean;
+  directory?: string;
+  components: Component[];
+  llmProvider?: LLMProvider;
   llmApiKey?: string;
+  addExample?: boolean;
   configureEditorWithDocsMCP?: Editor;
 }) => {
   s.start('Initializing Mastra');
@@ -56,6 +43,7 @@ export const init = async ({
         addExample,
         addWorkflow: components.includes('workflows'),
         addAgent: components.includes('agents'),
+        addScorers: components.includes('scorers'),
       }),
       ...components.map(component => createComponentsDir(dirPath, component)),
       writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }),
@@ -64,7 +52,7 @@ export const init = async ({
     if (addExample) {
       await Promise.all([
         ...components.map(component =>
-          writeCodeSample(dirPath, component as Components, llmProvider, components as Components[]),
+          writeCodeSample(dirPath, component as Component, llmProvider, components as Component[]),
         ),
       ]);
 
@@ -83,15 +71,20 @@ export const init = async ({
       if (needsLoggers) {
         await depService.installPackages(['@mastra/loggers']);
       }
+
+      const needsObservability = (await depService.checkDependencies(['@mastra/observability'])) !== `ok`;
+      if (needsObservability) {
+        await depService.installPackages(['@mastra/observability']);
+      }
+
+      const needsEvals =
+        components.includes(`scorers`) && (await depService.checkDependencies(['@mastra/evals'])) !== `ok`;
+      if (needsEvals) {
+        await depService.installPackages(['@mastra/evals']);
+      }
     }
 
     const key = await getAPIKey(llmProvider || 'openai');
-
-    const aiSdkPackage = getAISDKPackage(llmProvider);
-    const depsService = new DepsService();
-    const pm = depsService.packageManager;
-    const installCommand = getPackageManagerInstallCommand(pm);
-    await exec(`${pm} ${installCommand} ${aiSdkPackage}`);
 
     if (configureEditorWithDocsMCP) {
       await installMastraDocsMCPServer({

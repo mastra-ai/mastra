@@ -2,32 +2,28 @@ import { spawn } from 'node:child_process';
 import { MCPClient } from '@mastra/mcp';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { ServerInfo } from '@mastra/core/mcp';
-import getPort from 'get-port';
 import path from 'node:path';
 
 vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
 
 describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
   let mastraServer: ReturnType<typeof spawn>;
-  let port: number;
+  const port: number = 4114;
   const mcpServerId = 'myMcpServer';
   const testToolId = 'calculator';
   let client: MCPClient;
 
   beforeAll(async () => {
-    port = await getPort();
-
     mastraServer = spawn(
       'pnpm',
-      [
-        path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`),
-        'dev',
-        '--port',
-        port.toString(),
-      ],
+      [path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`), 'dev'],
       {
         stdio: 'pipe',
         detached: true, // Run in a new process group so we can kill it and children
+        env: {
+          ...process.env,
+          PORT: port.toString(),
+        },
       },
     );
 
@@ -45,7 +41,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
         console.error('Mastra server error:', data.toString());
       });
 
-      setTimeout(() => reject(new Error('Mastra server failed to start')), 10000);
+      setTimeout(() => reject(new Error('Mastra server failed to start')), 100000);
     });
 
     client = new MCPClient({
@@ -79,7 +75,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
       },
     };
 
-    const tools = await client.getTools();
+    const tools = await client.listTools();
     console.log('Tools:', tools);
 
     const tool = tools['myMcpServer_calculator'];
@@ -115,7 +111,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
     const toolCallPayloadParams = { num1: 10, num2: 5, operation: 'add' };
 
     // Get tools (this will connect the client internally if not already connected)
-    const tools = await sseClient.getTools();
+    const tools = await sseClient.listTools();
 
     const toolName = `${mcpServerId}_${testToolId}`;
     const tool = tools[toolName];
@@ -228,5 +224,52 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
         expect(body.next).toBeNull();
       }
     });
+
+    it('Should be able to get lazy loaded tools', async () => {
+      const agent = await fetch(`http://localhost:${port}/api/agents/test`);
+      const agentJson = await agent.json();
+      const tools = agentJson.tools;
+
+      expect(tools).toHaveProperty('weather_fetchWeather');
+      expect(Object.keys(tools).length).toBe(5);
+    });
+  });
+
+  describe('Mastra Instance Availability in MCP Tools', () => {
+    it('should have mastra instance available in MCP tool execution via HTTP', async () => {
+      const toolCallPayload = {
+        jsonrpc: '2.0',
+        id: `test-${Date.now()}`,
+        method: 'CallTool',
+        params: {
+          name: 'testMastraInstance',
+          args: { testMessage: 'Hello from integration test!' },
+        },
+      };
+
+      const tools = await client.listTools();
+      const tool = tools['myMcpServer_testMastraInstance'];
+      expect(tool).toBeDefined();
+
+      const result = await tool.execute({ context: toolCallPayload.params.args }, { suspend: async () => {} });
+
+      expect(result).toBeDefined();
+      expect(result.isError).toBe(false);
+      expect(result.content).toBeInstanceOf(Array);
+      expect(result.content.length).toBeGreaterThan(0);
+
+      const toolOutput = result.content[0];
+      expect(toolOutput.type).toBe('text');
+
+      const parsedResult = JSON.parse(toolOutput.text);
+      expect(parsedResult.success).toBe(true);
+      expect(parsedResult.testMessage).toBe('Hello from integration test!');
+      expect(parsedResult.mastraAvailable).toBe(true);
+      expect(parsedResult.mastraType).toBe('object');
+      expect(parsedResult.mastraHasAgents).toBe(true);
+      expect(parsedResult.mastraHasMCPServers).toBe(true);
+      expect(parsedResult.mastraHasLogger).toBe(true);
+      expect(parsedResult.timestamp).toBeDefined();
+    }, 25000);
   });
 });

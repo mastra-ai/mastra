@@ -40,22 +40,38 @@ describe('Provider Compatibility Classes', () => {
 
   describe('AnthropicSchemaCompatLayer', () => {
     it('should apply for Anthropic models', () => {
-      const compat = new AnthropicSchemaCompatLayer(mockModels.anthropic);
+      const compat = new AnthropicSchemaCompatLayer({
+        modelId: mockModels.anthropic.modelId,
+        supportsStructuredOutputs: mockModels.anthropic.supportsStructuredOutputs ?? false,
+        provider: mockModels.anthropic.provider,
+      });
       expect(compat.shouldApply()).toBe(true);
     });
 
     it('should not apply for non-Anthropic models', () => {
-      const compat = new AnthropicSchemaCompatLayer(mockModels.openai);
+      const compat = new AnthropicSchemaCompatLayer({
+        modelId: mockModels.openai.modelId,
+        supportsStructuredOutputs: mockModels.openai.supportsStructuredOutputs ?? false,
+        provider: mockModels.openai.provider,
+      });
       expect(compat.shouldApply()).toBe(false);
     });
 
     it('should return correct schema target', () => {
-      const compat = new AnthropicSchemaCompatLayer(mockModels.anthropic);
+      const compat = new AnthropicSchemaCompatLayer({
+        modelId: mockModels.anthropic.modelId,
+        supportsStructuredOutputs: mockModels.anthropic.supportsStructuredOutputs ?? false,
+        provider: mockModels.anthropic.provider,
+      });
       expect(compat.getSchemaTarget()).toBe('jsonSchema7');
     });
 
     it('should process schemas correctly', () => {
-      const compat = new AnthropicSchemaCompatLayer(mockModels.anthropic);
+      const compat = new AnthropicSchemaCompatLayer({
+        modelId: mockModels.anthropic.modelId,
+        supportsStructuredOutputs: mockModels.anthropic.supportsStructuredOutputs ?? false,
+        provider: mockModels.anthropic.provider,
+      });
       const schema = z.object({
         text: z.string().min(1).max(100),
         count: z.number().min(1),
@@ -79,17 +95,29 @@ describe('Provider Compatibility Classes', () => {
 
   describe('OpenAISchemaCompatLayer', () => {
     it('should apply for OpenAI models without structured outputs support', () => {
-      const compat = new OpenAISchemaCompatLayer(mockModels.openai);
+      const compat = new OpenAISchemaCompatLayer({
+        modelId: mockModels.openai.modelId,
+        supportsStructuredOutputs: mockModels.openai.supportsStructuredOutputs ?? false,
+        provider: mockModels.openai.provider,
+      });
       expect(compat.shouldApply()).toBe(true);
     });
 
     it('should return correct schema target', () => {
-      const compat = new OpenAISchemaCompatLayer(mockModels.openai);
+      const compat = new OpenAISchemaCompatLayer({
+        modelId: mockModels.openai.modelId,
+        supportsStructuredOutputs: mockModels.openai.supportsStructuredOutputs ?? false,
+        provider: mockModels.openai.provider,
+      });
       expect(compat.getSchemaTarget()).toBe('jsonSchema7');
     });
 
     it('should process complex schemas', () => {
-      const compat = new OpenAISchemaCompatLayer(mockModels.openai);
+      const compat = new OpenAISchemaCompatLayer({
+        modelId: mockModels.openai.modelId,
+        supportsStructuredOutputs: mockModels.openai.supportsStructuredOutputs ?? false,
+        provider: mockModels.openai.provider,
+      });
       const schema = z.object({
         user: z.object({
           name: z.string().email(),
@@ -122,29 +150,49 @@ describe('Provider Compatibility Classes', () => {
 
   describe('OpenAIReasoningSchemaCompatLayer', () => {
     it('should have consistent behavior', () => {
-      const compat = new OpenAIReasoningSchemaCompatLayer(mockModels.openaiReasoning);
+      const compat = new OpenAIReasoningSchemaCompatLayer({
+        modelId: mockModels.openaiReasoning.modelId,
+        supportsStructuredOutputs: mockModels.openaiReasoning.supportsStructuredOutputs ?? false,
+        provider: mockModels.openaiReasoning.provider,
+      });
       expect(compat.shouldApply()).toBe(true);
     });
 
     it('should return correct schema target', () => {
-      const compat = new OpenAIReasoningSchemaCompatLayer(mockModels.openaiReasoning);
+      const compat = new OpenAIReasoningSchemaCompatLayer({
+        modelId: mockModels.openaiReasoning.modelId,
+        supportsStructuredOutputs: mockModels.openaiReasoning.supportsStructuredOutputs ?? false,
+        provider: mockModels.openaiReasoning.provider,
+      });
       expect(compat.getSchemaTarget()).toBe('openApi3');
     });
   });
 
   describe('GoogleSchemaCompatLayer', () => {
     it('should have consistent behavior', () => {
-      const compat = new GoogleSchemaCompatLayer(mockModels.google);
+      const compat = new GoogleSchemaCompatLayer({
+        modelId: mockModels.google.modelId,
+        supportsStructuredOutputs: mockModels.google.supportsStructuredOutputs ?? false,
+        provider: mockModels.google.provider,
+      });
       expect(typeof compat.shouldApply()).toBe('boolean');
     });
 
     it('should return correct schema target', () => {
-      const compat = new GoogleSchemaCompatLayer(mockModels.google);
+      const compat = new GoogleSchemaCompatLayer({
+        modelId: mockModels.google.modelId,
+        supportsStructuredOutputs: mockModels.google.supportsStructuredOutputs ?? false,
+        provider: mockModels.google.provider,
+      });
       expect(compat.getSchemaTarget()).toBe('jsonSchema7');
     });
 
     it('should handle date types correctly', () => {
-      const compat = new GoogleSchemaCompatLayer(mockModels.google);
+      const compat = new GoogleSchemaCompatLayer({
+        modelId: mockModels.google.modelId,
+        supportsStructuredOutputs: mockModels.google.supportsStructuredOutputs ?? false,
+        provider: mockModels.google.provider,
+      });
       const schema = z.object({
         startDate: z.date(),
         endDate: z.date().optional(),
@@ -169,22 +217,38 @@ describe('Provider Compatibility Classes', () => {
 
   describe('DeepSeekSchemaCompatLayer', () => {
     it('should apply for DeepSeek models', () => {
-      const compat = new DeepSeekSchemaCompatLayer(mockModels.deepseek);
+      const compat = new DeepSeekSchemaCompatLayer({
+        modelId: mockModels.deepseek.modelId,
+        supportsStructuredOutputs: mockModels.deepseek.supportsStructuredOutputs ?? false,
+        provider: mockModels.deepseek.provider,
+      });
       expect(compat.shouldApply()).toBe(true);
     });
 
     it('should not apply for non-DeepSeek models', () => {
-      const compat = new DeepSeekSchemaCompatLayer(mockModels.openai);
+      const compat = new DeepSeekSchemaCompatLayer({
+        modelId: mockModels.openai.modelId,
+        supportsStructuredOutputs: mockModels.openai.supportsStructuredOutputs ?? false,
+        provider: mockModels.openai.provider,
+      });
       expect(compat.shouldApply()).toBe(false);
     });
 
     it('should return correct schema target', () => {
-      const compat = new DeepSeekSchemaCompatLayer(mockModels.deepseek);
+      const compat = new DeepSeekSchemaCompatLayer({
+        modelId: mockModels.deepseek.modelId,
+        supportsStructuredOutputs: mockModels.deepseek.supportsStructuredOutputs ?? false,
+        provider: mockModels.deepseek.provider,
+      });
       expect(compat.getSchemaTarget()).toBe('jsonSchema7');
     });
 
     it('should handle string constraints', () => {
-      const compat = new DeepSeekSchemaCompatLayer(mockModels.deepseek);
+      const compat = new DeepSeekSchemaCompatLayer({
+        modelId: mockModels.deepseek.modelId,
+        supportsStructuredOutputs: mockModels.deepseek.supportsStructuredOutputs ?? false,
+        provider: mockModels.deepseek.provider,
+      });
       const schema = z.object({
         email: z.string().email(),
         url: z.string().url(),
@@ -212,17 +276,29 @@ describe('Provider Compatibility Classes', () => {
 
   describe('MetaSchemaCompatLayer', () => {
     it('should have consistent behavior', () => {
-      const compat = new MetaSchemaCompatLayer(mockModels.meta);
+      const compat = new MetaSchemaCompatLayer({
+        modelId: mockModels.meta.modelId,
+        supportsStructuredOutputs: mockModels.meta.supportsStructuredOutputs ?? false,
+        provider: mockModels.meta.provider,
+      });
       expect(typeof compat.shouldApply()).toBe('boolean');
     });
 
     it('should return correct schema target', () => {
-      const compat = new MetaSchemaCompatLayer(mockModels.meta);
+      const compat = new MetaSchemaCompatLayer({
+        modelId: mockModels.meta.modelId,
+        supportsStructuredOutputs: mockModels.meta.supportsStructuredOutputs ?? false,
+        provider: mockModels.meta.provider,
+      });
       expect(compat.getSchemaTarget()).toBe('jsonSchema7');
     });
 
     it('should handle array and union types', () => {
-      const compat = new MetaSchemaCompatLayer(mockModels.meta);
+      const compat = new MetaSchemaCompatLayer({
+        modelId: mockModels.meta.modelId,
+        supportsStructuredOutputs: mockModels.meta.supportsStructuredOutputs ?? false,
+        provider: mockModels.meta.provider,
+      });
       const schema = z.object({
         tags: z.array(z.string()).min(1).max(10),
         status: z.union([z.literal('active'), z.literal('inactive')]),
@@ -271,12 +347,31 @@ describe('Provider Compatibility Classes', () => {
       });
 
       const providers = [
-        new AnthropicSchemaCompatLayer(mockModels.anthropic),
-        new OpenAISchemaCompatLayer(mockModels.openai),
-        new OpenAIReasoningSchemaCompatLayer(mockModels.openaiReasoning),
-        new GoogleSchemaCompatLayer(mockModels.google),
-        new DeepSeekSchemaCompatLayer(mockModels.deepseek),
-        new MetaSchemaCompatLayer(mockModels.meta),
+        new AnthropicSchemaCompatLayer({
+          modelId: mockModels.anthropic.modelId,
+          supportsStructuredOutputs: mockModels.anthropic.supportsStructuredOutputs ?? false,
+          provider: mockModels.anthropic.provider,
+        }),
+        new OpenAISchemaCompatLayer({
+          modelId: mockModels.openai.modelId,
+          supportsStructuredOutputs: mockModels.openai.supportsStructuredOutputs ?? false,
+          provider: mockModels.openai.provider,
+        }),
+        new OpenAIReasoningSchemaCompatLayer({
+          modelId: mockModels.openaiReasoning.modelId,
+          supportsStructuredOutputs: mockModels.openaiReasoning.supportsStructuredOutputs ?? false,
+          provider: mockModels.openaiReasoning.provider,
+        }),
+        new GoogleSchemaCompatLayer({
+          modelId: mockModels.google.modelId,
+          supportsStructuredOutputs: mockModels.google.supportsStructuredOutputs ?? false,
+          provider: mockModels.google.provider,
+        }),
+        new MetaSchemaCompatLayer({
+          modelId: mockModels.meta.modelId,
+          supportsStructuredOutputs: mockModels.meta.supportsStructuredOutputs ?? false,
+          provider: mockModels.meta.provider,
+        }),
       ];
 
       providers.forEach(provider => {

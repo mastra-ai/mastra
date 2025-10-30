@@ -1,46 +1,32 @@
 ---
-title: "Reference: Step | Building Workflows | Mastra Docs"
-description: Documentation for the Step class, which defines individual units of work within a workflow.
+title: "Reference: Step Class | Workflows | Mastra Docs"
+description: Documentation for the Step class in Mastra, which defines individual units of work within a workflow.
 ---
 
-# Step
+# Step Class
 
 The Step class defines individual units of work within a workflow, encapsulating execution logic, data validation, and input/output handling.
 It can take either a tool or an agent as a parameter to automatically create a step from them.
 
-## Usage
+## Usage example
 
-```typescript
-import { createStep } from "@mastra/core/workflows";
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
-const processOrder = createStep({
-  id: "processOrder",
+const step1 = createStep({
+  id: "step-1",
+  description: "passes value from input to output",
   inputSchema: z.object({
-    orderId: z.string(),
-    userId: z.string(),
+    value: z.number(),
   }),
   outputSchema: z.object({
-    status: z.string(),
-    orderId: z.string(),
+    value: z.number(),
   }),
-  resumeSchema: z.object({
-    orderId: z.string(),
-  }),
-  suspendSchema: z.object({}),
-  execute: async ({
-    inputData,
-    mastra,
-    getStepResult,
-    getInitData,
-    suspend,
-    runtimeContext,
-    runCount
-    runId,
-  }) => {
+  execute: async ({ inputData }) => {
+    const { value } = inputData;
     return {
-      status: "processed",
-      orderId: inputData.orderId,
+      value,
     };
   },
 });
@@ -87,11 +73,18 @@ const processOrder = createStep({
       required: false,
     },
     {
+      name: "stateSchema",
+      type: "z.ZodObject<any>",
+      description:
+        "Optional Zod schema for the step state. Automatically injected when using Mastra's state system. The stateSchema must be a subset of the workflow's stateSchema. If not specified, type is 'any'.",
+      required: false,
+    },
+    {
       name: "execute",
       type: "(params: ExecuteParams) => Promise<any>",
       description: "Async function containing step logic",
       required: true,
-    }
+    },
   ]}
 />
 
@@ -117,7 +110,7 @@ const processOrder = createStep({
     },
     {
       name: "getStepResult",
-      type: "(stepId: string) => any",
+      type: "(step: Step | string) => any",
       description: "Function to access results from other steps",
     },
     {
@@ -128,8 +121,14 @@ const processOrder = createStep({
     },
     {
       name: "suspend",
-      type: "() => Promise<void>",
+      type: "(suspendPayload: any, suspendOptions?: { resumeLabel?: string }) => Promise<void>",
       description: "Function to pause workflow execution",
+    },
+    {
+      name: "setState",
+      type: "(state: z.infer<TState>) => void",
+      description:
+        "Function to set the state of the workflow. Inject via reducer-like pattern, such as 'setState({ ...state, ...newState })'",
     },
     {
       name: "runId",
@@ -137,24 +136,23 @@ const processOrder = createStep({
       description: "Current run id",
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
     {
       name: "runCount",
       type: "number",
-      description: "The run count for this specific step, it automatically increases each time the step runs",
+      description:
+        "The run count for this specific step, it automatically increases each time the step runs",
       isOptional: true,
-    }
+    },
   ]}
 />
 
 ## Related
 
-- [Control flow](../../docs/workflows/control-flow.mdx)
-- [Using agents and tools](../../docs/workflows/using-with-agents-and-tools.mdx)
-- [Tool and agent as step example](../../examples/workflows/agent-and-tool-interop.mdx)
-- [Input data mapping](../../docs/workflows/input-data-mapping.mdx)
+- [Control flow](/docs/workflows/control-flow)
+- [Using agents and tools](/docs/workflows/agents-and-tools)

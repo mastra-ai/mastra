@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { WorkflowRunState } from '@mastra/core';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 
 export const createSampleTrace = (name: string, scope?: string, attributes?: Record<string, string>) => ({
   id: `trace-${randomUUID()}`,
@@ -37,10 +37,12 @@ export const createSampleWorkflowSnapshot = (threadId: string, status: string, c
     serializedStepGraph: [],
     activePaths: [],
     suspendedPaths: {},
+    resumeLabels: {},
+    waitingPaths: {},
     runId,
     status: status as WorkflowRunState['status'],
     timestamp: timestamp.getTime(),
-    runtimeContext: {},
+    requestContext: {},
   };
   return { snapshot, runId, stepId };
 };

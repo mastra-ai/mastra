@@ -10,7 +10,7 @@ export interface EntityHeaderProps {
 
 export const EntityHeader = ({ icon, title, isLoading, children }: EntityHeaderProps) => {
   return (
-    <div className="p-5">
+    <div className="p-5 w-full overflow-x-hidden">
       <div className="text-icon6 flex items-center gap-2">
         <Icon size="lg" className="bg-surface4 rounded-md p-1">
           {icon}

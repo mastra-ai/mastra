@@ -1,13 +1,12 @@
 import fs from 'fs';
 import fsPromises from 'fs/promises';
-import path, { dirname } from 'path';
-import { fileURLToPath } from 'url';
+import path from 'path';
 import { execa } from 'execa';
-import fsExtra from 'fs-extra/esm';
-import type { PackageJson } from 'type-fest';
+import { getPackageManagerAddCommand } from '../utils/package-manager';
+import type { PackageManager } from '../utils/package-manager';
 
 export class DepsService {
-  readonly packageManager: string;
+  readonly packageManager: PackageManager;
 
   constructor() {
     this.packageManager = this.getPackageManager();
@@ -27,7 +26,7 @@ export class DepsService {
     return null;
   }
 
-  private getPackageManager(): string {
+  private getPackageManager(): PackageManager {
     const lockFile = this.findLockFile(process.cwd());
     switch (lockFile) {
       case 'pnpm-lock.yaml':
@@ -44,15 +43,11 @@ export class DepsService {
   }
 
   public async installPackages(packages: string[]) {
-    let runCommand = this.packageManager;
-    if (this.packageManager === 'npm') {
-      runCommand = `${this.packageManager} i`;
-    } else {
-      runCommand = `${this.packageManager} add`;
-    }
+    const pm = this.packageManager;
+    const installCommand = getPackageManagerAddCommand(pm);
 
     const packageList = packages.join(' ');
-    return execa(`${runCommand} ${packageList}`, {
+    return execa(`${pm} ${installCommand} ${packageList}`, {
       all: true,
       shell: true,
       stdio: 'inherit',
@@ -92,15 +87,6 @@ export class DepsService {
     } catch (err) {
       throw err;
     }
-  }
-
-  public async getPackageVersion() {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-    const pkgJsonPath = path.join(__dirname, '..', 'package.json');
-
-    const content = (await fsExtra.readJSON(pkgJsonPath)) as PackageJson;
-    return content.version;
   }
 
   public async addScriptsToPackageJson(scripts: Record<string, string>) {

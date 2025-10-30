@@ -214,7 +214,8 @@ const prompt = `
     Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     `;
 
-const { runId, start } = ragWorkflow.createRun();
+const run = await ragWorkflow.createRunAsync();
+const { runId, start } = run;
 
 console.log('Run:', runId);
 

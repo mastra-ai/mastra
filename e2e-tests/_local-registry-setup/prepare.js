@@ -9,8 +9,9 @@ const defaultTimeout = 3 * 60 * 1000;
 
 let maxRetries = 5;
 function retryWithTimeout(fn, timeout, name, retryCount = 0) {
+  let timeoutHandle;
   const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(
+    timeoutHandle = setTimeout(
       () => reject(new Error(`Command "${name}" timed out after ${timeout}ms in ${retryCount} retries`)),
       timeout,
     );
@@ -18,13 +19,18 @@ function retryWithTimeout(fn, timeout, name, retryCount = 0) {
 
   const callbackPromise = fn();
 
-  return Promise.race([callbackPromise, timeoutPromise]).catch(err => {
-    if (retryCount < maxRetries) {
-      return retryWithTimeout(fn, timeout, name, retryCount + 1);
-    }
-
-    throw err;
-  });
+  return Promise.race([callbackPromise, timeoutPromise])
+    .then(result => {
+      clearTimeout(timeoutHandle);
+      return result;
+    })
+    .catch(err => {
+      clearTimeout(timeoutHandle);
+      if (retryCount < maxRetries) {
+        return retryWithTimeout(fn, timeout, name, retryCount + 1);
+      }
+      throw err;
+    });
 }
 
 function cleanup(monorepoDir, resetChanges = false) {
@@ -62,14 +68,18 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
       encoding: 'utf8',
     });
 
-    if (gitStatus.length > 0) {
+    if (gitStatus.stdout.length > 0) {
       await execAsync('git add -A', {
         cwd: monorepoDir,
         stdio: ['inherit', 'inherit', 'inherit'],
       });
-      await execAsync('git commit -m "SAVEPOINT"', {
+      await execAsync('git commit -m "SAVEPOINT" --no-verify', {
         cwd: monorepoDir,
         stdio: ['inherit', 'inherit', 'inherit'],
+        env: {
+          ...process.env,
+          HUSKY: '0',
+        },
       });
       shelvedChanges = true;
     }
@@ -90,32 +100,68 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
           parsed.peerDependencies['@mastra/core'] = 'workspace:*';
         }
 
+        // convert all workspace dependencies to *
+        for (const dependency of Object.keys(parsed.dependencies || {})) {
+          if (parsed.dependencies[dependency]?.startsWith('workspace:')) {
+            parsed.dependencies[dependency] = 'workspace:*';
+          }
+        }
+        // convert all workspace devDependencies to *
+        for (const dependency of Object.keys(parsed.devDependencies || {})) {
+          if (parsed.devDependencies[dependency]?.startsWith('workspace:')) {
+            parsed.devDependencies[dependency] = 'workspace:*';
+          }
+        }
+
         writeFileSync(join(monorepoDir, file), JSON.stringify(parsed, null, 2));
       }
     })();
 
-    console.log('Running pnpm changeset pre exit');
+    // Because it requires a GITHUB_TOKEN
+    console.log('Updating .changeset/config.json to not use @changesets/changelog-github');
+    await (async function updateChangesetConfig() {
+      const content = readFileSync(join(monorepoDir, '.changeset/config.json'), 'utf8');
+      const parsed = JSON.parse(content);
+      parsed.changelog = '@changesets/cli/changelog';
+      writeFileSync(join(monorepoDir, '.changeset/config.json'), JSON.stringify(parsed, null, 2));
+    })();
+
+    // update all packages so they are on the snapshot version
+    const allPackages = await execAsync('pnpm ls -r --depth -1 --json', {
+      cwd: monorepoDir,
+    });
+    const packages = JSON.parse(allPackages.stdout);
+    let changeset = `---\n`;
+    for (const pkg of packages) {
+      if (pkg.name && !pkg.private) {
+        changeset += `"${pkg.name}": patch\n`;
+      }
+    }
+    changeset += `---`;
+    writeFileSync(join(monorepoDir, `.changeset/test-${new Date().toISOString()}.md`), changeset);
+    // process.exit(0); // Remove this - it prevents changeset commands from running
+    console.log('Running pnpm changeset-cli pre exit');
     await retryWithTimeout(
       async () => {
-        await execAsync('pnpm changeset pre exit', {
+        await execAsync('pnpm changeset-cli pre exit', {
           cwd: monorepoDir,
           stdio: ['inherit', 'inherit', 'inherit'],
         });
       },
       defaultTimeout,
-      'pnpm changeset pre exit',
+      'pnpm changeset-cli pre exit',
     );
 
-    console.log(`Running pnpm changeset version --snapshot ${tag}`);
+    console.log(`Running pnpm changeset-cli version --snapshot ${tag}`);
     await retryWithTimeout(
       async () => {
-        await execAsync(`pnpm changeset version --snapshot ${tag}`, {
+        await execAsync(`pnpm changeset-cli version --snapshot ${tag}`, {
           cwd: monorepoDir,
           stdio: ['inherit', 'inherit', 'inherit'],
         });
       },
       defaultTimeout,
-      `pnpm changeset version --snapshot ${tag}`,
+      `pnpm changeset-cli version --snapshot ${tag}`,
     );
   } catch (error) {
     cleanup(monorepoDir, false);

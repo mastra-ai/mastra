@@ -15,7 +15,6 @@ export interface WorkflowStepActionBarProps {
   stepName: string;
   mapConfig?: string;
   event?: string;
-  onShowTrace?: () => void;
   onShowNestedGraph?: () => void;
   onSendEvent?: WorkflowSendEventFormProps['onSendEvent'];
   runId?: string;
@@ -30,7 +29,6 @@ export const WorkflowStepActionBar = ({
   mapConfig,
   stepName,
   event,
-  onShowTrace,
   onShowNestedGraph,
   onSendEvent,
   runId,
@@ -140,11 +138,9 @@ export const WorkflowStepActionBar = ({
             </>
           )}
 
-          {onShowTrace && <Button onClick={onShowTrace}>Show trace</Button>}
-
           {showEventForm && (
             <>
-              <Button className="ring-1 ring-accent5 !text-accent5" onClick={() => setIsEventFormOpen(true)}>
+              <Button className="!text-accent5" onClick={() => setIsEventFormOpen(true)}>
                 Send event
               </Button>
 

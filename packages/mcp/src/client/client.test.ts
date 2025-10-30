@@ -48,26 +48,22 @@ async function setupTestServer(withSessionManagement: boolean) {
     };
   });
 
-  mcpServer.prompt(
-    'greet',
-    'A simple greeting prompt',
-    () => {
-      return {
-        prompt: {
-          name: 'greet',
-          version: 'v1',
-          description: 'A simple greeting prompt',
-          mimeType: 'application/json',
+  mcpServer.prompt('greet', 'A simple greeting prompt', () => {
+    return {
+      prompt: {
+        name: 'greet',
+        version: 'v1',
+        description: 'A simple greeting prompt',
+        mimeType: 'application/json',
+      },
+      messages: [
+        {
+          role: 'assistant',
+          content: { type: 'text', text: `Hello, World!` },
         },
-        messages: [
-          {
-            role: 'assistant',
-            content: { type: 'text', text: `Hello, World!` }
-          }
-        ]
-      };
-    },
-  );
+      ],
+    };
+  });
 
   const serverTransport = new StreamableHTTPServerTransport({
     sessionIdGenerator: withSessionManagement ? () => randomUUID() : undefined,
@@ -133,7 +129,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
       const resourcesResult = await client.listResources();
       const resources = resourcesResult.resources;
       expect(resources).toBeInstanceOf(Array);
-      const testResource = resources.find((r) => r.uri === 'resource://test');
+      const testResource = resources.find(r => r.uri === 'resource://test');
       expect(testResource).toBeDefined();
       expect(testResource!.name).toBe('test-resource');
       expect(testResource!.uri).toBe('resource://test');
@@ -145,7 +141,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     });
 
     it('should list prompts', async () => {
-      const {prompts} = await client.listPrompts();
+      const { prompts } = await client.listPrompts();
       expect(prompts).toBeInstanceOf(Array);
       expect(prompts).toHaveLength(1);
       expect(prompts[0]).toHaveProperty('name');
@@ -154,8 +150,8 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     });
 
     it('should get a specific prompt', async () => {
-      const result = await client.getPrompt({name: 'greet'});
-      const {prompt, messages} = result;
+      const result = await client.getPrompt({ name: 'greet' });
+      const { prompt, messages } = result;
       expect(prompt).toBeDefined();
       expect(prompt).toMatchObject({
         name: 'greet',
@@ -220,7 +216,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
 
   beforeEach(async () => {
     testServer = await setupTestServer(false);
-    
+
     // Add elicitation-enabled tools to the test server
     testServer.mcpServer.tool(
       'collectUserInfo',
@@ -240,7 +236,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
             required: ['name'],
           },
         });
-        
+
         return {
           content: [{ type: 'text', text: JSON.stringify(result) }],
         };
@@ -265,7 +261,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
             required: ['ssn'],
           },
         });
-        
+
         return {
           content: [{ type: 'text', text: JSON.stringify(result) }],
         };
@@ -289,7 +285,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
             },
           },
         });
-        
+
         return {
           content: [{ type: 'text', text: JSON.stringify(result) }],
         };
@@ -305,12 +301,12 @@ describe('MastraMCPClient - Elicitation Tests', () => {
   });
 
   it('should handle elicitation request with accept response', async () => {
-    const mockHandler = vi.fn(async (request) => {
+    const mockHandler = vi.fn(async request => {
       expect(request.message).toBe('Please provide your information');
       expect(request.requestedSchema).toBeDefined();
       expect(request.requestedSchema.properties.name).toBeDefined();
       expect(request.requestedSchema.properties.email).toBeDefined();
-      
+
       return {
         action: 'accept' as const,
         content: {
@@ -335,8 +331,8 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectUserInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation
-    const result = await collectUserInfoTool.execute({ 
-      context: { message: 'Please provide your information' } 
+    const result = await collectUserInfoTool.execute({
+      context: { message: 'Please provide your information' },
     });
 
     console.log('result', result);
@@ -344,7 +340,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(mockHandler).toHaveBeenCalledTimes(1);
     expect(result.content).toBeDefined();
     expect(result.content[0].type).toBe('text');
-    
+
     const elicitationResult = JSON.parse(result.content[0].text);
     expect(elicitationResult.action).toBe('accept');
     expect(elicitationResult.content).toEqual({
@@ -354,9 +350,9 @@ describe('MastraMCPClient - Elicitation Tests', () => {
   });
 
   it('should handle elicitation request with reject response', async () => {
-    const mockHandler = vi.fn(async (request) => {
+    const mockHandler = vi.fn(async request => {
       expect(request.message).toBe('Please provide sensitive information');
-      return { action: 'reject' as const };
+      return { action: 'decline' as const };
     });
 
     client = new InternalMastraMCPClient({
@@ -374,20 +370,20 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectSensitiveInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation
-    const result = await collectSensitiveInfoTool.execute({ 
-      context: { message: 'Please provide sensitive information' } 
+    const result = await collectSensitiveInfoTool.execute({
+      context: { message: 'Please provide sensitive information' },
     });
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
     expect(result.content).toBeDefined();
     expect(result.content[0].type).toBe('text');
-    
+
     const elicitationResult = JSON.parse(result.content[0].text);
-    expect(elicitationResult.action).toBe('reject');
+    expect(elicitationResult.action).toBe('decline');
   });
 
   it('should handle elicitation request with cancel response', async () => {
-    const mockHandler = vi.fn(async (_request) => {
+    const mockHandler = vi.fn(async _request => {
       return { action: 'cancel' as const };
     });
 
@@ -406,20 +402,20 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectOptionalInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation
-    const result = await collectOptionalInfoTool.execute({ 
-      context: { message: 'Optional information request' } 
+    const result = await collectOptionalInfoTool.execute({
+      context: { message: 'Optional information request' },
     });
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
     expect(result.content).toBeDefined();
     expect(result.content[0].type).toBe('text');
-    
+
     const elicitationResult = JSON.parse(result.content[0].text);
     expect(elicitationResult.action).toBe('cancel');
   });
 
   it('should return an error when elicitation handler throws error', async () => {
-    const mockHandler = vi.fn(async (_request) => {
+    const mockHandler = vi.fn(async _request => {
       throw new Error('Handler failed');
     });
 
@@ -438,8 +434,8 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectUserInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation, handler will throw error
-    const result = await collectUserInfoTool.execute({ 
-      context: { message: 'This will cause handler to throw' } 
+    const result = await collectUserInfoTool.execute({
+      context: { message: 'This will cause handler to throw' },
     });
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
@@ -464,8 +460,8 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectUserInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation, should fail gracefully
-    const result = await collectUserInfoTool.execute({ 
-      context: { message: 'This should fail gracefully' } 
+    const result = await collectUserInfoTool.execute({
+      context: { message: 'This should fail gracefully' },
     });
 
     expect(result.content).toBeDefined();
@@ -473,7 +469,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
   });
 
   it('should validate elicitation request schema structure', async () => {
-    const mockHandler = vi.fn(async (request) => {
+    const mockHandler = vi.fn(async request => {
       // Verify the request has the expected structure
       expect(request).toHaveProperty('message');
       expect(request).toHaveProperty('requestedSchema');
@@ -503,8 +499,8 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectUserInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation with schema validation
-    const result = await collectUserInfoTool.execute({ 
-      context: { message: 'Schema validation test' } 
+    const result = await collectUserInfoTool.execute({
+      context: { message: 'Schema validation test' },
     });
 
     console.log('result', result);
@@ -512,8 +508,73 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(mockHandler).toHaveBeenCalledTimes(1);
     expect(result.content).toBeDefined();
     expect(result.content[0].type).toBe('text');
-    
+
     const elicitationResultText = result.content[0].text;
     expect(elicitationResultText).toContain('Elicitation response content does not match requested schema');
+  });
+});
+
+describe('MastraMCPClient - AuthProvider Tests', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should accept authProvider field in HTTP server configuration', async () => {
+    const mockAuthProvider = { test: 'authProvider' } as any;
+
+    client = new InternalMastraMCPClient({
+      name: 'auth-config-test',
+      server: {
+        url: testServer.baseUrl,
+        authProvider: mockAuthProvider,
+      },
+    });
+
+    const serverConfig = (client as any).serverConfig;
+    expect(serverConfig.authProvider).toBe(mockAuthProvider);
+    expect(client).toBeDefined();
+    expect(typeof client).toBe('object');
+  });
+
+  it('should handle undefined authProvider gracefully', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'auth-undefined-test',
+      server: {
+        url: testServer.baseUrl,
+        authProvider: undefined,
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+    expect(tools).toHaveProperty('greet');
+  });
+
+  it('should work without authProvider for HTTP transport (backward compatibility)', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'no-auth-http-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+    expect(tools).toHaveProperty('greet');
   });
 });

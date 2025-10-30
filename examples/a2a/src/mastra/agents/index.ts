@@ -6,3 +6,9 @@ export const myAgent = new Agent({
   instructions: 'My Agent Instructions',
   model: openai('gpt-4o'),
 });
+
+export const contentCreatorAgent = new Agent({
+  name: 'contentCreatorAgent',
+  instructions: 'Create engaging content',
+  model: openai('gpt-4o'),
+});

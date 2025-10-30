@@ -26,6 +26,7 @@ export const memory = new Memory({
       messageRange: 2,
     },
   },
+  embedder: openai.embedding('text-embedding-3-small'),
 });
 
 export const chefAgent = new Agent({

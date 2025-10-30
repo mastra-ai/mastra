@@ -6,6 +6,7 @@ import { canAccessPublicly, checkRules, isProtectedPath, isDevPlaygroundRequest 
 export const authenticationMiddleware = async (c: ContextWithMastra, next: Next) => {
   const mastra = c.get('mastra');
   const authConfig = mastra.getServer()?.experimental_auth;
+  const customRouteAuthConfig = c.get('customRouteAuthConfig');
 
   if (!authConfig) {
     // No auth config, skip authentication
@@ -17,7 +18,7 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
     return next();
   }
 
-  if (!isProtectedPath(c.req.path, c.req.method, authConfig)) {
+  if (!isProtectedPath(c.req.path, c.req.method, authConfig, customRouteAuthConfig)) {
     return next();
   }
 
@@ -55,7 +56,7 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
     }
 
     // Store user in context
-    c.get('runtimeContext').set('user', user);
+    c.get('requestContext').set('user', user);
 
     return next();
   } catch (err) {
@@ -67,6 +68,7 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
 export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) => {
   const mastra = c.get('mastra');
   const authConfig = mastra.getServer()?.experimental_auth;
+  const customRouteAuthConfig = c.get('customRouteAuthConfig');
 
   if (!authConfig) {
     // No auth config, skip authorization
@@ -81,7 +83,7 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
     return next();
   }
 
-  if (!isProtectedPath(c.req.path, c.req.method, authConfig)) {
+  if (!isProtectedPath(c.req.path, c.req.method, authConfig, customRouteAuthConfig)) {
     return next();
   }
 
@@ -90,7 +92,7 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
     return next();
   }
 
-  const user = c.get('runtimeContext').get('user');
+  const user = c.get('requestContext').get('user');
 
   if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
     try {

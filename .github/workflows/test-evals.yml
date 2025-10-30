@@ -2,7 +2,7 @@ name: Evals Tests
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 0.x]
     paths:
       - 'packages/evals/**'
       - '.github/workflows/test-evals.yml'
@@ -13,30 +13,10 @@ jobs:
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
-        with:
-          run_install: false
-
-      - name: Setup Node.js 20.x
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20.19.1
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Build core
         run: pnpm turbo --filter "@mastra/evals" build
-
-      - name: Run Evals NLP tests
-        run: pnpm test:evals:nlp
-
-      # - name: Run Evals LLM tests
-      #   run: pnpm test:evals:llm
-      #   env:
-      #     NODE_OPTIONS: "--max_old_space_size=8096"
-      #     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

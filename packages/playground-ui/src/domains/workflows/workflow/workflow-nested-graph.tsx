@@ -1,12 +1,4 @@
-import {
-  ReactFlow,
-  MiniMap,
-  Background,
-  useNodesState,
-  useEdgesState,
-  BackgroundVariant,
-  NodeProps,
-} from '@xyflow/react';
+import { ReactFlow, Background, useNodesState, useEdgesState, BackgroundVariant, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { SerializedStepFlowEntry } from '@mastra/core/workflows';
 
@@ -26,17 +18,10 @@ export interface WorkflowNestedGraphProps {
   stepGraph: SerializedStepFlowEntry[];
   open: boolean;
   workflowName: string;
-  onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
   onSendEvent?: WorkflowSendEventFormProps['onSendEvent'];
 }
 
-export function WorkflowNestedGraph({
-  stepGraph,
-  open,
-  workflowName,
-  onShowTrace,
-  onSendEvent,
-}: WorkflowNestedGraphProps) {
+export function WorkflowNestedGraph({ stepGraph, open, workflowName, onSendEvent }: WorkflowNestedGraphProps) {
   const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges({
     stepGraph,
   });
@@ -47,23 +32,13 @@ export function WorkflowNestedGraph({
 
   const nodeTypes = {
     'default-node': (props: NodeProps<DefaultNode>) => (
-      <WorkflowDefaultNode
-        parentWorkflowName={workflowName}
-        onShowTrace={onShowTrace}
-        onSendEvent={onSendEvent}
-        {...props}
-      />
+      <WorkflowDefaultNode parentWorkflowName={workflowName} onSendEvent={onSendEvent} {...props} />
     ),
     'condition-node': WorkflowConditionNode,
     'after-node': WorkflowAfterNode,
     'loop-result-node': WorkflowLoopResultNode,
     'nested-node': (props: NodeProps<NestedNode>) => (
-      <WorkflowNestedNode
-        parentWorkflowName={workflowName}
-        onShowTrace={onShowTrace}
-        onSendEvent={onSendEvent}
-        {...props}
-      />
+      <WorkflowNestedNode parentWorkflowName={workflowName} onSendEvent={onSendEvent} {...props} />
     ),
   };
 
@@ -88,7 +63,11 @@ export function WorkflowNestedGraph({
                 steps[`${workflowName}.${e.data?.previousStepId}`]?.status === 'success' &&
                 steps[`${workflowName}.${e.data?.nextStepId}`]
                   ? '#22c55e'
-                  : undefined,
+                  : e.data?.conditionNode &&
+                      !steps[`${workflowName}.${e.data?.previousStepId}`] &&
+                      Boolean(steps[`${workflowName}.${e.data?.nextStepId}`]?.status)
+                    ? '#22c55e'
+                    : undefined,
             },
           }))}
           fitView
@@ -101,7 +80,6 @@ export function WorkflowNestedGraph({
           onNodesChange={onNodesChange}
         >
           <ZoomSlider position="bottom-left" />
-          <MiniMap pannable zoomable maskColor="#121212" bgColor="#171717" nodeColor="#2c2c2c" />
           <Background variant={BackgroundVariant.Lines} gap={12} size={0.5} />
         </ReactFlow>
       ) : (

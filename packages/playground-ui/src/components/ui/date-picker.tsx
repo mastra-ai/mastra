@@ -54,7 +54,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
       >
         <DatePickerOnly
           value={value}
-          setValue={v => setValue(v ? new Date(`${v}z`) : null)} // TODO: Leave in the Z to prevent casting via timezone
+          setValue={setValue}
           clearable={props.clearable}
           setOpenPopover={setOpenPopover}
           {...props}

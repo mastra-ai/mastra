@@ -1,8 +1,8 @@
-import type { RuntimeContext } from '@mastra/core/di';
-import { isVercelTool } from '@mastra/core/tools';
+import type { RequestContext } from '@mastra/core/di';
 import type { ToolAction, VercelTool } from '@mastra/core/tools';
+import { isVercelTool } from '@mastra/core/tools';
+import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
-import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 
@@ -16,7 +16,7 @@ interface ToolsContext extends Context {
 }
 
 // Tool handlers
-export async function getToolsHandler({ tools }: Pick<ToolsContext, 'tools'>) {
+export async function listToolsHandler({ tools }: Pick<ToolsContext, 'tools'>) {
   try {
     if (!tools) {
       return {};
@@ -67,10 +67,10 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
     runId,
     toolId,
     data,
-    runtimeContext,
+    requestContext,
   }: Pick<ToolsContext, 'mastra' | 'toolId' | 'runId'> & {
     data?: unknown;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
   }) => {
     try {
       if (!toolId) {
@@ -98,7 +98,10 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
         context: data!,
         mastra,
         runId,
-        runtimeContext,
+        requestContext,
+        // TODO: Pass proper tracing context when server API supports tracing
+        tracingContext: { currentSpan: undefined },
+        suspend: async () => {},
       });
       return result;
     } catch (error) {
@@ -107,16 +110,51 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
   };
 }
 
+export async function getAgentToolHandler({
+  mastra,
+  agentId,
+  toolId,
+  requestContext,
+}: Pick<ToolsContext, 'mastra' | 'toolId'> & {
+  agentId?: string;
+  requestContext: RequestContext;
+}) {
+  try {
+    const agent = agentId ? mastra.getAgent(agentId) : null;
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    const agentTools = await agent.listTools({ requestContext });
+
+    const tool = Object.values(agentTools || {}).find((tool: any) => tool.id === toolId) as any;
+
+    if (!tool) {
+      throw new HTTPException(404, { message: 'Tool not found' });
+    }
+
+    const serializedTool = {
+      ...tool,
+      inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
+      outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+    };
+
+    return serializedTool;
+  } catch (error) {
+    return handleError(error, 'Error getting agent tool');
+  }
+}
+
 export async function executeAgentToolHandler({
   mastra,
   agentId,
   toolId,
   data,
-  runtimeContext,
+  requestContext,
 }: Pick<ToolsContext, 'mastra' | 'toolId'> & {
   agentId?: string;
   data: any;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
 }) {
   try {
     const agent = agentId ? mastra.getAgent(agentId) : null;
@@ -124,7 +162,7 @@ export async function executeAgentToolHandler({
       throw new HTTPException(404, { message: 'Tool not found' });
     }
 
-    const agentTools = await agent.getTools({ runtimeContext });
+    const agentTools = await agent.listTools({ requestContext });
 
     const tool = Object.values(agentTools || {}).find((tool: any) => tool.id === toolId) as any;
 
@@ -143,9 +181,12 @@ export async function executeAgentToolHandler({
 
     const result = await tool.execute({
       context: data,
-      runtimeContext,
+      requestContext,
       mastra,
       runId: agentId,
+      // TODO: Pass proper tracing context when server API supports tracing
+      tracingContext: { currentSpan: undefined },
+      suspend: async () => {},
     });
 
     return result;

@@ -53,7 +53,13 @@ export const transformTools = (tools?: TTools) => {
 
           // For ToolAction, the first argument is a context object with the args in a 'context' property
           if ('inputSchema' in tool) {
-            return await tool.execute({ context: args });
+            return await tool.execute(
+              { context: args },
+              {
+                toolCallId: 'unknown',
+                messages: [],
+              },
+            );
           }
           // For VercelTool, pass args directly
           else {

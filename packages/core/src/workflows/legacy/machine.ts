@@ -1,14 +1,13 @@
 import EventEmitter from 'node:events';
-import type { Span } from '@opentelemetry/api';
 import { get } from 'radash';
 import sift from 'sift';
 import type { MachineContext, Snapshot } from 'xstate';
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { z } from 'zod';
-import type { Mastra } from '../..';
 import type { MastraUnion } from '../../action';
 import type { IMastraLogger } from '../../logger';
-import type { RuntimeContext } from '../../runtime-context';
+import type { Mastra } from '../../mastra';
+import type { RequestContext } from '../../request-context';
 import { createMastraProxy } from '../../utils';
 import type { LegacyStep as Step } from './step';
 import type {
@@ -49,9 +48,8 @@ export class Machine<
 > extends EventEmitter {
   logger: IMastraLogger;
   #mastra?: Mastra;
-  #runtimeContext: RuntimeContext;
+  #requestContext: RequestContext;
   #workflowInstance: WorkflowInstance;
-  #executionSpan?: Span | undefined;
 
   #stepGraph: StepGraph;
   #machine!: ReturnType<typeof this.initializeMachine>;
@@ -66,9 +64,8 @@ export class Machine<
   constructor({
     logger,
     mastra,
-    runtimeContext,
+    requestContext,
     workflowInstance,
-    executionSpan,
     name,
     runId,
     steps,
@@ -78,9 +75,8 @@ export class Machine<
   }: {
     logger: IMastraLogger;
     mastra?: Mastra;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     workflowInstance: WorkflowInstance;
-    executionSpan?: Span;
     name: string;
     runId: string;
     steps: Record<string, StepNode>;
@@ -92,8 +88,7 @@ export class Machine<
 
     this.#mastra = mastra;
     this.#workflowInstance = workflowInstance;
-    this.#runtimeContext = runtimeContext;
-    this.#executionSpan = executionSpan;
+    this.#requestContext = requestContext;
     this.logger = logger;
 
     this.#runId = runId;
@@ -186,8 +181,6 @@ export class Machine<
       if (!this.#actor) {
         this.logger.error('Actor not initialized', { runId: this.#runId });
         const e = new Error('Actor not initialized');
-        this.#executionSpan?.recordException(e);
-        this.#executionSpan?.end();
         reject(e);
         return;
       }
@@ -231,7 +224,6 @@ export class Machine<
           this.logger.debug('All states complete', { runId: this.#runId });
           await this.#workflowInstance.persistWorkflowSnapshot();
           this.#cleanup();
-          this.#executionSpan?.end();
           resolve({
             runId: this.#runId,
             results: isResumedInitialStep ? { ...origSteps, ...state.context.steps } : state.context.steps,
@@ -246,7 +238,6 @@ export class Machine<
           this.logger.debug('Failed to persist final snapshot', { error });
 
           this.#cleanup();
-          this.#executionSpan?.end();
           resolve({
             runId: this.#runId,
             results: isResumedInitialStep ? { ...origSteps, ...state.context.steps } : state.context.steps,
@@ -390,7 +381,7 @@ export class Machine<
               }) satisfies WorkflowContext<TTriggerSchema>['getStepResult'],
             } as WorkflowContext,
             emit: (event: string, ...args: any[]) => {
-              // console.log(this.#workflowInstance.name, 'emitting', event, ...args);
+              // (this.#workflowInstance.name, 'emitting', event, ...args);
               this.emit(event, ...args);
             },
             suspend: async (payload?: any, softSuspend?: any) => {
@@ -415,7 +406,7 @@ export class Machine<
             },
             runId: this.#runId,
             mastra: mastraProxy as MastraUnion | undefined,
-            runtimeContext: this.#runtimeContext,
+            requestContext: this.#requestContext,
           });
         } catch (error) {
           this.logger.debug(`Step ${stepNode.id} failed`, {
@@ -535,7 +526,7 @@ export class Machine<
           };
         }) => {
           const { parentStepId, context } = input;
-          const result = await this.#workflowInstance.runMachine(parentStepId, context, this.#runtimeContext);
+          const result = await this.#workflowInstance.runMachine(parentStepId, context, this.#requestContext);
           return Promise.resolve({
             steps: result.reduce((acc, r) => {
               return { ...acc, ...r?.results };

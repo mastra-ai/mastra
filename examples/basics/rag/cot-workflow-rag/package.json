@@ -11,7 +11,7 @@
     "@mastra/pg": "latest",
     "@mastra/rag": "latest",
     "ai": "latest",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "version": "0.0.1",
   "pnpm": {

@@ -1,10 +1,10 @@
-import type { TaskAndHistory } from '@mastra/core/a2a';
+import type { Task } from '@mastra/core/a2a';
 
 export class InMemoryTaskStore {
-  private store: Map<string, TaskAndHistory> = new Map();
+  private store: Map<string, Task> = new Map();
   public activeCancellations = new Set<string>();
 
-  async load({ agentId, taskId }: { agentId: string; taskId: string }): Promise<TaskAndHistory | null> {
+  async load({ agentId, taskId }: { agentId: string; taskId: string }): Promise<Task | null> {
     const entry = this.store.get(`${agentId}-${taskId}`);
 
     if (!entry) {
@@ -12,18 +12,15 @@ export class InMemoryTaskStore {
     }
 
     // Return copies to prevent external mutation
-    return { task: { ...entry.task }, history: [...entry.history] };
+    return { ...entry };
   }
 
-  async save({ agentId, data }: { agentId: string; data: TaskAndHistory }): Promise<void> {
+  async save({ agentId, data }: { agentId: string; data: Task }): Promise<void> {
     // Store copies to prevent internal mutation if caller reuses objects
-    const key = `${agentId}-${data.task.id}`;
-    if (!data.task.id) {
+    const key = `${agentId}-${data.id}`;
+    if (!data.id) {
       throw new Error('Task ID is required');
     }
-    this.store.set(key, {
-      task: { ...data.task },
-      history: [...data.history],
-    });
+    this.store.set(key, { ...data });
   }
 }

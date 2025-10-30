@@ -1,15 +1,16 @@
-# getThreadById Reference
+---
+title: "Reference: Memory.getThreadById() | Memory | Mastra Docs"
+description: "Documentation for the `Memory.getThreadById()` method in Mastra, which retrieves a specific thread by its ID."
+---
 
-The `getThreadById` function retrieves a specific thread by its ID from storage.
+# Memory.getThreadById()
+
+The `.getThreadById()` method retrieves a specific thread by its ID.
 
 ## Usage Example
 
 ```typescript
-import { Memory } from "@mastra/core/memory";
-
-const memory = new Memory(config);
-
-const thread = await memory.getThreadById({ threadId: "thread-123" });
+await memory?.getThreadById({ threadId: "thread-123" });
 ```
 
 ## Parameters
@@ -30,8 +31,8 @@ const thread = await memory.getThreadById({ threadId: "thread-123" });
 <PropertiesTable
   content={[
     {
-      name: "StorageThreadType | null",
-      type: "Promise",
+      name: "thread",
+      type: "Promise<StorageThreadType | null>",
       description:
         "A promise that resolves to the thread associated with the given ID, or null if not found.",
     },
@@ -40,7 +41,7 @@ const thread = await memory.getThreadById({ threadId: "thread-123" });
 
 ### Related
 
-- [Memory Class Reference](/reference/memory/Memory.mdx)
-- [Getting Started with Memory](/docs/memory/overview.mdx) (Covers threads concept)
-- [createThread](/reference/memory/createThread.mdx)
-- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId.mdx)
+- [Memory Class Reference](/reference/memory/memory-class)
+- [Getting Started with Memory](/docs/memory/overview) (Covers threads concept)
+- [createThread](/reference/memory/createThread)
+- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId)

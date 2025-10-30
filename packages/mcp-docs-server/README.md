@@ -71,6 +71,14 @@ This will make all Mastra documentation tools available in your Windsurf workspa
 Note that Windsurf MCP tool calling doesn't work very well. You will need to fully quit and re-open Windsurf after adding this.
 If a tool call fails you will need to go into Windsurf MCP settings and re-start the MCP server.
 
+### In Claude Code
+
+After installing Claude Code run:
+
+```sh
+claude mcp add mastra-docs -- npx -y @mastra/mcp-docs-server
+```
+
 ### In a Mastra Agent
 
 ```typescript
@@ -93,12 +101,12 @@ const agent = new Agent({
   name: 'Documentation Assistant',
   instructions: 'You help users find and understand Mastra.ai documentation.',
   model: openai('gpt-4'),
-  tools: await mcp.getTools(),
+  tools: await mcp.listTools(),
 });
 
 // Or use toolsets dynamically in generate/stream
 const response = await agent.stream('Show me the quick start example', {
-  toolsets: await mcp.getToolsets(),
+  toolsets: await mcp.listToolsets(),
 });
 ```
 

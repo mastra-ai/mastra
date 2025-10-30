@@ -9,10 +9,10 @@
   },
   "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",
-    "@ai-sdk/fireworks": "^0.2.14",
+    "@ai-sdk/fireworks": "^0.2.16",
     "@mastra/core": "latest",
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
@@ -21,14 +21,14 @@
     "gradient-string": "^3.0.0",
     "ora": "^8.2.0",
     "tinycolor2": "^1.6.0",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^20.17.57",
     "dotenv": "^17.0.0",
     "mastra": "latest",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.3"
   },
   "pnpm": {
     "overrides": {

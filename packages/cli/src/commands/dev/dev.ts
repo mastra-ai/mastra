@@ -1,31 +1,52 @@
 import type { ChildProcess } from 'child_process';
 import process from 'node:process';
-import { join } from 'path';
+import { join, posix } from 'path';
+import devcert from '@expo/devcert';
 import { FileService } from '@mastra/deployer';
 import { getServerOptions } from '@mastra/deployer/build';
-import { isWebContainer } from '@webcontainer/env';
 import { execa } from 'execa';
 import getPort from 'get-port';
 
-import { logger } from '../../utils/logger.js';
+import { devLogger } from '../../utils/dev-logger.js';
+import { createLogger } from '../../utils/logger.js';
 
 import { DevBundler } from './DevBundler';
 
 let currentServerProcess: ChildProcess | undefined;
 let isRestarting = false;
+let serverStartTime: number | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
+
+interface HTTPSOptions {
+  key: Buffer;
+  cert: Buffer;
+}
+
+interface StartOptions {
+  inspect?: boolean;
+  inspectBrk?: boolean;
+  customArgs?: string[];
+  https?: HTTPSOptions;
+}
 
 const startServer = async (
   dotMastraPath: string,
-  port: number,
+  {
+    port,
+    host,
+  }: {
+    port: number;
+    host: string;
+  },
   env: Map<string, string>,
-  startOptions: { inspect?: boolean; inspectBrk?: boolean } = {},
+  startOptions: StartOptions = {},
   errorRestartCount = 0,
 ) => {
   let serverIsReady = false;
   try {
     // Restart server
-    logger.info('[Mastra Dev] - Starting server...');
+    serverStartTime = Date.now();
+    devLogger.starting();
 
     const commands = [];
 
@@ -37,14 +58,10 @@ const startServer = async (
       commands.push('--inspect-brk'); //stops at beginning of script
     }
 
-    if (!isWebContainer()) {
-      const instrumentation = import.meta.resolve('@opentelemetry/instrumentation/hook.mjs');
-      commands.push(
-        `--import=${import.meta.resolve('mastra/telemetry-loader')}`,
-        '--import=./instrumentation.mjs',
-        `--import=${instrumentation}`,
-      );
+    if (startOptions.customArgs) {
+      commands.push(...startOptions.customArgs);
     }
+
     commands.push('index.mjs');
 
     currentServerProcess = execa(process.execPath, commands, {
@@ -55,8 +72,14 @@ const startServer = async (
         MASTRA_DEV: 'true',
         PORT: port.toString(),
         MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
+        ...(startOptions?.https
+          ? {
+              MASTRA_HTTPS_KEY: startOptions.https.key.toString('base64'),
+              MASTRA_HTTPS_CERT: startOptions.https.cert.toString('base64'),
+            }
+          : {}),
       },
-      stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
+      stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
       reject: false,
     }) as any as ChildProcess;
 
@@ -69,13 +92,49 @@ const startServer = async (
       );
     }
 
+    // Filter server output to remove playground message
+    if (currentServerProcess.stdout) {
+      currentServerProcess.stdout.on('data', (data: Buffer) => {
+        const output = data.toString();
+        if (
+          !output.includes('Playground available') &&
+          !output.includes('👨‍💻') &&
+          !output.includes('Mastra API running on port')
+        ) {
+          process.stdout.write(output);
+        }
+      });
+    }
+
+    if (currentServerProcess.stderr) {
+      currentServerProcess.stderr.on('data', (data: Buffer) => {
+        const output = data.toString();
+        if (
+          !output.includes('Playground available') &&
+          !output.includes('👨‍💻') &&
+          !output.includes('Mastra API running on port')
+        ) {
+          process.stderr.write(output);
+        }
+      });
+    }
+
+    // Handle IPC errors to prevent EPIPE crashes
+    currentServerProcess.on('error', (err: Error) => {
+      if ((err as any).code !== 'EPIPE') {
+        throw err;
+      }
+    });
+
     currentServerProcess.on('message', async (message: any) => {
       if (message?.type === 'server-ready') {
         serverIsReady = true;
+        devLogger.ready(host, port, serverStartTime, startOptions.https);
+        devLogger.watching();
 
         // Send refresh signal
         try {
-          await fetch(`http://localhost:${port}/__refresh`, {
+          await fetch(`http://${host}:${port}/__refresh`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -85,7 +144,7 @@ const startServer = async (
           // Retry after another second
           await new Promise(resolve => setTimeout(resolve, 1500));
           try {
-            await fetch(`http://localhost:${port}/__refresh`, {
+            await fetch(`http://${host}:${port}/__refresh`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -99,8 +158,11 @@ const startServer = async (
     });
   } catch (err) {
     const execaError = err as { stderr?: string; stdout?: string };
-    if (execaError.stderr) logger.error('Server error output:', { stderr: execaError.stderr });
-    if (execaError.stdout) logger.debug('Server output:', { stdout: execaError.stdout });
+    if (execaError.stderr) {
+      devLogger.serverError(execaError.stderr);
+      devLogger.debug(`Server error output: ${execaError.stderr}`);
+    }
+    if (execaError.stdout) devLogger.debug(`Server output: ${execaError.stdout}`);
 
     if (!serverIsReady) {
       throw err;
@@ -111,24 +173,75 @@ const startServer = async (
       if (!isRestarting) {
         errorRestartCount++;
         if (errorRestartCount > ON_ERROR_MAX_RESTARTS) {
-          logger.error(`Server failed to start after ${ON_ERROR_MAX_RESTARTS} error attempts. Giving up.`);
+          devLogger.error(`Server failed to start after ${ON_ERROR_MAX_RESTARTS} error attempts. Giving up.`);
           process.exit(1);
         }
-        logger.error(
+        devLogger.warn(
           `Attempting to restart server after error... (Attempt ${errorRestartCount}/${ON_ERROR_MAX_RESTARTS})`,
         );
         // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        startServer(dotMastraPath, port, env, startOptions, errorRestartCount);
+        startServer(
+          dotMastraPath,
+          {
+            port,
+            host,
+          },
+          env,
+          startOptions,
+          errorRestartCount,
+        );
       }
     }, 1000);
   }
 };
 
+async function checkAndRestart(
+  dotMastraPath: string,
+  {
+    port,
+    host,
+  }: {
+    port: number;
+    host: string;
+  },
+  bundler: DevBundler,
+  startOptions: StartOptions = {},
+) {
+  if (isRestarting) {
+    return;
+  }
+
+  try {
+    // Check if hot reload is disabled due to template installation
+    const response = await fetch(`http://${host}:${port}/__hot-reload-status`);
+    if (response.ok) {
+      const status = (await response.json()) as { disabled: boolean; timestamp: string };
+      if (status.disabled) {
+        devLogger.info('[Mastra Dev] - ⏸️  Server restart skipped: agent builder action in progress');
+        return;
+      }
+    }
+  } catch (error) {
+    // If we can't check status (server down), proceed with restart
+    devLogger.debug(`[Mastra Dev] - Could not check hot reload status: ${error}`);
+  }
+
+  // Proceed with restart
+  devLogger.info('[Mastra Dev] - ✅ Restarting server...');
+  await rebundleAndRestart(dotMastraPath, { port, host }, bundler, startOptions);
+}
+
 async function rebundleAndRestart(
   dotMastraPath: string,
-  port: number,
+  {
+    port,
+    host,
+  }: {
+    port: number;
+    host: string;
+  },
   bundler: DevBundler,
-  startOptions: { inspect?: boolean; inspectBrk?: boolean } = {},
+  startOptions: StartOptions = {},
 ) {
   if (isRestarting) {
     return;
@@ -138,51 +251,73 @@ async function rebundleAndRestart(
   try {
     // If current server process is running, stop it
     if (currentServerProcess) {
-      logger.debug('Stopping current server...');
+      devLogger.restarting();
+      devLogger.debug('Stopping current server...');
       currentServerProcess.kill('SIGINT');
     }
 
     const env = await bundler.loadEnvVars();
 
-    await startServer(join(dotMastraPath, 'output'), port, env, startOptions);
+    // spread env into process.env
+    for (const [key, value] of env.entries()) {
+      process.env[key] = value;
+    }
+
+    await startServer(
+      join(dotMastraPath, 'output'),
+      {
+        port,
+        host,
+      },
+      env,
+      startOptions,
+    );
   } finally {
     isRestarting = false;
   }
 }
 
 export async function dev({
-  port,
   dir,
   root,
   tools,
   env,
   inspect,
   inspectBrk,
+  customArgs,
+  https,
+  debug,
 }: {
   dir?: string;
   root?: string;
-  port: number | null;
   tools?: string[];
   env?: string;
   inspect?: boolean;
   inspectBrk?: boolean;
+  customArgs?: string[];
+  https?: boolean;
+  debug: boolean;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
-  const defaultToolsPath = join(mastraDir, 'tools/**/*.{js,ts}');
-  const discoveredTools = [defaultToolsPath, ...(tools || [])];
-  const startOptions = { inspect, inspectBrk };
+  // You cannot express an "include all js/ts except these" in one single string glob pattern so by default an array is passed to negate test files.
+  const normalizedMastraDir = mastraDir.replaceAll('\\', '/');
+  const defaultToolsPath = posix.join(normalizedMastraDir, 'tools/**/*.{js,ts}');
+  const defaultToolsIgnorePaths = [
+    `!${posix.join(normalizedMastraDir, 'tools/**/*.{test,spec}.{js,ts}')}`,
+    `!${posix.join(normalizedMastraDir, 'tools/**/__tests__/**')}`,
+  ];
+  // We pass an array to tinyglobby to allow for the aforementioned negations
+  const defaultTools = [defaultToolsPath, ...defaultToolsIgnorePaths];
+  const discoveredTools = [defaultTools, ...(tools ?? [])];
 
   const fileService = new FileService();
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
   const bundler = new DevBundler(env);
-  bundler.__setLogger(logger);
-  await bundler.prepare(dotMastraPath);
-
-  const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
+  bundler.__setLogger(createLogger(debug)); // Keep Pino logger for internal bundler operations
 
   const loadedEnv = await bundler.loadEnvVars();
 
@@ -192,11 +327,10 @@ export async function dev({
   }
 
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
-
-  let portToUse = port ?? serverOptions?.port ?? process.env.PORT;
+  let portToUse = serverOptions?.port ?? process.env.PORT;
+  let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
   if (!portToUse || isNaN(Number(portToUse))) {
     const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
-
     portToUse = String(
       await getPort({
         port: portList,
@@ -204,17 +338,64 @@ export async function dev({
     );
   }
 
-  await startServer(join(dotMastraPath, 'output'), Number(portToUse), loadedEnv, startOptions);
+  let httpsOptions: HTTPSOptions | undefined = undefined;
+
+  /**
+   * A user can enable HTTPS in two ways:
+   * 1. By passing the --https flag to the dev command (we then generate a cert for them)
+   * 2. By specifying https options in the mastra server config
+   *
+   * If both are specified, the config options takes precedence.
+   */
+  if (https && serverOptions?.https) {
+    devLogger.warn('--https flag and server.https config are both specified. Using server.https config.');
+  }
+  if (serverOptions?.https) {
+    httpsOptions = serverOptions.https;
+  } else if (https) {
+    const { key, cert } = await devcert.certificateFor(serverOptions?.host ?? 'localhost');
+    httpsOptions = { key, cert };
+  }
+
+  const startOptions: StartOptions = { inspect, inspectBrk, customArgs, https: httpsOptions };
+
+  await bundler.prepare(dotMastraPath);
+
+  const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
+
+  await startServer(
+    join(dotMastraPath, 'output'),
+    {
+      port: Number(portToUse),
+      host: hostToUse,
+    },
+    loadedEnv,
+    startOptions,
+  );
+
   watcher.on('event', (event: { code: string }) => {
+    if (event.code === 'BUNDLE_START') {
+      devLogger.bundling();
+    }
     if (event.code === 'BUNDLE_END') {
-      logger.info('[Mastra Dev] - Bundling finished, restarting server...');
+      devLogger.bundleComplete();
+      devLogger.info('[Mastra Dev] - Bundling finished, checking if restart is allowed...');
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      rebundleAndRestart(dotMastraPath, Number(portToUse), bundler, startOptions);
+      checkAndRestart(
+        dotMastraPath,
+        {
+          port: Number(portToUse),
+          host: hostToUse,
+        },
+        bundler,
+        startOptions,
+      );
     }
   });
 
   process.on('SIGINT', () => {
-    logger.info('[Mastra Dev] - Stopping server...');
+    devLogger.shutdown();
+
     if (currentServerProcess) {
       currentServerProcess.kill();
     }
@@ -222,8 +403,6 @@ export async function dev({
     watcher
       .close()
       .catch(() => {})
-      .finally(() => {
-        process.exit(0);
-      });
+      .finally(() => process.exit(0));
   });
 }

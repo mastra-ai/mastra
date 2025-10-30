@@ -1,12 +1,11 @@
+import { createVectorTestSuite } from '@internal/storage-test-utils';
 import type { QueryResult, IndexStats } from '@mastra/core/vector';
 import { describe, expect, beforeEach, afterEach, it, beforeAll, afterAll, vi } from 'vitest';
 
 import { ChromaVector } from './';
 
 describe('ChromaVector Integration Tests', () => {
-  let vectorDB = new ChromaVector({
-    path: 'http://localhost:8000',
-  });
+  let vectorDB = new ChromaVector();
 
   const testIndexName = 'test-index';
   const testIndexName2 = 'test-index-2';
@@ -122,7 +121,7 @@ describe('ChromaVector Integration Tests', () => {
       const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
       expect(ids).toHaveLength(3);
 
-      const idToBeUpdated = ids[0];
+      const idToBeUpdated = ids[0] as string;
       const newVector = [1, 2, 3];
       const newMetaData = {
         test: 'updates',
@@ -150,7 +149,7 @@ describe('ChromaVector Integration Tests', () => {
       const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
       expect(ids).toHaveLength(3);
 
-      const idToBeUpdated = ids[0];
+      const idToBeUpdated = ids[0] as string;
       const newMetaData = {
         test: 'updates',
       };
@@ -163,7 +162,7 @@ describe('ChromaVector Integration Tests', () => {
 
       const results: QueryResult[] = await vectorDB.query({
         indexName: testIndexName,
-        queryVector: testVectors[0],
+        queryVector: testVectors[0] as number[],
         topK: 2,
         includeVector: true,
       });
@@ -176,7 +175,7 @@ describe('ChromaVector Integration Tests', () => {
       const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
       expect(ids).toHaveLength(3);
 
-      const idToBeUpdated = ids[0];
+      const idToBeUpdated = ids[0] as string;
       const newVector = [1, 2, 3];
 
       const update = {
@@ -204,7 +203,7 @@ describe('ChromaVector Integration Tests', () => {
     it('should delete the vector by id', async () => {
       const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
       expect(ids).toHaveLength(3);
-      const idToBeDeleted = ids[0];
+      const idToBeDeleted = ids[0] as string;
 
       await vectorDB.deleteVector({ indexName: testIndexName, id: idToBeDeleted });
 
@@ -1285,7 +1284,8 @@ describe('ChromaVector Integration Tests', () => {
         const results = await vectorDB.query({ indexName: testIndexName3, queryVector: [1.0, 0.0, 0.0], topK: 3 });
         expect(results).toHaveLength(3);
         // Verify documents are returned
-        expect(results[0].document).toBe(testDocuments[0]);
+
+        expect(results[0]!.document).toBe(testDocuments[0]);
       });
 
       it('should filter documents using $contains', async () => {
@@ -1317,8 +1317,19 @@ describe('ChromaVector Integration Tests', () => {
           documentFilter: { $contains: 'fox' },
         });
         expect(results).toHaveLength(1);
-        expect(results[0].metadata?.source).toBe('pangram1');
-        expect(results[0].document).toContain('fox');
+        expect(results[0]!.metadata?.source).toBe('pangram1');
+        expect(results[0]!.document).toContain('fox');
+      });
+
+      it('should get records with metadata and document filters', async () => {
+        const results = await vectorDB.get({
+          indexName: testIndexName3,
+          filter: { source: 'pangram1' },
+          documentFilter: { $contains: 'fox' },
+        });
+        expect(results).toHaveLength(1);
+        expect(results[0]!.metadata?.source).toBe('pangram1');
+        expect(results[0]!.document).toContain('fox');
       });
     });
 
@@ -1331,8 +1342,8 @@ describe('ChromaVector Integration Tests', () => {
           documentFilter: { $and: [{ $contains: 'quick' }, { $not_contains: 'fox' }] },
         });
         expect(results).toHaveLength(1);
-        expect(results[0].document).toContain('quick');
-        expect(results[0].document).not.toContain('fox');
+        expect(results[0]!.document).toContain('quick');
+        expect(results[0]!.document).not.toContain('fox');
       });
 
       it('should handle $or conditions', async () => {
@@ -1343,8 +1354,8 @@ describe('ChromaVector Integration Tests', () => {
           documentFilter: { $or: [{ $contains: 'fox' }, { $contains: 'zebras' }] },
         });
         expect(results).toHaveLength(2);
-        expect(results[0].document).toContain('fox');
-        expect(results[1].document).toContain('zebras');
+        expect(results[0]!.document).toContain('fox');
+        expect(results[1]!.document).toContain('zebras');
       });
     });
 
@@ -1395,7 +1406,7 @@ describe('ChromaVector Integration Tests', () => {
           documentFilter: { $contains: 'quick brown' }, // Test multi-word match
         });
         expect(results.length).toBe(1);
-        expect(results[0].document).toContain('quick brown');
+        expect(results[0]!.document).toContain('quick brown');
       });
 
       it('should handle deeply nested logical operators', async () => {
@@ -1442,6 +1453,7 @@ describe('ChromaVector Integration Tests', () => {
           vectorDB.query({
             indexName: testIndexName3,
             queryVector: [1, 0, 0],
+            // @ts-ignore
             documentFilter: {},
           }),
         ).rejects.toThrow();
@@ -1546,5 +1558,115 @@ describe('ChromaVector Integration Tests', () => {
       }
       expect(pages).toHaveLength(Math.ceil(batchSize / pageSize));
     }, 30000);
+  });
+});
+
+// Metadata filtering tests for Memory system
+describe('Chroma Metadata Filtering', () => {
+  const chromaVector = new ChromaVector();
+
+  createVectorTestSuite({
+    vector: chromaVector,
+    createIndex: async (indexName: string) => {
+      // Using dimension 4 as required by the metadata filtering test vectors
+      await chromaVector.createIndex({ indexName, dimension: 4 });
+    },
+    deleteIndex: async (indexName: string) => {
+      await chromaVector.deleteIndex({ indexName });
+    },
+    waitForIndexing: async () => {
+      // Chroma may need a short wait for indexing
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    },
+  });
+});
+
+// ChromaCloudVector fork functionality tests (requires CHROMA_API_KEY)
+describe.skipIf(!process.env.CHROMA_API_KEY)('ChromaCloudVector Fork Tests', () => {
+  let cloudVector: ChromaVector;
+  const testIndexName = 'fork-test-index';
+  const forkedIndexName = 'forked-test-index';
+  const dimension = 3;
+
+  beforeEach(async () => {
+    cloudVector = new ChromaVector({
+      apiKey: process.env.CHROMA_API_KEY,
+    });
+
+    // Clean up any existing test indexes
+    try {
+      await cloudVector.deleteIndex({ indexName: testIndexName });
+    } catch {
+      // Ignore errors if index doesn't exist
+    }
+    try {
+      await cloudVector.deleteIndex({ indexName: forkedIndexName });
+    } catch {
+      // Ignore errors if index doesn't exist
+    }
+  });
+
+  afterEach(async () => {
+    // Clean up test indexes
+    try {
+      await cloudVector.deleteIndex({ indexName: testIndexName });
+    } catch {
+      // Ignore cleanup errors
+    }
+    try {
+      await cloudVector.deleteIndex({ indexName: forkedIndexName });
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  it('should fork an index successfully', async () => {
+    // Create initial index with some data
+    await cloudVector.createIndex({ indexName: testIndexName, dimension });
+
+    const testVectors = [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0],
+    ];
+    const testMetadata = [{ label: 'x-axis' }, { label: 'y-axis' }, { label: 'z-axis' }];
+    const testIds = ['vec1', 'vec2', 'vec3'];
+
+    await cloudVector.upsert({
+      indexName: testIndexName,
+      vectors: testVectors,
+      ids: testIds,
+      metadata: testMetadata,
+    });
+
+    // Fork the index
+    await cloudVector.forkIndex({
+      indexName: testIndexName,
+      newIndexName: forkedIndexName,
+    });
+
+    // Verify both indexes exist and have the same data
+    let originalStats = await cloudVector.describeIndex({ indexName: testIndexName });
+    let forkedStats = await cloudVector.describeIndex({ indexName: forkedIndexName });
+
+    expect(originalStats.count).toBe(3);
+    expect(forkedStats.count).toBe(3);
+
+    await cloudVector.deleteVector({ indexName: forkedIndexName, id: 'vec1' });
+
+    originalStats = await cloudVector.describeIndex({ indexName: testIndexName });
+    forkedStats = await cloudVector.describeIndex({ indexName: forkedIndexName });
+
+    expect(originalStats.count).toBe(3);
+    expect(forkedStats.count).toBe(2);
+  });
+
+  it('should throw error when forking non-existent index', async () => {
+    await expect(
+      cloudVector.forkIndex({
+        indexName: 'non-existent-index',
+        newIndexName: forkedIndexName,
+      }),
+    ).rejects.toThrow();
   });
 });

@@ -1,4 +1,9 @@
-export function getPackageManager(): string {
+import { InvalidArgumentError } from 'commander';
+import type { PackageManager } from '../utils/package-manager';
+import { EDITOR, isValidEditor } from './init/mcp-docs-server-install';
+import { areValidComponents, COMPONENTS, isValidLLMProvider, LLMProvider } from './init/utils';
+
+export function getPackageManager(): PackageManager {
   const userAgent = process.env.npm_config_user_agent || '';
   const execPath = process.env.npm_execpath || '';
 
@@ -27,15 +32,26 @@ export function getPackageManager(): string {
   return 'npm'; // Default fallback
 }
 
-export function getPackageManagerInstallCommand(pm: string): string {
-  switch (pm) {
-    case 'npm':
-      return 'install';
-    case 'yarn':
-      return 'add';
-    case 'pnpm':
-      return 'add';
-    default:
-      return 'install';
+export function parseMcp(value: string) {
+  if (!isValidEditor(value)) {
+    throw new InvalidArgumentError(`Choose a valid value: ${EDITOR.join(', ')}`);
   }
+  return value;
+}
+
+export function parseComponents(value: string) {
+  const parsedValue = value.split(',');
+
+  if (!areValidComponents(parsedValue)) {
+    throw new InvalidArgumentError(`Choose valid components: ${COMPONENTS.join(', ')}`);
+  }
+
+  return parsedValue;
+}
+
+export function parseLlmProvider(value: string) {
+  if (!isValidLLMProvider(value)) {
+    throw new InvalidArgumentError(`Choose a valid provider: ${LLMProvider.join(', ')}`);
+  }
+  return value;
 }

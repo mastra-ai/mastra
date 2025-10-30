@@ -1,7 +1,6 @@
 // Schema compatibility base class and related types
 export {
-  SchemaCompatLayer,
-  // Constants
+  SchemaCompatLayer as SchemaCompatLayerV3,
   ALL_STRING_CHECKS,
   ALL_NUMBER_CHECKS,
   ALL_ARRAY_CHECKS,
@@ -25,7 +24,9 @@ export {
   isUnion,
   isString,
   isNumber,
-} from './schema-compatibility';
+} from './schema-compatibility-v3';
+export { SchemaCompatLayer as SchemaCompatLayerV4 } from './schema-compatibility-v4';
+export { SchemaCompatLayer } from './schema-compatibility';
 
 // Utility functions
 export { convertZodSchemaToAISDKSchema, applyCompatLayer, convertSchemaToZod } from './utils';

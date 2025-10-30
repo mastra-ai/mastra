@@ -22,7 +22,7 @@ describe('create mastra', () => {
       fixturePath = await mkdtemp(join(tmpdir(), 'mastra-create-test-'));
       projectPath = join(fixturePath, 'project');
       process.env.npm_config_registry = registry;
-      execSync(`pnpm dlx create-mastra@${tag} -c agents,tools,workflows -l openai -e project`, {
+      execSync(`pnpm dlx create-mastra@${tag} -c agents,tools,workflows,scorers -l openai -e project`, {
         cwd: fixturePath,
         stdio: ['inherit', 'inherit', 'inherit'],
       });
@@ -45,24 +45,30 @@ describe('create mastra', () => {
   describe('dev', () => {
     let port: number;
     let proc: ReturnType<typeof execa> | undefined;
-    beforeAll(async () => {
-      port = await getPort();
-      proc = execa('pnpm', ['dev', '--port', port.toString()], {
-        cwd: projectPath,
-      });
-      proc!.stderr?.on('data', data => {
-        console.error(data?.toString());
-      });
-      await new Promise<void>(resolve => {
-        console.log('waiting for server to start');
-        proc!.stdout?.on('data', data => {
-          console.log(data?.toString());
-          if (data?.toString()?.includes(`http://localhost:${port}`)) {
-            resolve();
-          }
+    beforeAll(
+      async () => {
+        port = await getPort();
+        proc = execa('pnpm', ['dev'], {
+          cwd: projectPath,
+          env: {
+            PORT: port.toString(),
+          },
         });
-      });
-    });
+        proc!.stderr?.on('data', data => {
+          console.error(data?.toString());
+        });
+        await new Promise<void>(resolve => {
+          console.log('waiting for server to start');
+          proc!.stdout?.on('data', data => {
+            console.log(data?.toString());
+            if (data?.toString()?.includes(`http://localhost:${port}`)) {
+              resolve();
+            }
+          });
+        });
+      },
+      60 * 10 * 1000,
+    );
 
     afterAll(async () => {
       if (proc) {
@@ -92,8 +98,10 @@ describe('create mastra', () => {
         await expect(response.json()).resolves.toMatchInlineSnapshot(`
           {
             "weatherAgent": {
+              "agents": {},
               "defaultGenerateOptions": {},
               "defaultStreamOptions": {},
+              "inputProcessors": [],
               "instructions": "
                 You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
 
@@ -109,14 +117,17 @@ describe('create mastra', () => {
                 Use the weatherTool to fetch current weather data.
           ",
               "modelId": "gpt-4o-mini",
+              "modelVersion": "v2",
               "name": "Weather Agent",
-              "provider": "openai.chat",
+              "outputProcessors": [],
+              "provider": "openai",
               "tools": {
                 "weatherTool": {
                   "description": "Get current weather for a location",
                   "id": "get-weather",
-                  "inputSchema": "{"json":{"type":"object","properties":{"location":{"type":"string","description":"City name"}},"required":["location"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}",
-                  "outputSchema": "{"json":{"type":"object","properties":{"temperature":{"type":"number"},"feelsLike":{"type":"number"},"humidity":{"type":"number"},"windSpeed":{"type":"number"},"windGust":{"type":"number"},"conditions":{"type":"string"},"location":{"type":"string"}},"required":["temperature","feelsLike","humidity","windSpeed","windGust","conditions","location"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}",
+                  "inputSchema": "{"json":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"location":{"description":"City name","type":"string"}},"required":["location"],"additionalProperties":false}}",
+                  "outputSchema": "{"json":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"temperature":{"type":"number"},"feelsLike":{"type":"number"},"humidity":{"type":"number"},"windSpeed":{"type":"number"},"windGust":{"type":"number"},"conditions":{"type":"string"},"location":{"type":"string"}},"required":["temperature","feelsLike","humidity","windSpeed","windGust","conditions","location"],"additionalProperties":false}}",
+                  "requireApproval": false,
                 },
               },
               "workflows": {},

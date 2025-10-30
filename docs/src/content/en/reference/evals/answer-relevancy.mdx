@@ -1,9 +1,13 @@
 ---
-title: "Reference: Answer Relevancy | Metrics | Evals | Mastra Docs"
+title: "Reference: AnswerRelevancyMetric | Evals | Mastra Docs"
 description: Documentation for the Answer Relevancy Metric in Mastra, which evaluates how well LLM outputs address the input query.
 ---
 
 # AnswerRelevancyMetric
+
+:::info Scorers
+This documentation refers to the legacy evals API. For the latest scorer features, see [Scorers](/docs/scorers/overview).
+:::
 
 The `AnswerRelevancyMetric` class evaluates how well an LLM's output answers or addresses the input query. It uses a judge-based system to determine relevancy and provides detailed scoring and reasoning.
 
@@ -126,7 +130,6 @@ The metric evaluates relevancy through query-answer alignment, considering compl
 ### Scoring Process
 
 1. Statement Analysis:
-
    - Breaks output into meaningful statements while preserving context
    - Evaluates each statement against query requirements
 

@@ -1,0 +1,70 @@
+---
+title: "Reference: Agent.listAgents() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.listAgents()` method in Mastra agents, which retrieves the sub-agents that the agent can access."
+---
+
+# Agent.listAgents()
+
+The `.listAgents()` method retrieves the sub-agents configured for an agent, resolving them if they're a function. These sub-agents enable the agent to access other agents and perform complex actions.
+
+## Usage example
+
+```typescript copy
+await agent.listAgents();
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ requestContext?: RequestContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "Optional configuration object containing request context.",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "agents",
+      type: "Promise<Record<string, Agent>>",
+      description:
+        "A promise that resolves to a record of agent names to their corresponding Agent instances.",
+    },
+  ]}
+/>
+
+## Extended usage example
+
+```typescript copy
+import { RequestContext } from "@mastra/core/request-context";
+
+await agent.listAgents({
+  requestContext: new RequestContext(),
+});
+```
+
+### Options parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description:
+        "Request Context for dependency injection and contextual information.",
+    },
+  ]}
+/>
+
+## Related
+
+- [Agents overview](/docs/agents/overview)

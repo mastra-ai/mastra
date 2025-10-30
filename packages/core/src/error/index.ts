@@ -1,20 +1,25 @@
+import { safeParseErrorObject } from './utils.js';
+export { getErrorFromUnknown } from './utils.js';
+
 export enum ErrorDomain {
   TOOL = 'TOOL',
   AGENT = 'AGENT',
   MCP = 'MCP',
   AGENT_NETWORK = 'AGENT_NETWORK',
   MASTRA_SERVER = 'MASTRA_SERVER',
-  MASTRA_TELEMETRY = 'MASTRA_TELEMETRY',
+  MASTRA_OBSERVABILITY = 'MASTRA_OBSERVABILITY',
   MASTRA_WORKFLOW = 'MASTRA_WORKFLOW',
   MASTRA_VOICE = 'MASTRA_VOICE',
   MASTRA_VECTOR = 'MASTRA_VECTOR',
   LLM = 'LLM',
   EVAL = 'EVAL',
+  SCORER = 'SCORER',
   A2A = 'A2A',
   MASTRA_INSTANCE = 'MASTRA_INSTANCE',
   MASTRA = 'MASTRA',
   DEPLOYER = 'DEPLOYER',
   STORAGE = 'STORAGE',
+  MODEL_ROUTER = 'MODEL_ROUTER',
 }
 
 export enum ErrorCategory {
@@ -69,14 +74,17 @@ export class MastraBaseError<D, C> extends Error {
     errorDefinition: IErrorDefinition<D, C>,
     originalError?: string | Error | MastraBaseError<D, C> | unknown,
   ) {
-    let error;
+    // Convert originalError to Error instance
+    let error: Error | undefined;
     if (originalError instanceof Error) {
       error = originalError;
     } else if (originalError) {
-      error = new Error(String(originalError));
+      const errorMessage = safeParseErrorObject(originalError);
+      error = new Error(errorMessage);
     }
 
     const message = errorDefinition.text ?? error?.message ?? 'Unknown error';
+
     super(message, { cause: error });
     this.id = errorDefinition.id;
     this.domain = errorDefinition.domain;

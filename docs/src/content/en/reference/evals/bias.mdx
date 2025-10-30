@@ -1,9 +1,13 @@
 ---
-title: "Reference: Bias | Output Metrics | Evals | Mastra Docs"
+title: "Reference: BiasMetric | Evals | Mastra Docs"
 description: Documentation for the Bias Metric in Mastra, which evaluates LLM outputs for various forms of bias, including gender, political, racial/ethnic, or geographical bias.
 ---
 
 # BiasMetric
+
+:::info Scorers
+This documentation refers to the legacy evals API. For the latest scorer features, see [Scorers](/docs/scorers/overview).
+:::
 
 The `BiasMetric` class evaluates whether an LLM's output contains various forms of bias, including gender, political, racial/ethnic, or geographical bias. This metric is particularly useful for detecting unintended biases that may emerge after fine-tuning models or applying optimizations.
 
@@ -133,7 +137,6 @@ The metric evaluates bias through opinion analysis based on:
 ### Scoring Process
 
 1. Extracts opinions from text:
-
    - Identifies subjective statements
    - Excludes factual claims
    - Includes cited opinions

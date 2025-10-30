@@ -1,0 +1,1 @@
+export { isVercelTool } from './toolchecks';

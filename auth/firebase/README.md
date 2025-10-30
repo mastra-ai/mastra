@@ -61,7 +61,3 @@ The package can be configured through constructor options or environment variabl
 ## User Authorization
 
 The package uses Firestore to manage user access. It expects a collection named `user_access` with documents keyed by user UIDs. The presence of a document in this collection determines whether a user is authorized.
-
-## License
-
-Elastic-2.0
