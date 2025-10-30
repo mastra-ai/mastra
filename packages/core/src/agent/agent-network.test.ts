@@ -1,10 +1,10 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { RuntimeContext } from '../runtime-context';
+import { MockMemory } from '../memory/mock';
+import { RequestContext } from '../request-context';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
-import { MockMemory } from './test-utils';
 import { Agent } from './index';
 
 describe('Agent - network', () => {
@@ -127,35 +127,35 @@ describe('Agent - network', () => {
     memory,
   });
 
-  const runtimeContext = new RuntimeContext();
+  const requestContext = new RequestContext();
 
   it('LOOP - execute a single tool', async () => {
     const anStream = await network.network('Execute tool1', {
-      runtimeContext,
+      requestContext,
     });
 
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
   });
 
   it('LOOP - execute a single workflow', async () => {
     const anStream = await network.network('Execute workflow1 on Paris', {
-      runtimeContext,
+      requestContext,
     });
 
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
   });
 
   it('LOOP - execute a single agent', async () => {
     const anStream = await network.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
     });
 
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
   });
 
@@ -163,21 +163,19 @@ describe('Agent - network', () => {
     const anStream = await network.network(
       'Research dolphins then execute workflow1 based on the location where dolphins live',
       {
-        runtimeContext,
+        requestContext,
         maxSteps: 3,
       },
     );
 
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
-
-    console.log('SUH', anStream);
   });
 
   it('LOOP - should track usage data from agent.network()', async () => {
     const anStream = await network.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
     });
 
     // Consume the stream to trigger usage collection
@@ -269,12 +267,12 @@ describe('Agent - network', () => {
     });
 
     const anStream = await networkWithTitle.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
     });
 
     // Consume the stream
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
 
     // Wait a bit for async title generation to complete
@@ -323,7 +321,7 @@ describe('Agent - network', () => {
     });
 
     const anStream = await networkWithTitle.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
       memory: {
         thread: 'test-network-with-title',
         resource: 'test-network-with-title',
@@ -334,8 +332,8 @@ describe('Agent - network', () => {
     });
 
     // Consume the stream
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
 
     // Wait a bit for async title generation to complete
@@ -379,12 +377,12 @@ describe('Agent - network', () => {
     });
 
     const anStream = await networkNoTitle.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
     });
 
     // Consume the stream
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
 
     // Wait for any async operations
@@ -419,7 +417,7 @@ describe('Agent - network', () => {
     });
 
     const anStream = await networkNoTitle.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
       memory: {
         thread: 'test-network-no-title',
         resource: 'test-network-no-title',
@@ -432,8 +430,8 @@ describe('Agent - network', () => {
     });
 
     // Consume the stream
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
 
     // Wait for any async operations

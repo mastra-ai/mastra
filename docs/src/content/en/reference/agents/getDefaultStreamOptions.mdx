@@ -19,10 +19,10 @@ await agent.getDefaultStreamOptions();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
       defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
+      description: "Optional configuration object containing request context.",
     },
   ]}
 />
@@ -34,7 +34,8 @@ await agent.getDefaultStreamOptions();
     {
       name: "defaultOptions",
       type: "AgentExecutionOptions<Output> | Promise<AgentExecutionOptions<Output>>",
-      description: "The default vNext streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
+      description:
+        "The default vNext streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
     },
   ]}
 />
@@ -43,7 +44,7 @@ await agent.getDefaultStreamOptions();
 
 ```typescript copy
 await agent.getDefaultStreamOptions({
-  runtimeContext: new RuntimeContext()
+  requestContext: new RequestContext(),
 });
 ```
 
@@ -52,16 +53,17 @@ await agent.getDefaultStreamOptions({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
-      description: "Runtime context for dependency injection and contextual information.",
+      defaultValue: "new RequestContext()",
+      description:
+        "Request Context for dependency injection and contextual information.",
     },
   ]}
 />
 
 ## Related
 
-- [Streaming with agents](../../docs/streaming/overview.mdx#streaming-with-agents)
-- [Runtime Context](../../docs/server-db/runtime-context.mdx)
+- [Streaming with agents](/docs/streaming/overview#streaming-with-agents)
+- [Request Context](/docs/server-db/request-context)

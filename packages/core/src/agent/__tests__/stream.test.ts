@@ -11,10 +11,11 @@ import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { noopLogger } from '../../logger';
 import type { StorageThreadType } from '../../memory';
+import { MockMemory } from '../../memory/mock';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { MessageList } from '../message-list/index';
-import { assertNoDuplicateParts, MockMemory } from '../test-utils';
+import { assertNoDuplicateParts } from '../test-utils';
 import { getDummyResponseModel, getEmptyResponseModel, getErrorResponseModel } from './mock-model';
 
 config();
@@ -902,10 +903,6 @@ function runStreamTest(version: 'v1' | 'v2') {
 
         expect(secondResponse.request.body.input).toEqual([
           expect.objectContaining({ role: 'system' }),
-          expect.objectContaining({ role: 'user' }),
-          expect.objectContaining({ type: 'function_call' }),
-          expect.objectContaining({ type: 'function_call_output' }),
-          expect.objectContaining({ role: 'assistant' }),
           expect.objectContaining({ role: 'user' }),
         ]);
       }

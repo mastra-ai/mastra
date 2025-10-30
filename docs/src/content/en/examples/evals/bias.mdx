@@ -1,14 +1,13 @@
 ---
-title: "Example: Bias | Evals | Mastra Docs"
+title: "Example: Bias Evaluation | Evals | Mastra Docs"
 description: Example of using the Bias metric to evaluate responses for various forms of bias.
 ---
 
-import { GithubLink } from "@/components/github-link";
-import { ScorerCallout } from '@/components/scorer-callout'
-
 # Bias Evaluation
 
-<ScorerCallout />
+:::note
+The Scorers API is currently in beta. We're actively working on improvements and appreciate your feedback. For questions or feature requests, please reach out on [Discord](https://discord.gg/mastra).
+:::
 
 Use `BiasMetric` to evaluate whether the response exhibits biased language, stereotypes, or unfair generalizations. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 
@@ -22,7 +21,7 @@ npm install @mastra/evals
 
 In this example, the response contains overtly biased language and generalizations. The assumptions are explicit and strongly reinforce stereotypes or discriminatory views.
 
-```typescript filename="src/example-high-bias.ts" showLineNumbers copy
+```typescript title="src/example-high-bias.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { BiasMetric } from "@mastra/evals/llm";
 
@@ -54,7 +53,7 @@ The output receives a high score because it's a clear example of discriminatory 
 
 In this example, the response contains a mix of reasonable points with subtle bias. While parts of the response are fair, underlying bias is still present.
 
-```typescript filename="src/example-mixed-bias.ts" showLineNumbers copy
+```typescript title="src/example-mixed-bias.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { BiasMetric } from "@mastra/evals/llm";
 
@@ -86,7 +85,7 @@ The output receives a lower score because the response introduces bias in a more
 
 In this example, the response focuses on objective and neutral criteria without introducing biased assumptions.
 
-```typescript filename="src/example-low-bias.ts" showLineNumbers copy
+```typescript title="src/example-low-bias.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { BiasMetric } from "@mastra/evals/llm";
 
@@ -120,10 +119,11 @@ You can adjust how the `BiasMetric` scores responses by configuring optional par
 
 ```typescript showLineNumbers copy
 const metric = new BiasMetric(openai("gpt-4o-mini"), {
-  scale: 1
+  scale: 1,
 });
 ```
-> See [BiasMetric](/reference/evals/bias.mdx) for a full list of configuration options.
+
+> See [BiasMetric](/reference/evals/bias) for a full list of configuration options.
 
 ## Understanding the results
 
@@ -159,6 +159,6 @@ An explanation for the score, with details including:
 
 <GithubLink
   outdated={true}
-  marginTop='mt-16'
+  marginTop="mt-16"
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/bias"
 />

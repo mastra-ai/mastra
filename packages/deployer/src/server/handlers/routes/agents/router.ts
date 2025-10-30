@@ -7,13 +7,12 @@ import { executeAgentToolHandler, getAgentToolHandler } from '../tools/handlers'
 import {
   generateHandler,
   getAgentByIdHandler,
-  getAgentsHandler,
+  listAgentsHandler,
   getProvidersHandler,
-  getEvalsByAgentIdHandler,
-  getLiveEvalsByAgentIdHandler,
   setAgentInstructionsHandler,
   streamGenerateHandler,
   updateAgentModelHandler,
+  resetAgentModelHandler,
   vNextBodyOptions,
   deprecatedStreamVNextHandler,
   streamUIMessageHandler,
@@ -42,7 +41,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    getAgentsHandler,
+    listAgentsHandler,
   );
 
   router.get(
@@ -82,50 +81,6 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getAgentByIdHandler,
-  );
-
-  router.get(
-    '/:agentId/evals/ci',
-    describeRoute({
-      description: 'Get CI evals by agent ID',
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      responses: {
-        200: {
-          description: 'List of evals',
-        },
-      },
-    }),
-    getEvalsByAgentIdHandler,
-  );
-
-  router.get(
-    '/:agentId/evals/live',
-    describeRoute({
-      description: 'Get live evals by agent ID',
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      responses: {
-        200: {
-          description: 'List of evals',
-        },
-      },
-    }),
-    getLiveEvalsByAgentIdHandler,
   );
 
   router.post(
@@ -751,6 +706,32 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
   );
 
   router.post(
+    '/:agentId/model/reset',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Reset the agent model to the original model set during construction',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Model reset to original successfully',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    resetAgentModelHandler,
+  );
+
+  router.post(
     '/:agentId/models/reorder',
     bodyLimit(bodyLimitOptions),
     describeRoute({
@@ -1341,7 +1322,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 data: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                requestContext: { type: 'object' },
               },
               required: ['data'],
             },
@@ -1383,7 +1364,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
               properties: {
                 runId: { type: 'string', description: 'The run ID for the execution' },
                 toolCallId: { type: 'string', description: 'The tool call ID for the execution' },
-                runtimeContext: { type: 'object', description: 'Runtime context for the execution' },
+                requestContext: { type: 'object', description: 'Request Context for the execution' },
                 format: { type: 'string', enum: ['aisdk', 'mastra'], description: 'Output format' },
               },
               required: ['runId', 'toolCallId'],
@@ -1426,7 +1407,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
               properties: {
                 runId: { type: 'string', description: 'The run ID for the execution' },
                 toolCallId: { type: 'string', description: 'The tool call ID for the execution' },
-                runtimeContext: { type: 'object', description: 'Runtime context for the execution' },
+                requestContext: { type: 'object', description: 'Request Context for the execution' },
                 format: { type: 'string', enum: ['aisdk', 'mastra'], description: 'Output format' },
               },
               required: ['runId', 'toolCallId'],

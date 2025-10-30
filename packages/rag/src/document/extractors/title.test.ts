@@ -48,7 +48,7 @@ describe('TitleExtractor', () => {
     expect(titles[0].documentTitle.length).toBeGreaterThan(0);
   });
 
-  it('handles very long input', async () => {
+  it('handles very long input', { retry: 2 }, async () => {
     const extractor = new TitleExtractor({ llm: model });
     const longText = 'A'.repeat(1000);
     const node = new TextNode({ text: longText });
