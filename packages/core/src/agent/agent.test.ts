@@ -18,6 +18,7 @@ import { Mastra } from '../mastra';
 import type { MastraMessageV2, StorageThreadType } from '../memory';
 import { MockMemory } from '../memory/mock';
 import { MessageHistory, SemanticRecall, ToolCallFilter, TokenLimiterProcessor, WorkingMemory } from '../processors';
+import { RequestContext } from '../request-context';
 import { MockStore } from '../storage';
 import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
@@ -25,7 +26,6 @@ import { delay } from '../utils';
 import { MessageList } from './message-list/index';
 import { assertNoDuplicateParts } from './test-utils';
 import { Agent } from './index';
-import { RequestContext } from '../request-context';
 
 config();
 
