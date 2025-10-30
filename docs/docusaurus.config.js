@@ -37,8 +37,8 @@ const config = {
   // We fetch all source files and store them there using the "transform" option
   // in gt.config.json
   i18n: {
-    defaultLocale: 'en',
-    locales: ['en', 'ja'],
+    defaultLocale: "en",
+    locales: ["en", "ja"],
   },
 
   // Enable v4 features in prod
