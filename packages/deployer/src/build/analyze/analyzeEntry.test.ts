@@ -20,6 +20,8 @@ vi.mock('rollup', async () => {
 describe('analyzeEntry', () => {
   beforeEach(() => {
     vi.mocked(rollup).mockClear();
+    vi.spyOn(process, 'cwd').mockReturnValue(join(import.meta.dirname, '__fixtures__', 'default'));
+    vi.mocked(resolveFrom).mockReset();
   });
 
   it('should analyze the entry file', async () => {
@@ -222,6 +224,7 @@ describe('analyzeEntry', () => {
         '@internal/shared',
         {
           location: `${root}/packages/shared`,
+          dependencies: {},
           version: '1.0.0',
         },
       ],
@@ -245,7 +248,8 @@ describe('analyzeEntry', () => {
     expect(result.dependencies.size).toBe(2);
     expect(result.dependencies.get('@internal/a')?.exports).toEqual(['a']);
     expect(result.dependencies.get('@internal/shared')?.exports).toEqual(['shared']);
-    // Verify that the analyzer doesn't get stuck in infinite loops
-    // (test will timeout if there's an infinite loop issue)
+    // Verify that the analyzer doesn't get stuck in infinite loops.
+    // The initialDepsToOptimize map tracks already-analyzed dependencies to prevent re-analysis.
+    // (Test will timeout if there's an infinite loop issue)
   });
 });
