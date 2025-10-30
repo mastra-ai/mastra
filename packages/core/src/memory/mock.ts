@@ -75,7 +75,7 @@ export class MockMemory extends MastraMemory {
       threadId,
       resourceId,
       format: 'v2',
-      selectBy: config?.selectBy,
+      threadConfig: config,
     });
     const list = new MessageList().add(v2Messages, `memory`);
     return { messages: list.get.remembered.v1(), messagesV2: list.get.remembered.v2() };
