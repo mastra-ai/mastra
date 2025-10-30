@@ -2145,7 +2145,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           .add(context || [], 'context');
 
         if (!memory || (!threadId && !resourceId)) {
-          messageList.add(messages, 'user');
+          messageList.add(messages, 'input');
           const { tripwireTriggered, tripwireReason } = await this.__runInputProcessors({
             requestContext,
             tracingContext: innerTracingContext,
@@ -2218,7 +2218,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         }
 
         // Add new user messages to message list
-        messageList.add(messages, 'user');
+        messageList.add(messages, 'input');
 
         // Run input processors (including MessageHistory, SemanticRecall, WorkingMemory)
         const { tripwireTriggered, tripwireReason } = await this.__runInputProcessors({
