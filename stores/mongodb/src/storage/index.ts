@@ -245,7 +245,7 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.memory.updateMessages(_args);
   }
 
-  async getWorkflowRuns(args?: {
+  async listWorkflowRuns(args?: {
     workflowName?: string;
     fromDate?: Date;
     toDate?: Date;
@@ -253,7 +253,7 @@ export class MongoDBStore extends MastraStorage {
     offset?: number;
     resourceId?: string;
   }): Promise<WorkflowRuns> {
-    return this.stores.workflows.getWorkflowRuns(args);
+    return this.stores.workflows.listWorkflowRuns(args);
   }
 
   async updateWorkflowResults({

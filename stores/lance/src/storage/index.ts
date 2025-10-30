@@ -327,7 +327,7 @@ export class LanceStorage extends MastraStorage {
     return this.stores.memory.updateMessages(_args);
   }
 
-  async getWorkflowRuns(args?: {
+  async listWorkflowRuns(args?: {
     namespace?: string;
     workflowName?: string;
     fromDate?: Date;
@@ -335,7 +335,7 @@ export class LanceStorage extends MastraStorage {
     limit?: number;
     offset?: number;
   }): Promise<WorkflowRuns> {
-    return this.stores.workflows.getWorkflowRuns(args);
+    return this.stores.workflows.listWorkflowRuns(args);
   }
 
   async getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<{

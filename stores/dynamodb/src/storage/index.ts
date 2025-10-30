@@ -387,7 +387,7 @@ export class DynamoDBStore extends MastraStorage {
     return this.stores.workflows.loadWorkflowSnapshot({ workflowName, runId });
   }
 
-  async getWorkflowRuns(args?: {
+  async listWorkflowRuns(args?: {
     workflowName?: string;
     fromDate?: Date;
     toDate?: Date;
@@ -395,7 +395,7 @@ export class DynamoDBStore extends MastraStorage {
     offset?: number;
     resourceId?: string;
   }): Promise<WorkflowRuns> {
-    return this.stores.workflows.getWorkflowRuns(args);
+    return this.stores.workflows.listWorkflowRuns(args);
   }
 
   async getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {

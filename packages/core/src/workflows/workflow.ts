@@ -1248,22 +1248,6 @@ export class Workflow<
     return res.status === 'success' ? res.result : undefined;
   }
 
-  async getWorkflowRuns(args?: {
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }) {
-    const storage = this.#mastra?.getStorage();
-    if (!storage) {
-      this.logger.debug('Cannot get workflow runs. Mastra storage is not initialized');
-      return { runs: [], total: 0 };
-    }
-
-    return storage.getWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
-  }
-
   async listWorkflowRuns(args?: {
     fromDate?: Date;
     toDate?: Date;
@@ -1276,6 +1260,7 @@ export class Workflow<
       this.logger.debug('Cannot get workflow runs. Mastra storage is not initialized');
       return { runs: [], total: 0 };
     }
+
     return storage.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
   }
 

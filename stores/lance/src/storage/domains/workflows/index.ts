@@ -177,15 +177,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns(args?: {
-    namespace?: string;
-    resourceId?: string;
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-  }): Promise<WorkflowRuns> {
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
 
@@ -244,9 +236,5 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
         error,
       );
     }
-  }
-
-  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
-    return this.getWorkflowRuns(args);
   }
 }
