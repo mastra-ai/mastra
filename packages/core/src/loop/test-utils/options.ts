@@ -1644,7 +1644,26 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "call": "1",
                     },
                     "id": "id-0",
-                    "messages": [],
+                    "messages": [
+                      {
+                        "content": [
+                          {
+                            "input": {
+                              "value": "value",
+                            },
+                            "providerExecuted": undefined,
+                            "toolCallId": "call-1",
+                            "toolName": "tool1",
+                            "type": "tool-call",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                      {
+                        "content": [],
+                        "role": "tool",
+                      },
+                    ],
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
                   },
@@ -1770,7 +1789,26 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "call": "1",
                     },
                     "id": "id-0",
-                    "messages": [],
+                    "messages": [
+                      {
+                        "content": [
+                          {
+                            "input": {
+                              "value": "value",
+                            },
+                            "providerExecuted": undefined,
+                            "toolCallId": "call-1",
+                            "toolName": "tool1",
+                            "type": "tool-call",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                      {
+                        "content": [],
+                        "role": "tool",
+                      },
+                    ],
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
                   },
