@@ -62,13 +62,22 @@ const getTextContent = (message: any): string => {
   if (typeof message.content === 'string') {
     return message.content;
   }
-  if (message.content?.parts) {
+  if (message.content?.parts && Array.isArray(message.content.parts)) {
     // Find the first text part
     const textPart = message.content.parts.find((p: any) => p.type === 'text' && p.text);
     if (textPart) {
       return textPart.text;
     }
   }
+  // Fallback: check if content has a direct text property
+  if (message.content?.text) {
+    return message.content.text;
+  }
+  // Fallback: check if content.content exists (nested structure)
+  if (message.content?.content && typeof message.content.content === 'string') {
+    return message.content.content;
+  }
+  console.error('Unable to extract text from message:', JSON.stringify(message, null, 2));
   return '';
 };
 
