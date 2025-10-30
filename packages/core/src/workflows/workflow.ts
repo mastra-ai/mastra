@@ -27,6 +27,7 @@ import type {
   DynamicMapping,
   ExtractSchemaFromStep,
   ExtractSchemaType,
+  OutputMatches,
   PathsToStringProps,
   SerializedStep,
   SerializedStepFlowEntry,
@@ -388,7 +389,7 @@ export function cloneWorkflow<
   });
 
   wf.setStepFlow(workflow.stepGraph);
-  wf.commit();
+  (wf as any).commit();
   return wf;
 }
 
@@ -969,9 +970,14 @@ export class Workflow<
    * This method should be called after all steps have been added to the workflow
    * @returns A built workflow instance ready for execution
    */
-  commit() {
-    this.executionGraph = this.buildExecutionGraph();
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TOutput>;
+  commit(
+    this: OutputMatches<TOutput, TPrevSchema> extends true
+      ? Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema>
+      : never,
+    // : "Error: The workflow output schema doesn't match the output schema of the last step. Please check your workflow.",
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
+    (this as any).executionGraph = (this as any).buildExecutionGraph();
+    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema>;
   }
 
   get stepGraph() {

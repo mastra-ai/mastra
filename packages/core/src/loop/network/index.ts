@@ -1155,16 +1155,7 @@ export async function networkLoop<
       isOneOff: z.boolean(),
       verboseIntrospection: z.boolean(),
     }),
-    outputSchema: z.object({
-      task: z.string(),
-      primitiveId: z.string(),
-      primitiveType: PRIMITIVE_TYPES,
-      prompt: z.string(),
-      result: z.string(),
-      isComplete: z.boolean().optional(),
-      completionReason: z.string().optional(),
-      iteration: z.number(),
-    }),
+    outputSchema: finalStep.outputSchema,
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
     },

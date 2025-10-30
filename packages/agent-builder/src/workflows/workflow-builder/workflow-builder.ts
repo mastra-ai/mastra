@@ -519,7 +519,7 @@ export const workflowBuilderWorkflow = createWorkflow({
   id: 'workflow-builder',
   description: 'Create or edit Mastra workflows using AI-powered assistance with iterative planning',
   inputSchema: WorkflowBuilderInputSchema,
-  outputSchema: WorkflowBuilderResultSchema,
+  outputSchema: TaskExecutionResultSchema, // FIXME: change to WorkflowBuilderResultSchema ? but right now the output schema doesn't match
   steps: [
     workflowDiscoveryStep,
     projectDiscoveryStep,
