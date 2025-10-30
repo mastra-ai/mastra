@@ -6,7 +6,7 @@ import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { InputProcessor, OutputProcessor } from '../processors';
-import type { RuntimeContext } from '../runtime-context';
+import type { RequestContext } from '../request-context';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
@@ -19,8 +19,8 @@ export type MultiPrimitiveExecutionOptions = {
   /** Unique identifier for this execution run */
   runId?: string;
 
-  /** Runtime context containing dynamic configuration and state */
-  runtimeContext?: RuntimeContext;
+  /** Request Context containing dynamic configuration and state */
+  requestContext?: RequestContext;
 
   /** Maximum number of steps to run */
   maxSteps?: number;
@@ -60,8 +60,8 @@ export type AgentExecutionOptions<
   /** Save messages incrementally after each stream step completes (default: false). */
   savePerStep?: boolean;
 
-  /** Runtime context containing dynamic configuration and state */
-  runtimeContext?: RuntimeContext;
+  /** Request Context containing dynamic configuration and state */
+  requestContext?: RequestContext;
 
   /** @deprecated Use memory.resource instead. Identifier for the resource/user */
   resourceId?: string;

@@ -143,13 +143,13 @@ be inspected by middleware to tailor behaviour:
 - `x-mastra-client-type`: identifies the client SDK, e.g. `js` or `python`
 - `x-mastra-dev-playground`: request triggered from a local playground
 
-### Setting `runtimeContext`
+### Setting `requestContext`
 
-You can populate `runtimeContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
+You can populate `requestContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 import { testWeatherAgent } from "./agents/test-weather-agent";
 
 export const mastra = new Mastra({
@@ -158,9 +158,9 @@ export const mastra = new Mastra({
     middleware: [
       async (context, next) => {
         const country = context.req.header("CF-IPCountry");
-        const runtimeContext = context.get("runtimeContext");
+        const requestContext = context.get("requestContext");
 
-        runtimeContext.set(
+        requestContext.set(
           "temperature-unit",
           country === "US" ? "fahrenheit" : "celsius",
         );
@@ -174,4 +174,4 @@ export const mastra = new Mastra({
 
 # Related
 
-- [Runtime Context](./runtime-context)
+- [Request Context](./request-context)

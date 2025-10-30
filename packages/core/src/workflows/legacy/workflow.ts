@@ -4,7 +4,7 @@ import type { Agent } from '../../agent';
 import { MastraBase } from '../../base';
 import type { Mastra } from '../../mastra';
 
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
 import type { LegacyWorkflowRuns } from '../../storage';
 import { LegacyStep as Step } from './step';
 import type {
@@ -1158,22 +1158,22 @@ export class LegacyWorkflow<
     runId,
     stepId,
     context: resumeContext,
-    runtimeContext = new RuntimeContext(),
+    requestContext = new RequestContext(),
   }: {
     runId: string;
     stepId: string;
     context?: Record<string, any>;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
   }) {
     this.logger.warn(`Please use 'resume' on the 'createRun' call instead, resume is deprecated`);
 
     const activeRun = this.#runs.get(runId);
     if (activeRun) {
-      return activeRun.resume({ stepId, context: resumeContext, runtimeContext });
+      return activeRun.resume({ stepId, context: resumeContext, requestContext });
     }
 
     const run = this.createRun({ runId });
-    return run.resume({ stepId, context: resumeContext, runtimeContext });
+    return run.resume({ stepId, context: resumeContext, requestContext });
   }
 
   watch(
@@ -1203,7 +1203,7 @@ export class LegacyWorkflow<
       runId,
       stepId: `__${eventName}_event`,
       context: { resumedEvent: data },
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
     });
     return results;
   }

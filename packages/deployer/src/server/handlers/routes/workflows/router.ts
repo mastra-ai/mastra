@@ -185,9 +185,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the workflow execution',
+                  description: 'Request Context for the workflow execution',
                 },
               },
             },
@@ -228,9 +228,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the workflow execution',
+                  description: 'Request Context for the workflow execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -283,9 +283,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the workflow execution',
+                  description: 'Request Context for the workflow execution',
                 },
               },
             },
@@ -322,9 +322,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the workflow execution',
+                  description: 'Request Context for the workflow execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -412,9 +412,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the workflow execution',
+                  description: 'Request Context for the workflow execution',
                 },
                 closeOnSuspend: {
                   type: 'boolean',
@@ -506,9 +506,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the workflow execution',
+                  description: 'Request Context for the workflow execution',
                 },
                 closeOnSuspend: {
                   type: 'boolean',
@@ -631,9 +631,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the workflow execution',
+                  description: 'Request Context for the workflow execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -690,9 +690,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the workflow execution',
+                  description: 'Request Context for the workflow execution',
                 },
                 tracingOptions: {
                   type: 'object',
