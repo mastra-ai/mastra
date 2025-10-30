@@ -399,7 +399,7 @@ export class MemoryMSSQL extends MemoryStorage {
             m.[resourceId],
             m.seq_id
           FROM (
-            SELECT *, ROW_NUMBER() OVER (${orderByStatement}) as row_num
+            SELECT *, ROW_NUMBER() OVER (ORDER BY [createdAt] ASC) as row_num
             FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })}
             WHERE [thread_id] = ${pThreadId}
           ) AS m
@@ -407,15 +407,17 @@ export class MemoryMSSQL extends MemoryStorage {
           OR EXISTS (
             SELECT 1
             FROM (
-              SELECT *, ROW_NUMBER() OVER (${orderByStatement}) as row_num
+              SELECT *, ROW_NUMBER() OVER (ORDER BY [createdAt] ASC) as row_num
               FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })}
               WHERE [thread_id] = ${pThreadId}
             ) AS target
             WHERE target.id = ${pId}
             AND (
-              (m.row_num <= target.row_num + ${pPrev} AND m.row_num > target.row_num)
+              -- Get previous messages (messages that come BEFORE the target)
+              (m.row_num < target.row_num AND m.row_num >= target.row_num - ${pPrev})
               OR
-              (m.row_num >= target.row_num - ${pNext} AND m.row_num < target.row_num)
+              -- Get next messages (messages that come AFTER the target)
+              (m.row_num > target.row_num AND m.row_num <= target.row_num + ${pNext})
             )
           )
         `,
@@ -581,12 +583,149 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
-  public async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    throw new Error(
-      `listMessages is not yet implemented by this storage adapter (${this.constructor.name}). ` +
-        `This method is currently being rolled out across all storage adapters. ` +
-        `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
-    );
+  public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
+    try {
+      // Determine how many results to return
+      // Default pagination is always 40 unless explicitly specified
+      let perPage = 40;
+      if (limit !== undefined) {
+        if (limit === false) {
+          // limit: false means get ALL messages
+          perPage = Number.MAX_SAFE_INTEGER;
+        } else if (typeof limit === 'number' && limit > 0) {
+          perPage = limit;
+        }
+      }
+
+      // Convert offset to page for pagination metadata
+      const page = Math.floor(offset / perPage);
+
+      // Determine sort field and direction
+      const sortField = orderBy?.field || 'createdAt';
+      const sortDirection = orderBy?.direction || 'DESC';
+      const orderByStatement = `ORDER BY [${sortField}] ${sortDirection}`;
+
+      const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
+      const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
+
+      // Build WHERE conditions
+      const conditions: string[] = ['[thread_id] = @threadId'];
+      const request = this.pool.request();
+      request.input('threadId', threadId);
+
+      if (resourceId) {
+        conditions.push('[resourceId] = @resourceId');
+        request.input('resourceId', resourceId);
+      }
+
+      if (filter?.dateRange?.start) {
+        conditions.push('[createdAt] >= @fromDate');
+        request.input('fromDate', filter.dateRange.start);
+      }
+
+      if (filter?.dateRange?.end) {
+        conditions.push('[createdAt] <= @toDate');
+        request.input('toDate', filter.dateRange.end);
+      }
+
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+      // Get total count
+      const countQuery = `SELECT COUNT(*) as total FROM ${tableName} ${whereClause}`;
+      const countResult = await request.query(countQuery);
+      const total = parseInt(countResult.recordset[0]?.total, 10) || 0;
+
+      // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
+      request.input('offset', offset);
+      request.input('limit', perPage);
+      const rowsResult = await request.query(dataQuery);
+      const rows = rowsResult.recordset || [];
+      const messages: any[] = [...rows];
+
+      if (total === 0 && messages.length === 0) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      // Step 2: Add included messages with context (if any), excluding duplicates
+      const messageIds = new Set(messages.map(m => m.id));
+      if (include && include.length > 0) {
+        const selectBy = { include };
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
+        if (includeMessages) {
+          // Deduplicate: only add messages that aren't already in the paginated results
+          for (const includeMsg of includeMessages) {
+            if (!messageIds.has(includeMsg.id)) {
+              messages.push(includeMsg);
+              messageIds.add(includeMsg.id);
+            }
+          }
+        }
+      }
+
+      // Parse and format messages to V2
+      const parsed = this._parseAndFormatMessages(messages, 'v2');
+      let finalMessages = parsed as MastraMessageV2[];
+
+      // Sort all messages (paginated + included) for final output
+      finalMessages = finalMessages.sort((a, b) => {
+        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
+        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
+
+      // Calculate hasMore
+      let hasMore: boolean;
+      if (include && include.length > 0) {
+        // When using include, check if we've returned all messages from the thread
+        // because include might bring in messages beyond the pagination window
+        const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+        hasMore = returnedThreadMessageIds.size < total;
+      } else {
+        // Standard pagination: check if there are more pages
+        hasMore = offset + rows.length < total;
+      }
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage,
+        hasMore,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_MSSQL_STORE_LIST_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+            resourceId: resourceId ?? '',
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      return {
+        messages: [],
+        total: 0,
+        page: Math.floor(offset / (limit === false ? Number.MAX_SAFE_INTEGER : limit || 40)),
+        perPage: limit === false ? Number.MAX_SAFE_INTEGER : limit || 40,
+        hasMore: false,
+      };
+    }
   }
 
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
