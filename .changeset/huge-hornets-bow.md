@@ -15,4 +15,4 @@
 '@mastra/pg': major
 ---
 
-Remove `getThreadsByResourceId` and `getThreadsByResourceIdPaginated` methods from storage interfaces in favor of `listThreadsByResourceId`. The new method uses offset/limit pagination instead of page/perPage and adds support for orderBy and sortDirection parameters.
+Remove `getThreadsByResourceId` and `getThreadsByResourceIdPaginated` methods from storage interfaces in favor of `listThreadsByResourceId`. The new method uses `offset`/`limit` pagination and a nested `orderBy` object structure (`{ field, direction }`).

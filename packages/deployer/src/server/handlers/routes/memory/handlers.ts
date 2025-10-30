@@ -70,9 +70,12 @@ export async function listThreadsHandler(c: Context) {
     const resourceId = c.req.query('resourceId');
     const offset = parseInt(c.req.query('offset') || '0', 10);
     const limit = parseInt(c.req.query('limit') || '100', 10);
-    const orderBy = c.req.query('orderBy') as ThreadOrderBy | undefined;
-    const sortDirection = c.req.query('sortDirection') as ThreadSortDirection | undefined;
+    const field = c.req.query('orderBy') as ThreadOrderBy | undefined;
+    const direction = c.req.query('sortDirection') as ThreadSortDirection | undefined;
     const requestContext = c.get('requestContext');
+
+    // Transform to nested structure
+    const orderBy = field || direction ? { field: field || 'createdAt', direction: direction || 'DESC' } : undefined;
 
     const result = await getOriginalListThreadsHandler({
       mastra,
@@ -81,7 +84,6 @@ export async function listThreadsHandler(c: Context) {
       offset,
       limit,
       orderBy,
-      sortDirection,
       requestContext,
     });
 

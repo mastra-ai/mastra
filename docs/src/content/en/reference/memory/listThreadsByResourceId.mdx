@@ -41,14 +41,8 @@ await memory.listThreadsByResourceId({
     },
     {
       name: "orderBy",
-      type: "'createdAt' | 'updatedAt'",
-      description: "Field to sort threads by (defaults to 'createdAt')",
-      isOptional: true,
-    },
-    {
-      name: "sortDirection",
-      type: "'ASC' | 'DESC'",
-      description: "Sort order direction (defaults to 'DESC')",
+      type: "{ field: 'createdAt' | 'updatedAt', direction: 'ASC' | 'DESC' }",
+      description: "Sort configuration with field and direction (defaults to { field: 'createdAt', direction: 'DESC' })",
       isOptional: true,
     },
   ]}
@@ -91,8 +85,7 @@ while (hasMorePages) {
     resourceId: "user-123",
     offset: currentOffset,
     limit: limit,
-    orderBy: "createdAt",
-    sortDirection: "ASC",
+    orderBy: { field: "createdAt", direction: "ASC" },
   });
 
   if (!result) {

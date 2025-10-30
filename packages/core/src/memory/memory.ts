@@ -299,15 +299,14 @@ export abstract class MastraMemory extends MastraBase {
 
   /**
    * Lists all threads that belong to the specified resource.
-   * @param resourceId - The unique identifier of the resource
-   * @param orderBy - Which timestamp field to sort by (`'createdAt'` or `'updatedAt'`);
-   *                  defaults to `'createdAt'`
-   * @param sortDirection - Sort order for the results (`'ASC'` or `'DESC'`);
-   *                        defaults to `'DESC'`
-   * @param offset - The number of threads to skip
-   * @param limit - The number of threads to return
-   * @returns Promise resolving to a list of threads; resolves to an empty array
-   *          if the resource has no threads
+   * @param args.resourceId - The unique identifier of the resource
+   * @param args.offset - The number of threads to skip (for pagination)
+   * @param args.limit - The maximum number of threads to return
+   * @param args.orderBy - Optional sorting configuration with `field` (`'createdAt'` or `'updatedAt'`)
+   *                       and `direction` (`'ASC'` or `'DESC'`);
+   *                       defaults to `{ field: 'createdAt', direction: 'DESC' }`
+   * @returns Promise resolving to paginated thread results with metadata;
+   *          resolves to an empty array if the resource has no threads
    */
   abstract listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
