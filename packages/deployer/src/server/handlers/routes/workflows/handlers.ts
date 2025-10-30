@@ -1,6 +1,6 @@
 import type { Mastra } from '@mastra/core';
 import {
-  getWorkflowsHandler as getOriginalWorkflowsHandler,
+  listWorkflowsHandler as getOriginalWorkflowsHandler,
   getWorkflowByIdHandler as getOriginalWorkflowByIdHandler,
   startAsyncWorkflowHandler as getOriginalStartAsyncWorkflowHandler,
   createWorkflowRunHandler as getOriginalCreateWorkflowRunHandler,
@@ -25,7 +25,7 @@ import { stream } from 'hono/streaming';
 
 import { handleError } from '../../error';
 
-export async function getWorkflowsHandler(c: Context) {
+export async function listWorkflowsHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
 

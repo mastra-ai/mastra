@@ -498,11 +498,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    *
    * @example
    * ```typescript
-   * const workflows = await agent.getWorkflows();
+   * const workflows = await agent.listWorkflows();
    * const workflow = workflows['myWorkflow'];
    * ```
    */
-  public async getWorkflows({
+  public async listWorkflows({
     runtimeContext = new RuntimeContext(),
   }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any>>> {
     let workflowRecord;
@@ -562,7 +562,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   public async getVoice({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}) {
     if (this.#voice) {
       const voice = this.#voice;
-      voice?.addTools(await this.getTools({ runtimeContext }));
+      voice?.addTools(await this.listTools({ runtimeContext }));
       const instructions = await this.getInstructions({ runtimeContext });
       voice?.addInstructions(this.#convertInstructionsToString(instructions));
       return voice;
@@ -773,11 +773,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    *
    * @example
    * ```typescript
-   * const tools = await agent.getTools();
+   * const tools = await agent.listTools();
    * console.log(Object.keys(tools)); // ['calculator', 'weather']
    * ```
    */
-  public getTools({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
+  public listTools({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
     | TTools
     | Promise<TTools> {
     if (typeof this.#tools !== 'function') {
@@ -1193,7 +1193,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Retrieves and converts memory tools to CoreTool format.
    * @internal
    */
-  private async getMemoryTools({
+  private async listMemoryTools({
     runId,
     resourceId,
     threadId,
@@ -1211,7 +1211,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     let convertedMemoryTools: Record<string, CoreTool> = {};
     // Get memory tools if available
     const memory = await this.getMemory({ runtimeContext });
-    const memoryTools = memory?.getTools?.();
+    const memoryTools = memory?.listTools?.();
 
     if (memoryTools) {
       this.logger.debug(
@@ -1381,7 +1381,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Retrieves and converts assigned tools to CoreTool format.
    * @internal
    */
-  private async getAssignedTools({
+  private async listAssignedTools({
     runId,
     resourceId,
     threadId,
@@ -1406,7 +1406,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     // Mastra tools passed into the Agent
 
-    const assignedTools = await this.getTools({ runtimeContext });
+    const assignedTools = await this.listTools({ runtimeContext });
 
     const assignedToolEntries = Object.entries(assignedTools || {});
 
@@ -1451,7 +1451,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Retrieves and converts toolset tools to CoreTool format.
    * @internal
    */
-  private async getToolsets({
+  private async listToolsets({
     runId,
     threadId,
     resourceId,
@@ -1507,7 +1507,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Retrieves and converts client-side tools to CoreTool format.
    * @internal
    */
-  private async getClientTools({
+  private async listClientTools({
     runId,
     threadId,
     resourceId,
@@ -1560,7 +1560,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Retrieves and converts agent tools to CoreTool format.
    * @internal
    */
-  private async getAgentTools({
+  private async listAgentTools({
     runId,
     threadId,
     resourceId,
@@ -1729,7 +1729,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Retrieves and converts workflow tools to CoreTool format.
    * @internal
    */
-  private async getWorkflowTools({
+  private async listWorkflowTools({
     runId,
     threadId,
     resourceId,
@@ -1745,7 +1745,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   }) {
     const convertedWorkflowTools: Record<string, CoreTool> = {};
-    const workflows = await this.getWorkflows({ runtimeContext });
+    const workflows = await this.listWorkflows({ runtimeContext });
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
         const toolObj = createTool({
@@ -1885,7 +1885,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
     }
 
-    const assignedTools = await this.getAssignedTools({
+    const assignedTools = await this.listAssignedTools({
       runId,
       resourceId,
       threadId,
@@ -1895,7 +1895,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       writableStream,
     });
 
-    const memoryTools = await this.getMemoryTools({
+    const memoryTools = await this.listMemoryTools({
       runId,
       resourceId,
       threadId,
@@ -1904,7 +1904,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       mastraProxy,
     });
 
-    const toolsetTools = await this.getToolsets({
+    const toolsetTools = await this.listToolsets({
       runId,
       resourceId,
       threadId,
@@ -1914,7 +1914,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       toolsets: toolsets!,
     });
 
-    const clientSideTools = await this.getClientTools({
+    const clientSideTools = await this.listClientTools({
       runId,
       resourceId,
       threadId,
@@ -1924,7 +1924,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       clientTools: clientTools!,
     });
 
-    const agentTools = await this.getAgentTools({
+    const agentTools = await this.listAgentTools({
       runId,
       resourceId,
       threadId,
@@ -1933,7 +1933,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingContext,
     });
 
-    const workflowTools = await this.getWorkflowTools({
+    const workflowTools = await this.listWorkflowTools({
       runId,
       resourceId,
       threadId,

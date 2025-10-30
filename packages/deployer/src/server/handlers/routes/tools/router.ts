@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { describeRoute } from 'hono-openapi';
 import type { BodyLimitOptions } from '../../../types';
-import { executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers';
+import { executeToolHandler, getToolByIdHandler, listToolsHandler } from './handlers';
 
 export function toolsRouter(bodyLimitOptions: BodyLimitOptions, tools: Record<string, any>) {
   const router = new Hono();
@@ -18,7 +18,7 @@ export function toolsRouter(bodyLimitOptions: BodyLimitOptions, tools: Record<st
         },
       },
     }),
-    getToolsHandler,
+    listToolsHandler,
   );
 
   router.get(

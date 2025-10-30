@@ -182,7 +182,7 @@ async function formatAgentList({
   runtimeContext: RuntimeContext;
 }): Promise<SerializedAgentWithId> {
   const instructions = await agent.getInstructions({ runtimeContext });
-  const tools = await agent.getTools({ runtimeContext });
+  const tools = await agent.listTools({ runtimeContext });
   const llm = await agent.getLLM({ runtimeContext });
   const defaultGenerateOptions = await agent.getDefaultGenerateOptionsLegacy({ runtimeContext });
   const defaultStreamOptions = await agent.getDefaultStreamOptionsLegacy({ runtimeContext });
@@ -193,10 +193,10 @@ async function formatAgentList({
     { name: string; steps?: Record<string, { id: string; description?: string }> }
   > = {};
 
-  if ('getWorkflows' in agent) {
+  if ('listWorkflows' in agent) {
     const logger = mastra.getLogger();
     try {
-      const workflows = await agent.getWorkflows({ runtimeContext });
+      const workflows = await agent.listWorkflows({ runtimeContext });
       serializedAgentWorkflows = Object.entries(workflows || {}).reduce<
         Record<string, { name: string; steps?: Record<string, { id: string; description?: string }> }>
       >((acc, [key, workflow]) => {
@@ -328,7 +328,7 @@ async function formatAgent({
   runtimeContext: RuntimeContext;
   isPlayground: boolean;
 }): Promise<SerializedAgent> {
-  const tools = await agent.getTools({ runtimeContext });
+  const tools = await agent.listTools({ runtimeContext });
 
   const serializedAgentTools = await getSerializedAgentTools(tools);
 
@@ -337,10 +337,10 @@ async function formatAgent({
     { name: string; steps: Record<string, { id: string; description?: string }> }
   > = {};
 
-  if ('getWorkflows' in agent) {
+  if ('listWorkflows' in agent) {
     const logger = mastra.getLogger();
     try {
-      const workflows = await agent.getWorkflows({ runtimeContext });
+      const workflows = await agent.listWorkflows({ runtimeContext });
 
       serializedAgentWorkflows = Object.entries(workflows || {}).reduce<
         Record<string, { name: string; steps: Record<string, { id: string; description?: string }> }>

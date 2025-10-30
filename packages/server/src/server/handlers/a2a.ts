@@ -64,7 +64,7 @@ export async function getAgentCardByIdHandler({
 
   const [instructions, tools] = await Promise.all([
     agent.getInstructions({ runtimeContext }),
-    agent.getTools({ runtimeContext }),
+    agent.listTools({ runtimeContext }),
   ]);
 
   // Extract agent information to create the AgentCard

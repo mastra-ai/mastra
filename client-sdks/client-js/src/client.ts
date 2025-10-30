@@ -187,7 +187,7 @@ export class MastraClient extends BaseResource {
    * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing map of tool IDs to tool details
    */
-  public getTools(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetToolResponse>> {
+  public listTools(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetToolResponse>> {
     const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
 
     const searchParams = new URLSearchParams();
@@ -214,7 +214,7 @@ export class MastraClient extends BaseResource {
    * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing map of workflow IDs to workflow details
    */
-  public getWorkflows(
+  public listWorkflows(
     runtimeContext?: RuntimeContext | Record<string, any>,
   ): Promise<Record<string, GetWorkflowResponse>> {
     const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));

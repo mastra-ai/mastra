@@ -1,6 +1,6 @@
 import type { Mastra } from '@mastra/core';
 import {
-  getToolsHandler as getOriginalToolsHandler,
+  listToolsHandler as getOriginalToolsHandler,
   getToolByIdHandler as getOriginalToolByIdHandler,
   executeToolHandler as getOriginalExecuteToolHandler,
   executeAgentToolHandler as getOriginalExecuteAgentToolHandler,
@@ -11,7 +11,7 @@ import type { Context } from 'hono';
 import { handleError } from '../../error';
 
 // Tool handlers
-export async function getToolsHandler(c: Context) {
+export async function listToolsHandler(c: Context) {
   try {
     const tools = c.get('tools');
 

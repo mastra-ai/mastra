@@ -1095,7 +1095,7 @@ ${
     return Boolean(isMDWorkingMemory && isMDWorkingMemory.version === `vnext`);
   }
 
-  public getTools(config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
+  public listTools(config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
     if (mergedConfig.workingMemory?.enabled) {
       return {

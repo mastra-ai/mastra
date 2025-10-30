@@ -61,7 +61,7 @@ export class AgentBuilder extends Agent {
       model: config.model,
       tools: async () => {
         return {
-          ...(await AgentBuilderDefaults.getToolsForMode(config.projectPath, config.mode)),
+          ...(await AgentBuilderDefaults.listToolsForMode(config.projectPath, config.mode)),
           ...(config.tools || {}),
         };
       },

@@ -4,7 +4,7 @@ const meta = {
   listAgents: ".listAgents()",
   getAgentById: ".getAgentById()",
   getWorkflow: ".getWorkflow()",
-  getWorkflows: ".getWorkflows()",
+  getWorkflows: ".listWorkflows()",
   getMemory: ".getMemory()",
   setStorage: ".setStorage()",
   getServer: ".getServer()",

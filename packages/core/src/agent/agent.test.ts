@@ -6021,14 +6021,14 @@ describe('Agent Tests', () => {
 //       });
 
 //       // Verify tools exist
-//       expect((agent.getTools() as Agent['tools']).mastraTool).toBeDefined();
-//       expect((agent.getTools() as Agent['tools']).vercelTool).toBeDefined();
+//       expect((agent.listTools() as Agent['tools']).mastraTool).toBeDefined();
+//       expect((agent.listTools() as Agent['tools']).vercelTool).toBeDefined();
 
 //       // Verify both tools can be executed
 //       // @ts-ignore
-//       await (agent.getTools() as Agent['tools']).mastraTool.execute!({ name: 'test' });
+//       await (agent.listTools() as Agent['tools']).mastraTool.execute!({ name: 'test' });
 //       // @ts-ignore
-//       await (agent.getTools() as Agent['tools']).vercelTool.execute!({ name: 'test' });
+//       await (agent.listTools() as Agent['tools']).vercelTool.execute!({ name: 'test' });
 
 //       expect(mastraExecute).toHaveBeenCalled();
 //       expect(vercelExecute).toHaveBeenCalled();

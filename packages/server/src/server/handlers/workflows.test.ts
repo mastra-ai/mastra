@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { getWorkflowInfo } from '../utils';
 import {
-  getWorkflowsHandler,
+  listWorkflowsHandler,
   getWorkflowByIdHandler,
   startAsyncWorkflowHandler,
   getWorkflowRunByIdHandler,
@@ -111,9 +111,9 @@ describe('vNext Workflow Handlers', () => {
     });
   });
 
-  describe('getWorkflowsHandler', () => {
+  describe('listWorkflowsHandler', () => {
     it('should get all workflows successfully', async () => {
-      const result = await getWorkflowsHandler({ mastra: mockMastra });
+      const result = await listWorkflowsHandler({ mastra: mockMastra });
       expect(result).toEqual({
         'test-workflow': serializeWorkflow(mockWorkflow),
         'reusable-workflow': serializeWorkflow(reusableWorkflow),

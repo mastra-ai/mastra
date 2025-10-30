@@ -96,7 +96,7 @@ const reportBrokenLinks = new Step({
         message: 'Agent not found',
       };
     }
-    const tools = await slack.getTools();
+    const tools = await slack.listTools();
 
     console.log(`🤖Generating...`);
     const res = await agent.generate(

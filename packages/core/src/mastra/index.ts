@@ -1073,9 +1073,9 @@ do:
    * Returns all registered legacy workflows as a record keyed by their IDs.
    *
    * Legacy workflows are the previous generation of workflow system in Mastra,
-   * maintained for backward compatibility. For new implementations, use `getWorkflows()`.
+   * maintained for backward compatibility. For new implementations, use `listWorkflows()`.
    *
-   * @deprecated Use `getWorkflows()` for new implementations
+   * @deprecated Use `listWorkflows()` for new implementations
    *
    * @example Listing all legacy workflows
    * ```typescript
@@ -1243,7 +1243,7 @@ do:
    *   }
    * });
    *
-   * const allWorkflows = mastra.getWorkflows();
+   * const allWorkflows = mastra.listWorkflows();
    * console.log(Object.keys(allWorkflows)); // ['dataProcessor', 'emailSender', 'reportGenerator']
    *
    * // Execute all workflows with sample data
@@ -1253,7 +1253,7 @@ do:
    * }
    * ```
    */
-  public getWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
+  public listWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
     if (props.serialized) {
       return Object.entries(this.#workflows).reduce((acc, [k, v]) => {
         return {
@@ -1598,7 +1598,7 @@ do:
    * const mcpServers = mastra.getMCPServers();
    * if (mcpServers) {
    *   const fsServer = mcpServers.filesystem;
-   *   const tools = await fsServer.getTools();
+   *   const tools = await fsServer.listTools();
    * }
    * ```
    */
@@ -1627,7 +1627,7 @@ do:
    *
    * const fsServer = mastra.getMCPServer('fs-server');
    * if (fsServer) {
-   *   const tools = await fsServer.getTools();
+   *   const tools = await fsServer.listTools();
    * }
    * ```
    */
