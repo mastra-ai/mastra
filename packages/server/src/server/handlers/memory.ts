@@ -370,7 +370,7 @@ export async function getMessagesHandler({
       threadId: threadId!,
       ...(limit && { selectBy: { last: limit } }),
     });
-    const uiMessages = convertMessages(result.messagesV2).to('AIV5.UI');
+    const uiMessages = convertMessages(result.messages).to('AIV5.UI');
     return { messages: result.messages, uiMessages, legacyMessages: result.uiMessages };
   } catch (error) {
     return handleError(error, 'Error getting messages');
@@ -619,7 +619,7 @@ export async function searchMemoryHandler({
     const threadMap = new Map(threads.map(t => [t.id, t]));
 
     // Process each message in the results
-    for (const msg of result.messagesV2) {
+    for (const msg of result.messages) {
       const content =
         typeof msg.content.content === `string`
           ? msg.content.content

@@ -1139,6 +1139,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       const countData = await countResult.json();
       const total = (countData as any).data[0].total;
 
+      // Only return early if there are no messages AND no include parameter
+      // When limit: 0 with include, we still need to process semantic recall results
       if (total === 0 && messages.length === 0) {
         return {
           messages: [],

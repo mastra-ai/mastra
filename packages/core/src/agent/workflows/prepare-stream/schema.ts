@@ -17,7 +17,7 @@ export type AgentCapabilities = {
   _agentNetworkAppend?: boolean;
   saveStepMessages: Agent['saveStepMessages'];
   convertTools: Agent['convertTools'];
-  getMemoryMessages: Agent['getMemoryMessages'];
+  listMemoryMessages: Agent['listMemoryMessages'];
   runInputProcessors: Agent['__runInputProcessors'];
   executeOnFinish: (args: AgentExecuteOnFinishOptions) => Promise<void>;
   outputProcessors?: DynamicArgument<OutputProcessor[]>;

@@ -1,11 +1,11 @@
 import type { UIMessageWithMetadata } from '../agent';
 import { MessageList } from '../agent/message-list';
-import type { CoreMessage } from '../llm';
 import { MastraMemory } from '../memory';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig, MessageDeleteInput } from '../memory';
 import { InMemoryStore } from '../storage';
 import type {
   StorageGetMessagesArg,
+  StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
   ThreadSortOptions,
@@ -62,7 +62,7 @@ export class MockMemory extends MastraMemory {
 
   async rememberMessages() {
     const list = new MessageList().add(Array.from(this.messages.values()), `memory`);
-    return { messages: list.get.remembered.v1(), messagesV2: list.get.remembered.v2() };
+    return { messages: list.get.remembered.v2() };
   }
 
   async getThreadsByResourceId(props: { resourceId: string } & ThreadSortOptions) {
@@ -85,35 +85,35 @@ export class MockMemory extends MastraMemory {
     return this.storage.listThreadsByResourceId(args);
   }
 
-  async query({ threadId, resourceId, selectBy }: StorageGetMessagesArg): Promise<{
-    messages: CoreMessage[];
+  async query({
+    threadId,
+    resourceId,
+    limit,
+    offset,
+    filter,
+  }: Omit<StorageListMessagesInput, 'include'> & {
+    vectorSearchString?: string;
+  }): Promise<{
+    messages: MastraMessageV2[];
     uiMessages: UIMessageWithMetadata[];
-    messagesV2: MastraMessageV2[];
   }> {
     // Get raw messages from storage
-    const rawMessages = await this.storage.getMessages({
+    const rawMessages = await this.storage.listMessages({
       threadId,
       resourceId,
-      format: 'v2',
-      selectBy,
+      limit,
+      offset,
+      filter,
     });
 
     // Convert using MessageList like the real Memory class does
-    const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
+    const list = new MessageList({ threadId, resourceId }).add(rawMessages.messages, 'memory');
     return {
       get messages() {
-        const v1Messages = list.get.all.v1();
-        // Handle selectBy.last if provided
-        if (selectBy?.last && v1Messages.length > selectBy.last) {
-          return v1Messages.slice(v1Messages.length - selectBy.last) as CoreMessage[];
-        }
-        return v1Messages as CoreMessage[];
+        return list.get.all.v2();
       },
       get uiMessages() {
         return list.get.all.ui();
-      },
-      get messagesV2() {
-        return list.get.all.v2();
       },
     };
   }

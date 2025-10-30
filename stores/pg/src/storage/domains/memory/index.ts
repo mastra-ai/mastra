@@ -366,6 +366,7 @@ export class MemoryPG extends MemoryStorage {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
       // if threadId is provided, use it, otherwise use threadId from args
       const searchId = inc.threadId || threadId;
+
       unionQueries.push(
         `
             SELECT * FROM (
@@ -627,7 +628,9 @@ export class MemoryPG extends MemoryStorage {
       const rows = await this.client.manyOrNone(dataQuery, [...queryParams, perPage, offset]);
       const messages: MessageRowFromDB[] = [...(rows || [])];
 
-      if (total === 0 && messages.length === 0) {
+      // Only return early if there are no messages AND no include parameter
+      // When limit: 0 with include, we still need to process semantic recall results
+      if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total: 0,

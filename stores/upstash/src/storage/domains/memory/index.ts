@@ -671,7 +671,9 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       // Get all message IDs from the sorted set
       const allMessageIds = await this.client.zrange(threadMessagesKey, 0, -1);
-      if (allMessageIds.length === 0) {
+      // Only return early if there are no messages AND no include parameter
+      // When limit: 0 with include, we still need to process semantic recall results
+      if (allMessageIds.length === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total: 0,

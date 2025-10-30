@@ -1362,7 +1362,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Fetches remembered messages from memory for the current thread.
    * @internal
    */
-  private async getMemoryMessages({
+  private async listMemoryMessages({
     resourceId,
     threadId,
     vectorMessageSearch,
@@ -1387,7 +1387,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
         vectorMessageSearch,
       })
-      .then(r => r.messagesV2);
+      .then(r => r.messages);
   }
 
   /**
@@ -2239,7 +2239,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           config?.semanticRecall === true;
         let [memoryMessages, memorySystemMessage] = await Promise.all([
           existingThread || hasResourceScopeSemanticRecall
-            ? this.getMemoryMessages({
+            ? this.listMemoryMessages({
                 resourceId,
                 threadId: threadObject.id,
                 vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
@@ -3156,7 +3156,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           : undefined,
       saveStepMessages: this.saveStepMessages.bind(this),
       convertTools: this.convertTools.bind(this),
-      getMemoryMessages: this.getMemoryMessages.bind(this),
+      listMemoryMessages: this.listMemoryMessages.bind(this),
       runInputProcessors: this.__runInputProcessors.bind(this),
       executeOnFinish: this.#executeOnFinish.bind(this),
       outputProcessors: this.#outputProcessors,

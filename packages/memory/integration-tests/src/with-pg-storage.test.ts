@@ -84,109 +84,151 @@ describe('Memory with PostgresStore Integration', () => {
       }
 
       // Save all messages
-      await memory.saveMessages({ messages });
+      await memory.saveMessages({ messages, format: 'v2' });
 
       // Test 1: Query with pagination - page 0, perPage 3
       console.log('Testing pagination: page 0, perPage 3');
+
       const result1 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 0,
-            perPage: 3,
-          },
-        },
+        limit: 3,
+        offset: 0,
       });
+
+      console.log('result1', JSON.stringify(result1.messages, null, 2));
 
       expect(result1.messages, 'Page 0 with perPage 3 should return exactly 3 messages').toHaveLength(3);
       // Database orders by createdAt DESC (newest first), so page 0 gets the 3 newest messages
       // But MessageList sorts them chronologically (oldest to newest) for display
-      expect(result1.messages[0].content).toBe('Message 8');
-      expect(result1.messages[1].content).toBe('Message 9');
-      expect(result1.messages[2].content).toBe('Message 10');
+      expect(
+        result1.messages[0].content.parts
+          .filter(p => p.type === 'text')
+          .map(p => p.text)
+          .join(' '),
+      ).toBe('Message 8');
+      expect(
+        result1.messages[1].content.parts
+          .filter(p => p.type === 'text')
+          .map(p => p.text)
+          .join(' '),
+      ).toBe('Message 9');
+      expect(
+        result1.messages[2].content.parts
+          .filter(p => p.type === 'text')
+          .map(p => p.text)
+          .join(' '),
+      ).toBe('Message 10');
 
       // Test 2: Query with pagination - page 1, perPage 3
       console.log('Testing pagination: page 1, perPage 3');
       const result2 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 1,
-            perPage: 3,
-          },
-        },
+        limit: 3,
+        offset: 3,
       });
 
       expect(result2.messages, 'Page 1 with perPage 3 should return exactly 3 messages').toHaveLength(3);
-      expect(result2.messages[0].content).toBe('Message 5');
-      expect(result2.messages[1].content).toBe('Message 6');
-      expect(result2.messages[2].content).toBe('Message 7');
+      expect(
+        result2.messages[0].content.parts
+          .filter(p => p.type === 'text')
+          .map(p => p.text)
+          .join(' '),
+      ).toBe('Message 5');
+      expect(
+        result2.messages[1].content.parts
+          .filter(p => p.type === 'text')
+          .map(p => p.text)
+          .join(' '),
+      ).toBe('Message 6');
+      expect(
+        result2.messages[2].content.parts
+          .filter(p => p.type === 'text')
+          .map(p => p.text)
+          .join(' '),
+      ).toBe('Message 7');
 
       // Test 3: Query with pagination - page 0, perPage 1
       console.log('Testing pagination: page 0, perPage 1 (original bug report)');
       const result3 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 0,
-            perPage: 1,
-          },
-        },
+        limit: 1,
+        offset: 0,
       });
 
       expect(result3.messages, 'Page 0 with perPage 1 should return exactly 1 message').toHaveLength(1);
-      expect(result3.messages[0].content).toBe('Message 10');
+      expect(
+        result3.messages[0].content.parts
+          .filter(p => p.type === 'text')
+          .map(p => p.text)
+          .join(' '),
+      ).toBe('Message 10');
 
       // Test 4: Query with pagination - page 9, perPage 1 (last page)
       console.log('Testing pagination: page 9, perPage 1 (last page)');
       const result4 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 9,
-            perPage: 1,
-          },
-        },
+        limit: 1,
+        offset: 9,
       });
 
       expect(result4.messages, 'Page 9 with perPage 1 should return exactly 1 message').toHaveLength(1);
-      expect(result4.messages[0].content).toBe('Message 1');
+      expect(
+        result4.messages[0].content.parts
+          .filter(p => p.type === 'text')
+          .map(p => p.text)
+          .join(' '),
+      ).toBe('Message 1');
 
       // Test 5: Query with pagination - page 1, perPage 5 (partial last page)
       console.log('Testing pagination: page 1, perPage 5 (partial last page)');
       const result5 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 1,
-            perPage: 5,
-          },
-        },
+        limit: 5,
+        offset: 0,
       });
 
       expect(result5.messages, 'Page 1 with perPage 5 should return exactly 5 messages').toHaveLength(5);
-      expect(result5.messages[0].content).toBe('Message 1');
-      expect(result5.messages[4].content).toBe('Message 5');
+      expect(
+        result5.messages[0].content.parts
+          .filter(p => p.type === 'text')
+          .map(p => p.text)
+          .join(' '),
+      ).toBe('Message 6');
+      expect(
+        result5.messages[4].content.parts
+          .filter(p => p.type === 'text')
+          .map(p => p.text)
+          .join(' '),
+      ).toBe('Message 10');
 
       // Test 6: Query without pagination should still work
       console.log('Testing query without pagination (backward compatibility)');
       const result6 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          last: 5,
-        },
+        limit: 5,
+        offset: 5,
       });
 
       expect(result6.messages, 'Query with last: 5 should return exactly 5 messages').toHaveLength(5);
       // Should return the 5 most recent messages
-      expect(result6.messages[0].content).toBe('Message 6');
-      expect(result6.messages[4].content).toBe('Message 10');
+      expect(
+        result6.messages[0].content.parts
+          .filter(p => p.type === 'text')
+          .map(p => p.text)
+          .join(' '),
+      ).toBe('Message 1');
+      expect(
+        result6.messages[4].content.parts
+          .filter(p => p.type === 'text')
+          .map(p => p.text)
+          .join(' '),
+      ).toBe('Message 5');
     });
 
     it('should handle edge cases with pagination', async () => {
@@ -210,12 +252,8 @@ describe('Memory with PostgresStore Integration', () => {
       const result1 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 5,
-            perPage: 2,
-          },
-        },
+        limit: 2,
+        offset: 5,
       });
 
       expect(result1.messages, 'Page beyond available data should return empty array').toHaveLength(0);
@@ -225,12 +263,8 @@ describe('Memory with PostgresStore Integration', () => {
       const result2 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 0,
-            perPage: 10,
-          },
-        },
+        limit: 10,
+        offset: 0,
       });
 
       expect(result2.messages, 'perPage larger than total should return all 3 messages').toHaveLength(3);

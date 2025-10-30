@@ -10,17 +10,17 @@ import type {
   MessageDeleteInput,
 } from '@mastra/core/memory';
 import type {
-  StorageGetMessagesArg,
   ThreadSortOptions,
   PaginationInfo,
   StorageListThreadsByResourceIdOutput,
   StorageListThreadsByResourceIdInput,
+  StorageListMessagesInput,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { embedMany } from 'ai';
-import type { CoreMessage, TextPart } from 'ai';
+import type { TextPart } from 'ai';
 import { embedMany as embedManyV5 } from 'ai-v5';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
@@ -104,11 +104,15 @@ export class Memory extends MastraMemory {
   async query({
     threadId,
     resourceId,
-    selectBy,
     threadConfig,
-  }: StorageGetMessagesArg & {
+    limit,
+    offset,
+    filter,
+    vectorSearchString,
+  }: Omit<StorageListMessagesInput, 'include'> & {
+    vectorSearchString?: string;
     threadConfig?: MemoryConfig;
-  }): Promise<{ messages: CoreMessage[]; uiMessages: UIMessageWithMetadata[]; messagesV2: MastraMessageV2[] }> {
+  }): Promise<{ messages: MastraMessageV2[]; uiMessages: UIMessageWithMetadata[] }> {
     const config = this.getMergedThreadConfig(threadConfig || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
@@ -121,7 +125,6 @@ export class Memory extends MastraMemory {
 
     this.logger.debug(`Memory query() with:`, {
       threadId,
-      selectBy,
       threadConfig,
     });
 
@@ -146,15 +149,15 @@ export class Memory extends MastraMemory {
       config.semanticRecall === true;
 
     // Guard: If resource-scoped semantic recall is enabled but no resourceId is provided, throw an error
-    if (resourceScope && !resourceId && config?.semanticRecall && selectBy?.vectorSearchString) {
+    if (resourceScope && !resourceId && config?.semanticRecall && vectorSearchString) {
       throw new Error(
         `Memory error: Resource-scoped semantic recall is enabled but no resourceId was provided. ` +
           `Either provide a resourceId or explicitly set semanticRecall.scope to 'thread'.`,
       );
     }
 
-    if (config?.semanticRecall && selectBy?.vectorSearchString && this.vector) {
-      const { embeddings, dimension } = await this.embedMessageContent(selectBy.vectorSearchString!);
+    if (config?.semanticRecall && vectorSearchString && this.vector) {
+      const { embeddings, dimension } = await this.embedMessageContent(vectorSearchString!);
       const { indexName } = await this.createEmbeddingIndex(dimension, config);
 
       await Promise.all(
@@ -185,14 +188,13 @@ export class Memory extends MastraMemory {
 
     // Get raw messages from storage
     // Use paginated method when pagination is requested
+    // Prioritize selectBy.last over pagination.perPage for limit
     const messagesResult = await this.storage.listMessages({
       threadId,
       resourceId,
-      limit: selectBy?.pagination?.perPage,
-      offset: selectBy?.pagination?.page,
-      filter: {
-        dateRange: selectBy?.pagination?.dateRange,
-      },
+      limit,
+      offset,
+      filter,
       ...(vectorResults?.length
         ? {
             include: vectorResults.map(r => ({
@@ -215,26 +217,10 @@ export class Memory extends MastraMemory {
 
     return {
       get messages() {
-        // returning v1 messages for backwards compat! v1 messages were CoreMessages stored in the db.
-        // returning .v1() takes stored messages which may be in v2 or v1 format and converts them to v1 shape, which is a CoreMessage + id + threadId + resourceId, etc
-        // Perhaps this should be called coreRecord or something ? - for now keeping v1 since it reflects that this used to be our db storage record shape
-        const v1Messages = list.get.all.v1();
-        // the conversion from V2/UIMessage -> V1/CoreMessage can sometimes split the messages up into more messages than before
-        // so slice off the earlier messages if it'll exceed the lastMessages setting
-        if (selectBy?.last && v1Messages.length > selectBy.last) {
-          // ex: 23 (v1 messages) minus 20 (selectBy.last messages)
-          // means we will start from index 3 and keep all the later newer messages from index 3 til the end of the array
-          return v1Messages.slice(v1Messages.length - selectBy.last) as CoreMessage[];
-        }
-        // TODO: this is absolutely wrong but became apparent that this is what we were doing before adding MessageList. Our public types said CoreMessage but we were returning MessageType which is equivalent to MastraMessageV1
-        // In a breaking change we should make this the type it actually is.
-        return v1Messages as CoreMessage[];
+        return list.get.all.v2();
       },
       get uiMessages() {
         return list.get.all.ui();
-      },
-      get messagesV2() {
-        return list.get.all.v2();
       },
     };
   }
@@ -249,32 +235,43 @@ export class Memory extends MastraMemory {
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }): Promise<{ messages: MastraMessageV1[]; messagesV2: MastraMessageV2[] }> {
+  }): Promise<{ messages: MastraMessageV2[] }> {
     const threadConfig = this.getMergedThreadConfig(config || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, threadConfig);
 
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
       return {
         messages: [],
-        messagesV2: [],
       };
+    }
+
+    // Determine limit for regular message fetching
+    // When lastMessages is 0 or false, we only want semantic recall (limit: 0)
+    // When lastMessages is undefined but semanticRecall is enabled, use default (undefined = 40)
+    // When lastMessages is a number, use that number
+    let queryLimit: number | false | undefined = undefined;
+
+    if (threadConfig.lastMessages === false || threadConfig.lastMessages === 0) {
+      queryLimit = 0;
+    } else if (threadConfig.lastMessages) {
+      queryLimit = threadConfig.lastMessages;
+    } else {
+      queryLimit = 10;
     }
 
     const messagesResult = await this.query({
       resourceId,
       threadId,
-      selectBy: {
-        last: threadConfig.lastMessages,
-        vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
-      },
+      vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
+      limit: queryLimit,
       threadConfig: config,
-      format: 'v2',
     });
+
     // Using MessageList here just to convert mixed input messages to single type output messages
-    const list = new MessageList({ threadId, resourceId }).add(messagesResult.messagesV2, 'memory');
+    const list = new MessageList({ threadId, resourceId }).add(messagesResult.messages, 'memory');
 
     this.logger.debug(`Remembered message history includes ${messagesResult.messages.length} messages.`);
-    return { messages: list.get.all.v1(), messagesV2: list.get.all.v2() };
+    return { messages: list.get.all.v2() };
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {

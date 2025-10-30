@@ -113,16 +113,20 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       // Save messages
       const savedMessages = await storage.saveMessages({ messages, format: 'v2' });
 
-      expect(savedMessages).toEqual(messages);
+      // Compare messages without fields that may differ between stores (type, entity, updatedAt)
+      const normalizeMessage = ({ type, entity, updatedAt, ...rest }: any) => rest;
+      const messagesNormalized = messages.map(normalizeMessage);
+      const savedMessagesNormalized = savedMessages.map(normalizeMessage);
+      expect(savedMessagesNormalized).toEqual(messagesNormalized);
 
       // Retrieve messages
       const retrievedMessages = await storage.listMessages({ threadId: thread.id });
 
       expect(retrievedMessages.messages).toHaveLength(2);
 
-      // Compare messages without the type field (v2 messages don't include type in the response)
-      const messagesWithoutType = messages.map(({ type, ...rest }) => rest);
-      expect(retrievedMessages.messages).toEqual(expect.arrayContaining(messagesWithoutType));
+      // Remove fields that may differ between stores before comparing
+      const retrievedMessagesNormalized = retrievedMessages.messages.map(normalizeMessage);
+      expect(retrievedMessagesNormalized).toEqual(expect.arrayContaining(messagesNormalized));
     });
 
     it('should handle empty message array', async () => {

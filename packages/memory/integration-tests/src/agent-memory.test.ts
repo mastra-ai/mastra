@@ -141,7 +141,7 @@ describe('Agent Memory Tests', () => {
     expect(workingMemoryData).toBe('# Resource Memory\n- Shared across threads');
   });
 
-  it('should call getMemoryMessages for first message in new thread when using resource-scoped semantic recall', async () => {
+  it('should call listMemoryMessages for first message in new thread when using resource-scoped semantic recall', async () => {
     const storage = new LibSQLStore({
       url: dbFile,
     });
@@ -195,12 +195,12 @@ describe('Agent Memory Tests', () => {
     // due to resource scope, even on the first message
     const thread2Id = randomUUID();
 
-    // Mock the getMemoryMessages method to track if it's called
-    let getMemoryMessagesCalled = false;
+    // Mock the listMemoryMessages method to track if it's called
+    let listMemoryMessagesCalled = false;
     let retrievedMemoryMessages: any[] = [];
-    const originalGetMemoryMessages = (agent as any).getMemoryMessages;
-    (agent as any).getMemoryMessages = async (...args: any[]) => {
-      getMemoryMessagesCalled = true;
+    const originalGetMemoryMessages = (agent as any).listMemoryMessages;
+    (agent as any).listMemoryMessages = async (...args: any[]) => {
+      listMemoryMessagesCalled = true;
       const result = await originalGetMemoryMessages.call(agent, ...args);
       retrievedMemoryMessages = result || [];
       return result;
@@ -214,11 +214,11 @@ describe('Agent Memory Tests', () => {
     });
 
     // Restore original method
-    (agent as any).getMemoryMessages = originalGetMemoryMessages;
+    (agent as any).listMemoryMessages = originalGetMemoryMessages;
 
-    expect(getMemoryMessagesCalled).toBe(true);
+    expect(listMemoryMessagesCalled).toBe(true);
 
-    // Verify that getMemoryMessages actually returned messages from the first thread
+    // Verify that listMemoryMessages actually returned messages from the first thread
     expect(retrievedMemoryMessages.length).toBeGreaterThan(0);
 
     // Verify that the retrieved messages contain content from the first thread

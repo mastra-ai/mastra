@@ -8,7 +8,7 @@ import type { Mastra } from '../mastra';
 import type {
   MastraStorage,
   PaginationInfo,
-  StorageGetMessagesArg,
+  StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
   ThreadSortOptions,
@@ -286,7 +286,7 @@ export abstract class MastraMemory extends MastraBase {
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }): Promise<{ messages: MastraMessageV1[]; messagesV2: MastraMessageV2[] }>;
+  }): Promise<{ messages: MastraMessageV2[] }>;
 
   estimateTokens(text: string): number {
     return Math.ceil(text.split(' ').length * 1.3);
@@ -366,10 +366,18 @@ export abstract class MastraMemory extends MastraBase {
    * @param threadId - The unique identifier of the thread
    * @returns Promise resolving to array of messages, uiMessages, and messagesV2
    */
-  abstract query({ threadId, resourceId, selectBy }: StorageGetMessagesArg): Promise<{
-    messages: CoreMessage[];
+  abstract query({
+    threadId,
+    resourceId,
+    limit,
+    offset,
+    filter,
+    vectorSearchString,
+  }: Omit<StorageListMessagesInput, 'include'> & {
+    vectorSearchString?: string;
+  }): Promise<{
+    messages: MastraMessageV2[];
     uiMessages: UIMessageWithMetadata[];
-    messagesV2: MastraMessageV2[];
   }>;
 
   /**
