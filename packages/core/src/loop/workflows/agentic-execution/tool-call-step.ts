@@ -101,6 +101,8 @@ export function createToolCallStep<
           writableStream: writer,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
+          // Pass MCP context from RequestContext if it was set
+          mcp: requestContext.get('__mcp'),
           suspend: async (suspendPayload: any) => {
             controller.enqueue({
               type: 'tool-call-suspended',
