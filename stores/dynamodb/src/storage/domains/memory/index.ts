@@ -348,7 +348,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_MESSAGES_BY_ID_FAILED',
+          id: 'STORAGE_DYNAMODB_STORE_LIST_MESSAGES_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: JSON.stringify(messageIds) },
@@ -640,7 +640,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     this.logger.debug('Getting threads by resource ID with pagination', {
       resourceId,
-      page: offset,
+      page: limit > 0 ? Math.floor(offset / limit) : 0,
       perPage: limit,
       field,
       direction,
@@ -674,10 +674,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+          id: 'DYNAMODB_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId, page: offset, perPage: limit },
+          details: { resourceId, page: limit > 0 ? Math.floor(offset / limit) : 0, perPage: limit },
         },
         error,
       );

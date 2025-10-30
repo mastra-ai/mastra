@@ -154,19 +154,25 @@ export class MemoryMSSQL extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+          id: 'MASTRA_STORAGE_MSSQL_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
             resourceId,
-            page: offset,
+            page: limitInput && limitInput > 0 ? Math.floor(offset / limitInput) : 0,
           },
         },
         error,
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return { threads: [], total: 0, page: offset, perPage: limitInput || 100, hasMore: false };
+      return {
+        threads: [],
+        total: 0,
+        page: limitInput && limitInput > 0 ? Math.floor(offset / limitInput) : 0,
+        perPage: limitInput || 100,
+        hasMore: false,
+      };
     }
   }
 
@@ -515,7 +521,7 @@ export class MemoryMSSQL extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_MESSAGES_BY_ID_FAILED',
+          id: 'MASTRA_STORAGE_MSSQL_STORE_LIST_MESSAGES_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

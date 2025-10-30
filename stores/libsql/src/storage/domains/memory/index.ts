@@ -193,7 +193,7 @@ export class MemoryLibSQL extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_MESSAGES_BY_ID_FAILED',
+          id: 'LIBSQL_STORE_LIST_MESSAGES_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: JSON.stringify(messageIds) },
@@ -906,7 +906,7 @@ export class MemoryLibSQL extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
+          id: 'LIBSQL_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -915,7 +915,13 @@ export class MemoryLibSQL extends MemoryStorage {
       );
       this.logger?.trackException?.(mastraError);
       this.logger?.error?.(mastraError.toString());
-      return { threads: [], total: 0, page: offset, perPage: limit, hasMore: false };
+      return {
+        threads: [],
+        total: 0,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
+        perPage: limit,
+        hasMore: false,
+      };
     }
   }
 

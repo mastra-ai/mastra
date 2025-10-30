@@ -228,7 +228,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'LANCE_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId: args?.resourceId ?? '', workflowName: args?.workflowName ?? '' },

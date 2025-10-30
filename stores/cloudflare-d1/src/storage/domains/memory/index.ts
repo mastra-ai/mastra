@@ -254,7 +254,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_ERROR',
+          id: 'CLOUDFLARE_D1_STORAGE_LIST_THREADS_BY_RESOURCE_ID_ERROR',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Error getting threads by resourceId ${resourceId}: ${
@@ -269,7 +269,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       return {
         threads: [],
         total: 0,
-        page: offset,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
         perPage: limit,
         hasMore: false,
       };
@@ -683,7 +683,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_MESSAGES_BY_ID_ERROR',
+          id: 'CLOUDFLARE_D1_STORAGE_LIST_MESSAGES_BY_ID_ERROR',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to retrieve messages by ID: ${error instanceof Error ? error.message : String(error)}`,
