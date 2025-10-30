@@ -1224,6 +1224,16 @@
       "source": "/examples/workflows-legacy/:path*",
       "destination": "/docs/workflows/overview",
       "permanent": true
+    },
+    {
+      "source": "/docs/server-db/runtime-context",
+      "destination": "/docs/server-db/request-context",
+      "permanent": true
+    },
+    {
+      "source": "/examples/agents/runtime-context",
+      "destination": "/examples/agents/request-context",
+      "permanent": true
     }
   ]
 }
