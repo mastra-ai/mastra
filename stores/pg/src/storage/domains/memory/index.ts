@@ -648,7 +648,7 @@ export class MemoryPG extends MemoryStorage {
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList().add(messagesWithParsedContent, 'memory');
-      let finalMessages = list.get.all.v2();
+      let finalMessages = list.get.all.db();
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {

@@ -339,7 +339,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       });
 
       const rows = await result.json();
-      const paginatedMessages = transformRows<MastraMessageV2>(rows.data);
+      const paginatedMessages = transformRows<MastraDBMessage>(rows.data);
       const paginatedCount = paginatedMessages.length;
 
       // Get total count
@@ -393,8 +393,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       }
 
       // Step 2: Add included messages with context (if any), excluding duplicates
-      const messageIds = new Set(paginatedMessages.map((m: MastraMessageV2) => m.id));
-      let includeMessages: MastraMessageV2[] = [];
+      const messageIds = new Set(paginatedMessages.map((m: MastraDBMessage) => m.id));
+      let includeMessages: MastraDBMessage[] = [];
 
       if (include && include.length > 0) {
         const unionQueries: string[] = [];
@@ -450,7 +450,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         });
 
         const includeRows = await includeResult.json();
-        includeMessages = transformRows<MastraMessageV2>(includeRows.data);
+        includeMessages = transformRows<MastraDBMessage>(includeRows.data);
 
         // Deduplicate: only add messages that aren't already in the paginated results
         for (const includeMsg of includeMessages) {
@@ -463,7 +463,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList().add(paginatedMessages, 'memory');
-      let finalMessages = list.get.all.v2();
+      let finalMessages = list.get.all.db();
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {

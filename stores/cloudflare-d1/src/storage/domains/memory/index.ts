@@ -862,12 +862,12 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(paginatedMessages.map((m: Record<string, any>) => m.id as string));
-      let includeMessages: MastraMessageV2[] = [];
+      let includeMessages: MastraDBMessage[] = [];
 
       if (include && include.length > 0) {
         // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
         const selectBy = { include };
-        const includeResult = (await this._getIncludedMessages(threadId, selectBy)) as MastraMessageV2[];
+        const includeResult = (await this._getIncludedMessages(threadId, selectBy)) as MastraDBMessage[];
         if (Array.isArray(includeResult)) {
           includeMessages = includeResult;
 
@@ -882,8 +882,8 @@ export class MemoryStorageD1 extends MemoryStorage {
       }
 
       // Use MessageList for proper deduplication and format conversion to V2
-      const list = new MessageList().add(paginatedMessages as MastraMessageV1[] | MastraMessageV2[], 'memory');
-      let finalMessages = list.get.all.v2();
+      const list = new MessageList().add(paginatedMessages as MastraMessageV1[] | MastraDBMessage[], 'memory');
+      let finalMessages = list.get.all.db();
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {

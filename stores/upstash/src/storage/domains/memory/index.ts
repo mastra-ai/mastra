@@ -642,10 +642,10 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
       // Get included messages with context if specified
-      let includedMessages: MastraMessageV2[] = [];
+      let includedMessages: MastraDBMessage[] = [];
       if (include && include.length > 0) {
         const selectBy = { include };
-        const included = (await this._getIncludedMessages(threadId, selectBy)) as MastraMessageV2[];
+        const included = (await this._getIncludedMessages(threadId, selectBy)) as MastraDBMessage[];
         includedMessages = included.map(this.parseStoredMessage);
       }
 
@@ -668,7 +668,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       // Process messages and apply filters
       let messagesData = results
-        .filter((msg): msg is MastraMessageV2 & { _index?: number } => msg !== null)
+        .filter((msg): msg is MastraDBMessage & { _index?: number } => msg !== null)
         .map(this.parseStoredMessage);
 
       // Filter by resourceId if provided
@@ -693,7 +693,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const sortDirection = orderBy?.direction || 'DESC';
 
       // Type-safe field accessor helper
-      const getFieldValue = (msg: MastraMessageV2): number => {
+      const getFieldValue = (msg: MastraDBMessage): number => {
         if (sortField === 'createdAt') {
           return new Date(msg.createdAt).getTime();
         }
@@ -740,7 +740,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       // Combine paginated messages with included messages, deduplicating
       const messageIds = new Set<string>();
-      const allMessages: MastraMessageV2[] = [];
+      const allMessages: MastraDBMessage[] = [];
 
       // Add paginated messages first
       for (const msg of paginatedMessages) {
@@ -781,7 +781,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       // Use MessageList for proper deduplication and format conversion
       const list = new MessageList().add(allMessages, 'memory');
-      const finalMessages = list.get.all.v2();
+      const finalMessages = list.get.all.db();
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false

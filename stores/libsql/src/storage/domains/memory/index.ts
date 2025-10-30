@@ -274,7 +274,7 @@ export class MemoryLibSQL extends MemoryStorage {
         sql: `SELECT id, content, role, type, "createdAt", "resourceId", "thread_id" FROM ${TABLE_MESSAGES} ${whereClause} ${orderByStatement} LIMIT ? OFFSET ?`,
         args: [...queryParams, perPage, offset],
       });
-      const messages: MastraMessageV2[] = (dataResult.rows || []).map((row: any) => this.parseRow(row));
+      const messages: MastraDBMessage[] = (dataResult.rows || []).map((row: any) => this.parseRow(row));
 
       if (total === 0 && messages.length === 0) {
         return {
@@ -304,7 +304,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList().add(messages, 'memory');
-      let finalMessages = list.get.all.v2();
+      let finalMessages = list.get.all.db();
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {

@@ -445,17 +445,17 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       let allThreadMessages = results.data
         .map((data: any) => this.parseMessageData(data))
-        .filter((msg: any): msg is MastraMessageV2 => 'content' in msg && typeof msg.content === 'object');
+        .filter((msg: any): msg is MastraDBMessage => 'content' in msg && typeof msg.content === 'object');
 
       // Apply resourceId filter
       if (resourceId) {
-        allThreadMessages = allThreadMessages.filter((msg: MastraMessageV2) => msg.resourceId === resourceId);
+        allThreadMessages = allThreadMessages.filter((msg: MastraDBMessage) => msg.resourceId === resourceId);
       }
 
       // Apply date range filter
       if (filter?.dateRange) {
         const dateRange = filter.dateRange;
-        allThreadMessages = allThreadMessages.filter((msg: MastraMessageV2) => {
+        allThreadMessages = allThreadMessages.filter((msg: MastraDBMessage) => {
           const createdAt = new Date(msg.createdAt).getTime();
           if (dateRange.start) {
             const startTime =
@@ -471,7 +471,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       }
 
       // Sort messages by the specified field and direction
-      allThreadMessages.sort((a: MastraMessageV2, b: MastraMessageV2) => {
+      allThreadMessages.sort((a: MastraDBMessage, b: MastraDBMessage) => {
         const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
         const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
 
@@ -501,8 +501,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       }
 
       // Step 2: Add included messages with context (if any), excluding duplicates
-      const messageIds = new Set(paginatedMessages.map((m: MastraMessageV2) => m.id));
-      let includeMessages: MastraMessageV2[] = [];
+      const messageIds = new Set(paginatedMessages.map((m: MastraDBMessage) => m.id));
+      let includeMessages: MastraDBMessage[] = [];
 
       if (include && include.length > 0) {
         // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
@@ -520,7 +520,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList().add(paginatedMessages, 'memory');
-      let finalMessages = list.get.all.v2();
+      let finalMessages = list.get.all.db();
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {

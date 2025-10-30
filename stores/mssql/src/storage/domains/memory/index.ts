@@ -687,7 +687,7 @@ export class MemoryMSSQL extends MemoryStorage {
 
       // Parse and format messages to V2
       const parsed = this._parseAndFormatMessages(messages, 'v2');
-      let finalMessages = parsed as MastraMessageV2[];
+      let finalMessages = parsed as MastraDBMessage[];
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {

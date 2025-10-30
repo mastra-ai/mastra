@@ -1056,7 +1056,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList({ threadId, resourceId }).add(prepared as MastraMessageV1[], 'memory');
-      let finalMessages = list.get.all.v2();
+      let finalMessages = list.get.all.db();
 
       // Sort final messages again to ensure correct order
       finalMessages = finalMessages.sort((a, b) => {
