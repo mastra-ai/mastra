@@ -4,7 +4,7 @@ import type { LanguageModelV2, LanguageModelV2TextPart } from '@ai-sdk/provider-
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 import type { CoreMessage, LanguageModelV1, CoreSystemMessage } from 'ai';
 import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1, createMockLanguageModelV1 } from 'ai/test';
 import { APICallError, stepCountIs } from 'ai-v5';
 import type { SystemModelMessage } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
@@ -25,6 +25,7 @@ import { delay } from '../utils';
 import { MessageList } from './message-list/index';
 import { assertNoDuplicateParts } from './test-utils';
 import { Agent } from './index';
+import { RequestContext } from '../request-context';
 
 config();
 
