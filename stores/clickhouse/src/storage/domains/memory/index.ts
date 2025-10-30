@@ -9,8 +9,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StoragelistThreadsByResourceIdInput,
-  StoragelistThreadsByResourceIdOutput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import {
   MemoryStorage,
@@ -770,8 +770,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
    * implement orderBy and sortDirection support for full sorting capabilities
    */
   public async listThreadsByResourceId(
-    args: StoragelistThreadsByResourceIdInput,
-  ): Promise<StoragelistThreadsByResourceIdOutput> {
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, limit, offset } = args;
     const page = Math.floor(offset / limit);
     const perPage = limit;
