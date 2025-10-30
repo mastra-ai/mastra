@@ -46,22 +46,97 @@ export class WorkflowsPG extends WorkflowsStorage {
     this.schema = schema;
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // runtimeContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    runtimeContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    runtimeContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema });
+      const now = new Date().toISOString();
+
+      let resultString: string;
+      try {
+        resultString = JSON.stringify(result);
+      } catch (error) {
+        throw new MastraError(
+          {
+            id: 'MASTRA_STORAGE_JSON_STRINGIFY_FAILED',
+            text: 'JSON.stringify failed for step result',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: { workflowName, runId, stepId },
+          },
+          error,
+        );
+      }
+
+      await this.client.none(
+        `UPDATE ${tableName}
+         SET snapshot = jsonb_set(
+           snapshot::jsonb,
+           $1,
+           $2::jsonb,
+           true
+         ),
+         "updatedAt" = $3
+         WHERE workflow_name = $4 AND run_id = $5`,
+        [`{context,${stepId}}`, resultString, now, workflowName, runId],
+      );
+
+      if (runtimeContext && Object.keys(runtimeContext).length > 0) {
+        for (const [key, value] of Object.entries(runtimeContext)) {
+          const valueString = JSON.stringify(value);
+          await this.client.none(
+            `UPDATE ${tableName}
+             SET snapshot = jsonb_set(
+               snapshot::jsonb,
+               $1,
+               $2::jsonb,
+               true
+             ),
+             "updatedAt" = $3
+             WHERE workflow_name = $4 AND run_id = $5`,
+            [`{runtimeContext,${key}}`, valueString, now, workflowName, runId],
+          );
+        }
+      }
+
+      const updatedSnapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
+      if (!updatedSnapshot) {
+        throw new MastraError({
+          id: 'MASTRA_STORAGE_PG_STORE_UPDATE_WORKFLOW_RESULTS_SNAPSHOT_NOT_FOUND',
+          text: `Workflow snapshot not found after update for ${workflowName}:${runId}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { workflowName, runId },
+        });
+      }
+
+      return updatedSnapshot.context;
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_UPDATE_WORKFLOW_RESULTS_FAILED',
+          text: 'Failed to update workflow results',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId, stepId },
+        },
+        error,
+      );
+    }
   }
   updateWorkflowState(
     {
@@ -94,6 +169,62 @@ export class WorkflowsPG extends WorkflowsStorage {
     resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
+    let snapshotString: string;
+
+    // Quick size estimation to prevent crashes
+    // Count string lengths as rough approximation
+    const estimateSize = (obj: any, depth = 0): number => {
+      if (depth > 10) return 100; // Prevent infinite recursion
+      if (typeof obj === 'string') return obj.length;
+      if (typeof obj === 'number' || typeof obj === 'boolean') return 8;
+      if (!obj) return 0;
+      if (Array.isArray(obj)) {
+        return obj.reduce((sum, item) => sum + estimateSize(item, depth + 1), 50);
+      }
+      if (typeof obj === 'object') {
+        return Object.entries(obj).reduce((sum, [k, v]) => sum + k.length + estimateSize(v, depth + 1), 100);
+      }
+      return 0;
+    };
+
+    const estimatedBytes = estimateSize(snapshot);
+    const estimatedMB = Math.round(estimatedBytes / 1024 / 1024);
+
+    // Prevent attempting JSON.stringify on payloads likely to cause heap errors
+    // Use conservative limit since estimation is rough
+    if (estimatedMB > 200) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_PAYLOAD_TOO_LARGE',
+        text: `Workflow snapshot too large (~${estimatedMB}MB). Maximum supported size is 200MB. Consider using external storage for large payloads.`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: {
+          workflowName,
+          runId,
+          estimatedMB,
+          maxSizeMB: 200,
+        },
+      });
+    }
+
+    try {
+      snapshotString = JSON.stringify(snapshot);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_JSON_STRINGIFY_FAILED',
+          text: `JSON.stringify failed - payload (~${estimatedMB}MB) exceeds V8 string limit`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+            estimatedMB,
+          },
+        },
+        error,
+      );
+    }
     try {
       const now = new Date().toISOString();
       await this.client.none(
@@ -101,14 +232,30 @@ export class WorkflowsPG extends WorkflowsStorage {
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
                  SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
-        [workflowName, runId, resourceId, JSON.stringify(snapshot), now, now],
+        [workflowName, runId, resourceId, snapshotString, now, now],
       );
     } catch (error) {
+      let isPgPromiseFormattingError = false;
+      if (error instanceof Error) {
+        // Check if it's the pg-promise formatting error (happens around 255MB)
+        isPgPromiseFormattingError = !!(
+          error.message?.includes('Invalid string length') &&
+          (error.stack?.includes('pg-promise') || error.stack?.includes('formatting.js'))
+        );
+      }
       throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          text: isPgPromiseFormattingError
+            ? 'Database query formatting failed - payload exceeds pg-promise limit (~255MB)'
+            : 'Database insert failed',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+            payloadSizeMB: Math.round(snapshotString.length / 1024 / 1024),
+          },
         },
         error,
       );
