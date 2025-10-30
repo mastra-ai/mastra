@@ -483,7 +483,7 @@ const messages = await mastra
 // Get messages by their IDs
 const messages = await mastra
   .getStorage()
-  .getMessagesById({ messageIds: messageIdArr });
+  .listMessagesById({ messageIds: messageIdArr });
 ```
 
 All message queries return `MastraDBMessage[]` format. If you need to convert messages to AI SDK formats for UI rendering, use the conversion utilities from `@mastra/ai-sdk/ui`:

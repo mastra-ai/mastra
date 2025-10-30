@@ -449,8 +449,8 @@ export function pgTests() {
         expect(messagesResult.messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
         expect(messagesResult.messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
 
-        // Test getMessagesById
-        const messagesByIdResult = await store.getMessagesById({ messageIds: [testMessageId] });
+        // Test listMessagesById
+        const messagesByIdResult = await store.listMessagesById({ messageIds: [testMessageId] });
         expect(messagesByIdResult.messages.length).toBe(1);
         expect(messagesByIdResult.messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messagesByIdResult.messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
@@ -487,8 +487,8 @@ export function pgTests() {
         expect(messagesResult.messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messagesResult.messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
 
-        // Test getMessagesById
-        const messagesByIdResult = await store.getMessagesById({ messageIds: [testMessageId] });
+        // Test listMessagesById
+        const messagesByIdResult = await store.listMessagesById({ messageIds: [testMessageId] });
         expect(messagesByIdResult.messages.length).toBe(1);
         expect(messagesByIdResult.messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messagesByIdResult.messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());

@@ -530,7 +530,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
     });
   });
 
-  describe('getMessagesById', () => {
+  describe('listMessagesById', () => {
     const resourceId = 'test-resource-id';
     const resourceId2 = 'test-resource-id-2';
     let threads: StorageThreadType[] = [];
@@ -622,7 +622,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
     });
 
     it('should return an empty array if no message IDs are provided', async () => {
-      const { messages } = await storage.getMessagesById({ messageIds: [] });
+const { messages } = await storage.listMessagesById({ messageIds: [] });
       expect(messages).toHaveLength(0);
     });
 
@@ -634,7 +634,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
         thread1Messages[0]!.id,
         thread2Messages[1]!.id,
       ];
-      const { messages } = await storage.getMessagesById({
+const { messages } = await storage.listMessagesById({
         messageIds,
       });
 
@@ -642,8 +642,8 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       expect(messages.every((msg, i, arr) => i === 0 || msg.createdAt >= arr[i - 1]!.createdAt)).toBe(true);
     });
 
-    it('should return V2 messages by default', async () => {
-      const { messages } = await storage.getMessagesById({
+it('should return V2 messages', async () => {
+      const { messages } = await storage.listMessagesById({
         messageIds: thread1Messages.map(msg => msg.id),
       });
 
@@ -652,7 +652,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
     });
 
     it('should return messages in MastraDBMessage format', async () => {
-      const { messages: v2messages } = await storage.getMessagesById({
+      const { messages: v2messages } = await storage.listMessagesById({
         messageIds: thread1Messages.map(msg => msg.id),
       });
 
@@ -661,7 +661,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
     });
 
     it('should return messages from multiple threads', async () => {
-      const { messages } = await storage.getMessagesById({
+      const { messages } = await storage.listMessagesById({
         messageIds: [...thread1Messages.map(msg => msg.id), ...thread2Messages.map(msg => msg.id)],
       });
 
@@ -671,7 +671,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
     });
 
     it('should return messages from multiple resources', async () => {
-      const { messages } = await storage.getMessagesById({
+      const { messages } = await storage.listMessagesById({
         messageIds: [...thread1Messages.map(msg => msg.id), ...resource2Messages.map(msg => msg.id)],
       });
 

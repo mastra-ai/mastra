@@ -526,7 +526,7 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
 
     const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
@@ -584,10 +584,6 @@ export class MemoryMSSQL extends MemoryStorage {
     );
   }
 
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraDBMessage[]> {
-    const result = await this.getMessagesById({ messageIds });
-    return result.messages;
-  }
 
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,

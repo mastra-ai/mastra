@@ -288,7 +288,7 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
     try {
       const table = await this.client.openTable(TABLE_MESSAGES);
@@ -329,10 +329,6 @@ export class StoreMemoryLance extends MemoryStorage {
     );
   }
 
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraDBMessage[]> {
-    const result = await this.getMessagesById({ messageIds });
-    return result.messages;
-  }
 
   /**
    * @todo When migrating from getThreadsByResourceIdPaginated to this method,

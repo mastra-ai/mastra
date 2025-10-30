@@ -244,9 +244,7 @@ export abstract class MastraStorage extends MastraBase {
     );
   }
 
-  abstract getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }>;
-
-  abstract getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }>;
+abstract getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }>;
 
   abstract saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }>;
 
@@ -288,9 +286,10 @@ export abstract class MastraStorage extends MastraBase {
     });
   }
 
-  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraDBMessage[]> {
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (this.stores?.memory) {
-      return this.stores.memory.listMessagesById({ messageIds });
+      const result = await this.stores.memory.listMessagesById({ messageIds });
+      return result;
     }
     throw new MastraError({
       id: 'MASTRA_STORAGE_LIST_MESSAGES_BY_ID_NOT_SUPPORTED',

@@ -276,8 +276,8 @@ export class DynamoDBStore extends MastraStorage {
     return this.stores.memory.getMessages(args);
   }
 
-  async getMessagesById(args: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessagesById(args);
+  async listMessagesById(args: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    return this.stores.memory.listMessagesById(args);
   }
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {

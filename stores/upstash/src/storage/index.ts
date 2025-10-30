@@ -155,9 +155,10 @@ export class UpstashStore extends MastraStorage {
     return this.stores.memory.getMessages(args);
   }
 
-  async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessagesById({ messageIds });
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    return this.stores.memory.listMessagesById({ messageIds });
   }
+
 
   public async getMessagesPaginated(
     args: StorageGetMessagesArg,

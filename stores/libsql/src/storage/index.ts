@@ -217,9 +217,10 @@ export class LibSQLStore extends MastraStorage {
     return this.stores.memory.getMessages({ threadId, selectBy });
   }
 
-  async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessagesById({ messageIds });
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    return this.stores.memory.listMessagesById({ messageIds });
   }
+
 
   public async getMessagesPaginated(
     args: StorageGetMessagesArg,

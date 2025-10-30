@@ -510,7 +510,7 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
     const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
 
@@ -554,10 +554,6 @@ export class MemoryPG extends MemoryStorage {
     );
   }
 
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraDBMessage[]> {
-    const result = await this.getMessagesById({ messageIds });
-    return result.messages;
-  }
 
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,

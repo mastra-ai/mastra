@@ -802,7 +802,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
 
     try {
@@ -846,11 +846,14 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     );
   }
 
+<<<<<<< HEAD
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraDBMessage[]> {
     const result = await this.getMessagesById({ messageIds });
     return result.messages;
   }
 
+=======
+>>>>>>> origin/main
   /**
    * @todo When migrating from getThreadsByResourceIdPaginated to this method,
    * implement orderBy and sortDirection support for full sorting capabilities

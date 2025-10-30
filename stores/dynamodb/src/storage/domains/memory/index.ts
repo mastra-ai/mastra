@@ -355,7 +355,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     this.logger.debug('Getting messages by ID', { messageIds });
     if (messageIds.length === 0) return { messages: [] };
 
@@ -396,11 +396,6 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         `This method is currently being rolled out across all storage adapters. ` +
         `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
     );
-  }
-
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraDBMessage[]> {
-    const result = await this.getMessagesById({ messageIds });
-    return result.messages;
   }
 
   /**

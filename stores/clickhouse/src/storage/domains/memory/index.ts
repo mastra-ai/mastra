@@ -178,7 +178,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
 
     try {
@@ -243,11 +243,6 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         `This method is currently being rolled out across all storage adapters. ` +
         `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
     );
-  }
-
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraDBMessage[]> {
-    const result = await this.getMessagesById({ messageIds });
-    return result.messages;
   }
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
