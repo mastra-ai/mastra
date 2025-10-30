@@ -1,5 +1,5 @@
 import { MessageList } from '../../../agent/message-list';
-import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '../../../memory/types';
+import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import type {
   PaginationInfo,
   StorageGetMessagesArg,

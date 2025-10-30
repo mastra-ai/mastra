@@ -645,40 +645,25 @@ ${workingMemory}`;
     return result;
   }
 
-  async saveMessages(args: {
-    messages: (MastraMessageV1 | MastraDBMessage)[] | MastraMessageV1[] | MastraDBMessage[];
-    memoryConfig?: MemoryConfig | undefined;
-    format?: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: {
-    messages: (MastraMessageV1 | MastraDBMessage)[] | MastraMessageV1[] | MastraDBMessage[];
-    memoryConfig?: MemoryConfig | undefined;
-    format: 'v2';
-  }): Promise<MastraDBMessage[]>;
   async saveMessages({
     messages,
     memoryConfig,
-    format = `v1`,
   }: {
-    messages: (MastraMessageV1 | MastraDBMessage)[];
+    messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
-    format?: 'v1' | 'v2';
-  }): Promise<MastraDBMessage[] | MastraMessageV1[]> {
+  }): Promise<{ messages: MastraDBMessage[] }> {
     // Then strip working memory tags from all messages
     const updatedMessages = messages
       .map(m => {
-        if (MessageList.isMastraMessageV1(m)) {
-          return this.updateMessageToHideWorkingMemory(m);
-        }
         // add this to prevent "error saving undefined in the db" if a project is on an earlier storage version but new memory/storage
         if (!m.type) m.type = `v2`;
         return this.updateMessageToHideWorkingMemoryV2(m);
       })
-      .filter((m): m is MastraMessageV1 | MastraDBMessage => Boolean(m));
+      .filter((m): m is MastraDBMessage => Boolean(m));
 
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    const result = this.storage.saveMessages({
+    const result = await this.storage.saveMessages({
       messages: new MessageList().add(updatedMessages, 'memory').get.all.db(),
     });
 
@@ -688,34 +673,20 @@ ${workingMemory}`;
         updatedMessages.map(async message => {
           let textForEmbedding: string | null = null;
 
-          if (MessageList.isMastraDBMessage(message)) {
-            if (
-              message.content.content &&
-              typeof message.content.content === 'string' &&
-              message.content.content.trim() !== ''
-            ) {
-              textForEmbedding = message.content.content;
-            } else if (message.content.parts && message.content.parts.length > 0) {
-              // Extract text from all text parts, concatenate
-              const joined = message.content.parts
-                .filter(part => part.type === 'text')
-                .map(part => (part as TextPart).text)
-                .join(' ')
-                .trim();
-              if (joined) textForEmbedding = joined;
-            }
-          } else if (MessageList.isMastraMessageV1(message)) {
-            if (message.content && typeof message.content === 'string' && message.content.trim() !== '') {
-              textForEmbedding = message.content;
-            } else if (message.content && Array.isArray(message.content) && message.content.length > 0) {
-              // Extract text from all text parts, concatenate
-              const joined = message.content
-                .filter(part => part.type === 'text')
-                .map(part => part.text)
-                .join(' ')
-                .trim();
-              if (joined) textForEmbedding = joined;
-            }
+          if (
+            message.content.content &&
+            typeof message.content.content === 'string' &&
+            message.content.content.trim() !== ''
+          ) {
+            textForEmbedding = message.content.content;
+          } else if (message.content.parts && message.content.parts.length > 0) {
+            // Extract text from all text parts, concatenate
+            const joined = message.content.parts
+              .filter(part => part.type === 'text')
+              .map(part => (part as TextPart).text)
+              .join(' ')
+              .trim();
+            if (joined) textForEmbedding = joined;
           }
 
           if (!textForEmbedding) return;
@@ -745,8 +716,7 @@ ${workingMemory}`;
       );
     }
 
-    if (format === `v1`) return new MessageList().add(await result, 'memory').get.all.v1(); // for backwards compat convert to v1 message format
-    return result;
+    return { messages: result };
   }
   protected updateMessageToHideWorkingMemory(message: MastraMessageV1): MastraMessageV1 | null {
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;

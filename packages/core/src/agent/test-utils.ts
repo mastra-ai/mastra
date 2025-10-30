@@ -57,22 +57,10 @@ export class MockMemory extends MastraMemory {
   }
 
   async saveMessages(args: {
-    messages: MastraMessageV1[] | MastraDBMessage[] | (MastraMessageV1 | MastraDBMessage)[];
+    messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig;
-    format?: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraDBMessage[]; memoryConfig?: MemoryConfig; format: 'v2' }): Promise<MastraDBMessage[]>;
-  async saveMessages(args: {
-    messages: MastraMessageV1[] | MastraDBMessage[] | (MastraMessageV1 | MastraDBMessage)[];
-    memoryConfig?: MemoryConfig;
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
-    const { messages, format } = args;
-
-    // Only support V2 format in test utils
-    if (format !== 'v2') {
-      throw new Error('MockMemory only supports format: "v2" (MastraDBMessage[])');
-    }
+  }): Promise<{ messages: MastraDBMessage[] }> {
+    const { messages } = args;
 
     for (const msg of messages) {
       const existing = this.messages.get(msg.id);
@@ -90,7 +78,8 @@ export class MockMemory extends MastraMemory {
     if (!firstMessage?.threadId || !firstMessage?.resourceId) {
       throw new Error('First message must have threadId and resourceId');
     }
-    return this.getMessages({ threadId: firstMessage.threadId, resourceId: firstMessage.resourceId });
+    const savedMessages = await this.getMessages({ threadId: firstMessage.threadId, resourceId: firstMessage.resourceId });
+    return { messages: savedMessages };
   }
 
   async rememberMessages({

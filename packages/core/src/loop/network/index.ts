@@ -153,7 +153,6 @@ export async function prepareMemoryStep({
               resourceId: thread?.resourceId,
             },
           ] as MastraDBMessage[],
-          format: 'v2',
         }),
       );
     }
@@ -169,7 +168,6 @@ export async function prepareMemoryStep({
       promises.push(
         memory.saveMessages({
           messages: messagesToSave,
-          format: 'v2',
         }),
       );
     }
@@ -397,7 +395,6 @@ export async function createNetworkLoop({
                 resourceId: initData?.threadResourceId || networkName,
               },
             ] as MastraDBMessage[],
-            format: 'v2',
           });
 
           return endPayload;
@@ -588,7 +585,6 @@ export async function createNetworkLoop({
             resourceId: initData?.threadResourceId || networkName,
           },
         ] as MastraDBMessage[],
-        format: 'v2',
       });
 
       const endPayload = {
@@ -751,7 +747,6 @@ export async function createNetworkLoop({
             resourceId: initData?.threadResourceId || networkName,
           },
         ] as MastraDBMessage[],
-        format: 'v2',
       });
 
       const endPayload = {
@@ -912,7 +907,6 @@ export async function createNetworkLoop({
             resourceId: initData.threadResourceId || networkName,
           },
         ] as MastraDBMessage[],
-        format: 'v2',
       });
 
       const endPayload = {
