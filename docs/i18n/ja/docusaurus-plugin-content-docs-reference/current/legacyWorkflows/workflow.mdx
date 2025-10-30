@@ -1,0 +1,273 @@
+---
+title: "リファレンス: Workflow クラス | レガシー ワークフロー | Mastra ドキュメント"
+description: Mastra の Workflow クラスに関するドキュメント。条件分岐やデータ検証を伴う複雑な処理フローのために、ステートマシンを作成できます。
+---
+
+<div id="workflow-class">
+  # Workflow クラス
+</div>
+
+Workflow クラスは、条件分岐やデータ検証を伴う複雑な処理の流れに対して、ステートマシンを作成できます。
+
+```ts copy
+import { LegacyWorkflow } from "@mastra/core/workflows/legacy";
+
+const workflow = new LegacyWorkflow({ name: "my-workflow" });
+```
+
+
+<div id="api-reference">
+  ## API リファレンス
+</div>
+
+<div id="constructor">
+  ### コンストラクタ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "ワークフローの識別子",
+    },
+    {
+      name: "logger",
+      type: "Logger<WorkflowLogMessage>",
+      isOptional: true,
+      description: "ワークフロー実行の詳細を記録するための任意のロガーインスタンス",
+    },
+    {
+      name: "steps",
+      type: "Step[]",
+      description: "ワークフローに含めるステップの配列",
+    },
+    {
+      name: "triggerSchema",
+      type: "z.Schema",
+      description: "ワークフローのトリガーデータを検証するための任意のスキーマ",
+    },
+  ]}
+/>
+
+<div id="core-methods">
+  ### コアメソッド
+</div>
+
+<div id="step">
+  #### `step()`
+</div>
+
+ワークフローに[Step](./step-class)を追加し、他のステップへの遷移も定義します。チェーン呼び出しのためにワークフローインスタンスを返します。[ステップの詳細](./step-class)。
+
+<div id="commit">
+  #### `commit()`
+</div>
+
+ワークフロー構成を検証して確定します。すべてのステップを追加した後に必ず呼び出してください。
+
+<div id="execute">
+  #### `execute()`
+</div>
+
+必要に応じてトリガー用データを指定してワークフローを実行します。型は [トリガースキーマ](./workflow#trigger-schemas)に基づきます。
+
+<div id="trigger-schemas">
+  ## トリガースキーマ
+</div>
+
+トリガースキーマは、Zod を使用してワークフローに渡される初期データを検証します。
+
+```ts showLineNumbers copy
+const workflow = new LegacyWorkflow({
+  name: "order-process",
+  triggerSchema: z.object({
+    orderId: z.string(),
+    customer: z.object({
+      id: z.string(),
+      email: z.string().email(),
+    }),
+  }),
+});
+```
+
+スキーマは次のとおりです:
+
+* `execute()` に渡すデータを検証します
+* ワークフローの入力用の TypeScript 型を提供します
+
+
+<div id="validation">
+  ## 検証
+</div>
+
+ワークフローの検証は、主に次の2つのタイミングで行われます：
+
+<div id="1-at-commit-time">
+  ### 1. コミット時
+</div>
+
+`.commit()` を呼び出すと、ワークフローは次の内容を検証します：
+
+```ts showLineNumbers copy
+workflow
+  .step('step1', {...})
+  .step('step2', {...})
+  .commit(); // ワークフローの構造を検証する
+```
+
+* ステップ間の循環依存
+* 終端パス（すべてのパスは必ず終了する必要がある）
+* 到達不能なステップ
+* 存在しないステップへの変数参照
+* 重複したステップID
+
+
+<div id="2-during-execution">
+  ### 2. 実行時
+</div>
+
+`start()` を呼び出すと、次の内容を検証します:
+
+```ts showLineNumbers copy
+const { runId, start } = workflow.createRun();
+
+// トリガーデータをスキーマに照らして検証します
+await start({
+  triggerData: {
+    orderId: "123",
+    customer: {
+      id: "cust_123",
+      email: "invalid-email", // 検証に失敗します
+    },
+  },
+});
+```
+
+* トリガー・スキーマに対するトリガー・データの検証
+* 各ステップの入力データがその inputSchema に適合していること
+* 参照先のステップ出力に変数パスが存在すること
+* 必須の変数が存在すること
+
+
+<div id="workflow-status">
+  ## ワークフローのステータス
+</div>
+
+ワークフローのステータスは、現在の実行状態を示します。取り得る値は次のとおりです。
+
+<PropertiesTable
+  content={[
+    {
+      name: "CREATED",
+      type: "string",
+      description: "ワークフローインスタンスは作成済みだが開始されていない",
+    },
+    {
+      name: "RUNNING",
+      type: "string",
+      description: "ワークフローがステップを実行中",
+    },
+    {
+      name: "SUSPENDED",
+      type: "string",
+      description: "ワークフローの実行が一時停止され、再開待ちの状態",
+    },
+    {
+      name: "COMPLETED",
+      type: "string",
+      description: "すべてのステップの実行が正常に完了した",
+    },
+    {
+      name: "FAILED",
+      type: "string",
+      description: "実行中にエラーが発生した",
+    },
+  ]}
+/>
+
+<div id="example-handling-different-statuses">
+  ### 例: さまざまなステータスの処理
+</div>
+
+```typescript showLineNumbers copy
+const { runId, start, watch } = workflow.createRun();
+
+watch(async ({ status }) => {
+  switch (status) {
+    case "SUSPENDED":
+      // 一時停止中の処理
+      break;
+    case "COMPLETED":
+      // 結果の処理
+      break;
+    case "FAILED":
+      // エラー時の処理
+      break;
+  }
+});
+
+await start({ triggerData: data });
+```
+
+
+<div id="error-handling">
+  ## エラー処理
+</div>
+
+```ts showLineNumbers copy
+try {
+  const { runId, start, watch, resume } = workflow.createRun();
+  await start({ triggerData: data });
+} catch (error) {
+  if (error instanceof ValidationError) {
+    // バリデーションエラーを処理する
+    console.log(error.type); // 'circular_dependency' | 'no_terminal_path' | 'unreachable_step'
+    console.log(error.details); // { stepId?: string, path?: string[] }
+  }
+}
+```
+
+
+<div id="passing-context-between-steps">
+  ## ステップ間でのコンテキストの受け渡し
+</div>
+
+ステップは、コンテキストオブジェクトを介してワークフロー内の前のステップのデータにアクセスできます。各ステップは、これまでに実行されたすべての前のステップで蓄積されたコンテキストを受け取ります。
+
+```typescript showLineNumbers copy
+workflow
+  .step({
+    id: "getData",
+    execute: async ({ context }) => {
+      return {
+        data: { id: "123", value: "example" },
+      };
+    },
+  })
+  .step({
+    id: "processData",
+    execute: async ({ context }) => {
+      // context.steps を使って前のステップのデータにアクセスする
+      const previousData = context.steps.getData.output.data;
+      // previousData.id と previousData.value を処理する
+    },
+  });
+```
+
+The context object:
+
+* `context.steps` に、完了したすべてのステップの結果が含まれます
+* `context.steps.[stepId].output` を通じて各ステップの出力にアクセスできます
+* ステップの出力スキーマに基づいて型付けされています
+* データの一貫性を保つためにイミュータブル（不変）です
+
+
+<div id="related-documentation">
+  ## 関連ドキュメント
+</div>
+
+- [Step](./step-class)
+- [.then()](./then)
+- [.step()](./step-function)
+- [.after()](./after)

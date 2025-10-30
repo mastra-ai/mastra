@@ -1,0 +1,218 @@
+---
+title: "例：コンテキスト位置の評価 | Evals | Mastra Docs"
+description: 応答の順序付けを評価するために「コンテキスト位置」指標を使用する例。
+---
+
+<div id="context-position-evaluation">
+  # コンテキスト位置の評価
+</div>
+
+:::note
+Scorers API は現在ベータ版です。改善に継続的に取り組んでおり、皆さまのフィードバックを歓迎します。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までお寄せください。
+:::
+
+`ContextPositionMetric` を使って、レスポンスが最も関連性の高いコンテキストセグメントによって裏付けられているかを評価します。このメトリクスは `query` と `response` を受け取り、スコアと理由を含む `info` オブジェクトを返します。
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash copy
+npm install @mastra/evals
+```
+
+
+<div id="high-position-example">
+  ## 高いポジションの例
+</div>
+
+この例では、提示されたコンテキストの最初の文を使って、応答がクエリに直接答えています。周辺のコンテキストは、一貫性のある補足情報によって応答をさらに裏づけ、強固なポジショナル・アライメントを実現します。
+
+```typescript title="src/example-high-position.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextPositionMetric } from "@mastra/evals/llm";
+
+const metric = new ContextPositionMetric(openai("gpt-4o-mini"), {
+  context: [
+    "フランスの首都はパリです。",
+    "パリは508年から首都となっています。",
+    "パリはフランスの政治の中心地です。",
+    "首都にはフランス政府が置かれています。",
+  ],
+});
+
+const query = "フランスの首都は何ですか?";
+const response = "フランスの首都はパリです。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+<div id="high-position-output">
+  ### 高い位置での出力
+</div>
+
+関連情報がコンテキストの先頭にあり、余計な要素やノイズに邪魔されることなく回答を直接裏付けているため、この出力は満点となります。
+
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'スコアが1なのは、提供されたすべてのコンテキストが、フランスの首都がパリであることを確認し、出力を直接裏付けているためであり、各記述が歴史的・政治的・機能的な観点から回答を補強しているからです。'
+  }
+}
+```
+
+
+<div id="mixed-position-example">
+  ## 位置が混在した例
+</div>
+
+この例では、回答が非常に関連性の高い情報に、コンテキストの後半から引かれた追加の詳細を組み合わせています。体重に関する事実はクエリに答えているものの、関連性の低い事実を含めたことで、回答の位置的な精度が下がっています。
+
+```typescript title="src/example-mixed-position.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextPositionMetric } from "@mastra/evals/llm";
+
+const metric = new ContextPositionMetric(openai("gpt-4o-mini"), {
+  context: [
+    "ゾウは草食動物です。",
+    "成体のゾウの体重は最大13,000ポンドになります。",
+    "ゾウは陸上最大の動物です。",
+    "ゾウは植物や草を食べます。",
+  ],
+});
+
+const query = "ゾウの体重はどのくらいですか?";
+const response =
+  "成体のゾウの体重は最大13,000ポンドになり、陸上最大の動物です。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+<div id="mixed-position-output">
+  ### 位置が混在した出力
+</div>
+
+関連情報は含まれているものの、優先度の低い文脈と混ざっているため、出力は中程度の評価にとどまります。これにより、文脈の並びと応答の焦点との整合性が弱まります。
+
+```typescript
+{
+  score: 0.4,
+  info: {
+    reason: 'スコアが0.4なのは、成体のゾウの体重に関する直接的な回答が含まれており、これは非常に関連性が高いからです。一方で、ゾウが草食動物であることや食習性といった、体重の理解に寄与しない無関係な情報も含まれています。関連性の高い内容と低い内容が混在しているため、全体のスコアは低くなっています。'
+  }
+}
+```
+
+
+<div id="low-position-example">
+  ## 低位置の例
+</div>
+
+この例では、応答がコンテキストの末尾にある関連情報を参照しています。コンテキストの前半では無関係な説明的な詳細が導入されており、そのため本来想定される根拠情報の提示順序が乱れています。
+
+```typescript title="src/example-low-position.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextPositionMetric } from "@mastra/evals/llm";
+
+const metric = new ContextPositionMetric(openai("gpt-4o-mini"), {
+  context: [
+    "虹は空に現れます。",
+    "虹にはさまざまな色があります。",
+    "虹は曲線の形をしています。",
+    "虹は太陽光が水滴に当たることで形成されます。",
+  ],
+});
+
+const query = "虹はどのように形成されますか?";
+const response =
+  "虹は、太陽光が空気中の水滴と相互作用することで生成されます。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+<div id="low-position-output">
+  ### 低位置の出力
+</div>
+
+クエリに関連する重要な根拠情報が文脈の後半でようやく現れ、前半の内容がほとんど（あるいはまったく）寄与しないため、この出力は低いスコアとなります。
+
+```typescript
+{
+  score: 0.12,
+  info: {
+    reason: 'スコアが0.12なのは、関連する文脈が虹の生成過程を直接説明している一方、他の記述は無関係か、生成過程にせいぜい周辺的にしか関係しない情報しか示していないためです。'
+  }
+}
+```
+
+
+<div id="metric-configuration">
+  ## メトリクスの設定
+</div>
+
+期待される情報の並びを表す `context` 配列を指定して、`ContextPositionMetric` インスタンスを作成できます。最大スコアを設定するための `scale` など、任意のパラメータも指定できます。
+
+```typescript showLineNumbers copy
+const metric = new ContextPositionMetric(openai("gpt-4o-mini"), {
+  context: [""],
+  scale: 1,
+});
+```
+
+> 設定オプションの一覧は、[ContextPositionMetric](/reference/evals/context-position)を参照してください。
+
+
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
+
+`ContextPositionMetric` は次の形の結果を返します:
+
+```typescript
+{
+  score: 数値,
+  info: {
+    reason: 文字列
+  }
+}
+```
+
+
+<div id="position-score">
+  ### 位置スコア
+</div>
+
+0〜1 の範囲の位置スコア:
+
+- **1.0**: 理想的な位置づけ – 最も重要な情報が最初にある。
+- **0.7–0.9**: 強い位置づけ – 重要な情報の多くが冒頭にある。
+- **0.4–0.6**: ばらつきのある位置づけ – 重要な情報が全体に散らばっている。
+- **0.1–0.3**: 弱い位置づけ – 重要な情報の多くが末尾にある。
+- **0.0**: 位置づけなし – まったく無関係、または並びが逆。
+
+<div id="position-info">
+  ### 位置情報
+</div>
+
+スコアの説明（以下の詳細を含む）:
+
+- クエリおよび応答に対するコンテキストの関連性
+- コンテキスト内における関連コンテンツの位置
+- 後半よりも前半のコンテキストを重視すること
+- コンテキストの全体的な整理と構造
+
+<GithubLink
+  outdated={true}
+  marginTop="mt-16"
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-position"
+/>

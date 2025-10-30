@@ -1,0 +1,932 @@
+---
+title: "AI トレーシング | オブザーバビリティ | Mastra ドキュメント"
+description: "Mastra アプリケーション向けの AI トレーシングを設定する"
+---
+
+<div id="ai-tracing">
+  # AIトレーシング
+</div>
+
+AIトレーシングは、アプリケーション内のAI関連処理に特化したモニタリングとデバッグ機能を提供します。有効化すると、Mastraはエージェントの実行、LLMの生成、ツール呼び出し、ワークフローの各ステップについて、AI特有のコンテキストとメタデータを含むトレースを自動的に作成します。
+
+従来のアプリケーショントレーシングとは異なり、AIトレーシングはAIパイプラインの把握に特化しています。具体的には、トークン使用量、モデルのパラメータ、ツール実行の詳細、会話の流れを記録します。これにより、問題のデバッグ、パフォーマンスの最適化、本番環境におけるAIシステムの挙動の把握が容易になります。
+
+## 仕組み
+
+AI Traces は次の手順で作成されます:
+
+- **エクスポーターを設定** → トレースデータをオブザーバビリティプラットフォームに送信
+- **サンプリング戦略を設定** → 収集するトレースを制御
+- **エージェントとワークフローを実行** → Mastra が AI Tracing で自動的に計装します
+
+<div id="configuration">
+  ## 設定
+</div>
+
+<div id="basic-config">
+  ### 基本設定
+</div>
+
+```ts title="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  // ... その他の設定
+  observability: {
+    default: { enabled: true }, // DefaultExporterとCloudExporterを有効にする
+  },
+  storage: new LibSQLStore({
+    url: "file:./mastra.db", // トレーシングにはストレージが必須
+  }),
+});
+```
+
+有効化すると、デフォルト構成には自動的に次が含まれます:
+
+* **Service Name**: `"mastra"`
+* **Sampling**: `"always"` - 常時サンプリング（トレースの100%）
+* **Exporters**:
+  * `DefaultExporter` - 設定済みのストレージにトレースを永続化
+  * `CloudExporter` - Mastra Cloud にトレースを送信（`MASTRA_CLOUD_ACCESS_TOKEN` が必要）
+* **Processors**: `SensitiveDataFilter` - 機密フィールドを自動的にマスク
+
+
+<div id="expanded-basic-config">
+  ### 拡張された基本設定
+</div>
+
+このデフォルト設定は、次のようなより詳細な設定と同等の、最小限の補助設定です。
+
+```ts title="src/mastra/index.ts" showLineNumbers copy
+import {
+  CloudExporter,
+  DefaultExporter,
+  SensitiveDataFilter,
+} from "@mastra/core/ai-tracing";
+
+export const mastra = new Mastra({
+  // ... その他の設定
+  observability: {
+    configs: {
+      default: {
+        serviceName: "mastra",
+        sampling: { type: "always" },
+        processors: [new SensitiveDataFilter()],
+        exporters: [new CloudExporter(), new DefaultExporter()],
+      },
+    },
+  },
+  storage: new LibSQLStore({
+    url: "file:./mastra.db", // トレーシングにはストレージが必要
+  }),
+});
+```
+
+
+## エクスポーター
+
+エクスポーターは、AIのトレースデータの送信先と保存方法を決定します。適切なエクスポーターを選ぶことで、既存のオブザーバビリティスタックとの統合、データ所在要件の順守、コストとパフォーマンスの最適化が可能になります。複数のエクスポーターを同時に使用し、同じトレースデータを異なる送信先に配信できます。たとえば、詳細なトレースはデバッグ用にローカルへ保存しつつ、本番監視のためにサンプリングしたデータはクラウドプロバイダーへ送信することができます。
+
+<div id="internal-exporters">
+  ### 内蔵エクスポーター
+</div>
+
+Mastra には、すぐに使えるエクスポーターが 2 つ用意されています:
+
+- **[Default](/docs/observability/ai-tracing/exporters/default)** - プレイグラウンドでの閲覧のため、トレースをローカルストレージに保存します
+- **[Cloud](/docs/observability/ai-tracing/exporters/cloud)** - 本番環境の監視やコラボレーションのために、トレースを Mastra Cloud に送信します
+
+<div id="external-exporters">
+  ### 外部エクスポーター
+</div>
+
+内部エクスポーターに加え、Mastra は主要なオブザーバビリティプラットフォームとの連携に対応しています。これらのエクスポーターにより、既存の監視基盤を活用しつつ、アラート、ダッシュボード、他のアプリケーションメトリクスとの相関など、プラットフォーム固有の機能を活用できます。
+
+- **[Arize](/docs/observability/ai-tracing/exporters/arize)** - OpenInference のセマンティック規約に沿って Arize Phoenix または Arize AX へトレースをエクスポート
+- **[Braintrust](/docs/observability/ai-tracing/exporters/braintrust)** - Braintrust の評価・オブザーバビリティプラットフォームへトレースをエクスポート
+- **[Langfuse](/docs/observability/ai-tracing/exporters/langfuse)** - Langfuse のオープンソース LLM エンジニアリングプラットフォームへトレースを送信
+- **[LangSmith](/docs/observability/ai-tracing/exporters/langsmith)** - LangSmith のオブザーバビリティ／評価ツールキットへトレースを送信
+- **[OpenTelemetry](/docs/observability/ai-tracing/exporters/otel)** - OpenTelemetry 互換のあらゆるオブザーバビリティシステムへトレースを送信
+  - サポート: Dash0、Laminar、New Relic、SigNoz、Traceloop、Zipkin など！
+
+<div id="sampling-strategies">
+  ## サンプリング戦略
+</div>
+
+サンプリングは、どのトレースを収集するかを制御し、オブザーバビリティの要件とリソースコストのバランスを取るのに役立ちます。トラフィックの多い本番環境では、すべてのトレースを収集するのは高コストで、必ずしも必要ではありません。サンプリング戦略を用いることで、エラーや重要な処理に関する重要な情報を取りこぼさずに、代表性のあるトレースのサブセットを取得できます。
+
+Mastra は次の 4 つのサンプリング戦略をサポートしています:
+
+<div id="always-sample">
+  ### 常時サンプリング
+</div>
+
+トレースを100%収集します。開発やデバッグ、あるいは完全な可視性が必要な低トラフィック環境に最適です。
+
+```ts
+sampling: {
+  type: "always";
+}
+```
+
+
+<div id="never-sample">
+  ### Never Sample
+</div>
+
+トレースを完全に無効にします。トレースが付加価値を生まない特定の環境や、設定を削除せずに一時的にトレースを停止したい場合に便利です。
+
+```ts
+sampling: {
+  type: "never";
+}
+```
+
+
+<div id="ratio-based-sampling">
+  ### 比率ベースのサンプリング
+</div>
+
+トレースの一定割合をランダムに取得します。全トレースを収集するコストをかけずに統計的な示唆を得たい本番環境に最適です。確率値は 0（トレースなし）から 1（全トレース）までの範囲です。
+
+```ts
+sampling: {
+  type: 'ratio',
+  probability: 0.1  // トレースの10%をサンプリング
+}
+```
+
+
+<div id="custom-sampling">
+  ### カスタムサンプリング
+</div>
+
+実行時のコンテキスト、メタデータ、ビジネスルールなどに基づいて独自のサンプリングロジックを実装します。ユーザー層やリクエスト種別、エラー条件に応じたサンプリングなど、複雑なシナリオに最適です。
+
+```ts
+sampling: {
+  type: 'custom',
+  sampler: (options) => {
+    // プレミアムユーザーを高い割合でサンプリング
+    if (options?.metadata?.userTier === 'premium') {
+      return Math.random() < 0.5; // 50%サンプリング
+    }
+
+    // その他は1%サンプリング（デフォルト）
+    return Math.random() < 0.01;
+  }
+}
+```
+
+
+<div id="complete-example">
+  ### 完成例
+</div>
+
+```ts title="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      "10_percent": {
+        serviceName: "my-service",
+        // トレースの10%をサンプリング
+        sampling: {
+          type: "ratio",
+          probability: 0.1,
+        },
+        exporters: [new DefaultExporter()],
+      },
+    },
+  },
+});
+```
+
+
+<div id="multi-config-setup">
+  ## 複数構成のセットアップ
+</div>
+
+複雑なアプリケーションでは、状況に応じて異なるトレーシング設定が必要になることがよくあります。開発中はフルサンプリングで詳細なトレースを取得し、本番では外部プロバイダーにサンプリング済みのトレースを送信し、さらに特定の機能や顧客セグメント向けに専用の設定を用意したい場合があります。`configSelector` 関数は、実行時に設定を動的に選択できるようにし、リクエストコンテキスト、環境変数、フィーチャーフラグ、または任意のカスタムロジックに基づいてトレースを振り分けることを可能にします。
+
+このアプローチは特に以下のような場合に有用です:
+
+- 観測要件の異なる A/B テストを実施する場合
+- 特定の顧客やサポート案件向けに強化されたデバッグを提供する場合
+- 既存の監視に影響を与えずに新しいトレーシングプロバイダーを段階的に導入する場合
+- リクエスト種別ごとに異なるサンプリング率でコストを最適化する場合
+- コンプライアンスやデータレジデンシー要件のために独立したトレースストリームを維持する場合
+
+:::info
+
+特定の実行では使用できる構成は1つだけである点に注意してください。ただし、単一の構成から同時に複数のエクスポーターへデータを送信することは可能です。
+
+:::
+
+<div id="dynamic-configuration-selection">
+  ### 動的な設定の選択
+</div>
+
+実行時のコンテキストに応じて適切なトレーシング設定を選択するには、`configSelector` を使用します。
+
+```ts title="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    default: { enabled: true }, // 'default' インスタンスを提供
+    configs: {
+      langfuse: {
+        serviceName: "langfuse-service",
+        exporters: [langfuseExporter],
+      },
+      braintrust: {
+        serviceName: "braintrust-service",
+        exporters: [braintrustExporter],
+      },
+      debug: {
+        serviceName: "debug-service",
+        sampling: { type: "always" },
+        exporters: [new DefaultExporter()],
+      },
+    },
+    configSelector: (context, availableTracers) => {
+      // サポートリクエストにはデバッグ設定を使用
+      if (context.runtimeContext?.get("supportMode")) {
+        return "debug";
+      }
+
+      // 特定の顧客を異なるプロバイダーにルーティング
+      const customerId = context.runtimeContext?.get("customerId");
+      if (customerId && premiumCustomers.includes(customerId)) {
+        return "braintrust";
+      }
+
+      // 特定のリクエストをlangfuseにルーティング
+      if (context.runtimeContext?.get("useExternalTracing")) {
+        return "langfuse";
+      }
+
+      return "default";
+    },
+  },
+});
+```
+
+
+<div id="environment-based-configuration">
+  ### 環境別の設定
+</div>
+
+一般的には、デプロイ環境に応じて設定を選択します。
+
+```ts title="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      development: {
+        serviceName: "my-service-dev",
+        sampling: { type: "always" },
+        exporters: [new DefaultExporter()],
+      },
+      staging: {
+        serviceName: "my-service-staging",
+        sampling: { type: "ratio", probability: 0.5 },
+        exporters: [langfuseExporter],
+      },
+      production: {
+        serviceName: "my-service-prod",
+        sampling: { type: "ratio", probability: 0.01 },
+        exporters: [cloudExporter, langfuseExporter],
+      },
+    },
+    configSelector: (context, availableTracers) => {
+      const env = process.env.NODE_ENV || "development";
+      return env;
+    },
+  },
+});
+```
+
+
+<div id="common-configuration-patterns-troubleshooting">
+  ### よくある設定パターンとトラブルシューティング
+</div>
+
+<div id="default-config-takes-priority">
+  #### 既定の設定が優先されます
+</div>
+
+既定の設定が有効で、カスタム設定も定義されている場合は、明示的に別の設定を選択しない限り、**常に既定の設定が使用されます**。
+
+```ts title="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    default: { enabled: true }, // これが常に使用されます!
+    configs: {
+      langfuse: {
+        serviceName: "my-service",
+        exporters: [langfuseExporter], // ここには到達しません
+      },
+    },
+  },
+});
+```
+
+**解決策:**
+
+1. **デフォルトを無効に**し、カスタム設定のみを使用する:
+
+```ts
+observability: {
+  // デフォルト設定を無効にする場合は、この行をコメントアウトまたは削除してください
+  // default: { enabled: true },
+  configs: {
+    langfuse: {
+      /* ... */
+    }
+  }
+}
+```
+
+2. 設定を切り替えるには、**configSelector を使用**します:
+
+```ts
+observability: {
+  default: { enabled: true },
+  configs: {
+    langfuse: { /* ... */ }
+  },
+  configSelector: (context, availableConfigs) => {
+    // 'default' と 'langfuse' を選択するロジック
+    return useExternalTracing ? 'langfuse' : 'default';
+  }
+}
+```
+
+
+<div id="maintaining-playground-and-cloud-access">
+  #### Playground と Cloud へのアクセスを維持する
+</div>
+
+外部エクスポーターを使ってカスタム設定を作成すると、Mastra Playground と Cloud へのアクセスを失う場合があります。外部エクスポーターを追加してもアクセスを維持するには、デフォルトのエクスポーターもカスタム設定に含めてください。
+
+```ts title="src/mastra/index.ts" showLineNumbers copy
+import { DefaultExporter, CloudExporter } from "@mastra/core/ai-tracing";
+import { ArizeExporter } from "@mastra/arize";
+
+export const mastra = new Mastra({
+  observability: {
+    default: { enabled: false }, // カスタム設定を使用するためデフォルトを無効化
+    configs: {
+      production: {
+        serviceName: "my-service",
+        exporters: [
+          new ArizeExporter({
+            // 外部エクスポーター
+            endpoint: process.env.PHOENIX_ENDPOINT,
+            apiKey: process.env.PHOENIX_API_KEY,
+          }),
+          new DefaultExporter(), // Playgroundへのアクセスを維持
+          new CloudExporter(), // Cloudへのアクセスを維持
+        ],
+      },
+    },
+  },
+});
+```
+
+この構成では、3つの宛先すべてに同時にトレースを送信します:
+
+* 外部向けの可観測性に **Arize Phoenix/AX**
+* ローカルのPlaygroundでのアクセスに **DefaultExporter**
+* Mastra Cloudダッシュボードに **CloudExporter**
+
+:::info
+
+注意: 1つのトレースは複数のエクスポーターへ送信できます。エクスポーターごとにサンプリングレートやプロセッサーを変えたい場合を除き、エクスポーターごとに個別の設定は不要です。
+
+:::
+
+
+<div id="adding-custom-metadata">
+  ## カスタムメタデータの追加
+</div>
+
+カスタムメタデータを使うと、トレースに追加情報を付与でき、問題のデバッグや本番環境でのシステム挙動の把握が容易になります。メタデータには、ビジネスロジックの詳細、パフォーマンス指標、ユーザーコンテキストなど、実行時に何が起きたかの理解に役立つあらゆる情報を含められます。
+
+トレーシングコンテキストを使って、任意のスパンにメタデータを追加できます。
+
+```ts showLineNumbers copy
+execute: async ({ inputData, tracingContext }) => {
+  const startTime = Date.now();
+  const response = await fetch(inputData.endpoint);
+
+  // 現在のスパンにカスタムメタデータを追加
+  tracingContext.currentSpan?.update({
+    metadata: {
+      apiStatusCode: response.status,
+      endpoint: inputData.endpoint,
+      responseTimeMs: Date.now() - startTime,
+      userTier: inputData.userTier,
+      region: process.env.AWS_REGION,
+    },
+  });
+
+  return await response.json();
+};
+```
+
+ここで設定したメタデータは、構成済みのすべてのエクスポーターに表示されます。
+
+
+<div id="automatic-metadata-from-runtimecontext">
+  ### RuntimeContext からのメタデータ自動付与
+</div>
+
+各スパンに手動でメタデータを追加する代わりに、Mastra を設定して RuntimeContext から値を自動抽出し、トレース内のすべてのスパンにメタデータとして付与できます。これは、ユーザー識別子、環境情報、機能フラグ、あるいはリクエストスコープのデータなどを、トレース全体で一貫して追跡するのに役立ちます。
+
+<div id="configuration-level-extraction">
+  #### 設定レベルの抽出
+</div>
+
+トレース設定で抽出する `RuntimeContext` のキーを定義します。これらのキーは、この設定で作成されるすべてのスパンのメタデータとして自動的に含まれます。
+
+```ts title="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      default: {
+        serviceName: "my-service",
+        runtimeContextKeys: ["userId", "environment", "tenantId"],
+        exporters: [new DefaultExporter()],
+      },
+    },
+  },
+});
+```
+
+現在、RuntimeContext を使ってエージェントやワークフローを実行すると、これらの値は自動的に抽出されます。
+
+```ts showLineNumbers copy
+const runtimeContext = new RuntimeContext();
+runtimeContext.set("userId", "user-123");
+runtimeContext.set("environment", "production");
+runtimeContext.set("tenantId", "tenant-456");
+
+// このトレース内のすべてのスパンに、userId、environment、tenantId のメタデータが自動的に付与されます
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  runtimeContext,
+});
+```
+
+
+<div id="per-request-additions">
+  #### リクエストごとの追加
+</div>
+
+`tracingOptions.runtimeContextKeys` を使用して、トレース固有のキーを追加できます。これらは設定レベルのキーと統合されます。
+
+```ts showLineNumbers copy
+const runtimeContext = new RuntimeContext();
+runtimeContext.set("userId", "user-123");
+runtimeContext.set("environment", "production");
+runtimeContext.set("experimentId", "exp-789");
+
+const result = await agent.generate({
+  messages: [{ role: "user", content: "こんにちは" }],
+  runtimeContext,
+  tracingOptions: {
+    runtimeContextKeys: ["experimentId"], // 設定済みのキーに追加
+  },
+});
+
+// すべてのスパンに userId、environment、experimentId が含まれます
+```
+
+
+<div id="nested-value-extraction">
+  #### ネストされた値の抽出
+</div>
+
+RuntimeContext からネストされた値を取得するには、ドット記法を使用します。
+
+```ts showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      default: {
+        runtimeContextKeys: ["user.id", "session.data.experimentId"],
+        exporters: [new DefaultExporter()],
+      },
+    },
+  },
+});
+
+const runtimeContext = new RuntimeContext();
+runtimeContext.set("user", { id: "user-456", name: "John Doe" });
+runtimeContext.set("session", { data: { experimentId: "exp-999" } });
+
+// メタデータには以下が含まれます: { user: { id: 'user-456' }, session: { data: { experimentId: 'exp-999' } } }
+```
+
+
+<div id="how-it-works">
+  #### 仕組み
+</div>
+
+1. **TraceState の計算**: トレース開始時（ルートスパン作成時）に、Mastra は設定レベルのキーとリクエスト単位のキーを統合し、抽出対象のキーを決定します
+2. **自動抽出**: ルートスパン（エージェントの実行、ワークフローの実行）は RuntimeContext からメタデータを自動的に抽出します
+3. **子スパンでの抽出**: 子スパンも、作成時に `runtimeContext` を渡せばメタデータを抽出できます
+4. **メタデータの優先順位**: スパンのオプションに明示的に渡されたメタデータは、抽出されたメタデータより常に優先されます
+
+<div id="child-spans-and-metadata-extraction">
+  #### 子スパンとメタデータの抽出
+</div>
+
+ツールやワークフローのステップ内で子スパンを作成する際は、`runtimeContext` パラメータを渡すことでメタデータの抽出を有効化できます。
+
+```ts showLineNumbers copy
+execute: async ({ tracingContext, runtimeContext }) => {
+  // runtimeContextを指定して子スパンを作成 - メタデータ抽出が行われます
+  const dbSpan = tracingContext.currentSpan?.createChildSpan({
+    type: "generic",
+    name: "database-query",
+    runtimeContext, // メタデータ抽出を有効化するために渡す
+  });
+
+  const results = await db.query("SELECT * FROM users");
+  dbSpan?.end({ output: results });
+
+  // runtimeContextを指定せずに子スパンを作成 - メタデータ抽出は行われません
+  const cacheSpan = tracingContext.currentSpan?.createChildSpan({
+    type: "generic",
+    name: "cache-check",
+    // runtimeContextなし - メタデータは抽出されません
+  });
+
+  return results;
+};
+```
+
+これにより、どの子スパンに RuntimeContext のメタデータを含めるかをきめ細かく制御できます。ルートスパン（エージェント／ワークフローの実行）は常にメタデータを自動抽出しますが、子スパンは `runtimeContext` を明示的に渡した場合にのみ抽出します。
+
+
+<div id="creating-child-spans">
+  ## 子スパンの作成
+</div>
+
+子スパンを使うと、ワークフローのステップやツール内で行われる細かな処理を追跡できます。データベースクエリ、API 呼び出し、ファイル操作、複雑な計算などのサブ処理を可視化できます。こうした階層構造により、パフォーマンスのボトルネックを特定し、処理の正確な順序を把握しやすくなります。
+
+特定の処理を追跡するために、ツール呼び出しやワークフローステップ内で子スパンを作成します：
+
+```ts showLineNumbers copy
+execute: async ({ input, tracingContext }) => {
+  // メインのデータベース操作用に別の子スパンを作成
+  const querySpan = tracingContext.currentSpan?.createChildSpan({
+    type: "generic",
+    name: "database-query",
+    input: { query: input.query },
+    metadata: { database: "production" },
+  });
+
+  try {
+    const results = await db.query(input.query);
+    querySpan?.end({
+      output: results.data,
+      metadata: {
+        rowsReturned: results.length,
+        queryTimeMs: results.executionTime,
+        cacheHit: results.fromCache,
+      },
+    });
+    return results;
+  } catch (error) {
+    querySpan?.error({
+      error,
+      metadata: { retryable: isRetryableError(error) },
+    });
+    throw error;
+  }
+};
+```
+
+子スパンは親からトレースコンテキストを自動で継承し、オブザーバビリティプラットフォーム上で関係の階層性を維持します。
+
+
+<div id="span-processors">
+  ## スパンプロセッサ
+</div>
+
+スパンプロセッサは、エクスポート前にトレースデータを変換、フィルタ、または付加情報で強化できる機能です。スパンの作成からエクスポートまでの間にあるパイプラインとして機能し、セキュリティ、コンプライアンス、デバッグなどの目的に合わせてスパンを修正できます。Mastra には組み込みのプロセッサが用意されており、カスタム実装にも対応しています。
+
+<div id="built-in-processors">
+  ### 組み込みプロセッサ
+</div>
+
+- [Sensitive Data Filter](/docs/observability/ai-tracing/processors/sensitive-data-filter) は機密情報をマスクします。デフォルトのオブザーバビリティ設定で有効になっています。
+
+<div id="creating-custom-processors">
+  ### カスタムプロセッサの作成
+</div>
+
+`AISpanProcessor` インターフェースを実装することで、カスタムのスパンプロセッサを作成できます。次は、スパン内のすべての入力テキストを小文字に変換するシンプルな例です。
+
+```ts title="src/processors/lowercase-input-processor.ts" showLineNumbers copy
+import type { AISpanProcessor, AnyAISpan } from "@mastra/core/ai-tracing";
+
+export class LowercaseInputProcessor implements AISpanProcessor {
+  name = "lowercase-processor";
+
+  process(span: AnyAISpan): AnyAISpan {
+    span.input = `${span.input}`.toLowerCase();
+    return span;
+  }
+
+  async shutdown(): Promise<void> {
+    // 必要に応じてクリーンアップ
+  }
+}
+
+// カスタムプロセッサを使用
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      development: {
+        processors: [new LowercaseInputProcessor(), new SensitiveDataFilter()],
+        exporters: [new DefaultExporter()],
+      },
+    },
+  },
+});
+```
+
+プロセッサは定義された順に実行され、複数の変換をチェーンできます。カスタムプロセッサの代表的なユースケースには次のようなものがあります：
+
+* 環境固有のメタデータの付与
+* 条件に基づくスパンのフィルタリング
+* データ形式の正規化
+* 高ボリュームなトレースのサンプリング
+* ビジネス文脈でのスパンのリッチ化
+
+
+<div id="retrieving-trace-ids">
+  ## トレースIDの取得
+</div>
+
+トレースを有効にした状態でエージェントやワークフローを実行すると、レスポンスに `traceId` が含まれます。これを使って、オブザーバビリティ・プラットフォームで完全なトレースを参照できます。これは、デバッグやカスタマーサポート、システム内の他のイベントとのトレースの相関付けに役立ちます。
+
+<div id="agent-trace-ids">
+  ### エージェントのトレース ID
+</div>
+
+`generate` と `stream` の両メソッドは、レスポンスにトレース ID を含めて返します。
+
+```ts showLineNumbers copy
+// generateを使用
+const result = await agent.generate({
+  messages: [{ role: "user", content: "こんにちは" }],
+});
+
+console.log("トレースID:", result.traceId);
+
+// streamを使用
+const streamResult = await agent.stream({
+  messages: [{ role: "user", content: "物語を聞かせて" }],
+});
+
+console.log("トレースID:", streamResult.traceId);
+```
+
+
+<div id="workflow-trace-ids">
+  ### ワークフロートレースID
+</div>
+
+ワークフローの実行では、トレースIDも返されます。
+
+```ts showLineNumbers copy
+// ワークフロー実行を作成
+const run = await mastra.getWorkflow("myWorkflow").createRunAsync();
+
+// ワークフローを開始
+const result = await run.start({
+  inputData: { data: "process this" },
+});
+
+console.log("Trace ID:", result.traceId);
+
+// またはワークフローをストリーミング
+const { stream, getWorkflowState } = run.stream({
+  inputData: { data: "process this" },
+});
+
+// トレースIDを含む最終状態を取得
+const finalState = await getWorkflowState();
+console.log("Trace ID:", finalState.traceId);
+```
+
+
+<div id="using-trace-ids">
+  ### Trace ID の使用
+</div>
+
+Trace ID を取得したら、次のことができます:
+
+1. **Mastra Playground でトレースを検索**: トレースビューに移動し、ID で検索します
+2. **外部プラットフォームでトレースを照会**: Langfuse、Braintrust、または利用中のオブザーバビリティプラットフォームでその ID を使用します
+3. **ログとの相関付け**: アプリケーションログに Trace ID を含め、相互参照できるようにします
+4. **デバッグのために共有**: 調査のためにサポートチームや開発者に Trace ID を提供します
+
+Trace ID はトレースが有効な場合にのみ取得できます。トレースが無効化されているか、サンプリングによってリクエストが除外されている場合、`traceId` は `undefined` になります。
+
+<div id="integrating-with-external-tracing-systems">
+  ## 外部トレーシングシステムとの統合
+</div>
+
+既存の分散トレーシング（OpenTelemetry、Datadog など）を利用しているアプリケーション内で Mastra のエージェントやワークフローを実行する場合、Mastra のトレースを親トレースのコンテキストに接続できます。これにより、リクエストフロー全体を一元的に可視化でき、Mastra の処理がより大きなシステムの中でどのように組み込まれているかを把握しやすくなります。
+
+<div id="passing-external-trace-ids">
+  ### 外部トレースIDの引き継ぎ
+</div>
+
+親システムのトレースコンテキストを指定するには、`tracingOptions` パラメータを使用します。
+
+```ts showLineNumbers copy
+// 既存のトレーシングシステムからトレースコンテキストを取得
+const parentTraceId = getCurrentTraceId(); // 使用中のトレーシングシステム
+const parentSpanId = getCurrentSpanId(); // 使用中のトレーシングシステム
+
+// 親トレースの一部としてMastra操作を実行
+const result = await agent.generate("このデータを分析", {
+  tracingOptions: {
+    traceId: parentTraceId,
+    parentSpanId: parentSpanId,
+  },
+});
+
+// Mastraトレースは分散トレース内で子として表示されます
+```
+
+
+<div id="opentelemetry-integration">
+  ### OpenTelemetry 連携
+</div>
+
+OpenTelemetry と連携することで、Mastra のトレースを既存のオブザーバビリティ・プラットフォームにシームレスに表示できます。
+
+```ts showLineNumbers copy
+import { trace } from "@opentelemetry/api";
+
+// 現在の OpenTelemetry スパンを取得
+const currentSpan = trace.getActiveSpan();
+const spanContext = currentSpan?.spanContext();
+
+if (spanContext) {
+  const result = await agent.generate(userMessage, {
+    tracingOptions: {
+      traceId: spanContext.traceId,
+      parentSpanId: spanContext.spanId,
+    },
+  });
+}
+```
+
+
+<div id="workflow-integration">
+  ### ワークフロー統合
+</div>
+
+ワークフローでも、トレース伝播に同じパターンを使用できます。
+
+```ts showLineNumbers copy
+const workflow = mastra.getWorkflow("data-pipeline");
+const run = await workflow.createRunAsync();
+
+const result = await run.start({
+  inputData: { data: "..." },
+  tracingOptions: {
+    traceId: externalTraceId,
+    parentSpanId: externalSpanId,
+  },
+});
+```
+
+
+<div id="id-format-requirements">
+  ### ID 形式の要件
+</div>
+
+Mastra はトレース ID とスパン ID を検証して、互換性を確保します：
+
+- **トレース ID**：1〜32 桁の 16 進数（OpenTelemetry では 32 桁）
+- **スパン ID**：1〜16 桁の 16 進数（OpenTelemetry では 16 桁）
+
+無効な ID は適切に処理され、Mastra はエラーを記録して処理を継続します：
+
+- 無効なトレース ID → 新しいトレース ID を生成
+- 無効な親スパン ID → 親子関係を無視
+
+これにより、入力が不正でもトレーシングがアプリケーションをクラッシュさせることはありません。
+
+<div id="example-express-middleware">
+  ### 例: Express のミドルウェア
+</div>
+
+以下は、Express アプリケーションでのトレース伝播を示す完全な例です。
+
+```ts showLineNumbers copy
+import { trace } from "@opentelemetry/api";
+import express from "express";
+
+const app = express();
+
+app.post("/api/analyze", async (req, res) => {
+  // 現在のOpenTelemetryコンテキストを取得
+  const currentSpan = trace.getActiveSpan();
+  const spanContext = currentSpan?.spanContext();
+
+  const result = await agent.generate(req.body.message, {
+    tracingOptions: spanContext
+      ? {
+          traceId: spanContext.traceId,
+          parentSpanId: spanContext.spanId,
+        }
+      : undefined,
+  });
+
+  res.json(result);
+});
+```
+
+これにより、HTTP リクエスト処理と Mastra エージェントの実行の両方を含む単一の分散トレースが作成され、任意のオブザーバビリティプラットフォームで表示できます。
+
+
+<div id="what-gets-traced">
+  ## 何がトレースされるか
+</div>
+
+Mastra は自動的に次のスパンを作成します：
+
+<div id="agent-operations">
+  ### エージェントのオペレーション
+</div>
+
+- **エージェントラン** - 指示とツールを用いた一連の実行
+- **LLM 呼び出し** - トークンやパラメータを伴うモデルとのやり取り
+- **ツール実行** - 入力と出力を伴う関数呼び出し
+- **メモリ操作** - スレッドおよびセマンティックリコール
+
+<div id="workflow-operations">
+  ### ワークフローの操作
+</div>
+
+- **ワークフローの実行** - 開始から終了までの一連の実行
+- **個々のステップ** - 入出力を伴うステップの処理
+- **制御フロー** - 条件分岐、ループ、並列実行
+- **待機処理** - 遅延やイベント待ち
+
+<div id="viewing-traces">
+  ## トレースの確認
+</div>
+
+トレースは以下の場所で確認できます：
+
+- **Mastra Playground** - ローカル開発環境
+- **Mastra Cloud** - 本番環境の監視ダッシュボード
+- **Arize Phoenix / Arize AX** - Arize エクスポーター使用時
+- **Braintrust Console** - Braintrust エクスポーター使用時
+- **Langfuse Dashboard** - Langfuse エクスポーター使用時
+
+<div id="see-also">
+  ## 参考
+</div>
+
+<div id="examples">
+  ### 例
+</div>
+
+- [Basic AI トレーシングの基本例](/examples/observability/basic-ai-tracing) - 動作する実装
+
+<div id="reference-documentation">
+  ### 参考資料
+</div>
+
+- [Configuration API](/reference/observability/ai-tracing/configuration) - ObservabilityConfig の詳細
+- [AITracing クラス](/reference/observability/ai-tracing/) - 主要クラスとメソッド
+- [Span インターフェース](/reference/observability/ai-tracing/span) - Span の種類とライフサイクル
+- [型定義](/reference/observability/ai-tracing/interfaces) - インターフェースの完全なリファレンス
+
+<div id="exporters">
+  ### エクスポーター
+</div>
+
+- [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - ストレージへの永続化
+- [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud と連携
+- [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter) - デバッグ出力
+- [Arize](/reference/observability/ai-tracing/exporters/arize) - Arize Phoenix と Arize AX に対応
+- [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust と連携
+- [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse と連携
+- [OpenTelemetry](/reference/observability/ai-tracing/exporters/otel) - OTEL 互換プラットフォームに対応
+
+<div id="processors">
+  ### プロセッサ
+</div>
+
+- [Sensitive Data Filter](/docs/observability/ai-tracing/processors/sensitive-data-filter) - データのマスキング

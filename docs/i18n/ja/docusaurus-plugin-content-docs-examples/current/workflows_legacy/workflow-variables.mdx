@@ -1,0 +1,236 @@
+---
+title: "例：ワークフロー変数によるデータマッピング（レガシー） | ワークフロー（レガシー） | Mastra ドキュメント"
+description: "Mastra のワークフローで、ステップ間のデータをマッピングするためにワークフロー変数を使う方法を学びます。"
+---
+
+<div id="data-mapping-with-workflow-variables-legacy">
+  # ワークフロー変数によるデータマッピング（レガシー）
+</div>
+
+この例では、Mastra のワークフローにおいて、ステップ間でデータをマッピングするためにワークフロー変数を使用する方法を示します。
+
+<div id="use-case-user-registration-process">
+  ## ユースケース: ユーザー登録プロセス
+</div>
+
+この例では、次の処理を行うシンプルなユーザー登録ワークフローを構築します:
+
+1. ユーザー入力を検証する
+1. ユーザーデータを整える
+1. ユーザープロフィールを作成する
+
+<div id="implementation">
+  ## 実装
+</div>
+
+```typescript showLineNumbers title="src/mastra/workflows/user-registration.ts" copy
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
+
+// 型安全性を高めるためのスキーマ定義
+const userInputSchema = z.object({
+  email: z.string().email(),
+  name: z.string(),
+  age: z.number().min(18),
+});
+
+const validatedDataSchema = z.object({
+  isValid: z.boolean(),
+  validatedData: z.object({
+    email: z.string(),
+    name: z.string(),
+    age: z.number(),
+  }),
+});
+
+const formattedDataSchema = z.object({
+  userId: z.string(),
+  formattedData: z.object({
+    email: z.string(),
+    displayName: z.string(),
+    ageGroup: z.string(),
+  }),
+});
+
+const profileSchema = z.object({
+  profile: z.object({
+    id: z.string(),
+    email: z.string(),
+    displayName: z.string(),
+    ageGroup: z.string(),
+    createdAt: z.string(),
+  }),
+});
+
+// ワークフローの定義
+const registrationWorkflow = new LegacyWorkflow({
+  name: "user-registration",
+  triggerSchema: userInputSchema,
+});
+
+// ステップ1: ユーザー入力の検証
+const validateInput = new LegacyStep({
+  id: "validateInput",
+  inputSchema: userInputSchema,
+  outputSchema: validatedDataSchema,
+  execute: async ({ context }) => {
+    const { email, name, age } = context;
+
+    // シンプルな検証ロジック
+    const isValid = email.includes("@") && name.length > 0 && age >= 18;
+
+    return {
+      isValid,
+      validatedData: {
+        email: email.toLowerCase().trim(),
+        name,
+        age,
+      },
+    };
+  },
+});
+
+// ステップ2: ユーザーデータのフォーマット
+const formatUserData = new LegacyStep({
+  id: "formatUserData",
+  inputSchema: z.object({
+    validatedData: z.object({
+      email: z.string(),
+      name: z.string(),
+      age: z.number(),
+    }),
+  }),
+  outputSchema: formattedDataSchema,
+  execute: async ({ context }) => {
+    const { validatedData } = context;
+
+    // シンプルなユーザーIDを生成
+    const userId = `user_${Math.floor(Math.random() * 10000)}`;
+
+    // データのフォーマット
+    const ageGroup = validatedData.age < 30 ? "young-adult" : "adult";
+
+    return {
+      userId,
+      formattedData: {
+        email: validatedData.email,
+        displayName: validatedData.name,
+        ageGroup,
+      },
+    };
+  },
+});
+
+// ステップ3: ユーザープロフィールの作成
+const createUserProfile = new LegacyStep({
+  id: "createUserProfile",
+  inputSchema: z.object({
+    userId: z.string(),
+    formattedData: z.object({
+      email: z.string(),
+      displayName: z.string(),
+      ageGroup: z.string(),
+    }),
+  }),
+  outputSchema: profileSchema,
+  execute: async ({ context }) => {
+    const { userId, formattedData } = context;
+
+    // 実際のアプリケーションでは、ここでデータベースに保存します
+
+    return {
+      profile: {
+        id: userId,
+        ...formattedData,
+        createdAt: new Date().toISOString(),
+      },
+    };
+  },
+});
+
+// 変数マッピングを使用したワークフローの構築
+registrationWorkflow
+  // 最初のステップはトリガーからデータを取得
+  .step(validateInput, {
+    variables: {
+      email: { step: "trigger", path: "email" },
+      name: { step: "trigger", path: "name" },
+      age: { step: "trigger", path: "age" },
+    },
+  })
+  // 前のステップで検証されたデータを使用してユーザーデータをフォーマット
+  .then(formatUserData, {
+    variables: {
+      validatedData: { step: validateInput, path: "validatedData" },
+    },
+    when: {
+      ref: { step: validateInput, path: "isValid" },
+      query: { $eq: true },
+    },
+  })
+  // フォーマットステップのデータを使用してプロフィールを作成
+  .then(createUserProfile, {
+    variables: {
+      userId: { step: formatUserData, path: "userId" },
+      formattedData: { step: formatUserData, path: "formattedData" },
+    },
+  })
+  .commit();
+
+export default registrationWorkflow;
+```
+
+
+<div id="how-to-use-this-example">
+  ## この例の使い方
+</div>
+
+1. 上記のとおりにファイルを作成する
+2. Mastra インスタンスにワークフローを登録する
+3. ワークフローを実行する:
+
+```bash
+curl --location 'http://localhost:4111/api/workflows/user-registration/start-async' \
+     --header 'Content-Type: application/json' \
+     --data '{
+       "email": "user@example.com",
+       "name": "John Doe",
+       "age": 25
+     }'
+```
+
+
+<div id="key-takeaways">
+  ## 重要なポイント
+</div>
+
+この例では、ワークフロー変数に関する重要な概念をいくつか示します:
+
+1. **データマッピング**: 変数はデータをあるステップから別のステップへ受け渡し、明確なデータフローを形成します。
+
+2. **パスアクセス**: `path` プロパティは、ステップの出力のどの部分を利用するかを指定します。
+
+3. **条件付き実行**: `when` プロパティにより、前のステップの出力に基づいてステップを条件付きで実行できます。
+
+4. **型安全性**: 各ステップは型安全性のために入力・出力スキーマを定義し、ステップ間で受け渡されるデータが適切に型付けされていることを保証します。
+
+5. **明示的なデータ依存関係**: 入力スキーマを定義し、変数マッピングを用いることで、ステップ間のデータ依存関係が明確かつ明示的になります。
+
+ワークフロー変数の詳細については、[Workflow Variables のドキュメント](/docs/workflows-legacy/variables)を参照してください。
+
+<div id="workflows-legacy">
+  ## ワークフロー（レガシー）
+</div>
+
+以下のリンクは、レガシー版ワークフローの例を解説するドキュメントです：
+
+- [シンプルなワークフローの作成（レガシー）](/examples/workflows_legacy/creating-a-workflow)
+- [順次ステップのワークフロー（レガシー）](/examples/workflows_legacy/sequential-steps)
+- [ステップの並列実行（レガシー）](/examples/workflows_legacy/parallel-steps)
+- [分岐パス（レガシー）](/examples/workflows_legacy/branching-paths)
+- [条件分岐付きワークフロー（レガシー・実験的）](/examples/workflows_legacy/conditional-branching)
+- [ワークフロー（レガシー）からのエージェント呼び出し](/examples/workflows_legacy/calling-agent)
+- [ツールをワークフローのステップとして使用（レガシー）](/examples/workflows_legacy/using-a-tool-as-a-step)
+- [循環依存関係のあるワークフロー（レガシー）](/examples/workflows_legacy/cyclical-dependencies)
+- [Human-in-the-Loop ワークフロー（レガシー）](/examples/workflows_legacy/human-in-the-loop)
+- [一時停止と再開に対応したワークフロー（レガシー）](/examples/workflows_legacy/suspend-and-resume)

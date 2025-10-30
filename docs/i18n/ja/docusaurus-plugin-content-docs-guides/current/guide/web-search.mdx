@@ -1,0 +1,290 @@
+---
+title: "ガイド：ウェブを検索できるエージェントの作成 | Mastra ガイド"
+description: "ウェブを検索できるエージェントを作成するためのステップバイステップガイド。"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+
+<div id="building-an-agent-that-can-search-the-web">
+  # ウェブ検索ができるエージェントの構築
+</div>
+
+ウェブ検索エージェントを構築する際には、主に次の2つの方針が考えられます。
+
+1. **LLMのネイティブ検索ツールを使う**: 一部の言語モデルには、そのまま使える統合型のウェブ検索機能が備わっています。
+2. **カスタム検索ツールを実装する**: 検索プロバイダーのAPIと独自に連携し、クエリの処理と結果の取得を行います。
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+- Node.js `v20.0` 以降がインストールされていること
+- 対応する[Model Provider](/models)の API キー
+- 既存の Mastra プロジェクト（新規プロジェクトのセットアップは[インストールガイド](/docs/getting-started/installation)を参照）
+
+<div id="using-native-search-tools">
+  ## ネイティブ検索ツールを使う
+</div>
+
+一部の LLM プロバイダーには、追加の API 連携なしでそのまま使える組み込みのウェブ検索機能があります。OpenAI の GPT-4o-mini と Google の Gemini 2.5 Flash は、いずれも生成中にモデルが呼び出せるネイティブ検索ツールを提供しています。
+
+<Steps>
+
+<StepItem title="依存関係をインストールする">
+
+依存関係をインストールする
+
+<Tabs>
+  <TabItem value="openai" label="Open AI">
+    ```bash copy npm install @ai-sdk/openai ```
+  </TabItem>
+  <TabItem value="gemini" label="Gemini">
+    ```bash copy npm install @ai-sdk/google ```
+  </TabItem>
+</Tabs>
+
+</StepItem>
+
+<StepItem title="エージェントを定義する">
+
+新しいファイル `src/mastra/agents/searchAgent.ts` を作成し、エージェントを定義します:
+
+<Tabs>
+    <TabItem value="openai" label="Open AI">
+
+    ```ts copy title="src/mastra/agents/searchAgent.ts"
+    import { Agent } from "@mastra/core/agent";
+
+    export const searchAgent = new Agent({
+        name: "Search Agent",
+        instructions:
+            "You are a search agent that can search the web for information.",
+        model: 'openai/gpt-4o-mini',
+    });
+    ```
+
+    </TabItem>
+    <TabItem value="gemini" label="Gemini">
+
+    ```ts copy title="src/mastra/agents/searchAgent.ts"
+    import { Agent } from "@mastra/core/agent";
+
+    export const searchAgent = new Agent({
+        name: "Search Agent",
+        instructions:
+            "You are a search agent that can search the web for information.",
+        model: 'google/gemini-2.5-flash',
+    });
+    ```
+
+    </TabItem>
+
+</Tabs>
+
+</StepItem>
+
+<StepItem title="ツールをセットアップする">
+
+ツールをセットアップします:
+
+<Tabs>
+    <TabItem value="openai" label="Open AI">
+
+    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-11}
+    import { openai } from "@ai-sdk/openai";
+    import { Agent } from "@mastra/core/agent";
+
+    export const searchAgent = new Agent({
+        name: "Search Agent",
+        instructions:
+            "You are a search agent that can search the web for information.",
+        model: 'openai/gpt-4o-mini',
+        tools: {
+            webSearch: openai.tools.webSearch()
+        }
+    });
+    ```
+
+    </TabItem>
+    <TabItem value="gemini" label="Gemini">
+
+    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-11}
+    import { google } from "@ai-sdk/google";
+    import { Agent } from "@mastra/core/agent";
+
+    export const searchAgent = new Agent({
+        name: "Search Agent",
+        instructions:
+            "You are a search agent that can search the web for information.",
+        model: 'google/gemini-2.5-flash',
+        tools: {
+            webSearch: google.tools.googleSearch()
+        }
+    });
+    ```
+
+    </TabItem>
+
+</Tabs>
+
+</StepItem>
+
+<StepItem title="エージェントを Mastra に登録する">
+
+`src/mastra/index.ts` ファイルでエージェントを登録します:
+
+```ts copy title="src/mastra/index.ts" {2, 5}
+import { Mastra } from "@mastra/core";
+import { searchAgent } from "./agents/searchAgent";
+
+export const mastra = new Mastra({
+  agents: { searchAgent },
+});
+```
+
+</StepItem>
+
+<StepItem title="エージェントをテストする">
+
+Mastra の [Playground](/docs/getting-started/studio) で `mastra dev` コマンドを使ってエージェントをテストできます:
+
+```bash copy
+mastra dev
+```
+
+Playground で「Search Agent」に移動し、次のように質問してください: “What happened last week in AI news?”
+
+</StepItem>
+
+</Steps>
+
+<div id="using-search-apis">
+  ## Search API の使用
+</div>
+
+検索動作をより細かく制御するには、外部の検索 API をカスタムツールとして統合できます。[Exa](https://exa.ai/) は AI アプリケーション向けに特化した検索エンジンで、セマンティック検索、設定可能なフィルター（カテゴリ、ドメイン、日付範囲）、およびページ全文の取得機能を提供します。検索 API は Mastra のツールでラップされ、入力スキーマ、出力形式、実行ロジックを定義します。
+
+<Steps>
+
+<StepItem title="Install dependencies">
+
+依存関係をインストールする
+
+```bash copy
+npm install exa-js
+```
+
+</StepItem>
+
+<StepItem title="Define the Agent">
+
+新しいファイル `src/mastra/agents/searchAgent.ts` を作成し、エージェントを定義します:
+
+```ts copy title="src/mastra/agents/searchAgent.ts"
+import { Agent } from "@mastra/core/agent";
+
+export const searchAgent = new Agent({
+  name: "Search Agent",
+  instructions:
+    "You are a search agent that can search the web for information.",
+  model: "openai/gpt-4o-mini",
+});
+```
+
+</StepItem>
+
+<StepItem title="Setup the tool">
+
+ツールをセットアップする
+
+```ts copy title="src/mastra/tools/searchTool.ts"
+import { createTool } from "@mastra/core/tools";
+import z from "zod";
+import Exa from "exa-js";
+
+export const exa = new Exa(process.env.EXA_API_KEY);
+
+export const webSearch = createTool({
+  id: "exa-web-search",
+  description: "Search the web",
+  inputSchema: z.object({
+    query: z.string().min(1).max(50).describe("The search query"),
+  }),
+  outputSchema: z.array(
+    z.object({
+      title: z.string().nullable(),
+      url: z.string(),
+      content: z.string(),
+      publishedDate: z.string().optional(),
+    }),
+  ),
+  execute: async ({ context }) => {
+    const { results } = await exa.searchAndContents(context.query, {
+      livecrawl: "always",
+      numResults: 2,
+    });
+
+    return results.map((result) => ({
+      title: result.title,
+      url: result.url,
+      content: result.text.slice(0, 500),
+      publishedDate: result.publishedDate,
+    }));
+  },
+});
+```
+
+</StepItem>
+
+<StepItem title="Add to your Agent">
+
+エージェントに追加する
+
+```ts copy title="src/mastra/agents/searchAgent.ts"
+import { webSearch } from "./tools/searchTool";
+
+export const searchAgent = new Agent({
+  name: "Search Agent",
+  instructions:
+    "You are a search agent that can search the web for information.",
+  model: "openai/gpt-4o-mini",
+  tools: {
+    webSearch,
+  },
+});
+```
+
+</StepItem>
+
+<StepItem title="Register the Agent with Mastra">
+
+`src/mastra/index.ts` ファイルでエージェントを登録します:
+
+```ts copy title="src/mastra/index.ts" {2, 5}
+import { Mastra } from "@mastra/core";
+import { searchAgent } from "./agents/searchAgent";
+
+export const mastra = new Mastra({
+  agents: { searchAgent },
+});
+```
+
+</StepItem>
+
+<StepItem title="Test your agent">
+
+Mastra の [Playground](/docs/getting-started/studio) で `mastra dev` コマンドを使ってエージェントをテストできます:
+
+```bash copy
+mastra dev
+```
+
+Playground 内で「Search Agent」に移動し、次のように質問してください: “What happened last week in AI news?”
+
+</StepItem>
+
+</Steps>

@@ -1,0 +1,236 @@
+---
+title: "エラー処理 | ワークフロー | Mastra ドキュメント"
+description: "Mastra のワークフローで、ステップの再試行、条件分岐、監視を活用したエラー処理方法を学びます。"
+---
+
+<div id="error-handling">
+  # エラーハンドリング
+</div>
+
+Mastra には、一時的なエラーで失敗したワークフローやステップを対象にした再試行機構が組み込まれています。これは、外部サービスや一時的に利用不能となる可能性のあるリソースとやり取りするステップで特に有用です。
+
+<div id="workflow-level-using-retryconfig">
+  ## ワークフローレベルでの `retryConfig` の使用
+</div>
+
+ワークフローレベルでリトライを設定でき、ワークフロー内のすべてのステップに適用されます。
+
+```typescript {8-11} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  retryConfig: {
+    attempts: 5,
+    delay: 2000
+  }
+})
+  .then(step1)
+  .commit();
+```
+
+
+<div id="step-level-using-retries">
+  ## `retries` を使用したステップ単位の設定
+</div>
+
+各ステップごとに `retries` プロパティでリトライを設定できます。これにより、そのステップに限りワークフロー全体のリトライ設定が上書きされます。
+
+```typescript {17} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  // ...
+  execute: async () => {
+    const response = await // ...
+
+    if (!response.ok) {
+      throw new Error('エラー');
+    }
+
+    return {
+      value: ""
+    };
+  },
+  retries: 3
+});
+```
+
+
+<div id="conditional-branching">
+  ## 条件分岐
+</div>
+
+条件ロジックを使って、前のステップの成否に応じた代替のワークフロー経路を作成できます。
+
+```typescript {15,19,33-34} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  // ...
+  execute: async () => {
+    try {
+      const response = await // ...
+
+      if (!response.ok) {
+        throw new Error('error');
+      }
+
+      return {
+        status: "ok"
+      };
+    } catch (error) {
+      return {
+        status: "error"
+      };
+    }
+  }
+});
+
+const step2 = createStep({...});
+const fallback = createStep({...});
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .branch([
+    [async ({ inputData: { status } }) => status === "ok", step2],
+    [async ({ inputData: { status } }) => status === "error", fallback]
+  ])
+  .commit();
+```
+
+
+<div id="check-previous-step-results">
+  ## 前のステップの結果を確認する
+</div>
+
+`getStepResult()` を使って、前のステップの結果を確認します。
+
+```typescript {10} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+
+const step2 = createStep({
+  // ...
+  execute: async ({ getStepResult }) => {
+
+    const step1Result = getStepResult(step1);
+
+    return {
+      value: ""
+    };
+  }
+});
+```
+
+
+<div id="exiting-early-with-bail">
+  ## `bail()` で早期終了する
+</div>
+
+ステップ内で `bail()` を使うと、成功として早期終了できます。指定したペイロードがステップの出力として返され、ワークフローの実行が終了します。
+
+```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  id: 'step1',
+  execute: async ({ bail }) => {
+    return bail({ result: 'bailed' });
+  },
+  inputSchema: z.object({ value: z.string() }),
+  outputSchema: z.object({ result: z.string() }),
+});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .commit();
+```
+
+
+<div id="exiting-early-with-error">
+  ## `Error()` で早期終了する
+</div>
+
+エラーで終了するには、ステップ内で `throw new Error()` を使用します。
+
+```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  id: 'step1',
+  execute: async () => {
+    throw new Error('error');
+  },
+  inputSchema: z.object({ value: z.string() }),
+  outputSchema: z.object({ result: z.string() }),
+});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .commit();
+```
+
+
+<div id="monitor-errors-with-watch">
+  ## `watch()` でエラーを監視する
+</div>
+
+`watch` メソッドを使って、ワークフローのエラーを監視できます。
+
+```typescript {11} title="src/test-workflow.ts" showLineNumbers copy
+import { mastra } from "../src/mastra";
+
+const workflow = mastra.getWorkflow("testWorkflow");
+const run = await workflow.createRunAsync();
+
+run.watch((event) => {
+  const {
+    payload: { currentStep },
+  } = event;
+
+  console.log(currentStep?.payload?.status);
+});
+```
+
+## Monitor errors with `stream()`
+
+You can monitor workflows for errors using `stream`:
+
+```typescript {11} title="src/test-workflow.ts" showLineNumbers copy
+import { mastra } from "../src/mastra";
+
+const workflow = mastra.getWorkflow("testWorkflow");
+
+const run = await workflow.createRunAsync();
+
+const stream = await run.stream({
+  inputData: {
+    value: "初期データ",
+  },
+});
+
+for await (const chunk of stream.stream) {
+  console.log(chunk.payload.output.stats);
+}
+```
+
+
+<div id="related">
+  ## 関連情報
+</div>
+
+- [制御フロー](./control-flow)
+- [条件分岐](./control-flow#conditional-logic-with-branch)
+- [ワークフローの実行](/examples/workflows_legacy/creating-a-workflow)

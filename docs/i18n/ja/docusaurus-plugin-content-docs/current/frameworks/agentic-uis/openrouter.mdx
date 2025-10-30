@@ -1,0 +1,189 @@
+---
+title: "Mastra で OpenRouter を使う | Frameworks | Mastra ドキュメント"
+description: "OpenRouter を Mastra に統合する方法を学ぶ"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+
+<div id="use-openrouter-with-mastra">
+  # Mastra で OpenRouter を使う
+</div>
+
+OpenRouter 上で利用可能な多様なモデルを活用するために、Mastra と OpenRouter を統合します。
+
+<Steps>
+
+<StepItem>
+
+Mastra を始める最も簡単な方法は、`mastra` CLI で新しいプロジェクトを初期化することです:
+
+```bash copy
+npx create-mastra@latest
+```
+
+プロジェクト設定のためのプロンプトが表示されます。次のように選択します:
+
+- プロジェクト名: my-mastra-openrouter-app
+- コンポーネント: Agents（推奨）
+- 既定のプロバイダー: OpenAI を選択（推奨）— OpenRouter は後で手動設定します
+- 必要に応じてサンプルコードを含める
+
+</StepItem>
+
+<StepItem>
+
+`create-mastra` でプロジェクト作成後、プロジェクトのルートに `.env` ファイルが生成されます。
+セットアップ時に OpenAI を選んだため、OpenRouter は手動で設定します:
+
+```bash title=".env" copy
+OPENROUTER_API_KEY=
+```
+
+プロジェクトから `@ai-sdk/openai` パッケージをアンインストールします:
+
+```bash copy
+npm uninstall @ai-sdk/openai
+```
+
+続いて、`@openrouter/ai-sdk-provider` パッケージをインストールします:
+
+```bash copy
+npm install @openrouter/ai-sdk-provider
+```
+
+</StepItem>
+
+<StepItem>
+
+エージェントが OpenRouter を使うように設定します。
+
+```typescript title="src/mastra/agents/assistant.ts" copy showLineNumbers {4-6,11}
+import { Agent } from "@mastra/core/agent";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+
+const openrouter = createOpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+export const assistant = new Agent({
+  name: "assistant",
+  instructions: "You are a helpful assistant.",
+  model: openrouter("anthropic/claude-sonnet-4"),
+});
+```
+
+エージェントを Mastra インスタンスに登録するのを忘れないでください:
+
+```typescript title="src/mastra/index.ts" copy showLineNumbers {4}
+import { assistant } from "./agents/assistant";
+
+export const mastra = new Mastra({
+  agents: { assistant },
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+```bash copy
+npm run dev
+```
+
+これで Mastra の開発サーバーが起動します。
+
+プレイグラウンドは [http://localhost:4111](http://localhost:4111) で、または Mastra API の [http://localhost:4111/api/agents/assistant/stream](http://localhost:4111/api/agents/assistant/stream) 経由でも、エージェントをテストできます。
+
+</StepItem>
+
+</Steps>
+
+<div id="advanced-configuration">
+  ## 高度な設定
+</div>
+
+OpenRouter へのリクエストをより柔軟に制御するために、追加の設定オプションを指定できます。
+
+<div id="provider-wide-options">
+  ### プロバイダー共通のオプション:
+</div>
+
+OpenRouter のプロバイダーに対して、プロバイダー共通のオプションを渡せます。
+
+```typescript title="src/mastra/agents/assistant.ts" {6-10} copy showLineNumbers
+import { Agent } from "@mastra/core/agent";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+
+const openrouter = createOpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY,
+  extraBody: {
+    reasoning: {
+      max_tokens: 10,
+    },
+  },
+});
+
+export const assistant = new Agent({
+  name: "assistant",
+  instructions: "あなたは親切なアシスタントです。",
+  model: openrouter("anthropic/claude-sonnet-4"),
+});
+```
+
+
+<div id="model-specific-options">
+  ### モデル固有のオプション:
+</div>
+
+OpenRouter のプロバイダーにモデル固有のオプションを渡せます:
+
+```typescript title="src/mastra/agents/assistant.ts" {11-17} copy showLineNumbers
+import { Agent } from "@mastra/core/agent";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+
+const openrouter = createOpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+export const assistant = new Agent({
+  name: "assistant",
+  instructions: "あなたは親切なアシスタントです。",
+  model: openrouter("anthropic/claude-sonnet-4", {
+    extraBody: {
+      reasoning: {
+        max_tokens: 10,
+      },
+    },
+  }),
+});
+```
+
+
+<div id="provider-specific-options">
+  ### プロバイダー固有のオプション:
+</div>
+
+OpenRouter のプロバイダーに、プロバイダー固有のオプションを渡せます:
+
+```typescript copy showLineNumbers {7-12}
+// プロバイダー固有のオプションを使用してレスポンスを取得
+const response = await assistant.generate([
+  {
+    role: "system",
+    content:
+      "あなたはシェフ・ミシェルです。ケトジェニック(ケト)ダイエットを専門とする料理の専門家です...",
+    providerOptions: {
+      // プロバイダー固有のオプション - キーは 'anthropic' または 'openrouter' を指定可能
+      anthropic: {
+        cacheControl: { type: "ephemeral" },
+      },
+    },
+  },
+  {
+    role: "user",
+    content: "ケトの朝食を提案してもらえますか?",
+  },
+]);
+```

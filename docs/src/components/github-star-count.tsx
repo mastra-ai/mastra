@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 
 const STORAGE_KEY = "github-stars-cache";
 const CACHE_DURATION = 1000 * 60 * 60; // 1 hour
@@ -68,10 +69,20 @@ const fetchGitHubStars = async (): Promise<number> => {
 };
 
 export const GithubStarCount = () => {
+  const queryClient = useQueryClient();
+
+  // Ensure SSR and first client render match: no localStorage reads pre-hydration.
+  useEffect(() => {
+    const cached = getFromLocalStorage();
+    if (typeof cached === "number") {
+      queryClient.setQueryData(["github-stars"], cached);
+    }
+  }, [queryClient]);
+
   const { data: stars = 0, isLoading } = useQuery({
     queryKey: ["github-stars"],
     queryFn: fetchGitHubStars,
-    initialData: getFromLocalStorage,
+    // Avoid using initialData from localStorage during hydration to prevent mismatch
     staleTime: CACHE_DURATION,
     refetchOnWindowFocus: false,
   });

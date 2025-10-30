@@ -1,0 +1,110 @@
+---
+title: "LangSmith Exporter | AI トレーシング | オブザーバビリティ | Mastra ドキュメント"
+description: "LLM の可観測性と評価のために、AI トレースを LangSmith に送信する"
+---
+
+<div id="langsmith-exporter">
+  # LangSmith エクスポーター
+</div>
+
+[LangSmith](https://smith.langchain.com/) は、LangChain の LLM アプリケーションを監視・評価するためのプラットフォームです。LangSmith エクスポーターは AI のトレースを LangSmith に送信し、モデルの性能に関する洞察、デバッグ機能、評価ワークフローを提供します。
+
+<div id="when-to-use-langsmith">
+  ## LangSmith を使うべきとき
+</div>
+
+LangSmith は次のような場合に最適です:
+
+- **LangChain エコシステムとの統合** - LangChain アプリケーションのネイティブサポート
+- **デバッグとテスト** - 詳細なトレースの可視化とリプレイ
+- **評価パイプライン** - 組み込みの評価とデータセット管理
+- **プロンプトのバージョン管理** - プロンプトのバリエーションの追跡と比較
+- **コラボレーション機能** - チーム用ワークスペースと共有プロジェクト
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash npm2yarn
+npm install @mastra/langsmith
+```
+
+
+<div id="configuration">
+  ## 設定
+</div>
+
+<div id="prerequisites">
+  ### 前提条件
+</div>
+
+1. **LangSmith アカウント**: [smith.langchain.com](https://smith.langchain.com) で登録
+2. **API キー**: LangSmith の「Settings」→「API Keys」で API キーを作成
+3. **環境変数**: 資格情報を設定
+
+```bash title=".env"
+LANGSMITH_API_KEY=ls-xxxxxxxxxxxx
+LANGSMITH_BASE_URL=https://api.smith.langchain.com  # セルフホスト環境では省略可能
+```
+
+
+<div id="basic-setup">
+  ### 基本設定
+</div>
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { LangSmithExporter } from "@mastra/langsmith";
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      langsmith: {
+        serviceName: "my-service",
+        exporters: [
+          new LangSmithExporter({
+            apiKey: process.env.LANGSMITH_API_KEY,
+          }),
+        ],
+      },
+    },
+  },
+});
+```
+
+
+<div id="configuration-options">
+  ## 設定項目
+</div>
+
+<div id="complete-configuration">
+  ### 完全な設定
+</div>
+
+```typescript
+new LangSmithExporter({
+  // 必須の認証情報
+  apiKey: process.env.LANGSMITH_API_KEY!,
+
+  // オプション設定
+  apiUrl: process.env.LANGSMITH_BASE_URL, // デフォルト: https://api.smith.langchain.com
+  callerOptions: {
+    // HTTPクライアントオプション
+    timeout: 30000, // リクエストタイムアウト(ミリ秒)
+    maxRetries: 3, // 再試行回数
+  },
+  logLevel: "info", // 診断ログ: debug | info | warn | error
+
+  // LangSmith固有のオプション
+  hideInputs: false, // UIで入力データを非表示
+  hideOutputs: false, // UIで出力データを非表示
+});
+```
+
+
+<div id="related">
+  ## 関連情報
+</div>
+
+- [AI トレーシング概要](/docs/observability/ai-tracing/overview)
+- [LangSmith ドキュメント](https://docs.smith.langchain.com/)

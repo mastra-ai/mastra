@@ -1,0 +1,140 @@
+---
+title: "リファレンス: run.watch() | 旧式ワークフロー | Mastra ドキュメント"
+description: ワークフローで使用する `.watch()` メソッドのドキュメント。ワークフロー実行の状態を監視します。
+---
+
+<div id="runwatch">
+  # run.watch()
+</div>
+
+`.watch()` 関数は、mastra の実行（run）の状態変化を購読し、実行の進捗を監視して状態更新に応答できるようにします。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript
+import { LegacyWorkflow } from "@mastra/core/workflows/legacy";
+
+const workflow = new LegacyWorkflow({
+  name: "document-processor",
+});
+
+const run = workflow.createRun();
+
+// Subscribe to state changes
+const unsubscribe = run.watch(({ results, activePaths }) => {
+  console.log("結果:", results);
+  console.log("アクティブなパス:", activePaths);
+});
+
+// 状態変更を監視する
+await run.start({
+  input: { text: "このドキュメントを処理してください" },
+});
+
+// ワークフローを実行
+// 監視を停止
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "callback",
+      type: "(state: LegacyWorkflowState) => void",
+      description: "ワークフローの状態が変化するたびに呼び出される関数",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="legacyworkflowstate-properties">
+  ### LegacyWorkflowState のプロパティ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "results",
+      type: "Record<string, any>",
+      description: "完了したワークフローステップの出力結果",
+      isOptional: false,
+    },
+    {
+      name: "activePaths",
+      type: "Map<string, { status: string; suspendPayload?: any; stepPath: string[] }>",
+      description: "各ステップの現在の状態",
+      isOptional: false,
+    },
+    {
+      name: "runId",
+      type: "string",
+      description: "ワークフロー実行のID",
+      isOptional: false,
+    },
+    {
+      name: "timestamp",
+      type: "number",
+      description: "ワークフロー実行時のタイムスタンプ",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "unsubscribe",
+      type: "() => void",
+      description: "ワークフローの状態変化の監視を停止する関数",
+    },
+  ]}
+/>
+
+<div id="additional-examples">
+  ## 追加例
+</div>
+
+特定のステップの完了を監視する:
+
+```typescript
+run.watch(({ results, activePaths }) => {
+  if (activePaths.get("processDocument")?.status === "completed") {
+    console.log(
+      "ドキュメント処理の出力：",
+      results["processDocument"].output,
+    );
+  }
+});
+```
+
+エラー処理:
+
+```typescript
+run.watch(({ results, activePaths }) => {
+  if (activePaths.get("processDocument")?.status === "failed") {
+    console.error(
+      "ドキュメント処理に失敗しました:",
+      results["processDocument"].error,
+    );
+    // エラー復旧ロジックを実装する
+  }
+});
+```
+
+
+<div id="related">
+  ### 関連
+</div>
+
+- [ワークフローの作成](./createRun)
+- [ステップの設定](./step-class)

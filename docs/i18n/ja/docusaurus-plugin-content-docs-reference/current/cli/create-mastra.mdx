@@ -1,0 +1,194 @@
+---
+title: "リファレンス: create-mastra | CLI | Mastra ドキュメント"
+description: 対話型のセットアップオプションで新しい Mastra プロジェクトを作成する create-mastra コマンドのリファレンス。
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+
+<div id="create-mastra">
+  # create-mastra
+</div>
+
+`create-mastra` コマンドは、新しいスタンドアロンの Mastra プロジェクトを**作成**します。専用ディレクトリに完全な Mastra 環境をスキャフォルドするために使用します。セットアッププロセスは、追加のフラグを指定してカスタマイズできます。
+
+<div id="usage">
+  ## 使い方
+</div>
+
+<Tabs>
+  <TabItem value="npm" label="npm">
+    ```bash copy
+    npx create-mastra@latest
+    ```
+  </TabItem>
+
+  <TabItem value="yarn" label="yarn">
+    ```bash copy
+    yarn dlx create-mastra@latest
+    ```
+  </TabItem>
+
+  <TabItem value="pnpm" label="pnpm">
+    ```bash copy
+    pnpm create mastra@latest
+    ```
+  </TabItem>
+
+  <TabItem value="bun" label="bun">
+    ```bash copy
+    bun create mastra@latest
+    ```
+  </TabItem>
+</Tabs>
+
+`create-mastra` はデフォルトでインタラクティブモードで実行されますが、コマンドライン引数でプロジェクト名やテンプレートを指定することもできます。
+
+<Tabs>
+  <TabItem value="npm" label="npm">
+    ```bash copy
+    npx create-mastra@latest my-mastra-project -- --template coding-agent
+    ```
+  </TabItem>
+
+  <TabItem value="yarn" label="yarn">
+    ```bash copy
+    yarn dlx create-mastra@latest --template coding-agent
+    ```
+  </TabItem>
+
+  <TabItem value="pnpm" label="pnpm">
+    ```bash copy
+    pnpm create mastra@latest --template coding-agent
+    ```
+  </TabItem>
+
+  <TabItem value="bun" label="bun">
+    ```bash copy
+    bun create mastra@latest --template coding-agent
+    ```
+  </TabItem>
+</Tabs>
+
+テンプレートの[一覧](https://mastra.ai/api/templates.json)を確認し、`--template` CLI フラグには `slug` を指定してください。
+
+任意の GitHub リポジトリをテンプレートとして使用することもできます（有効な Mastra プロジェクトである必要があります）:
+
+```bash
+npx create-mastra@latest my-mastra-project -- --template mastra-ai/template-coding-agent
+```
+
+
+<div id="cli-flags">
+  ## CLI フラグ
+</div>
+
+対話型プロンプトの代わりに、以下の CLI フラグを指定できます。
+
+<PropertiesTable
+  content={[
+    {
+      name: "--version",
+      type: "boolean",
+      description: "バージョン番号を出力",
+      isOptional: true,
+    },
+    {
+      name: "--project-name",
+      type: "string",
+      description:
+        "package.json およびプロジェクトディレクトリ名に使用されるプロジェクト名",
+      isOptional: true,
+    },
+    {
+      name: "--default",
+      type: "boolean",
+      description: "デフォルト設定でクイックスタート（src、OpenAI、サンプルなし）",
+      isOptional: true,
+    },
+    {
+      name: "--components",
+      type: "string",
+      description:
+        "コンポーネントのカンマ区切りリスト（agents、tools、workflows、scorers）",
+      isOptional: true,
+    },
+    {
+      name: "--llm",
+      type: "string",
+      description:
+        "デフォルトのモデルプロバイダー（openai、anthropic、groq、google、cerebras）",
+      isOptional: true,
+    },
+    {
+      name: "--llm-api-key",
+      type: "string",
+      description: "モデルプロバイダーの API キー",
+      isOptional: true,
+    },
+    {
+      name: "--example",
+      type: "boolean",
+      description: "サンプルコードを含める",
+      isOptional: true,
+    },
+    {
+      name: "--no-example",
+      type: "boolean",
+      description: "サンプルコードを含めない",
+      isOptional: true,
+    },
+    {
+      name: "--template",
+      type: "string",
+      description:
+        "テンプレートからプロジェクトを作成（テンプレート名、公開 GitHub URL、または空欄にして一覧から選択）",
+      isOptional: true,
+    },
+    {
+      name: "--timeout",
+      type: "number",
+      description:
+        "パッケージインストールのタイムアウト（設定可能、デフォルトは 60000 ms）",
+      isOptional: true,
+    },
+    {
+      name: "--dir",
+      type: "string",
+      description: "Mastra のソースコード出力先ディレクトリ（デフォルト: src/）",
+      isOptional: true,
+    },
+    {
+      name: "--mcp",
+      type: "string",
+      description:
+        "コードエディタ用 MCP サーバー（cursor、cursor-global、windsurf、vscode）",
+      isOptional: true,
+    },
+    {
+      name: "--help",
+      type: "boolean",
+      description: "コマンドのヘルプを表示",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="telemetry">
+  ## テレメトリー
+</div>
+
+Mastra はデフォルトで、OS、Mastra のバージョン、Node.js のバージョンなど、プロジェクトに関する匿名情報を収集します。収集内容は [ソースコード](https://github.com/mastra-ai/mastra/blob/main/packages/cli/src/analytics/index.ts) で確認できます。
+
+環境変数を設定することで、CLI のテレメトリーを無効化（オプトアウト）できます。
+
+```bash copy
+MASTRA_TELEMETRY_DISABLED=1
+```
+
+他の `mastra` コマンド使用中でも、これを設定できます:
+
+```bash copy
+MASTRA_TELEMETRY_DISABLED=1 npx create-mastra@latest
+```

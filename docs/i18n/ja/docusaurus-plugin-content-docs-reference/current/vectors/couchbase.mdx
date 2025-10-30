@@ -1,0 +1,390 @@
+---
+title: "リファレンス: Couchbase Vector Store | Vectors | Mastra ドキュメント"
+description: Mastra の CouchbaseVector クラスのドキュメント。Couchbase Vector Search を使ったベクトル検索を提供します。
+---
+
+<div id="couchbase-vector-store">
+  # Couchbase ベクターストア
+</div>
+
+`CouchbaseVector` クラスは、[Couchbase Vector Search](https://docs.couchbase.com/server/current/vector-search/vector-search.html) を利用してベクトル検索を実現します。これにより、Couchbase のコレクション内で効率的な類似検索とメタデータによるフィルタリングを行えます。
+
+<div id="requirements">
+  ## 必要条件
+</div>
+
+- **Couchbase Server 7.6.4 以降** または互換の Capella クラスター
+- Couchbase のデプロイで **Search Service が有効** になっていること
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash copy
+npm install @mastra/couchbase
+```
+
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy showLineNumbers
+import { CouchbaseVector } from "@mastra/couchbase";
+
+const store = new CouchbaseVector({
+  connectionString: process.env.COUCHBASE_CONNECTION_STRING,
+  username: process.env.COUCHBASE_USERNAME,
+  password: process.env.COUCHBASE_PASSWORD,
+  bucketName: process.env.COUCHBASE_BUCKET,
+  scopeName: process.env.COUCHBASE_SCOPE,
+  collectionName: process.env.COUCHBASE_COLLECTION,
+});
+```
+
+
+<div id="constructor-options">
+  ## コンストラクターのオプション
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "connectionString",
+      type: "string",
+      description: "Couchbase の接続文字列",
+    },
+    {
+      name: "username",
+      type: "string",
+      description: "Couchbase のユーザー名",
+    },
+    {
+      name: "password",
+      type: "string",
+      description: "Couchbase のパスワード",
+    },
+    {
+      name: "bucketName",
+      type: "string",
+      description: "使用する Couchbase のバケット名",
+    },
+    {
+      name: "scopeName",
+      type: "string",
+      description: "使用する Couchbase のスコープ名",
+    },
+    {
+      name: "collectionName",
+      type: "string",
+      description: "使用する Couchbase のコレクション名",
+    },
+    {
+      name: "options",
+      type: "CouchbaseClientOptions",
+      isOptional: true,
+      description: "任意の Couchbase クライアントオプション",
+    },
+  ]}
+/>
+
+<div id="methods">
+  ## 方法
+</div>
+
+<div id="createindex">
+  ### createIndex()
+</div>
+
+Couchbase に新しいベクターインデックスを作成します。
+
+> 注意: インデックスの作成は非同期で行われます。`createIndex` を呼び出した後は、クエリを実行する前に一定の待機時間を設けてください（小規模なデータセットでは通常 1〜5 秒、より大規模な場合はさらに長くなります）。本番環境では固定の遅延ではなく、ポーリングでインデックスの状態を確認する実装にしてください。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "作成するインデックス名",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "ベクターの次元数（使用する埋め込みモデルと一致している必要があります）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "類似検索に用いる距離メトリック",
+    },
+  ]}
+/>
+
+<div id="upsert">
+  ### upsert()
+</div>
+
+コレクション内のベクトルとそのメタデータを追加または更新します。
+
+> **注:** インデックスの作成前後いずれのタイミングでもデータをアップサートできます。`upsert` メソッドはインデックスの存在を前提としません。Couchbase では同一コレクションに対して複数の Search インデックスを作成できます。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "挿入先のインデックス名",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "埋め込みベクトルの配列",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "各ベクトルのメタデータ",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "ベクトル ID（省略時は自動生成）",
+    },
+  ]}
+/>
+
+<div id="query">
+  ### query()
+</div>
+
+類似ベクトルを検索します。
+
+> **警告:** 現在、`filter` と `includeVector` パラメータはサポートされていません。フィルタリングは結果取得後にクライアント側で行うか、Couchbase SDK の Search 機能を直接使用してください。ベクトル埋め込みを取得するには、Couchbase SDK を使用して ID でドキュメント全体を取得してください。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "検索対象のインデックス名",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "類似ベクトルを検索するためのクエリベクトル",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "返す結果数",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "メタデータによるフィルタ",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "結果にベクトルデータを含めるかどうか",
+    },
+    {
+      name: "minScore",
+      type: "number",
+      isOptional: true,
+      defaultValue: "0",
+      description: "最小類似度スコアのしきい値",
+    },
+  ]}
+/>
+
+<div id="describeindex">
+  ### describeIndex()
+</div>
+
+インデックスに関する情報を返します。
+
+<PropertiesTable
+  content={[
+{
+  name: "indexName",
+  type: "string",
+  description: "詳細を取得するインデックス名",
+},
+]}
+/>
+
+戻り値:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+
+<div id="deleteindex">
+  ### deleteIndex()
+</div>
+
+インデックスとそのデータをすべて削除します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除するインデックス名",
+    },
+  ]}
+/>
+
+<div id="listindexes">
+  ### listIndexes()
+</div>
+
+Couchbase バケット内のすべてのベクターインデックスを一覧します。
+
+Returns: `Promise<string[]>`
+
+<div id="updatevector">
+  ### updateVector()
+</div>
+
+指定したIDのベクターエントリを、新しいベクターデータやメタデータで更新します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクターを含むインデックス名",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "更新対象のベクターエントリのID",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "ベクターおよび/またはメタデータを含む更新データ",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      isOptional: true,
+      description: "更新後のベクターデータ",
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "更新後のメタデータ",
+    },
+  ]}
+/>
+
+<div id="deletevector">
+  ### deleteVector()
+</div>
+
+指定した ID のベクターエントリをインデックスから削除します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクターを含むインデックス名",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "削除するベクターエントリのID",
+    },
+  ]}
+/>
+
+<div id="disconnect">
+  ### disconnect()
+</div>
+
+Couchbase クライアントの接続を閉じます。ストアの使用が完了したら呼び出してください。
+
+<div id="response-types">
+  ## レスポンスタイプ
+</div>
+
+クエリ結果は次の形式で返されます：
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // includeVectorがtrueの場合のみ含まれる
+}
+```
+
+
+<div id="error-handling">
+  ## エラー処理
+</div>
+
+ストアはキャッチ可能な型付きエラーをスローします：
+
+```typescript copy
+try {
+  await store.query({
+    indexName: "my_index",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  // 特定のエラーケースを処理
+  if (error.message.includes("Invalid index name")) {
+    console.error(
+      "インデックス名は文字またはアンダースコアで始まり、有効な文字のみを含む必要があります。",
+    );
+  } else if (error.message.includes("Index not found")) {
+    console.error("指定されたインデックスは存在しません");
+  } else {
+    console.error("ベクトルストアエラー:", error.message);
+  }
+}
+```
+
+
+<div id="notes">
+  ## 注意事項
+</div>
+
+- **インデックス削除に関する注意:** Search インデックスを削除しても、関連する Couchbase コレクション内のベクターやドキュメントは削除されません。明示的に削除しない限り、データは残ります。
+- **必要な権限:** Couchbase ユーザーは、対象コレクションへの接続、ドキュメントの読み書き（`kv` ロール）、および Search インデックスの管理（該当するバケット/スコープ上の `search_admin` ロール）の権限を持っている必要があります。
+- **インデックス定義の詳細とドキュメント構造:** `createIndex` メソッドは、`embedding` フィールド（タイプ `vector`）と `content` フィールド（タイプ `text`）をインデックス化する Search インデックス定義を作成し、指定された `scopeName.collectionName` 内のドキュメントを対象にします。各ドキュメントは `embedding` フィールドにベクターを、`metadata` フィールドにメタデータを格納します。`metadata` に `text` プロパティが含まれる場合、その値はトップレベルの `content` フィールドにもコピーされ、テキスト検索用にインデックス化されます。
+- **レプリケーションと耐久性:** データの耐久性のために、Couchbase の組み込みのレプリケーションおよび永続化機能の利用を検討してください。効率的な検索を維持するため、インデックス統計を定期的に監視してください。
+
+<div id="limitations">
+  ## 制限事項
+</div>
+
+- インデックス作成の遅延により、作成直後のクエリには影響が出る可能性があります。
+- 取り込み時にベクトル次元は厳密には強制されません（次元の不一致はクエリ時にエラーになります）。
+- ベクトルの挿入やインデックスの更新は最終的整合性モデルです。書き込み直後に強い整合性は保証されません。
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [メタデータフィルター](../rag/metadata-filters)

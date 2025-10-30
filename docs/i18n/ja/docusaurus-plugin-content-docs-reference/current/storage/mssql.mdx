@@ -1,0 +1,132 @@
+---
+title: "リファレンス: MSSQL Storage | Storage | Mastra ドキュメント"
+description: Mastra における MSSQL ストレージ実装のドキュメントです。
+---
+
+<div id="mssql-storage">
+  # MSSQL ストレージ
+</div>
+
+MSSQL ストレージ実装は、Microsoft SQL Server データベースを用いた本番運用レベルのストレージソリューションを提供します。
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash copy
+npm install @mastra/mssql@latest
+```
+
+
+<div id="usage">
+  ## 使い方
+</div>
+
+```typescript copy showLineNumbers
+import { MSSQLStore } from "@mastra/mssql";
+
+const storage = new MSSQLStore({
+  connectionString: process.env.DATABASE_URL,
+});
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "connectionString",
+      type: "string",
+      description:
+        "MSSQL の接続文字列（例：mssql://user:pass@host:1433/dbname）",
+      isOptional: false,
+    },
+    {
+      name: "schemaName",
+      type: "string",
+      description:
+        "ストレージで使用するスキーマ名。未指定の場合は既定のスキーマが使用されます。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="constructor-examples">
+  ## コンストラクターの例
+</div>
+
+`MSSQLStore` は次の方法でインスタンス化できます：
+
+```ts
+import { MSSQLStore } from "@mastra/mssql";
+
+// 接続文字列のみを使用
+const store1 = new MSSQLStore({
+  connectionString: "mssql://user:password@localhost:1433/mydb",
+});
+
+// カスタムスキーマ名付きの接続文字列を使用
+const store2 = new MSSQLStore({
+  connectionString: "mssql://user:password@localhost:1433/mydb",
+  schemaName: "custom_schema", // 省略可
+});
+
+// 個別の接続パラメータを使用
+const store4 = new MSSQLStore({
+  server: "localhost",
+  port: 1433,
+  database: "mydb",
+  user: "user",
+  password: "password",
+});
+
+// schemaName を含む個別パラメータ
+const store5 = new MSSQLStore({
+  server: "localhost",
+  port: 1433,
+  database: "mydb",
+  user: "user",
+  password: "password",
+  schemaName: "custom_schema", // 省略可
+});
+```
+
+
+<div id="additional-notes">
+  ## 追記
+</div>
+
+<div id="schema-management">
+  ### スキーマ管理
+</div>
+
+ストレージ実装はスキーマの作成と更新を自動的に行います。以下のテーブルを作成します:
+
+- `mastra_workflow_snapshot`: ワークフローの状態および実行データを保存
+- `mastra_evals`: 評価結果およびメタデータを保存
+- `mastra_threads`: 会話スレッドを保存
+- `mastra_messages`: 個々のメッセージを保存
+- `mastra_traces`: テレメトリおよびトレースデータを保存
+- `mastra_scorers`: スコアリングおよび評価データを保存
+- `mastra_resources`: リソースの作業メモリデータを保存
+
+<div id="direct-database-and-pool-access">
+  ### データベースおよびプールへの直接アクセス
+</div>
+
+`MSSQLStore` は、mssql の接続プールをパブリックなフィールドとして公開しています：
+
+```typescript
+store.pool; // mssql接続プールインスタンス
+```
+
+これは、クエリの直接実行とカスタムなトランザクション管理を可能にします。これらのフィールドを使用する場合は次の点にご注意ください:
+
+* 接続やトランザクションの適切な扱いは利用者の責任です。
+* ストアを閉じる（`store.close()`）と、関連する接続プールが破棄されます。
+* 直接アクセスでは、MSSQLStore のメソッドが提供する追加のロジックや検証処理がスキップされます。
+
+このアプローチは、低レベルなアクセスが必要となる上級者向けのシナリオを想定しています。

@@ -5,6 +5,7 @@ import { type ReactNode } from "react";
 import { FeedbackTrigger } from "@site/src/components/feedback-trigger";
 import SubscribeForm from "@site/src/components/subscribe-form";
 import TOC from "@theme/TOC";
+import { T } from "gt-react";
 
 export default function DocItemTOCDesktop(): ReactNode {
   const { toc, frontMatter } = useDoc();
@@ -25,7 +26,9 @@ export default function DocItemTOCDesktop(): ReactNode {
           <path d="M17 6H3"></path>
           <path d="M21 12H3"></path>
         </svg>
-        <p className="text-sm mb-0!">On this page</p>
+        <T>
+          <p className="text-sm mb-0!">On this page</p>
+        </T>
       </div>
 
       <TOC

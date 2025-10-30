@@ -1,0 +1,220 @@
+---
+title: "リファレンス: ContextRelevancyMetric | Evals | Mastra ドキュメント"
+description: RAG パイプラインで取得したコンテキストの妥当性（関連性）を評価する Context Relevancy Metric のドキュメント。
+---
+
+<div id="contextrelevancymetric">
+  # ContextRelevancyMetric
+</div>
+
+:::info Scorers
+このドキュメントはレガシーの evals API を参照しています。最新のスコアラー機能については [Scorers](/docs/scorers/overview) をご覧ください。
+:::
+
+`ContextRelevancyMetric` クラスは、RAG（Retrieval-Augmented Generation）パイプラインにおけるリトリーバーの品質を、取得されたコンテキストが入力クエリにどれだけ関連しているかで評価します。LLM ベースの評価システムを用い、まずコンテキストから記述（ステートメント）を抽出し、その後それらの入力に対する関連性を判定します。
+
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { ContextRelevancyMetric } from "@mastra/evals/llm";
+
+// 評価用にモデルを設定する
+const model = openai("gpt-4o-mini");
+
+const metric = new ContextRelevancyMetric(model, {
+  context: [
+    "すべてのデータは保存時および転送時に暗号化されています",
+    "二要素認証は必須です",
+    "このプラットフォームは多言語対応です",
+    "当社のオフィスはサンフランシスコにあります",
+  ],
+});
+
+const result = await metric.measure(
+  "当社製品のセキュリティ機能は何ですか？",
+  "当社製品は暗号化を採用し、2FAを必須としています。",
+);
+
+console.log(result.score); // スコア（0〜1）
+console.log(result.info.reason); // 関連性評価の説明
+```
+
+
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      description:
+        "コンテキストの妥当性を評価するために使用するモデルの設定",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "ContextRelevancyMetricOptions",
+      description: "メトリクスの設定オプション",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="contextrelevancymetricoptions">
+  ### ContextRelevancyMetricOptions
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "scale",
+      type: "number",
+      description: "スコアの最大値",
+      isOptional: true,
+      defaultValue: "1",
+    },
+    {
+      name: "context",
+      type: "string[]",
+      description:
+        "応答の生成に用いる、検索で取得したコンテキスト文書の配列",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="measure-parameters">
+  ## measure() のパラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "元のクエリまたはプロンプト",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "評価対象の LLM の回答",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "コンテキスト関連度スコア（0 からのスケール、既定は 0〜1）",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "スコアの理由を含むオブジェクト",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description: "関連度評価の詳細な説明",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
+
+この指標は、取得したコンテキストがクエリにどれほど適合しているかを、二値の関連性分類で評価します。
+
+<div id="scoring-process">
+  ### スコアリング手順
+</div>
+
+1. コンテキストから文を抽出:
+   - コンテキストを意味のある単位に分割
+   - 意味関係を保持
+
+2. 文の関連性を評価:
+   - 各文をクエリに対して評価
+   - 関連する文を数える
+   - 関連度の比率を算出
+
+最終スコア: `(relevant_statements / total_statements) * scale`
+
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
+
+（スケールは0から、既定は0〜1）
+
+- 1.0: 完全に関連 - 取得されたコンテキストはすべて関連している
+- 0.7〜0.9: 高い関連性 - ほとんどのコンテキストが関連しており、無関係な部分は少ない
+- 0.4〜0.6: 中程度の関連性 - 関連・無関係のコンテキストが混在
+- 0.1〜0.3: 低い関連性 - ほとんどが無関係なコンテキスト
+- 0.0: 関連なし - 完全に無関係なコンテキスト
+
+<div id="example-with-custom-configuration">
+  ## カスタム設定の例
+</div>
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { ContextRelevancyMetric } from "@mastra/evals/llm";
+
+// 評価のためにモデルを設定する
+const model = openai("gpt-4o-mini");
+
+const metric = new ContextRelevancyMetric(model, {
+  scale: 100, // 0〜1 ではなく 0〜100 のスケールを使用
+  context: [
+    "ベーシックプランは月額 $10 です",
+    "プロプランは月額 $30 で高度な機能を含みます",
+    "エンタープライズプランはカスタム料金です",
+    "当社は 2020 年に設立されました",
+    "当社は世界各地にオフィスがあります",
+  ],
+});
+
+const result = await metric.measure(
+  "当社の料金プランは何ですか？",
+  "ベーシック、プロ、エンタープライズの各プランをご用意しています。",
+);
+
+// 出力例:
+// {
+//   score: 60,
+//   info: {
+//     reason: "5 つの記述のうち 3 つが料金プランに関連しています。会社の設立とオフィスの所在地に関する記述は、料金に関する質問とは関連しません。"
+//           company founding and office locations are not relevant to the pricing query."
+//   }
+// }
+```
+
+
+<div id="related">
+  ## 関連
+</div>
+
+- [コンテキスト リコール指標](./contextual-recall)
+- [コンテキスト精度指標](./context-precision)
+- [コンテキスト位置指標](./context-position)

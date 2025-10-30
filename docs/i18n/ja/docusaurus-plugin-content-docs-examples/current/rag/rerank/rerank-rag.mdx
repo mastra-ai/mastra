@@ -1,0 +1,225 @@
+---
+title: "例: ツールを用いた再ランキング結果 | RAG | Mastra ドキュメント"
+description: OpenAI の埋め込みと PGVector を用いたベクトル保存で、Mastra における再ランキング対応 RAG システムを実装する例。
+---
+
+import GithubLink from "@site/src/components/GithubLink";
+
+
+<div id="re-ranking-results-with-tools">
+  # ツールを使った再ランキング結果
+</div>
+
+この例では、Mastra のベクタークエリツールを使い、OpenAI の埋め込みと PGVector（ベクター保存）を組み合わせて、再ランキング対応の Retrieval-Augmented Generation（RAG）システムを実装する方法を示します。
+
+<div id="overview">
+  ## 概要
+</div>
+
+このシステムは、Mastra と OpenAI を用いて再ランキング付きの RAG を実装しています。主な処理は次のとおりです:
+
+1. 応答生成のために gpt-4o-mini を使った Mastra エージェントをセットアップする
+2. 再ランキング機能を備えたベクター検索ツールを作成する
+3. テキストドキュメントを小さなチャンクに分割し、埋め込みを生成する
+4. それらを PostgreSQL のベクターデータベースに保存する
+5. クエリに基づいて関連チャンクを取得し、再ランキングする
+6. Mastra エージェントで文脈に応じた応答を生成する
+
+<div id="setup">
+  ## セットアップ
+</div>
+
+<div id="environment-setup">
+  ### 環境設定
+</div>
+
+環境変数を必ず設定してください：
+
+```bash title=".env"
+OPENAI_API_KEY=your_openai_api_key_here
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+
+<div id="dependencies">
+  ### 依存関係
+</div>
+
+次に、必要な依存パッケージをインポートします。
+
+```typescript copy showLineNumbers title="index.ts"
+import { openai } from "@ai-sdk/openai";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { PgVector } from "@mastra/pg";
+import {
+  MDocument,
+  createVectorQueryTool,
+  MastraAgentRelevanceScorer,
+} from "@mastra/rag";
+import { embedMany } from "ai";
+```
+
+
+<div id="vector-query-tool-creation-with-re-ranking">
+  ## リランキング対応ベクタークエリツールの作成
+</div>
+
+@mastra/rag からインポートした createVectorQueryTool を使うと、ベクターデータベースにクエリを投げ、結果をリランキングするツールを作成できます。
+
+```typescript copy showLineNumbers{8} title="index.ts"
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
+  reranker: {
+    model: new MastraAgentRelevanceScorer(
+      "relevance-scorer",
+      openai("gpt-4o-mini"),
+    ),
+  },
+});
+```
+
+
+<div id="agent-configuration">
+  ## エージェントの設定
+</div>
+
+応答を処理する Mastra エージェントをセットアップします。
+
+```typescript copy showLineNumbers{17} title="index.ts"
+export const ragAgent = new Agent({
+  name: "RAG Agent",
+  instructions: `あなたは提供されたコンテキストに基づいて質問に答える有用なアシスタントです。回答は簡潔かつ関連性の高いものにしてください。
+    重要:質問に答える際は、ツールで提供されたコンテキストのみに基づいて回答してください。
+    コンテキストに質問への完全な回答に必要な情報が含まれていない場合は、その旨を明示的に述べてください。`,
+  model: openai("gpt-4o-mini"),
+  tools: {
+    vectorQueryTool,
+  },
+});
+```
+
+
+<div id="instantiate-pgvector-and-mastra">
+  ## PgVector と Mastra のインスタンス化
+</div>
+
+次のコンポーネントを使って、PgVector と Mastra をインスタンス化します:
+
+```typescript copy showLineNumbers{29} title="index.ts"
+const pgVector = new PgVector({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+});
+
+export const mastra = new Mastra({
+  agents: { ragAgent },
+  vectors: { pgVector },
+});
+
+const agent = mastra.getAgent("ragAgent");
+```
+
+
+<div id="document-processing">
+  ## ドキュメント処理
+</div>
+
+ドキュメントを作成し、チャンクに分割して処理します:
+
+```typescript copy showLineNumbers{38} title="index.ts"
+const doc1 = MDocument.fromText(`
+市場データは価格の抵抗線を示しています。
+テクニカルチャートは移動平均線を表示します。
+サポートラインが取引判断の指針となります。
+ブレイクアウトパターンがエントリーポイントを示します。
+価格変動が取引タイミングを決定します。
+
+野球カードは徐々に価値が上昇します。
+ルーキーカードはプレミアム価格で取引されます。
+カードの状態が再販価値に影響します。
+認証により偽造品の取引を防止します。
+グレーディングサービスがカードの品質を検証します。
+
+出来高分析により価格トレンドを確認します。
+スポーツカードは季節的な需要を追跡します。
+チャートパターンが値動きを予測します。
+ミント状態でカードの価値が2倍になります。
+抵抗線のブレイクが注文を発動します。
+希少カードは毎年価値が上昇します。
+`);
+
+const chunks = await doc1.chunk({
+  strategy: "recursive",
+  size: 150,
+  overlap: 20,
+  separator: "\n",
+});
+```
+
+
+<div id="creating-and-storing-embeddings">
+  ## 埋め込みの作成と保存
+</div>
+
+チャンクごとに埋め込みを生成し、ベクトルデータベースに保存します。
+
+```typescript copy showLineNumbers{66} title="index.ts"
+const { embeddings } = await embedMany({
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
+});
+
+const vectorStore = mastra.getVector("pgVector");
+await vectorStore.createIndex({
+  indexName: "embeddings",
+  dimension: 1536,
+});
+
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+});
+```
+
+
+<div id="querying-with-re-ranking">
+  ## リランキングを使ったクエリ実行
+</div>
+
+リランキングが結果にどう影響するかを確かめるため、いろいろなクエリを試してみてください。
+
+```typescript copy showLineNumbers{82} title="index.ts"
+const queryOne = "テクニカルトレーディング分析について説明してください";
+const answerOne = await agent.generate(queryOne);
+console.log("\n質問:", queryOne);
+console.log("回答:", answerOne.text);
+
+const queryTwo = "トレーディングカードの評価について説明してください";
+const answerTwo = await agent.generate(queryTwo);
+console.log("\n質問:", queryTwo);
+console.log("回答:", answerTwo.text);
+
+const queryThree = "市場の抵抗線をどのように分析しますか";
+const answerThree = await agent.generate(queryThree);
+console.log("\n質問:", queryThree);
+console.log("回答:", answerThree.text);
+```
+
+<br />
+
+<br />
+
+<hr className="dark:border-[#404040] border-gray-300" />
+
+<br />
+
+<br />
+
+<GithubLink
+  link={
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank-rag"
+}
+/>

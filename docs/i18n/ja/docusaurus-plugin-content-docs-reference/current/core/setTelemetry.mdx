@@ -1,0 +1,47 @@
+---
+title: "リファレンス: Mastra.setTelemetry() | Core | Mastra Docs"
+description: "Mastra の `Mastra.setTelemetry()` メソッドに関するドキュメント。すべてのコンポーネントのテレメトリー設定を一括で構成します。"
+---
+
+<div id="mastrasettelemetry">
+  # Mastra.setTelemetry()
+</div>
+
+`.setTelemetry()` メソッドは、Mastra インスタンス内のすべてのコンポーネントに対するテレメトリの設定を行うために使用します。このメソッドは、テレメトリ設定オブジェクトを1つ受け取ります。
+
+<div id="usage-example">
+  ## 使用例
+</div>
+
+```typescript copy
+mastra.setTelemetry({ export: { type: "console" } });
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "telemetry",
+      type: "OtelConfig",
+      description:
+        "すべてのコンポーネントに適用するテレメトリー設定オブジェクト。",
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+このメソッドは値を返しません。
+
+<div id="related">
+  ## 関連情報
+</div>
+
+- [Logging](/docs/observability/logging)
+- [PinoLogger](/reference/observability/logging/pino-logger)

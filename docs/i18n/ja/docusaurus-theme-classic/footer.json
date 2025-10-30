@@ -1,0 +1,66 @@
+{
+  "link.title.Developer": {
+    "message": "開発者",
+    "description": "フッター内で、title=Developer のフッターリンク列の見出し"
+  },
+  "link.title.Company": {
+    "message": "企業情報",
+    "description": "フッター内の、title=Company のフッターリンク列の見出し"
+  },
+  "link.title.Legal": {
+    "message": "リーガル",
+    "description": "フッター内の、title=Legal のフッターリンク列のタイトル"
+  },
+  "link.item.label.Docs": {
+    "message": "ドキュメント",
+    "description": "label=Docs のフッターリンク（/docs へのリンク）のラベル"
+  },
+  "link.item.label.Templates": {
+    "message": "テンプレート",
+    "description": "label=Templates のフッターリンク（https://mastra.ai/templates にリンク）のラベル"
+  },
+  "link.item.label.Principles of Building AI Agents": {
+    "message": "AIエージェント構築の原理",
+    "description": "label=Principles of Building AI Agents のフッターリンクで、https://mastra.ai/book にリンクするリンクのラベル"
+  },
+  "link.item.label.llms.txt": {
+    "message": "llms.txt",
+    "description": "label=llms.txt のフッターリンク（https://mastra.ai/llms.txt へのリンク）のラベル"
+  },
+  "link.item.label.llms-full.txt": {
+    "message": "llms-full.txt",
+    "description": "label=llms-full.txt のフッター内リンクのラベル（https://mastra.ai/llms-full.txt へのリンク）"
+  },
+  "link.item.label.MCP Registry Registry": {
+    "message": "MCP レジストリ",
+    "description": "label=MCP Registry Registry、https://mastra.ai/mcp-registry-registry にリンクするフッターリンクのラベル"
+  },
+  "link.item.label.Mastra Cloud Status": {
+    "message": "Mastra Cloud ステータス",
+    "description": "label=Mastra Cloud Status で、https://statuspage.incident.io/mastra-cloud にリンクするフッターリンクのラベル"
+  },
+  "link.item.label.GitHub": {
+    "message": "GitHub",
+    "description": "label=GitHub、https://github.com/mastra-ai/mastra へのリンクとなるフッターリンクのラベル"
+  },
+  "link.item.label.Discord": {
+    "message": "Discord",
+    "description": "label=Discord、https://discord.gg/BTYqqHKUrf にリンクするフッター内リンクのラベル"
+  },
+  "link.item.label.X": {
+    "message": "X",
+    "description": "ラベルがXで、https://x.com/mastra_ai にリンクするフッターリンクのラベル"
+  },
+  "link.item.label.YouTube": {
+    "message": "YouTube",
+    "description": "label=YouTube、https://www.youtube.com/@mastra-ai にリンクするフッターリンクのラベル"
+  },
+  "link.item.label.Privacy Policy": {
+    "message": "プライバシーポリシー",
+    "description": "label=Privacy Policy のフッターリンク（https://mastra.ai/privacy-policy へのリンク）のラベル"
+  },
+  "copyright": {
+    "message": "© 2025 Mastra",
+    "description": "フッターのコピーライト"
+  }
+}

@@ -1,0 +1,172 @@
+---
+title: "リファレンス: メモリ API | クライアント SDK | Mastra ドキュメント"
+description: client-js SDK を使って、Mastra で会話スレッドとメッセージ履歴を管理する方法を解説します。
+---
+
+<div id="memory-api">
+  # Memory API
+</div>
+
+Memory API は、Mastra の会話スレッドとメッセージ履歴を管理するためのメソッドを提供します。
+
+<div id="get-all-threads">
+  ### すべてのスレッドを取得
+</div>
+
+特定のリソースに紐づくメモリスレッドをすべて取得します。
+
+```typescript
+const threads = await mastraClient.getMemoryThreads({
+  resourceId: "resource-1",
+  agentId: "agent-1",
+});
+```
+
+
+<div id="create-a-new-thread">
+  ### 新規スレッドの作成
+</div>
+
+新しいメモリスレッドを作成します：
+
+```typescript
+const thread = await mastraClient.createMemoryThread({
+  title: "新規会話",
+  metadata: { category: "サポート" },
+  resourceId: "resource-1",
+  agentId: "agent-1",
+});
+```
+
+
+<div id="working-with-a-specific-thread">
+  ### 特定のスレッドを扱う
+</div>
+
+特定のメモリスレッドのインスタンスを取得します：
+
+```typescript
+const thread = mastraClient.getMemoryThread({ threadId: "thread-id", agentId: "agent-id" });
+```
+
+
+<div id="thread-methods">
+  ## スレッドのメソッド
+</div>
+
+<div id="get-thread-details">
+  ### スレッドの詳細を取得
+</div>
+
+特定のスレッドの詳細を取得します。
+
+```typescript
+const details = await thread.get();
+```
+
+
+<div id="update-thread">
+  ### スレッドの更新
+</div>
+
+スレッドのプロパティを更新します：
+
+```typescript
+const updated = await thread.update({
+  title: "更新後のタイトル",
+  metadata: { status: "解決済み" },
+  resourceId: "resource-1",
+});
+```
+
+
+<div id="delete-thread">
+  ### スレッドを削除
+</div>
+
+スレッドとそのメッセージを削除します：
+
+```typescript
+await thread.delete();
+```
+
+
+<div id="message-operations">
+  ## メッセージ操作
+</div>
+
+<div id="save-messages">
+  ### メッセージの保存
+</div>
+
+メッセージをメモリに保存します：
+
+```typescript
+const savedMessages = await mastraClient.saveMessageToMemory({
+  messages: [
+    {
+      role: "user",
+      content: "こんにちは！",
+      id: "1",
+      threadId: "thread-1",
+      createdAt: new Date(),
+      type: "text",
+      type: "text",
+  ],
+  agentId: "agent-1",
+});
+```
+
+
+<div id="retrieve-thread-messages">
+  ### スレッド メッセージの取得
+</div>
+
+メモリ スレッドに関連するメッセージを取得します。
+
+```typescript
+// スレッド内のすべてのメッセージを取得する
+const { messages } = await thread.getMessages();
+
+// 取得するメッセージ数を制限する
+const { messages } = await thread.getMessages({ limit: 10 });
+```
+
+
+<div id="delete-a-message">
+  ### メッセージを削除する
+</div>
+
+スレッドから特定のメッセージを削除します:
+
+```typescript
+const result = await thread.deleteMessage("message-id");
+// 戻り値: { success: true, message: "メッセージが正常に削除されました" }
+```
+
+
+<div id="delete-multiple-messages">
+  ### 複数のメッセージを削除
+</div>
+
+1 回の操作でスレッドから複数のメッセージを削除します。
+
+```typescript
+const result = await thread.deleteMessages([
+  "message-1",
+  "message-2",
+  "message-3",
+]);
+// 戻り値: { success: true, message: "3件のメッセージが削除されました" }
+```
+
+
+<div id="get-memory-status">
+  ### メモリの状態を取得
+</div>
+
+メモリシステムの状態を確認します。
+
+```typescript
+const status = await mastraClient.getMemoryStatus("agent-id");
+```

@@ -1,0 +1,100 @@
+---
+title: "ツールの使い方 | Tools & MCP | Mastra Docs"
+description: Mastra におけるツールの概要、エージェントへの追加方法、効果的なツール設計のベストプラクティスを解説します。
+---
+
+<div id="using-tools">
+  # ツールの使用
+</div>
+
+ツールは、エージェントが特定のタスクを実行したり、外部情報にアクセスしたりするために呼び出せる関数です。これにより、単なるテキスト生成を超えて、API、データベース、その他のシステムとやり取りする能力が拡張されます。
+
+各ツールは通常、次の項目を定義します:
+
+- **入力:** ツールの実行に必要な情報（`inputSchema` で定義され、Zod が用いられることが多い）。
+- **出力:** ツールが返すデータの構造（`outputSchema` で定義）。
+- **実行ロジック:** ツールの処理を行うコード。
+- **説明:** ツールの機能と使用すべき状況をエージェントに伝えるためのテキスト。
+
+<div id="creating-tools">
+  ## ツールの作成
+</div>
+
+Mastra では、`@mastra/core/tools` パッケージの [`createTool`](/reference/tools/create-tool) 関数を使用してツールを作成します。
+
+```typescript title="src/mastra/tools/weatherInfo.ts" copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const getWeatherInfo = async (city: string) => {
+  // 実際の天気サービスAPIの呼び出しに置き換えてください
+  console.log(`${city}の天気情報を取得中...`);
+  // データ構造の例
+  return { temperature: 20, conditions: "Sunny" };
+};
+
+export const weatherTool = createTool({
+  id: "Get Weather Information",
+  description: `指定された都市の現在の天気情報を取得します`,
+  inputSchema: z.object({
+    city: z.string().describe("都市名"),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    conditions: z.string(),
+  }),
+  execute: async ({ context: { city } }) => {
+    console.log("ツールを使用して天気情報を取得中:", city);
+    return await getWeatherInfo(city);
+  },
+});
+```
+
+この例では、都市を受け取る入力スキーマ、天気データを返す出力スキーマ、そしてツールのロジックを含む `execute` 関数を備えた `weatherTool` を定義しています。
+
+ツールを作成する際は、ツールの説明をシンプルにし、ツールが「何を」行い「いつ」使うのかに焦点を当て、主要なユースケースを強調してください。技術的な詳細はパラメータスキーマに記載し、わかりやすい名前、明確な説明、デフォルト値の説明によって、エージェントがツールを正しく「どのように」使うかを導くようにします。
+
+
+<div id="adding-tools-to-an-agent">
+  ## エージェントにツールを追加する
+</div>
+
+エージェントでツールを使えるようにするには、エージェントの定義にツールを設定します。利用可能なツールとその大まかな用途をエージェントのシステムプロンプトに明記すると、ツールの活用が向上することがあります。手順と具体例の詳細は、[Using Tools with Agents](/docs/agents/using-tools#adding-tools-to-an-agent)のガイドを参照してください。
+
+<div id="using-runtimecontext">
+  ## `RuntimeContext` の使用
+</div>
+
+[RuntimeContext](/docs/server-db/runtime-context) を使うと、リクエストごとの値にアクセスできます。これにより、リクエストの文脈に応じて挙動を条件付きで調整できます。
+
+```typescript title="src/mastra/tools/test-tool.ts" showLineNumbers
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const advancedTools = () => {
+  // ...
+};
+
+const baseTools = () => {
+  // ...
+};
+
+export const testTool = createTool({
+  // ...
+  execute: async ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+
+    return userTier === "enterprise" ? advancedTools : baseTools;
+  },
+});
+```
+
+> 詳細は [Runtime Context](/docs/server-db/runtime-context) をご参照ください。
+
+
+<div id="testing-with-mastra-playground">
+  ## Mastra Playground でのテスト
+</div>
+
+Mastra の [Playground](/docs/getting-started/studio) を使って、さまざまな入力でツールを試し、実行結果を確認し、ツールの挙動を検証しましょう。

@@ -1,0 +1,538 @@
+{
+  "version.label": {
+    "message": "次へ",
+    "description": "現在のバージョン用ラベル"
+  },
+  "sidebar.docsSidebar.category.Getting Started": {
+    "message": "はじめに",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Getting Started」のラベル"
+  },
+  "sidebar.docsSidebar.category.Agents": {
+    "message": "エージェント",
+    "description": "サイドバー「docsSidebar」の「Agents」カテゴリのラベル"
+  },
+  "sidebar.docsSidebar.category.Workflows": {
+    "message": "ワークフロー",
+    "description": "サイドバー「docsSidebar」にあるカテゴリ「Workflows」のラベル"
+  },
+  "sidebar.docsSidebar.category.Streaming": {
+    "message": "ストリーミング",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Streaming」のラベル"
+  },
+  "sidebar.docsSidebar.category.Tools & MCP": {
+    "message": "ツールとMCP",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Tools & MCP」のラベル"
+  },
+  "sidebar.docsSidebar.category.Memory": {
+    "message": "メモリー",
+    "description": "サイドバー「docsSidebar」にあるカテゴリ「Memory」のラベル"
+  },
+  "sidebar.docsSidebar.category.Storage": {
+    "message": "保存容量",
+    "description": "サイドバー「docsSidebar」にあるカテゴリ「Storage」のラベル"
+  },
+  "sidebar.docsSidebar.category.RAG": {
+    "message": "RAG",
+    "description": "サイドバー「docsSidebar」のカテゴリ「RAG」のラベル"
+  },
+  "sidebar.docsSidebar.category.Server & DB": {
+    "message": "サーバー & DB",
+    "description": "サイドバー「docsSidebar」にあるカテゴリ「Server & DB」のラベル"
+  },
+  "sidebar.docsSidebar.category.Deployment": {
+    "message": "デプロイメント",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Deployment」のラベル"
+  },
+  "sidebar.docsSidebar.category.Serverless Platforms": {
+    "message": "サーバーレスプラットフォーム",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Serverless Platforms」のラベル"
+  },
+  "sidebar.docsSidebar.category.Cloud Providers": {
+    "message": "クラウドプロバイダ",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Cloud Providers」のラベル"
+  },
+  "sidebar.docsSidebar.category.Mastra Cloud": {
+    "message": "Mastra Cloud",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Mastra Cloud」のラベル"
+  },
+  "sidebar.docsSidebar.category.Observability": {
+    "message": "オブザーバビリティ",
+    "description": "サイドバー「docsSidebar」にある「Observability」カテゴリのラベル"
+  },
+  "sidebar.docsSidebar.category.AI Tracing": {
+    "message": "AIトレース",
+    "description": "サイドバー「docsSidebar」のカテゴリ「AI Tracing」のラベル"
+  },
+  "sidebar.docsSidebar.category.Exporters": {
+    "message": "輸出業者",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Exporters」のラベル"
+  },
+  "sidebar.docsSidebar.category.Processors": {
+    "message": "プロセッサー",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Processors」のラベル"
+  },
+  "sidebar.docsSidebar.category.Scorers": {
+    "message": "スコアラー",
+    "description": "サイドバー「docsSidebar」にあるカテゴリ「Scorers」のラベル"
+  },
+  "sidebar.docsSidebar.category.Evals (old API)": {
+    "message": "Evals（旧 API）",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Evals（旧API）」のラベル"
+  },
+  "sidebar.docsSidebar.category.Auth": {
+    "message": "認証",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Auth」のラベル"
+  },
+  "sidebar.docsSidebar.category.Voice": {
+    "message": "音声",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Voice」のラベル"
+  },
+  "sidebar.docsSidebar.category.Frameworks": {
+    "message": "フレームワーク",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Frameworks」のラベル"
+  },
+  "sidebar.docsSidebar.category.Agentic UIs": {
+    "message": "エージェント型UI",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Agentic UIs」のラベル"
+  },
+  "sidebar.docsSidebar.category.Servers": {
+    "message": "サーバー",
+    "description": "サイドバー「docsSidebar」にあるカテゴリ「Servers」のラベル"
+  },
+  "sidebar.docsSidebar.category.Web Frameworks": {
+    "message": "Webフレームワーク",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Web Frameworks」のラベル"
+  },
+  "sidebar.docsSidebar.category.Community": {
+    "message": "コミュニティ",
+    "description": "サイドバー「docsSidebar」のカテゴリ「Community」のラベル"
+  },
+  "sidebar.docsSidebar.doc.Installation": {
+    "message": "インストール",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Installation」のラベルで、ドキュメント getting-started/installation へリンクしています"
+  },
+  "sidebar.docsSidebar.doc.Playground": {
+    "message": "Playground",
+    "description": "サイドバー「docsSidebar」のドキュメント項目「Playground」のラベル。ドキュメント「getting-started/studio」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Project Structure": {
+    "message": "プロジェクト構造",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Project Structure」のラベル。リンク先はドキュメント「getting-started/project-structure」です"
+  },
+  "sidebar.docsSidebar.doc.MCP Docs Server": {
+    "message": "MCP ドキュメント サーバー",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「MCP Docs Server」のラベルで、ドキュメント「getting-started/mcp-docs-server」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Templates": {
+    "message": "テンプレート",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Templates」のラベル。ドキュメント「getting-started/templates」へのリンク。"
+  },
+  "sidebar.docsSidebar.doc.agents.overview": {
+    "message": "概要",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Overview」のラベル。ドキュメント「agents/overview」へのリンク。"
+  },
+  "sidebar.docsSidebar.doc.Using Tools": {
+    "message": "ツールの使い方",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Using Tools」のラベル。ドキュメント agents/using-tools へのリンク"
+  },
+  "sidebar.docsSidebar.doc.Memory": {
+    "message": "メモリ",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Memory」のラベル。ドキュメント agents/agent-memory へのリンク。"
+  },
+  "sidebar.docsSidebar.doc.Networks": {
+    "message": "ネットワーク",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Networks」のラベルで、ドキュメント「agents/networks」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Guardrails": {
+    "message": "ガードレール",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Guardrails」のラベル。ドキュメント「agents/guardrails」へのリンク"
+  },
+  "sidebar.docsSidebar.doc.Adding Voice": {
+    "message": "音声を追加",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Adding Voice」のラベルで、ドキュメント「agents/adding-voice」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.workflows.overview": {
+    "message": "概要",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Overview」のラベル。ドキュメント workflows/overview へのリンク"
+  },
+  "sidebar.docsSidebar.doc.Control Flow": {
+    "message": "制御フロー",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Control Flow」のラベルで、ドキュメント workflows/control-flow へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Agents & Tools": {
+    "message": "エージェントとツール",
+    "description": "サイドバー「docsSidebar」で、ドキュメント workflows/agents-and-tools にリンクするドキュメント項目「Agents & Tools」のラベル"
+  },
+  "sidebar.docsSidebar.doc.Suspend & Resume": {
+    "message": "サスペンドと再開",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Suspend & Resume」のラベルで、ドキュメント「workflows/suspend-and-resume」へリンクします"
+  },
+  "sidebar.docsSidebar.doc.Error Handling": {
+    "message": "エラーハンドリング",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Error Handling」のラベル。ドキュメント workflows/error-handling へのリンク"
+  },
+  "sidebar.docsSidebar.doc.Input Data Mapping": {
+    "message": "入力データマッピング",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Input Data Mapping」のラベル。ドキュメント workflows/input-data-mapping へのリンク"
+  },
+  "sidebar.docsSidebar.doc.Human-in-the-loop": {
+    "message": "Human-in-the-Loop",
+    "description": "サイドバー「docsSidebar」で、ドキュメント「workflows/human-in-the-loop」へリンクするドキュメント項目「Human-in-the-loop」のラベル"
+  },
+  "sidebar.docsSidebar.doc.Snapshots": {
+    "message": "スナップショット",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Snapshots」のラベルで、ドキュメント workflows/snapshots へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Inngest Workflow": {
+    "message": "Inngest のワークフロー",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Inngest Workflow」のラベルで、ドキュメント workflows/inngest-workflow へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.streaming.overview": {
+    "message": "概要",
+    "description": "サイドバー「docsSidebar」内のドキュメント項目「Overview」のラベル。ドキュメント「streaming/overview」へのリンクです。"
+  },
+  "sidebar.docsSidebar.doc.Events": {
+    "message": "イベント",
+    "description": "サイドバー 'docsSidebar' にあるドキュメント項目 'Events' のラベル。doc「streaming/events」へリンクします。"
+  },
+  "sidebar.docsSidebar.doc.Tool Streaming": {
+    "message": "ツールストリーミング",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Tool Streaming」のラベルで、ドキュメント streaming/tool-streaming へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Workflow Streaming": {
+    "message": "ワークフロー ストリーミング",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Workflow Streaming」のラベル。ドキュメント「streaming/workflow-streaming」へのリンク"
+  },
+  "sidebar.docsSidebar.doc.tools-mcp.overview": {
+    "message": "概要",
+    "description": "サイドバー「docsSidebar」内のドキュメント項目「Overview」のラベル。ドキュメント tools-mcp/overview へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.MCP Overview": {
+    "message": "MCP概要",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「MCP Overview」のラベルで、ドキュメント tools-mcp/mcp-overview へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Advanced Usage": {
+    "message": "上級者向けの使い方",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Advanced Usage」のラベル。ドキュメント tools-mcp/advanced-usage へのリンク"
+  },
+  "sidebar.docsSidebar.doc.memory.overview": {
+    "message": "概要",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Overview」のラベル。ドキュメント memory/overview へのリンク。"
+  },
+  "sidebar.docsSidebar.doc.Threads and Resources": {
+    "message": "スレッドとリソース",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Threads and Resources」のラベルで、ドキュメント「memory/threads-and-resources」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Working Memory": {
+    "message": "ワーキングメモリ",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Working Memory」のラベルで、ドキュメント「memory/working-memory」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Conversation History": {
+    "message": "会話の履歴",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Conversation History」のラベルで、ドキュメント「memory/conversation-history」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Semantic Recall": {
+    "message": "意味記憶の想起",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Semantic Recall」のラベル。ドキュメント memory/semantic-recall へのリンク"
+  },
+  "sidebar.docsSidebar.doc.Memory Processors": {
+    "message": "メモリープロセッサー",
+    "description": "サイドバー「docsSidebar」内のドキュメント項目「Memory Processors」のラベルで、ドキュメント memory/memory-processors へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Memory with LibSQL": {
+    "message": "LibSQL によるメモリ管理",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Memory with LibSQL」のラベルで、ドキュメント memory/storage/memory-with-libsql へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Memory with PostgreSQL": {
+    "message": "PostgreSQL のメモリ",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Memory with PostgreSQL」のラベル。リンク先はドキュメント memory/storage/memory-with-pg。"
+  },
+  "sidebar.docsSidebar.doc.Memory with Upstash": {
+    "message": "Upstash のメモリ",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Memory with Upstash」のラベルで、ドキュメント memory/storage/memory-with-upstash へのリンク"
+  },
+  "sidebar.docsSidebar.doc.rag.overview": {
+    "message": "概要",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Overview」のラベルで、ドキュメント「rag/overview」へリンクします"
+  },
+  "sidebar.docsSidebar.doc.Chunking and Embedding": {
+    "message": "分割と埋め込み",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Chunking and Embedding」のラベル。ドキュメント「rag/chunking-and-embedding」へのリンク。"
+  },
+  "sidebar.docsSidebar.doc.Vector Databases": {
+    "message": "ベクトルデータベース",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Vector Databases」のラベルで、ドキュメント「rag/vector-databases」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Retrieval": {
+    "message": "検索・取得",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Retrieval」のラベル。ドキュメント「rag/retrieval」へのリンクです。"
+  },
+  "sidebar.docsSidebar.doc.Production Server": {
+    "message": "本番サーバー",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Production Server」のラベルで、ドキュメント server-db/production-server へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Middleware": {
+    "message": "ミドルウェア",
+    "description": "サイドバー「docsSidebar」にある、ドキュメント server-db/middleware へのリンクを持つドキュメント項目「Middleware」のラベル"
+  },
+  "sidebar.docsSidebar.doc.Runtime Context": {
+    "message": "ランタイム・コンテキスト",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Runtime Context」のラベル。ドキュメント server-db/runtime-context へのリンク。"
+  },
+  "sidebar.docsSidebar.doc.Custom API Routes": {
+    "message": "カスタムAPIルート",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Custom API Routes」のラベルで、ドキュメント server-db/custom-api-routes へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Storage": {
+    "message": "ストレージ",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Storage」のラベル。ドキュメント「server-db/storage」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Mastra Client": {
+    "message": "Mastra クライアント",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Mastra Client」のラベル。doc「server-db/mastra-client」へのリンク。"
+  },
+  "sidebar.docsSidebar.doc.deployment.overview": {
+    "message": "概要",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Overview」のラベルで、ドキュメント「deployment/overview」へリンクします"
+  },
+  "sidebar.docsSidebar.doc.Server deployment": {
+    "message": "サーバーのデプロイメント",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Server deployment」のラベルで、ドキュメント「deployment/server-deployment」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.With a Monorepo": {
+    "message": "モノレポを使う場合",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「With a Monorepo」のラベル。ドキュメント「deployment/monorepo」にリンクします"
+  },
+  "sidebar.docsSidebar.doc.With a Web Framework": {
+    "message": "Webフレームワークを使用して",
+    "description": "サイドバー「docsSidebar」内のドキュメント項目「With a Web Framework」のラベル。ドキュメント「deployment/web-framework」へのリンク"
+  },
+  "sidebar.docsSidebar.doc.deployment.serverless-platforms.overview": {
+    "message": "概要",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Overview」のラベル。ドキュメント deployment/serverless-platforms/index へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Cloudflare": {
+    "message": "Cloudflare",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Cloudflare」のラベル。ドキュメント deployment/serverless-platforms/cloudflare-deployer へリンクします。"
+  },
+  "sidebar.docsSidebar.doc.Netlify": {
+    "message": "Netlify",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Netlify」のラベルで、ドキュメント deployment/serverless-platforms/netlify-deployer へのリンクです。"
+  },
+  "sidebar.docsSidebar.doc.Vercel": {
+    "message": "Vercel",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Vercel」のラベル。リンク先はドキュメント「deployment/serverless-platforms/vercel-deployer」"
+  },
+  "sidebar.docsSidebar.doc.deployment.cloud-providers.overview": {
+    "message": "概要",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Overview」のラベルで、ドキュメント deployment/cloud-providers/index へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Amazon EC2": {
+    "message": "Amazon EC2",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Amazon EC2」のラベル。リンク先はドキュメント「deployment/cloud-providers/amazon-ec2」。"
+  },
+  "sidebar.docsSidebar.doc.AWS Lambda": {
+    "message": "AWS Lambda",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「AWS Lambda」のラベルで、ドキュメント deployment/cloud-providers/aws-lambda へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Digital Ocean": {
+    "message": "DigitalOcean",
+    "description": "サイドバー 'docsSidebar' にあるドキュメント項目 'Digital Ocean' のラベルで、ドキュメント deployment/cloud-providers/digital-ocean へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Azure App Services": {
+    "message": "Azure App Service",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Azure App Services」のラベルで、ドキュメント deployment/cloud-providers/azure-app-services へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.mastra-cloud.overview": {
+    "message": "概要",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Overview」のラベルで、ドキュメント mastra-cloud/overview へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Setup & Deploy": {
+    "message": "セットアップとデプロイ",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Setup & Deploy」のラベルで、ドキュメント「mastra-cloud/setting-up」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Dashboard": {
+    "message": "ダッシュボード",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Dashboard」のラベルで、ドキュメント「mastra-cloud/dashboard」へリンクしています"
+  },
+  "sidebar.docsSidebar.doc.Observability": {
+    "message": "オブザーバビリティ",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Observability」のラベル。ドキュメント「mastra-cloud/observability」へリンクします"
+  },
+  "sidebar.docsSidebar.doc.observability.overview": {
+    "message": "概要",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Overview」のラベルで、ドキュメント observability/overview へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Logging": {
+    "message": "ログ",
+    "description": "サイドバー「docsSidebar」のドキュメント項目「Logging」のラベルで、ドキュメント observability/logging へリンクしています"
+  },
+  "sidebar.docsSidebar.doc.OTEL Tracing": {
+    "message": "OTEL トレース",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「OTEL Tracing」のラベルで、ドキュメント「observability/otel-tracing」へリンクしています"
+  },
+  "sidebar.docsSidebar.doc.Next.js Tracing": {
+    "message": "Next.js のトレース",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Next.js Tracing」のラベル。リンク先はドキュメント observability/nextjs-tracing"
+  },
+  "sidebar.docsSidebar.doc.observability.ai-tracing.overview": {
+    "message": "概要",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Overview」のラベルで、ドキュメント「observability/ai-tracing/overview」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Default": {
+    "message": "既定",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Default」のラベル。ドキュメント observability/ai-tracing/exporters/default へのリンク。"
+  },
+  "sidebar.docsSidebar.doc.Cloud": {
+    "message": "クラウド",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Cloud」のラベルで、ドキュメント observability/ai-tracing/exporters/cloud へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Arize": {
+    "message": "Arize",
+    "description": "サイドバー「docsSidebar」内のドキュメント項目「Arize」のラベル。ドキュメント observability/ai-tracing/exporters/arize へのリンクです。"
+  },
+  "sidebar.docsSidebar.doc.Braintrust": {
+    "message": "Braintrust",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Braintrust」のラベル。ドキュメント「observability/ai-tracing/exporters/braintrust」へのリンク。"
+  },
+  "sidebar.docsSidebar.doc.Langfuse": {
+    "message": "Langfuse",
+    "description": "サイドバー「docsSidebar」内のドキュメント項目「Langfuse」のラベル。リンク先はドキュメント observability/ai-tracing/exporters/langfuse"
+  },
+  "sidebar.docsSidebar.doc.LangSmith": {
+    "message": "LangSmith",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「LangSmith」のラベルで、ドキュメント observability/ai-tracing/exporters/langsmith へのリンク"
+  },
+  "sidebar.docsSidebar.doc.OpenTelemetry": {
+    "message": "OpenTelemetry",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「OpenTelemetry」のラベル。ドキュメント「observability/ai-tracing/exporters/otel」へのリンク。"
+  },
+  "sidebar.docsSidebar.doc.SensitiveDataFilter": {
+    "message": "SensitiveDataFilter",
+    "description": "サイドバー「docsSidebar」のドキュメント項目「SensitiveDataFilter」のラベル。リンク先はドキュメント「observability/ai-tracing/processors/sensitive-data-filter」。"
+  },
+  "sidebar.docsSidebar.doc.scorers.overview": {
+    "message": "概要",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Overview」のラベルで、ドキュメント「scorers/overview」へリンクします"
+  },
+  "sidebar.docsSidebar.doc.Off the Shelf Scorers": {
+    "message": "既製スコアラー",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Off the Shelf Scorers」のラベルで、ドキュメント scorers/off-the-shelf-scorers へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Custom Scorers": {
+    "message": "カスタムスコア",
+    "description": "サイドバー「docsSidebar」で、ドキュメント項目「Custom Scorers」のラベル（ドキュメント scorers/custom-scorers へのリンク）"
+  },
+  "sidebar.docsSidebar.doc.scorers.evals-old-api.overview": {
+    "message": "概要",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Overview」のラベルで、ドキュメント scorers/evals-old-api/overview へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Textual Evals": {
+    "message": "テキスト評価",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Textual Evals」のラベル。ドキュメント scorers/evals-old-api/textual-evals へのリンクです。"
+  },
+  "sidebar.docsSidebar.doc.Custom Evals": {
+    "message": "カスタム評価",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Custom Evals」のラベルで、ドキュメント scorers/evals-old-api/custom-eval へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Running in CI": {
+    "message": "CI での実行",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Running in CI」のラベルで、ドキュメント scorers/evals-old-api/running-in-ci へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.auth.overview": {
+    "message": "概要",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Overview」のラベル。ドキュメント「auth/index」へのリンクです。"
+  },
+  "sidebar.docsSidebar.doc.JSON Web Token": {
+    "message": "JSON Webトークン",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「JSON Web Token」のラベルで、ドキュメント auth/jwt へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Clerk": {
+    "message": "受付係",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Clerk」のラベルで、ドキュメント auth/clerk へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Supabase": {
+    "message": "Supabase",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Supabase」のラベルで、ドキュメント auth/supabase へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Firebase": {
+    "message": "Firebase",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Firebase」のラベルで、ドキュメント「auth/firebase」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.WorkOS": {
+    "message": "WorkOS",
+    "description": "サイドバー「docsSidebar」内のドキュメント項目「WorkOS」のラベルで、ドキュメント「auth/workos」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Auth0": {
+    "message": "Auth0",
+    "description": "サイドバー「docsSidebar」にある、ドキュメント auth/auth0 へのリンクを持つドキュメント項目「Auth0」のラベル"
+  },
+  "sidebar.docsSidebar.doc.voice.overview": {
+    "message": "概要",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Overview」のラベルで、ドキュメント「voice/overview」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Text to Speech": {
+    "message": "テキスト読み上げ",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Text to Speech」のラベル。ドキュメント「voice/text-to-speech」へリンクします"
+  },
+  "sidebar.docsSidebar.doc.Speech to Text": {
+    "message": "音声→テキスト",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Speech to Text」のラベル。ドキュメント「voice/speech-to-text」へのリンク。"
+  },
+  "sidebar.docsSidebar.doc.Speech to Speech": {
+    "message": "音声間変換",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Speech to Speech」のラベルで、ドキュメント「voice/speech-to-speech」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.With Vercel AI SDK": {
+    "message": "Vercel AI SDK を使って",
+    "description": "サイドバー「docsSidebar」で、ドキュメント「frameworks/agentic-uis/ai-sdk」へリンクするドキュメント項目「With Vercel AI SDK」のラベル"
+  },
+  "sidebar.docsSidebar.doc.With CopilotKit": {
+    "message": "CopilotKit とともに",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「With CopilotKit」のラベルで、ドキュメント frameworks/agentic-uis/copilotkit へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.With Assistant UI": {
+    "message": "Assistant UI を使って",
+    "description": "サイドバー「docsSidebar」内のドキュメント項目「With Assistant UI」のラベル。ドキュメント frameworks/agentic-uis/assistant-ui へのリンク"
+  },
+  "sidebar.docsSidebar.doc.With Cedar-OS": {
+    "message": "Cedar-OS と共に",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「With Cedar-OS」のラベル。ドキュメント frameworks/agentic-uis/cedar-os へのリンクです。"
+  },
+  "sidebar.docsSidebar.doc.With OpenRouter": {
+    "message": "OpenRouter を使用して",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「With OpenRouter」のラベルで、ドキュメント frameworks/agentic-uis/openrouter へのリンクです。"
+  },
+  "sidebar.docsSidebar.doc.With Express": {
+    "message": "Express を使って",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「With Express」のラベルで、ドキュメント「frameworks/servers/express」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.With Vite/React": {
+    "message": "Vite／React を使用",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「With Vite/React」のラベルで、ドキュメント frameworks/web-frameworks/vite-react へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.With Next.js": {
+    "message": "Next.js で",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「With Next.js」のラベル。リンク先はドキュメント frameworks/web-frameworks/next-js"
+  },
+  "sidebar.docsSidebar.doc.With Astro": {
+    "message": "Astro と一緒に",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「With Astro」のラベルで、ドキュメント frameworks/web-frameworks/astro へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.With SvelteKit": {
+    "message": "SvelteKit で",
+    "description": "サイドバー「docsSidebar」にある、ドキュメント frameworks/web-frameworks/sveltekit へのリンクを持つドキュメント項目「With SvelteKit」のラベル"
+  },
+  "sidebar.docsSidebar.doc.Contributing Templates": {
+    "message": "コントリビューション用テンプレート",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Contributing Templates」のラベル。ドキュメント community/contributing-templates へのリンク"
+  },
+  "sidebar.docsSidebar.doc.License": {
+    "message": "ライセンス",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「License」のラベルで、ドキュメント「community/licensing」へのリンク"
+  },
+  "sidebar.docsSidebar.doc.Discord": {
+    "message": "Discord",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Discord」のラベルで、ドキュメント community/discord へのリンクです"
+  }
+}

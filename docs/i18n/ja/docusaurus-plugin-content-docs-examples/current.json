@@ -1,0 +1,366 @@
+{
+  "version.label": {
+    "message": "次へ",
+    "description": "現在のバージョンのラベル"
+  },
+  "sidebar.examplesSidebar.category.Agents": {
+    "message": "エージェント",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Agents」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Workflows": {
+    "message": "ワークフロー",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Workflows」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Processors": {
+    "message": "プロセッサ",
+    "description": "サイドバー「examplesSidebar」にあるカテゴリ「Processors」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Memory": {
+    "message": "メモリー",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Memory」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Workflows (Legacy)": {
+    "message": "ワークフロー（レガシー）",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Workflows (Legacy)」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Workflows (Legacy).link.generated-index.title": {
+    "message": "ワークフロー（従来版）",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Workflows (Legacy)」のgenerated-indexページタイトル"
+  },
+  "sidebar.examplesSidebar.category.RAG": {
+    "message": "RAG",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「RAG」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Chunking": {
+    "message": "チャンク分割",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Chunking」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Embedding": {
+    "message": "埋め込み",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Embedding」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Upsert": {
+    "message": "アップサート（upsert）",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Upsert」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Query": {
+    "message": "問い合わせ",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Query」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Rerank": {
+    "message": "再ランキング",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Rerank」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Usage": {
+    "message": "使用方法",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Usage」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Evals": {
+    "message": "評価",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Evals」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Voice": {
+    "message": "音声",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Voice」のラベル"
+  },
+  "sidebar.examplesSidebar.category.Observability": {
+    "message": "オブザーバビリティ",
+    "description": "サイドバー「examplesSidebar」のカテゴリ「Observability」のラベル"
+  },
+  "sidebar.examplesSidebar.doc.Overview": {
+    "message": "概要",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Overview」のラベルで、ドキュメントのインデックスにリンクします"
+  },
+  "sidebar.examplesSidebar.doc.Calling Agents": {
+    "message": "エージェントの呼び出し",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Calling Agents」のラベル。ドキュメント agents/calling-agents へのリンク。"
+  },
+  "sidebar.examplesSidebar.doc.Changing the System Prompt": {
+    "message": "システムプロンプトを変更する",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Changing the System Prompt」のラベル。ドキュメント agents/system-prompt へのリンク"
+  },
+  "sidebar.examplesSidebar.doc.Supervisor Agent": {
+    "message": "スーパーバイザー・エージェント",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Supervisor Agent」のラベルで、ドキュメント「agents/supervisor-agent」へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Image Analysis": {
+    "message": "画像分析",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Image Analysis」のラベル。ドキュメント agents/image-analysis へのリンク"
+  },
+  "sidebar.examplesSidebar.doc.Runtime Context": {
+    "message": "ランタイム コンテキスト",
+    "description": "サイドバー「examplesSidebar」にある、ドキュメント「agents/runtime-context」へリンクするドキュメント項目「Runtime Context」のラベル"
+  },
+  "sidebar.examplesSidebar.doc.Deploying an MCPServer": {
+    "message": "MCPServer のデプロイ方法",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Deploying an MCPServer」のラベルで、ドキュメント agents/deploying-mcp-server へのリンク"
+  },
+  "sidebar.examplesSidebar.doc.AI SDK v5 Integration": {
+    "message": "AI SDK v5 の統合方法",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「AI SDK v5 Integration」のラベルで、ドキュメント「agents/ai-sdk-v5-integration」へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.WhatsApp Chat Bot": {
+    "message": "WhatsApp チャットボット",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「WhatsApp Chat Bot」のラベルで、ドキュメント「agents/whatsapp-chat-bot」へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Inngest Workflow": {
+    "message": "Inngest ワークフロー",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Inngest Workflow」のラベル。リンク先はドキュメント「workflows/inngest-workflow」。"
+  },
+  "sidebar.examplesSidebar.doc.Message Length Limiter": {
+    "message": "メッセージの長さ制限",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Message Length Limiter」のラベルで、ドキュメント processors/message-length-limiter へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Response Length Limiter": {
+    "message": "応答長制限",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Response Length Limiter」のラベルで、ドキュメント processors/response-length-limiter へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Response Validator": {
+    "message": "レスポンスバリデーター",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Response Validator」のラベルで、ドキュメント「processors/response-validator」へリンクします"
+  },
+  "sidebar.examplesSidebar.doc.Memory with Template": {
+    "message": "テンプレート付きのメモリー",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Memory with Template」のラベル。ドキュメント memory/working-memory-template へのリンク。"
+  },
+  "sidebar.examplesSidebar.doc.Memory with Schema": {
+    "message": "スキーマ対応メモリ",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Memory with Schema」のラベルで、ドキュメント memory/working-memory-schema へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Memory with MongoDB": {
+    "message": "MongoDB を使ったメモリー",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Memory with MongoDB」のラベルで、ドキュメント memory/memory-with-mongodb へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Creating a Workflow": {
+    "message": "ワークフローの作成",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Creating a Workflow」のラベル。ドキュメント workflows_legacy/creating-a-workflow へのリンク"
+  },
+  "sidebar.examplesSidebar.doc.Sequential Steps": {
+    "message": "手順の順序",
+    "description": "サイドバー「examplesSidebar」のドキュメント項目「Sequential Steps」のラベル。ドキュメント「workflows_legacy/sequential-steps」へのリンク。"
+  },
+  "sidebar.examplesSidebar.doc.Parallel Steps": {
+    "message": "並列ステップ",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Parallel Steps」のラベルで、ドキュメント workflows_legacy/parallel-steps へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Branching Paths": {
+    "message": "分かれ道",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Branching Paths」のラベル。ドキュメント workflows_legacy/branching-paths へリンクします"
+  },
+  "sidebar.examplesSidebar.doc.Conditional Branching": {
+    "message": "条件分岐",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Conditional Branching」のラベル。ドキュメント workflows_legacy/conditional-branching へのリンク"
+  },
+  "sidebar.examplesSidebar.doc.Calling an Agent": {
+    "message": "エージェントへの電話",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Calling an Agent」のラベル。ドキュメント workflows_legacy/calling-agent へのリンク。"
+  },
+  "sidebar.examplesSidebar.doc.Using a Tool as a Step": {
+    "message": "手順内でのツールの使用",
+    "description": "サイドバー「examplesSidebar」内のドキュメント項目「Using a Tool as a Step」のラベルで、ドキュメント workflows_legacy/using-a-tool-as-a-step へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Cyclical Dependencies": {
+    "message": "循環依存",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Cyclical Dependencies」のラベルで、ドキュメント「workflows_legacy/cyclical-dependencies」へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Workflow Variables": {
+    "message": "ワークフローの変数",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Workflow Variables」のラベル。リンク先はドキュメント「workflows_legacy/workflow-variables」"
+  },
+  "sidebar.examplesSidebar.doc.Human in the Loop Workflow (Legacy)": {
+    "message": "Human-in-the-Loop ワークフロー（レガシー）",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Human in the Loop Workflow (Legacy)」のラベルで、ドキュメント「workflows_legacy/human-in-the-loop」へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Workflow (Legacy) with Suspend and Resume": {
+    "message": "サスペンドとリジュームに対応したワークフロー（レガシー）",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Workflow (Legacy) with Suspend and Resume」のラベルで、ドキュメント「workflows_legacy/suspend-and-resume」へのリンク"
+  },
+  "sidebar.examplesSidebar.doc.Chunk Text": {
+    "message": "チャンクテキスト",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Chunk Text」のラベルで、ドキュメント「rag/chunking/chunk-text」へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Chunk Markdown": {
+    "message": "チャンク用Markdown",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Chunk Markdown」のラベルで、ドキュメント「rag/chunking/chunk-markdown」へリンクします"
+  },
+  "sidebar.examplesSidebar.doc.Chunk HTML": {
+    "message": "HTML のチャンク化",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Chunk HTML」のラベル。ドキュメント「rag/chunking/chunk-html」へのリンク"
+  },
+  "sidebar.examplesSidebar.doc.Chunk JSON": {
+    "message": "JSON のチャンク",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Chunk JSON」のラベルで、ドキュメント「rag/chunking/chunk-json」へリンクしています"
+  },
+  "sidebar.examplesSidebar.doc.Adjust Chunk Size": {
+    "message": "チャンク サイズを調整",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Adjust Chunk Size」のラベル。ドキュメント「rag/chunking/adjust-chunk-size」へのリンク。"
+  },
+  "sidebar.examplesSidebar.doc.Adjust Chunk Delimiters": {
+    "message": "チャンク区切りの調整",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Adjust Chunk Delimiters」のラベル。ドキュメント「rag/chunking/adjust-chunk-delimiters」へのリンク"
+  },
+  "sidebar.examplesSidebar.doc.Embed Text Chunk": {
+    "message": "テキストチャンクの埋め込み",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Embed Text Chunk」のラベル。ドキュメント rag/embedding/embed-text-chunk へのリンク"
+  },
+  "sidebar.examplesSidebar.doc.Embed Chunk Array": {
+    "message": "チャンク配列の埋め込み",
+    "description": "サイドバー「examplesSidebar」内のドキュメント項目「Embed Chunk Array」のラベルで、ドキュメント「rag/embedding/embed-chunk-array」へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Embed Text with Cohere": {
+    "message": "Cohere でテキストを埋め込み",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Embed Text with Cohere」のラベルで、ドキュメント rag/embedding/embed-text-with-cohere へリンクします"
+  },
+  "sidebar.examplesSidebar.doc.Metadata Extraction": {
+    "message": "メタデータの抽出",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Metadata Extraction」のラベルで、ドキュメント「rag/embedding/metadata-extraction」へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Upsert Embeddings": {
+    "message": "埋め込みのアップサート",
+    "description": "サイドバー「examplesSidebar」内のドキュメント項目「Upsert Embeddings」のラベルで、ドキュメント rag/upsert/upsert-embeddings へのリンク"
+  },
+  "sidebar.examplesSidebar.doc.Hybrid Vector Search": {
+    "message": "ハイブリッドベクター検索",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Hybrid Vector Search」のラベル。ドキュメント「rag/query/hybrid-vector-search」へのリンク。"
+  },
+  "sidebar.examplesSidebar.doc.Retrieve Results": {
+    "message": "結果の取得",
+    "description": "サイドバー「examplesSidebar」内のドキュメント項目「Retrieve Results」のラベルで、ドキュメント rag/query/retrieve-results へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Re-ranking Results": {
+    "message": "再ランキング結果",
+    "description": "サイドバー「examplesSidebar」にある、ドキュメント rag/rerank/rerank へのリンク「Re-ranking Results」ドキュメント項目のラベル"
+  },
+  "sidebar.examplesSidebar.doc.Re-ranking Results with Tools": {
+    "message": "ツールを使った結果の再ランク付け",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Re-ranking Results with Tools」のラベルで、ドキュメント「rag/rerank/rerank-rag」へリンクします"
+  },
+  "sidebar.examplesSidebar.doc.Re-ranking results with Cohere": {
+    "message": "Cohere を用いた検索結果の再ランキング",
+    "description": "サイドバー「examplesSidebar」にある、ドキュメント rag/rerank/reranking-with-cohere へのリンク「Re-ranking results with Cohere」のラベル"
+  },
+  "sidebar.examplesSidebar.doc.Re-ranking results with ZeroEntropy": {
+    "message": "ZeroEntropy で結果を再ランク付け",
+    "description": "サイドバー「examplesSidebar」内のドキュメント項目「Re-ranking results with ZeroEntropy」のラベル。ドキュメント rag/rerank/reranking-with-zeroentropy へのリンク"
+  },
+  "sidebar.examplesSidebar.doc.Using the Vector Query Tool": {
+    "message": "ベクタークエリツールの使用",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Using the Vector Query Tool」のラベル。ドキュメント rag/usage/basic-rag へのリンク。"
+  },
+  "sidebar.examplesSidebar.doc.Optimizing Information Density": {
+    "message": "情報密度の最適化",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Optimizing Information Density」のラベル。ドキュメント「rag/usage/cleanup-rag」へのリンク。"
+  },
+  "sidebar.examplesSidebar.doc.Metadata Filtering": {
+    "message": "メタデータフィルタリング",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Metadata Filtering」のラベルで、ドキュメント「rag/usage/filter-rag」へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Chain of Thought Prompting": {
+    "message": "Chain-of-Thoughtプロンプト",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Chain of Thought Prompting」のラベル（ドキュメント rag/usage/cot-rag へのリンク）"
+  },
+  "sidebar.examplesSidebar.doc.Structured Reasoning with Workflows": {
+    "message": "ワークフローによる構造化推論",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Structured Reasoning with Workflows」のラベル。リンク先は doc rag/usage/cot-workflow-rag"
+  },
+  "sidebar.examplesSidebar.doc.Graph RAG": {
+    "message": "グラフRAG",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Graph RAG」のラベルで、ドキュメント「rag/usage/graph-rag」へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Database-Specific Configurations": {
+    "message": "データベース別の設定",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Database-Specific Configurations」のラベルで、ドキュメント「rag/usage/database-specific-config」へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Answer Relevancy": {
+    "message": "回答の妥当性",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Answer Relevancy」のラベルで、ドキュメント「evals/answer-relevancy」へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Bias": {
+    "message": "偏り",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Bias」のラベル。ドキュメント「evals/bias」へのリンク"
+  },
+  "sidebar.examplesSidebar.doc.Completeness": {
+    "message": "網羅性",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Completeness」のラベルで、ドキュメント「evals/completeness」へのリンク"
+  },
+  "sidebar.examplesSidebar.doc.Content Similarity": {
+    "message": "コンテンツの類似度",
+    "description": "サイドバー「examplesSidebar」で、ドキュメント evals/content-similarity へのリンクとなるドキュメント項目「Content Similarity」のラベル"
+  },
+  "sidebar.examplesSidebar.doc.Context Position": {
+    "message": "コンテキスト位置",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Context Position」のラベル（リンク先: ドキュメント evals/context-position）"
+  },
+  "sidebar.examplesSidebar.doc.Context Precision": {
+    "message": "コンテキストの精度",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Context Precision」のラベルで、ドキュメント「evals/context-precision」へのリンク"
+  },
+  "sidebar.examplesSidebar.doc.Context Relevancy": {
+    "message": "文脈の適合性",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Context Relevancy」のラベル。ドキュメント「evals/context-relevancy」へのリンクです。"
+  },
+  "sidebar.examplesSidebar.doc.Contextual Recall": {
+    "message": "コンテキスト再現",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Contextual Recall」のラベルで、ドキュメント「evals/contextual-recall」へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Faithfulness": {
+    "message": "忠実",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Faithfulness」のラベルで、ドキュメント「evals/faithfulness」へリンクします"
+  },
+  "sidebar.examplesSidebar.doc.Hallucination": {
+    "message": "ハルシネーション",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Hallucination」のラベルで、ドキュメント「evals/hallucination」へのリンクです。"
+  },
+  "sidebar.examplesSidebar.doc.Keyword Coverage": {
+    "message": "キーワードカバレッジ",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Keyword Coverage」のラベル。ドキュメント「evals/keyword-coverage」へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Prompt Alignment": {
+    "message": "プロンプト整合",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Prompt Alignment」のラベルで、ドキュメント evals/prompt-alignment へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Summarization": {
+    "message": "要約",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Summarization」のラベルで、ドキュメント evals/summarization へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Textual Difference": {
+    "message": "テキスト差異",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Textual Difference」のラベルで、ドキュメント「evals/textual-difference」へのリンク"
+  },
+  "sidebar.examplesSidebar.doc.Tone Consistency": {
+    "message": "トーンの整合性",
+    "description": "サイドバー「examplesSidebar」内のドキュメント項目「Tone Consistency」のラベルで、ドキュメント evals/tone-consistency へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Toxicity": {
+    "message": "毒性",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Toxicity」のラベル。ドキュメント evals/toxicity へのリンク"
+  },
+  "sidebar.examplesSidebar.doc.LLM as a Judge": {
+    "message": "審判者としてのLLM",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「LLM as a Judge」のラベルで、ドキュメント「evals/custom-llm-judge-eval」へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Native JavaScript": {
+    "message": "ネイティブJavaScript",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Native JavaScript」のラベルで、ドキュメント「evals/custom-native-javascript-eval」へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Text to Speech": {
+    "message": "テキスト読み上げ",
+    "description": "サイドバー「examplesSidebar」で、ドキュメント voice/text-to-speech へリンクするドキュメント項目「Text to Speech」のラベル"
+  },
+  "sidebar.examplesSidebar.doc.Speech to Text": {
+    "message": "音声認識",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Speech to Text」のラベル。ドキュメント voice/speech-to-text へのリンク"
+  },
+  "sidebar.examplesSidebar.doc.Turn Taking": {
+    "message": "発話の順番交替",
+    "description": "サイドバー「examplesSidebar」にある、ドキュメント voice/turn-taking へのリンク用ドキュメント項目「Turn Taking」のラベル"
+  },
+  "sidebar.examplesSidebar.doc.Speech to Speech": {
+    "message": "音声から音声へ",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Speech to Speech」のラベルで、ドキュメント「voice/speech-to-speech」へのリンクです"
+  },
+  "sidebar.examplesSidebar.doc.Basic AI Tracing": {
+    "message": "AIの基本的なトレース",
+    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Basic AI Tracing」のラベルで、ドキュメント observability/basic-ai-tracing へのリンクです"
+  }
+}

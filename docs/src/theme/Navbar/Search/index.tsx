@@ -10,29 +10,12 @@ import { CustomSearch } from "@site/src/components/custom-search";
 import { Button } from "@site/src/components/ui/button";
 import { useEffect, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
+import { T } from "gt-react";
 
 const SHORTCUT_OS_KEY = "shortcut-os-preference";
 
-function getInitialIsMac(): boolean {
-  if (typeof window === "undefined") return false;
-
-  try {
-    const cached = localStorage.getItem(SHORTCUT_OS_KEY);
-    if (cached !== null) {
-      return cached === "mac";
-    }
-  } catch (error) {
-    console.error(
-      "Error reading shortcut preference from localStorage:",
-      error,
-    );
-  }
-
-  return false;
-}
-
 export function Shortcut() {
-  const [isMac, setIsMac] = useState(getInitialIsMac);
+  const [isMac, setIsMac] = useState(false);
 
   useEffect(() => {
     const isMacOS = navigator.userAgent.includes("Mac");
@@ -99,6 +82,7 @@ export default function SearchContainer({ locale }: { locale: string }) {
   };
 
   return (
+    <T>
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button
@@ -128,5 +112,6 @@ export default function SearchContainer({ locale }: { locale: string }) {
         </DialogContent>
       </DialogPortal>
     </Dialog>
+    </T>
   );
 }

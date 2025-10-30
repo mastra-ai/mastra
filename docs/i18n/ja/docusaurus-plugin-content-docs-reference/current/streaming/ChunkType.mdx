@@ -1,0 +1,1408 @@
+---
+title: "リファレンス: ChunkType | ストリーミング | Mastra ドキュメント"
+description: "Mastra のストリーミング応答で使用される ChunkType 型のドキュメント。想定されるすべてのチャンクタイプとそのペイロードを定義します。"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
+<div id="chunktype">
+  # ChunkType
+</div>
+
+`ChunkType` 型は、エージェントのストリーミング応答で出力されるストリームチャンクの mastra 形式を定義します。
+
+<div id="base-properties">
+  ## 基本プロパティ
+</div>
+
+すべてのチャンクには、次の基本プロパティが含まれます。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: "string",
+      description: "チャンクの種類を示す識別子",
+    },
+    {
+      name: "runId",
+      type: "string",
+      description: "この実行に対する一意の識別子",
+    },
+    {
+      name: "from",
+      type: "ChunkFrom",
+      description: "チャンクの生成元",
+      properties: [
+        {
+          type: "enum",
+          parameters: [
+            {
+              name: "AGENT",
+              type: "'AGENT'",
+              description: "エージェント実行によるチャンク",
+            },
+            {
+              name: "USER",
+              type: "'USER'",
+              description: "ユーザー入力によるチャンク",
+            },
+            {
+              name: "SYSTEM",
+              type: "'SYSTEM'",
+              description: "システム処理によるチャンク",
+            },
+            {
+              name: "WORKFLOW",
+              type: "'WORKFLOW'",
+              description: "ワークフロー実行によるチャンク",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="text-chunks">
+  ## テキストチャンク
+</div>
+
+<div id="text-start">
+  ### text-start
+</div>
+
+テキスト生成の開始を示します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"text-start"',
+      description: "チャンク種別の識別子",
+    },
+    {
+      name: "payload",
+      type: "TextStartPayload",
+      description: "テキスト開始に関する情報",
+      properties: [
+        {
+          type: "TextStartPayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              description: "このテキスト生成の一意の識別子",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "プロバイダー固有のメタデータ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="text-delta">
+  ### text-delta
+</div>
+
+生成中に逐次出力されるテキスト内容。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"text-delta"',
+      description: "チャンク種別の識別子",
+    },
+    {
+      name: "payload",
+      type: "TextDeltaPayload",
+      description: "逐次的なテキスト内容",
+      properties: [
+        {
+          type: "TextDeltaPayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              description: "このテキスト生成の一意の識別子",
+            },
+            {
+              name: "text",
+              type: "string",
+              description: "逐次的なテキスト内容",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "プロバイダ固有のメタデータ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="text-end">
+  ### text-end
+</div>
+
+テキスト生成の終了を示します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"text-end"',
+      description: "チャンクタイプ識別子",
+    },
+    {
+      name: "payload",
+      type: "TextEndPayload",
+      description: "テキスト終了に関する情報",
+      properties: [
+        {
+          type: "TextEndPayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              description: "このテキスト生成の一意の識別子",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "プロバイダ固有のメタデータ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="reasoning-chunks">
+  ## 推論チャンク
+</div>
+
+<div id="reasoning-start">
+  ### reasoning-start
+</div>
+
+（推論対応モデルで）推論生成の開始を示します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"reasoning-start"',
+      description: "チャンク種別を識別する ID",
+    },
+    {
+      name: "payload",
+      type: "ReasoningStartPayload",
+      description: "推論開始に関する情報",
+      properties: [
+        {
+          type: "ReasoningStartPayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              description: "この推論生成の一意識別子",
+            },
+            {
+              name: "signature",
+              type: "string",
+              isOptional: true,
+              description: "利用可能な場合の推論シグネチャ",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "プロバイダー固有のメタデータ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="reasoning-delta">
+  ### reasoning-delta
+</div>
+
+生成中に逐次出力される推論テキスト。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"reasoning-delta"',
+      description: "チャンクタイプ識別子",
+    },
+    {
+      name: "payload",
+      type: "ReasoningDeltaPayload",
+      description: "逐次的な推論コンテンツ",
+      properties: [
+        {
+          type: "ReasoningDeltaPayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              description: "この推論生成の一意の識別子",
+            },
+            {
+              name: "text",
+              type: "string",
+              description: "逐次的な推論テキスト",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "プロバイダ固有のメタデータ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="reasoning-end">
+  ### reasoning-end
+</div>
+
+推論生成の終了を示します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"reasoning-end"',
+      description: "チャンクタイプの識別子",
+    },
+    {
+      name: "payload",
+      type: "ReasoningEndPayload",
+      description: "推論終了に関する情報",
+      properties: [
+        {
+          type: "ReasoningEndPayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              description: "この推論生成の一意の識別子",
+            },
+            {
+              name: "signature",
+              type: "string",
+              isOptional: true,
+              description: "利用可能な場合の最終推論シグネチャ",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "プロバイダ固有のメタデータ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="reasoning-signature">
+  ### reasoning-signature
+</div>
+
+高度な推論をサポートするモデル（OpenAI の o1 シリーズなど）からの reasoning signature を含みます。これは、モデルの内部推論プロセスに関するメタデータ（例：推論の負荷やアプローチ）を表しますが、推論内容そのものは含みません。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"reasoning-signature"',
+      description: "チャンクの種類を示す識別子",
+    },
+    {
+      name: "payload",
+      type: "ReasoningSignaturePayload",
+      description:
+        "モデルの推論プロセス特性に関するメタデータ",
+      properties: [
+        {
+          type: "ReasoningSignaturePayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              description: "推論セッションの一意の識別子",
+            },
+            {
+              name: "signature",
+              type: "string",
+              description:
+                "推論アプローチや負荷（例：推論の努力度設定）を表すシグネチャ",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "プロバイダ固有のメタデータ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="tool-chunks">
+  ## ツールのチャンク
+</div>
+
+<div id="tool-call">
+  ### tool-call
+</div>
+
+ツールが呼び出されています。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"tool-call"',
+      description: "チャンク種別の識別子",
+    },
+    {
+      name: "payload",
+      type: "ToolCallPayload",
+      description: "ツール呼び出しに関する情報",
+      properties: [
+        {
+          type: "ToolCallPayload",
+          parameters: [
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "このツール呼び出しの一意な識別子",
+            },
+            {
+              name: "toolName",
+              type: "string",
+              description: "呼び出されるツールの名前",
+            },
+            {
+              name: "args",
+              type: "Record<string, any>",
+              isOptional: true,
+              description: "ツールに渡す引数",
+            },
+            {
+              name: "providerExecuted",
+              type: "boolean",
+              isOptional: true,
+              description: "プロバイダーがツールを実行したかどうか",
+            },
+            {
+              name: "output",
+              type: "any",
+              isOptional: true,
+              description: "利用可能な場合のツールの出力",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "プロバイダー固有のメタデータ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="tool-result">
+  ### tool-result
+</div>
+
+ツールの実行結果。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"tool-result"',
+      description: "チャンク種別の識別子",
+    },
+    {
+      name: "payload",
+      type: "ToolResultPayload",
+      description: "ツールの実行結果",
+      properties: [
+        {
+          type: "ToolResultPayload",
+          parameters: [
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "ツール呼び出しの一意の識別子",
+            },
+            {
+              name: "toolName",
+              type: "string",
+              description: "実行されたツールの名称",
+            },
+            {
+              name: "result",
+              type: "any",
+              description: "ツール実行の結果",
+            },
+            {
+              name: "isError",
+              type: "boolean",
+              isOptional: true,
+              description: "結果がエラーかどうか",
+            },
+            {
+              name: "providerExecuted",
+              type: "boolean",
+              isOptional: true,
+              description: "プロバイダーがツールを実行したかどうか",
+            },
+            {
+              name: "args",
+              type: "Record<string, any>",
+              isOptional: true,
+              description: "ツールに渡された引数",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "プロバイダー固有のメタデータ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="tool-call-input-streaming-start">
+  ### tool-call-input-streaming-start
+</div>
+
+ツール呼び出し引数のストリーミング開始を示します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"tool-call-input-streaming-start"',
+      description: "チャンク種別識別子",
+    },
+    {
+      name: "payload",
+      type: "ToolCallInputStreamingStartPayload",
+      description: "ツール呼び出し入力のストリーミング開始情報",
+      properties: [
+        {
+          type: "ToolCallInputStreamingStartPayload",
+          parameters: [
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "このツール呼び出しの一意な識別子",
+            },
+            {
+              name: "toolName",
+              type: "string",
+              description: "呼び出されるツール名",
+            },
+            {
+              name: "providerExecuted",
+              type: "boolean",
+              isOptional: true,
+              description: "プロバイダーがツールを実行したかどうか",
+            },
+            {
+              name: "dynamic",
+              type: "boolean",
+              isOptional: true,
+              description: "ツール呼び出しが動的かどうか",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "プロバイダー固有のメタデータ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="tool-call-delta">
+  ### tool-call-delta
+</div>
+
+ストリーミング中に段階的に送られるツール呼び出し引数。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"tool-call-delta"',
+      description: "チャンク種別の識別子",
+    },
+    {
+      name: "payload",
+      type: "ToolCallDeltaPayload",
+      description: "段階的なツール呼び出し引数",
+      properties: [
+        {
+          type: "ToolCallDeltaPayload",
+          parameters: [
+            {
+              name: "argsTextDelta",
+              type: "string",
+              description: "ツール引数に対する段階的なテキスト差分",
+            },
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "このツール呼び出しの固有識別子",
+            },
+            {
+              name: "toolName",
+              type: "string",
+              isOptional: true,
+              description: "呼び出されるツール名",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "プロバイダ固有のメタデータ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="tool-call-input-streaming-end">
+  ### tool-call-input-streaming-end
+</div>
+
+ツール呼び出し引数のストリーミングが終了したことを示します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"tool-call-input-streaming-end"',
+      description: "チャンク種別の識別子",
+    },
+    {
+      name: "payload",
+      type: "ToolCallInputStreamingEndPayload",
+      description: "ツール呼び出しの入力ストリーミング終了に関する情報",
+      properties: [
+        {
+          type: "ToolCallInputStreamingEndPayload",
+          parameters: [
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "このツール呼び出しの一意な識別子",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "プロバイダー固有のメタデータ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="tool-error">
+  ### tool-error
+</div>
+
+ツールの実行中にエラーが発生しました。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"tool-error"',
+      description: "チャンクタイプの識別子",
+    },
+    {
+      name: "payload",
+      type: "ToolErrorPayload",
+      description: "ツールのエラー情報",
+      properties: [
+        {
+          type: "ToolErrorPayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              isOptional: true,
+              description: "任意の識別子",
+            },
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "ツール呼び出しの一意な識別子",
+            },
+            {
+              name: "toolName",
+              type: "string",
+              description: "失敗したツール名",
+            },
+            {
+              name: "args",
+              type: "Record<string, any>",
+              isOptional: true,
+              description: "ツールに渡された引数",
+            },
+            {
+              name: "error",
+              type: "unknown",
+              description: "発生したエラー",
+            },
+            {
+              name: "providerExecuted",
+              type: "boolean",
+              isOptional: true,
+              description: "プロバイダがツールを実行したかどうか",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "プロバイダ固有のメタデータ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="source-and-file-chunks">
+  ## ソースとファイルのチャンク
+</div>
+
+<div id="source">
+  ### source
+</div>
+
+コンテンツのソース情報を含みます。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"source"',
+      description: "チャンク種別の識別子",
+    },
+    {
+      name: "payload",
+      type: "SourcePayload",
+      description: "ソース情報",
+      properties: [
+        {
+          type: "SourcePayload",
+          parameters: [
+            { name: "id", type: "string", description: "一意の識別子" },
+            {
+              name: "sourceType",
+              type: "'url' | 'document'",
+              description: "ソースの種類",
+            },
+            {
+              name: "title",
+              type: "string",
+              description: "ソースのタイトル",
+            },
+            {
+              name: "mimeType",
+              type: "string",
+              isOptional: true,
+              description: "ソースのMIMEタイプ",
+            },
+            {
+              name: "filename",
+              type: "string",
+              isOptional: true,
+              description: "該当する場合のファイル名",
+            },
+            {
+              name: "url",
+              type: "string",
+              isOptional: true,
+              description: "該当する場合のURL",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "プロバイダ固有のメタデータ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="file">
+  ### file
+</div>
+
+ファイルのデータを含みます。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"file"',
+      description: "チャンク種別識別子",
+    },
+    {
+      name: "payload",
+      type: "FilePayload",
+      description: "ファイルデータ",
+      properties: [
+        {
+          type: "FilePayload",
+          parameters: [
+            {
+              name: "data",
+              type: "string | Uint8Array",
+              description: "ファイルのデータ",
+            },
+            {
+              name: "base64",
+              type: "string",
+              isOptional: true,
+              description: "該当する場合のBase64エンコード済みデータ",
+            },
+            {
+              name: "mimeType",
+              type: "string",
+              description: "ファイルのMIMEタイプ",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "プロバイダー固有のメタデータ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="control-chunks">
+  ## 制御チャンク
+</div>
+
+<div id="start">
+  ### start
+</div>
+
+ストリーミングの開始を通知します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"start"',
+      description: "チャンク種別の識別子",
+    },
+    {
+      name: "payload",
+      type: "StartPayload",
+      description: "開始に関する情報",
+      properties: [
+        {
+          type: "StartPayload",
+          parameters: [
+            {
+              name: "[key: string]",
+              type: "any",
+              description: "開始時の追加データ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="step-start">
+  ### step-start
+</div>
+
+処理ステップの開始を示します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"step-start"',
+      description: "チャンク種別識別子",
+    },
+    {
+      name: "payload",
+      type: "StepStartPayload",
+      description: "ステップ開始に関する情報",
+      properties: [
+        {
+          type: "StepStartPayload",
+          parameters: [
+            {
+              name: "messageId",
+              type: "string",
+              isOptional: true,
+              description: "任意のメッセージID",
+            },
+            {
+              name: "request",
+              type: "object",
+              description: "本文などを含むリクエスト情報",
+            },
+            {
+              name: "warnings",
+              type: "LanguageModelV2CallWarning[]",
+              isOptional: true,
+              description: "言語モデル呼び出しに関する警告",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="step-finish">
+  ### step-finish
+</div>
+
+処理ステップの完了を示します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"step-finish"',
+      description: "チャンクタイプの識別子",
+    },
+    {
+      name: "payload",
+      type: "StepFinishPayload",
+      description: "ステップ完了の情報",
+      properties: [
+        {
+          type: "StepFinishPayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              isOptional: true,
+              description: "任意の識別子",
+            },
+            {
+              name: "messageId",
+              type: "string",
+              isOptional: true,
+              description: "任意のメッセージ識別子",
+            },
+            {
+              name: "stepResult",
+              type: "object",
+              description:
+                "理由・警告・継続可否などを含むステップの実行結果",
+            },
+            {
+              name: "output",
+              type: "object",
+              description: "利用状況統計を含む出力情報",
+            },
+            {
+              name: "metadata",
+              type: "object",
+              description:
+                "リクエストおよびプロバイダー情報を含む実行メタデータ",
+            },
+            {
+              name: "totalUsage",
+              type: "LanguageModelV2Usage",
+              isOptional: true,
+              description: "総利用状況の統計",
+            },
+            {
+              name: "response",
+              type: "LanguageModelV2ResponseMetadata",
+              isOptional: true,
+              description: "レスポンスのメタデータ",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "プロバイダー固有のメタデータ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="raw">
+  ### raw
+</div>
+
+プロバイダーから提供される生データを含みます。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"raw"',
+      description: "チャンク種別識別子",
+    },
+    {
+      name: "payload",
+      type: "RawPayload",
+      description: "プロバイダーの生データ",
+      properties: [
+        {
+          type: "RawPayload",
+          parameters: [
+            {
+              name: "[key: string]",
+              type: "any",
+              description: "プロバイダーからの生データ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="finish">
+  ### finish
+</div>
+
+ストリームは正常に完了しました。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"finish"',
+      description: "チャンク種別を示す識別子",
+    },
+    {
+      name: "payload",
+      type: "FinishPayload",
+      description: "完了に関する情報",
+      properties: [
+        {
+          type: "FinishPayload",
+          parameters: [
+            {
+              name: "stepResult",
+              type: "object",
+              description: "ステップの実行結果",
+            },
+            {
+              name: "output",
+              type: "object",
+              description: "使用量を含む出力情報",
+            },
+            {
+              name: "metadata",
+              type: "object",
+              description: "実行時メタデータ",
+            },
+            {
+              name: "messages",
+              type: "object",
+              description: "メッセージ履歴",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="error">
+  ### error
+</div>
+
+ストリーミング中にエラーが発生しました。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"error"',
+      description: "チャンクの型識別子",
+    },
+    {
+      name: "payload",
+      type: "ErrorPayload",
+      description: "エラー情報",
+      properties: [
+        {
+          type: "ErrorPayload",
+          parameters: [
+            {
+              name: "error",
+              type: "unknown",
+              description: "発生したエラー",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="abort">
+  ### abort
+</div>
+
+ストリームがアボートされました。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"abort"',
+      description: "チャンク種別識別子",
+    },
+    {
+      name: "payload",
+      type: "AbortPayload",
+      description: "アボートに関する情報",
+      properties: [
+        {
+          type: "AbortPayload",
+          parameters: [
+            {
+              name: "[key: string]",
+              type: "any",
+              description: "追加のアボートデータ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="object-and-output-chunks">
+  ## オブジェクトと出力チャンク
+</div>
+
+<div id="object">
+  ### object
+</div>
+
+定義済みスキーマを用いた出力生成時に発生します。指定された Zod または JSON スキーマに準拠する、部分的または完全な構造化データを含みます。このチャンクは、実行コンテキストによってはスキップされることがあり、構造化オブジェクトのストリーミング生成に使用されます。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"object"',
+      description: "チャンクの種類を示す識別子",
+    },
+    {
+      name: "object",
+      type: "PartialSchemaOutput<OUTPUT>",
+      description:
+        "定義されたスキーマに適合する、部分的または完全な構造化データ。型は OUTPUT スキーマパラメータによって決まります。",
+    },
+  ]}
+/>
+
+<div id="tool-output">
+  ### tool-output
+</div>
+
+エージェントやワークフローの実行結果を含み、特に使用状況の統計や完了イベントの追跡に用いられます。ネストされた実行コンテキストを提供するために、他のチャンクタイプ（finish チャンクなど）をラップすることがよくあります。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"tool-output"',
+      description: "チャンクタイプの識別子",
+    },
+    {
+      name: "payload",
+      type: "ToolOutputPayload",
+      description: "メタデータ付きでラップされた実行出力",
+      properties: [
+        {
+          type: "ToolOutputPayload",
+          parameters: [
+            {
+              name: "output",
+              type: "ChunkType",
+              description:
+                "ネストされたチャンクデータ。使用状況の統計を含む finish イベントを含むことが多い",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="step-output">
+  ### step-output
+</div>
+
+ワークフローステップ実行の出力を含み、主に利用状況の追跡やステップ完了イベントに使用されます。tool-output に似ていますが、個々のワークフローステップに特化しています。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"step-output"',
+      description: "チャンク種別の識別子",
+    },
+    {
+      name: "payload",
+      type: "StepOutputPayload",
+      description: "メタデータ付きのワークフローステップ実行出力",
+      properties: [
+        {
+          type: "StepOutputPayload",
+          parameters: [
+            {
+              name: "output",
+              type: "ChunkType",
+              description:
+                "ステップ実行に由来するネストされたチャンクデータ。通常、完了イベントやその他のステップ結果を含む",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="metadata-and-special-chunks">
+  ## メタデータと特殊チャンク
+</div>
+
+<div id="response-metadata">
+  ### response-metadata
+</div>
+
+LLM プロバイダーの応答に関するメタデータを含みます。モデル ID、タイムスタンプ、応答ヘッダーなどの追加情報を提供するため、テキスト生成後に一部のプロバイダーによって出力されます。このチャンクは内部の状態管理に使用され、メッセージの組み立てには影響しません。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"response-metadata"',
+      description: "チャンクの種類を示す識別子",
+    },
+    {
+      name: "payload",
+      type: "ResponseMetadataPayload",
+      description: "追跡やデバッグのためのプロバイダー応答メタデータ",
+      properties: [
+        {
+          type: "ResponseMetadataPayload",
+          parameters: [
+            {
+              name: "signature",
+              type: "string",
+              isOptional: true,
+              description: "利用可能な場合の応答署名",
+            },
+            {
+              name: "[key: string]",
+              type: "any",
+              description:
+                "プロバイダー固有の追加メタデータフィールド（例: id、modelId、timestamp、headers）",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="watch">
+  ### watch
+</div>
+
+エージェントの実行に関する監視・オブザーバビリティーデータを含みます。`stream()` が使用されるコンテキストに応じて、ワークフローの状態情報、実行の進捗、その他のランタイムの詳細が含まれる場合があります。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"watch"',
+      description: "チャンクの種類を示す識別子",
+    },
+    {
+      name: "payload",
+      type: "WatchPayload",
+      description:
+        "エージェント実行のオブザーバビリティーとデバッグのための監視データ",
+      properties: [
+        {
+          type: "WatchPayload",
+          parameters: [
+            {
+              name: "workflowState",
+              type: "object",
+              isOptional: true,
+              description:
+                "現在のワークフロー実行状態（ワークフローで使用される場合）",
+            },
+            {
+              name: "eventTimestamp",
+              type: "number",
+              isOptional: true,
+              description: "イベント発生時刻のタイムスタンプ",
+            },
+            {
+              name: "[key: string]",
+              type: "any",
+              description: "追加の監視・実行データ",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="tripwire">
+  ### tripwire
+</div>
+
+出力プロセッサによってコンテンツがブロックされた結果、ストリームが強制的に終了されたときに発行されます。これは、有害または不適切なコンテンツの配信を防ぐための安全機構として機能します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"tripwire"',
+      description: "チャンクタイプの識別子",
+    },
+    {
+      name: "payload",
+      type: "TripwirePayload",
+      description:
+        "安全機構によりストリームが終了された理由に関する情報",
+      properties: [
+        {
+          type: "TripwirePayload",
+          parameters: [
+            {
+              name: "tripwireReason",
+              type: "string",
+              description:
+                "コンテンツがブロックされた理由の説明（例：「Output processor blocked content」）",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript
+const stream = await agent.stream("Hello");
+
+for await (const chunk of stream.fullStream) {
+  switch (chunk.type) {
+    case "text-delta":
+      console.log("テキスト:", chunk.payload.text);
+      break;
+
+    case "tool-call":
+      console.log("ツール呼び出し:", chunk.payload.toolName);
+      break;
+
+    case "tool-result":
+      console.log("ツール結果:", chunk.payload.result);
+      break;
+
+    case "reasoning-delta":
+      console.log("推論:", chunk.payload.text);
+      break;
+
+    case "finish":
+      console.log("完了:", chunk.payload.stepResult.reason);
+      console.log("使用状況:", chunk.payload.output.usage);
+      break;
+
+    case "error":
+      console.error("エラー:", chunk.payload.error);
+      break;
+  }
+}
+```
+
+
+<div id="related-types">
+  ## 関連する型
+</div>
+
+- [.stream()](./agents/stream) - これらのチャンクを出力するストリームを返すメソッド
+- [MastraModelOutput](./agents/MastraModelOutput) - これらのチャンクを出力するストリームオブジェクト
+- [workflow.streamVNext()](./workflows/streamVNext) - ワークフローでこれらのチャンクを出力するストリームを返すメソッド

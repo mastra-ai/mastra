@@ -1,0 +1,53 @@
+---
+title: "リファレンス: LangWatch | オブザーバビリティ | Mastra ドキュメント"
+description: LLM アプリケーション向けの特化型オブザーバビリティ プラットフォームである LangWatch を Mastra と統合するためのドキュメントです。
+---
+
+<div id="langwatch">
+  # LangWatch
+</div>
+
+LangWatchは、LLMアプリケーション向けの特化型オブザーバビリティ・プラットフォームです。
+
+<div id="configuration">
+  ## 設定
+</div>
+
+Mastra で LangWatch を利用するには、以下の環境変数を設定してください:
+
+```env
+LANGWATCH_API_KEY=your_api_key
+```
+
+
+<div id="implementation">
+  ## 実装
+</div>
+
+Mastra を LangWatch で利用できるように設定する方法は次のとおりです。
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { LangWatchExporter } from "langwatch";
+
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "ai", // LangWatchExporterがAI SDKトレースとして認識するため、"ai"に設定する必要があります
+    enabled: true,
+    export: {
+      type: "custom",
+      exporter: new LangWatchExporter({
+        apiKey: process.env.LANGWATCH_API_KEY,
+      }),
+    },
+  },
+});
+```
+
+
+<div id="dashboard">
+  ## ダッシュボード
+</div>
+
+[app.langwatch.ai](https://app.langwatch.ai) から LangWatch のダッシュボードにアクセスできます

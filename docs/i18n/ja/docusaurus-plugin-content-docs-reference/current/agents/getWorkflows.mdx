@@ -1,0 +1,85 @@
+---
+title: "リファレンス: Agent.getWorkflows() | Agents | Mastra ドキュメント"
+description: "Mastra のエージェントにおける `Agent.getWorkflows()` メソッドのドキュメント。エージェントが実行可能なワークフローを取得します。"
+---
+
+<div id="agentgetworkflows">
+  # Agent.getWorkflows()
+</div>
+
+`.getWorkflows()` メソッドは、エージェントに設定されたワークフローを取得し、それらが関数の場合は評価して解決します。これらのワークフローによって、エージェントは定義された実行パスに従い、複雑な複数ステップの処理を実行できます。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+await agent.getWorkflows();
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ runtimeContext?: RuntimeContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "ランタイムコンテキストを含む任意指定の設定オブジェクト。",
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 返り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflows",
+      type: "Promise<Record<string, Workflow>>",
+      description:
+        "ワークフロー名をキー、対応する Workflow インスタンスを値とするレコードに解決される Promise。",
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 拡張された使用例
+</div>
+
+```typescript copy
+await agent.getWorkflows({
+  runtimeContext: new RuntimeContext(),
+});
+```
+
+
+<div id="options-parameters">
+  ### オプションパラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      defaultValue: "new RuntimeContext()",
+      description:
+        "依存性注入とコンテキスト情報のためのランタイムコンテキスト。",
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [エージェントの概要](/docs/agents/overview)
+- [ワークフローの概要](/docs/workflows/overview)
