@@ -630,7 +630,17 @@ export class StoreMemoryUpstash extends MemoryStorage {
     const threadMessagesKey = getThreadMessagesKey(threadId);
 
     try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+      if (!threadId.trim()) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_UPSTASH_LIST_MESSAGES_INVALID_THREAD_ID',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: { threadId },
+          },
+          new Error('threadId must be a non-empty string'),
+        );
+      }
 
       // Determine how many results to return
       // Default pagination is always 40 unless explicitly specified

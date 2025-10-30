@@ -190,7 +190,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
 
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_LIST_MESSAGES_INVALID_THREAD_ID',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        new Error('threadId must be a non-empty string'),
+      );
+    }
 
     try {
       // Determine how many results to return
@@ -235,7 +245,14 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
       const sortObj: any = { [sortField]: sortOrder };
-      const dataResult = await collection.find(query).sort(sortObj).skip(offset).limit(perPage).toArray();
+      let cursor = collection.find(query).sort(sortObj).skip(offset);
+
+      // Only apply limit if not unlimited (MongoDB rejects values > 2,147,483,647)
+      if (limit !== false) {
+        cursor = cursor.limit(perPage);
+      }
+
+      const dataResult = await cursor.toArray();
       const messages: any[] = dataResult.map((row: any) => this.parseRow(row));
 
       if (total === 0 && messages.length === 0) {

@@ -187,15 +187,7 @@ export class InMemoryMemory extends MemoryStorage {
     const messageIds = new Set<string>();
 
     for (const msg of paginatedThreadMessages) {
-      const convertedMessage = {
-        id: msg.id,
-        threadId: msg.thread_id,
-        content: safelyParseJSON(msg.content),
-        role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
-        type: msg.type,
-        createdAt: msg.createdAt,
-        resourceId: msg.resourceId,
-      } as MastraMessageV2;
+      const convertedMessage = this.parseStoredMessage(msg);
       messages.push(convertedMessage);
       messageIds.add(msg.id);
     }

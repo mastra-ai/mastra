@@ -564,7 +564,17 @@ export class MemoryMSSQL extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
 
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MSSQL_LIST_MESSAGES_INVALID_THREAD_ID',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        new Error('threadId must be a non-empty string'),
+      );
+    }
 
     try {
       // Determine how many results to return
@@ -620,7 +630,13 @@ export class MemoryMSSQL extends MemoryStorage {
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
       const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
       request.input('offset', offset);
-      request.input('limit', perPage);
+
+      if (perPage > 2147483647) {
+        request.input('limit', sql.BigInt, perPage);
+      } else {
+        request.input('limit', perPage);
+      }
+
       const rowsResult = await request.query(dataQuery);
       const rows = rowsResult.recordset || [];
       const messages: any[] = [...rows];

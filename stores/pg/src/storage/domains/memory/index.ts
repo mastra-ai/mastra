@@ -556,7 +556,17 @@ export class MemoryPG extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
 
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_PG_LIST_MESSAGES_INVALID_THREAD_ID',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        new Error('threadId must be a non-empty string'),
+      );
+    }
 
     try {
       // Determine how many results to return
@@ -610,7 +620,7 @@ export class MemoryPG extends MemoryStorage {
       const total = parseInt(countResult.count, 10);
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
-      const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause}${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+      const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
       const rows = await this.client.manyOrNone(dataQuery, [...queryParams, perPage, offset]);
       const messages: MessageRowFromDB[] = [...(rows || [])];
 
@@ -640,19 +650,7 @@ export class MemoryPG extends MemoryStorage {
         }
       }
 
-      // Parse content back to objects if they were stringified during storage
-      const messagesWithParsedContent: MastraMessageV2[] = messages.map((row: MessageRowFromDB): MastraMessageV2 => {
-        const message = this.normalizeMessageRow(row);
-        if (typeof message.content === 'string') {
-          try {
-            return { ...message, content: JSON.parse(message.content) } as MastraMessageV2;
-          } catch {
-            // If parsing fails, leave as string (V1 message)
-            return message as MastraMessageV2;
-          }
-        }
-        return message as MastraMessageV2;
-      });
+      const messagesWithParsedContent = messages.map(row => this.parseRow(row));
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList().add(messagesWithParsedContent, 'memory');

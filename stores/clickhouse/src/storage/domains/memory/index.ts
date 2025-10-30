@@ -241,7 +241,17 @@ export class MemoryStorageClickhouse extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
 
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_CLICKHOUSE_LIST_MESSAGES_INVALID_THREAD_ID',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        new Error('threadId must be a non-empty string'),
+      );
+    }
 
     try {
       // Determine how many results to return
