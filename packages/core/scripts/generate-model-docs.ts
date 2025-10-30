@@ -329,8 +329,8 @@ const agent = new Agent({
 \`\`\`typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "${provider.id}/${provider.models[provider.models.length - 1]}"
       : "${provider.id}/${provider.models[0]}";
@@ -726,14 +726,14 @@ const reasoningAgent = new Agent({
 \`\`\`
 ## Dynamic model selection
 
-Since models are just strings, you can select them dynamically based on [runtime context](/docs/server-db/runtime-context), variables, or any other logic.
+Since models are just strings, you can select them dynamically based on [request context](/docs/server-db/request-context), variables, or any other logic.
 
 \`\`\`typescript showLineNumbers
 const agent = new Agent({
   name: "dynamic-assistant",
-  model: ({ runtimeContext }) => {
-    const provider = runtimeContext.get("provider-id");
-    const model = runtimeContext.get("model-id");
+  model: ({ requestContext }) => {
+    const provider = requestContext.get("provider-id");
+    const model = requestContext.get("model-id");
     return \`\${provider}/\${model}\`;
   },
 });

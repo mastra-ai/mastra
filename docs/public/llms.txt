@@ -99,7 +99,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Mastra Client SDK | Server & DB | Mastra Docs](https://mastra.ai/en/docs/server-db/mastra-client): Learn how to set up and use the Mastra Client SDK
 - [Middleware | Server & DB | Mastra Docs](https://mastra.ai/en/docs/server-db/middleware): Apply custom middleware functions to intercept requests.
 - [Create a Mastra Production Server | Server & DB | Mastra Docs](https://mastra.ai/en/docs/server-db/production-server): Learn how to configure and deploy a production-ready Mastra server with custom settings for APIs, CORS, and more
-- [Runtime Context | Server & DB | Mastra Docs](https://mastra.ai/en/docs/server-db/runtime-context): Learn how to use Mastras RuntimeContext to provide dynamic, request-specific configuration to agents.
+- [Request Context | Server & DB | Mastra Docs](https://mastra.ai/en/docs/server-db/request-context): Learn how to use Mastras RequestContext to provide dynamic, request-specific configuration to agents.
 - [MastraStorage | Server & DB | Mastra Docs](https://mastra.ai/en/docs/server-db/storage): Overview of Mastras storage system and data persistence capabilities.
 - [Streaming Events | Streaming | Mastra Docs](https://mastra.ai/en/docs/streaming/events): Learn about the different types of streaming events in Mastra, including text deltas, tool calls, step events, and how to handle them in your applications.
 - [Streaming Overview | Streaming | Mastra Docs](https://mastra.ai/en/docs/streaming/overview): Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced.
@@ -127,7 +127,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Example: Calling Agents | Agents | Mastra Docs](https://mastra.ai/en/examples/agents/calling-agents): Example for how to call agents.
 - [Example: Deploying an MCPServer | Agents | Mastra Docs](https://mastra.ai/en/examples/agents/deploying-mcp-server): Example of setting up, building, and deploying a Mastra MCPServer using the stdio transport and publishing it to NPM.
 - [Example: Image Analysis | Agents | Mastra Docs](https://mastra.ai/en/examples/agents/image-analysis): Example of using a Mastra AI Agent to analyze images from Unsplash to identify objects, determine species, and describe locations.
-- [Example: Runtime Context | Agents | Mastra Docs](https://mastra.ai/en/examples/agents/runtime-context): Learn how to create and configure dynamic agents using runtime context to adapt behavior based on user subscription tiers.
+- [Example: Request Context | Agents | Mastra Docs](https://mastra.ai/en/examples/agents/request-context): Learn how to create and configure dynamic agents using request context to adapt behavior based on user subscription tiers.
 - [Example: Supervisor Agent | Agents | Mastra Docs](https://mastra.ai/en/examples/agents/supervisor-agent): Example of creating a supervisor agent using Mastra, where agents interact through tool functions.
 - [Example: Changing the System Prompt | Agents | Mastra Docs](https://mastra.ai/en/examples/agents/system-prompt): Example of creating an AI agent in Mastra with a system prompt to define its personality and capabilities.
 - [Example: WhatsApp Chat Bot | Agents | Mastra Docs](https://mastra.ai/en/examples/agents/whatsapp-chat-bot): Example of creating a WhatsApp chat bot using Mastra agents and workflows to handle incoming messages and respond naturally via text messages.

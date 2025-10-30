@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import type { MessageList } from '../../../agent/message-list';
-import { RuntimeContext } from '../../../runtime-context';
+import { RequestContext } from '../../../request-context';
 import { ChunkFrom } from '../../../stream/types';
 import { ToolStream } from '../../../tools/stream';
 import { createToolCallStep } from './tool-call-step';
@@ -26,7 +26,7 @@ describe('createToolCallStep tool approval workflow', () => {
     runId: 'test-run-id',
     workflowId: 'test-workflow-id',
     mastra: {} as any,
-    runtimeContext: new RuntimeContext(),
+    requestContext: new RequestContext(),
     state: {},
     setState: vi.fn(),
     runCount: 1,

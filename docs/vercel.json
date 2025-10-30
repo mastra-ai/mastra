@@ -17,7 +17,7 @@
     },
     {
       "source": "/docs/agents/runtime-variables",
-      "destination": "/docs/agents/runtime-context",
+      "destination": "/docs/agents/request-context",
       "permanent": true
     },
     {
@@ -947,7 +947,7 @@
     },
     {
       "source": "/docs/agents/dynamic-agents",
-      "destination": "/docs/agents/runtime-context",
+      "destination": "/docs/agents/request-context",
       "permanent": true
     },
     {
@@ -996,8 +996,8 @@
       "permanent": true
     },
     {
-      "source": "/docs/agents/runtime-context",
-      "destination": "/docs/server-db/runtime-context",
+      "source": "/docs/agents/request-context",
+      "destination": "/docs/server-db/request-context",
       "permanent": true
     },
     {
@@ -1126,8 +1126,8 @@
       "permanent": true
     },
     {
-      "source": "/docs/tools-mcp/runtime-context",
-      "destination": "/docs/server-db/runtime-context",
+      "source": "/docs/tools-mcp/request-context",
+      "destination": "/docs/server-db/request-context",
       "permanent": true
     },
     {
