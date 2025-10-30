@@ -155,6 +155,29 @@ export class MockMemory extends MastraMemory {
     return { messages: filteredMessages };
   }
 
+  async listThreadsByResourceId(args: {
+    resourceId: string;
+    limit?: number;
+    cursor?: string;
+  }): Promise<{
+    threads: StorageThreadType[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }> {
+    const threads = Object.values(this.threads).filter(
+      thread => thread.resourceId === args.resourceId,
+    );
+    return {
+      threads,
+      total: threads.length,
+      page: 1,
+      perPage: threads.length,
+      hasMore: false,
+    };
+  }
+
   async deleteThread(threadId: string) {
     delete this.threads[threadId];
   }
