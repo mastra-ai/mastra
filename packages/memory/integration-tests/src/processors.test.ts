@@ -22,7 +22,7 @@ import { z } from 'zod';
 import { filterToolCallsByName, filterToolResultsByName, generateConversationHistory } from './test-utils';
 
 function v2ToCoreMessages(messages: MastraMessageV2[] | UIMessage[]): CoreMessage[] {
-  return new MessageList().add(messages, 'memory').get.all.core();
+  return new MessageList().add(messages, 'input').get.input.aiV4.core();
 }
 
 /**
