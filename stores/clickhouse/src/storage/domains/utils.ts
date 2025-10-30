@@ -2,7 +2,6 @@ import type { TABLE_NAMES, TABLE_SCHEMAS, StorageColumn } from '@mastra/core/sto
 import {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
-  TABLE_EVALS,
   TABLE_SCORERS,
   TABLE_THREADS,
   TABLE_TRACES,
@@ -16,7 +15,6 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_WORKFLOW_SNAPSHOT]: `ReplacingMergeTree()`,
   [TABLE_TRACES]: `MergeTree()`,
   [TABLE_THREADS]: `ReplacingMergeTree()`,
-  [TABLE_EVALS]: `MergeTree()`,
   [TABLE_SCORERS]: `MergeTree()`,
   [TABLE_RESOURCES]: `ReplacingMergeTree()`,
   // TODO: verify this is the correct engine for ai spans when implementing clickhouse storage

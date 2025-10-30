@@ -423,3 +423,6 @@ export type WorkingMemoryTemplate = {
   format: WorkingMemoryFormat;
   content: string;
 };
+
+// Type for flexible message deletion input
+export type MessageDeleteInput = string[] | { id: string }[];
