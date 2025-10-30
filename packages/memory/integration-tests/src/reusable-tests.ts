@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import * as path from 'path';
 import { Worker } from 'worker_threads';
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV1, SharedMemoryConfig } from '@mastra/core/memory';
+import type { SharedMemoryConfig } from '@mastra/core/memory';
 import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
 import type { Memory } from '@mastra/memory';
 import type { PostgresStoreConfig } from '@mastra/pg';
