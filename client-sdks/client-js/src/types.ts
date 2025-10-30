@@ -150,13 +150,6 @@ export type ReorderModelListParams = {
   reorderedModelIds: string[];
 };
 
-export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
-  evals: any[];
-  instructions: string;
-  name: string;
-  id: string;
-}
-
 export interface GetToolResponse {
   id: string;
   description: string;
