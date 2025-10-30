@@ -8,7 +8,7 @@ export const NetlifyLogo = ({
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 128 113"
     fill="currentColor"
-    className={cn(className, "-mt-2")}
+    className={cn(className, "")}
     {...rest}
   >
     <g clipPath="url(#clip0_236_138)">
