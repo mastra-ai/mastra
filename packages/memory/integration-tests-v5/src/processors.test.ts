@@ -104,9 +104,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result = await applyInputProcessors(
-      new MessageList({ threadId: thread.id, resourceId })
-        .add(queryResult.uiMessages, 'memory')
-        .get.all.core(),
+      new MessageList({ threadId: thread.id, resourceId }).add(queryResult.uiMessages, 'memory').get.all.core(),
       [new TokenLimiter(250)], // Limit to 250 tokens
       thread.id,
       resourceId,
@@ -136,9 +134,7 @@ describe('Memory with Processors', () => {
     expect(allMessagesQuery.messages.length).toBe(20);
 
     const allMessagesResult = await applyInputProcessors(
-      new MessageList({ threadId: thread.id, resourceId })
-        .add(allMessagesQuery.uiMessages, 'memory')
-        .get.all.core(),
+      new MessageList({ threadId: thread.id, resourceId }).add(allMessagesQuery.uiMessages, 'memory').get.all.core(),
       [new TokenLimiter(3000)], // High limit that should exceed total tokens
       thread.id,
       resourceId,
@@ -199,12 +195,7 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       selectBy: { last: 20 },
     });
-    const result2 = await applyInputProcessors(
-      v2ToCoreMessages(queryResult2.uiMessages),
-      [],
-      thread.id,
-      resourceId,
-    );
+    const result2 = await applyInputProcessors(v2ToCoreMessages(queryResult2.uiMessages), [], thread.id, resourceId);
     const messages2 = new MessageList({ threadId: thread.id, resourceId }).add(result2, 'response').get.all.v2();
     expect(new MessageList().add(messages2, 'memory').get.all.v2()).toHaveLength(messagesV2.length);
     expect(filterToolCallsByName(result2, 'weather')).toHaveLength(1);
@@ -575,12 +566,7 @@ describe('Memory with Processors', () => {
     });
 
     // Retrieve the message (no TokenLimiter, just get the message back)
-    const result = await applyInputProcessors(
-      v2ToCoreMessages(queryResult.uiMessages),
-      [],
-      thread.id,
-      resourceId,
-    );
+    const result = await applyInputProcessors(v2ToCoreMessages(queryResult.uiMessages), [], thread.id, resourceId);
 
     // Should have retrieved the message
     expect(result.length).toBe(1);
