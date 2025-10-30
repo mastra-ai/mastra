@@ -1,0 +1,169 @@
+---
+title: "リファレンス: Run.streamVNext()（実験的） | ストリーミング | Mastra ドキュメント"
+description: ワークフローにおける `Run.streamVNext()` メソッドのドキュメント。応答をリアルタイムにストリーミングします。
+---
+
+<div id="runstreamvnext-experimental">
+  # Run.streamVNext()（実験的）
+</div>
+
+:::caution 実験機能
+これは将来のバージョンで変更される可能性がある実験的な API です。`streamVNext()` メソッドは、最終的に現在の `stream()` メソッドに置き換わる予定です。本番環境での使用は慎重に行ってください。
+:::
+
+`.streamVNext()` メソッドは、ワークフローからの応答をリアルタイムでストリーミングします。この拡張されたストリーミング機能は、最終的に現在の `stream()` メソッドに置き換わる予定です。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+const stream = run.streamVNext({
+  inputData: {
+    value: "初期データ",
+  },
+});
+```
+
+
+<div id="parameters">
+  ## パラメーター
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "inputData",
+      type: "z.infer<TInput>",
+      description: "ワークフローの入力スキーマに適合する入力データ。",
+      isOptional: true,
+    },
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      description: "ワークフロー実行時に使用するランタイムコンテキストデータ。",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description:
+        "子スパンの作成やメタデータの追加に用いる AI トレーシング用のコンテキスト。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "currentSpan",
+              type: "AISpan",
+              isOptional: true,
+              description:
+                "子スパンの作成やメタデータの追加に用いる現在の AI スパン。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "AI トレーシング設定のオプション。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description: "ルートトレーススパンに追加するメタデータ。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "closeOnSuspend",
+      type: "boolean",
+      description:
+        "ワークフローが一時停止された際にストリームを閉じるか、ワークフローが（成功またはエラーで）完了するまで開いたままにするか。既定値は true。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "stream",
+      type: "MastraWorkflowStream<ChunkType>",
+      description:
+        "ReadableStream<ChunkType> を拡張し、ワークフロー固有のプロパティを追加したカスタムストリーム",
+    },
+    {
+      name: "stream.status",
+      type: "Promise<RunStatus>",
+      description: "現在のワークフロー実行ステータスを返す Promise",
+    },
+    {
+      name: "stream.result",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+      description: "最終的なワークフロー結果を返す Promise",
+    },
+    {
+      name: "stream.usage",
+      type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cacheInputTokens?: number }>",
+      description: "トークン使用状況を返す Promise",
+    },
+    {
+      name: "stream.traceId",
+      type: "string",
+      isOptional: true,
+      description:
+        "AI トレーシングが有効な場合、この実行に関連付けられるトレース ID。",
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 応用例
+</div>
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+const stream = run.streamVNext({
+  inputData: {
+    value: "初期データ",
+  },
+});
+
+const result = await stream.result;
+```
+
+
+<div id="stream-events">
+  ## ストリームイベント
+</div>
+
+ストリームはワークフローの実行中にさまざまなタイプのイベントを発行します。各イベントには `type` フィールドと、関連データを含む `payload` が含まれます:
+
+- **`workflow-start`**: ワークフローの実行が開始される
+- **`workflow-step-start`**: ステップの実行が開始される
+- **`workflow-step-output`**: ステップからのカスタム出力
+- **`workflow-step-result`**: ステップが結果とともに完了する
+- **`workflow-finish`**: ワークフローの実行が使用状況の統計情報とともに完了する
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [Workflows の概要](/docs/workflows/overview#running-workflows)
+- [Workflow.createRunAsync()](/reference/workflows/workflow-methods/create-run)
+- [Run.resumeStreamVNext()](./resumeStreamVNext)

@@ -1,0 +1,118 @@
+---
+title: "LucidQuery AI | モデル | Mastra"
+description: "Mastra で LucidQuery AI のモデルを利用できます。利用可能なモデルは2種類です。"
+---
+
+{/* このファイルは generate-model-docs.ts によって自動生成されています - 手動での編集は行わないでください */}
+
+import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
+# <img src="https://models.dev/logos/lucidquery.svg" alt="LucidQuery AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LucidQuery AI
+
+Mastra のモデルルーター経由で、2 つの LucidQuery AI モデルにアクセスできます。認証は `LUCIDQUERY_API_KEY` 環境変数により自動で行われます。
+
+詳しくは [LucidQuery AI のドキュメント](https://lucidquery.com)をご覧ください。
+
+```bash
+LUCIDQUERY_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "あなたは親切なアシスタントです",
+  model: "lucidquery/lucidnova-rf1-100b"
+});
+
+// レスポンスを生成
+const response = await agent.generate("Hello!");
+
+// レスポンスをストリーム
+const stream = await agent.stream("物語を聞かせて");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra は OpenAI 互換の `/chat/completions` エンドポイントを使用します。プロバイダー固有の機能の一部は利用できない場合があります。詳細は [LucidQuery AI のドキュメント](https://lucidquery.com)をご確認ください。
+
+:::
+
+
+<div id="models">
+  ## 提供モデル
+</div>
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "lucidquery/lucidnova-rf1-100b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 120000,
+    "maxOutput": 8000,
+    "inputCost": 2,
+    "outputCost": 5
+  },
+  {
+    "model": "lucidquery/lucidquery-nexus-coder",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 250000,
+    "maxOutput": 60000,
+    "inputCost": 2,
+    "outputCost": 5
+  }
+]}
+/>
+
+<div id="advanced-configuration">
+  ## 高度な設定
+</div>
+
+<div id="custom-headers">
+  ### カスタムヘッダ
+</div>
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://lucidquery.com/api/v1",
+    id: "lucidquery/lucidnova-rf1-100b",
+    apiKey: process.env.LUCIDQUERY_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+
+<div id="dynamic-model-selection">
+  ### 動的モデル選択
+</div>
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "lucidquery/lucidquery-nexus-coder"
+      : "lucidquery/lucidnova-rf1-100b";
+  }
+});
+```

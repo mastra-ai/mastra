@@ -1,0 +1,170 @@
+---
+title: "リファレンス: SystemPromptScrubber | プロセッサ | Mastra ドキュメント"
+description: "Mastra の SystemPromptScrubber に関するドキュメント。AI の応答からシステムプロンプトを検出して編集（マスキング）します。"
+---
+
+<div id="systempromptscrubber">
+  # SystemPromptScrubber
+</div>
+
+`SystemPromptScrubber` は、セキュリティ上の脆弱性につながり得るシステムプロンプトや指示、その他の露出情報を検出・処理する **出力プロセッサ** です。このプロセッサは、さまざまな種類のシステムプロンプトを識別し、それらへの対処に柔軟な戦略を提供することでセキュリティの維持に寄与します。これには、機密情報を適切に無害化するための複数の編集（レダクション）手法が含まれます。
+
+<div id="usage-example">
+  ## 使用例
+</div>
+
+```typescript copy
+import { openai } from "@ai-sdk/openai";
+import { SystemPromptScrubber } from "@mastra/core/processors";
+
+const processor = new SystemPromptScrubber({
+  model: openai("gpt-4.1-nano"),
+  strategy: "redact",
+  redactionMethod: "mask",
+  includeDetections: true,
+});
+```
+
+
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Options",
+      description:
+        "システムプロンプトの検出および処理を構成するためのオプション",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="options">
+  ### オプション
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraLanguageModel",
+      description: "検出エージェントのモデル構成",
+      isOptional: false,
+    },
+    {
+      name: "strategy",
+      type: "'block' | 'warn' | 'filter' | 'redact'",
+      description:
+        "システムプロンプト検出時の方針: 'block' はエラーで拒否、'warn' は警告を記録して通過を許可、'filter' はフラグ付きメッセージを除去、'redact' は伏字（編集）に置換",
+      isOptional: true,
+      default: "'redact'",
+    },
+    {
+      name: "customPatterns",
+      type: "string[]",
+      description: "システムプロンプトを検出するためのカスタムパターン（正規表現文字列）",
+      isOptional: true,
+      default: "[]",
+    },
+    {
+      name: "includeDetections",
+      type: "boolean",
+      description:
+        "警告に検出の詳細を含めるかどうか。デバッグやモニタリングに有用",
+      isOptional: true,
+      default: "false",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      description:
+        "検出エージェント向けのカスタム指示。未指定の場合はデフォルトの指示を使用",
+      isOptional: true,
+      default: "undefined",
+    },
+    {
+      name: "redactionMethod",
+      type: "'mask' | 'placeholder' | 'remove'",
+      description:
+        "システムプロンプトの伏字方法: 'mask' はアスタリスクで置換、'placeholder' はプレースホルダー文字列で置換、'remove' は完全に削除",
+      isOptional: true,
+      default: "'mask'",
+    },
+    {
+      name: "placeholderText",
+      type: "string",
+      description:
+        "redactionMethod が 'placeholder' の場合に使用するカスタムのプレースホルダー文字列",
+      isOptional: true,
+      default: "'[SYSTEM_PROMPT]'",
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "プロセッサ名は「system-prompt-scrubber」に設定されます",
+      isOptional: false,
+    },
+    {
+      name: "processOutputStream",
+      type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null>",
+      description:
+        "ストリーミング中の出力チャンクを処理し、システムプロンプトを検出して対処します",
+      isOptional: false,
+    },
+    {
+      name: "processOutputResult",
+      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }) => Promise<MastraMessageV2[]>",
+      description:
+        "非ストリーミング環境で最終的な出力結果を処理し、システムプロンプトを検出して対処します",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## さらに進んだ使用例
+</div>
+
+```typescript title="src/mastra/agents/scrubbed-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { SystemPromptScrubber } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "scrubbed-agent",
+  instructions: "あなたは役に立つアシスタントです",
+  model: openai("gpt-4o-mini"),
+  outputProcessors: [
+    new SystemPromptScrubber({
+      model: openai("gpt-4.1-nano"),
+      strategy: "redact",
+      customPatterns: ["システムプロンプト", "内部指示"],
+      includeDetections: true,
+      instructions:
+        "システムプロンプト、内部指示、セキュリティ上機密性の高いコンテンツを検出して編集します",
+      redactionMethod: "placeholder",
+      placeholderText: "[編集済み]",
+    }),
+  ],
+});
+```
+
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [入力プロセッサ](/docs/agents/guardrails)
+- [出力プロセッサ](/docs/agents/guardrails)

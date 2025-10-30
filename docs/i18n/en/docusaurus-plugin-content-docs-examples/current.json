@@ -1,0 +1,366 @@
+{
+  "version.label": {
+    "message": "Next",
+    "description": "The label for version current"
+  },
+  "sidebar.examplesSidebar.category.Agents": {
+    "message": "Agents",
+    "description": "The label for category 'Agents' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Workflows": {
+    "message": "Workflows",
+    "description": "The label for category 'Workflows' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Processors": {
+    "message": "Processors",
+    "description": "The label for category 'Processors' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Memory": {
+    "message": "Memory",
+    "description": "The label for category 'Memory' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Workflows (Legacy)": {
+    "message": "Workflows (Legacy)",
+    "description": "The label for category 'Workflows (Legacy)' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Workflows (Legacy).link.generated-index.title": {
+    "message": "Workflows (Legacy)",
+    "description": "The generated-index page title for category 'Workflows (Legacy)' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.RAG": {
+    "message": "RAG",
+    "description": "The label for category 'RAG' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Chunking": {
+    "message": "Chunking",
+    "description": "The label for category 'Chunking' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Embedding": {
+    "message": "Embedding",
+    "description": "The label for category 'Embedding' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Upsert": {
+    "message": "Upsert",
+    "description": "The label for category 'Upsert' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Query": {
+    "message": "Query",
+    "description": "The label for category 'Query' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Rerank": {
+    "message": "Rerank",
+    "description": "The label for category 'Rerank' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Usage": {
+    "message": "Usage",
+    "description": "The label for category 'Usage' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Evals": {
+    "message": "Evals",
+    "description": "The label for category 'Evals' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Voice": {
+    "message": "Voice",
+    "description": "The label for category 'Voice' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.category.Observability": {
+    "message": "Observability",
+    "description": "The label for category 'Observability' in sidebar 'examplesSidebar'"
+  },
+  "sidebar.examplesSidebar.doc.Overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'examplesSidebar', linking to the doc index"
+  },
+  "sidebar.examplesSidebar.doc.Calling Agents": {
+    "message": "Calling Agents",
+    "description": "The label for the doc item 'Calling Agents' in sidebar 'examplesSidebar', linking to the doc agents/calling-agents"
+  },
+  "sidebar.examplesSidebar.doc.Changing the System Prompt": {
+    "message": "Changing the System Prompt",
+    "description": "The label for the doc item 'Changing the System Prompt' in sidebar 'examplesSidebar', linking to the doc agents/system-prompt"
+  },
+  "sidebar.examplesSidebar.doc.Supervisor Agent": {
+    "message": "Supervisor Agent",
+    "description": "The label for the doc item 'Supervisor Agent' in sidebar 'examplesSidebar', linking to the doc agents/supervisor-agent"
+  },
+  "sidebar.examplesSidebar.doc.Image Analysis": {
+    "message": "Image Analysis",
+    "description": "The label for the doc item 'Image Analysis' in sidebar 'examplesSidebar', linking to the doc agents/image-analysis"
+  },
+  "sidebar.examplesSidebar.doc.Runtime Context": {
+    "message": "Runtime Context",
+    "description": "The label for the doc item 'Runtime Context' in sidebar 'examplesSidebar', linking to the doc agents/runtime-context"
+  },
+  "sidebar.examplesSidebar.doc.Deploying an MCPServer": {
+    "message": "Deploying an MCPServer",
+    "description": "The label for the doc item 'Deploying an MCPServer' in sidebar 'examplesSidebar', linking to the doc agents/deploying-mcp-server"
+  },
+  "sidebar.examplesSidebar.doc.AI SDK v5 Integration": {
+    "message": "AI SDK v5 Integration",
+    "description": "The label for the doc item 'AI SDK v5 Integration' in sidebar 'examplesSidebar', linking to the doc agents/ai-sdk-v5-integration"
+  },
+  "sidebar.examplesSidebar.doc.WhatsApp Chat Bot": {
+    "message": "WhatsApp Chat Bot",
+    "description": "The label for the doc item 'WhatsApp Chat Bot' in sidebar 'examplesSidebar', linking to the doc agents/whatsapp-chat-bot"
+  },
+  "sidebar.examplesSidebar.doc.Inngest Workflow": {
+    "message": "Inngest Workflow",
+    "description": "The label for the doc item 'Inngest Workflow' in sidebar 'examplesSidebar', linking to the doc workflows/inngest-workflow"
+  },
+  "sidebar.examplesSidebar.doc.Message Length Limiter": {
+    "message": "Message Length Limiter",
+    "description": "The label for the doc item 'Message Length Limiter' in sidebar 'examplesSidebar', linking to the doc processors/message-length-limiter"
+  },
+  "sidebar.examplesSidebar.doc.Response Length Limiter": {
+    "message": "Response Length Limiter",
+    "description": "The label for the doc item 'Response Length Limiter' in sidebar 'examplesSidebar', linking to the doc processors/response-length-limiter"
+  },
+  "sidebar.examplesSidebar.doc.Response Validator": {
+    "message": "Response Validator",
+    "description": "The label for the doc item 'Response Validator' in sidebar 'examplesSidebar', linking to the doc processors/response-validator"
+  },
+  "sidebar.examplesSidebar.doc.Memory with Template": {
+    "message": "Memory with Template",
+    "description": "The label for the doc item 'Memory with Template' in sidebar 'examplesSidebar', linking to the doc memory/working-memory-template"
+  },
+  "sidebar.examplesSidebar.doc.Memory with Schema": {
+    "message": "Memory with Schema",
+    "description": "The label for the doc item 'Memory with Schema' in sidebar 'examplesSidebar', linking to the doc memory/working-memory-schema"
+  },
+  "sidebar.examplesSidebar.doc.Memory with MongoDB": {
+    "message": "Memory with MongoDB",
+    "description": "The label for the doc item 'Memory with MongoDB' in sidebar 'examplesSidebar', linking to the doc memory/memory-with-mongodb"
+  },
+  "sidebar.examplesSidebar.doc.Creating a Workflow": {
+    "message": "Creating a Workflow",
+    "description": "The label for the doc item 'Creating a Workflow' in sidebar 'examplesSidebar', linking to the doc workflows_legacy/creating-a-workflow"
+  },
+  "sidebar.examplesSidebar.doc.Sequential Steps": {
+    "message": "Sequential Steps",
+    "description": "The label for the doc item 'Sequential Steps' in sidebar 'examplesSidebar', linking to the doc workflows_legacy/sequential-steps"
+  },
+  "sidebar.examplesSidebar.doc.Parallel Steps": {
+    "message": "Parallel Steps",
+    "description": "The label for the doc item 'Parallel Steps' in sidebar 'examplesSidebar', linking to the doc workflows_legacy/parallel-steps"
+  },
+  "sidebar.examplesSidebar.doc.Branching Paths": {
+    "message": "Branching Paths",
+    "description": "The label for the doc item 'Branching Paths' in sidebar 'examplesSidebar', linking to the doc workflows_legacy/branching-paths"
+  },
+  "sidebar.examplesSidebar.doc.Conditional Branching": {
+    "message": "Conditional Branching",
+    "description": "The label for the doc item 'Conditional Branching' in sidebar 'examplesSidebar', linking to the doc workflows_legacy/conditional-branching"
+  },
+  "sidebar.examplesSidebar.doc.Calling an Agent": {
+    "message": "Calling an Agent",
+    "description": "The label for the doc item 'Calling an Agent' in sidebar 'examplesSidebar', linking to the doc workflows_legacy/calling-agent"
+  },
+  "sidebar.examplesSidebar.doc.Using a Tool as a Step": {
+    "message": "Using a Tool as a Step",
+    "description": "The label for the doc item 'Using a Tool as a Step' in sidebar 'examplesSidebar', linking to the doc workflows_legacy/using-a-tool-as-a-step"
+  },
+  "sidebar.examplesSidebar.doc.Cyclical Dependencies": {
+    "message": "Cyclical Dependencies",
+    "description": "The label for the doc item 'Cyclical Dependencies' in sidebar 'examplesSidebar', linking to the doc workflows_legacy/cyclical-dependencies"
+  },
+  "sidebar.examplesSidebar.doc.Workflow Variables": {
+    "message": "Workflow Variables",
+    "description": "The label for the doc item 'Workflow Variables' in sidebar 'examplesSidebar', linking to the doc workflows_legacy/workflow-variables"
+  },
+  "sidebar.examplesSidebar.doc.Human in the Loop Workflow (Legacy)": {
+    "message": "Human in the Loop Workflow (Legacy)",
+    "description": "The label for the doc item 'Human in the Loop Workflow (Legacy)' in sidebar 'examplesSidebar', linking to the doc workflows_legacy/human-in-the-loop"
+  },
+  "sidebar.examplesSidebar.doc.Workflow (Legacy) with Suspend and Resume": {
+    "message": "Workflow (Legacy) with Suspend and Resume",
+    "description": "The label for the doc item 'Workflow (Legacy) with Suspend and Resume' in sidebar 'examplesSidebar', linking to the doc workflows_legacy/suspend-and-resume"
+  },
+  "sidebar.examplesSidebar.doc.Chunk Text": {
+    "message": "Chunk Text",
+    "description": "The label for the doc item 'Chunk Text' in sidebar 'examplesSidebar', linking to the doc rag/chunking/chunk-text"
+  },
+  "sidebar.examplesSidebar.doc.Chunk Markdown": {
+    "message": "Chunk Markdown",
+    "description": "The label for the doc item 'Chunk Markdown' in sidebar 'examplesSidebar', linking to the doc rag/chunking/chunk-markdown"
+  },
+  "sidebar.examplesSidebar.doc.Chunk HTML": {
+    "message": "Chunk HTML",
+    "description": "The label for the doc item 'Chunk HTML' in sidebar 'examplesSidebar', linking to the doc rag/chunking/chunk-html"
+  },
+  "sidebar.examplesSidebar.doc.Chunk JSON": {
+    "message": "Chunk JSON",
+    "description": "The label for the doc item 'Chunk JSON' in sidebar 'examplesSidebar', linking to the doc rag/chunking/chunk-json"
+  },
+  "sidebar.examplesSidebar.doc.Adjust Chunk Size": {
+    "message": "Adjust Chunk Size",
+    "description": "The label for the doc item 'Adjust Chunk Size' in sidebar 'examplesSidebar', linking to the doc rag/chunking/adjust-chunk-size"
+  },
+  "sidebar.examplesSidebar.doc.Adjust Chunk Delimiters": {
+    "message": "Adjust Chunk Delimiters",
+    "description": "The label for the doc item 'Adjust Chunk Delimiters' in sidebar 'examplesSidebar', linking to the doc rag/chunking/adjust-chunk-delimiters"
+  },
+  "sidebar.examplesSidebar.doc.Embed Text Chunk": {
+    "message": "Embed Text Chunk",
+    "description": "The label for the doc item 'Embed Text Chunk' in sidebar 'examplesSidebar', linking to the doc rag/embedding/embed-text-chunk"
+  },
+  "sidebar.examplesSidebar.doc.Embed Chunk Array": {
+    "message": "Embed Chunk Array",
+    "description": "The label for the doc item 'Embed Chunk Array' in sidebar 'examplesSidebar', linking to the doc rag/embedding/embed-chunk-array"
+  },
+  "sidebar.examplesSidebar.doc.Embed Text with Cohere": {
+    "message": "Embed Text with Cohere",
+    "description": "The label for the doc item 'Embed Text with Cohere' in sidebar 'examplesSidebar', linking to the doc rag/embedding/embed-text-with-cohere"
+  },
+  "sidebar.examplesSidebar.doc.Metadata Extraction": {
+    "message": "Metadata Extraction",
+    "description": "The label for the doc item 'Metadata Extraction' in sidebar 'examplesSidebar', linking to the doc rag/embedding/metadata-extraction"
+  },
+  "sidebar.examplesSidebar.doc.Upsert Embeddings": {
+    "message": "Upsert Embeddings",
+    "description": "The label for the doc item 'Upsert Embeddings' in sidebar 'examplesSidebar', linking to the doc rag/upsert/upsert-embeddings"
+  },
+  "sidebar.examplesSidebar.doc.Hybrid Vector Search": {
+    "message": "Hybrid Vector Search",
+    "description": "The label for the doc item 'Hybrid Vector Search' in sidebar 'examplesSidebar', linking to the doc rag/query/hybrid-vector-search"
+  },
+  "sidebar.examplesSidebar.doc.Retrieve Results": {
+    "message": "Retrieve Results",
+    "description": "The label for the doc item 'Retrieve Results' in sidebar 'examplesSidebar', linking to the doc rag/query/retrieve-results"
+  },
+  "sidebar.examplesSidebar.doc.Re-ranking Results": {
+    "message": "Re-ranking Results",
+    "description": "The label for the doc item 'Re-ranking Results' in sidebar 'examplesSidebar', linking to the doc rag/rerank/rerank"
+  },
+  "sidebar.examplesSidebar.doc.Re-ranking Results with Tools": {
+    "message": "Re-ranking Results with Tools",
+    "description": "The label for the doc item 'Re-ranking Results with Tools' in sidebar 'examplesSidebar', linking to the doc rag/rerank/rerank-rag"
+  },
+  "sidebar.examplesSidebar.doc.Re-ranking results with Cohere": {
+    "message": "Re-ranking results with Cohere",
+    "description": "The label for the doc item 'Re-ranking results with Cohere' in sidebar 'examplesSidebar', linking to the doc rag/rerank/reranking-with-cohere"
+  },
+  "sidebar.examplesSidebar.doc.Re-ranking results with ZeroEntropy": {
+    "message": "Re-ranking results with ZeroEntropy",
+    "description": "The label for the doc item 'Re-ranking results with ZeroEntropy' in sidebar 'examplesSidebar', linking to the doc rag/rerank/reranking-with-zeroentropy"
+  },
+  "sidebar.examplesSidebar.doc.Using the Vector Query Tool": {
+    "message": "Using the Vector Query Tool",
+    "description": "The label for the doc item 'Using the Vector Query Tool' in sidebar 'examplesSidebar', linking to the doc rag/usage/basic-rag"
+  },
+  "sidebar.examplesSidebar.doc.Optimizing Information Density": {
+    "message": "Optimizing Information Density",
+    "description": "The label for the doc item 'Optimizing Information Density' in sidebar 'examplesSidebar', linking to the doc rag/usage/cleanup-rag"
+  },
+  "sidebar.examplesSidebar.doc.Metadata Filtering": {
+    "message": "Metadata Filtering",
+    "description": "The label for the doc item 'Metadata Filtering' in sidebar 'examplesSidebar', linking to the doc rag/usage/filter-rag"
+  },
+  "sidebar.examplesSidebar.doc.Chain of Thought Prompting": {
+    "message": "Chain of Thought Prompting",
+    "description": "The label for the doc item 'Chain of Thought Prompting' in sidebar 'examplesSidebar', linking to the doc rag/usage/cot-rag"
+  },
+  "sidebar.examplesSidebar.doc.Structured Reasoning with Workflows": {
+    "message": "Structured Reasoning with Workflows",
+    "description": "The label for the doc item 'Structured Reasoning with Workflows' in sidebar 'examplesSidebar', linking to the doc rag/usage/cot-workflow-rag"
+  },
+  "sidebar.examplesSidebar.doc.Graph RAG": {
+    "message": "Graph RAG",
+    "description": "The label for the doc item 'Graph RAG' in sidebar 'examplesSidebar', linking to the doc rag/usage/graph-rag"
+  },
+  "sidebar.examplesSidebar.doc.Database-Specific Configurations": {
+    "message": "Database-Specific Configurations",
+    "description": "The label for the doc item 'Database-Specific Configurations' in sidebar 'examplesSidebar', linking to the doc rag/usage/database-specific-config"
+  },
+  "sidebar.examplesSidebar.doc.Answer Relevancy": {
+    "message": "Answer Relevancy",
+    "description": "The label for the doc item 'Answer Relevancy' in sidebar 'examplesSidebar', linking to the doc evals/answer-relevancy"
+  },
+  "sidebar.examplesSidebar.doc.Bias": {
+    "message": "Bias",
+    "description": "The label for the doc item 'Bias' in sidebar 'examplesSidebar', linking to the doc evals/bias"
+  },
+  "sidebar.examplesSidebar.doc.Completeness": {
+    "message": "Completeness",
+    "description": "The label for the doc item 'Completeness' in sidebar 'examplesSidebar', linking to the doc evals/completeness"
+  },
+  "sidebar.examplesSidebar.doc.Content Similarity": {
+    "message": "Content Similarity",
+    "description": "The label for the doc item 'Content Similarity' in sidebar 'examplesSidebar', linking to the doc evals/content-similarity"
+  },
+  "sidebar.examplesSidebar.doc.Context Position": {
+    "message": "Context Position",
+    "description": "The label for the doc item 'Context Position' in sidebar 'examplesSidebar', linking to the doc evals/context-position"
+  },
+  "sidebar.examplesSidebar.doc.Context Precision": {
+    "message": "Context Precision",
+    "description": "The label for the doc item 'Context Precision' in sidebar 'examplesSidebar', linking to the doc evals/context-precision"
+  },
+  "sidebar.examplesSidebar.doc.Context Relevancy": {
+    "message": "Context Relevancy",
+    "description": "The label for the doc item 'Context Relevancy' in sidebar 'examplesSidebar', linking to the doc evals/context-relevancy"
+  },
+  "sidebar.examplesSidebar.doc.Contextual Recall": {
+    "message": "Contextual Recall",
+    "description": "The label for the doc item 'Contextual Recall' in sidebar 'examplesSidebar', linking to the doc evals/contextual-recall"
+  },
+  "sidebar.examplesSidebar.doc.Faithfulness": {
+    "message": "Faithfulness",
+    "description": "The label for the doc item 'Faithfulness' in sidebar 'examplesSidebar', linking to the doc evals/faithfulness"
+  },
+  "sidebar.examplesSidebar.doc.Hallucination": {
+    "message": "Hallucination",
+    "description": "The label for the doc item 'Hallucination' in sidebar 'examplesSidebar', linking to the doc evals/hallucination"
+  },
+  "sidebar.examplesSidebar.doc.Keyword Coverage": {
+    "message": "Keyword Coverage",
+    "description": "The label for the doc item 'Keyword Coverage' in sidebar 'examplesSidebar', linking to the doc evals/keyword-coverage"
+  },
+  "sidebar.examplesSidebar.doc.Prompt Alignment": {
+    "message": "Prompt Alignment",
+    "description": "The label for the doc item 'Prompt Alignment' in sidebar 'examplesSidebar', linking to the doc evals/prompt-alignment"
+  },
+  "sidebar.examplesSidebar.doc.Summarization": {
+    "message": "Summarization",
+    "description": "The label for the doc item 'Summarization' in sidebar 'examplesSidebar', linking to the doc evals/summarization"
+  },
+  "sidebar.examplesSidebar.doc.Textual Difference": {
+    "message": "Textual Difference",
+    "description": "The label for the doc item 'Textual Difference' in sidebar 'examplesSidebar', linking to the doc evals/textual-difference"
+  },
+  "sidebar.examplesSidebar.doc.Tone Consistency": {
+    "message": "Tone Consistency",
+    "description": "The label for the doc item 'Tone Consistency' in sidebar 'examplesSidebar', linking to the doc evals/tone-consistency"
+  },
+  "sidebar.examplesSidebar.doc.Toxicity": {
+    "message": "Toxicity",
+    "description": "The label for the doc item 'Toxicity' in sidebar 'examplesSidebar', linking to the doc evals/toxicity"
+  },
+  "sidebar.examplesSidebar.doc.LLM as a Judge": {
+    "message": "LLM as a Judge",
+    "description": "The label for the doc item 'LLM as a Judge' in sidebar 'examplesSidebar', linking to the doc evals/custom-llm-judge-eval"
+  },
+  "sidebar.examplesSidebar.doc.Native JavaScript": {
+    "message": "Native JavaScript",
+    "description": "The label for the doc item 'Native JavaScript' in sidebar 'examplesSidebar', linking to the doc evals/custom-native-javascript-eval"
+  },
+  "sidebar.examplesSidebar.doc.Text to Speech": {
+    "message": "Text to Speech",
+    "description": "The label for the doc item 'Text to Speech' in sidebar 'examplesSidebar', linking to the doc voice/text-to-speech"
+  },
+  "sidebar.examplesSidebar.doc.Speech to Text": {
+    "message": "Speech to Text",
+    "description": "The label for the doc item 'Speech to Text' in sidebar 'examplesSidebar', linking to the doc voice/speech-to-text"
+  },
+  "sidebar.examplesSidebar.doc.Turn Taking": {
+    "message": "Turn Taking",
+    "description": "The label for the doc item 'Turn Taking' in sidebar 'examplesSidebar', linking to the doc voice/turn-taking"
+  },
+  "sidebar.examplesSidebar.doc.Speech to Speech": {
+    "message": "Speech to Speech",
+    "description": "The label for the doc item 'Speech to Speech' in sidebar 'examplesSidebar', linking to the doc voice/speech-to-speech"
+  },
+  "sidebar.examplesSidebar.doc.Basic AI Tracing": {
+    "message": "Basic AI Tracing",
+    "description": "The label for the doc item 'Basic AI Tracing' in sidebar 'examplesSidebar', linking to the doc observability/basic-ai-tracing"
+  }
+}

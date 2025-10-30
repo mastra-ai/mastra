@@ -1,0 +1,205 @@
+---
+title: "Mastra Docs Server | はじめに | Mastra Docs"
+description: "IDE で Mastra MCP ドキュメントサーバーを使い、IDE をエージェント的に振る舞う Mastra のエキスパートへと変える方法を学びましょう。"
+---
+
+import Youtube from "@site/src/components/YouTube-player";
+
+
+<div id="mastra-docs-server">
+  # Mastra Docs Server
+</div>
+
+`@mastra/mcp-docs-server` パッケージは、[Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro) を介して、ドキュメント、コード例、ブログ記事、チェンジログなどを含む Mastra の包括的なナレッジベースへ直接アクセスできるようにします。Cursor、Windsurf、Cline、Claude Code、Codex など、MCP をサポートするあらゆるツールで利用できます。
+
+これらのツールは、エージェントがタスクに特化した正確な情報を取得できるよう設計されています。たとえば、エージェントに機能を追加する場合、新規プロジェクトのスキャフォールディングを行う場合、あるいは仕組みを調べる場合などです。
+
+このガイドでは、Mastra の MCP サーバーを AI ツールに追加する方法を紹介します。
+
+<YouTube id="vciV57lF0og" />
+
+<div id="installation">
+  ## インストール
+</div>
+
+<div id="create-mastra">
+  ### create-mastra
+</div>
+
+対話型の[create-mastra](/reference/cli/create-mastra)ウィザードで、MCP のステップにて使用するツールを選択してください。
+
+<div id="manual-setup">
+  ### 手動セットアップ
+</div>
+
+以下に特定の手順が記載されていないツールでも、共通のJSON設定でMCPサーバーを追加できる場合があります。
+
+```json copy
+{
+  "mcpServers": {
+    "mastra": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@mastra/mcp-docs-server"]
+    }
+  }
+}
+```
+
+
+<div id="claude-code-cli">
+  ### Claude Code CLI
+</div>
+
+ターミナルで次のコマンドを実行してインストールします:
+
+```bash copy
+claude mcp add mastra -- npx -y @mastra/mcp-docs-server
+```
+
+[Claude Code での MCP サーバー活用に関する詳細](https://docs.claude.com/en/docs/claude-code/mcp)
+
+
+<div id="openai-codex-cli">
+  ### OpenAI Codex CLI
+</div>
+
+1. ターミナルから登録します:
+
+   ```bash copy
+   codex mcp add mastra-docs -- npx -y @mastra/mcp-docs-server
+   ```
+
+2. サーバーが `enabled` と表示されることを確認するため、`codex mcp list` を実行します。
+
+[OpenAI Codex での MCP サーバーの使い方について詳しくはこちら](https://developers.openai.com/codex/mcp)
+
+<div id="cursor">
+  ### Cursor
+</div>
+
+以下のボタンをクリックしてインストールしてください：
+
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=mastra&config=eyJjb21tYW5kIjoibnB4IC15IEBtYXN0cmEvbWNwLWRvY3Mtc2VydmVyIn0%3D)
+
+自動インストールを行った場合は、Cursor を開くと左下に、Mastra Docs MCP Server を有効にするよう促すポップアップが表示されます。
+
+<img
+  src="/img/enable-mastra-docs-cursor.png"
+  alt="Mastra Docs MCP Server を有効にするよう促す Cursor のプロンプトの図"
+  width={800}
+/>
+
+[Cursor での MCP サーバーの使用方法の詳細](https://cursor.com/de/docs/context/mcp)
+
+<div id="visual-studio-code">
+  ### Visual Studio Code
+</div>
+
+1. ワークスペースに `.vscode/mcp.json` ファイルを作成します
+2. 次の設定を追加します:
+
+   ```json copy
+   {
+     "servers": {
+       "mastra": {
+         "type": "stdio",
+         "command": "npx",
+         "args": ["-y", "@mastra/mcp-docs-server"]
+       }
+     }
+   }
+   ```
+
+MCP サーバーをインストールしたら、以下の手順で使い始められます。
+
+1. VS Code の設定を開きます。
+2. MCP の設定に移動します。
+3. Chat > MCP オプションで「enable」をクリックします。
+
+   <img
+     src="/img/vscode-mcp-setting.png"
+     alt="VS Code の設定ページで MCP を有効化"
+     width={800}
+     className="rounded-lg"
+   />
+
+MCP は VS Code の Agent モードでのみ動作します。Agent モードに入ったら、`mcp.json` を開いて「start」ボタンをクリックします。「start」ボタンは、`mcp.json` を含む `.vscode` フォルダーがワークスペースのルート、またはエディター内ファイル エクスプローラーの最上位にある場合にのみ表示されます。
+
+<img
+  src="/img/vscode-start-mcp.png"
+  alt="VS Code の設定ページで MCP を有効化"
+  width={800}
+  className="rounded-lg"
+/>
+
+MCP サーバーを起動したら、Copilot ペインのツール ボタンをクリックして利用可能なツールを確認します。
+
+<img
+  src="/img/vscode-mcp-running.png"
+  alt="VS Code のツールページで利用可能なツールを確認"
+  width={800}
+  className="rounded-lg"
+/>
+
+[Visual Studio Code で MCP サーバーを使用する方法の詳細](https://code.visualstudio.com/docs/copilot/customization/mcp-servers)
+
+<div id="windsurf">
+  ### Windsurf
+</div>
+
+1. エディタで `~/.codeium/windsurf/mcp_config.json` を開く
+2. 次の設定を追加します:
+
+   ```json copy
+   {
+     "mcpServers": {
+       "mastra": {
+         "command": "npx",
+         "args": ["-y", "@mastra/mcp-docs-server"]
+       }
+     }
+   }
+   ```
+
+3. 設定を保存し、Windsurf を再起動する
+
+[Windsurf での MCP サーバーの使用方法について詳しくはこちら](https://docs.windsurf.com/windsurf/cascade/mcp#mcp-config-json)
+
+<div id="usage">
+  ## 使い方
+</div>
+
+設定が完了したら、Mastra について質問したり、操作を指示したりできます。これらの操作では、Mastra の MCP サーバーから常に最新の情報が取得されます。
+
+**機能を追加する:**
+
+- 「エージェントに eval を追加して、テストを書いて」
+- 「`[task]` を実行するワークフローを書いて」
+- 「エージェントが `[3rd party API]` にアクセスできる新しいツールを作って」
+
+**連携について聞く:**
+
+- 「Mastra は AI SDK と連携しますか？
+  `[React/Svelte/etc]` プロジェクトではどう使えますか？」
+- 「MCP に関する Mastra の最新情報は？」
+- 「Mastra は `[provider]` の音声・音声合成 API をサポートしていますか？自分のコードでの使用例を見せてください。」
+
+**既存コードのデバッグや更新:**
+
+- 「エージェントのメモリでバグが出ています。最近、関連する変更やバグ修正はありましたか？」
+- 「Mastra のワーキングメモリはどう動作し、`[task]` を行うためにどう使えばいいですか？期待どおりに動いていないようです。」
+- 「新しいワークフロー機能を見ました。内容を説明したうえで、`[workflow]` をそれらを使うように更新してください。」
+
+<div id="troubleshooting">
+  ### トラブルシューティング
+</div>
+
+1. **サーバーが起動しない**
+   - [npx](https://docs.npmjs.com/cli/v11/commands/npx) がインストールされ、正常に動作していることを確認してください。
+   - 競合する MCP サーバーがないか確認してください。
+   - 設定ファイルの文法（構文）を確認してください。
+
+2. **ツール呼び出しが失敗する**
+   - MCP サーバーや IDE を再起動してください。
+   - IDE を最新バージョンに更新してください。

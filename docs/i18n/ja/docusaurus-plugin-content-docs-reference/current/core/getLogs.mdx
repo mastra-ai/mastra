@@ -1,0 +1,109 @@
+---
+title: "リファレンス: Mastra.getLogs() | Core | Mastra ドキュメント"
+description: "Mastra の `Mastra.getLogs()` メソッドのドキュメント。特定のトランスポート ID に対するすべてのログを取得します。"
+---
+
+<div id="mastragetlogs">
+  # Mastra.getLogs()
+</div>
+
+`.getLogs()` メソッドは、特定の transport ID に紐づくすべてのログを取得するために使用します。このメソッドを使用するには、`getLogs` 操作をサポートするように構成されたロガーが必要です。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+mastra.getLogs("456");
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "transportId",
+      type: "string",
+      description: "ログの取得元となる transport ID。",
+    },
+    {
+      name: "options",
+      type: "object",
+      description:
+        "フィルタリングやページネーション用のオプションパラメータ。詳細は以下の Options セクションを参照してください。",
+      optional: true,
+    },
+  ]}
+/>
+
+<div id="options">
+  ### オプション
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "fromDate",
+      type: "Date",
+      description:
+        "ログを絞り込むための開始日（任意）。例: new Date('2024-01-01')。",
+      optional: true,
+    },
+    {
+      name: "toDate",
+      type: "Date",
+      description:
+        "ログを絞り込むための終了日（任意）。例: new Date('2024-01-31')。",
+      optional: true,
+    },
+    {
+      name: "logLevel",
+      type: "LogLevel",
+      description: "絞り込みに使用するログレベル（任意）。",
+      optional: true,
+    },
+    {
+      name: "filters",
+      type: "Record<string, any>",
+      description: "ログクエリに適用する追加フィルター（任意）。",
+      optional: true,
+    },
+    {
+      name: "page",
+      type: "number",
+      description: "ページネーション用のページ番号（任意）。",
+      optional: true,
+    },
+    {
+      name: "perPage",
+      type: "number",
+      description: "ページネーション時の1ページあたりのログ件数（任意）。",
+      optional: true,
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "logs",
+      type: "Promise<any>",
+      description:
+        "指定されたトランスポート ID のログに解決される Promise。",
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [ロギングの概要](/docs/observability/logging)
+- [ロガーリファレンス](/reference/observability/logging/pino-logger)

@@ -1,0 +1,94 @@
+---
+title: "リファレンス: Agent.getLLM() | Agents | Mastra ドキュメント"
+description: "Mastra のエージェントにおける `Agent.getLLM()` メソッドのリファレンス。言語モデルのインスタンスを取得します。"
+---
+
+<div id="agentgetllm">
+  # Agent.getLLM()
+</div>
+
+`.getLLM()` メソッドは、エージェントに設定された言語モデルのインスタンスを取得し、それが関数として指定されている場合は評価して解決します。このメソッドにより、エージェントの機能を支える基盤の LLM にアクセスできます。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+await agent.getLLM();
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ runtimeContext?: RuntimeContext; model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel> }",
+      isOptional: true,
+      defaultValue: "{}",
+      description:
+        "ランタイムコンテキストとモデルの上書きを含む、任意の設定オブジェクト。",
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "llm",
+      type: "MastraLLMV1 | Promise<MastraLLMV1>",
+      description:
+        "エージェント用に設定された言語モデルのインスタンス。直接のインスタンス、またはLLMに解決されるPromiseのいずれかです。",
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 応用的な使用例
+</div>
+
+```typescript copy
+await agent.getLLM({
+  runtimeContext: new RuntimeContext(),
+  model: openai("gpt-4"),
+});
+```
+
+
+<div id="options-parameters">
+  ### オプションパラメーター
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      defaultValue: "new RuntimeContext()",
+      description:
+        "依存性注入とコンテキスト情報のためのランタイムコンテキスト。",
+    },
+    {
+      name: "model",
+      type: "MastraLanguageModel | DynamicArgument<MastraLanguageModel>",
+      isOptional: true,
+      description:
+        "モデルの任意指定。指定された場合、エージェントで設定されているモデルの代わりにこのモデルが使用されます。",
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [Agents の概要](/docs/agents/overview)
+- [ランタイムコンテキスト](/docs/server-db/runtime-context)

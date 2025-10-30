@@ -1,0 +1,151 @@
+---
+title: "リファレンス: Workflow クラス | Workflows | Mastra ドキュメント"
+description: Mastra の `Workflow` クラスに関するドキュメント。条件分岐やデータ検証を伴う複雑な一連の処理に対して、ステートマシンを構築できます。
+---
+
+<div id="workflow-class">
+  # Workflow クラス
+</div>
+
+`Workflow` クラスは、条件分岐やデータ検証を伴う複雑な処理フローに対して、ステートマシンを作成できるようにします。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+export const workflow = createWorkflow({
+  id: "test-workflow",
+  inputSchema: z.object({
+    value: z.string(),
+  }),
+  outputSchema: z.object({
+    value: z.string(),
+  }),
+});
+```
+
+
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "ワークフローの一意の識別子",
+    },
+    {
+      name: "inputSchema",
+      type: "z.ZodType<any>",
+      description: "ワークフローの入力構造を定義する Zod スキーマ",
+    },
+    {
+      name: "outputSchema",
+      type: "z.ZodType<any>",
+      description: "ワークフローの出力構造を定義する Zod スキーマ",
+    },
+    {
+      name: "stateSchema",
+      type: "z.ZodObject<any>",
+      description:
+        "ワークフローの状態を表す任意の Zod スキーマ。Mastra の state システムを使用する場合は自動的に注入されます。指定しない場合、型は any です。",
+      isOptional: true,
+    },
+    {
+      name: "options",
+      type: "WorkflowOptions",
+      description: "ワークフローの任意のオプション",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="workflowoptions">
+  ### WorkflowOptions
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "tracingPolicy",
+      type: "TracingPolicy",
+      description: "ワークフロー用の任意のトレーシングポリシー",
+      isOptional: true,
+    },
+    {
+      name: "validateInputs",
+      type: "boolean",
+      description:
+        "ワークフローの入力を検証するかどうかを制御する任意のフラグ。workflow/step の input/resume データに対して、zodSchemas のデフォルト値を適用することも含みます。start/resume 時に input/resume データの検証に失敗した場合、ワークフローは開始/再開されず、代わりにエラーがスローされます。ステップ実行時に入力データの検証に失敗した場合、そのステップは失敗し、ワークフロー全体が失敗してエラーが返されます。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "shouldPersistSnapshot",
+      type: "(params: { stepResults: Record<string, StepResult<any, any, any, any>>; workflowStatus: WorkflowRunStatus }) => boolean",
+      description:
+        "ワークフローのスナップショットを永続化するかどうかを制御する任意のフラグ",
+      isOptional: true,
+      defaultValue: "() => true",
+    },
+  ]}
+/>
+
+<div id="workflow-status">
+  ## ワークフローのステータス
+</div>
+
+ワークフローの`status`は現在の実行状態を示します。取り得る値は次のとおりです。
+
+<PropertiesTable
+  content={[
+    {
+      name: "success",
+      type: "string",
+      description:
+        "すべてのステップが正常に完了し、有効な結果が出力された状態",
+    },
+    {
+      name: "failed",
+      type: "string",
+      description:
+        "実行中にエラーが発生し、エラーの詳細を参照できる状態",
+    },
+    {
+      name: "suspended",
+      type: "string",
+      description:
+        "再開待ちで実行が一時停止しており、停止中のステップ情報が含まれる状態",
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 拡張された使用例
+</div>
+
+```typescript title="src/test-run.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const run = await mastra.getWorkflow("workflow").createRunAsync();
+
+const result = await run.start({...});
+
+if (result.status === "suspended") {
+  const resumedResult = await run.resume({...});
+}
+```
+
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [Step クラス](./step)
+- [制御フロー](/docs/workflows/control-flow)

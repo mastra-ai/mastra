@@ -1,0 +1,60 @@
+---
+title: "組み込みスコアラー | スコアラー | Mastra ドキュメント"
+description: "品質・安全性・パフォーマンスの観点からAI出力を評価するための、Mastraの即使用可能なスコアラーの概要。"
+---
+
+<div id="built-in-scorers">
+  # 組み込みスコアラー
+</div>
+
+Mastra は、AI の出力を評価するための包括的な組み込みスコアラーを提供します。これらのスコアラーは一般的な評価シナリオ向けに最適化されており、エージェントやワークフローですぐに利用できます。
+
+<div id="available-scorers">
+  ## 利用可能なスコアリング手法
+</div>
+
+<div id="accuracy-and-reliability">
+  ### 精度と信頼性
+</div>
+
+これらのスコアラーは、エージェントの回答の正確性・真実性・網羅性を評価します:
+
+- [`answer-relevancy`](/reference/scorers/answer-relevancy): 応答が入力クエリにどれだけ適切に対応しているかを評価（`0-1`、高いほど良い）
+- [`answer-similarity`](/reference/scorers/answer-similarity): セマンティック分析を用いて、CI/CD テストでエージェントの出力を正解と比較（`0-1`、高いほど良い）
+- [`faithfulness`](/reference/scorers/faithfulness): 応答が与えられたコンテキストをどれだけ正確に反映しているかを測定（`0-1`、高いほど良い）
+- [`hallucination`](/reference/scorers/hallucination): 事実の矛盾や根拠のない主張を検出（`0-1`、低いほど良い）
+- [`completeness`](/reference/scorers/completeness): 応答に必要な情報がすべて含まれているかを確認（`0-1`、高いほど良い）
+- [`content-similarity`](/reference/scorers/content-similarity): 文字レベルのマッチングでテキスト類似度を測定（`0-1`、高いほど良い）
+- [`textual-difference`](/reference/scorers/textual-difference): 文字列間のテキスト差分を測定（`0-1`、値が高いほど類似）
+- [`tool-call-accuracy`](/reference/scorers/tool-call-accuracy): LLM が利用可能な選択肢から正しいツールを選べているかを評価（`0-1`、高いほど良い）
+- [`prompt-alignment`](/reference/scorers/prompt-alignment): エージェントの応答がユーザープロンプトの意図・要件・網羅性・形式にどれだけ合致しているかを測定（`0-1`、高いほど良い）
+
+<div id="context-quality">
+  ### コンテキスト品質
+</div>
+
+これらのスコアラーは、応答生成に用いるコンテキストの質と妥当性を評価します:
+
+- [`context-precision`](/reference/scorers/context-precision): Mean Average Precision によってコンテキストの関連性とランキングを評価し、関連コンテキストを早期に提示できているかを重視します（`0-1`、高いほど良い）
+- [`context-relevance`](/reference/scorers/context-relevance): きめ細かな関連度レベル、利用状況の追跡、欠落コンテキストの検出により、コンテキストの有用性を測定します（`0-1`、高いほど良い）
+
+> tip コンテキストスコアラーの選択
+
+- コンテキストの順序が重要で、標準的な IR 指標が必要な場合は **Context Precision** を使用（RAG のランキング評価に最適）
+- 詳細な関連性評価が必要で、コンテキストの利用状況を追跡し、抜けを特定したい場合は **Context Relevance** を使用
+
+両方のコンテキストスコアラーは次をサポートします:
+
+- **静的コンテキスト**: 事前定義されたコンテキスト配列
+- **動的コンテキスト抽出**: カスタム関数で実行ログからコンテキストを抽出（RAG システムやベクターデータベースなどに最適）
+
+<div id="output-quality">
+  ### 出力品質
+</div>
+
+これらのスコアラーは、形式、文体、安全性要件への準拠を評価します:
+
+- [`tone-consistency`](/reference/scorers/tone-consistency): 敬体・難易度・文体の一貫性を測定します（`0–1`、高いほど良い）
+- [`toxicity`](/reference/scorers/toxicity): 有害または不適切な内容を検出します（`0–1`、低いほど良い）
+- [`bias`](/reference/scorers/bias): 出力における潜在的な偏りを検出します（`0–1`、低いほど良い）
+- [`keyword-coverage`](/reference/scorers/keyword-coverage): 技術用語の網羅度を評価します（`0–1`、高いほど良い）

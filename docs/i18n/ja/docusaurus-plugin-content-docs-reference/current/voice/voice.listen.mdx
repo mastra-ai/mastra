@@ -1,0 +1,228 @@
+---
+title: "リファレンス: voice.listen() | Voice | Mastra ドキュメント"
+description: "すべての Mastra の音声プロバイダーで利用できる listen() メソッドのドキュメント。音声をテキストに変換します。"
+---
+
+<div id="voicelisten">
+  # voice.listen()
+</div>
+
+`listen()` メソッドは、すべての Mastra の音声プロバイダーで利用可能な基本機能で、音声をテキストに変換します。音声ストリームを入力として受け取り、書き起こし結果のテキストを返します。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { getMicrophoneStream } from "@mastra/node-audio";
+import { createReadStream } from "fs";
+import path from "path";
+
+// 音声プロバイダーを初期化
+const voice = new OpenAIVoice({
+  listeningModel: {
+    name: "whisper-1",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// ファイルストリームを使う基本的な例
+const audioFilePath = path.join(process.cwd(), "audio.mp3");
+const audioStream = createReadStream(audioFilePath);
+const transcript = await voice.listen(audioStream, {
+  filetype: "mp3",
+});
+console.log("文字起こし結果:", transcript);
+
+// マイク入力ストリームを使用
+const microphoneStream = getMicrophoneStream(); // この関数で音声入力を取得すると仮定
+const transcription = await voice.listen(microphoneStream);
+
+// プロバイダー固有のオプションを指定
+const transcriptWithOptions = await voice.listen(audioStream, {
+  language: "en",
+  prompt: "これは人工知能に関する会話です。",
+});
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description:
+        "書き起こし対象の音声ストリーム。ファイルストリームまたはマイク入力のストリームを指定できます。",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "音声認識プロバイダー固有のオプション",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="return-value">
+  ## 戻り値
+</div>
+
+次のいずれかを返します:
+
+- `Promise<string>`: 書き起こしテキストに解決される Promise
+- `Promise<NodeJS.ReadableStream>`: 書き起こしテキストのストリームに解決される Promise（ストリーミング書き起こし用）
+- `Promise<void>`: テキストを直接返さずに 'writing' イベントを発行するリアルタイムプロバイダー向け
+
+<div id="provider-specific-options">
+  ## プロバイダー固有のオプション
+</div>
+
+各音声プロバイダーは、実装に特有の追加オプションをサポートしている場合があります。以下に例をいくつか示します：
+
+<div id="openai">
+  ### OpenAI
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "options.filetype",
+      type: "string",
+      description: "音声ファイルの形式（例：「mp3」「wav」「m4a」）",
+      isOptional: true,
+      defaultValue: "'mp3'",
+    },
+    {
+      name: "options.prompt",
+      type: "string",
+      description: "モデルの文字起こしを補助するテキスト",
+      isOptional: true,
+    },
+    {
+      name: "options.language",
+      type: "string",
+      description: "言語コード（例：「en」「fr」「de」）",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="google">
+  ### Google
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "options.stream",
+      type: "boolean",
+      description: "ストリーミング認識を使用するかどうか",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "options.config",
+      type: "object",
+      description:
+        "Google Cloud Speech-to-Text API の音声認識設定",
+      isOptional: true,
+      defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
+    },
+  ]}
+/>
+
+<div id="deepgram">
+  ### Deepgram
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "options.model",
+      type: "string",
+      description: "文字起こしに使用する Deepgram のモデル",
+      isOptional: true,
+      defaultValue: "'nova-2'",
+    },
+    {
+      name: "options.language",
+      type: "string",
+      description: "文字起こしの言語コード",
+      isOptional: true,
+      defaultValue: "'en'",
+    },
+  ]}
+/>
+
+<div id="realtime-voice-providers">
+  ## リアルタイム音声プロバイダー
+</div>
+
+`OpenAIRealtimeVoice` のようなリアルタイム音声プロバイダーを使用する場合、`listen()` メソッドの挙動は次のように異なります:
+
+* 文字起こし結果を返すのではなく、文字起こしテキストを含む &#39;writing&#39; イベントを発行します
+* 文字起こしを受け取るには、イベントリスナーを登録する必要があります
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { getMicrophoneStream } from "@mastra/node-audio";
+
+const voice = new OpenAIRealtimeVoice();
+await voice.connect();
+
+// 音声書き起こし用のイベントリスナーを登録
+voice.on("writing", ({ text, role }) => {
+  console.log(`${role}: ${text}`);
+});
+
+// これはテキストを返す代わりに 'writing' イベントを発生させます
+const microphoneStream = getMicrophoneStream();
+await voice.listen(microphoneStream);
+```
+
+
+<div id="using-with-compositevoice">
+  ## CompositeVoice と併用する場合
+</div>
+
+`CompositeVoice` を使用すると、`listen()` メソッドは設定されたリスニングプロバイダーに委譲されます。
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+
+const voice = new CompositeVoice({
+  listenProvider: new OpenAIVoice(),
+  speakProvider: new PlayAIVoice(),
+});
+
+// こちらは OpenAIVoice のプロバイダーを使用します
+const transcript = await voice.listen(audioStream);
+```
+
+
+<div id="notes">
+  ## 注意事項
+</div>
+
+- すべての音声プロバイダーが音声認識（音声→テキスト）機能をサポートしているわけではありません（例：PlayAI、Speechify）
+- `listen()` の動作はプロバイダーによって多少異なりますが、いずれの実装も同じ基本的なインターフェースに準拠しています
+- リアルタイムの音声プロバイダーを使用する場合、このメソッドはテキストを直接返さず、代わりに「writing」イベントを発行することがあります
+- 対応する音声フォーマットはプロバイダーに依存します。一般的なフォーマットには MP3、WAV、M4A があります
+- 一部のプロバイダーはストリーミング文字起こしに対応しており、書き起こしと同時にテキストが返されます
+- パフォーマンスを最適化するには、使用が終わったら音声ストリームを閉じる（または終了する）ことを検討してください
+
+<div id="related-methods">
+  ## 関連メソッド
+</div>
+
+- [voice.speak()](./voice.speak) - テキストを音声に変換する
+- [voice.send()](./voice.send) - 音声データをリアルタイムで音声プロバイダーに送信する
+- [voice.on()](./voice.on) - 音声イベント用のイベントリスナーを登録する

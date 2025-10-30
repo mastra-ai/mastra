@@ -1,0 +1,64 @@
+---
+title: "リファレンス: Tools API | クライアント SDK | Mastra ドキュメント"
+description: client-js SDK を使って、Mastra プラットフォーム上で利用可能なツールと連携し、実行する方法を学びます。
+---
+
+<div id="tools-api">
+  # Tools API
+</div>
+
+Tools API は、Mastra プラットフォームで利用可能なツールとの連携や実行を行うためのメソッドを提供します。
+
+<div id="getting-all-tools">
+  ## すべてのツールを取得
+</div>
+
+利用可能なツールの一覧を取得します。
+
+```typescript
+const tools = await mastraClient.getTools();
+```
+
+
+<div id="working-with-a-specific-tool">
+  ## 特定のツールを使う
+</div>
+
+特定のツールのインスタンスを取得する:
+
+```typescript
+const tool = mastraClient.getTool("tool-id");
+```
+
+
+<div id="tool-methods">
+  ## ツールのメソッド
+</div>
+
+<div id="get-tool-details">
+  ### ツールの詳細を取得
+</div>
+
+ツールの詳細情報を取得します:
+
+```typescript
+const details = await tool.details();
+```
+
+
+<div id="execute-tool">
+  ### ツールの実行
+</div>
+
+特定の引数を指定してツールを実行します:
+
+```typescript
+const result = await tool.execute({
+  args: {
+    param1: "value1",
+    param2: "value2",
+  },
+  threadId: "thread-1", // 省略可: スレッドコンテキスト
+  resourceId: "resource-1", // 省略可: リソース識別子
+});
+```

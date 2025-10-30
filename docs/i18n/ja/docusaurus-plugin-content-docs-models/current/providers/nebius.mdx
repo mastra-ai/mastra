@@ -1,0 +1,274 @@
+---
+title: "Nebius AI Studio | モデル | Mastra"
+description: "Mastra で Nebius AI Studio のモデルを利用できます。利用可能なモデルは15件です。"
+---
+
+{/* このファイルは generate-model-docs.ts によって自動生成されています。手動で編集しないでください */}
+
+import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
+# <img src="https://models.dev/logos/nebius.svg" alt="Nebius AI Studio logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Nebius AI Studio
+
+Mastraのモデルルーター経由で、Nebius AI Studioの15モデルにアクセスできます。認証は `NEBIUS_API_KEY` 環境変数を用いて自動的に行われます。
+
+詳しくは [Nebius AI Studio のドキュメント](https://docs.studio.nebius.com/quickstart)をご覧ください。
+
+```bash
+NEBIUS_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "あなたは親切なアシスタントです",
+  model: "nebius/NousResearch/hermes-4-405b"
+});
+
+// レスポンスを生成
+const response = await agent.generate("Hello!");
+
+// レスポンスをストリーミング
+const stream = await agent.stream("物語を聞かせて");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra は OpenAI 互換の `/chat/completions` エンドポイントを使用します。プロバイダ固有の機能の一部は利用できない場合があります。詳細は [Nebius AI Studio ドキュメント](https://docs.studio.nebius.com/quickstart)をご確認ください。
+
+:::
+
+
+<div id="models">
+  ## モデル
+</div>
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "nebius/deepseek-ai/deepseek-v3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "model": "nebius/meta-llama/llama-3_1-405b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 1,
+    "outputCost": 3
+  },
+  {
+    "model": "nebius/meta-llama/llama-3.3-70b-instruct-base",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.13,
+    "outputCost": 0.4
+  },
+  {
+    "model": "nebius/meta-llama/llama-3.3-70b-instruct-fast",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.25,
+    "outputCost": 0.75
+  },
+  {
+    "model": "nebius/moonshotai/kimi-k2-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.5,
+    "outputCost": 2.4
+  },
+  {
+    "model": "nebius/NousResearch/hermes-4-405b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 1,
+    "outputCost": 3
+  },
+  {
+    "model": "nebius/NousResearch/hermes-4-70b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.13,
+    "outputCost": 0.4
+  },
+  {
+    "model": "nebius/nvidia/llama-3_1-nemotron-ultra-253b-v1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.6,
+    "outputCost": 1.8
+  },
+  {
+    "model": "nebius/openai/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "nebius/openai/gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.05,
+    "outputCost": 0.2
+  },
+  {
+    "model": "nebius/qwen/qwen3-235b-a22b-instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 8192,
+    "inputCost": 0.2,
+    "outputCost": 0.6
+  },
+  {
+    "model": "nebius/qwen/qwen3-235b-a22b-thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 8192,
+    "inputCost": 0.2,
+    "outputCost": 0.8
+  },
+  {
+    "model": "nebius/qwen/qwen3-coder-480b-a35b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 66536,
+    "inputCost": 0.4,
+    "outputCost": 1.8
+  },
+  {
+    "model": "nebius/zai-org/glm-4.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.6,
+    "outputCost": 2.2
+  },
+  {
+    "model": "nebius/zai-org/glm-4.5-air",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.2,
+    "outputCost": 1.2
+  }
+]}
+/>
+
+<div id="advanced-configuration">
+  ## 詳細設定
+</div>
+
+<div id="custom-headers">
+  ### カスタムヘッダー
+</div>
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.studio.nebius.com/v1/",
+    id: "nebius/NousResearch/hermes-4-405b",
+    apiKey: process.env.NEBIUS_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+
+<div id="dynamic-model-selection">
+  ### 動的モデル選択
+</div>
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "nebius/zai-org/glm-4.5-air"
+      : "nebius/NousResearch/hermes-4-405b";
+  }
+});
+```

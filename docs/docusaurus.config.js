@@ -28,8 +28,20 @@ const config = {
       onBrokenMarkdownLinks: "warn",
     },
   },
-  // Enable v4 features in prod
 
+  // Internationalization
+  // By default, Docusuarus will look for translations in:
+  //
+  //    i18n/{locale}/docusaurus-plugin-content-{name}/current/*.{filetype}
+  //
+  // We fetch all source files and store them there using the "transform" option
+  // in gt.config.json
+  i18n: {
+    defaultLocale: "en",
+    locales: ["en", "ja"],
+  },
+
+  // Enable v4 features in prod
   ...(process.env.NODE_ENV === "production" && {
     future: {
       v4: {

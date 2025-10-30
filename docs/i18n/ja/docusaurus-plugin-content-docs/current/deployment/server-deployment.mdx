@@ -1,0 +1,104 @@
+---
+title: "Mastra サーバーのデプロイ | デプロイ | Mastra ドキュメント"
+description: "ビルド設定とデプロイ方法を使って Mastra サーバーをデプロイする手順を学びます。"
+---
+
+<div id="deploy-a-mastra-server">
+  # Mastra サーバーをデプロイする
+</div>
+
+Mastra は標準的な Node.js サーバーとして動作し、さまざまな環境にデプロイできます。
+
+<div id="default-project-structure">
+  ## デフォルトのプロジェクト構成
+</div>
+
+[はじめにガイド](/docs/getting-started/installation)では、すぐに開発を始められるよう、妥当なデフォルト設定を備えたプロジェクトのひな型を作成します。デフォルトでは、CLI はアプリケーションのファイルを `src/mastra/` ディレクトリ配下に整理し、次のような構成になります。
+
+```
+src/
+└── mastra/
+    ├── agents/
+    ├── tools/
+    ├── workflows/
+    └── index.ts
+package.json
+tsconfig.json
+```
+
+
+<div id="building">
+  ## ビルド
+</div>
+
+`mastra build` コマンドでビルドを開始します。
+
+```bash copy
+mastra build
+```
+
+
+<div id="customizing-the-input-directory">
+  ### 入力ディレクトリのカスタマイズ
+</div>
+
+Mastra のファイルが別の場所にある場合は、`--dir` フラグを使って場所を指定します。`--dir` フラグは、エントリポイントとなるファイル（`index.ts` または `index.js`）と関連ディレクトリをどこで探すかを Mastra に指示します。
+
+```bash copy
+mastra build --dir ./my-project/mastra
+```
+
+
+<div id="build-process">
+  ## ビルドプロセス
+</div>
+
+ビルドプロセスは次の手順で進みます:
+
+1. **エントリーファイルの特定**: 指定ディレクトリ（デフォルト: `src/mastra/`）内の `index.ts` または `index.js` を検出します。
+2. **ビルドディレクトリの作成**: 次を含む `.mastra/` ディレクトリを生成します:
+   - **`.build`**: 依存関係の解析結果、バンドル済みの依存関係、ビルド設定ファイルを含みます。
+   - **`output`**: `index.mjs`、`instrumentation.mjs`、およびプロジェクト固有のファイルを含む、本番向けのアプリケーションバンドルを格納します。
+3. **静的アセットのコピー**: 静的ファイルを配信するために、`public/` フォルダの内容を `output` ディレクトリへコピーします。
+4. **コードのバンドル**: 最適化のために、Rollup を用いてツリーシェイキングとソースマップを有効化します。
+5. **サーバーの生成**: デプロイ可能な [Hono](https://hono.dev) 製の HTTP サーバーを作成します。
+
+<div id="build-output-structure">
+  ### ビルド出力の構成
+</div>
+
+ビルド後、Mastra は以下の構成を持つ `.mastra/` ディレクトリを作成します。
+
+```
+.mastra/
+├── .build/
+└── output/
+```
+
+
+<div id="public-folder">
+  ### `public` フォルダー
+</div>
+
+`src/mastra` に `public` フォルダーが存在する場合、ビルド時にその内容は `.build/output` ディレクトリにコピーされます。
+
+<div id="running-the-server">
+  ## サーバーの実行
+</div>
+
+HTTP サーバーを起動する:
+
+```bash copy
+node .mastra/output/index.mjs
+```
+
+
+<div id="enable-telemetry">
+  ## テレメトリーを有効にする
+</div>
+
+テレメトリーとオブザーバビリティを有効にするには、instrumentation ファイルを読み込みます:
+
+```bash copy
+node --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs
+```

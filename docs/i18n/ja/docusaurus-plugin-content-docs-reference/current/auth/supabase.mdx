@@ -1,0 +1,74 @@
+---
+title: "リファレンス: MastraAuthSupabase クラス | Auth | Mastra ドキュメント"
+description: "Supabase Auth で Mastra アプリを認証する MastraAuthSupabase クラスの API リファレンス。"
+---
+
+<div id="mastraauthsupabase-class">
+  # MastraAuthSupabase クラス
+</div>
+
+`MastraAuthSupabase` クラスは、Supabase Auth を用いて Mastra の認証を提供します。Supabase の認証システムで受信リクエストを検証し、`experimental_auth` オプションを介して Mastra サーバーと統合します。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthSupabase } from "@mastra/auth-supabase";
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthSupabase({
+      url: process.env.SUPABASE_URL,
+      anonKey: process.env.SUPABASE_ANON_KEY,
+    }),
+  },
+});
+```
+
+
+<div id="constructor-parameters">
+  ## コンストラクターのパラメーター
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "string",
+      description:
+        "Supabase プロジェクトの URL。プロジェクトの設定から確認できます。",
+      isOptional: true,
+      defaultValue: "process.env.SUPABASE_URL",
+    },
+    {
+      name: "anonKey",
+      type: "string",
+      description:
+        "Supabase プロジェクトの匿名/公開キー。クライアント側の認証に使用します。",
+      isOptional: true,
+      defaultValue: "process.env.SUPABASE_ANON_KEY",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "認証プロバイダーインスタンスの任意名。",
+      isOptional: true,
+    },
+    {
+      name: "authorizeUser",
+      type: "(user: User, request: HoneRequest) => Promise<boolean> | boolean",
+      description:
+        "ユーザーにアクセス権を付与すべきかを判定するカスタム認可関数。トークン検証後に呼び出されます。既定では 'users' テーブルの 'isAdmin' 列をチェックします。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連情報
+</div>
+
+[MastraAuthSupabase](/docs/auth/supabase)

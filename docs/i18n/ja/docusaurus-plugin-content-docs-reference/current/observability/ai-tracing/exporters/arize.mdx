@@ -1,0 +1,196 @@
+---
+title: "リファレンス: ArizeExporter | 可観測性 | Mastra ドキュメント"
+description: OpenInference を用いた AI トレーシング向け Arize エクスポーター
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
+<div id="arizeexporter">
+  # ArizeExporter
+</div>
+
+AI のトレーシングデータを、Arize Phoenix、Arize AX、または OpenInference のセマンティック規約に準拠した任意の OpenTelemetry 互換のオブザーバビリティプラットフォームへ送信します。
+
+<div id="constructor">
+  ## コンストラクタ
+</div>
+
+```typescript
+new ArizeExporter(config: ArizeExporterConfig)
+```
+
+
+<div id="arizeexporterconfig">
+  ## ArizeExporterConfig
+</div>
+
+```typescript
+interface ArizeExporterConfig {
+  // Phoenix / OpenTelemetry の設定
+  endpoint?: string;
+  apiKey?: string;
+
+  // Arize AX の設定
+  spaceId?: string;
+
+  // 共通の設定
+  projectName?: string;
+  headers?: Record<string, string>;
+
+  // OtelExporterConfig から継承
+  timeout?: number;
+  batchSize?: number;
+  logLevel?: "debug" | "info" | "warn" | "error";
+  resourceAttributes?: Record<string, any>;
+}
+```
+
+<PropertiesTable
+  props={[
+{
+  name: "endpoint",
+  type: "string",
+  description:
+    "トレースをエクスポートするためのコレクターのエンドポイント（例: Phoenix の場合は 'http://localhost:6006/v1/traces'）。Phoenix では必須。Arize AX では任意（既定: https://otlp.arize.com/v1/traces）。",
+  required: false,
+},
+{
+  name: "apiKey",
+  type: "string",
+  description:
+    "認証用の API キー。Phoenix Cloud と Arize AX では必須。自己ホスト型の Phoenix では任意。",
+  required: false,
+},
+{
+  name: "spaceId",
+  type: "string",
+  description:
+    "Arize AX のスペース ID。Arize AX にトレースを送信する場合は必須。",
+  required: false,
+},
+{
+  name: "projectName",
+  type: "string",
+  description: "OpenInference のリソース属性として追加されるプロジェクト名",
+  required: false,
+},
+{
+  name: "headers",
+  type: "Record<string, string>",
+  description: "OTLP リクエストに付与する追加ヘッダー",
+  required: false,
+},
+{
+  name: "timeout",
+  type: "number",
+  description:
+    "スパンをエクスポートするまでのタイムアウト（ミリ秒）（既定: 30000）",
+  required: false,
+},
+{
+  name: "batchSize",
+  type: "number",
+  description: "エクスポート前にバッチ処理するスパン数（既定: 512）",
+  required: false,
+},
+{
+  name: "logLevel",
+  type: "'debug' | 'info' | 'warn' | 'error'",
+  description: "ログレベル（既定: 'warn'）",
+  required: false,
+},
+{
+  name: "resourceAttributes",
+  type: "Record<string, any>",
+  description: "各スパンに追加するカスタムのリソース属性",
+  required: false,
+},
+]}
+/>
+
+
+<div id="methods">
+  ## 方法
+</div>
+
+<div id="exportevent">
+  ### exportEvent
+</div>
+
+```typescript
+async exportEvent(event: AITracingEvent): Promise<void>
+```
+
+設定されたエンドポイントにトレースイベントをエクスポートします。
+
+
+<div id="export">
+  ### export
+</div>
+
+```typescript
+async export(spans: ReadOnlyAISpan[]): Promise<void>
+```
+
+OpenTelemetry を使用し、OpenInference のセマンティック規約に従ってスパンをバッチでエクスポートします。
+
+
+<div id="shutdown">
+  ### シャットダウン
+</div>
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+未処理のデータをフラッシュし、クライアントをシャットダウンします。
+
+
+<div id="usage">
+  ## 使い方
+</div>
+
+<div id="phoenix-configuration">
+  ### Phoenix の構成
+</div>
+
+```typescript
+import { ArizeExporter } from "@mastra/arize";
+
+const exporter = new ArizeExporter({
+  endpoint: "http://localhost:6006/v1/traces",
+  apiKey: process.env.PHOENIX_API_KEY, // ローカルのPhoenixでは省略可能
+  projectName: "my-ai-project",
+});
+```
+
+
+<div id="arize-ax-configuration">
+  ### Arize AX の設定
+</div>
+
+```typescript
+import { ArizeExporter } from "@mastra/arize";
+
+const exporter = new ArizeExporter({
+  spaceId: process.env.ARIZE_SPACE_ID!,
+  apiKey: process.env.ARIZE_API_KEY!,
+  projectName: "my-ai-project",
+});
+```
+
+
+<div id="openinference-semantic-conventions">
+  ## OpenInference セマンティック規約
+</div>
+
+ArizeExporter は、生成 AI アプリケーション向けに [OpenInference セマンティック規約](https://github.com/Arize-ai/openinference/tree/main/spec) を実装し、さまざまなオブザーバビリティプラットフォーム間で標準化されたトレース構造を提供します。
+
+<div id="related">
+  ## 関連情報
+</div>
+
+- [ArizeExporter のドキュメント](/docs/observability/ai-tracing/exporters/arize)
+- [Phoenix のドキュメント](https://docs.arize.com/phoenix)
+- [Arize AX のドキュメント](https://docs.arize.com/)

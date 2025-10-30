@@ -1,0 +1,96 @@
+---
+title: "Speech-to-Text (STT) | Voice | Mastra ドキュメント"
+description: Mastra の Speech-to-Text 機能の概要。設定方法、使い方、音声プロバイダーとの連携について解説します。
+---
+
+<div id="speech-to-text-stt">
+  # 音声認識（STT）
+</div>
+
+Mastra の音声認識（STT）は、複数のサービスプロバイダーに対応し、音声入力をテキストに変換するための標準化インターフェースを提供します。
+STT は、人間の音声に反応する音声対応アプリケーションの構築を支援し、ハンズフリー操作、障害のあるユーザーのアクセシビリティ向上、より自然な人間とコンピューターのインターフェースを実現します。
+
+<div id="configuration">
+  ## 設定
+</div>
+
+Mastra で STT を利用するには、音声プロバイダーを初期化する際に `listeningModel` を指定します。これには次のようなパラメータが含まれます:
+
+* **`name`**: 使用する STT モデル名。
+* **`apiKey`**: 認証用 API キー。
+* **プロバイダー固有のオプション**: 利用する音声プロバイダーで必要/サポートされる追加オプション。
+
+**注意**: これらのパラメータはすべて任意です。使用するプロバイダーに応じて、音声プロバイダーが提供するデフォルト設定をそのまま利用できます。
+
+```typescript
+const voice = new OpenAIVoice({
+  listeningModel: {
+    name: "whisper-1",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// 既定の設定を使用する場合、設定は次のように簡略化できます:
+const voice = new OpenAIVoice();
+```
+
+
+<div id="available-providers">
+  ## 利用可能なプロバイダー
+</div>
+
+Mastra は複数の Speech-to-Text プロバイダーをサポートしており、それぞれに固有の機能と強みがあります。
+
+* [**OpenAI**](/reference/voice/openai/) - Whisper モデルによる高精度な文字起こし
+* [**Azure**](/reference/voice/azure/) - 企業向けの高い信頼性を備えた Microsoft の音声認識
+* [**ElevenLabs**](/reference/voice/elevenlabs/) - 多言語対応の高度な音声認識
+* [**Google**](/reference/voice/google/) - 幅広い言語をサポートする Google の音声認識
+* [**Cloudflare**](/reference/voice/cloudflare/) - 低レイテンシ用途向けのエッジ最適化音声認識
+* [**Deepgram**](/reference/voice/deepgram/) - 多様なアクセントに高精度で対応する AI 搭載の音声認識
+* [**Sarvam**](/reference/voice/sarvam/) - インド系言語とアクセントに特化
+
+各プロバイダーは、必要に応じてインストールできる個別パッケージとして提供されています。
+
+```bash
+pnpm add @mastra/voice-openai  # OpenAI の例
+```
+
+
+<div id="using-the-listen-method">
+  ## Listen メソッドの使用
+</div>
+
+STT の主要なメソッドは `listen()` で、音声をテキストに変換します。使い方は次のとおりです：
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { getMicrophoneStream } from "@mastra/node-audio";
+
+const voice = new OpenAIVoice();
+
+const agent = new Agent({
+  name: "Voice Agent",
+  instructions:
+    "あなたはユーザーの入力に基づいてレコメンデーションを提供する音声アシスタントです。",
+  model: openai("gpt-4o"),
+  voice,
+});
+
+const audioStream = getMicrophoneStream(); // この関数が音声入力を取得すると想定
+
+const transcript = await agent.voice.listen(audioStream, {
+  filetype: "m4a", // オプション: 音声ファイル形式を指定
+});
+
+console.log(`ユーザーの発言: ${transcript}`);
+
+const { text } = await agent.generate(
+  `ユーザーの発言に基づいて、レコメンデーションを提供してください: ${transcript}`,
+);
+
+console.log(`レコメンデーション: ${text}`);
+```
+
+エージェントでの STT の使い方は、[Adding Voice to Agents](/docs/agents/adding-voice) のドキュメントをご覧ください。

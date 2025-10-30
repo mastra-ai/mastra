@@ -1,0 +1,97 @@
+---
+title: "リファレンス: Langfuse | オブザーバビリティ | Mastra ドキュメント"
+description: Mastra と Langfuse の統合方法に関するドキュメント。Mastra は LLM アプリケーション向けのオープンソースのオブザーバビリティプラットフォームです。
+---
+
+<div id="langfuse">
+  # Langfuse
+</div>
+
+Langfuse は、LLM アプリケーション向けに特化して設計されたオープンソースのオブザーバビリティ・プラットフォームです。
+
+> **注**: 現在、詳細なテレメトリーデータを含むのは AI 関連の呼び出しのみです。その他の操作でもトレースは作成されますが、情報は限定的です。
+
+<div id="configuration">
+  ## 設定
+</div>
+
+Mastra で Langfuse を使用するには、環境変数で設定するか、Mastra の設定で直接指定します。
+
+<div id="using-environment-variables">
+  ### 環境変数の使用
+</div>
+
+以下の環境変数を設定します：
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT="https://cloud.langfuse.com/api/public/otel/v1/traces" # 🇪🇺 EUデータ地域
+# OTEL_EXPORTER_OTLP_ENDPOINT="https://us.cloud.langfuse.com/api/public/otel/v1/traces" # 🇺🇸 USデータ地域
+
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic ${AUTH_STRING}"
+```
+
+`AUTH_STRING` は、公開キーと秘密キーを組み合わせて base64 エンコードしたものです（下記参照）。
+
+
+### AUTH&#95;STRING の生成
+
+認可には Langfuse の API キーを用いた Basic 認証を使用します。以下の方法で、base64 エンコードされた認証文字列を生成できます:
+
+```bash
+echo -n "pk-lf-1234567890:sk-lf-1234567890" | base64
+```
+
+GNU システムで長い API キーを使用する場合は、自動改行を防ぐために `-w 0` を追加する必要がある場合があります：
+
+```bash
+echo -n "pk-lf-1234567890:sk-lf-1234567890" | base64 -w 0
+```
+
+
+<div id="implementation">
+  ## 実装
+</div>
+
+Mastra を OpenTelemetry と併用して Langfuse を使うように設定する手順は次のとおりです：
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // ... その他の設定
+  telemetry: {
+    enabled: true,
+    export: {
+      type: "otlp",
+      endpoint: "https://cloud.langfuse.com/api/public/otel/v1/traces", // または任意のエンドポイント
+      headers: {
+        Authorization: `Basic ${AUTH_STRING}`, // Base64エンコードされた認証文字列
+      },
+    },
+  },
+});
+```
+
+または、環境変数を使用している場合は、設定を簡素化できます。
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // ... その他の設定
+  telemetry: {
+    enabled: true,
+    export: {
+      type: "otlp",
+      // エンドポイントとヘッダーは OTEL_EXPORTER_OTLP_* 環境変数から読み取られます
+    },
+  },
+});
+```
+
+
+<div id="dashboard">
+  ## ダッシュボード
+</div>
+
+設定が完了すると、[cloud.langfuse.com](https://cloud.langfuse.com) の Langfuse ダッシュボードでトレースと分析を確認できます

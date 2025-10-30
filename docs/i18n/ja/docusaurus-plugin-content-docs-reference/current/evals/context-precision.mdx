@@ -1,0 +1,219 @@
+---
+title: "リファレンス: ContextPrecisionMetric | Evals | Mastra ドキュメント"
+description: Mastra における Context Precision Metric のドキュメント。期待される出力を生成するために、取得したコンテキストノードの関連性と精度を評価します。
+---
+
+<div id="contextprecisionmetric">
+  # ContextPrecisionMetric
+</div>
+
+:::info Scorers
+このドキュメントはレガシーの evals API に関するものです。最新のスコアラー機能については [Scorers](/docs/scorers/overview) を参照してください。
+:::
+
+`ContextPrecisionMetric` クラスは、期待される出力の生成に対して、取得したコンテキストノードがどれだけ関連性が高く、精度が高いかを評価します。各コンテキスト要素の寄与度を判定ベースで分析し、位置に応じた重み付けスコアを提供します。
+
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { ContextPrecisionMetric } from "@mastra/evals/llm";
+
+// 評価用にモデルを構成する
+const model = openai("gpt-4o-mini");
+
+const metric = new ContextPrecisionMetric(model, {
+  context: [
+    "光合成は、植物が太陽光からエネルギーを作り出す生物学的プロセスです。",
+    "植物は生長のために土壌から水と養分を必要とします。",
+    "光合成の過程では、副産物として酸素が生成されます。",
+  ],
+});
+
+const result = await metric.measure(
+  "光合成とは何ですか？",
+  "光合成は、植物が太陽光をエネルギーに変換する過程です。",
+);
+
+console.log(result.score); // 精度スコア（0〜1）
+console.log(result.info.reason); // スコアの説明
+```
+
+
+<div id="constructor-parameters">
+  ## コンストラクターのパラメーター
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      description:
+        "コンテキストの関連性を評価するために使用するモデルの構成",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "ContextPrecisionMetricOptions",
+      description: "この指標の構成オプション",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="contextprecisionmetricoptions">
+  ### ContextPrecisionMetricOptions
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "scale",
+      type: "number",
+      description: "スコアの最大値",
+      isOptional: true,
+      defaultValue: "1",
+    },
+    {
+      name: "context",
+      type: "string[]",
+      description: "取得順に並んだコンテキスト要素の配列",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="measure-parameters">
+  ## measure() のパラメーター
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "元のクエリまたはプロンプト",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "評価する生成結果",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "精度スコア（0 〜 scale、デフォルトは 0〜1）",
+    },
+    {
+      name: "info",
+      type: "object",
+      description: "スコアの理由を含むオブジェクト",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description: "スコアの詳細な説明",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
+
+このメトリクスは、二値の関連性判定と Mean Average Precision（MAP） に基づくスコアリングで、コンテキストの適合度を評価します。
+
+<div id="scoring-process">
+  ### スコアリングプロセス
+</div>
+
+1. 二値の関連度スコアを付与:
+   - 関連コンテキスト: 1
+   - 非関連コンテキスト: 0
+
+2. 平均適合率（Mean Average Precision）を算出:
+   - 各順位での適合率を計算
+   - 上位の順位をより重く重み付け
+   - 設定済みスケールに正規化
+
+最終スコア: `Mean Average Precision * scale`
+
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
+
+（スケールは0から。デフォルトは0〜1）
+
+- 1.0: すべての関連する文脈が最適な順序で並んでいる
+- 0.7〜0.9: ほとんどが関連する文脈で、順序も良好
+- 0.4〜0.6: 関連性が混在、または順序が最適ではない
+- 0.1〜0.3: 関連性が限定的、または順序が不十分
+- 0.0: 関連する文脈がない
+
+<div id="example-with-analysis">
+  ## 分析付きの例
+</div>
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { ContextPrecisionMetric } from "@mastra/evals/llm";
+
+// 評価用にモデルを設定する
+const model = openai("gpt-4o-mini");
+
+const metric = new ContextPrecisionMetric(model, {
+  context: [
+    "運動は心臓を強くし、血液循環を改善します。",
+    "健康のためにはバランスの取れた食事が重要です。",
+    "定期的な身体活動はストレスや不安を軽減します。",
+    "運動器具は高価になり得ます。",
+  ],
+});
+
+const result = await metric.measure(
+  "運動にはどんな利点がありますか？",
+  "定期的な運動は心血管の健康とメンタルウェルビーイングを向上させます。",
+);
+
+// 出力例:
+// {
+//   score: 0.75,
+//   info: {
+//     reason: "スコアが0.75である理由は、最初と3番目のコンテキストが出力で述べられた利点と強く関連している一方、2番目と4番目のコンテキストは運動の利点に直接関係しないためです。関連するコンテキストはシーケンスの冒頭と中ほどに適切に配置されています。"
+//           to the benefits mentioned in the output, while the second and fourth contexts
+//           are not directly related to exercise benefits. The relevant contexts are well-positioned
+//           at the beginning and middle of the sequence."
+//   }
+// }
+```
+
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [回答の関連性メトリクス](./answer-relevancy)
+- [コンテキスト位置メトリクス](./context-position)
+- [完全性メトリクス](./completeness)
+- [コンテキスト関連性メトリクス](./context-relevancy)

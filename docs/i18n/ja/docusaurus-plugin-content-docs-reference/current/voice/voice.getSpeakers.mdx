@@ -1,0 +1,305 @@
+---
+title: "リファレンス: voice.getSpeakers() | Voice Providers | Mastra ドキュメント"
+description: "音声プロバイダーで利用可能な getSpeakers() メソッドのドキュメント。利用可能な音声オプションを取得します。"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+
+<div id="voicegetspeakers">
+  # voice.getSpeakers()
+</div>
+
+`getSpeakers()` メソッドは、音声プロバイダーから利用可能な音声オプション（話者）の一覧を取得します。これにより、アプリケーションはユーザーに音声の選択肢を提示したり、用途に応じて最適な音声をプログラムで選択したりできます。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+
+// 音声プロバイダーを初期化
+const openaiVoice = new OpenAIVoice();
+const elevenLabsVoice = new ElevenLabsVoice({
+  apiKey: process.env.ELEVENLABS_API_KEY,
+});
+
+// OpenAI の利用可能なボイスを取得
+const openaiSpeakers = await openaiVoice.getSpeakers();
+console.log("OpenAI のボイス:", openaiSpeakers);
+// 出力例: [{ voiceId: "alloy" }, { voiceId: "echo" }, { voiceId: "fable" }, ...]
+
+// ElevenLabs の利用可能なボイスを取得
+const elevenLabsSpeakers = await elevenLabsVoice.getSpeakers();
+console.log("ElevenLabs のボイス:", elevenLabsSpeakers);
+// 出力例: [{ voiceId: "21m00Tcm4TlvDq8ikWAM", name: "Rachel" }, ...]
+
+// 特定のボイスで読み上げる
+const text = "こんにちは。これは異なるボイスのテストです。";
+await openaiVoice.speak(text, { speaker: openaiSpeakers[2].voiceId });
+await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+このメソッドはパラメータを受け取りません。
+
+<div id="return-value">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "Promise<Array<{ voiceId: string } & TSpeakerMetadata>>",
+      type: "Promise",
+      description:
+        "各オプションに少なくとも voiceId プロパティが含まれ、必要に応じてプロバイダー固有のメタデータが追加されうる、音声オプションの配列に解決される Promise。",
+    },
+  ]}
+/>
+
+<div id="provider-specific-metadata">
+  ## プロバイダー固有のメタデータ
+</div>
+
+音声プロバイダーによって、提供される音声のメタデータは異なります。
+
+<Tabs>
+  <TabItem value="OpenAI">
+    <PropertiesTable
+      content={[
+  {
+    name: "voiceId",
+    type: "string",
+    description: "音声の固有識別子（例: 'alloy'、'echo'、'fable'、'onyx'、'nova'、'shimmer'）",
+  }
+]}
+    />
+  </TabItem>
+
+  <TabItem value="OpenAI Realtime">
+    <PropertiesTable
+      content={[
+{
+  name: "voiceId",
+  type: "string",
+  description:
+    "音声の固有識別子（例：「alloy」「echo」「fable」「onyx」「nova」「shimmer」）",
+},
+]}
+    />
+  </TabItem>
+
+  <TabItem value="Deepgram">
+    <PropertiesTable
+      content={[
+{
+  name: "voiceId",
+  type: "string",
+  description: "音声の固有識別子",
+},
+{
+  name: "language",
+  type: "string",
+  description: "voiceId に含まれる言語コード（例: 'en'）",
+},
+]}
+    />
+  </TabItem>
+
+  <TabItem value="ElevenLabs">
+    <PropertiesTable
+      content={[
+{
+  name: "voiceId",
+  type: "string",
+  description: "ボイスの固有識別子",
+},
+{
+  name: "name",
+  type: "string",
+  description: "ボイスの人間にとって読みやすい名称",
+},
+{
+  name: "category",
+  type: "string",
+  description: "ボイスのカテゴリ（例：「premade」「cloned」）",
+},
+]}
+    />
+  </TabItem>
+
+  <TabItem value="Google">
+    <PropertiesTable
+      content={[
+{
+  name: "voiceId",
+  type: "string",
+  description: "音声の一意識別子",
+},
+{
+  name: "languageCodes",
+  type: "string[]",
+  description:
+    "音声が対応する言語コードの配列（例: ['en-US']）",
+},
+]}
+    />
+  </TabItem>
+
+  <TabItem value="Azure">
+    <PropertiesTable
+      content={[
+{
+  name: "voiceId",
+  type: "string",
+  description: "音声の固有識別子",
+},
+{
+  name: "language",
+  type: "string",
+  description: "voice ID から抽出された言語コード（例: 'en'）",
+},
+{
+  name: "region",
+  type: "string",
+  description: "voice ID から抽出された地域コード（例: 'US'）",
+},
+]}
+    />
+  </TabItem>
+
+  <TabItem value="Murf">
+    <PropertiesTable
+      content={[
+{
+  name: "voiceId",
+  type: "string",
+  description: "音声の固有識別子",
+},
+{
+  name: "name",
+  type: "string",
+  description: "音声名（voiceId と同じ）",
+},
+{
+  name: "language",
+  type: "string",
+  description: "voiceId から抽出された言語コード（例: 'en'）",
+},
+{
+  name: "gender",
+  type: "string",
+  description:
+    "音声の性別（現行の実装では常に 'neutral'）",
+},
+]}
+    />
+  </TabItem>
+
+  <TabItem value="PlayAI">
+    <PropertiesTable
+      content={[
+{
+  name: "voiceId",
+  type: "string",
+  description:
+    "音声の一意な識別子（manifest.json への S3 URL）",
+},
+{
+  name: "name",
+  type: "string",
+  description:
+    "音声の表示名（例：'Angelo'、'Arsenio'）",
+},
+{
+  name: "accent",
+  type: "string",
+  description:
+    "音声のアクセント（例：'US'、'Irish'、'US African American'）",
+},
+{
+  name: "gender",
+  type: "string",
+  description: "音声の性別（'M' または 'F'）",
+},
+{
+  name: "age",
+  type: "string",
+  description: "音声の年齢区分（例：'Young'、'Middle'）",
+},
+{
+  name: "style",
+  type: "string",
+  description: "話し方のスタイル（例：'Conversational'）",
+},
+]}
+    />
+  </TabItem>
+
+  <TabItem value="Speechify">
+    <PropertiesTable
+      content={[
+{
+  name: "voiceId",
+  type: "string",
+  description: "音声の一意の識別子",
+},
+{
+  name: "name",
+  type: "string",
+  description: "音声の人間が判読可能な名称",
+},
+{
+  name: "language",
+  type: "string",
+  description: "音声の言語コード（例：「en-US」）",
+},
+]}
+    />
+  </TabItem>
+
+  <TabItem value="Sarvam">
+    <PropertiesTable
+      content={[
+  {
+    name: "voiceId",
+    type: "string",
+    description: "音声の一意な識別子",
+  },
+  {
+    name: "name",
+    type: "string",
+    description: "音声の人間可読な名称",
+  },
+  {
+    name: "language",
+    type: "string",
+    description: "音声の言語（例: 'english'、'hindi'）",
+  },
+  {
+    name: "gender",
+    type: "string",
+    description: "音声の性別（'male' または 'female'）",
+  }
+]}
+    />
+  </TabItem>
+</Tabs>
+
+<div id="notes">
+  ## 注意事項
+</div>
+
+- 利用可能な音声はプロバイダーによって大きく異なります
+- 一部のプロバイダーでは、音声の全リストを取得するには認証が必要な場合があります
+- デフォルト実装では、このメソッドをサポートしていないプロバイダーの場合、空の配列を返します
+- パフォーマンスの観点から、一覧を頻繁に表示する必要がある場合は結果のキャッシュを検討してください
+- `voiceId` プロパティはすべてのプロバイダーで必ず存在しますが、追加のメタデータは異なります

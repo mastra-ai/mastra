@@ -1,0 +1,207 @@
+---
+title: "リファレンス: MastraScorer | スコアラー | Mastra ドキュメント"
+description: Mastra の MastraScorer 基底クラスに関するドキュメント。すべてのカスタムおよび組み込みスコアラーの基盤となるクラスです。
+---
+
+<div id="mastrascorer">
+  # MastraScorer
+</div>
+
+`MastraScorer` クラスは、Mastra におけるすべてのスコアラーの基底クラスです。入力と出力のペアを評価するための標準的な `.run()` メソッドを提供し、preprocess → analyze → generateScore → generateReason の実行フローによるマルチステップのスコアリングをサポートします。
+
+**注:** 多くのユーザーは、スコアラーのインスタンスを作成する際は [`createScorer`](./create-scorer) を使用してください。`MastraScorer` を直接インスタンス化することは推奨されません。
+
+<div id="how-to-get-a-mastrascorer-instance">
+  ## MastraScorer インスタンスの取得方法
+</div>
+
+`MastraScorer` インスタンスは、`createScorer` ファクトリ関数で作成できます。
+
+```typescript
+const scorer = createScorer({
+  name: "My Custom Scorer",
+  description: "カスタム条件に基づいてレスポンスを評価します",
+}).generateScore(({ run, results }) => {
+  // スコアリングロジック
+  return 0.85;
+});
+
+// scorer は MastraScorer インスタンスです
+```
+
+
+<div id="run-method">
+  ## .run() メソッド
+</div>
+
+`.run()` メソッドは、scorer を実行して入出力ペアを評価するための主要な方法です。定義した手順（preprocess → analyze → generateScore → generateReason）に沿ってデータを処理し、スコア、根拠、および中間結果を含む包括的な結果オブジェクトを返します。
+
+```typescript
+const result = await scorer.run({
+  input: "機械学習とは何ですか?",
+  output: "機械学習は人工知能のサブセットです...",
+  runId: "optional-run-id",
+  runtimeContext: {
+    /* オプションのコンテキスト */
+  },
+});
+```
+
+
+<div id="run-input">
+  ## .run() の入力
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "any",
+      required: true,
+      description:
+        "評価対象の入力データ。スコアラーの要件に応じて任意の型を使用できます。",
+    },
+    {
+      name: "output",
+      type: "any",
+      required: true,
+      description:
+        "評価対象の出力データ。スコアラーの要件に応じて任意の型を使用できます。",
+    },
+    {
+      name: "runId",
+      type: "string",
+      required: false,
+      description: "このスコアリング実行のための任意の一意識別子。",
+    },
+    {
+      name: "runtimeContext",
+      type: "any",
+      required: false,
+      description:
+        "評価対象のエージェントまたはワークフローステップから渡されるオプションのランタイムコンテキスト。",
+    },
+    {
+      name: "groundTruth",
+      type: "any",
+      required: false,
+      description:
+        "スコアリング時の比較に用いる想定結果または参照出力（任意）。runExperiment を使用する場合は自動的に渡されます。",
+    },
+  ]}
+/>
+
+<div id="run-returns">
+  ## .run() の戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "このスコアリング実行の一意の識別子。",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "generateScore ステップで算出された数値スコア。",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description:
+        "スコアの理由。generateReason ステップが定義されている場合（任意）。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "any",
+      description: "preprocess ステップの結果（任意・定義されている場合）。",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "any",
+      description: "analyze ステップの結果（任意・定義されている場合）。",
+    },
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description: "preprocess 用プロンプト（任意・定義されている場合）。",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description: "analyze 用プロンプト（任意・定義されている場合）。",
+    },
+    {
+      name: "generateScorePrompt",
+      type: "string",
+      description: "スコア生成用プロンプト（任意・定義されている場合）。",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description: "理由生成用プロンプト（任意・定義されている場合）。",
+    },
+  ]}
+/>
+
+<div id="step-execution-flow">
+  ## ステップ実行フロー
+</div>
+
+`.run()` を呼び出すと、MastraScorer は以下の順序で定義されたステップを実行します：
+
+1. **preprocess**（任意）- データを抽出・変換する
+2. **analyze**（任意）- 入出力および前処理済みデータを処理する
+3. **generateScore**（必須）- 数値スコアを算出する
+4. **generateReason**（任意）- スコアの理由を説明する
+
+各ステップは直前のステップの結果を受け取り、複雑な評価パイプラインを構築できるようにします。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript
+const scorer = createScorer({
+  name: "品質スコアラー",
+  description: "応答の品質を評価します",
+})
+  .preprocess(({ run }) => {
+    // 重要な情報を抽出
+    return { wordCount: run.output.split(" ").length };
+  })
+  .analyze(({ run, results }) => {
+    // 応答を分析
+    const hasSubstance = results.preprocessStepResult.wordCount > 10;
+    return { hasSubstance };
+  })
+  .generateScore(({ results }) => {
+    // スコアを計算
+    return results.analyzeStepResult.hasSubstance ? 1.0 : 0.0;
+  })
+  .generateReason(({ score, results }) => {
+    // スコアの説明を生成
+    const wordCount = results.preprocessStepResult.wordCount;
+    return `スコア: ${score}。応答は${wordCount}単語です。`;
+  });
+
+// スコアラーを使用
+const result = await scorer.run({
+  input: "機械学習とは何ですか?",
+  output: "機械学習は人工知能のサブセットです...",
+});
+
+console.log(result.score); // 1.0
+console.log(result.reason); // "スコア: 1.0。応答は12単語です。"
+```
+
+
+<div id="integration">
+  ## 統合
+</div>
+
+MastraScorer のインスタンスは、エージェントやワークフローの各ステップで使用できます。
+
+カスタムスコアリングロジックの定義についての詳細は、[createScorer リファレンス](./create-scorer)をご覧ください。
