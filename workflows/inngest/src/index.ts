@@ -418,7 +418,7 @@ export class InngestRun<
           e.type = e.payload.output.type;
           e.payload = e.payload.output.payload;
         }
-        // watch-v2 events are data stream events, so we need to cast them to the correct type
+        // watch events are data stream events, so we need to cast them to the correct type
         await writer.write(e as any);
       } catch {}
     });
@@ -482,7 +482,7 @@ export class InngestRun<
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
-        // TODO: fix this, watch-v2 doesn't have a type
+        // TODO: fix this, watch doesn't have a type
         // @ts-ignore
         const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
           controller.enqueue({

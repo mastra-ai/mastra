@@ -1186,8 +1186,8 @@ export class Workflow<
       await run.cancel();
     });
 
-    const unwatchV2 = run.watch(event => {
-      emitter.emit('nested-watch-v2', { event, workflowId: this.id });
+    const unwatch = run.watch(event => {
+      emitter.emit('nested-watch', { event, workflowId: this.id });
     });
 
     if (retryCount && retryCount > 0 && isResume && requestContext) {
@@ -1211,7 +1211,7 @@ export class Workflow<
           initialState: state,
           outputOptions: { includeState: true, includeResumeLabels: true },
         });
-    unwatchV2();
+    unwatch();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
       const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
       return stepRes?.status === 'suspended';
@@ -1769,7 +1769,7 @@ export class Run<
           ...event,
           type: event.type.replace('workflow-', ''),
         };
-        // watch-v2 events are data stream events, so we need to cast them to the correct type
+        // watch events are data stream events, so we need to cast them to the correct type
         await writer.write(e as any);
         if (onChunk) {
           await onChunk(e as any);
@@ -1857,7 +1857,7 @@ export class Run<
           ...event,
           type: event.type.replace('workflow-', ''),
         };
-        // watch-v2 events are data stream events, so we need to cast them to the correct type
+        // watch events are data stream events, so we need to cast them to the correct type
         await writer.write(e as any);
       } catch {}
     });
@@ -1946,7 +1946,7 @@ export class Run<
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
-        // TODO: fix this, watch-v2 doesn't have a type
+        // TODO: fix this, watch doesn't have a type
         // @ts-ignore
         const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
           controller.enqueue({
@@ -2086,7 +2086,7 @@ export class Run<
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
-        // TODO: fix this, watch-v2 doesn't have a type
+        // TODO: fix this, watch doesn't have a type
         // @ts-ignore
         const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
           controller.enqueue({
@@ -2155,7 +2155,7 @@ export class Run<
    * @internal
    */
   watch(cb: (event: WorkflowStreamEvent) => void): () => void {
-    const nestedWatchV2Cb = ({
+    const nestedWatchCb = ({
       event,
       workflowId,
     }: {
@@ -2169,11 +2169,11 @@ export class Run<
     };
 
     this.emitter.on('watch', cb);
-    this.emitter.on('nested-watch-v2', nestedWatchV2Cb);
+    this.emitter.on('nested-watch', nestedWatchCb);
 
     return () => {
       this.emitter.off('watch', cb);
-      this.emitter.off('nested-watch-v2', nestedWatchV2Cb);
+      this.emitter.off('nested-watch', nestedWatchCb);
     };
   }
 
