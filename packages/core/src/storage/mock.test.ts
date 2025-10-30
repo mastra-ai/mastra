@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, beforeEach } from 'vitest';
 import { MessageList } from '../agent';
-import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '../memory/types';
+import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import { deepMerge } from '../utils';
 import { InMemoryStore } from './mock';
 

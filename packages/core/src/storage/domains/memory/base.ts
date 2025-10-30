@@ -46,8 +46,6 @@ abstract getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBM
 
   abstract listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
 
-  abstract getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }>;
-
   abstract listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }>;
 
   abstract saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }>;
