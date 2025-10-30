@@ -257,11 +257,19 @@ export interface CreateMemoryThreadParams {
 
 export type CreateMemoryThreadResponse = StorageThreadType;
 
-export interface GetMemoryThreadParams {
+export interface ListMemoryThreadsParams {
   resourceId: string;
   agentId: string;
+  offset?: number;
+  limit?: number;
+  orderBy?: 'createdAt' | 'updatedAt';
+  sortDirection?: 'ASC' | 'DESC';
   runtimeContext?: RuntimeContext | Record<string, any>;
 }
+
+export type ListMemoryThreadsResponse = PaginationInfo & {
+  threads: StorageThreadType[];
+};
 
 export interface GetMemoryConfigParams {
   agentId: string;
@@ -269,8 +277,6 @@ export interface GetMemoryConfigParams {
 }
 
 export type GetMemoryConfigResponse = { config: MemoryConfig };
-
-export type GetMemoryThreadResponse = StorageThreadType[];
 
 export interface UpdateMemoryThreadParams {
   title: string;

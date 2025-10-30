@@ -10,8 +10,7 @@ import {
   getMessagesHandler,
   getMessagesPaginatedHandler,
   getThreadByIdHandler,
-  getThreadsHandler,
-  getThreadsPaginatedHandler,
+  listThreadsHandler,
   getWorkingMemoryHandler,
   saveMessagesHandler,
   searchMemoryHandler,
@@ -65,6 +64,20 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
           schema: { type: 'string' },
         },
         {
+          name: 'offset',
+          in: 'query',
+          required: false,
+          schema: { type: 'number', default: 0 },
+          description: 'Number of records to skip',
+        },
+        {
+          name: 'limit',
+          in: 'query',
+          required: false,
+          schema: { type: 'number', default: 100 },
+          description: 'Maximum number of threads to return',
+        },
+        {
           name: 'orderBy',
           in: 'query',
           required: false,
@@ -93,7 +106,7 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    getThreadsHandler,
+    listThreadsHandler,
   );
 
   router.get(
@@ -535,56 +548,6 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
   router.get(
     '/threads',
     describeRoute({
-      description: 'Get all threads',
-      tags: ['memory'],
-      parameters: [
-        {
-          name: 'resourceid',
-          in: 'query',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'agentId',
-          in: 'query',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'orderBy',
-          in: 'query',
-          required: false,
-          schema: {
-            type: 'string',
-            enum: ['createdAt', 'updatedAt'],
-            default: 'createdAt',
-          },
-          description: 'Field to sort by',
-        },
-        {
-          name: 'sortDirection',
-          in: 'query',
-          required: false,
-          schema: {
-            type: 'string',
-            enum: ['ASC', 'DESC'],
-            default: 'DESC',
-          },
-          description: 'Sort direction',
-        },
-      ],
-      responses: {
-        200: {
-          description: 'List of all threads',
-        },
-      },
-    }),
-    getThreadsHandler,
-  );
-
-  router.get(
-    '/threads/paginated',
-    describeRoute({
       description: 'Get paginated threads',
       tags: ['memory'],
       parameters: [
@@ -601,18 +564,18 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
           schema: { type: 'string' },
         },
         {
-          name: 'page',
+          name: 'offset',
           in: 'query',
           required: false,
           schema: { type: 'number', default: 0 },
-          description: 'Page number',
+          description: 'Number of records to skip',
         },
         {
-          name: 'perPage',
+          name: 'limit',
           in: 'query',
           required: false,
           schema: { type: 'number', default: 100 },
-          description: 'Number of threads per page',
+          description: 'Maximum number of threads to return',
         },
         {
           name: 'orderBy',
@@ -641,7 +604,7 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    getThreadsPaginatedHandler,
+    listThreadsHandler,
   );
 
   router.get(

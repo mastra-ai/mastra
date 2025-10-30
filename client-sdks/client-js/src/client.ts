@@ -21,8 +21,6 @@ import type {
   GetLogParams,
   GetLogsParams,
   GetLogsResponse,
-  GetMemoryThreadParams,
-  GetMemoryThreadResponse,
   GetToolResponse,
   GetWorkflowResponse,
   SaveMessageToMemoryParams,
@@ -43,6 +41,8 @@ import type {
   GetMemoryThreadMessagesResponse,
   MemorySearchResponse,
   ListAgentsModelProvidersResponse,
+  ListMemoryThreadsParams,
+  ListMemoryThreadsResponse,
 } from './types';
 import { base64RuntimeContext, parseClientRuntimeContext, runtimeContextQueryString } from './utils';
 
@@ -85,13 +85,22 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Retrieves memory threads for a resource
-   * @param params - Parameters containing the resource ID and optional runtime context
-   * @returns Promise containing array of memory threads
+   * Lists memory threads for a resource with pagination support
+   * @param params - Parameters containing resource ID, pagination options, and optional runtime context
+   * @returns Promise containing paginated array of memory threads with metadata
    */
-  public getMemoryThreads(params: GetMemoryThreadParams): Promise<GetMemoryThreadResponse> {
+  public listMemoryThreads(params: ListMemoryThreadsParams): Promise<ListMemoryThreadsResponse> {
+    const queryParams = new URLSearchParams({
+      resourceId: params.resourceId,
+      agentId: params.agentId,
+      ...(params.offset !== undefined && { offset: params.offset.toString() }),
+      ...(params.limit !== undefined && { limit: params.limit.toString() }),
+      ...(params.orderBy && { orderBy: params.orderBy }),
+      ...(params.sortDirection && { sortDirection: params.sortDirection }),
+    });
+
     return this.request(
-      `/api/memory/threads?resourceid=${params.resourceId}&agentId=${params.agentId}${runtimeContextQueryString(params.runtimeContext, '&')}`,
+      `/api/memory/threads?${queryParams.toString()}${runtimeContextQueryString(params.runtimeContext, '&')}`,
     );
   }
 

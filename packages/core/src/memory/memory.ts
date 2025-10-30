@@ -5,7 +5,14 @@ import type { MastraDBMessage } from '../agent/message-list';
 import { MastraBase } from '../base';
 import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
-import type { MastraStorage, PaginationInfo, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
+import type {
+  MastraStorage,
+  PaginationInfo,
+  StorageGetMessagesArg,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
+  ThreadSortOptions,
+} from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
 import { deepMerge } from '../utils';
@@ -310,6 +317,10 @@ export abstract class MastraMemory extends MastraBase {
       perPage: number;
     } & ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
+
+  abstract listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput>;
 
   /**
    * Saves or updates a thread

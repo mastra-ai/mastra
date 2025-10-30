@@ -380,6 +380,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('tool approval and suspension', () => {
       describe.skipIf(version === 'v1')('requireToolApproval', () => {
         it('should call findUserTool with requireToolApproval on tool and be able to reject the tool call', async () => {
+          mockFindUser.mockClear(); // Reset mock call count before this test
+
           const findUserTool = createTool({
             id: 'Find user tool',
             description: 'This is a test tool that returns the name and email',
