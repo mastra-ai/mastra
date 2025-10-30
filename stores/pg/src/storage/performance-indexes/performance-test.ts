@@ -385,14 +385,15 @@ export class PostgresPerformanceTest {
     const threadId = 'thread_0';
     results.push(await this.measureOperation('getMessages', () => this.store.getMessages({ threadId }), scenario));
 
-    // Test getMessagesPaginated
+    // Test listMessages
     results.push(
       await this.measureOperation(
-        'getMessagesPaginated',
+        'listMessages',
         () =>
-          this.store.getMessagesPaginated({
+          this.store.listMessages({
             threadId,
-            selectBy: { pagination: { page: 0, perPage: 20 } },
+            limit: 20,
+            offset: 0,
           }),
         scenario,
       ),

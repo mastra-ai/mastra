@@ -185,64 +185,34 @@ export class Memory extends MastraMemory {
 
     // Get raw messages from storage
     // Use paginated method when pagination is requested
-    let rawMessages;
-    if (selectBy?.pagination) {
-      const paginatedResult = await this.storage.getMessagesPaginated({
-        threadId,
-        resourceId,
-        format: 'v2',
-        selectBy: {
-          ...selectBy,
-          ...(vectorResults?.length
-            ? {
-                include: vectorResults.map(r => ({
-                  id: r.metadata?.message_id,
-                  threadId: r.metadata?.thread_id,
-                  withNextMessages:
-                    typeof vectorConfig.messageRange === 'number'
-                      ? vectorConfig.messageRange
-                      : vectorConfig.messageRange.after,
-                  withPreviousMessages:
-                    typeof vectorConfig.messageRange === 'number'
-                      ? vectorConfig.messageRange
-                      : vectorConfig.messageRange.before,
-                })),
-              }
-            : {}),
-        },
-        threadConfig: config,
-      });
-      rawMessages = paginatedResult.messages;
-    } else {
-      // Fall back to regular getMessages for backward compatibility
-      rawMessages = await this.storage.getMessages({
-        threadId,
-        resourceId,
-        format: 'v2',
-        selectBy: {
-          ...selectBy,
-          ...(vectorResults?.length
-            ? {
-                include: vectorResults.map(r => ({
-                  id: r.metadata?.message_id,
-                  threadId: r.metadata?.thread_id,
-                  withNextMessages:
-                    typeof vectorConfig.messageRange === 'number'
-                      ? vectorConfig.messageRange
-                      : vectorConfig.messageRange.after,
-                  withPreviousMessages:
-                    typeof vectorConfig.messageRange === 'number'
-                      ? vectorConfig.messageRange
-                      : vectorConfig.messageRange.before,
-                })),
-              }
-            : {}),
-        },
-        threadConfig: config,
-      });
-    }
+    const messagesResult = await this.storage.listMessages({
+      threadId,
+      resourceId,
+      limit: selectBy?.pagination?.perPage,
+      offset: selectBy?.pagination?.page,
+      filter: {
+        dateRange: selectBy?.pagination?.dateRange,
+      },
+      ...(vectorResults?.length
+        ? {
+            include: vectorResults.map(r => ({
+              id: r.metadata?.message_id,
+              threadId: r.metadata?.thread_id,
+              withNextMessages:
+                typeof vectorConfig.messageRange === 'number'
+                  ? vectorConfig.messageRange
+                  : vectorConfig.messageRange.after,
+              withPreviousMessages:
+                typeof vectorConfig.messageRange === 'number'
+                  ? vectorConfig.messageRange
+                  : vectorConfig.messageRange.before,
+            })),
+          }
+        : {}),
+    });
 
-    const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
+    const list = new MessageList({ threadId, resourceId }).add(messagesResult.messages, 'memory');
+
     return {
       get messages() {
         // returning v1 messages for backwards compat! v1 messages were CoreMessages stored in the db.

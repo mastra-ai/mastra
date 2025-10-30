@@ -457,9 +457,8 @@ export function pgTests() {
         expect(messagesById[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
 
         // Test getMessagesPaginated
-        const messagesPaginated = await store.getMessagesPaginated({
+        const messagesPaginated = await store.listMessages({
           threadId: testThreadId,
-          format: 'v2',
         });
         expect(messagesPaginated.messages.length).toBe(1);
         expect(messagesPaginated.messages[0]?.createdAt).toBeInstanceOf(Date);
@@ -494,9 +493,8 @@ export function pgTests() {
         expect(messagesById[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
 
         // Test getMessagesPaginated
-        const messagesPaginated = await store.getMessagesPaginated({
+        const messagesPaginated = await store.listMessages({
           threadId: testThreadId,
-          format: 'v2',
         });
         expect(messagesPaginated.messages.length).toBe(1);
         expect(messagesPaginated.messages[0]?.createdAt).toBeInstanceOf(Date);
