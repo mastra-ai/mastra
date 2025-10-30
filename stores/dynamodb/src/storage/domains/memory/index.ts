@@ -109,7 +109,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         resourceId: thread.resourceId,
         title: threadData.title,
         createdAt: thread.createdAt || now,
-        updatedAt: now,
+        updatedAt: thread.updatedAt || now,
         metadata: thread.metadata,
       };
     } catch (error) {
@@ -359,12 +359,188 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
-  public async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    throw new Error(
-      `listMessages is not yet implemented by this storage adapter (${this.constructor.name}). ` +
-        `This method is currently being rolled out across all storage adapters. ` +
-        `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
-    );
+  public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+
+    if (!threadId.trim()) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_DYNAMODB_LIST_MESSAGES_INVALID_THREAD_ID',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        new Error('threadId must be a non-empty string'),
+      );
+    }
+
+    try {
+      // Determine how many results to return
+      // Default pagination is always 40 unless explicitly specified
+      let perPage = 40;
+      if (limit !== undefined) {
+        if (limit === false) {
+          // limit: false means get ALL messages
+          perPage = Number.MAX_SAFE_INTEGER;
+        } else if (limit === 0) {
+          // limit: 0 means return zero results
+          perPage = 0;
+        } else if (typeof limit === 'number' && limit > 0) {
+          perPage = limit;
+        }
+      }
+
+      // Convert offset to page for pagination metadata
+      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
+
+      // Determine sort field and direction
+      const sortField = orderBy?.field || 'createdAt';
+      const sortDirection = orderBy?.direction || 'DESC';
+
+      this.logger.debug('Getting messages with listMessages', {
+        threadId,
+        resourceId,
+        limit,
+        offset,
+        perPage,
+        page,
+        sortField,
+        sortDirection,
+      });
+
+      // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      const query = this.service.entities.message.query.byThread({ entity: 'message', threadId });
+      const results = await query.go();
+
+      let allThreadMessages = results.data
+        .map((data: any) => this.parseMessageData(data))
+        .filter((msg: any): msg is MastraMessageV2 => 'content' in msg && typeof msg.content === 'object');
+
+      // Apply resourceId filter
+      if (resourceId) {
+        allThreadMessages = allThreadMessages.filter((msg: MastraMessageV2) => msg.resourceId === resourceId);
+      }
+
+      // Apply date range filter
+      if (filter?.dateRange) {
+        const dateRange = filter.dateRange;
+        allThreadMessages = allThreadMessages.filter((msg: MastraMessageV2) => {
+          const createdAt = new Date(msg.createdAt).getTime();
+          if (dateRange.start) {
+            const startTime =
+              dateRange.start instanceof Date ? dateRange.start.getTime() : new Date(dateRange.start).getTime();
+            if (createdAt < startTime) return false;
+          }
+          if (dateRange.end) {
+            const endTime = dateRange.end instanceof Date ? dateRange.end.getTime() : new Date(dateRange.end).getTime();
+            if (createdAt > endTime) return false;
+          }
+          return true;
+        });
+      }
+
+      // Sort messages by the specified field and direction
+      allThreadMessages.sort((a: MastraMessageV2, b: MastraMessageV2) => {
+        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
+        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+
+        // Handle tiebreaker for stable sorting
+        if (aValue === bValue) {
+          return a.id.localeCompare(b.id);
+        }
+
+        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
+
+      // Save total before pagination
+      const total = allThreadMessages.length;
+
+      // Apply pagination
+      const paginatedMessages = allThreadMessages.slice(offset, offset + perPage);
+      const paginatedCount = paginatedMessages.length;
+
+      if (total === 0 && paginatedCount === 0) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      // Step 2: Add included messages with context (if any), excluding duplicates
+      const messageIds = new Set(paginatedMessages.map((m: MastraMessageV2) => m.id));
+      let includeMessages: MastraMessageV2[] = [];
+
+      if (include && include.length > 0) {
+        // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
+        const selectBy = { include };
+        includeMessages = await this._getIncludedMessages(threadId, selectBy);
+
+        // Deduplicate: only add messages that aren't already in the paginated results
+        for (const includeMsg of includeMessages) {
+          if (!messageIds.has(includeMsg.id)) {
+            paginatedMessages.push(includeMsg);
+            messageIds.add(includeMsg.id);
+          }
+        }
+      }
+
+      // Use MessageList for proper deduplication and format conversion to V2
+      const list = new MessageList().add(paginatedMessages, 'memory');
+      let finalMessages = list.get.all.v2();
+
+      // Sort all messages (paginated + included) for final output
+      finalMessages = finalMessages.sort((a, b) => {
+        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
+        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+
+        // Handle tiebreaker for stable sorting
+        if (aValue === bValue) {
+          return a.id.localeCompare(b.id);
+        }
+
+        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
+
+      // Calculate hasMore based on pagination window
+      // If all thread messages have been returned (through pagination or include), hasMore = false
+      // Otherwise, check if there are more pages in the pagination window
+      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
+      const hasMore = limit === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage,
+        hasMore,
+      };
+    } catch (error: any) {
+      const mastraError = new MastraError(
+        {
+          id: 'STORAGE_DYNAMODB_STORE_LIST_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+            resourceId: resourceId ?? '',
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      return {
+        messages: [],
+        total: 0,
+        page: Math.floor(offset / (limit === false ? Number.MAX_SAFE_INTEGER : limit || 40)),
+        perPage: limit === false ? Number.MAX_SAFE_INTEGER : limit || 40,
+        hasMore: false,
+      };
+    }
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
