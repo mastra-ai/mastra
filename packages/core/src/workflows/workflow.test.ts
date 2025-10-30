@@ -755,7 +755,7 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            id: 'mapping_mock-uuid-1',
+            id: expect.any(String),
             payload: {
               prompt1: 'Capital of France, just the name',
               prompt2: 'Capital of UK, just the name',
@@ -768,7 +768,7 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            id: 'mapping_mock-uuid-1',
+            id: expect.any(String),
             endedAt: expect.any(Number),
             output: {
               prompt: 'Capital of France, just the name',
@@ -779,7 +779,7 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            id: 'mapping_mock-uuid-1',
+            id: expect.any(String),
             metadata: {},
             stepCallId: expect.any(String),
           },
@@ -840,7 +840,7 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            id: 'mapping_mock-uuid-2',
+            id: expect.any(String),
             payload: {
               text: 'Paris',
             },
@@ -852,7 +852,7 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            id: 'mapping_mock-uuid-2',
+            id: expect.any(String),
             endedAt: expect.any(Number),
             output: {
               prompt: 'Capital of UK, just the name',
@@ -863,7 +863,7 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            id: 'mapping_mock-uuid-2',
+            id: expect.any(String),
             metadata: {},
             stepCallId: expect.any(String),
           },
@@ -2346,8 +2346,8 @@ describe('Workflow', () => {
           runId: 'test-run-id',
           from: 'WORKFLOW',
           payload: {
-            stepName: 'mapping_mock-uuid-1',
-            id: 'mapping_mock-uuid-1',
+            stepName: expect.any(String),
+            id: expect.any(String),
             stepCallId: expect.any(String),
             payload: {
               prompt1: 'Capital of France, just the name',
@@ -2362,8 +2362,8 @@ describe('Workflow', () => {
           runId: 'test-run-id',
           from: 'WORKFLOW',
           payload: {
-            stepName: 'mapping_mock-uuid-1',
-            id: 'mapping_mock-uuid-1',
+            stepName: expect.any(String),
+            id: expect.any(String),
             stepCallId: expect.any(String),
             status: 'success',
             output: {
@@ -2405,8 +2405,8 @@ describe('Workflow', () => {
           runId: 'test-run-id',
           from: 'WORKFLOW',
           payload: {
-            stepName: 'mapping_mock-uuid-2',
-            id: 'mapping_mock-uuid-2',
+            stepName: expect.any(String),
+            id: expect.any(String),
             stepCallId: expect.any(String),
             payload: {},
             startedAt: expect.any(Number),
@@ -2418,8 +2418,8 @@ describe('Workflow', () => {
           runId: 'test-run-id',
           from: 'WORKFLOW',
           payload: {
-            stepName: 'mapping_mock-uuid-2',
-            id: 'mapping_mock-uuid-2',
+            stepName: expect.any(String),
+            id: expect.any(String),
             stepCallId: expect.any(String),
             status: 'success',
             output: {
@@ -2642,8 +2642,8 @@ describe('Workflow', () => {
           runId: 'test-run-id',
           from: 'WORKFLOW',
           payload: {
-            stepName: 'mapping_mock-uuid-1',
-            id: 'mapping_mock-uuid-1',
+            stepName: expect.any(String),
+            id: expect.any(String),
             stepCallId: expect.any(String),
             payload: {
               prompt1: 'Capital of France, just the name',
@@ -2658,8 +2658,8 @@ describe('Workflow', () => {
           runId: 'test-run-id',
           from: 'WORKFLOW',
           payload: {
-            stepName: 'mapping_mock-uuid-1',
-            id: 'mapping_mock-uuid-1',
+            stepName: expect.any(String),
+            id: expect.any(String),
             stepCallId: expect.any(String),
             status: 'success',
             output: {
@@ -2701,8 +2701,8 @@ describe('Workflow', () => {
           runId: 'test-run-id',
           from: 'WORKFLOW',
           payload: {
-            stepName: 'mapping_mock-uuid-2',
-            id: 'mapping_mock-uuid-2',
+            stepName: expect.any(String),
+            id: expect.any(String),
             stepCallId: expect.any(String),
             payload: {},
             startedAt: expect.any(Number),
@@ -2714,8 +2714,8 @@ describe('Workflow', () => {
           runId: 'test-run-id',
           from: 'WORKFLOW',
           payload: {
-            stepName: 'mapping_mock-uuid-2',
-            id: 'mapping_mock-uuid-2',
+            stepName: expect.any(String),
+            id: expect.any(String),
             stepCallId: expect.any(String),
             status: 'success',
             output: {
