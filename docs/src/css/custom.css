@@ -1283,8 +1283,12 @@ p {
   }
 
   .theme-doc-sidebar-container.theme-doc-sidebar-container {
-    padding-inline-start: 1rem;
+    padding-inline-start: 0rem;
     border-right: var(--border-sm) solid var(--border);
+  }
+
+  [class*="sidebar"]:has(> .menu) {
+    padding-inline-start: 1rem;
   }
 
   .theme-doc-toc-desktop.theme-doc-toc-desktop {
@@ -1315,6 +1319,26 @@ p {
   .theme-doc-sidebar-item-link-level-2 {
     padding-inline-start: 0.65rem;
     margin-block-end: calc(0.25rem * 1.5);
+  }
+
+  .theme-doc-sidebar-item-link-level-3 > a {
+    margin-inline-start: -0.25rem;
+  }
+
+  .theme-doc-sidebar-item-category-level-2 > .menu__list-item-collapsible {
+    margin-inline-start: 0.18rem;
+  }
+
+  .theme-doc-sidebar-item-category-level-2 > .menu__list-item-collapsible a {
+    &::after {
+      right: 16.5%;
+    }
+  }
+
+  .theme-doc-sidebar-item-category-level-3 > .menu__list-item-collapsible a {
+    &::after {
+      right: 20.4%;
+    }
   }
 }
 
