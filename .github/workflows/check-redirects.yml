@@ -1,4 +1,4 @@
-name: Check for Missing Redirects
+name: Check Redirects
 
 permissions:
   contents: read
@@ -9,9 +9,12 @@ on:
     paths:
       - 'docs/src/content/**/*.mdx'
       - 'docs/vercel.json'
+  deployment_status:
 
 jobs:
-  check-redirects:
+  check-deleted-pages:
+    name: Check for deleted pages without redirects
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR branch
@@ -26,7 +29,7 @@ jobs:
 
       - name: Check for removed pages without redirects
         run: |
-          node .github/scripts/check-redirects.js
+          node .github/scripts/check-deleted-pages.js
         env:
           BASE_REF: origin/${{ github.event.pull_request.base.ref }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
@@ -46,3 +49,29 @@ jobs:
               repo: context.repo.repo,
               body: body
             });
+
+  check-duplicate-redirects:
+    name: Check for duplicate redirects
+    if: ${{ github.event.deployment_status.state == 'success' && github.event.deployment_status.environment == 'Preview – mastra-docs' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20.19.5'
+          cache: 'npm'
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install dependencies for docs
+        run: npm ci
+        working-directory: docs
+
+      - name: Set deployment URL as env var
+        run: echo "MASTRA_DEPLOYMENT_URL=${{ github.event.deployment_status.target_url }}" >> $GITHUB_ENV
+
+      - name: Run check-duplicate-redirects
+        run: node .github/scripts/check-duplicate-redirects.js
