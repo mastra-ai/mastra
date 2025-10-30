@@ -42,7 +42,7 @@ export abstract class MemoryStorage extends MastraBase {
 
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
 
-abstract getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }>;
+  abstract getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }>;
 
   abstract listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
 

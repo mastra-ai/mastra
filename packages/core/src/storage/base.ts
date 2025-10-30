@@ -244,7 +244,7 @@ export abstract class MastraStorage extends MastraBase {
     );
   }
 
-abstract getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }>;
+  abstract getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }>;
 
   abstract saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }>;
 

@@ -554,7 +554,6 @@ export class MemoryPG extends MemoryStorage {
     );
   }
 
-
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {

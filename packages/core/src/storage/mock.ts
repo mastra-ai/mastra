@@ -246,7 +246,7 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.memory.getMessages({ threadId, resourceId, selectBy }).catch(() => ({ messages: [] }));
   }
 
-async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.listMessagesById({ messageIds });
   }
 

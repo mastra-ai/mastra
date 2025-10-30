@@ -613,7 +613,6 @@ export class StoreMemoryUpstash extends MemoryStorage {
     );
   }
 
-
   public async getMessagesPaginated(
     args: StorageGetMessagesArg,
   ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {

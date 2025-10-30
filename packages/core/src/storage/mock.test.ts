@@ -342,14 +342,14 @@ describe('InMemoryStore - listMessagesById', () => {
     expect(messages.every((msg, i, arr) => i === 0 || msg.createdAt >= arr[i - 1]!.createdAt)).toBe(true);
   });
 
-it('should return messages by ID', async () => {
+  it('should return messages by ID', async () => {
     const result = await store.listMessagesById({ messageIds: thread1Messages.map(msg => msg.id) });
 
     expect(result.messages.length).toBeGreaterThan(0);
     expect(result.messages.every(MessageList.isMastraDBMessage)).toBe(true);
   });
 
-it('should return messages from multiple threads', async () => {
+  it('should return messages from multiple threads', async () => {
     const result = await store.listMessagesById({
       messageIds: [...thread1Messages.map(msg => msg.id), ...thread2Messages.map(msg => msg.id)],
     });

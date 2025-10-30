@@ -329,7 +329,6 @@ export class StoreMemoryLance extends MemoryStorage {
     );
   }
 
-
   /**
    * @todo When migrating from getThreadsByResourceIdPaginated to this method,
    * implement orderBy and sortDirection support for full sorting capabilities

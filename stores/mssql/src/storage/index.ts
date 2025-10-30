@@ -273,7 +273,6 @@ export class MSSQLStore extends MastraStorage {
     return this.stores.memory.listMessagesById({ messageIds });
   }
 
-
   public async getMessagesPaginated(
     args: StorageGetMessagesArg,
   ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {

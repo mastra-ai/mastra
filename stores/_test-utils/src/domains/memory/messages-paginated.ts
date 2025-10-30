@@ -622,7 +622,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
     });
 
     it('should return an empty array if no message IDs are provided', async () => {
-const { messages } = await storage.listMessagesById({ messageIds: [] });
+      const { messages } = await storage.listMessagesById({ messageIds: [] });
       expect(messages).toHaveLength(0);
     });
 
@@ -634,7 +634,7 @@ const { messages } = await storage.listMessagesById({ messageIds: [] });
         thread1Messages[0]!.id,
         thread2Messages[1]!.id,
       ];
-const { messages } = await storage.listMessagesById({
+      const { messages } = await storage.listMessagesById({
         messageIds,
       });
 
@@ -642,7 +642,7 @@ const { messages } = await storage.listMessagesById({
       expect(messages.every((msg, i, arr) => i === 0 || msg.createdAt >= arr[i - 1]!.createdAt)).toBe(true);
     });
 
-it('should return V2 messages', async () => {
+    it('should return V2 messages', async () => {
       const { messages } = await storage.listMessagesById({
         messageIds: thread1Messages.map(msg => msg.id),
       });

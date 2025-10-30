@@ -263,7 +263,6 @@ export class D1Store extends MastraStorage {
     return this.stores.memory.getMessages({ threadId, selectBy });
   }
 
-
   public async getMessagesPaginated({
     threadId,
     selectBy,

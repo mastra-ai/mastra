@@ -584,7 +584,6 @@ export class MemoryMSSQL extends MemoryStorage {
     );
   }
 
-
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {

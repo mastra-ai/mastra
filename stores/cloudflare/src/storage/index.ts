@@ -250,8 +250,8 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
 
-  async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessagesById({ messageIds });
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    return this.stores.memory.listMessagesById({ messageIds });
   }
 
   async persistWorkflowSnapshot(params: {
