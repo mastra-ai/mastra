@@ -19,8 +19,8 @@ import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
 import type { TracingContext } from '../ai-tracing';
-import type { Run } from '../run/types';
 import type { RequestContext } from '../request-context';
+import type { Run } from '../run/types';
 import type { CoreTool } from '../tools/types';
 import type { MastraLanguageModel } from './model/shared.types';
 
