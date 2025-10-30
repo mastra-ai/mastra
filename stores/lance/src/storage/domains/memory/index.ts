@@ -352,6 +352,10 @@ export class StoreMemoryLance extends MemoryStorage {
     return this.getMessagesById({ messageIds, format: 'v2' });
   }
 
+  /**
+   * @todo When migrating from getThreadsByResourceIdPaginated to this method,
+   * implement orderBy and sortDirection support for full sorting capabilities
+   */
   public async listThreadsByResourceIdPaginated(
     args: StorageListThreadsByResourceIdPaginatedInput,
   ): Promise<StorageListThreadsByResourceIdPaginatedOutput> {
