@@ -41,7 +41,8 @@ async function applyInputProcessors(
     agentName: 'test-agent',
   });
 
-  const messageList = new MessageList({ threadId, resourceId }).add(messages, 'memory');
+  // Add messages as 'input' so they're included in clear.input.v2()
+  const messageList = new MessageList({ threadId, resourceId }).add(messages, 'input');
   const requestContext = new RequestContext();
   requestContext.set('MastraMemory', {
     thread: { id: threadId },

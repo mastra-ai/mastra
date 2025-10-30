@@ -34,15 +34,20 @@ async function applyInputProcessors(
   const runner = new ProcessorRunner({
     inputProcessors: processors,
     outputProcessors: [],
+    agentName: 'test-agent',
   });
 
+  // Add messages as 'input' so they're included in clear.input.v2()
+  const messageList = new MessageList({ threadId, resourceId }).add(messages, 'input');
   const requestContext = new RequestContext();
   requestContext.set('MastraMemory', {
     thread: { id: threadId },
     resourceId,
   });
 
-  return await runner.runInputProcessors(messages, requestContext);
+  const processedMessageList = await runner.runInputProcessors(messageList, undefined, undefined, requestContext);
+
+  return processedMessageList.get.all.core();
 }
 
 let memory: Memory;
