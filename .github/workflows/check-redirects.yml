@@ -50,15 +50,20 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const missing = JSON.parse(fs.readFileSync('/tmp/missing-redirects.json', 'utf8'));
-            const body = `## 🚨 Missing Redirects Detected\n\nThe following pages were removed but don't have redirects in \`vercel.json\`:\n\n${missing.map(path => `- \`${path}\``).join('\n')}\n\nPlease add redirects for these pages to prevent 404 errors.`;
+            try {
+              const missing = JSON.parse(fs.readFileSync('/tmp/missing-redirects.json', 'utf8'));
+              const body = `## 🚨 Missing Redirects Detected\n\nThe following pages were removed but don't have redirects in \`vercel.json\`:\n\n${missing.map(path => `- \`${path}\``).join('\n')}\n\nPlease add redirects for these pages to prevent 404 errors.`;
 
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: body
-            });
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            } catch (error) {
+              console.error('Failed to read missing-redirects.json or post comment:', error);
+              console.log('The check-deleted-pages script may have failed for a different reason.');
+            }
 
   check-duplicate-redirects:
     name: Check for duplicate redirects
