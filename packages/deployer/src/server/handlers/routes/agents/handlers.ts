@@ -25,7 +25,6 @@ import type { Context } from 'hono';
 
 import { stream } from 'hono/streaming';
 import { handleError } from '../../error';
-import { AllowedProviderKeys } from '../../utils';
 
 export const sharedBodyOptions: any = {
   messages: {
