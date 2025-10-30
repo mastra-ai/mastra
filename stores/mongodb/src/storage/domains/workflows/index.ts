@@ -18,13 +18,13 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       // runId,
       // stepId,
       // result,
-      // runtimeContext,
+      // requestContext,
     }: {
       workflowName: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
+      requestContext: Record<string, any>;
     },
   ): Promise<Record<string, StepResult<any, any, any, any>>> {
     throw new Error('Method not implemented.');

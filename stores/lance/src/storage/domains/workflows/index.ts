@@ -38,13 +38,13 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       // runId,
       // stepId,
       // result,
-      // runtimeContext,
+      // requestContext,
     }: {
       workflowName: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
+      requestContext: Record<string, any>;
     },
   ): Promise<Record<string, StepResult<any, any, any, any>>> {
     throw new Error('Method not implemented.');
@@ -231,7 +231,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
           id: 'LANCE_STORE_GET_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { namespace: args?.namespace ?? '', workflowName: args?.workflowName ?? '' },
+          details: { resourceId: args?.resourceId ?? '', workflowName: args?.workflowName ?? '' },
         },
         error,
       );

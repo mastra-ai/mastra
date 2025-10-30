@@ -4,7 +4,7 @@ import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
 import { AISpanType, wrapMastra } from '@mastra/core/ai-tracing';
 import type { TracingContext, TracingOptions } from '@mastra/core/ai-tracing';
-import { RuntimeContext } from '@mastra/core/di';
+import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import { ChunkFrom, WorkflowRunOutput } from '@mastra/core/stream';
@@ -217,7 +217,7 @@ export class InngestRun<
 
   async start(params: {
     inputData?: z.infer<TInput>;
-    runtimeContext?: RuntimeContext;
+    requestContext?: RequestContext;
     initialState?: z.infer<TState>;
     tracingOptions?: TracingOptions;
     outputOptions?: {
@@ -236,7 +236,7 @@ export class InngestRun<
     format,
   }: {
     inputData?: z.infer<TInput>;
-    runtimeContext?: RuntimeContext;
+    requestContext?: RequestContext;
     initialState?: z.infer<TState>;
     tracingOptions?: TracingOptions;
     outputOptions?: {
@@ -302,7 +302,7 @@ export class InngestRun<
       | [...Step<string, any, any, any, any>[], Step<string, any, any, TResumeSchema, any>]
       | string
       | string[];
-    runtimeContext?: RuntimeContext;
+    requestContext?: RequestContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const p = this._resume(params).then(result => {
       if (result.status !== 'suspended') {
@@ -323,7 +323,7 @@ export class InngestRun<
       | [...Step<string, any, any, any, any>[], Step<string, any, any, TResumeSchema, any>]
       | string
       | string[];
-    runtimeContext?: RuntimeContext;
+    requestContext?: RequestContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
@@ -399,7 +399,7 @@ export class InngestRun<
     };
   }
 
-  streamLegacy({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
+  streamLegacy({ inputData, requestContext }: { inputData?: z.infer<TInput>; requestContext?: RequestContext } = {}): {
     stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   } {
@@ -446,7 +446,7 @@ export class InngestRun<
       }
     };
 
-    this.executionResults = this._start({ inputData, runtimeContext, format: 'legacy' }).then(result => {
+    this.executionResults = this._start({ inputData, requestContext, format: 'legacy' }).then(result => {
       if (result.status !== 'suspended') {
         this.closeStreamAction?.().catch(() => {});
       }
@@ -462,14 +462,14 @@ export class InngestRun<
 
   stream({
     inputData,
-    runtimeContext,
+    requestContext,
     tracingOptions,
     closeOnSuspend = true,
     initialState,
     outputOptions,
   }: {
     inputData?: z.input<TInput>;
-    runtimeContext?: RuntimeContext;
+    requestContext?: RequestContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     closeOnSuspend?: boolean;
@@ -514,7 +514,7 @@ export class InngestRun<
 
         const executionResultsPromise = self._start({
           inputData,
-          runtimeContext,
+          requestContext,
           // tracingContext, // We are not able to pass a reference to a span here, what to do?
           initialState,
           tracingOptions,
@@ -556,7 +556,7 @@ export class InngestRun<
   streamVNext(
     args: {
       inputData?: z.input<TInput>;
-      runtimeContext?: RuntimeContext;
+      requestContext?: RequestContext;
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
       closeOnSuspend?: boolean;
@@ -797,7 +797,7 @@ export class InngestWorkflow<
           initialState,
           emitter,
           retryConfig: this.retryConfig,
-          runtimeContext: new RuntimeContext(), // TODO
+          requestContext: new RequestContext(), // TODO
           resume,
           format,
           abortController: new AbortController(),
@@ -955,7 +955,7 @@ export function createStep<
         inputData,
         [EMITTER_SYMBOL]: emitter,
         [STREAM_FORMAT_SYMBOL]: streamFormat,
-        runtimeContext,
+        requestContext,
         tracingContext,
         abortSignal,
         abort,
@@ -983,7 +983,7 @@ export function createStep<
             ...(agentOptions ?? {}),
             // resourceId: inputData.resourceId,
             // threadId: inputData.threadId,
-            runtimeContext,
+            requestContext,
             tracingContext,
             onFinish: result => {
               streamPromise.resolve(result.text);
@@ -995,7 +995,7 @@ export function createStep<
         } else {
           const modelOutput = await params.stream(inputData.prompt, {
             ...(agentOptions ?? {}),
-            runtimeContext,
+            requestContext,
             tracingContext,
             onFinish: result => {
               streamPromise.resolve(result.text);
@@ -1055,11 +1055,11 @@ export function createStep<
       description: params.description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra, runtimeContext, tracingContext, suspend, resumeData }) => {
+      execute: async ({ inputData, mastra, requestContext, tracingContext, suspend, resumeData }) => {
         return params.execute({
           context: inputData,
           mastra: wrapMastra(mastra, tracingContext),
-          runtimeContext,
+          requestContext,
           tracingContext,
           suspend,
           resumeData,
@@ -1252,7 +1252,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     stepResults,
     emitter,
     abortController,
-    runtimeContext,
+    requestContext,
     executionContext,
     writableStream,
     tracingContext,
@@ -1278,7 +1278,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     executionContext: ExecutionContext;
     emitter: Emitter;
     abortController: AbortController;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
   }): Promise<void> {
@@ -1303,7 +1303,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               runId,
               workflowId,
               mastra: this.mastra!,
-              runtimeContext,
+              requestContext,
               inputData: prevOutput,
               state: executionContext.state,
               setState: (state: any) => {
@@ -1370,7 +1370,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     stepResults,
     emitter,
     abortController,
-    runtimeContext,
+    requestContext,
     executionContext,
     writableStream,
     tracingContext,
@@ -1396,7 +1396,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     executionContext: ExecutionContext;
     emitter: Emitter;
     abortController: AbortController;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
   }): Promise<void> {
@@ -1422,7 +1422,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               runId,
               workflowId,
               mastra: this.mastra!,
-              runtimeContext,
+              requestContext,
               inputData: prevOutput,
               state: executionContext.state,
               setState: (state: any) => {
@@ -1512,7 +1512,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     prevOutput,
     emitter,
     abortController,
-    runtimeContext,
+    requestContext,
     tracingContext,
     writableStream,
     disableScorers,
@@ -1528,7 +1528,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     prevOutput: any;
     emitter: Emitter;
     abortController: AbortController;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
@@ -1871,7 +1871,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           const result = await step.execute({
             runId: executionContext.runId,
             mastra: this.mastra!,
-            runtimeContext,
+            requestContext,
             writer: new ToolStream(
               {
                 prefix: 'workflow-step',
@@ -2053,7 +2053,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             output: stepRes.result,
             workflowId: executionContext.workflowId,
             stepId: step.id,
-            runtimeContext,
+            requestContext,
             disableScorers,
             tracingContext: { currentSpan: stepAISpan },
           });
@@ -2091,7 +2091,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     workflowStatus: 'success' | 'failed' | 'suspended' | 'running';
     result?: Record<string, any>;
     error?: string | Error;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
   }) {
     await this.inngestStep.run(
       `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate`,
@@ -2136,7 +2136,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     executionContext,
     emitter,
     abortController,
-    runtimeContext,
+    requestContext,
     writableStream,
     disableScorers,
     tracingContext,
@@ -2160,7 +2160,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     executionContext: ExecutionContext;
     emitter: Emitter;
     abortController: AbortController;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
     tracingContext?: TracingContext;
@@ -2197,7 +2197,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                     runId,
                     workflowId,
                     mastra: this.mastra!,
-                    runtimeContext,
+                    requestContext,
                     runCount: -1,
                     retryCount: -1,
                     inputData: prevOutput,
@@ -2295,7 +2295,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           },
           emitter,
           abortController,
-          runtimeContext,
+          requestContext,
           writableStream,
           disableScorers,
           tracingContext: {

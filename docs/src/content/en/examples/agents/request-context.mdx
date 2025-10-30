@@ -1,11 +1,11 @@
 ---
-title: "Example: Runtime Context | Agents | Mastra Docs"
-description: Learn how to create and configure dynamic agents using runtime context to adapt behavior based on user subscription tiers.
+title: "Example: Request Context | Agents | Mastra Docs"
+description: Learn how to create and configure dynamic agents using request context to adapt behavior based on user subscription tiers.
 ---
 
-# Runtime Context
+# Request Context
 
-This example demonstrates how to use runtime context to create a single agent that dynamically adapts its behavior, capabilities, model selection, tools, memory configuration, input/output processing, and quality scoring based on user subscription tiers.
+This example demonstrates how to use request context to create a single agent that dynamically adapts its behavior, capabilities, model selection, tools, memory configuration, input/output processing, and quality scoring based on user subscription tiers.
 
 ## Prerequisites
 
@@ -24,7 +24,7 @@ import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 import { TokenLimiterProcessor } from "@mastra/core/processors";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 import {
   knowledgeBase,
   ticketSystem,
@@ -35,7 +35,7 @@ import { CharacterLimiterProcessor } from "../processors/character-limiter";
 import { responseQualityScorer } from "../scorers/response-quality";
 
 export type UserTier = "free" | "pro" | "enterprise";
-export type SupportRuntimeContext = {
+export type SupportRequestContext = {
   "user-tier": UserTier;
   language: "en" | "es" | "ja" | "fr";
 };
@@ -45,12 +45,12 @@ export const supportAgent = new Agent({
   description: "AI support agent that adapts to user subscription tiers",
 
   instructions: async ({
-    runtimeContext,
+    requestContext,
   }: {
-    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+    requestContext: RequestContext<SupportRequestContext>;
   }) => {
-    const userTier = runtimeContext.get("user-tier");
-    const language = runtimeContext.get("language");
+    const userTier = requestContext.get("user-tier");
+    const language = requestContext.get("language");
 
     return `You are a customer support agent for our SaaS platform.
     The current user is on the ${userTier} tier and prefers ${language} language.
@@ -65,11 +65,11 @@ export const supportAgent = new Agent({
   },
 
   model: ({
-    runtimeContext,
+    requestContext,
   }: {
-    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+    requestContext: RequestContext<SupportRequestContext>;
   }) => {
-    const userTier = runtimeContext.get("user-tier");
+    const userTier = requestContext.get("user-tier");
 
     if (userTier === "enterprise") return "openai/gpt-5";
     if (userTier === "pro") return "openai/gpt-4o";
@@ -77,11 +77,11 @@ export const supportAgent = new Agent({
   },
 
   tools: ({
-    runtimeContext,
+    requestContext,
   }: {
-    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+    requestContext: RequestContext<SupportRequestContext>;
   }) => {
-    const userTier = runtimeContext.get("user-tier");
+    const userTier = requestContext.get("user-tier");
     const baseTools = [knowledgeBase, ticketSystem];
 
     if (userTier === "pro" || userTier === "enterprise") {
@@ -96,11 +96,11 @@ export const supportAgent = new Agent({
   },
 
   memory: ({
-    runtimeContext,
+    requestContext,
   }: {
-    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+    requestContext: RequestContext<SupportRequestContext>;
   }) => {
-    const userTier = runtimeContext.get("user-tier");
+    const userTier = requestContext.get("user-tier");
 
     switch (userTier) {
       case "enterprise":
@@ -132,11 +132,11 @@ export const supportAgent = new Agent({
   },
 
   inputProcessors: ({
-    runtimeContext,
+    requestContext,
   }: {
-    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+    requestContext: RequestContext<SupportRequestContext>;
   }) => {
-    const userTier = runtimeContext.get("user-tier");
+    const userTier = requestContext.get("user-tier");
 
     switch (userTier) {
       case "enterprise":
@@ -150,11 +150,11 @@ export const supportAgent = new Agent({
   },
 
   outputProcessors: ({
-    runtimeContext,
+    requestContext,
   }: {
-    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+    requestContext: RequestContext<SupportRequestContext>;
   }) => {
-    const userTier = runtimeContext.get("user-tier");
+    const userTier = requestContext.get("user-tier");
 
     switch (userTier) {
       case "enterprise":
@@ -174,11 +174,11 @@ export const supportAgent = new Agent({
   },
 
   scorers: ({
-    runtimeContext,
+    requestContext,
   }: {
-    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+    requestContext: RequestContext<SupportRequestContext>;
   }) => {
-    const userTier = runtimeContext.get("user-tier");
+    const userTier = requestContext.get("user-tier");
 
     if (userTier === "enterprise") {
       return [responseQualityScorer];
@@ -211,18 +211,18 @@ export const mastra = new Mastra({
 ```typescript title="src/examples/free-tier-usage.ts" showLineNumbers copy
 import "dotenv/config";
 import { mastra } from "../mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
-import type { SupportRuntimeContext } from "../mastra/agents/support-agent";
+import { RequestContext } from "@mastra/core/request-context";
+import type { SupportRequestContext } from "../mastra/agents/support-agent";
 
 const agent = mastra.getAgent("supportAgent");
-const runtimeContext = new RuntimeContext<SupportRuntimeContext>();
+const requestContext = new RequestContext<SupportRequestContext>();
 
-runtimeContext.set("user-tier", "free");
-runtimeContext.set("language", "en");
+requestContext.set("user-tier", "free");
+requestContext.set("language", "en");
 
 const response = await agent.generate(
   "I'm having trouble with API rate limits. Can you help?",
-  { runtimeContext },
+  { requestContext },
 );
 
 console.log(response.text);
@@ -233,18 +233,18 @@ console.log(response.text);
 ```typescript title="src/examples/pro-tier-usage.ts" showLineNumbers copy
 import "dotenv/config";
 import { mastra } from "../mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
-import type { SupportRuntimeContext } from "../mastra/agents/support-agent";
+import { RequestContext } from "@mastra/core/request-context";
+import type { SupportRequestContext } from "../mastra/agents/support-agent";
 
 const agent = mastra.getAgent("supportAgent");
-const runtimeContext = new RuntimeContext<SupportRuntimeContext>();
+const requestContext = new RequestContext<SupportRequestContext>();
 
-runtimeContext.set("user-tier", "pro");
-runtimeContext.set("language", "es");
+requestContext.set("user-tier", "pro");
+requestContext.set("language", "es");
 
 const response = await agent.generate(
   "I need detailed analytics on my API usage patterns and optimization recommendations.",
-  { runtimeContext },
+  { requestContext },
 );
 
 console.log(response.text);
@@ -255,18 +255,18 @@ console.log(response.text);
 ```typescript title="src/examples/enterprise-tier-usage.ts" showLineNumbers copy
 import "dotenv/config";
 import { mastra } from "../mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
-import type { SupportRuntimeContext } from "../mastra/agents/support-agent";
+import { RequestContext } from "@mastra/core/request-context";
+import type { SupportRequestContext } from "../mastra/agents/support-agent";
 
 const agent = mastra.getAgent("supportAgent");
-const runtimeContext = new RuntimeContext<SupportRuntimeContext>();
+const requestContext = new RequestContext<SupportRequestContext>();
 
-runtimeContext.set("user-tier", "enterprise");
-runtimeContext.set("language", "ja");
+requestContext.set("user-tier", "enterprise");
+requestContext.set("language", "ja");
 
 const response = await agent.generate(
   "I need to integrate our custom webhook system with your platform and get real-time analytics on our usage across multiple environments.",
-  { runtimeContext },
+  { requestContext },
 );
 
 console.log(response.text);
@@ -274,7 +274,7 @@ console.log(response.text);
 
 ## Key Benefits
 
-This runtime context approach provides:
+This request context approach provides:
 
 - **Cost Optimization**: Enterprise users get premium models and features while free users get basic functionality
 - **Resource Management**: Input and output limits prevent abuse on lower subscription tiers
@@ -284,7 +284,7 @@ This runtime context approach provides:
 
 ## Related
 
-- [Runtime Context Documentation](/docs/server-db/runtime-context)
+- [Request Context Documentation](/docs/server-db/request-context)
 - [Agent Reference](/reference/agents/agent)
 - [Input Processors](/docs/agents/guardrails)
 - [Output Processors](/docs/agents/guardrails)

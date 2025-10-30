@@ -119,7 +119,7 @@ export class MastraLLMV1 extends MastraBase {
     experimental_output,
     threadId,
     resourceId,
-    runtimeContext,
+    requestContext,
     tracingContext,
     ...rest
   }: GenerateTextWithMessagesArgs<Tools, Z>): Promise<GenerateTextResult<Tools, Z>> {
@@ -293,7 +293,7 @@ export class MastraLLMV1 extends MastraBase {
     runId,
     threadId,
     resourceId,
-    runtimeContext,
+    requestContext,
     tracingContext,
     ...rest
   }: GenerateObjectWithMessagesArgs<Z>): Promise<GenerateObjectResult<Z>> {
@@ -424,7 +424,7 @@ export class MastraLLMV1 extends MastraBase {
     experimental_output,
     threadId,
     resourceId,
-    runtimeContext,
+    requestContext,
     tracingContext,
     ...rest
   }: StreamTextWithMessagesArgs<Tools, Z>): StreamTextResult<Tools, Z> {
@@ -623,7 +623,7 @@ export class MastraLLMV1 extends MastraBase {
   __streamObject<T extends ZodSchema | JSONSchema7>({
     messages,
     runId,
-    runtimeContext,
+    requestContext,
     threadId,
     resourceId,
     onFinish,

@@ -502,7 +502,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
           startedAt: Date.now(),
           endedAt: Date.now(),
         },
-        runtimeContext: {
+        requestContext: {
           test: 'test',
         },
       });
@@ -529,7 +529,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
             startedAt: Date.now(),
             endedAt: Date.now(),
           },
-          runtimeContext: { test: 'test' },
+          requestContext: { test: 'test' },
         }),
         storage.updateWorkflowResults({
           workflowName,
@@ -542,7 +542,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
             startedAt: Date.now(),
             endedAt: Date.now(),
           },
-          runtimeContext: { test2: 'test' },
+          requestContext: { test2: 'test' },
         }),
       ]);
 

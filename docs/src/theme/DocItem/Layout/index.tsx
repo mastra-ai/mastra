@@ -45,7 +45,7 @@ export default function DocItemLayout({ children }: Props): ReactNode {
   const docTOC = useDocTOC();
   const { metadata } = useDoc();
   return (
-    <div id="doc-item-container" className="row @container-normal">
+    <div id="doc-item-container" className="row @container">
       <div className={clsx("col", !docTOC.hidden && styles.docItemCol)}>
         <ContentVisibility metadata={metadata} />
         <DocVersionBanner />
@@ -60,9 +60,10 @@ export default function DocItemLayout({ children }: Props): ReactNode {
           <DocItemPaginator />
         </div>
       </div>
+
       {docTOC.desktop ? (
         <div id="toc-column" className={clsx("col col--3")}>
-          {docTOC.desktop}
+          <div className="">{docTOC.desktop}</div>
         </div>
       ) : (
         <div id="toc-column" className={clsx("col col--3")}>

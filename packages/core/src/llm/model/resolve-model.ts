@@ -1,5 +1,5 @@
 import type { Mastra } from '../../mastra';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
 import { ModelRouterLanguageModel } from './router';
 import type { MastraModelConfig, MastraLanguageModel, OpenAICompatibleConfig } from './shared.types';
 
@@ -11,10 +11,10 @@ export function isOpenAICompatibleObjectConfig(
   modelConfig:
     | MastraModelConfig
     | (({
-        runtimeContext,
+        requestContext,
         mastra,
       }: {
-        runtimeContext: RuntimeContext;
+        requestContext: RequestContext;
         mastra?: Mastra;
       }) => MastraModelConfig | Promise<MastraModelConfig>),
 ): modelConfig is OpenAICompatibleConfig {
@@ -38,7 +38,7 @@ export function isOpenAICompatibleObjectConfig(
  * - Dynamic functions that return any of the above
  *
  * @param modelConfig The model configuration
- * @param runtimeContext Optional runtime context for dynamic resolution
+ * @param requestContext Optional request context for dynamic resolution
  * @param mastra Optional Mastra instance for dynamic resolution
  * @returns A resolved LanguageModel instance
  *
@@ -55,7 +55,7 @@ export function isOpenAICompatibleObjectConfig(
  *
  * // Dynamic resolution
  * const model = await resolveModelConfig(
- *   ({ runtimeContext }) => runtimeContext.get("preferredModel")
+ *   ({ requestContext }) => requestContext.get("preferredModel")
  * );
  * ```
  */
@@ -63,13 +63,13 @@ export async function resolveModelConfig(
   modelConfig:
     | MastraModelConfig
     | (({
-        runtimeContext,
+        requestContext,
         mastra,
       }: {
-        runtimeContext: RuntimeContext;
+        requestContext: RequestContext;
         mastra?: Mastra;
       }) => MastraModelConfig | Promise<MastraModelConfig>),
-  runtimeContext: RuntimeContext = new RuntimeContext(),
+  requestContext: RequestContext = new RequestContext(),
   mastra?: Mastra,
 ): Promise<MastraLanguageModel> {
   // If it's already a LanguageModel, return it
@@ -84,7 +84,7 @@ export async function resolveModelConfig(
 
   // If it's a function, resolve it first
   if (typeof modelConfig === 'function') {
-    const fromDynamic = await modelConfig({ runtimeContext, mastra });
+    const fromDynamic = await modelConfig({ requestContext, mastra });
     if (typeof fromDynamic === 'string' || isOpenAICompatibleObjectConfig(fromDynamic)) {
       return new ModelRouterLanguageModel(fromDynamic);
     }
