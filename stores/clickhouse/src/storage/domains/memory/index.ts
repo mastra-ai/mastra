@@ -494,6 +494,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         hasMore,
       };
     } catch (error: any) {
+      const errorPerPage = limit === false ? Number.MAX_SAFE_INTEGER : limit === 0 ? 0 : limit || 40;
       const mastraError = new MastraError(
         {
           id: 'STORAGE_CLICKHOUSE_STORE_LIST_MESSAGES_FAILED',
@@ -511,8 +512,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       return {
         messages: [],
         total: 0,
-        page,
-        perPage,
+        page: errorPerPage === 0 ? 0 : Math.floor(offset / errorPerPage),
+        perPage: errorPerPage,
         hasMore: false,
       };
     }
