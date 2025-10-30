@@ -43,7 +43,7 @@ export class ResponseLengthLimiter implements Processor {
   }: {
     part: ChunkType;
     streamParts: ChunkType[];
-    state: Record<string, any>;
+    state: Record<string, unknown>;
     abort: (reason?: string) => never;
   }): Promise<ChunkType | null | undefined> {
     if (!state.cumulativeLength) {
