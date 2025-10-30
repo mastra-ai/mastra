@@ -86,14 +86,14 @@ export function createCompletenessScorer() {
         !run.input ||
         run.input.inputMessages.some((i: MastraMessageV2) => {
           const content = getMessageContent(i);
-          return content === null || content === undefined || content === '';
+          return content === null || content === undefined;
         });
 
       const isOutputInvalid =
         !run.output ||
         run.output.some((i: MastraMessageV2) => {
           const content = getMessageContent(i);
-          return content === null || content === undefined || content === '';
+          return content === null || content === undefined;
         });
 
       if (isInputInvalid || isOutputInvalid) {
