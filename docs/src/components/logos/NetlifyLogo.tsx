@@ -1,10 +1,15 @@
-export const NetlifyLogo = (props: React.SVGProps<SVGSVGElement>) => (
+import { cn } from "@site/src/css/utils";
+
+export const NetlifyLogo = ({
+  className,
+  ...rest
+}: React.SVGProps<SVGSVGElement>) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 128 113"
     fill="currentColor"
-    className="w-full h-full"
-    {...props}
+    className={cn(className, "")}
+    {...rest}
   >
     <g clipPath="url(#clip0_236_138)">
       <path
