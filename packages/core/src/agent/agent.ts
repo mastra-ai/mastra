@@ -145,7 +145,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
-  #defaultStreamOptions: DynamicArgument<AgentExecutionOptions>;
+  #defaultOptions: DynamicArgument<AgentExecutionOptions>;
   #tools: DynamicArgument<TTools>;
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
@@ -233,9 +233,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       this.#workflows = config.workflows;
     }
 
-    this.#defaultGenerateOptionsLegacy = config.defaultGenerateOptions || {};
-    this.#defaultStreamOptionsLegacy = config.defaultStreamOptions || {};
-    this.#defaultStreamOptions = config.defaultVNextStreamOptions || {};
+    this.#defaultGenerateOptionsLegacy = config.defaultGenerateOptionsLegacy || {};
+    this.#defaultStreamOptionsLegacy = config.defaultStreamOptionsLegacy || {};
+    this.#defaultOptions = config.defaultOptions || {};
 
     this.#tools = config.tools || ({} as TTools);
 
@@ -739,14 +739,14 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * console.log(options.maxSteps); // 5
    * ```
    */
-  public getDefaultStreamOptions<OUTPUT extends OutputSchema = undefined>({
+  public getDefaultOptions<OUTPUT extends OutputSchema = undefined>({
     requestContext = new RequestContext(),
   }: { requestContext?: RequestContext } = {}): AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>> {
-    if (typeof this.#defaultStreamOptions !== 'function') {
-      return this.#defaultStreamOptions as AgentExecutionOptions<OUTPUT>;
+    if (typeof this.#defaultOptions !== 'function') {
+      return this.#defaultOptions as AgentExecutionOptions<OUTPUT>;
     }
 
-    const result = this.#defaultStreamOptions({ requestContext, mastra: this.#mastra }) as
+    const result = this.#defaultOptions({ requestContext, mastra: this.#mastra }) as
       | AgentExecutionOptions<OUTPUT>
       | Promise<AgentExecutionOptions<OUTPUT>>;
 
@@ -3447,7 +3447,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    const defaultStreamOptions = await this.getDefaultStreamOptions<OUTPUT>({
+    const defaultStreamOptions = await this.getDefaultOptions<OUTPUT>({
       requestContext: streamOptions?.requestContext,
     });
     const mergedStreamOptions = {
@@ -3535,7 +3535,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     resumeData: any,
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT> & { toolCallId?: string },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    const defaultStreamOptions = await this.getDefaultStreamOptions({
+    const defaultStreamOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });
 

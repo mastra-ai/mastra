@@ -880,10 +880,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         instructions: 'Test agent',
         model: openaiModel,
         tools: integration.getStaticTools(),
-        defaultGenerateOptions: {
+        defaultGenerateOptionsLegacy: {
           maxSteps: 7,
         },
-        defaultVNextStreamOptions: {
+        defaultOptions: {
           maxSteps: 7,
         },
       });
@@ -5668,7 +5668,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         instructions: 'You are a helpful assistant.',
         ...(version === 'v1'
           ? {
-              defaultStreamOptions: {
+              defaultStreamOptionsLegacy: {
                 onFinish: data => {
                   onFinishCalled = true;
                   finishData = data;
@@ -5676,7 +5676,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               },
             }
           : {
-              defaultVNextStreamOptions: {
+              defaultOptions: {
                 onFinish: data => {
                   onFinishCalled = true;
                   finishData = data;
@@ -5714,7 +5714,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         instructions: 'You are a helpful assistant.',
         ...(version === 'v1'
           ? {
-              defaultStreamOptions: {
+              defaultStreamOptionsLegacy: {
                 onFinish: data => {
                   onFinishCalled = true;
                   finishData = data;
@@ -5722,7 +5722,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               },
             }
           : {
-              defaultVNextStreamOptions: {
+              defaultOptions: {
                 onFinish: data => {
                   onFinishCalled = true;
                   finishData = data;
@@ -5762,14 +5762,14 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         instructions: 'You are a helpful assistant.',
         ...(version === 'v1'
           ? {
-              defaultStreamOptions: {
+              defaultStreamOptionsLegacy: {
                 onFinish: () => {
                   defaultOnFinishCalled = true;
                 },
               },
             }
           : {
-              defaultVNextStreamOptions: {
+              defaultOptions: {
                 onFinish: () => {
                   defaultOnFinishCalled = true;
                 },
