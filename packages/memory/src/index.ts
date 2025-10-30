@@ -11,8 +11,6 @@ import type {
 } from '@mastra/core/memory';
 import type {
   StorageGetMessagesArg,
-  ThreadSortOptions,
-  PaginationInfo,
   StorageListThreadsByResourceIdOutput,
   StorageListThreadsByResourceIdInput,
 } from '@mastra/core/storage';
