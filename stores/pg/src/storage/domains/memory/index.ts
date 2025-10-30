@@ -106,22 +106,18 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  public async getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page = 0, perPage: perPageInput } = args;
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, offset = 0, limit: limitInput } = args;
     const orderBy = this.castThreadOrderBy(args.orderBy);
     const sortDirection = this.castThreadSortDirection(args.sortDirection);
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
       const baseQuery = `FROM ${tableName} WHERE "resourceId" = $1`;
       const queryParams: any[] = [resourceId];
-      const perPage = perPageInput !== undefined ? perPageInput : 100;
-      const currentOffset = page * perPage;
+      const limit = limitInput !== undefined ? limitInput : 100;
+      const currentOffset = offset * limit;
 
       const countQuery = `SELECT COUNT(*) ${baseQuery}`;
       const countResult = await this.client.one(countQuery, queryParams);
@@ -131,14 +127,14 @@ export class MemoryPG extends MemoryStorage {
         return {
           threads: [],
           total: 0,
-          page,
-          perPage,
+          page: offset,
+          perPage: limit,
           hasMore: false,
         };
       }
 
       const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "${orderBy}" ${sortDirection} LIMIT $2 OFFSET $3`;
-      const rows = await this.client.manyOrNone(dataQuery, [...queryParams, perPage, currentOffset]);
+      const rows = await this.client.manyOrNone(dataQuery, [...queryParams, limit, currentOffset]);
 
       const threads = (rows || []).map(thread => ({
         ...thread,
@@ -150,8 +146,8 @@ export class MemoryPG extends MemoryStorage {
       return {
         threads,
         total,
-        page,
-        perPage,
+        page: offset,
+        perPage: limit,
         hasMore: currentOffset + threads.length < total,
       };
     } catch (error) {
@@ -162,14 +158,14 @@ export class MemoryPG extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             resourceId,
-            page,
+            page: offset,
           },
         },
         error,
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException(mastraError);
-      return { threads: [], total: 0, page, perPage: perPageInput || 100, hasMore: false };
+      return { threads: [], total: 0, page: offset, perPage: limitInput || 100, hasMore: false };
     }
   }
 
@@ -534,15 +530,6 @@ export class MemoryPG extends MemoryStorage {
         `This method is currently being rolled out across all storage adapters. ` +
         `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
     );
-  }
-
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset, orderBy, sortDirection } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage, orderBy, sortDirection });
   }
 
   public async getMessagesPaginated(

@@ -105,16 +105,13 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
-  public async getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-    } & PaginationArgs &
-      ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy = 'createdAt', sortDirection = 'DESC' } = args;
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, offset = 0, limit: limitInput, orderBy = 'createdAt', sortDirection = 'DESC' } = args;
     try {
-      const perPage = perPageInput !== undefined ? perPageInput : 100;
-      const currentOffset = page * perPage;
+      const limit = limitInput !== undefined ? limitInput : 100;
+      const currentOffset = offset * limit;
       const baseQuery = `FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} WHERE [resourceId] = @resourceId`;
 
       const countQuery = `SELECT COUNT(*) as count ${baseQuery}`;
@@ -127,8 +124,8 @@ export class MemoryMSSQL extends MemoryStorage {
         return {
           threads: [],
           total: 0,
-          page,
-          perPage,
+          page: offset,
+          perPage: limit,
           hasMore: false,
         };
       }
@@ -138,7 +135,7 @@ export class MemoryMSSQL extends MemoryStorage {
       const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
       const dataRequest = this.pool.request();
       dataRequest.input('resourceId', resourceId);
-      dataRequest.input('perPage', perPage);
+      dataRequest.input('perPage', limit);
       dataRequest.input('offset', currentOffset);
       const rowsResult = await dataRequest.query(dataQuery);
       const rows = rowsResult.recordset || [];
@@ -152,8 +149,8 @@ export class MemoryMSSQL extends MemoryStorage {
       return {
         threads,
         total,
-        page,
-        perPage,
+        page: offset,
+        perPage: limit,
         hasMore: currentOffset + threads.length < total,
       };
     } catch (error) {
@@ -164,14 +161,14 @@ export class MemoryMSSQL extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             resourceId,
-            page,
+            page: offset,
           },
         },
         error,
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return { threads: [], total: 0, page, perPage: perPageInput || 100, hasMore: false };
+      return { threads: [], total: 0, page: offset, perPage: limitInput || 100, hasMore: false };
     }
   }
 
@@ -541,15 +538,6 @@ export class MemoryMSSQL extends MemoryStorage {
         `This method is currently being rolled out across all storage adapters. ` +
         `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
     );
-  }
-
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset, orderBy, sortDirection } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage, orderBy, sortDirection });
   }
 
   public async getMessagesPaginated(

@@ -367,19 +367,6 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     );
   }
 
-  /**
-   * @todo When migrating from getThreadsByResourceIdPaginated to this method,
-   * implement orderBy and sortDirection support for full sorting capabilities
-   */
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
-  }
-
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   async saveMessages(
@@ -471,21 +458,17 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page?: number;
-      perPage?: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page = 0, perPage = 100 } = args;
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, offset = 0, limit = 100 } = args;
     const orderBy = this.castThreadOrderBy(args.orderBy);
     const sortDirection = this.castThreadSortDirection(args.sortDirection);
 
     this.logger.debug('Getting threads by resource ID with pagination', {
       resourceId,
-      page,
-      perPage,
+      page: offset,
+      perPage: limit,
       orderBy,
       sortDirection,
     });
@@ -501,8 +484,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const allThreads = this.transformAndSortThreads(results.data, orderBy, sortDirection);
 
       // Apply pagination in memory
-      const startIndex = page * perPage;
-      const endIndex = startIndex + perPage;
+      const startIndex = offset * limit;
+      const endIndex = startIndex + limit;
       const paginatedThreads = allThreads.slice(startIndex, endIndex);
 
       // Calculate pagination info
@@ -512,8 +495,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       return {
         threads: paginatedThreads,
         total,
-        page,
-        perPage,
+        page: offset,
+        perPage: limit,
         hasMore,
       };
     } catch (error) {
@@ -522,7 +505,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           id: 'STORAGE_DYNAMODB_STORE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId, page, perPage },
+          details: { resourceId, page: offset, perPage: limit },
         },
         error,
       );

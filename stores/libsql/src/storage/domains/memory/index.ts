@@ -212,15 +212,6 @@ export class MemoryLibSQL extends MemoryStorage {
     );
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset, orderBy, sortDirection } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage, orderBy, sortDirection });
-  }
-
   public async getMessagesPaginated(
     args: StorageGetMessagesArg & {
       format?: 'v1' | 'v2';
@@ -718,14 +709,10 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  public async getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page = 0, perPage = 100 } = args;
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, offset = 0, limit = 100 } = args;
     const orderBy = this.castThreadOrderBy(args.orderBy);
     const sortDirection = this.castThreadSortDirection(args.sortDirection);
 
@@ -742,7 +729,7 @@ export class MemoryLibSQL extends MemoryStorage {
         metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
       });
 
-      const currentOffset = page * perPage;
+      const currentOffset = offset * limit;
 
       const countResult = await this.client.execute({
         sql: `SELECT COUNT(*) as count ${baseQuery}`,
@@ -754,15 +741,15 @@ export class MemoryLibSQL extends MemoryStorage {
         return {
           threads: [],
           total: 0,
-          page,
-          perPage,
+          page: offset,
+          perPage: limit,
           hasMore: false,
         };
       }
 
       const dataResult = await this.client.execute({
         sql: `SELECT * ${baseQuery} ORDER BY ${orderBy} ${sortDirection} LIMIT ? OFFSET ?`,
-        args: [...queryParams, perPage, currentOffset],
+        args: [...queryParams, limit, currentOffset],
       });
 
       const threads = (dataResult.rows || []).map(mapRowToStorageThreadType);
@@ -770,8 +757,8 @@ export class MemoryLibSQL extends MemoryStorage {
       return {
         threads,
         total,
-        page,
-        perPage,
+        page: offset,
+        perPage: limit,
         hasMore: currentOffset + threads.length < total,
       };
     } catch (error) {
@@ -786,7 +773,7 @@ export class MemoryLibSQL extends MemoryStorage {
       );
       this.logger?.trackException?.(mastraError);
       this.logger?.error?.(mastraError.toString());
-      return { threads: [], total: 0, page, perPage, hasMore: false };
+      return { threads: [], total: 0, page: offset, perPage: limit, hasMore: false };
     }
   }
 
