@@ -8,6 +8,9 @@ import { Agent, MessageList } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { MemoryProcessorOpts } from '@mastra/core/memory';
 import { MemoryProcessor } from '@mastra/core/memory';
+import type { InputProcessor } from '@mastra/core/processors';
+import { ProcessorRunner } from '@mastra/core/processors';
+import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
@@ -20,6 +23,34 @@ import { filterToolCallsByName, filterToolResultsByName, generateConversationHis
 
 function v2ToCoreMessages(messages: MastraMessageV2[] | UIMessage[]): CoreMessage[] {
   return new MessageList().add(messages, 'memory').get.all.core();
+}
+
+/**
+ * Helper function to apply input processors to messages
+ * Replaces the deprecated memory.processMessages() method
+ */
+async function applyInputProcessors(
+  messages: CoreMessage[],
+  processors: InputProcessor[],
+  threadId: string,
+  resourceId: string,
+): Promise<CoreMessage[]> {
+  const runner = new ProcessorRunner({
+    inputProcessors: processors,
+    outputProcessors: [],
+    agentName: 'test-agent',
+  });
+
+  const messageList = new MessageList({ threadId, resourceId }).add(messages, 'memory');
+  const requestContext = new RequestContext();
+  requestContext.set('MastraMemory', {
+    thread: { id: threadId },
+    resourceId,
+  });
+
+  const processedMessageList = await runner.runInputProcessors(messageList, undefined, undefined, requestContext);
+
+  return processedMessageList.get.all.core();
 }
 
 let memory: Memory;
@@ -80,12 +111,14 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       selectBy: { last: 20 },
     });
-    const result = await memory.processMessages({
-      messages: new MessageList({ threadId: thread.id, resourceId })
+    const result = await applyInputProcessors(
+      new MessageList({ threadId: thread.id, resourceId })
         .add(queryResult.uiMessages, 'memory')
         .get.all.core(),
-      processors: [new TokenLimiter(250)], // Limit to 250 tokens
-    });
+      [new TokenLimiter(250)], // Limit to 250 tokens
+      thread.id,
+      resourceId,
+    );
 
     // We should have messages limited by token count
     expect(result.length).toBeGreaterThan(0);
@@ -110,12 +143,14 @@ describe('Memory with Processors', () => {
     });
     expect(allMessagesQuery.messages.length).toBe(20);
 
-    const allMessagesResult = await memory.processMessages({
-      messages: new MessageList({ threadId: thread.id, resourceId })
+    const allMessagesResult = await applyInputProcessors(
+      new MessageList({ threadId: thread.id, resourceId })
         .add(allMessagesQuery.uiMessages, 'memory')
         .get.all.core(),
-      processors: [new TokenLimiter(3000)], // High limit that should exceed total tokens
-    });
+      [new TokenLimiter(3000)], // High limit that should exceed total tokens
+      thread.id,
+      resourceId,
+    );
 
     // create response message list to add to memory
     const messages = new MessageList({ threadId: thread.id, resourceId })
@@ -154,10 +189,12 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       selectBy: { last: 20 },
     });
-    const result = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult.uiMessages),
-      processors: [new ToolCallFilter({ exclude: ['weather'] })],
-    });
+    const result = await applyInputProcessors(
+      v2ToCoreMessages(queryResult.uiMessages),
+      [new ToolCallFilter({ exclude: ['weather'] })],
+      thread.id,
+      resourceId,
+    );
     const messages = new MessageList({ threadId: thread.id, resourceId }).add(result, 'response').get.all.v2();
     expect(new MessageList().add(messages, 'memory').get.all.v2().length).toBeLessThan(messagesV2.length);
     expect(filterToolCallsByName(result, 'weather')).toHaveLength(0);
@@ -170,10 +207,12 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       selectBy: { last: 20 },
     });
-    const result2 = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult2.uiMessages),
-      processors: [],
-    });
+    const result2 = await applyInputProcessors(
+      v2ToCoreMessages(queryResult2.uiMessages),
+      [],
+      thread.id,
+      resourceId,
+    );
     const messages2 = new MessageList({ threadId: thread.id, resourceId }).add(result2, 'response').get.all.v2();
     expect(new MessageList().add(messages2, 'memory').get.all.v2()).toHaveLength(messagesV2.length);
     expect(filterToolCallsByName(result2, 'weather')).toHaveLength(1);
@@ -186,10 +225,12 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       selectBy: { last: 20 },
     });
-    const result3 = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult3.uiMessages),
-      processors: [new ToolCallFilter({ exclude: ['weather', 'calculator'] })],
-    });
+    const result3 = await applyInputProcessors(
+      v2ToCoreMessages(queryResult3.uiMessages),
+      [new ToolCallFilter({ exclude: ['weather', 'calculator'] })],
+      thread.id,
+      resourceId,
+    );
     expect(result3.length).toBeLessThan(messagesV2.length);
     expect(filterToolCallsByName(result3, 'weather')).toHaveLength(0);
     expect(filterToolResultsByName(result3, 'weather')).toHaveLength(0);
@@ -201,10 +242,12 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       selectBy: { last: 20 },
     });
-    const result4 = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult4.uiMessages),
-      processors: [new ToolCallFilter()],
-    });
+    const result4 = await applyInputProcessors(
+      v2ToCoreMessages(queryResult4.uiMessages),
+      [new ToolCallFilter()],
+      thread.id,
+      resourceId,
+    );
     expect(result4.length).toBeLessThan(messagesV2.length);
     expect(filterToolCallsByName(result4, 'weather')).toHaveLength(0);
     expect(filterToolResultsByName(result4, 'weather')).toHaveLength(0);
@@ -236,10 +279,12 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       selectBy: { last: 20 },
     });
-    const result = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult.uiMessages),
-      processors: [new ToolCallFilter({ exclude: ['weather'] }), new TokenLimiter(250)],
-    });
+    const result = await applyInputProcessors(
+      v2ToCoreMessages(queryResult.uiMessages),
+      [new ToolCallFilter({ exclude: ['weather'] }), new TokenLimiter(250)],
+      thread.id,
+      resourceId,
+    );
 
     // We should have fewer messages after filtering and token limiting
     expect(result.length).toBeGreaterThan(0);
@@ -417,11 +462,9 @@ describe('Memory with Processors', () => {
 
     const list = new MessageList({ threadId }).add(queryResult.messagesV2, 'memory');
 
-    const baselineResult = await memory.processMessages({
-      messages: list.get.remembered.core(),
-      newMessages: list.get.input.core(),
-      processors: [],
-    });
+    // For this test, we'll process both remembered and input messages together
+    const allMessages = [...list.get.remembered.core(), ...list.get.input.core()];
+    const baselineResult = await applyInputProcessors(allMessages, [], threadId, resourceId);
 
     // There should be at least 6 messages (3 user + 3 assistant responses)
     expect(baselineResult.length).toBeGreaterThanOrEqual(6);
@@ -438,10 +481,12 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const list2 = new MessageList({ threadId }).add(weatherQueryResult.messagesV2, 'memory');
-    const weatherFilteredResult = await memory.processMessages({
-      messages: list2.get.all.core(),
-      processors: [new ToolCallFilter({ exclude: ['get_weather'] })],
-    });
+    const weatherFilteredResult = await applyInputProcessors(
+      list2.get.all.core(),
+      [new ToolCallFilter({ exclude: ['get_weather'] })],
+      threadId,
+      resourceId,
+    );
 
     // Should have fewer messages after filtering
     expect(weatherFilteredResult.length).toBeLessThan(baselineResult.length);
@@ -459,10 +504,12 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const list3 = new MessageList({ threadId }).add(tokenLimitQuery.messages, 'memory');
-    const tokenLimitedResult = await memory.processMessages({
-      messages: list3.get.all.core(),
-      processors: [new TokenLimiter(100)], // Small limit to only get a subset
-    });
+    const tokenLimitedResult = await applyInputProcessors(
+      list3.get.all.core(),
+      [new TokenLimiter(100)], // Small limit to only get a subset
+      threadId,
+      resourceId,
+    );
 
     // Should have fewer messages after token limiting
     expect(tokenLimitedResult.length).toBeLessThan(baselineResult.length);
@@ -473,10 +520,12 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const list4 = new MessageList({ threadId }).add(combinedQuery.messages, 'memory');
-    const combinedResult = await memory.processMessages({
-      messages: list4.get.all.core(),
-      processors: [new ToolCallFilter({ exclude: ['get_weather', 'calculator'] }), new TokenLimiter(500)],
-    });
+    const combinedResult = await applyInputProcessors(
+      list4.get.all.core(),
+      [new ToolCallFilter({ exclude: ['get_weather', 'calculator'] }), new TokenLimiter(500)],
+      threadId,
+      resourceId,
+    );
 
     // No tool calls should remain
     expect(filterToolCallsByName(combinedResult, 'get_weather').length).toBe(0);
