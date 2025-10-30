@@ -58511,8 +58511,8 @@ export const mastraClient = new MastraClient({
       description: "Creates a new memory thread with the given parameters.",
     },
     {
-      name: "getMemoryThread(threadId)",
-      type: "Promise<MemoryThread>",
+      name: "getMemoryThread({ threadId, agentId })",
+      type: "MemoryThread",
       description: "Fetches a specific memory thread by ID.",
     },
     {
@@ -58620,7 +58620,7 @@ const thread = await mastraClient.createMemoryThread({
 Get an instance of a specific memory thread:
 
 ```typescript
-const thread = mastraClient.getMemoryThread("thread-id", "agent-id");
+const thread = mastraClient.getMemoryThread({ threadId: "thread-id", agentId: "agent-id" });
 ```
 
 ## Thread Methods
@@ -80155,7 +80155,7 @@ jobs:
 
 ## Related
 
-- [Running in CI](/docs/scorers/overview) - Setting up scorers in CI/CD pipelines
+- [Scorers Overview](/docs/scorers/overview) - Setting up scorer pipelines
 - [Hallucination Scorer](/reference/scorers/hallucination) - Evaluates fabricated content
 - [Answer Relevancy Scorer](/reference/scorers/answer-relevancy) - Measures response focus
 - [Custom Scorers](/docs/scorers/custom-scorers) - Creating your own evaluation metrics
