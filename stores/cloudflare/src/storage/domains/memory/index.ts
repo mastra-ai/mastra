@@ -920,9 +920,19 @@ export class MemoryStorageCloudflare extends MemoryStorage {
             const fullOrder = await this.getFullOrder(threadMessagesKey);
             const totalMessages = fullOrder.length;
 
-            // Apply offset and limit
-            const start = offset;
-            const end = Math.min(offset + perPage - 1, totalMessages - 1);
+            // Apply offset and limit - direction-aware pagination
+            // For ASC: select from start (oldest first)
+            // For DESC: select from end (newest first)
+            let start: number;
+            let end: number;
+            if (sortDirection === 'ASC') {
+              start = offset;
+              end = Math.min(offset + perPage - 1, totalMessages - 1);
+            } else {
+              // DESC: calculate window from the end (newest messages)
+              start = Math.max(totalMessages - offset - perPage, 0);
+              end = totalMessages - offset - 1;
+            }
             const paginatedIds = await this.getRange(threadMessagesKey, start, end);
             paginatedIds.forEach(id => messageIds.add(id));
           } catch {
@@ -977,9 +987,28 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         }
       }
 
+      // If perPage is 0, return empty array immediately
+      if (perPage === 0) {
+        return {
+          messages: [],
+          total,
+          page,
+          perPage: 0,
+          hasMore: false,
+        };
+      }
+
       // Apply pagination if filters were applied (we fetched all messages above)
+      // Direction-aware slicing: for DESC, slice from the end (newest messages)
       if (hasFilters && perPage !== Number.MAX_SAFE_INTEGER && perPage > 0) {
-        filteredMessages = filteredMessages.slice(offset, offset + perPage);
+        if (sortDirection === 'ASC') {
+          filteredMessages = filteredMessages.slice(offset, offset + perPage);
+        } else {
+          // DESC: slice from the end (newest messages first)
+          const start = Math.max(filteredMessages.length - offset - perPage, 0);
+          const end = filteredMessages.length - offset;
+          filteredMessages = filteredMessages.slice(start, end);
+        }
       }
 
       // Calculate paginated count (before adding included messages)
@@ -1064,10 +1093,21 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
-      // Otherwise, check if there are more pages in the pagination window
+      // Otherwise, check if there are more pages in the pagination window (direction-aware)
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = limit === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
+
+      let hasMore: boolean;
+      if (limit === false || allThreadMessagesReturned) {
+        hasMore = false;
+      } else if (sortDirection === 'ASC') {
+        // ASC: check if there are more messages after the current window
+        hasMore = offset + paginatedCount < total;
+      } else {
+        // DESC: check if there are more (older) messages before the current window
+        // Window starts at: total - offset - perPage, so there are more if start > 0
+        hasMore = total - offset - perPage > 0;
+      }
 
       return {
         messages: finalMessages,

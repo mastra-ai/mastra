@@ -696,6 +696,7 @@ export class MemoryMSSQL extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      const errorPerPage = limit === false ? Number.MAX_SAFE_INTEGER : limit === 0 ? 0 : limit || 40;
       const mastraError = new MastraError(
         {
           id: 'MASTRA_STORAGE_MSSQL_STORE_LIST_MESSAGES_FAILED',
@@ -713,8 +714,8 @@ export class MemoryMSSQL extends MemoryStorage {
       return {
         messages: [],
         total: 0,
-        page: Math.floor(offset / (limit === false ? Number.MAX_SAFE_INTEGER : limit || 40)),
-        perPage: limit === false ? Number.MAX_SAFE_INTEGER : limit || 40,
+        page: errorPerPage === 0 ? 0 : Math.floor(offset / errorPerPage),
+        perPage: errorPerPage,
         hasMore: false,
       };
     }

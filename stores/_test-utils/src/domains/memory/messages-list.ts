@@ -471,8 +471,6 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           ],
         });
 
-        console.log(result.messages);
-
         // Should get first 2 from pagination (Message 1, 2) + included Message 3 (Message 2 already in paginated set)
         expect(result.messages).toHaveLength(3);
         expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 1', 'Message 2', 'Message 3']);

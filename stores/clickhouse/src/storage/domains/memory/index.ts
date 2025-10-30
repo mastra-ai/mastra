@@ -511,8 +511,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       return {
         messages: [],
         total: 0,
-        page: Math.floor(offset / (limit === false ? Number.MAX_SAFE_INTEGER : limit || 40)),
-        perPage: limit === false ? Number.MAX_SAFE_INTEGER : limit || 40,
+        page,
+        perPage,
         hasMore: false,
       };
     }
