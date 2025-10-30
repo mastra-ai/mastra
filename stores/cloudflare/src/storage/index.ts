@@ -226,7 +226,7 @@ export class CloudflareStore extends MastraStorage {
     threadId,
     resourceId,
     selectBy,
-  }: StorageGetMessagesArg): Promise<MastraDBMessage[]> {
+  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessages({ threadId, resourceId, selectBy });
   }
 
@@ -264,7 +264,7 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
 
-  async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraDBMessage[]> {
+  async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessagesById({ messageIds });
   }
 
@@ -340,7 +340,7 @@ export class CloudflareStore extends MastraStorage {
 
   async getMessagesPaginated(
     args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraDBMessage[] }> {
+  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessagesPaginated(args);
   }
 
