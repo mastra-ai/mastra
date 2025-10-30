@@ -621,7 +621,7 @@ export class InMemoryMemory extends MemoryStorage {
         perPage,
         hasMore: messages.length > end,
       };
-    } catch (error) {
+    } catch {
       return { messages: [], total: 0, page, perPage, hasMore: false };
     }
   }
