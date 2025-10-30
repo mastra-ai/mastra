@@ -1,16 +1,16 @@
 ---
-title: "Reference: Agent.getScorers() | Agents | Mastra Docs"
-description: "Documentation for the `Agent.getScorers()` method in Mastra agents, which retrieves the scoring configuration."
+title: "Reference: Agent.listScorers() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.listScorers()` method in Mastra agents, which retrieves the scoring configuration."
 ---
 
-# Agent.getScorers()
+# Agent.listScorers()
 
-The `.getScorers()` method retrieves the scoring configuration configured for an agent, resolving it if it's a function. This method provides access to the scoring system used for evaluating agent responses and performance.
+The `.listScorers()` method retrieves the scoring configuration configured for an agent, resolving it if it's a function. This method provides access to the scoring system used for evaluating agent responses and performance.
 
 ## Usage example
 
 ```typescript copy
-await agent.getScorers();
+await agent.listScorers();
 ```
 
 ## Parameters
@@ -43,7 +43,7 @@ await agent.getScorers();
 ## Extended usage example
 
 ```typescript copy
-await agent.getScorers({
+await agent.listScorers({
   runtimeContext: new RuntimeContext(),
 });
 ```

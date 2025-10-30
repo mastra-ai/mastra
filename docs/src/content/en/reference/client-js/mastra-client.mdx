@@ -135,7 +135,7 @@ export const mastraClient = new MastraClient({
       description: "Returns a vector store instance by name.",
     },
     {
-      name: "getLogs(params)",
+      name: "listLogs(params)",
       type: "Promise<LogEntry[]>",
       description: "Fetches system logs matching the provided filters.",
     },
@@ -145,7 +145,7 @@ export const mastraClient = new MastraClient({
       description: "Retrieves a specific log entry by ID or filter.",
     },
     {
-      name: "getLogTransports()",
+      name: "listLogTransports()",
       type: "string[]",
       description: "Returns the list of configured log transport types.",
     },

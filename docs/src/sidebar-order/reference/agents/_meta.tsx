@@ -6,7 +6,7 @@ const meta = {
   listAgents: ".listAgents()",
   getWorkflows: ".listWorkflows()",
   listTools: ".listTools()",
-  getScorers: ".getScorers()",
+  listScorers: ".listScorers()",
   getModel: ".getModel()",
   getMemory: ".getMemory()",
   getVoice: ".getVoice()",

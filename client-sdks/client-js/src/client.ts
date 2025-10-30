@@ -268,7 +268,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters for filtering logs
    * @returns Promise containing array of log messages
    */
-  public getLogs(params: GetLogsParams): Promise<GetLogsResponse> {
+  public listLogs(params: GetLogsParams): Promise<GetLogsResponse> {
     const { transportId, fromDate, toDate, logLevel, filters, page, perPage } = params;
     const _filters = filters ? Object.entries(filters).map(([key, value]) => `${key}:${value}`) : [];
 
@@ -361,7 +361,7 @@ export class MastraClient extends BaseResource {
    * List of all log transports
    * @returns Promise containing list of log transports
    */
-  public getLogTransports(): Promise<{ transports: string[] }> {
+  public listLogTransports(): Promise<{ transports: string[] }> {
     return this.request('/api/logs/transports');
   }
 
@@ -517,7 +517,7 @@ export class MastraClient extends BaseResource {
    * Retrieves all available scorers
    * @returns Promise containing list of available scorers
    */
-  public getScorers(): Promise<Record<string, GetScorerResponse>> {
+  public listScorers(): Promise<Record<string, GetScorerResponse>> {
     return this.request('/api/scores/scorers');
   }
 

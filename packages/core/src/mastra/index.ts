@@ -1122,7 +1122,7 @@ do:
    *   }
    * });
    *
-   * const allScorers = mastra.getScorers();
+   * const allScorers = mastra.listScorers();
    * console.log(Object.keys(allScorers)); // ['helpfulness', 'accuracy', 'relevance']
    *
    * // Check scorer configurations
@@ -1131,7 +1131,7 @@ do:
    * }
    * ```
    */
-  public getScorers() {
+  public listScorers() {
     return this.#scorers;
   }
 
@@ -1480,7 +1480,7 @@ do:
     return this.#bundler;
   }
 
-  public async getLogsByRunId({
+  public async listLogsByRunId({
     runId,
     transportId,
     fromDate,
@@ -1501,7 +1501,7 @@ do:
   }) {
     if (!transportId) {
       const error = new MastraError({
-        id: 'MASTRA_GET_LOGS_BY_RUN_ID_MISSING_TRANSPORT',
+        id: 'MASTRA_LIST_LOGS_BY_RUN_ID_MISSING_TRANSPORT',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
         text: 'Transport ID is required',
@@ -1514,12 +1514,12 @@ do:
       throw error;
     }
 
-    if (!this.#logger?.getLogsByRunId) {
+    if (!this.#logger?.listLogsByRunId) {
       const error = new MastraError({
         id: 'MASTRA_GET_LOGS_BY_RUN_ID_LOGGER_NOT_CONFIGURED',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.SYSTEM,
-        text: 'Logger is not configured or does not support getLogsByRunId operation',
+        text: 'Logger is not configured or does not support listLogsByRunId operation',
         details: {
           runId,
           transportId,
@@ -1529,7 +1529,7 @@ do:
       throw error;
     }
 
-    return await this.#logger.getLogsByRunId({
+    return await this.#logger.listLogsByRunId({
       runId,
       transportId,
       fromDate,
@@ -1541,7 +1541,7 @@ do:
     });
   }
 
-  public async getLogs(
+  public async listLogs(
     transportId: string,
     params?: {
       fromDate?: Date;
@@ -1579,7 +1579,7 @@ do:
       throw error;
     }
 
-    return await this.#logger.getLogs(transportId, params);
+    return await this.#logger.listLogs(transportId, params);
   }
 
   /**

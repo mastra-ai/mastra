@@ -1079,7 +1079,7 @@ export class Workflow<
     return run;
   }
 
-  async getScorers({
+  async listScorers({
     runtimeContext = new RuntimeContext(),
   }: { runtimeContext?: RuntimeContext } = {}): Promise<MastraScorers> {
     const steps = this.steps;

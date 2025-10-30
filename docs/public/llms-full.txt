@@ -56382,11 +56382,11 @@ await agent.getModel({
 
 
 ---
-title: "Reference: Agent.getScorers() | Agents | Mastra Docs"
+title: "Reference: Agent.listScorers() | Agents | Mastra Docs"
 description: "Documentation for the `Agent.getScorers()` method in Mastra agents, which retrieves the scoring configuration."
 ---
 
-# Agent.getScorers()
+# Agent.listScorers()
 [EN] Source: https://mastra.ai/en/reference/agents/getScorers
 
 The `.getScorers()` method retrieves the scoring configuration configured for an agent, resolving it if it's a function. This method provides access to the scoring system used for evaluating agent responses and performance.

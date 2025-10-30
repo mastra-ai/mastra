@@ -524,7 +524,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     return workflowRecord;
   }
 
-  async getScorers({
+  async listScorers({
     runtimeContext = new RuntimeContext(),
   }: { runtimeContext?: RuntimeContext } = {}): Promise<MastraScorers> {
     if (typeof this.#scorers !== 'function') {
@@ -2603,7 +2603,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     try {
       scorers = overrideScorers
         ? this.resolveOverrideScorerReferences(overrideScorers)
-        : await this.getScorers({ runtimeContext });
+        : await this.listScorers({ runtimeContext });
     } catch (e) {
       this.logger.warn(`[Agent:${this.name}] - Failed to get scorers: ${e}`);
       return;

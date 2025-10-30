@@ -4,7 +4,7 @@ import type { StoragePagination } from '@mastra/core/storage';
 import type { Context } from '../types';
 import { handleError } from './error';
 
-async function getScorersFromSystem({
+async function listScorersFromSystem({
   mastra,
   runtimeContext,
 }: Context & {
@@ -20,7 +20,7 @@ async function getScorersFromSystem({
 
   for (const [agentId, agent] of Object.entries(agents)) {
     const scorers =
-      (await agent.getScorers({
+      (await agent.listScorers({
         runtimeContext,
       })) || {};
 
@@ -45,7 +45,7 @@ async function getScorersFromSystem({
 
   for (const [workflowId, workflow] of Object.entries(workflows)) {
     const scorers =
-      (await workflow.getScorers({
+      (await workflow.listScorers({
         runtimeContext,
       })) || {};
 
@@ -67,7 +67,7 @@ async function getScorersFromSystem({
     }
   }
 
-  const registeredScorers = await mastra.getScorers();
+  const registeredScorers = await mastra.listScorers();
   for (const [_scorerId, scorer] of Object.entries(registeredScorers || {})) {
     const scorerName = scorer.name;
     if (scorersMap.has(scorerName)) {
@@ -86,8 +86,8 @@ async function getScorersFromSystem({
   return Object.fromEntries(scorersMap.entries());
 }
 
-export async function getScorersHandler({ mastra, runtimeContext }: Context & { runtimeContext: RuntimeContext }) {
-  const scorers = await getScorersFromSystem({
+export async function listScorersHandler({ mastra, runtimeContext }: Context & { runtimeContext: RuntimeContext }) {
+  const scorers = await listScorersFromSystem({
     mastra,
     runtimeContext,
   });
@@ -100,7 +100,7 @@ export async function getScorerHandler({
   scorerId,
   runtimeContext,
 }: Context & { scorerId: string; runtimeContext: RuntimeContext }) {
-  const scorers = await getScorersFromSystem({
+  const scorers = await listScorersFromSystem({
     mastra,
     runtimeContext,
   });
