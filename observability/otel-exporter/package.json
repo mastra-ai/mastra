@@ -32,18 +32,18 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/core": "^2.1.0",
-    "@opentelemetry/resources": "^2.1.0",
-    "@opentelemetry/sdk-trace-base": "^2.1.0",
-    "@opentelemetry/sdk-trace-node": "^2.1.0",
+    "@opentelemetry/core": "^2.2.0",
+    "@opentelemetry/resources": "^2.2.0",
+    "@opentelemetry/sdk-trace-base": "^2.2.0",
+    "@opentelemetry/sdk-trace-node": "^2.2.0",
     "@opentelemetry/semantic-conventions": "^1.37.0"
   },
   "optionalDependencies": {
     "@grpc/grpc-js": "^1.14.0",
-    "@opentelemetry/exporter-trace-otlp-grpc": "^0.205.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.205.0",
-    "@opentelemetry/exporter-trace-otlp-proto": "^0.205.0",
-    "@opentelemetry/exporter-zipkin": "^2.1.0"
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.207.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.207.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.207.0",
+    "@opentelemetry/exporter-zipkin": "^2.2.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
