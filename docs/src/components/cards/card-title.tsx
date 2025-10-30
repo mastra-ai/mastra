@@ -11,7 +11,7 @@ export function CardTitle({
   setActiveTab: (tab: string) => void;
 }) {
   return (
-    <div className="flex d flex-wrap mt-6 items-center gap-2">
+    <div className="flex flex-wrap mt-6 items-center gap-2">
       {titles.map((title) => (
         <button
           onClick={() => setActiveTab(title)}
