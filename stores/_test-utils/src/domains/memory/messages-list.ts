@@ -5,10 +5,6 @@ import type { MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import { MessageList } from '@mastra/core/agent';
 
 export function createMessagesListTest({ storage }: { storage: MastraStorage }) {
-  if (!['InMemoryStorage', 'UpstashStorage'].includes(storage.name)) {
-    return;
-  }
-
   describe('listMessages', () => {
     let thread: StorageThreadType;
     let thread2: StorageThreadType;
@@ -328,6 +324,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
             withNextMessages: 10, // Request more than available
           },
         ],
+        orderBy: { field: 'createdAt', direction: 'ASC' },
         limit: 3,
         offset: 0,
       });
@@ -473,6 +470,8 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
             },
           ],
         });
+
+        console.log(result.messages);
 
         // Should get first 2 from pagination (Message 1, 2) + included Message 3 (Message 2 already in paginated set)
         expect(result.messages).toHaveLength(3);
