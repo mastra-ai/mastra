@@ -147,7 +147,7 @@ The storage format (`MastraMessageV2`) and all public APIs remain unchanged.
 - Removed `generateVNext()` method. Use `generate()` instead.
 - Removed `streamVNext()` method. Use `stream()` instead.
 - `agent.llm` → `agent.getLLM()`
-- `agent.tools` → `agent.getTools()`
+- `agent.tools` → `agent.listTools()`
 - `agent.instructions` → `agent.getInstructions()`
 - `agent.speak()` → `agent.voice.speak()`
 - `agent.getSpeakers()` → `agent.voice.getSpeakers()`
@@ -245,6 +245,72 @@ export const accountBalance = createTool({
 
 - Removed the `@mastra/core/agent/input-processors` exports. They can found at `@mastra/core/processors` now.
 - `InputProcessor` type removed in favour of `Processor` which implements a `processInput` function.
+
+### Changed: `RuntimeContext` renamed to `RequestContext`
+
+The `RuntimeContext` class has been renamed to `RequestContext`, and all parameter names have been updated from `runtimeContext` to `requestContext` across all APIs.
+
+**Why this change?**
+
+- **Clearer naming**: "requestContext" better describes its purpose as request-specific data
+- **Consistency**: Aligns with web framework conventions where "request context" is a common pattern
+- **Less confusion**: Avoids ambiguity with "runtime" which could refer to execution environment
+
+**Migration:**
+
+Update imports, class instantiation, and parameter names:
+
+```typescript
+// Before
+import { RuntimeContext } from "@mastra/core/runtime-context"; // ❌
+
+const runtimeContext = new RuntimeContext(); // ❌
+runtimeContext.set("userTier", "enterprise");
+
+// After
+import { RequestContext } from "@mastra/core/request-context"; // ✅
+
+const requestContext = new RequestContext(); // ✅
+requestContext.set("userTier", "enterprise");
+```
+
+**Agents:**
+
+```typescript
+// Before
+await agent.generate(messages, {
+  runtimeContext, // ❌
+});
+
+// After
+await agent.generate(messages, {
+  requestContext, // ✅
+});
+```
+
+**Tools:**
+
+```typescript
+// Before
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async ({ context, runtimeContext }) => {
+    // ❌
+    const userTier = runtimeContext.get("userTier");
+  },
+});
+
+// After
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async ({ context, requestContext }) => {
+    // ✅
+    const userTier = requestContext.get("userTier");
+  },
+});
+```
+
+This change also affects workflow steps, dynamic configuration functions (memory, model, etc.), and anywhere else you pass or receive `runtimeContext` as a parameter.
 
 ## Migrate to v0.22
 

@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 const agent = new Agent({
@@ -42,7 +42,7 @@ const agent = new Agent({
   model: openai('gpt-4o'),
 });
 
-const fetchWeather = new LegacyStep({
+const fetchWeather = createStep({
   id: 'fetch-weather',
   description: 'Fetches weather forecast for a given city',
   inputSchema: z.object({
@@ -93,7 +93,7 @@ const forecastSchema = z.array(
   }),
 );
 
-const planActivities = new LegacyStep({
+const planActivities = createStep({
   id: 'plan-activities',
   description: 'Suggests activities based on weather conditions',
   inputSchema: forecastSchema,
@@ -150,15 +150,14 @@ function getWeatherCondition(code: number): string {
   return conditions[code] || 'Unknown';
 }
 
-const weatherWorkflow = new LegacyWorkflow({
+const weatherWorkflow = createWorkflow({
   name: 'weather-workflow',
   triggerSchema: z.object({
     city: z.string().describe('The city to get the weather for'),
   }),
 })
   .step(fetchWeather)
-  .then(planActivities);
-
-weatherWorkflow.commit();
+  .then(planActivities)
+  .commit();
 
 export { weatherWorkflow };

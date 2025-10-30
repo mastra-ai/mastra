@@ -187,9 +187,9 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the agent builder action execution',
+                  description: 'Request Context for the agent builder action execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -242,9 +242,9 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the agent builder action execution',
+                  description: 'Request Context for the agent builder action execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -296,9 +296,9 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the agent builder action execution',
+                  description: 'Request Context for the agent builder action execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -347,9 +347,9 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the agent builder action execution',
+                  description: 'Request Context for the agent builder action execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -437,9 +437,9 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the agent builder action execution',
+                  description: 'Request Context for the agent builder action execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -558,9 +558,9 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the agent builder action execution',
+                  description: 'Request Context for the agent builder action execution',
                 },
                 closeOnSuspend: {
                   type: 'boolean',
@@ -652,9 +652,9 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the agent builder action execution',
+                  description: 'Request Context for the agent builder action execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -711,9 +711,9 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the agent builder action execution',
+                  description: 'Request Context for the agent builder action execution',
                 },
                 tracingOptions: {
                   type: 'object',

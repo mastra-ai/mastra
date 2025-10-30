@@ -57,6 +57,6 @@ export function createSampleScore({
       id: entityId ?? 'eval-agent',
       name: 'Sample entity',
     },
-    runtimeContext: {},
+    requestContext: {},
   };
 }

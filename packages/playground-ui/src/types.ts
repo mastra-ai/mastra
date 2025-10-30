@@ -61,7 +61,7 @@ export interface ChatProps {
   memory?: boolean;
   refreshThreadList?: () => void;
   settings?: AgentSettingsType;
-  runtimeContext?: Record<string, any>;
+  requestContext?: Record<string, any>;
   onInputChange?: (value: string) => void;
   modelList?: GetAgentResponse['modelList'];
 }

@@ -9,7 +9,13 @@ import type {
   WorkingMemoryTemplate,
   MessageDeleteInput,
 } from '@mastra/core/memory';
-import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
+import type {
+  StorageGetMessagesArg,
+  ThreadSortOptions,
+  PaginationInfo,
+  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsByResourceIdInput,
+} from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
@@ -335,6 +341,12 @@ export class Memory extends MastraMemory {
       orderBy,
       sortDirection,
     });
+  }
+
+  async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    return this.storage.listThreadsByResourceId(args);
   }
 
   private async handleWorkingMemoryFromMetadata({
@@ -1095,7 +1107,7 @@ ${
     return Boolean(isMDWorkingMemory && isMDWorkingMemory.version === `vnext`);
   }
 
-  public getTools(config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
+  public listTools(config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
     if (mergedConfig.workingMemory?.enabled) {
       return {
