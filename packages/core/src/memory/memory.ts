@@ -7,11 +7,9 @@ import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
 import type {
   MastraStorage,
-  PaginationInfo,
   StorageGetMessagesArg,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
-  ThreadSortOptions,
 } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';

@@ -8,7 +8,6 @@ import type {
   StorageGetMessagesArg,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
-  ThreadSortOptions,
 } from '../storage';
 
 export class MockMemory extends MastraMemory {

@@ -14,7 +14,6 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   StorageDomains,
-  ThreadSortOptions,
   AISpanRecord,
   AITraceRecord,
   AITracesPaginatedArg,

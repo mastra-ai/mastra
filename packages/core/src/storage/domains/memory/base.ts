@@ -7,7 +7,6 @@ import type {
   StorageResourceType,
   ThreadOrderBy,
   ThreadSortDirection,
-  ThreadSortOptions,
   StorageListMessagesInput,
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,

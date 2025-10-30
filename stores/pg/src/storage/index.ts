@@ -13,7 +13,6 @@ import type {
   WorkflowRuns,
   StoragePagination,
   StorageDomains,
-  ThreadSortOptions,
   AISpanRecord,
   AITraceRecord,
   AITracesPaginatedArg,

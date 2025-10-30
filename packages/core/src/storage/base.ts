@@ -24,7 +24,6 @@ import type {
   StorageGetMessagesArg,
   StorageResourceType,
   StoragePagination,
-  ThreadSortOptions,
   WorkflowRun,
   WorkflowRuns,
   AISpanRecord,

@@ -7,7 +7,6 @@ import type {
   PaginationInfo,
   StorageGetMessagesArg,
   StorageResourceType,
-  ThreadSortOptions,
   StorageListMessagesInput,
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,

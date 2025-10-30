@@ -16,7 +16,6 @@ import type {
   StoragePagination,
   StorageDomains,
   StorageResourceType,
-  ThreadSortOptions,
   StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
