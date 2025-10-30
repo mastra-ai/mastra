@@ -594,7 +594,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     threadId,
     resourceId,
     selectBy,
-  }: StorageGetMessagesArg): Promise<MastraDBMessage[]> {
+  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
       const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
@@ -651,7 +651,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       });
       this.logger.debug(`Retrieved ${messages.length} messages for thread ${threadId}`);
       const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraDBMessage[], 'memory');
-      return list.get.all.db();
+      return { messages: list.get.all.db() };
     } catch (error) {
       const mastraError = new MastraError(
         {
@@ -675,8 +675,8 @@ export class MemoryStorageD1 extends MemoryStorage {
     messageIds,
   }: {
     messageIds: string[];
-  }): Promise<MastraDBMessage[]> {
-    if (messageIds.length === 0) return [];
+  }): Promise<{ messages: MastraDBMessage[] }> {
+    if (messageIds.length === 0) return { messages: [] };
     const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
     const messages: any[] = [];
 
@@ -707,7 +707,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       });
       this.logger.debug(`Retrieved ${messages.length} messages`);
       const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraDBMessage[], 'memory');
-      return list.get.all.db();
+      return { messages: list.get.all.db() };
     } catch (error) {
       const mastraError = new MastraError(
         {

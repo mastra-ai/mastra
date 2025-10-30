@@ -327,7 +327,7 @@ export class ClickhouseStore extends MastraStorage {
     threadId,
     resourceId,
     selectBy,
-  }: StorageGetMessagesArg): Promise<MastraDBMessage[]> {
+  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessages({ threadId, resourceId, selectBy });
   }
 
@@ -335,7 +335,7 @@ export class ClickhouseStore extends MastraStorage {
     messageIds,
   }: {
     messageIds: string[];
-  }): Promise<MastraDBMessage[]> {
+  }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessagesById({ messageIds });
   }
 

@@ -1,5 +1,5 @@
 import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
-import type { StorageThreadType, MastraMessageV1 } from '@mastra/core/memory';
+import type { StorageThreadType } from '@mastra/core/memory';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
@@ -170,44 +170,32 @@ export class UpstashStore extends MastraStorage {
     return this.stores.memory.deleteThread({ threadId });
   }
 
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraDBMessage[]; format: 'v2' }): Promise<MastraDBMessage[]>;
-  async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraDBMessage[]; format: 'v2' },
-  ): Promise<MastraDBMessage[] | MastraMessageV1[]> {
+  async saveMessages(args: {
+    messages: MastraDBMessage[];
+  }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.saveMessages(args);
   }
 
   /**
    * @deprecated use getMessagesPaginated instead
    */
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraDBMessage[]>;
-  public async getMessages({
-    threadId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
-    return this.stores.memory.getMessages({ threadId, selectBy, format });
+  public async getMessages(
+    args: StorageGetMessagesArg,
+  ): Promise<{ messages: MastraDBMessage[] }> {
+    return this.stores.memory.getMessages(args);
   }
 
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraDBMessage[]>;
   async getMessagesById({
     messageIds,
-    format,
   }: {
     messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
-    return this.stores.memory.getMessagesById({ messageIds, format });
+  }): Promise<{ messages: MastraDBMessage[] }> {
+    return this.stores.memory.getMessagesById({ messageIds });
   }
 
   public async getMessagesPaginated(
-    args: StorageGetMessagesArg & {
-      format?: 'v1' | 'v2';
-    },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraDBMessage[] }> {
+    args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessagesPaginated(args);
   }
 

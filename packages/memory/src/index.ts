@@ -184,7 +184,6 @@ export class Memory extends MastraMemory {
       const paginatedResult = await this.storage.getMessagesPaginated({
         threadId,
         resourceId,
-        format: 'v2',
         selectBy: {
           ...selectBy,
           ...(vectorResults?.length
@@ -209,10 +208,9 @@ export class Memory extends MastraMemory {
       rawMessages = paginatedResult.messages;
     } else {
       // Fall back to regular getMessages for backward compatibility
-      rawMessages = await this.storage.getMessages({
+      const result = await this.storage.getMessages({
         threadId,
         resourceId,
-        format: 'v2',
         selectBy: {
           ...selectBy,
           ...(vectorResults?.length
@@ -234,6 +232,7 @@ export class Memory extends MastraMemory {
         },
         threadConfig: config,
       });
+      rawMessages = result.messages;
     }
 
     const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');

@@ -27,7 +27,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     threadId,
     resourceId,
     selectBy,
-  }: StorageGetMessagesArg): Promise<MastraDBMessage[]> {
+  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
@@ -153,7 +153,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       });
 
       const list = new MessageList({ threadId, resourceId }).add(messages as MastraMessageV1[] | MastraDBMessage[], 'memory');
-      return list.get.all.db();
+      return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
         {
@@ -171,8 +171,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     messageIds,
   }: {
     messageIds: string[];
-  }): Promise<MastraDBMessage[]> {
-    if (messageIds.length === 0) return [];
+  }): Promise<{ messages: MastraDBMessage[] }> {
+    if (messageIds.length === 0) return { messages: [] };
 
     try {
       const result = await this.client.query({
@@ -216,7 +216,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       });
 
       const list = new MessageList().add(messages as MastraMessageV1[] | MastraDBMessage[], 'memory');
-      return list.get.all.db();
+      return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
         {

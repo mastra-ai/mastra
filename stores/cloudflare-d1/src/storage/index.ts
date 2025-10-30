@@ -267,11 +267,11 @@ export class D1Store extends MastraStorage {
   /**
    * @deprecated use getMessagesPaginated instead
    */
-  public async getMessages({ threadId, selectBy }: StorageGetMessagesArg): Promise<MastraDBMessage[]> {
+  public async getMessages({ threadId, selectBy }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessages({ threadId, selectBy });
   }
 
-  async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraDBMessage[]> {
+  async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessagesById({ messageIds });
   }
 
