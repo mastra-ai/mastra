@@ -238,9 +238,8 @@ export class MemoryLibSQL extends MemoryStorage {
       const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
       // Determine sort field and direction
-      const sortField = orderBy?.field || 'createdAt';
-      const sortDirection = orderBy?.direction || 'DESC';
-      const orderByStatement = `ORDER BY "${sortField}" ${sortDirection}`;
+      const { field, direction } = this.parseOrderBy(orderBy);
+      const orderByStatement = `ORDER BY "${field}" ${direction}`;
 
       // Build WHERE conditions
       const conditions: string[] = [`thread_id = ?`];
@@ -313,9 +312,9 @@ export class MemoryLibSQL extends MemoryStorage {
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {
-        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
       // Calculate hasMore based on pagination window

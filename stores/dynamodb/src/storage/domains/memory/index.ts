@@ -36,7 +36,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   }
 
   // Helper function to transform and sort threads
-  private transformAndSortThreads(rawThreads: any[], orderBy: string, sortDirection: string): StorageThreadType[] {
+  private transformAndSortThreads(rawThreads: any[], field: string, direction: string): StorageThreadType[] {
     return rawThreads
       .map((data: any) => ({
         ...data,
@@ -45,11 +45,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         updatedAt: typeof data.updatedAt === 'string' ? new Date(data.updatedAt) : data.updatedAt,
       }))
       .sort((a: StorageThreadType, b: StorageThreadType) => {
-        const fieldA = orderBy === 'createdAt' ? a.createdAt : a.updatedAt;
-        const fieldB = orderBy === 'createdAt' ? b.createdAt : b.updatedAt;
+        const fieldA = field === 'createdAt' ? a.createdAt : a.updatedAt;
+        const fieldB = field === 'createdAt' ? b.createdAt : b.updatedAt;
 
         const comparison = fieldA.getTime() - fieldB.getTime();
-        return sortDirection === 'DESC' ? -comparison : comparison;
+        return direction === 'DESC' ? -comparison : comparison;
       }) as StorageThreadType[];
   }
 
@@ -393,8 +393,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
       // Determine sort field and direction
-      const sortField = orderBy?.field || 'createdAt';
-      const sortDirection = orderBy?.direction || 'DESC';
+      const { field, direction } = this.parseOrderBy(orderBy);
 
       this.logger.debug('Getting messages with listMessages', {
         threadId,
@@ -403,8 +402,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         offset,
         perPage,
         page,
-        sortField,
-        sortDirection,
+        field,
+        direction,
       });
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
@@ -440,15 +439,15 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       // Sort messages by the specified field and direction
       allThreadMessages.sort((a: MastraMessageV2, b: MastraMessageV2) => {
-        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
 
         // Handle tiebreaker for stable sorting
         if (aValue === bValue) {
           return a.id.localeCompare(b.id);
         }
 
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
       // Save total before pagination
@@ -492,15 +491,15 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {
-        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
 
         // Handle tiebreaker for stable sorting
         if (aValue === bValue) {
           return a.id.localeCompare(b.id);
         }
 
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
       // Calculate hasMore based on pagination window
@@ -643,8 +642,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       resourceId,
       page: offset,
       perPage: limit,
-      orderBy: field,
-      sortDirection: direction,
+      field,
+      direction,
     });
 
     try {

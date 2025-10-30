@@ -1,7 +1,7 @@
 import { convertMessages } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
-import type { StorageGetMessagesArg, ThreadSortOptions } from '@mastra/core/storage';
+import type { StorageGetMessagesArg, StorageOrderBy } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
@@ -131,7 +131,6 @@ export async function listThreadsHandler({
       offset,
       limit,
       orderBy,
-      sortDirection,
     });
     return result;
   } catch (error) {

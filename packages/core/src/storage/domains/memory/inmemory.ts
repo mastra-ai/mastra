@@ -104,9 +104,7 @@ export class InMemoryMemory extends MemoryStorage {
 
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
-    // Determine sort field and direction, default to DESC (newest first)
-    const sortField = orderBy?.field || 'createdAt';
-    const sortDirection = orderBy?.direction || 'DESC';
+    const { field, direction } = this.parseOrderBy(orderBy);
 
     // Determine how many results to return
     // Default pagination is always 40 unless explicitly specified
@@ -149,9 +147,9 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Sort thread messages before pagination
     threadMessages.sort((a: any, b: any) => {
-      const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : a[sortField];
-      const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : b[sortField];
-      return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+      const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : a[field];
+      const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : b[field];
+      return direction === 'ASC' ? aValue - bValue : bValue - aValue;
     });
 
     // Get total count of thread messages (for pagination metadata)
@@ -258,9 +256,9 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Sort all messages (paginated + included) for final output
     messages.sort((a: any, b: any) => {
-      const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : a[sortField];
-      const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : b[sortField];
-      return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+      const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : a[field];
+      const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : b[field];
+      return direction === 'ASC' ? aValue - bValue : bValue - aValue;
     });
 
     // Calculate hasMore
@@ -813,12 +811,12 @@ export class InMemoryMemory extends MemoryStorage {
     return resource;
   }
 
-  private sortThreads(threads: any[], orderBy: ThreadOrderBy, sortDirection: ThreadSortDirection): any[] {
+  private sortThreads(threads: any[], field: ThreadOrderBy, direction: ThreadSortDirection): any[] {
     return threads.sort((a, b) => {
-      const aValue = new Date(a[orderBy]).getTime();
-      const bValue = new Date(b[orderBy]).getTime();
+      const aValue = new Date(a[field]).getTime();
+      const bValue = new Date(b[field]).getTime();
 
-      if (sortDirection === 'ASC') {
+      if (direction === 'ASC') {
         return aValue - bValue;
       } else {
         return bValue - aValue;

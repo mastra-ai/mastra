@@ -837,8 +837,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
       // Determine sort field and direction
-      const sortField = orderBy?.field || 'createdAt';
-      const sortDirection = orderBy?.direction || 'DESC';
+      const { field, direction } = this.parseOrderBy(orderBy);
 
       const messageIds = new Set<string>();
 
@@ -869,7 +868,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
             // For DESC: select from end (newest first)
             let start: number;
             let end: number;
-            if (sortDirection === 'ASC') {
+            if (direction === 'ASC') {
               start = offset;
               end = Math.min(offset + perPage - 1, totalMessages - 1);
             } else {
@@ -945,7 +944,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       // Apply pagination if filters were applied (we fetched all messages above)
       // Direction-aware slicing: for DESC, slice from the end (newest messages)
       if (hasFilters && perPage !== Number.MAX_SAFE_INTEGER && perPage > 0) {
-        if (sortDirection === 'ASC') {
+        if (direction === 'ASC') {
           filteredMessages = filteredMessages.slice(offset, offset + perPage);
         } else {
           // DESC: slice from the end (newest messages first)
@@ -972,13 +971,13 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           const indexB = orderMap.get(b.id);
 
           if (indexA !== undefined && indexB !== undefined) {
-            return sortDirection === 'ASC' ? indexA - indexB : indexB - indexA;
+            return direction === 'ASC' ? indexA - indexB : indexB - indexA;
           }
 
           // Fallback to createdAt sorting
           const timeA = new Date(a.createdAt).getTime();
           const timeB = new Date(b.createdAt).getTime();
-          const timeDiff = sortDirection === 'ASC' ? timeA - timeB : timeB - timeA;
+          const timeDiff = direction === 'ASC' ? timeA - timeB : timeB - timeA;
 
           // Handle tiebreaker for stable sorting
           if (timeDiff === 0) {
@@ -991,7 +990,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         filteredMessages.sort((a, b) => {
           const timeA = new Date(a.createdAt).getTime();
           const timeB = new Date(b.createdAt).getTime();
-          const timeDiff = sortDirection === 'ASC' ? timeA - timeB : timeB - timeA;
+          const timeDiff = direction === 'ASC' ? timeA - timeB : timeB - timeA;
 
           // Handle tiebreaker for stable sorting
           if (timeDiff === 0) {
@@ -1024,15 +1023,15 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       // Sort final messages again to ensure correct order
       finalMessages = finalMessages.sort((a, b) => {
-        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
 
         // Handle tiebreaker for stable sorting
         if (aValue === bValue) {
           return a.id.localeCompare(b.id);
         }
 
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
       // Calculate hasMore based on pagination window
@@ -1044,7 +1043,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       let hasMore: boolean;
       if (limit === false || allThreadMessagesReturned) {
         hasMore = false;
-      } else if (sortDirection === 'ASC') {
+      } else if (direction === 'ASC') {
         // ASC: check if there are more messages after the current window
         hasMore = offset + paginatedCount < total;
       } else {

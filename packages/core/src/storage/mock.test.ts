@@ -68,8 +68,7 @@ describe('InMemoryStore - Thread Sorting', () => {
         resourceId,
         offset: 0,
         limit: 2,
-        orderBy: 'createdAt',
-        sortDirection: 'ASC',
+        orderBy: { field: 'createdAt', direction: 'ASC' },
       });
 
       expect(result.threads).toHaveLength(2);
@@ -86,8 +85,7 @@ describe('InMemoryStore - Thread Sorting', () => {
         resourceId,
         offset: 0,
         limit: 2,
-        orderBy: 'updatedAt',
-        sortDirection: 'ASC',
+        orderBy: { field: 'updatedAt', direction: 'ASC' },
       });
 
       expect(result.threads).toHaveLength(2);
@@ -102,8 +100,7 @@ describe('InMemoryStore - Thread Sorting', () => {
         resourceId,
         offset: 0,
         limit: 2,
-        orderBy: 'updatedAt',
-        sortDirection: 'DESC',
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
       });
 
       expect(result.threads).toHaveLength(2);
@@ -119,8 +116,7 @@ describe('InMemoryStore - Thread Sorting', () => {
         resourceId,
         offset: 0,
         limit: 2,
-        orderBy: 'createdAt',
-        sortDirection: 'ASC',
+        orderBy: { field: 'createdAt', direction: 'ASC' },
       });
 
       // Second page
@@ -128,8 +124,7 @@ describe('InMemoryStore - Thread Sorting', () => {
         resourceId,
         offset: 1,
         limit: 2,
-        orderBy: 'createdAt',
-        sortDirection: 'ASC',
+        orderBy: { field: 'createdAt', direction: 'ASC' },
       });
 
       expect(page1.threads).toHaveLength(2);
@@ -145,8 +140,7 @@ describe('InMemoryStore - Thread Sorting', () => {
         resourceId,
         offset: 1,
         limit: 2,
-        orderBy: 'updatedAt',
-        sortDirection: 'DESC',
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
       });
 
       expect(result.threads).toHaveLength(1);

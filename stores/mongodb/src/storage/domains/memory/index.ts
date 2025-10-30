@@ -222,9 +222,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
       // Determine sort field and direction
-      const sortField = orderBy?.field || 'createdAt';
-      const sortDirection = orderBy?.direction || 'DESC';
-      const sortOrder = sortDirection === 'ASC' ? 1 : -1;
+      const { field, direction } = this.parseOrderBy(orderBy);
+      const sortOrder = direction === 'ASC' ? 1 : -1;
 
       const collection = await this.operations.getCollection(TABLE_MESSAGES);
 
@@ -247,7 +246,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const total = await collection.countDocuments(query);
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
-      const sortObj: any = { [sortField]: sortOrder };
+      const sortObj: any = { [field]: sortOrder };
       let cursor = collection.find(query).sort(sortObj).skip(offset);
 
       // Only apply limit if not unlimited and perPage > 0
@@ -303,9 +302,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {
-        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
       // Calculate hasMore based on pagination window

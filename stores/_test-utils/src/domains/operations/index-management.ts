@@ -488,8 +488,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
             resourceId: `perf-resource-5`,
             offset: 0,
             limit: 10,
-            orderBy: 'createdAt',
-            sortDirection: 'DESC',
+            orderBy: { field: 'createdAt', direction: 'DESC' },
           });
           const queryTime = Date.now() - startTime;
 

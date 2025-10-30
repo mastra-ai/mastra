@@ -331,8 +331,7 @@ export class StoreMemoryLance extends MemoryStorage {
       const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
       // Determine sort field and direction
-      const sortField = orderBy?.field || 'createdAt';
-      const sortDirection = orderBy?.direction || 'DESC';
+      const { field, direction } = this.parseOrderBy(orderBy);
 
       const table = await this.client.openTable(TABLE_MESSAGES);
 
@@ -371,9 +370,9 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // Sort records
       allRecords.sort((a, b) => {
-        const aValue = sortField === 'createdAt' ? a.createdAt : a[sortField];
-        const bValue = sortField === 'createdAt' ? b.createdAt : b[sortField];
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        const aValue = field === 'createdAt' ? a.createdAt : a[field];
+        const bValue = field === 'createdAt' ? b.createdAt : b[field];
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
       // Apply pagination
@@ -426,9 +425,9 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {
-        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
       // Calculate hasMore based on pagination window

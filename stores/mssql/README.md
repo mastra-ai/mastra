@@ -209,7 +209,7 @@ MSSQLStore supports multiple connection methods:
 - `getThreadById({ threadId })`: Get a thread by ID
 - `updateThread({ id, title, metadata })`: Update thread title and metadata
 - `deleteThread({ threadId })`: Delete a thread and its messages
-- `listThreadsByResourceId({ resourceId, offset, limit, orderBy?, sortDirection? })`: List paginated threads for a resource
+- `listThreadsByResourceId({ resourceId, offset, limit, orderBy? })`: List paginated threads for a resource
 
 ### Messages
 

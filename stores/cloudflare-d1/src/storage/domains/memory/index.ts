@@ -731,10 +731,6 @@ export class MemoryStorageD1 extends MemoryStorage {
       // Convert offset to page for pagination metadata
       const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
-      // Determine sort field and direction
-      const sortField = orderBy?.field || 'createdAt';
-      const sortDirection = orderBy?.direction || 'DESC';
-
       const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
@@ -766,9 +762,8 @@ export class MemoryStorageD1 extends MemoryStorage {
       }
 
       // Build ORDER BY clause
-      const orderByField = sortField === 'createdAt' ? 'createdAt' : `"${sortField}"`;
-      const orderByDirection = sortDirection === 'ASC' ? 'ASC' : 'DESC';
-      query += ` ORDER BY ${orderByField} ${orderByDirection}`;
+      const { field, direction } = this.parseOrderBy(orderBy);
+      query += ` ORDER BY "${field}" ${direction}`;
 
       // Apply pagination
       if (perPage !== Number.MAX_SAFE_INTEGER) {
@@ -855,15 +850,15 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {
-        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
 
         // Handle tiebreaker for stable sorting
         if (aValue === bValue) {
           return a.id.localeCompare(b.id);
         }
 
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
       // Calculate hasMore based on pagination window

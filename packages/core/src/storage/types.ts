@@ -137,8 +137,8 @@ export type StorageMessageType = {
 };
 
 export interface StorageOrderBy {
-  field: ThreadOrderBy;
-  direction: ThreadSortDirection;
+  field?: ThreadOrderBy;
+  direction?: ThreadSortDirection;
 }
 
 export type ThreadOrderBy = 'createdAt' | 'updatedAt';

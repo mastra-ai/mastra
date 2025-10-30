@@ -456,8 +456,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           resourceId,
           offset: 0,
           limit: 3,
-          orderBy: 'createdAt',
-          sortDirection: 'ASC',
+          orderBy: { field: 'createdAt', direction: 'ASC' },
         });
 
         expect(result.threads).toHaveLength(3);
@@ -468,8 +467,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       it('should sort threads by createdAt DESC', async () => {
         const result = await storage.listThreadsByResourceId({
           resourceId,
-          orderBy: 'createdAt',
-          sortDirection: 'DESC',
+          orderBy: { field: 'createdAt', direction: 'DESC' },
           offset: 0,
           limit: 3,
         });
@@ -484,8 +482,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           resourceId,
           offset: 0,
           limit: 3,
-          orderBy: 'updatedAt',
-          sortDirection: 'ASC',
+          orderBy: { field: 'updatedAt', direction: 'ASC' },
         });
 
         expect(result.threads).toHaveLength(3);
@@ -498,8 +495,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           resourceId,
           offset: 0,
           limit: 3,
-          orderBy: 'updatedAt',
-          sortDirection: 'DESC',
+          orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
 
         expect(result.threads).toHaveLength(3);
@@ -507,10 +503,10 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         expectThreadsSortedBy(result.threads, 'updatedAt', 'DESC');
       });
 
-      it('should sort by createdAt DESC when only orderBy is specified (sortDirection defaults to DESC)', async () => {
+      it('should sort by createdAt DESC when only field is specified (direction defaults to DESC)', async () => {
         const result = await storage.listThreadsByResourceId({
           resourceId,
-          orderBy: 'createdAt',
+          orderBy: { field: 'createdAt' },
           offset: 0,
           limit: 3,
         });
@@ -520,10 +516,10 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         expectThreadsSortedBy(result.threads, 'createdAt', 'DESC');
       });
 
-      it('should sort by updatedAt DESC when only orderBy is specified (sortDirection defaults to DESC)', async () => {
+      it('should sort by updatedAt DESC when only field is specified (direction defaults to DESC)', async () => {
         const result = await storage.listThreadsByResourceId({
           resourceId,
-          orderBy: 'updatedAt',
+          orderBy: { field: 'updatedAt' },
           offset: 0,
           limit: 3,
         });
@@ -533,10 +529,10 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         expectThreadsSortedBy(result.threads, 'updatedAt', 'DESC');
       });
 
-      it('should sort by createdAt ASC when only sortDirection ASC is specified (orderBy defaults to createdAt)', async () => {
+      it('should sort by createdAt ASC when only direction ASC is specified (field defaults to createdAt)', async () => {
         const result = await storage.listThreadsByResourceId({
           resourceId,
-          sortDirection: 'ASC',
+          orderBy: { direction: 'ASC' },
           offset: 0,
           limit: 3,
         });
@@ -546,10 +542,10 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         expectThreadsSortedBy(result.threads, 'createdAt', 'ASC');
       });
 
-      it('should sort by createdAt DESC when only sortDirection DESC is specified (orderBy defaults to createdAt)', async () => {
+      it('should sort by createdAt DESC when only direction DESC is specified (field defaults to createdAt)', async () => {
         const result = await storage.listThreadsByResourceId({
           resourceId,
-          sortDirection: 'DESC',
+          orderBy: { direction: 'DESC' },
           offset: 0,
           limit: 3,
         });
@@ -563,8 +559,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         // Get all threads sorted by updatedAt DESC for comparison
         const { threads: allThreads } = await storage.listThreadsByResourceId({
           resourceId,
-          orderBy: 'updatedAt',
-          sortDirection: 'DESC',
+          orderBy: { field: 'updatedAt', direction: 'DESC' },
           offset: 0,
           limit: 10,
         });
@@ -574,24 +569,21 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           resourceId,
           offset: 0,
           limit: 2,
-          orderBy: 'updatedAt',
-          sortDirection: 'DESC',
+          orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
 
         const page2 = await storage.listThreadsByResourceId({
           resourceId,
           offset: 1,
           limit: 2,
-          orderBy: 'updatedAt',
-          sortDirection: 'DESC',
+          orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
 
         const page3 = await storage.listThreadsByResourceId({
           resourceId,
           offset: 2,
           limit: 2,
-          orderBy: 'updatedAt',
-          sortDirection: 'DESC',
+          orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
 
         // Combine paginated results
@@ -609,8 +601,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           resourceId: emptyResourceId,
           offset: 0,
           limit: 10,
-          orderBy: 'createdAt',
-          sortDirection: 'ASC',
+          orderBy: { field: 'createdAt', direction: 'ASC' },
         });
 
         expect(result.threads).toHaveLength(0);
@@ -630,8 +621,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           resourceId: singleResourceId,
           offset: 0,
           limit: 10,
-          orderBy: 'updatedAt',
-          sortDirection: 'ASC',
+          orderBy: { field: 'updatedAt', direction: 'ASC' },
         });
 
         expect(result.threads).toHaveLength(1);
@@ -683,8 +673,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           resourceId: identicalResourceId,
           offset: 0,
           limit: 3,
-          orderBy: 'createdAt',
-          sortDirection: 'ASC',
+          orderBy: { field: 'createdAt', direction: 'ASC' },
         });
 
         expect(result).toHaveLength(3);

@@ -669,16 +669,15 @@ export class StoreMemoryUpstash extends MemoryStorage {
       }
 
       // Determine sort field and direction, default to DESC (newest first)
-      const sortField = orderBy?.field || 'createdAt';
-      const sortDirection = orderBy?.direction || 'DESC';
+      const { field, direction } = this.parseOrderBy(orderBy);
 
       // Type-safe field accessor helper
       const getFieldValue = (msg: MastraMessageV2): number => {
-        if (sortField === 'createdAt') {
+        if (field === 'createdAt') {
           return new Date(msg.createdAt).getTime();
         }
         // Access other fields with type-safe casting
-        const value = (msg as Record<string, unknown>)[sortField];
+        const value = (msg as Record<string, unknown>)[field];
         if (typeof value === 'number') {
           return value;
         }
@@ -694,7 +693,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         messagesData.sort((a, b) => {
           const aValue = getFieldValue(a);
           const bValue = getFieldValue(b);
-          return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
         });
       } else {
         // Default: sort by position in sorted set
@@ -743,7 +742,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         allMessages.sort((a, b) => {
           const aValue = getFieldValue(a);
           const bValue = getFieldValue(b);
-          return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
         });
       } else {
         // Build Map for O(1) lookups instead of O(n) indexOf
@@ -1224,14 +1223,14 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
   private sortThreads(
     threads: StorageThreadType[],
-    orderBy: ThreadOrderBy,
-    sortDirection: ThreadSortDirection,
+    field: ThreadOrderBy,
+    direction: ThreadSortDirection,
   ): StorageThreadType[] {
     return threads.sort((a, b) => {
-      const aValue = new Date(a[orderBy]).getTime();
-      const bValue = new Date(b[orderBy]).getTime();
+      const aValue = new Date(a[field]).getTime();
+      const bValue = new Date(b[field]).getTime();
 
-      if (sortDirection === 'ASC') {
+      if (direction === 'ASC') {
         return aValue - bValue;
       } else {
         return bValue - aValue;
