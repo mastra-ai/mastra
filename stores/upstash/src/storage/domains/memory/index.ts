@@ -627,21 +627,22 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+
+    if (!threadId.trim()) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_LIST_MESSAGES_INVALID_THREAD_ID',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        new Error('threadId must be a non-empty string'),
+      );
+    }
+
     const threadMessagesKey = getThreadMessagesKey(threadId);
 
     try {
-      if (!threadId.trim()) {
-        throw new MastraError(
-          {
-            id: 'STORAGE_UPSTASH_LIST_MESSAGES_INVALID_THREAD_ID',
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-            details: { threadId },
-          },
-          new Error('threadId must be a non-empty string'),
-        );
-      }
-
       // Determine how many results to return
       // Default pagination is always 40 unless explicitly specified
       let perPage = 40;
@@ -725,7 +726,6 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Apply pagination
       const start = offset;
       const end = limit === false ? total : start + perPage;
-      const hasMore = end < total;
       const paginatedMessages = messagesData.slice(start, end);
 
       // Combine paginated messages with included messages, deduplicating
@@ -762,6 +762,18 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Use MessageList for proper deduplication and format conversion
       const list = new MessageList().add(allMessages, 'memory');
       const finalMessages = list.get.all.v2();
+
+      // Calculate hasMore
+      let hasMore: boolean;
+      if (include && include.length > 0) {
+        // When using include, check if we've returned all messages from the thread
+        // because include might bring in messages beyond the pagination window
+        const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+        hasMore = returnedThreadMessageIds.size < total;
+      } else {
+        // Standard pagination: check if there are more pages
+        hasMore = end < total;
+      }
 
       return {
         messages: finalMessages,
