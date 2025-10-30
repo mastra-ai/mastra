@@ -12,6 +12,7 @@ import {
   generateHandler as getOriginalGenerateHandler,
   streamGenerateHandler as getOriginalStreamGenerateHandler,
   updateAgentModelHandler as getOriginalUpdateAgentModelHandler,
+  resetAgentModelHandler as getOriginalResetAgentModelHandler,
   streamUIMessageHandler as getOriginalStreamUIMessageHandler,
   generateLegacyHandler as getOriginalGenerateLegacyHandler,
   streamGenerateLegacyHandler as getOriginalStreamGenerateLegacyHandler,
@@ -595,6 +596,22 @@ export async function updateAgentModelHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error updating agent model');
+  }
+}
+
+export async function resetAgentModelHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+
+    const result = await getOriginalResetAgentModelHandler({
+      mastra,
+      agentId,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error resetting agent model');
   }
 }
 
