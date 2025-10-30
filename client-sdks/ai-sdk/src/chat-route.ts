@@ -154,9 +154,15 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
         throw new Error(`Agent ${agentToUse} not found`);
       }
 
+      let runId: string | undefined;
+      if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
+        runId = messages[messages.length - 1].id;
+      }
+
       const result = await agentObj.stream<OUTPUT, 'mastra'>(messages, {
         ...defaultOptions,
         ...rest,
+        runId,
         requestContext: requestContext || defaultOptions?.requestContext,
       });
 
