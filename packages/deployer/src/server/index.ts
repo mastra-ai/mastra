@@ -5,7 +5,7 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core/mastra';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { Tool } from '@mastra/core/tools';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { Context, MiddlewareHandler } from 'hono';
@@ -37,7 +37,7 @@ type Bindings = {};
 
 type Variables = {
   mastra: Mastra;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   clients: Set<{ controller: ReadableStreamDefaultController }>;
   tools: Record<string, Tool>;
   taskStore: InMemoryTaskStore;
@@ -96,17 +96,17 @@ export async function createHonoServer(
   // Configure hono context
   // Configure hono context
   app.use('*', async function setContext(c, next) {
-    // Parse runtime context from request body and add to context
-    let runtimeContext = new RuntimeContext();
-    // Parse runtime context from request body and add to context
+    // Parse request context from request body and add to context
+    let requestContext = new RequestContext();
+    // Parse request context from request body and add to context
     if (c.req.method === 'POST' || c.req.method === 'PUT') {
       const contentType = c.req.header('content-type');
       if (contentType?.includes('application/json')) {
         try {
           const clonedReq = c.req.raw.clone();
-          const body = (await clonedReq.json()) as { runtimeContext?: Record<string, any> };
-          if (body.runtimeContext) {
-            runtimeContext = new RuntimeContext(Object.entries(body.runtimeContext));
+          const body = (await clonedReq.json()) as { requestContext?: Record<string, any> };
+          if (body.requestContext) {
+            requestContext = new RequestContext(Object.entries(body.requestContext));
           }
         } catch {
           // Body parsing failed, continue without body
@@ -114,27 +114,27 @@ export async function createHonoServer(
       }
     }
 
-    // Parse runtime context from query params and add to context
+    // Parse request context from query params and add to context
     if (c.req.method === 'GET') {
       try {
-        const encodedRuntimeContext = c.req.query('runtimeContext');
-        if (encodedRuntimeContext) {
-          let parsedRuntimeContext: Record<string, any> | undefined;
+        const encodedRequestContext = c.req.query('requestContext');
+        if (encodedRequestContext) {
+          let parsedRequestContext: Record<string, any> | undefined;
           // Try JSON first
           try {
-            parsedRuntimeContext = JSON.parse(encodedRuntimeContext);
+            parsedRequestContext = JSON.parse(encodedRequestContext);
           } catch {
             // Fallback to base64(JSON)
             try {
-              const json = Buffer.from(encodedRuntimeContext, 'base64').toString('utf-8');
-              parsedRuntimeContext = JSON.parse(json);
+              const json = Buffer.from(encodedRequestContext, 'base64').toString('utf-8');
+              parsedRequestContext = JSON.parse(json);
             } catch {
               // ignore if still invalid
             }
           }
 
-          if (parsedRuntimeContext && typeof parsedRuntimeContext === 'object') {
-            runtimeContext = new RuntimeContext([...runtimeContext.entries(), ...Object.entries(parsedRuntimeContext)]);
+          if (parsedRequestContext && typeof parsedRequestContext === 'object') {
+            requestContext = new RequestContext([...requestContext.entries(), ...Object.entries(parsedRequestContext)]);
           }
         }
       } catch {
@@ -143,7 +143,7 @@ export async function createHonoServer(
     }
 
     // Add relevant contexts to hono context
-    c.set('runtimeContext', runtimeContext);
+    c.set('requestContext', requestContext);
     c.set('mastra', mastra);
     c.set('tools', options.tools);
     c.set('taskStore', a2aTaskStore);

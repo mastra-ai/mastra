@@ -4,7 +4,7 @@ import { databaseIntrospectionTool } from '../tools/database-introspection-tool'
 import { sqlGenerationTool } from '../tools/sql-generation-tool';
 import { sqlExecutionTool } from '../tools/sql-execution-tool';
 import { databaseSeedingTool } from '../tools/database-seeding-tool';
-import { RuntimeContext } from '@mastra/core/di';
+import { RequestContext } from '@mastra/core/di';
 
 // Step 1: Get connection string
 const getConnectionStep = createStep({
@@ -60,7 +60,7 @@ const seedDatabaseStep = createStep({
   suspendSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ inputData, resumeData, suspend, runtimeContext }) => {
+  execute: async ({ inputData, resumeData, suspend, requestContext }) => {
     const { connectionString } = inputData;
 
     if (resumeData === undefined) {
@@ -92,7 +92,7 @@ const seedDatabaseStep = createStep({
 
       const seedResult = await databaseSeedingTool.execute({
         context: { connectionString },
-        runtimeContext: runtimeContext || new RuntimeContext(),
+        requestContext: requestContext || new RequestContext(),
       });
 
       // Type guard to ensure we have seed result
@@ -140,7 +140,7 @@ const introspectDatabaseStep = createStep({
       })
       .optional(),
   }),
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     const { connectionString, seeded, seedResult } = inputData;
 
     try {
@@ -151,7 +151,7 @@ const introspectDatabaseStep = createStep({
 
       const schemaData = await databaseIntrospectionTool.execute({
         context: { connectionString },
-        runtimeContext: runtimeContext || new RuntimeContext(),
+        requestContext: requestContext || new RequestContext(),
       });
 
       // Type guard to ensure we have schema data
@@ -221,7 +221,7 @@ const generateSQLStep = createStep({
       })
       .optional(),
   }),
-  execute: async ({ inputData, resumeData, suspend, runtimeContext }) => {
+  execute: async ({ inputData, resumeData, suspend, requestContext }) => {
     const { connectionString, schema, schemaPresentation, seeded, seedResult } = inputData;
 
     if (!resumeData?.naturalLanguageQuery) {
@@ -260,7 +260,7 @@ const generateSQLStep = createStep({
           naturalLanguageQuery,
           databaseSchema: schema,
         },
-        runtimeContext: runtimeContext || new RuntimeContext(),
+        requestContext: requestContext || new RequestContext(),
       });
 
       // Type guard for generated SQL
@@ -319,7 +319,7 @@ const reviewAndExecuteStep = createStep({
     }),
     message: z.string(),
   }),
-  execute: async ({ inputData, resumeData, suspend, runtimeContext }) => {
+  execute: async ({ inputData, resumeData, suspend, requestContext }) => {
     const { connectionString, naturalLanguageQuery, generatedSQL } = inputData;
 
     if (!resumeData) {
@@ -359,7 +359,7 @@ const reviewAndExecuteStep = createStep({
           connectionString,
           query: finalSQL,
         },
-        runtimeContext: runtimeContext || new RuntimeContext(),
+        requestContext: requestContext || new RequestContext(),
       });
 
       // Type guard for execution result

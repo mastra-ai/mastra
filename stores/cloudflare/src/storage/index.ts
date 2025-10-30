@@ -8,25 +8,21 @@ import {
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_EVALS,
   TABLE_SCORERS,
 } from '@mastra/core/storage';
 import type {
   TABLE_NAMES,
   StorageColumn,
   StorageGetMessagesArg,
-  EvalRow,
   WorkflowRuns,
   WorkflowRun,
   PaginationInfo,
   StoragePagination,
-  PaginationArgs,
   StorageDomains,
   StorageResourceType,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
-import { LegacyEvalsStorageCloudflare } from './domains/legacy-evals';
 import { MemoryStorageCloudflare } from './domains/memory';
 import { StoreOperationsCloudflare } from './domains/operations';
 import { ScoresStorageCloudflare } from './domains/scores';
@@ -52,13 +48,7 @@ export class CloudflareStore extends MastraStorage {
     }
 
     // Validate all required table bindings exist
-    const requiredTables = [
-      TABLE_THREADS,
-      TABLE_MESSAGES,
-      TABLE_WORKFLOW_SNAPSHOT,
-      TABLE_EVALS,
-      TABLE_SCORERS,
-    ] as const;
+    const requiredTables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCORERS] as const;
 
     for (const table of requiredTables) {
       if (!(table in config.bindings)) {
@@ -115,10 +105,6 @@ export class CloudflareStore extends MastraStorage {
         bindings: this.bindings,
       });
 
-      const legacyEvals = new LegacyEvalsStorageCloudflare({
-        operations,
-      });
-
       const workflows = new WorkflowsStorageCloudflare({
         operations,
       });
@@ -133,7 +119,6 @@ export class CloudflareStore extends MastraStorage {
 
       this.stores = {
         operations,
-        legacyEvals,
         workflows,
         memory,
         scores,
@@ -242,15 +227,15 @@ export class CloudflareStore extends MastraStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
+    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
   }
 
   async updateWorkflowState({
@@ -298,16 +283,6 @@ export class CloudflareStore extends MastraStorage {
 
   async batchInsert<T extends TABLE_NAMES>(input: { tableName: T; records: Partial<RecordTypes[T]>[] }): Promise<void> {
     return this.stores.operations.batchInsert(input);
-  }
-
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
-  }
-
-  async getEvals(
-    options: { agentName?: string; type?: 'test' | 'live'; dateRange?: { start?: Date; end?: Date } } & PaginationArgs,
-  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
   }
 
   async getWorkflowRuns({

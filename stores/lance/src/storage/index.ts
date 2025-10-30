@@ -10,14 +10,12 @@ import type {
   PaginationInfo,
   StorageGetMessagesArg,
   StorageColumn,
-  EvalRow,
   WorkflowRuns,
   StoragePagination,
   StorageDomains,
   StorageResourceType,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { StoreLegacyEvalsLance } from './domains/legacy-evals';
 import { StoreMemoryLance } from './domains/memory';
 import { StoreOperationsLance } from './domains/operations';
 import { StoreScoresLance } from './domains/scores';
@@ -58,7 +56,6 @@ export class LanceStorage extends MastraStorage {
         workflows: new StoreWorkflowsLance({ client: instance.lanceClient }),
         scores: new StoreScoresLance({ client: instance.lanceClient }),
         memory: new StoreMemoryLance({ client: instance.lanceClient, operations }),
-        legacyEvals: new StoreLegacyEvalsLance({ client: instance.lanceClient }),
       };
       return instance;
     } catch (e: any) {
@@ -87,7 +84,6 @@ export class LanceStorage extends MastraStorage {
       operations: new StoreOperationsLance({ client: this.lanceClient }),
       workflows: new StoreWorkflowsLance({ client: this.lanceClient }),
       scores: new StoreScoresLance({ client: this.lanceClient }),
-      legacyEvals: new StoreLegacyEvalsLance({ client: this.lanceClient }),
       memory: new StoreMemoryLance({ client: this.lanceClient, operations }),
     };
   }
@@ -331,22 +327,6 @@ export class LanceStorage extends MastraStorage {
     return this.stores.memory.updateMessages(_args);
   }
 
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
-  }
-
-  async getEvals(options: {
-    agentName?: string;
-    type?: 'test' | 'live';
-    page?: number;
-    perPage?: number;
-    fromDate?: Date;
-    toDate?: Date;
-    dateRange?: { start?: Date; end?: Date };
-  }): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
-  }
-
   async getWorkflowRuns(args?: {
     namespace?: string;
     workflowName?: string;
@@ -373,15 +353,15 @@ export class LanceStorage extends MastraStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
+    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
   }
 
   async updateWorkflowState({

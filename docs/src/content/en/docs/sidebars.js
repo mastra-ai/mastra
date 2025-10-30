@@ -289,8 +289,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "server-db/runtime-context",
-          label: "Runtime Context",
+          id: "server-db/request-context",
+          label: "Request Context",
         },
         {
           type: "doc",

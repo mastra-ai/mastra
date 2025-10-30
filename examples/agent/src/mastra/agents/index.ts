@@ -61,24 +61,24 @@ export const chefAgent = new Agent({
 
 export const dynamicAgent = new Agent({
   name: 'Dynamic Agent',
-  instructions: ({ runtimeContext }) => {
-    if (runtimeContext.get('foo')) {
+  instructions: ({ requestContext }) => {
+    if (requestContext.get('foo')) {
       return 'You are a dynamic agent';
     }
     return 'You are a static agent';
   },
-  model: ({ runtimeContext }) => {
-    if (runtimeContext.get('foo')) {
+  model: ({ requestContext }) => {
+    if (requestContext.get('foo')) {
       return openai('gpt-4o');
     }
     return openai('gpt-4o-mini');
   },
-  tools: ({ runtimeContext }) => {
+  tools: ({ requestContext }) => {
     const tools = {
       cookingTool,
     };
 
-    if (runtimeContext.get('foo')) {
+    if (requestContext.get('foo')) {
       tools['web_search_preview'] = openai.tools.webSearchPreview();
     }
 

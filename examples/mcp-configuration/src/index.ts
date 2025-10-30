@@ -30,7 +30,7 @@ const mcp = new MCPClient({
   },
 });
 
-const toolsets = await mcp.getToolsets();
+const toolsets = await mcp.listToolsets();
 
 console.log({ toolsets });
 

@@ -101,12 +101,12 @@ const agent = new Agent({
   name: 'Documentation Assistant',
   instructions: 'You help users find and understand Mastra.ai documentation.',
   model: openai('gpt-4'),
-  tools: await mcp.getTools(),
+  tools: await mcp.listTools(),
 });
 
 // Or use toolsets dynamically in generate/stream
 const response = await agent.stream('Show me the quick start example', {
-  toolsets: await mcp.getToolsets(),
+  toolsets: await mcp.listToolsets(),
 });
 ```
 

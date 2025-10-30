@@ -1,6 +1,6 @@
 import type { StepResult, WorkflowRunState } from '../../../workflows';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../constants';
-import type { StorageWorkflowRun, WorkflowRun, WorkflowRuns } from '../../types';
+import type { StorageWorkflowRun, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
 import type { StoreOperations } from '../operations';
 import { WorkflowsStorage } from './base';
 
@@ -21,13 +21,13 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     this.logger.debug(`MockStore: updateWorkflowResults called for ${workflowName} ${runId} ${stepId}`, result);
     const run = this.collection.get(`${workflowName}-${runId}`);
@@ -64,7 +64,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     }
 
     snapshot.context[stepId] = result;
-    snapshot.runtimeContext = { ...snapshot.runtimeContext, ...runtimeContext };
+    snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
     this.collection.set(`${workflowName}-${runId}`, {
       ...run,
@@ -255,5 +255,9 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     };
 
     return parsedRun as WorkflowRun;
+  }
+
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
+    return this.getWorkflowRuns(args);
   }
 }
