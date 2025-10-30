@@ -4,7 +4,12 @@ import type { CoreMessage } from '../llm';
 import { MastraMemory } from '../memory';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig, MessageDeleteInput } from '../memory';
 import { InMemoryStore } from '../storage';
-import type { StorageGetMessagesArg, ThreadSortOptions } from '../storage';
+import type {
+  StorageGetMessagesArg,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
+  ThreadSortOptions,
+} from '../storage';
 
 export class MockMemory extends MastraMemory {
   threads: Record<string, StorageThreadType> = {};
@@ -73,6 +78,13 @@ export class MockMemory extends MastraMemory {
   ): Promise<any & { threads: StorageThreadType[] }> {
     return this.storage.getThreadsByResourceIdPaginated(args);
   }
+
+  async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    return this.storage.listThreadsByResourceId(args);
+  }
+
   async query({ threadId, resourceId, selectBy }: StorageGetMessagesArg): Promise<{
     messages: CoreMessage[];
     uiMessages: UIMessageWithMetadata[];
