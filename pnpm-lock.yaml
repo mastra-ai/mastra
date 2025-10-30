@@ -80,7 +80,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -114,7 +114,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -145,7 +145,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -176,7 +176,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -210,7 +210,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -241,7 +241,7 @@ importers:
         specifier: ^7.0.15
         version: 7.0.15
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -305,7 +305,7 @@ importers:
         specifier: npm:ai@^5
         version: ai@5.0.81(zod@3.25.76)
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -372,10 +372,10 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(vitest@3.2.4)
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       eslint-plugin-storybook:
-        specifier: ^9.1.12
+        specifier: ^9.1.15
         version: 9.1.15(eslint@9.38.0(jiti@2.6.1))(storybook@9.1.15(@testing-library/dom@10.4.1)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(prettier@3.6.2)(vite@7.1.12(@types/node@20.19.23)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)))(typescript@5.9.3)
       react:
         specifier: '>=19.0.0'
@@ -445,7 +445,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -500,7 +500,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -555,7 +555,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -598,7 +598,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -817,7 +817,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.36.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -851,7 +851,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -885,7 +885,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -925,7 +925,7 @@ importers:
         specifier: ^17.2.2
         version: 17.2.3
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -958,7 +958,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -1007,7 +1007,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -1099,7 +1099,7 @@ importers:
         specifier: ^7.7.1
         version: 7.7.1
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsx:
         specifier: ^4.19.2
@@ -1114,7 +1114,7 @@ importers:
   packages/_config:
     dependencies:
       '@vitest/eslint-plugin':
-        specifier: ^1.3.20
+        specifier: ^1.3.25
         version: 1.3.25(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)(vitest@3.2.4)
       eslint-plugin-import-x:
         specifier: ^4.16.1
@@ -1163,7 +1163,7 @@ importers:
         specifier: ^4.3.19
         version: 4.3.19(react@19.2.0)(zod@3.25.76)
       eslint:
-        specifier: ^9.36.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -1248,7 +1248,7 @@ importers:
         specifier: ^7.7.1
         version: 7.7.1
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -1291,7 +1291,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -1394,7 +1394,7 @@ importers:
         specifier: ^1.0.4
         version: 1.0.4
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       memfs:
         specifier: ^4.17.2
@@ -1557,7 +1557,7 @@ importers:
         specifier: ^6.14.0
         version: 6.14.0
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       fast-deep-equal:
         specifier: ^3.1.3
@@ -1639,7 +1639,7 @@ importers:
         specifier: ^0.25.10
         version: 0.25.11
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       mastra:
         specifier: workspace:^
@@ -1781,7 +1781,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       fetch-to-node:
         specifier: ^2.1.0
@@ -1866,7 +1866,7 @@ importers:
         specifier: ^17.0.0
         version: 17.2.3
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -1940,7 +1940,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -2004,7 +2004,7 @@ importers:
         specifier: ^5.0.60
         version: 5.0.81(zod@3.25.76)
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       hono:
         specifier: ^4.9.7
@@ -2086,7 +2086,7 @@ importers:
         specifier: ^10.1.0
         version: 10.1.0
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       hono:
         specifier: ^4.9.7
@@ -2144,7 +2144,7 @@ importers:
         specifier: ^10.1.0
         version: 10.1.0
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       hono:
         specifier: ^4.9.7
@@ -2232,7 +2232,7 @@ importers:
         specifier: ^8.15.5
         version: 8.15.5
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -2661,7 +2661,7 @@ importers:
         specifier: ^17.0.0
         version: 17.2.3
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -2707,7 +2707,7 @@ importers:
         specifier: 4.3.16
         version: 4.3.16(react@19.2.0)(zod@3.25.76)
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -2752,7 +2752,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       superjson:
         specifier: ^2.2.2
@@ -2810,7 +2810,7 @@ importers:
         specifier: ^4.3.16
         version: 4.3.19(react@19.2.0)(zod@3.25.76)
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.4.0
@@ -2854,7 +2854,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -2891,7 +2891,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -2928,7 +2928,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -2971,7 +2971,7 @@ importers:
         specifier: ^17.0.0
         version: 17.2.3
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       miniflare:
         specifier: ^4.20251008.0
@@ -3017,7 +3017,7 @@ importers:
         specifier: ^17.0.0
         version: 17.2.3
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       miniflare:
         specifier: ^4.20251008.0
@@ -3063,7 +3063,7 @@ importers:
         specifier: ^1.12.2
         version: 1.13.0(debug@4.4.3)
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3115,7 +3115,7 @@ importers:
         specifier: ^1.12.2
         version: 1.13.0(debug@4.4.3)
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3155,7 +3155,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3192,7 +3192,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3238,7 +3238,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3278,7 +3278,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3312,7 +3312,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3361,7 +3361,7 @@ importers:
         specifier: ^8.15.5
         version: 8.15.5
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3398,7 +3398,7 @@ importers:
         specifier: ^17.0.0
         version: 17.2.3
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3435,7 +3435,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3478,7 +3478,7 @@ importers:
         specifier: ^17.0.0
         version: 17.2.3
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3515,7 +3515,7 @@ importers:
         specifier: ^17.0.0
         version: 17.2.3
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3558,7 +3558,7 @@ importers:
         specifier: ^17.0.0
         version: 17.2.3
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3595,7 +3595,7 @@ importers:
         specifier: ^17.0.0
         version: 17.2.3
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3629,7 +3629,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3666,7 +3666,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3706,7 +3706,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3743,7 +3743,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3773,7 +3773,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       pnpm:
         specifier: 10.18.2
@@ -3816,7 +3816,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3832,7 +3832,7 @@ importers:
     dependencies:
       '@google/genai':
         specifier: latest
-        version: 1.27.0(@modelcontextprotocol/sdk@1.20.2)
+        version: 1.28.0(@modelcontextprotocol/sdk@1.20.2)
       google-auth-library:
         specifier: ^10.2.1
         version: 10.4.2
@@ -3862,7 +3862,7 @@ importers:
         specifier: ^8.18.1
         version: 8.18.1
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3902,7 +3902,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3939,7 +3939,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -3982,7 +3982,7 @@ importers:
         specifier: ^8.18.1
         version: 8.18.1
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -4019,7 +4019,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -4049,7 +4049,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -4089,7 +4089,7 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       tsup:
         specifier: ^8.5.0
@@ -4147,7 +4147,7 @@ importers:
         specifier: ^4.3.19
         version: 4.3.19(react@19.2.0)(zod@3.25.76)
       eslint:
-        specifier: ^9.37.0
+        specifier: ^9.38.0
         version: 9.38.0(jiti@2.6.1)
       execa:
         specifier: ^9.6.0
@@ -4623,6 +4623,7 @@ packages:
   '@aws-sdk/credential-provider-web-identity@3.917.0':
     resolution: {integrity: sha512-pZncQhFbwW04pB0jcD5OFv3x2gAddDYCVxyJVixgyhSw7bKCYxqu6ramfq1NxyVpmm+qsw+ijwi/3cCmhUHF/A==}
     engines: {node: '>=18.0.0'}
+    deprecated: This version contains a compilation TypeScript error https://github.com/aws/aws-sdk-js-v3/issues/7457 - please use @aws-sdk/credential-providers@3.918.0 or higher
 
   '@aws-sdk/endpoint-cache@3.893.0':
     resolution: {integrity: sha512-KSwTfyLZyNLszz5f/yoLC+LC+CRKpeJii/+zVAy7JUOQsKhSykiRUPYUx7o2Sdc4oJfqqUl26A/jSttKYnYtAA==}
@@ -6380,8 +6381,8 @@ packages:
     resolution: {integrity: sha512-KUnK+mBYz9aegxHrBbwEignOkGRqXvqOXs/EGY7CAJhMFKuNSieW02/PV/ipVRsJM11MP69qgTgEetoyAN0HAg==}
     engines: {node: '>=18'}
 
-  '@google/genai@1.27.0':
-    resolution: {integrity: sha512-sveeQqwyzO/U5kOjo3EflF1rf7v0ZGprrjPGmeT6V5u22IUTcA4wBFxW+q1n7hOX0M1iWR3944MImoNPOM+zsA==}
+  '@google/genai@1.28.0':
+    resolution: {integrity: sha512-0pfZ1EWQsM9kINsL+mFKJvpzM6NRHS9t360S1MzKq4JtIwTj/RbsPpC/K5wpKiPy9PC+J+bsz/9gvaL51++KrA==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': ^1.20.1
@@ -15000,6 +15001,7 @@ packages:
   source-map@0.8.0-beta.0:
     resolution: {integrity: sha512-2ymg6oRBpebeZi9UUNsgQ89bhx01TcTkmNTGnNO88imTmbSgy4nfujrgVEFKWpMTEGA11EDkTt7mqObTPdigIA==}
     engines: {node: '>= 8'}
+    deprecated: The work that was done in this beta branch won't be included in future versions
 
   space-separated-tokens@1.1.5:
     resolution: {integrity: sha512-q/JSVd1Lptzhf5bkYm4ob4iWPjx0KiRe3sRFBNrVqbJkFaBm5vbbowy1mymoPNLRa52+oadOhJ+K49wsSeSjTA==}
@@ -19128,7 +19130,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google/genai@1.27.0(@modelcontextprotocol/sdk@1.20.2)':
+  '@google/genai@1.28.0(@modelcontextprotocol/sdk@1.20.2)':
     dependencies:
       google-auth-library: 10.4.2
       ws: 8.18.3

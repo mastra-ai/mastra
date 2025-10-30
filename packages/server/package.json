@@ -75,7 +75,7 @@
     "@mastra/agent-builder": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
-    "eslint": "^9.37.0",
+    "eslint": "^9.38.0",
     "superjson": "^2.2.2",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
