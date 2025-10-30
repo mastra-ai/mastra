@@ -14,6 +14,13 @@ import Mermaid from "@theme/Mermaid";
 import type { MDXComponentsObject } from "@theme/MDXComponents";
 import { CopyPageButton } from "@site/src/components/copy-page-button";
 import BrowserOnly from "@docusaurus/BrowserOnly";
+import GithubLink from "@site/src/components/GithubLink";
+import NetlifyLogo from "@site/src/components/NetlifyLogo";
+import OperatorsTable from "@site/src/components/OperatorsTable";
+import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+import { CardGrid, CardGridItem } from "@site/src/components/CardGrid";
+import YouTube from "@site/src/components/YouTube-player";
 
 const MDXComponents: MDXComponentsObject = {
   Head,
@@ -44,6 +51,14 @@ const MDXComponents: MDXComponentsObject = {
   h6: (props: ComponentProps<"h6">) => <MDXHeading as="h6" {...props} />,
   admonition: Admonition,
   mermaid: Mermaid,
+  GithubLink,
+  NetlifyLogo,
+  OperatorsTable,
+  ProviderModelsTable,
+  PropertiesTable,
+  CardGrid,
+  CardGridItem,
+  YouTube,
 };
 
 export default MDXComponents;
