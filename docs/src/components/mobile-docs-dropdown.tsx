@@ -80,7 +80,7 @@ export function MobileDocsDropdown() {
       <DropdownMenuTrigger asChild>
         <Button
           variant="secondary"
-          className="w-full shadow-none justify-between bg-(--ifm-background-color) border border-(--border)/50 text-(--mastra-text-secondary) hover:bg-(--mastra-surface-3) hover:text-(--mastra-text-primary) rounded-xl px-4 py-2.5 text-sm font-medium"
+          className="w-full shadow-none justify-between bg-(--mastra-surface-4) dark:bg-(--ifm-background-color) border border-(--border)/50 text-(--mastra-text-secondary) hover:bg-(--mastra-surface-3) hover:text-(--mastra-text-primary) rounded-xl px-4 py-2.5 text-sm font-medium"
         >
           <span>{m(activeTab.label)}</span>
           <ChevronDown
