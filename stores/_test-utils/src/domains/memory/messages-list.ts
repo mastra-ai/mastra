@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createSampleMessageV2, createSampleThread } from './data';
 import type { MastraStorage } from '@mastra/core/storage';
-import type { MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { MessageList } from '@mastra/core/agent';
 
 export function createMessagesListTest({ storage }: { storage: MastraStorage }) {
   describe('listMessages', () => {
     let thread: StorageThreadType;
     let thread2: StorageThreadType;
-    let messages: MastraMessageV2[];
+    let messages: MastraDBMessage[];
 
     beforeEach(async () => {
       // Create test threads
@@ -68,7 +68,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
       expect(result.messages).toHaveLength(5);
       expect(result.total).toBe(5);
-      expect(result.messages.every(MessageList.isMastraMessageV2)).toBe(true);
+      expect(result.messages.every(MessageList.isMastraDBMessage)).toBe(true);
     });
 
     it('should list messages with pagination', async () => {
@@ -340,7 +340,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         threadId: thread.id,
       });
 
-      expect(result.messages.every(MessageList.isMastraMessageV2)).toBe(true);
+      expect(result.messages.every(MessageList.isMastraDBMessage)).toBe(true);
     });
 
     it('should handle include with threadId parameter', async () => {
