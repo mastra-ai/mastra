@@ -157,7 +157,7 @@ describe('Working Memory Tests', () => {
         ),
       ];
 
-      await memory.saveMessages({ messages, format: 'v2' });
+      await memory.saveMessages({ messages });
 
       const remembered = await memory.rememberMessages({
         threadId: thread.id,
@@ -216,7 +216,7 @@ describe('Working Memory Tests', () => {
         ),
       ];
 
-      await disabledMemory.saveMessages({ messages, format: 'v2' });
+      await disabledMemory.saveMessages({ messages });
 
       // Working memory should be null when disabled
       const workingMemory = await disabledMemory.getWorkingMemory({ threadId: thread.id });
@@ -394,7 +394,7 @@ describe('Working Memory Tests', () => {
       ];
 
       // Save messages
-      const saved = await memory.saveMessages({ messages: messages as MastraMessageV1[], format: 'v2' });
+      const saved = await memory.saveMessages({ messages: messages as MastraMessageV1[] });
 
       // Should not include any updateWorkingMemory tool-call messages (pure or mixed)
       expect(
