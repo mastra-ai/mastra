@@ -348,11 +348,9 @@ export class MemoryPG extends MemoryStorage {
   private async _getIncludedMessages({
     threadId,
     selectBy,
-    orderByStatement,
   }: {
     threadId: string;
     selectBy: StorageGetMessagesArg['selectBy'];
-    orderByStatement: string;
   }) {
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 

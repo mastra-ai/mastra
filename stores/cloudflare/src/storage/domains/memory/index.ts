@@ -879,12 +879,245 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
-  public async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    throw new Error(
-      `listMessages is not yet implemented by this storage adapter (${this.constructor.name}). ` +
-        `This method is currently being rolled out across all storage adapters. ` +
-        `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
-    );
+  public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
+    try {
+      // Determine how many results to return
+      // Default pagination is always 40 unless explicitly specified
+      let perPage = 40;
+      if (limit !== undefined) {
+        if (limit === false) {
+          // limit: false means get ALL messages
+          perPage = Number.MAX_SAFE_INTEGER;
+        } else if (typeof limit === 'number' && limit > 0) {
+          perPage = limit;
+        }
+      }
+
+      // Convert offset to page for pagination metadata
+      const page = Math.floor(offset / perPage);
+
+      // Determine sort field and direction
+      const sortField = orderBy?.field || 'createdAt';
+      const sortDirection = orderBy?.direction || 'DESC';
+
+      const messageIds = new Set<string>();
+
+      // Step 1: Get messages from the thread
+      // If filters are applied, we need to fetch all messages first, then filter and paginate
+      // Otherwise, we can paginate first by index
+      const hasFilters = !!resourceId || !!filter?.dateRange;
+
+      if (hasFilters || perPage === Number.MAX_SAFE_INTEGER) {
+        // Get all messages when filters are applied or when limit is false
+        try {
+          const threadMessagesKey = this.getThreadMessagesKey(threadId);
+          const allIds = await this.getFullOrder(threadMessagesKey);
+          allIds.forEach(id => messageIds.add(id));
+        } catch {
+          // If no message order found, continue with empty set
+        }
+      } else {
+        // No filters - paginate by index first (more efficient)
+        if (perPage > 0) {
+          try {
+            const threadMessagesKey = this.getThreadMessagesKey(threadId);
+            const fullOrder = await this.getFullOrder(threadMessagesKey);
+            const totalMessages = fullOrder.length;
+
+            // Apply offset and limit
+            const start = offset;
+            const end = Math.min(offset + perPage - 1, totalMessages - 1);
+            const paginatedIds = await this.getRange(threadMessagesKey, start, end);
+            paginatedIds.forEach(id => messageIds.add(id));
+          } catch {
+            // If no message order found, continue with empty set
+          }
+        }
+      }
+
+      // Step 2: Add included messages with context (if any)
+      if (include && include.length > 0) {
+        await this.getIncludedMessagesWithContext(threadId, include, messageIds);
+      }
+
+      // Fetch and parse all messages
+      const messages = await this.fetchAndParseMessagesFromMultipleThreads(
+        Array.from(messageIds),
+        include,
+        include && include.length > 0 ? undefined : threadId,
+      );
+
+      // Filter by resourceId if specified
+      let filteredMessages = messages;
+      if (resourceId) {
+        filteredMessages = filteredMessages.filter(msg => msg.resourceId === resourceId);
+      }
+
+      // Filter by dateRange if specified
+      if (filter?.dateRange) {
+        filteredMessages = filteredMessages.filter(msg => {
+          const messageDate = new Date(msg.createdAt);
+          if (filter.dateRange.start && messageDate < new Date(filter.dateRange.start)) return false;
+          if (filter.dateRange.end && messageDate > new Date(filter.dateRange.end)) return false;
+          return true;
+        });
+      }
+
+      // Get total count BEFORE pagination (for hasMore calculation)
+      let total: number;
+      if (hasFilters) {
+        // With filters, total is the count of filtered messages
+        total = filteredMessages.length;
+      } else {
+        // No filters - get total from order
+        try {
+          const threadMessagesKey = this.getThreadMessagesKey(threadId);
+          const fullOrder = await this.getFullOrder(threadMessagesKey);
+          total = fullOrder.length;
+        } catch {
+          // Fallback to filtered messages length
+          total = filteredMessages.length;
+        }
+      }
+
+      // Apply pagination if filters were applied (we fetched all messages above)
+      if (hasFilters && perPage !== Number.MAX_SAFE_INTEGER && perPage > 0) {
+        filteredMessages = filteredMessages.slice(offset, offset + perPage);
+      }
+
+      // Calculate paginated count (before adding included messages)
+      const paginatedCount =
+        hasFilters && perPage !== Number.MAX_SAFE_INTEGER && perPage > 0
+          ? filteredMessages.length // Already sliced
+          : filteredMessages.length;
+
+      // Sort messages
+      try {
+        const threadMessagesKey = this.getThreadMessagesKey(threadId);
+        const messageOrder = await this.getFullOrder(threadMessagesKey);
+        const orderMap = new Map(messageOrder.map((id, index) => [id, index]));
+
+        filteredMessages.sort((a, b) => {
+          const indexA = orderMap.get(a.id);
+          const indexB = orderMap.get(b.id);
+
+          if (indexA !== undefined && indexB !== undefined) {
+            return sortDirection === 'ASC' ? indexA - indexB : indexB - indexA;
+          }
+
+          // Fallback to createdAt sorting
+          const timeA = new Date(a.createdAt).getTime();
+          const timeB = new Date(b.createdAt).getTime();
+          const timeDiff = sortDirection === 'ASC' ? timeA - timeB : timeB - timeA;
+
+          // Handle tiebreaker for stable sorting
+          if (timeDiff === 0) {
+            return a.id.localeCompare(b.id);
+          }
+          return timeDiff;
+        });
+      } catch {
+        // Fallback to createdAt sorting
+        filteredMessages.sort((a, b) => {
+          const timeA = new Date(a.createdAt).getTime();
+          const timeB = new Date(b.createdAt).getTime();
+          const timeDiff = sortDirection === 'ASC' ? timeA - timeB : timeB - timeA;
+
+          // Handle tiebreaker for stable sorting
+          if (timeDiff === 0) {
+            return a.id.localeCompare(b.id);
+          }
+          return timeDiff;
+        });
+      }
+
+      if (total === 0 && filteredMessages.length === 0) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      // Remove _index and ensure dates before returning
+      const prepared = filteredMessages.map(({ _index, ...message }) => ({
+        ...message,
+        type: message.type === (`v2` as `text`) ? undefined : message.type,
+        createdAt: ensureDate(message.createdAt)!,
+      }));
+
+      // Use MessageList for proper deduplication and format conversion to V2
+      const list = new MessageList({ threadId, resourceId }).add(prepared as MastraMessageV1[], 'memory');
+      let finalMessages = list.get.all.v2();
+
+      // Sort final messages again to ensure correct order
+      finalMessages = finalMessages.sort((a, b) => {
+        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
+        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+
+        // Handle tiebreaker for stable sorting
+        if (aValue === bValue) {
+          return a.id.localeCompare(b.id);
+        }
+
+        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
+
+      // Calculate hasMore
+      let hasMore: boolean;
+      if (include && include.length > 0) {
+        // When using include, check if we've returned all messages from the thread
+        // because include might bring in messages beyond the pagination window
+        const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+        hasMore = returnedThreadMessageIds.size < total;
+      } else {
+        // Standard pagination: check if there are more pages
+        if (perPage === Number.MAX_SAFE_INTEGER) {
+          hasMore = false; // We got all messages
+        } else {
+          hasMore = offset + paginatedCount < total;
+        }
+      }
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage,
+        hasMore,
+      };
+    } catch (error: any) {
+      const mastraError = new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_LIST_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to list messages for thread ${threadId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          details: {
+            threadId,
+            resourceId: resourceId ?? '',
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      return {
+        messages: [],
+        total: 0,
+        page: Math.floor(offset / (limit === false ? Number.MAX_SAFE_INTEGER : limit || 40)),
+        perPage: limit === false ? Number.MAX_SAFE_INTEGER : limit || 40,
+        hasMore: false,
+      };
+    }
   }
 
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
