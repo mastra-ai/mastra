@@ -61,7 +61,7 @@ describe('create mastra', () => {
             const output = data?.toString() ?? '';
             console.error(output);
             const errorPatterns = ['Error', 'ERR', 'failed', 'ENOENT', 'MODULE_NOT_FOUND'];
-            if (errorPatterns.some(pattern => output.includes(pattern))) {
+            if (errorPatterns.some(pattern => output.toLowerCase().includes(pattern.toLowerCase()))) {
               reject(new Error('failed to start dev: ' + data?.toString()));
             }
           });
