@@ -239,7 +239,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         .where('resourceId = ?', resourceId)
         .orderBy(field, direction)
         .limit(limit)
-        .offset(offset * limit);
+        .offset(offset);
 
       const results = (await this.operations.executeQuery(selectQuery.build())) as Record<string, any>[];
       const threads = results.map(mapRowToStorageThreadType);
@@ -247,9 +247,9 @@ export class MemoryStorageD1 extends MemoryStorage {
       return {
         threads,
         total,
-        page: offset,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
         perPage: limit,
-        hasMore: offset * limit + threads.length < total,
+        hasMore: offset + threads.length < total,
       };
     } catch (error) {
       const mastraError = new MastraError(

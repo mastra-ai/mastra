@@ -553,10 +553,9 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // Get paginated results
       const query = table.query().where(`\`resourceId\` = '${resourceId}'`);
-      const currentOffset = offset * limit;
       query.limit(limit);
-      if (currentOffset > 0) {
-        query.offset(currentOffset);
+      if (offset > 0) {
+        query.offset(offset);
       }
 
       const records = await query.toArray();
@@ -574,9 +573,9 @@ export class StoreMemoryLance extends MemoryStorage {
       return {
         threads,
         total,
-        page: offset,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
         perPage: limit,
-        hasMore: total > (offset + 1) * limit,
+        hasMore: offset + threads.length < total,
       };
     } catch (error: any) {
       throw new MastraError(

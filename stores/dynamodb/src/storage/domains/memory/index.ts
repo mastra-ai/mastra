@@ -657,18 +657,17 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const allThreads = this.transformAndSortThreads(results.data, field, direction);
 
       // Apply pagination in memory
-      const startIndex = offset * limit;
-      const endIndex = startIndex + limit;
-      const paginatedThreads = allThreads.slice(startIndex, endIndex);
+      const endIndex = offset + limit;
+      const paginatedThreads = allThreads.slice(offset, endIndex);
 
       // Calculate pagination info
       const total = allThreads.length;
-      const hasMore = endIndex < total;
+      const hasMore = offset + limit < total;
 
       return {
         threads: paginatedThreads,
         total,
-        page: offset,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
         perPage: limit,
         hasMore,
       };

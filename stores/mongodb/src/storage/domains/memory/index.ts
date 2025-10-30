@@ -781,7 +781,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const threads = await collection
         .find(query)
         .sort({ [field]: sortOrder })
-        .skip(offset * limit)
+        .skip(offset)
         .limit(limit)
         .toArray();
 
@@ -795,9 +795,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           metadata: thread.metadata || {},
         })),
         total,
-        page: offset,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
         perPage: limit,
-        hasMore: (offset + 1) * limit < total,
+        hasMore: offset + threads.length < total,
       };
     } catch (error) {
       throw new MastraError(

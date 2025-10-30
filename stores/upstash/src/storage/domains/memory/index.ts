@@ -103,15 +103,14 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const sortedThreads = this.sortThreads(allThreads, field, direction);
 
       const total = sortedThreads.length;
-      const start = offset * limit;
-      const end = start + limit;
-      const paginatedThreads = sortedThreads.slice(start, end);
-      const hasMore = end < total;
+      const end = offset + limit;
+      const paginatedThreads = sortedThreads.slice(offset, end);
+      const hasMore = offset + limit < total;
 
       return {
         threads: paginatedThreads,
         total,
-        page: offset,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
         perPage: limit,
         hasMore,
       };

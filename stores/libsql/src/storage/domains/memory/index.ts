@@ -873,8 +873,6 @@ export class MemoryLibSQL extends MemoryStorage {
         metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
       });
 
-      const currentOffset = offset * limit;
-
       const countResult = await this.client.execute({
         sql: `SELECT COUNT(*) as count ${baseQuery}`,
         args: queryParams,
@@ -885,7 +883,7 @@ export class MemoryLibSQL extends MemoryStorage {
         return {
           threads: [],
           total: 0,
-          page: offset,
+          page: 0,
           perPage: limit,
           hasMore: false,
         };
@@ -893,7 +891,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
       const dataResult = await this.client.execute({
         sql: `SELECT * ${baseQuery} ORDER BY ${field} ${direction} LIMIT ? OFFSET ?`,
-        args: [...queryParams, limit, currentOffset],
+        args: [...queryParams, limit, offset],
       });
 
       const threads = (dataResult.rows || []).map(mapRowToStorageThreadType);
@@ -901,9 +899,9 @@ export class MemoryLibSQL extends MemoryStorage {
       return {
         threads,
         total,
-        page: offset,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
         perPage: limit,
-        hasMore: currentOffset + threads.length < total,
+        hasMore: offset + threads.length < total,
       };
     } catch (error) {
       const mastraError = new MastraError(

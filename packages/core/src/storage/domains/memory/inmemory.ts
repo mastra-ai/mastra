@@ -588,11 +588,11 @@ export class InMemoryMemory extends MemoryStorage {
       metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
     })) as StorageThreadType[];
     return {
-      threads: clonedThreads.slice(offset * limit, (offset + 1) * limit),
+      threads: clonedThreads.slice(offset, offset + limit),
       total: clonedThreads.length,
-      page: offset,
+      page: limit > 0 ? Math.floor(offset / limit) : 0,
       perPage: limit,
-      hasMore: clonedThreads.length > (offset + 1) * limit,
+      hasMore: offset + limit < clonedThreads.length,
     };
   }
 

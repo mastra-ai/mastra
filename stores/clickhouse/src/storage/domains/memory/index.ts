@@ -886,8 +886,6 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
-      const currentOffset = offset * limit;
-
       // Get total count
       const countResult = await this.client.query({
         query: `SELECT count() as total FROM ${TABLE_THREADS} WHERE resourceId = {resourceId:String}`,
@@ -906,7 +904,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         return {
           threads: [],
           total: 0,
-          page: offset,
+          page: 0,
           perPage: limit,
           hasMore: false,
         };
@@ -930,7 +928,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         query_params: {
           resourceId,
           limit: limit,
-          offset: currentOffset,
+          offset: offset,
         },
         clickhouse_settings: {
           date_time_input_format: 'best_effort',
@@ -946,9 +944,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       return {
         threads,
         total,
-        page: offset,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
         perPage: limit,
-        hasMore: currentOffset + threads.length < total,
+        hasMore: offset + threads.length < total,
       };
     } catch (error) {
       throw new MastraError(

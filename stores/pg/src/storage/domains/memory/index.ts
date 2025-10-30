@@ -115,7 +115,6 @@ export class MemoryPG extends MemoryStorage {
       const baseQuery = `FROM ${tableName} WHERE "resourceId" = $1`;
       const queryParams: any[] = [resourceId];
       const limit = limitInput !== undefined ? limitInput : 100;
-      const currentOffset = offset * limit;
 
       const countQuery = `SELECT COUNT(*) ${baseQuery}`;
       const countResult = await this.client.one(countQuery, queryParams);
@@ -125,14 +124,14 @@ export class MemoryPG extends MemoryStorage {
         return {
           threads: [],
           total: 0,
-          page: offset,
+          page: 0,
           perPage: limit,
           hasMore: false,
         };
       }
 
       const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`;
-      const rows = await this.client.manyOrNone(dataQuery, [...queryParams, limit, currentOffset]);
+      const rows = await this.client.manyOrNone(dataQuery, [...queryParams, limit, offset]);
 
       const threads = (rows || []).map(thread => ({
         ...thread,
@@ -144,9 +143,9 @@ export class MemoryPG extends MemoryStorage {
       return {
         threads,
         total,
-        page: offset,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
         perPage: limit,
-        hasMore: currentOffset + threads.length < total,
+        hasMore: offset + threads.length < total,
       };
     } catch (error) {
       const mastraError = new MastraError(

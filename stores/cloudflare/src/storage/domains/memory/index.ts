@@ -94,15 +94,14 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       });
 
       // Apply pagination
-      const start = offset * limit;
-      const end = start + limit;
-      const paginatedThreads = threads.slice(start, end);
+      const end = offset + limit;
+      const paginatedThreads = threads.slice(offset, end);
 
       return {
-        page: offset,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
         perPage: limit,
         total: threads.length,
-        hasMore: start + limit < threads.length,
+        hasMore: offset + limit < threads.length,
         threads: paginatedThreads,
       };
     } catch (error) {

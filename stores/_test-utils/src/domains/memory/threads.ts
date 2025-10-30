@@ -215,8 +215,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       expect(page1.perPage).toBe(7);
       expect(page1.hasMore).toBe(true);
 
-      const page3 = await storage.listThreadsByResourceId({ resourceId, offset: 2, limit: 7 });
-      expect(page3.threads).toHaveLength(3); // 17 total, 7 per page, 3rd page has 17 - 2*7 = 3
+      const page3 = await storage.listThreadsByResourceId({ resourceId, offset: 14, limit: 7 });
+      expect(page3.threads).toHaveLength(3); // 17 total, skip 14, get 3 remaining
       expect(page3.total).toBe(17);
       expect(page3.hasMore).toBe(false);
     });

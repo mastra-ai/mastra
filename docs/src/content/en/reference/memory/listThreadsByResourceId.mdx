@@ -30,7 +30,7 @@ await memory.listThreadsByResourceId({
     {
       name: "offset",
       type: "number",
-      description: "Number of threads to skip (for pagination)",
+      description: "Number of items to skip",
       isOptional: false,
     },
     {
@@ -98,7 +98,7 @@ while (hasMorePages) {
   });
 
   hasMorePages = result.hasMore;
-  currentOffset++;
+  currentOffset += limit; // Increment by limit to get next page
 }
 ```
 

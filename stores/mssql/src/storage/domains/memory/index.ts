@@ -110,7 +110,6 @@ export class MemoryMSSQL extends MemoryStorage {
     const { field, direction } = this.parseOrderBy(orderBy);
     try {
       const limit = limitInput !== undefined ? limitInput : 100;
-      const currentOffset = offset * limit;
       const baseQuery = `FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} WHERE [resourceId] = @resourceId`;
 
       const countQuery = `SELECT COUNT(*) as count ${baseQuery}`;
@@ -123,7 +122,7 @@ export class MemoryMSSQL extends MemoryStorage {
         return {
           threads: [],
           total: 0,
-          page: offset,
+          page: 0,
           perPage: limit,
           hasMore: false,
         };
@@ -135,7 +134,7 @@ export class MemoryMSSQL extends MemoryStorage {
       const dataRequest = this.pool.request();
       dataRequest.input('resourceId', resourceId);
       dataRequest.input('perPage', limit);
-      dataRequest.input('offset', currentOffset);
+      dataRequest.input('offset', offset);
       const rowsResult = await dataRequest.query(dataQuery);
       const rows = rowsResult.recordset || [];
       const threads = rows.map(thread => ({
@@ -148,9 +147,9 @@ export class MemoryMSSQL extends MemoryStorage {
       return {
         threads,
         total,
-        page: offset,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
         perPage: limit,
-        hasMore: currentOffset + threads.length < total,
+        hasMore: offset + threads.length < total,
       };
     } catch (error) {
       const mastraError = new MastraError(

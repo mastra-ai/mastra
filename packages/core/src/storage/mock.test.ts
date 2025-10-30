@@ -122,7 +122,7 @@ describe('InMemoryStore - Thread Sorting', () => {
       // Second page
       const page2 = await store.listThreadsByResourceId({
         resourceId,
-        offset: 1,
+        offset: 2,
         limit: 2,
         orderBy: { field: 'createdAt', direction: 'ASC' },
       });
@@ -138,7 +138,7 @@ describe('InMemoryStore - Thread Sorting', () => {
     it('should calculate pagination info correctly after sorting', async () => {
       const result = await store.listThreadsByResourceId({
         resourceId,
-        offset: 1,
+        offset: 2,
         limit: 2,
         orderBy: { field: 'updatedAt', direction: 'DESC' },
       });
@@ -177,7 +177,7 @@ describe('InMemoryStore - Thread Sorting', () => {
 
       const result = await store.listThreadsByResourceId({ resourceId, offset: 0, limit: 2 });
 
-      expect(result.threads).toHaveLength(3);
+      expect(result.threads).toHaveLength(2);
       expect(result.threads.every(t => t.resourceId === resourceId)).toBe(true);
       expect(result.total).toBe(3);
       expect(result.page).toBe(0);
