@@ -597,31 +597,6 @@ export async function deprecatedStreamVNextHandler(c: Context) {
   );
 }
 
-export async function getModelProvidersHandler(c: Context) {
-  const isPlayground = c.get('playground') === true;
-  if (!isPlayground) {
-    return c.json({ error: 'This API is only available in the playground environment' }, 403);
-  }
-  const envVars = process.env;
-  const providers = Object.entries(AllowedProviderKeys);
-  const envKeys = Object.keys(envVars);
-  const availableProviders = providers.filter(([_, value]) => envKeys.includes(value) && !!envVars[value]);
-
-  const providerInfo = availableProviders.map(([key, envVar]) => {
-    const providerConfig = getProviderConfig(key);
-    return {
-      id: key,
-      name: key.charAt(0).toUpperCase() + key.slice(1).replace(/-/g, ' '),
-      envVar,
-      hasApiKey: !!envVars[envVar],
-      docUrl: providerConfig?.docUrl || null,
-      models: providerConfig?.models || [],
-    };
-  });
-
-  return c.json(providerInfo);
-}
-
 export async function updateAgentModelInModelListHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
