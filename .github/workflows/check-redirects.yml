@@ -34,6 +34,10 @@ jobs:
         with:
           node-version: '18'
 
+      - name: Install dependencies
+        if: steps.mdx-changes.outputs.has_changes == 'true'
+        run: npm install path-to-regexp
+
       - name: Check for removed pages without redirects
         if: steps.mdx-changes.outputs.has_changes == 'true'
         run: |

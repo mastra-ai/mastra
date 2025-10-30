@@ -1,13 +1,8 @@
-#!/usr/bin/env node
-
-/**
- * This script checks if deleted MDX files have corresponding redirects in vercel.json
- * It compares the current branch with the base branch (usually main)
- */
-
 import { execSync } from 'child_process';
 import fs from 'fs';
+import { match } from 'path-to-regexp';
 
+const matcherCache = new Map();
 const BASE_REF = process.env.BASE_REF || 'origin/main';
 const DOCS_DIR = 'docs/src/content';
 const VERCEL_JSON_PATH = 'docs/vercel.json';
@@ -61,23 +56,19 @@ function getExistingRedirects() {
 
 // Check if a URL has a redirect
 function hasRedirect(urlPath, redirects) {
-  return redirects.some(redirect => {
-    const source = redirect.source;
-
+  return redirects.some(({ source }) => {
     // Exact match
     if (source === urlPath) {
       return true;
     }
 
-    // Check if source is a pattern that would match this path
-    // Handle wildcards like /path/:slug or /path/*
-    const pattern = source
-      .replace(/:[^/]+/g, '[^/]+') // :param becomes regex
-      .replace(/\*/g, '.*'); // * becomes .*
-
+    // Use path-to-regexp to handle patterns like :param, :param*, :param+, :param?, etc.
     try {
-      const regex = new RegExp(`^${pattern}$`);
-      return regex.test(urlPath);
+      if (!matcherCache.has(source)) {
+        matcherCache.set(source, match(source, { decode: decodeURIComponent }));
+      }
+      const tester = matcherCache.get(source);
+      return Boolean(tester(urlPath));
     } catch {
       return false;
     }
