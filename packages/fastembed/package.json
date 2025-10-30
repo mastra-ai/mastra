@@ -37,7 +37,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "ai": "^5.0.76",
+    "ai": "^5.0.80",
     "ai-v4": "npm:ai@4.3.19",
     "@ai-sdk/provider": "^2.0.0",
     "fastembed": "^1.14.4"
