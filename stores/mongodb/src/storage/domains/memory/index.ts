@@ -250,12 +250,25 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const sortObj: any = { [sortField]: sortOrder };
       let cursor = collection.find(query).sort(sortObj).skip(offset);
 
-      // Only apply limit if not unlimited (MongoDB rejects values > 2,147,483,647)
-      if (limit !== false) {
+      // Only apply limit if not unlimited and perPage > 0
+      // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
+      // So we skip limit when perPage === 0 and handle it by returning empty array
+      if (limit !== false && perPage > 0) {
         cursor = cursor.limit(perPage);
       }
 
       const dataResult = await cursor.toArray();
+
+      // If perPage is 0, return empty array regardless of query results
+      if (perPage === 0) {
+        return {
+          messages: [],
+          total,
+          page,
+          perPage: 0,
+          hasMore: false,
+        };
+      }
       const messages: any[] = dataResult.map((row: any) => this.parseRow(row));
 
       if (total === 0 && messages.length === 0) {
