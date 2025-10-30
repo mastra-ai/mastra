@@ -522,13 +522,6 @@ https://mastra.ai/en/docs/memory/overview`,
   }): Promise<{ success: boolean; reason: string }>;
 
   /**
-   * Deletes multiple messages by their IDs
-   * @param messageIds - Array of message IDs to delete
-   * @returns Promise that resolves when all messages are deleted
-   */
-  abstract deleteMessages(messageIds: MessageDeleteInput): Promise<void>;
-
-  /**
    * Get input processors for this memory instance.
    * This allows Memory to be used as a ProcessorProvider in Agent's inputProcessors array.
    * @param configuredProcessors - Processors already configured by the user (for deduplication)
