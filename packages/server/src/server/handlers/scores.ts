@@ -10,7 +10,7 @@ async function getScorersFromSystem({
 }: Context & {
   runtimeContext: RuntimeContext;
 }) {
-  const agents = mastra.getAgents();
+  const agents = mastra.listAgents();
   const workflows = mastra.getWorkflows();
 
   const scorersMap = new Map<

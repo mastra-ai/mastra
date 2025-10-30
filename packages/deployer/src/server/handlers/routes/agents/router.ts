@@ -7,7 +7,7 @@ import { executeAgentToolHandler, getAgentToolHandler } from '../tools/handlers'
 import {
   generateHandler,
   getAgentByIdHandler,
-  getAgentsHandler,
+  listAgentsHandler,
   getProvidersHandler,
   setAgentInstructionsHandler,
   streamGenerateHandler,
@@ -40,7 +40,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    getAgentsHandler,
+    listAgentsHandler,
   );
 
   router.get(

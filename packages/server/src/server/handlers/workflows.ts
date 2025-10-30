@@ -55,7 +55,7 @@ async function getWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) {
 
   if (!workflow) {
     logger.debug('Workflow not found, searching agents for workflow', { workflowId });
-    const agents = mastra.getAgents();
+    const agents = mastra.listAgents();
 
     if (Object.keys(agents || {}).length) {
       for (const [_, agent] of Object.entries(agents)) {

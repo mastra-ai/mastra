@@ -1,7 +1,7 @@
 const meta = {
   "mastra-class": "Mastra",
   getAgent: ".getAgent()",
-  getAgents: ".getAgents()",
+  listAgents: ".listAgents()",
   getAgentById: ".getAgentById()",
   getWorkflow: ".getWorkflow()",
   getWorkflows: ".getWorkflows()",

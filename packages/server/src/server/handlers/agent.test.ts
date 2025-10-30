@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import {
-  getAgentsHandler,
+  listAgentsHandler,
   getAgentByIdHandler,
   generateHandler,
   updateAgentModelHandler,
@@ -89,9 +89,9 @@ describe('Agent Handlers', () => {
     });
   });
 
-  describe('getAgentsHandler', () => {
+  describe('listAgentsHandler', () => {
     it('should return serialized agents', async () => {
-      const result = await getAgentsHandler({ mastra: mockMastra, runtimeContext });
+      const result = await listAgentsHandler({ mastra: mockMastra, runtimeContext });
 
       expect(result).toEqual({
         'test-agent': {
@@ -162,7 +162,7 @@ describe('Agent Handlers', () => {
         },
       });
 
-      const result = await getAgentsHandler({ mastra: mastraWithCoreProcessors, runtimeContext });
+      const result = await listAgentsHandler({ mastra: mastraWithCoreProcessors, runtimeContext });
 
       expect(result['agent-with-core-processors']).toMatchObject({
         name: 'agent-with-core-processors',

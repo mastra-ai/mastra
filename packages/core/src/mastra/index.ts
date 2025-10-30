@@ -756,11 +756,11 @@ do:
    *   }
    * });
    *
-   * const allAgents = mastra.getAgents();
+   * const allAgents = mastra.listAgents();
    * console.log(Object.keys(allAgents)); // ['weatherAgent', 'supportAgent']
    * ```
    */
-  public getAgents() {
+  public listAgents() {
     return this.#agents;
   }
 

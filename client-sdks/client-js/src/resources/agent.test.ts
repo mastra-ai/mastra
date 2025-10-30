@@ -399,7 +399,7 @@ describe('Agent Client Methods', () => {
       agent2: { name: 'Agent 2', model: 'gpt-3.5' },
     };
     mockFetchResponse(mockResponse);
-    const result = await client.getAgents();
+    const result = await client.listAgents();
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
       `${clientOptions.baseUrl}/api/agents`,
@@ -419,7 +419,7 @@ describe('Agent Client Methods', () => {
     const expectedEncodedBase64 = encodeURIComponent(expectedBase64);
 
     mockFetchResponse(mockResponse);
-    const result = await client.getAgents(runtimeContext);
+    const result = await client.listAgents(runtimeContext);
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
       `${clientOptions.baseUrl}/api/agents?runtimeContext=${expectedEncodedBase64}`,

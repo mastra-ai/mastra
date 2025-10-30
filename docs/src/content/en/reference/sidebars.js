@@ -18,7 +18,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: "doc", id: "core/getAgent", label: ".getAgent()" },
-        { type: "doc", id: "core/getAgents", label: ".getAgents()" },
+        { type: "doc", id: "core/listAgents", label: ".listAgents()" },
         { type: "doc", id: "core/getAgentById", label: ".getAgentById()" },
         { type: "doc", id: "core/getWorkflow", label: ".getWorkflow()" },
         { type: "doc", id: "core/getWorkflows", label: ".getWorkflows()" },

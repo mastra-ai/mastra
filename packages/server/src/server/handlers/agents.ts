@@ -266,7 +266,7 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
 
   if (!agent) {
     logger.debug(`Agent ${agentId} not found, looking through sub-agents`);
-    const agents = mastra.getAgents();
+    const agents = mastra.listAgents();
     if (Object.keys(agents || {}).length) {
       for (const [_, ag] of Object.entries(agents)) {
         try {
@@ -291,12 +291,12 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
 }
 
 // Agent handlers
-export async function getAgentsHandler({
+export async function listAgentsHandler({
   mastra,
   runtimeContext,
 }: Context & { runtimeContext: RuntimeContext }): Promise<Record<string, SerializedAgent>> {
   try {
-    const agents = mastra.getAgents();
+    const agents = mastra.listAgents();
 
     const serializedAgentsMap = await Promise.all(
       Object.entries(agents).map(async ([id, agent]) => {

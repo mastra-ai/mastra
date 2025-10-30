@@ -55,7 +55,7 @@ export const myMcpServer = new MCPServer({
           mastraAvailable: !!mastra,
           mastraType: typeof mastra,
           // Verify that the mastra instance has the expected properties
-          mastraHasAgents: mastra ? 'getAgents' in mastra : false,
+          mastraHasAgents: mastra ? 'listAgents' in mastra : false,
           mastraHasMCPServers: mastra ? 'getMCPServers' in mastra : false,
           mastraHasLogger: mastra ? 'getLogger' in mastra : false,
           timestamp: new Date().toISOString(),

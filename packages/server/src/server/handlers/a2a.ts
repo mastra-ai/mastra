@@ -48,7 +48,7 @@ export async function getAgentCardByIdHandler({
   runtimeContext,
 }: Context & {
   runtimeContext: RuntimeContext;
-  agentId: keyof ReturnType<typeof mastra.getAgents>;
+  agentId: keyof ReturnType<typeof mastra.listAgents>;
   executionUrl?: string;
   version?: string;
   provider?: {

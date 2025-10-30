@@ -10,7 +10,7 @@ export const useAgents = () => {
 
   return useQuery({
     queryKey: ['agents', JSON.stringify(runtimeContext)],
-    queryFn: () => client.getAgents(runtimeContext),
+    queryFn: () => client.listAgents(runtimeContext),
   });
 };
 

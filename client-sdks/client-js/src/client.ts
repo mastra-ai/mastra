@@ -42,7 +42,7 @@ import type {
   GetMemoryConfigResponse,
   GetMemoryThreadMessagesResponse,
   MemorySearchResponse,
-  GetAgentsModelProvidersResponse,
+  ListAgentsModelProvidersResponse,
 } from './types';
 import { base64RuntimeContext, parseClientRuntimeContext, runtimeContextQueryString } from './utils';
 
@@ -58,7 +58,7 @@ export class MastraClient extends BaseResource {
    * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing map of agent IDs to agent details
    */
-  public getAgents(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetAgentResponse>> {
+  public listAgents(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetAgentResponse>> {
     const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
 
     const searchParams = new URLSearchParams();
@@ -71,7 +71,7 @@ export class MastraClient extends BaseResource {
     return this.request(`/api/agents${queryString ? `?${queryString}` : ''}`);
   }
 
-  public getAgentsModelProviders(): Promise<GetAgentsModelProvidersResponse> {
+  public listAgentsModelProviders(): Promise<ListAgentsModelProvidersResponse> {
     return this.request(`/api/agents/providers`);
   }
 
