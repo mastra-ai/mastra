@@ -1,4 +1,4 @@
-import type { AITracesPaginatedArg, StoragePagination } from '@mastra/core';
+import type { AITracesPaginatedArg, StoragePagination } from '@mastra/core/storage';
 import { scoreTraces } from '@mastra/core/scores/scoreTraces';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';

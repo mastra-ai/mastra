@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { createTool, Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
+import { createTool } from '@mastra/core/tools';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import { TABLE_WORKFLOW_SNAPSHOT, MockStore } from '@mastra/core/storage';

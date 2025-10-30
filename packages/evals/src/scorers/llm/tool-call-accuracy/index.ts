@@ -1,4 +1,4 @@
-import type { Tool } from '@mastra/core';
+import type { Tool } from '@mastra/core/tools';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { createScorer } from '@mastra/core/scores';
 import { z } from 'zod';

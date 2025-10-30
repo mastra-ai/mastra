@@ -40,7 +40,7 @@ Configure Observability in your Mastra instance:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core/mastra";
-import { PinoLogger } from "@mastra/core";
+import { PinoLogger } from "@mastra/loggers";
 import { LibSqlStorage } from "@mastra/libsql";
 
 export const mastra = new Mastra({

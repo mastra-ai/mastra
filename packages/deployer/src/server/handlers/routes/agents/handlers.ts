@@ -1,6 +1,6 @@
-import type { Mastra, ProviderConfig } from '@mastra/core';
+import type { Mastra } from '@mastra/core/mastra';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
-import { getProviderConfig, PROVIDER_REGISTRY } from '@mastra/core/llm';
+import { getProviderConfig, PROVIDER_REGISTRY, type ProviderConfig } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType } from '@mastra/core/stream';
 import { ChunkFrom } from '@mastra/core/stream';
