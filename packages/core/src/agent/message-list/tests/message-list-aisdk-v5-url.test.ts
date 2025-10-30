@@ -3,7 +3,7 @@ import type { MastraDBMessage } from '../../types';
 import { MessageList } from '../index';
 
 describe('MessageList AI SDK v5 URL handling', () => {
-  describe('V2 to V3 conversion for AI SDK v5', () => {
+  describe('V2 to AIV5 UI conversion for AI SDK v5', () => {
     it('should preserve remote URLs when converting messages for AI SDK v5', () => {
       const messageList = new MessageList();
 
@@ -30,16 +30,15 @@ describe('MessageList AI SDK v5 URL handling', () => {
 
       messageList.add([userMessage], 'input');
 
-      // Get V3 messages - this is what happens internally when format: 'aisdk' is used
-      const v3Messages = messageList.get.all.v3();
+      // Get AIV5 UI messages - this is what happens internally when format: 'aisdk' is used
+      const v5Messages = messageList.get.all.aiV5.ui();
 
-      // The V3 message should have the URL properly preserved
-      expect(v3Messages).toHaveLength(1);
-      expect(v3Messages[0].role).toBe('user');
-      expect(v3Messages[0].content.format).toBe(3);
-      expect(v3Messages[0].content.parts).toHaveLength(2);
+      // The AIV5 UI message should have the URL properly preserved
+      expect(v5Messages).toHaveLength(1);
+      expect(v5Messages[0].role).toBe('user');
+      expect(v5Messages[0].parts).toHaveLength(2);
 
-      const filePart = v3Messages[0].content.parts[0];
+      const filePart = v5Messages[0].parts[0];
       expect(filePart.type).toBe('file');
       if (filePart.type === 'file') {
         // The URL should be preserved as-is, not wrapped as a data URI
@@ -80,21 +79,20 @@ describe('MessageList AI SDK v5 URL handling', () => {
 
       messageList.add([userMessage], 'input');
 
-      const v3Messages = messageList.get.all.v3();
+      const v5Messages = messageList.get.all.aiV5.ui();
 
-      expect(v3Messages).toHaveLength(1);
-      expect(v3Messages[0].content.format).toBe(3);
-      expect(v3Messages[0].content.parts).toHaveLength(3);
+      expect(v5Messages).toHaveLength(1);
+      expect(v5Messages[0].parts).toHaveLength(3);
 
       // Check first image
-      const firstFile = v3Messages[0].content.parts[0];
+      const firstFile = v5Messages[0].parts[0];
       if (firstFile.type === 'file') {
         expect(firstFile.url).toBe('https://example.com/image1.jpg');
         expect(firstFile.mediaType).toBe('image/jpeg');
       }
 
       // Check second image
-      const secondFile = v3Messages[0].content.parts[2];
+      const secondFile = v5Messages[0].parts[2];
       if (secondFile.type === 'file') {
         expect(secondFile.url).toBe('https://example.com/image2.png');
         expect(secondFile.mediaType).toBe('image/png');
@@ -130,13 +128,12 @@ describe('MessageList AI SDK v5 URL handling', () => {
 
       messageList.add([userMessage], 'input');
 
-      const v3Messages = messageList.get.all.v3();
+      const v5Messages = messageList.get.all.aiV5.ui();
 
-      expect(v3Messages).toHaveLength(1);
-      expect(v3Messages[0].content.format).toBe(3);
-      expect(v3Messages[0].content.parts).toHaveLength(2);
+      expect(v5Messages).toHaveLength(1);
+      expect(v5Messages[0].parts).toHaveLength(2);
 
-      const filePart = v3Messages[0].content.parts[0];
+      const filePart = v5Messages[0].parts[0];
 
       if (filePart.type === 'file') {
         // For data URIs, it should be preserved correctly
@@ -173,13 +170,12 @@ describe('MessageList AI SDK v5 URL handling', () => {
 
       messageList.add([userMessage], 'input');
 
-      const v3Messages = messageList.get.all.v3();
+      const v5Messages = messageList.get.all.aiV5.ui();
 
-      expect(v3Messages).toHaveLength(1);
-      expect(v3Messages[0].content.format).toBe(3);
-      expect(v3Messages[0].content.parts).toHaveLength(2);
+      expect(v5Messages).toHaveLength(1);
+      expect(v5Messages[0].parts).toHaveLength(2);
 
-      const filePart = v3Messages[0].content.parts[0];
+      const filePart = v5Messages[0].parts[0];
 
       if (filePart.type === 'file') {
         // Plain base64 should be converted to a data URI
@@ -217,10 +213,10 @@ describe('MessageList AI SDK v5 URL handling', () => {
 
       messageList.add([userMessage], 'input');
 
-      const v3Messages = messageList.get.all.v3();
+      const v5Messages = messageList.get.all.aiV5.ui();
 
-      expect(v3Messages).toHaveLength(1);
-      const filePart = v3Messages[0].content.parts[0];
+      expect(v5Messages).toHaveLength(1);
+      const filePart = v5Messages[0].parts[0];
 
       if (filePart.type === 'file') {
         // With the buggy code, this would become 'data:image/png;base64,//storage.example.com/image.png'
@@ -256,10 +252,10 @@ describe('MessageList AI SDK v5 URL handling', () => {
 
       messageList.add([userMessage], 'input');
 
-      const v3Messages = messageList.get.all.v3();
+      const v5Messages = messageList.get.all.aiV5.ui();
 
-      expect(v3Messages).toHaveLength(1);
-      const filePart = v3Messages[0].content.parts[0];
+      expect(v5Messages).toHaveLength(1);
+      const filePart = v5Messages[0].parts[0];
 
       if (filePart.type === 'file') {
         // Should not wrap FTP URLs as data URIs
@@ -308,12 +304,12 @@ describe('MessageList AI SDK v5 URL handling', () => {
       }
 
       // Now convert to V3 (what happens internally when format: 'aisdk' is used)
-      const v3Messages = messageList.get.all.v3();
+      const v5Messages = messageList.get.all.aiV5.ui();
 
-      expect(v3Messages).toHaveLength(1);
-      expect(v3Messages[0].content.parts).toHaveLength(2);
+      expect(v5Messages).toHaveLength(1);
+      expect(v5Messages[0].parts).toHaveLength(2);
 
-      const v3FilePart = v3Messages[0].content.parts[0];
+      const v3FilePart = v5Messages[0].parts[0];
       expect(v3FilePart.type).toBe('file');
 
       if (v3FilePart.type === 'file') {
@@ -348,10 +344,10 @@ describe('MessageList AI SDK v5 URL handling', () => {
       const messageList = new MessageList();
       messageList.add(modelMessages, 'input');
 
-      const v3Messages = messageList.get.all.v3();
+      const v5Messages = messageList.get.all.aiV5.ui();
 
-      expect(v3Messages).toHaveLength(1);
-      const v3FilePart = v3Messages[0].content.parts[0];
+      expect(v5Messages).toHaveLength(1);
+      const v3FilePart = v5Messages[0].parts[0];
 
       if (v3FilePart.type === 'file') {
         // Plain base64 should be converted to a proper data URI

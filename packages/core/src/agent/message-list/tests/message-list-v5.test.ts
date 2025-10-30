@@ -958,14 +958,14 @@ describe('MessageList V5 Support', () => {
 
       messageList.add(v2Message, 'user');
 
-      // Get V3 messages (internal format used for message processing)
-      const v3Messages = messageList.get.all.v3();
-      const v3FilePart = v3Messages[0].content.parts.find((p: any) => p.type === 'file');
+      // Get V5 UI messages (used for message processing)
+      const v5UiMessages = messageList.get.all.aiV5.ui();
+      const v5UiFilePart = v5UiMessages[0].parts.find((p: any) => p.type === 'file');
 
-      if (v3FilePart?.type === 'file') {
-        expect(v3FilePart.url).toBe(imageUrl);
+      if (v5UiFilePart?.type === 'file') {
+        expect(v5UiFilePart.url).toBe(imageUrl);
         // It should NOT be wrapped as a malformed data URI
-        expect(v3FilePart.url).not.toContain('data:image/png;base64,https://');
+        expect(v5UiFilePart.url).not.toContain('data:image/png;base64,https://');
       }
 
       // Get V2 messages back (this is what InputProcessors receive)

@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
-import slugify from '@sindresorhus/slugify';
 import type { CoreMessage, StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
@@ -1640,7 +1639,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                   agent.__setMemory(this.#memory);
                 }
                 const subAgentThreadId = randomUUID();
-                const subAgentResourceId = `${slugify(this.id)}-${agentName}`;
+                const slugify = await import(`@sindresorhus/slugify`); // this is an esm package, need to dynamic import incase we're running in cjs
+                const subAgentResourceId = `${slugify.default(this.id)}-${agentName}`;
 
                 const streamResult = await agent.stream((context as any).prompt, {
                   requestContext,
