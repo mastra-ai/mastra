@@ -97,8 +97,12 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       selectBy: { last: 20 },
     });
+    console.log('DEBUG queryResult.messages.length:', queryResult.messages.length);
+    const messageList = new MessageList({ threadId: thread.id, resourceId }).add(queryResult.messages, 'memory');
+    const coreMessages = messageList.get.all.core();
+    console.log('DEBUG coreMessages.length:', coreMessages.length);
     const result = await memory.processMessages({
-      messages: new MessageList({ threadId: thread.id, resourceId }).add(queryResult.messages, 'memory').get.all.core(),
+      messages: coreMessages,
       processors: [new TokenLimiter(250)], // Limit to 250 tokens
     });
 
