@@ -29,7 +29,7 @@ const sidebars = {
           label: "Supervisor Agent",
         },
         { type: "doc", id: "agents/image-analysis", label: "Image Analysis" },
-        { type: "doc", id: "agents/runtime-context", label: "Runtime Context" },
+        { type: "doc", id: "agents/request-context", label: "Request Context" },
         {
           type: "doc",
           id: "agents/deploying-mcp-server",

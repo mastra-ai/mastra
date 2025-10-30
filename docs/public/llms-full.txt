@@ -438,9 +438,9 @@ const response = await memoryAgent.generate("What's my favorite color?", {
 
 To learn more about memory see the [Memory](../memory/overview) documentation.
 
-## Using `RuntimeContext`
+## Using `RequestContext`
 
-Use [RuntimeContext](/docs/server-db/runtime-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
+Use [RequestContext](/docs/server-db/request-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
 
 ```typescript title="src/mastra/agents/memory-agent.ts" showLineNumbers
 export type UserTier = {
@@ -457,8 +457,8 @@ const standardMemory = new Memory({
 
 export const memoryAgent = new Agent({
   // ...
-  memory: ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+  memory: ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     return userTier === "enterprise" ? premiumMemory : standardMemory;
   },
@@ -467,7 +467,7 @@ export const memoryAgent = new Agent({
 
 :::note
 
-See [Runtime Context](/docs/server-db/runtime-context) docs for more information.
+See [Request Context](/docs/server-db/request-context) docs for more information.
 
 :::
 
@@ -476,7 +476,7 @@ See [Runtime Context](/docs/server-db/runtime-context) docs for more information
 - [Working Memory](../memory/working-memory)
 - [Semantic Recall](../memory/semantic-recall)
 - [Threads and Resources](../memory/threads-and-resources)
-- [Runtime Context](/docs/server-db/runtime-context)
+- [Request Context](/docs/server-db/request-context)
 
 
 ---
@@ -1070,7 +1070,7 @@ network-execution-event-step-finish
 
 - [Agent Memory](./agent-memory)
 - [Workflows Overview](../workflows/overview)
-- [Runtime Context](/docs/server-db/runtime-context)
+- [Request Context](/docs/server-db/request-context)
 
 
 ---
@@ -1503,9 +1503,9 @@ export const testAgent = new Agent({
 
 > See [Using Tools](./using-tools) for more information.
 
-## Using `RuntimeContext`
+## Using `RequestContext`
 
-Use `RuntimeContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use `RequestContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
 export type UserTier = {
@@ -1514,8 +1514,8 @@ export type UserTier = {
 
 export const testAgent = new Agent({
   // ...
-  model: ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+  model: ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     return userTier === "enterprise"
       ? openai("gpt-4o-mini")
@@ -1524,7 +1524,7 @@ export const testAgent = new Agent({
 });
 ```
 
-> See [Runtime Context](/docs/server-db/runtime-context) for more information.
+> See [Request Context](/docs/server-db/request-context) for more information.
 
 ## Testing with Mastra Playground
 
@@ -1534,7 +1534,7 @@ Use the Mastra [Playground](/docs/getting-started/studio) to test agents with di
 
 - [Using Tools](./using-tools)
 - [Agent Memory](./agent-memory)
-- [Runtime Context](/examples/agents/runtime-context)
+- [Request Context](/examples/agents/request-context)
 - [Calling Agents](/examples/agents/calling-agents)
 
 
@@ -1631,7 +1631,7 @@ export const weatherAgent = new Agent({
 
 - [Tools Overview](../tools-mcp/overview)
 - [Agent Memory](./agent-memory)
-- [Runtime Context](/docs/server-db/runtime-context)
+- [Request Context](/docs/server-db/request-context)
 - [Calling Agents](/examples/agents/calling-agents)
 
 
@@ -5098,7 +5098,7 @@ export async function POST(req: Request) {
 
 ### Passing additional data
 
-`sendMessage()` allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as `RuntimeContext`.
+`sendMessage()` allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as `RequestContext`.
 
 ```typescript {16-26} title="app/test/chat-extra.tsx" copy
 "use client";
@@ -5143,31 +5143,31 @@ export function ChatExtra() {
 
 ```typescript {8,12} title="app/api/chat-extra/route.ts" copy
 import { mastra } from "../../../mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 
 export async function POST(req: Request) {
   const { messages, data } = await req.json();
   const myAgent = mastra.getAgent("weatherAgent");
 
-  const runtimeContext = new RuntimeContext();
+  const requestContext = new RequestContext();
 
   if (data) {
     for (const [key, value] of Object.entries(data)) {
-      runtimeContext.set(key, value);
+      requestContext.set(key, value);
     }
   }
 
   const stream = await myAgent.stream(messages, {
-    runtimeContext,
+    requestContext,
     format: "aisdk",
   });
   return stream.toUIMessageStreamResponse();
 }
 ```
 
-### Handling `runtimeContext` with `server.middleware`
+### Handling `requestContext` with `server.middleware`
 
-You can also populate the `RuntimeContext` by reading custom data in a server middleware:
+You can also populate the `RequestContext` by reading custom data in a server middleware:
 
 ```typescript {8,17} title="mastra/index.ts" copy
 import { Mastra } from "@mastra/core/mastra";
@@ -5177,7 +5177,7 @@ export const mastra = new Mastra({
   server: {
     middleware: [
       async (c, next) => {
-        const runtimeContext = c.get("runtimeContext");
+        const requestContext = c.get("requestContext");
 
         if (c.req.method === "POST") {
           try {
@@ -5186,7 +5186,7 @@ export const mastra = new Mastra({
 
             if (body?.data) {
               for (const [key, value] of Object.entries(body.data)) {
-                runtimeContext.set(key, value);
+                requestContext.set(key, value);
               }
             }
           } catch {}
@@ -5198,7 +5198,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> You can then access this data in your tools via the `runtimeContext` parameter. See the [Runtime Context documentation](/docs/server-db/runtime-context) for more details.
+> You can then access this data in your tools via the `requestContext` parameter. See the [Request Context documentation](/docs/server-db/request-context) for more details.
 
 ## Migrating from AI SDK v4 to v5
 
@@ -5700,7 +5700,7 @@ import { Mastra } from "@mastra/core/mastra";
 import { registerCopilotKit } from "@ag-ui/mastra/copilotkit";
 import { weatherAgent } from "./agents/weather-agent";
 
-type WeatherRuntimeContext = {
+type WeatherRequestContext = {
   "user-id": string;
   "temperature-scale": "celsius" | "fahrenheit";
 };
@@ -5714,15 +5714,15 @@ export const mastra = new Mastra({
       allowHeaders: ["*"],
     },
     apiRoutes: [
-      registerCopilotKit<WeatherRuntimeContext>({
+      registerCopilotKit<WeatherRequestContext>({
         path: "/copilotkit",
         resourceId: "weatherAgent",
-        setContext: (c, runtimeContext) => {
-          runtimeContext.set(
+        setContext: (c, requestContext) => {
+          requestContext.set(
             "user-id",
             c.req.header("X-User-ID") || "anonymous",
           );
-          runtimeContext.set("temperature-scale", "celsius");
+          requestContext.set("temperature-scale", "celsius");
         },
       }),
     ],
@@ -10313,7 +10313,7 @@ export const testAgent = new Agent({
 
 #### Dynamic model selection and instructions
 
-You can configure thread title generation dynamically by passing functions to `model` and `instructions`. These functions receive the `runtimeContext` object, allowing you to adapt title generation based on user-specific values.
+You can configure thread title generation dynamically by passing functions to `model` and `instructions`. These functions receive the `requestContext` object, allowing you to adapt title generation based on user-specific values.
 
 ```typescript {7-16} showLineNumbers
 export const testAgent = new Agent({
@@ -10322,14 +10322,14 @@ export const testAgent = new Agent({
     options: {
       threads: {
         generateTitle: {
-          model: ({ runtimeContext }) => {
-            const userTier = runtimeContext.get("userTier");
+          model: ({ requestContext }) => {
+            const userTier = requestContext.get("userTier");
             return userTier === "premium"
               ? openai("gpt-4.1")
               : openai("gpt-4.1-nano");
           },
-          instructions: ({ runtimeContext }) => {
-            const language = runtimeContext.get("userLanguage") || "English";
+          instructions: ({ requestContext }) => {
+            const language = requestContext.get("userLanguage") || "English";
             return `Generate a concise, engaging title in ${language} based on the user's first message.`;
           },
         },
@@ -11924,7 +11924,7 @@ sampling: {
 
 ### Custom Sampling
 
-Implements your own sampling logic based on runtime context, metadata, or business rules. Perfect for complex scenarios like sampling based on user tier, request type, or error conditions.
+Implements your own sampling logic based on request context, metadata, or business rules. Perfect for complex scenarios like sampling based on user tier, request type, or error conditions.
 
 ```ts
 sampling: {
@@ -11981,7 +11981,7 @@ Note that only a single config can be used for a specific execution. But a singl
 
 ### Dynamic Configuration Selection
 
-Use `configSelector` to choose the appropriate tracing configuration based on runtime context:
+Use `configSelector` to choose the appropriate tracing configuration based on request context:
 
 ```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
@@ -12004,18 +12004,18 @@ export const mastra = new Mastra({
     },
     configSelector: (context, availableTracers) => {
       // Use debug config for support requests
-      if (context.runtimeContext?.get("supportMode")) {
+      if (context.requestContext?.get("supportMode")) {
         return "debug";
       }
 
       // Route specific customers to different providers
-      const customerId = context.runtimeContext?.get("customerId");
+      const customerId = context.requestContext?.get("customerId");
       if (customerId && premiumCustomers.includes(customerId)) {
         return "braintrust";
       }
 
       // Route specific requests to langfuse
-      if (context.runtimeContext?.get("useExternalTracing")) {
+      if (context.requestContext?.get("useExternalTracing")) {
         return "langfuse";
       }
 
@@ -12177,13 +12177,13 @@ execute: async ({ inputData, tracingContext }) => {
 
 Metadata set here will be shown in all configured exporters.
 
-### Automatic Metadata from RuntimeContext
+### Automatic Metadata from RequestContext
 
-Instead of manually adding metadata to each span, you can configure Mastra to automatically extract values from RuntimeContext and attach them as metadata to all spans in a trace. This is useful for consistently tracking user identifiers, environment information, feature flags, or any request-scoped data across your entire trace.
+Instead of manually adding metadata to each span, you can configure Mastra to automatically extract values from RequestContext and attach them as metadata to all spans in a trace. This is useful for consistently tracking user identifiers, environment information, feature flags, or any request-scoped data across your entire trace.
 
 #### Configuration-Level Extraction
 
-Define which RuntimeContext keys to extract in your tracing configuration. These keys will be automatically included as metadata for all spans created with this configuration:
+Define which RequestContext keys to extract in your tracing configuration. These keys will be automatically included as metadata for all spans created with this configuration:
 
 ```ts title="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
@@ -12191,7 +12191,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: "my-service",
-        runtimeContextKeys: ["userId", "environment", "tenantId"],
+        requestContextKeys: ["userId", "environment", "tenantId"],
         exporters: [new DefaultExporter()],
       },
     },
@@ -12199,36 +12199,36 @@ export const mastra = new Mastra({
 });
 ```
 
-Now when you execute agents or workflows with a RuntimeContext, these values are automatically extracted:
+Now when you execute agents or workflows with a RequestContext, these values are automatically extracted:
 
 ```ts showLineNumbers copy
-const runtimeContext = new RuntimeContext();
-runtimeContext.set("userId", "user-123");
-runtimeContext.set("environment", "production");
-runtimeContext.set("tenantId", "tenant-456");
+const requestContext = new RequestContext();
+requestContext.set("userId", "user-123");
+requestContext.set("environment", "production");
+requestContext.set("tenantId", "tenant-456");
 
 // All spans in this trace automatically get userId, environment, and tenantId metadata
 const result = await agent.generate({
   messages: [{ role: "user", content: "Hello" }],
-  runtimeContext,
+  requestContext,
 });
 ```
 
 #### Per-Request Additions
 
-You can add trace-specific keys using `tracingOptions.runtimeContextKeys`. These are merged with the configuration-level keys:
+You can add trace-specific keys using `tracingOptions.requestContextKeys`. These are merged with the configuration-level keys:
 
 ```ts showLineNumbers copy
-const runtimeContext = new RuntimeContext();
-runtimeContext.set("userId", "user-123");
-runtimeContext.set("environment", "production");
-runtimeContext.set("experimentId", "exp-789");
+const requestContext = new RequestContext();
+requestContext.set("userId", "user-123");
+requestContext.set("environment", "production");
+requestContext.set("experimentId", "exp-789");
 
 const result = await agent.generate({
   messages: [{ role: "user", content: "Hello" }],
-  runtimeContext,
+  requestContext,
   tracingOptions: {
-    runtimeContextKeys: ["experimentId"], // Adds to configured keys
+    requestContextKeys: ["experimentId"], // Adds to configured keys
   },
 });
 
@@ -12237,23 +12237,23 @@ const result = await agent.generate({
 
 #### Nested Value Extraction
 
-Use dot notation to extract nested values from RuntimeContext:
+Use dot notation to extract nested values from RequestContext:
 
 ```ts showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
     configs: {
       default: {
-        runtimeContextKeys: ["user.id", "session.data.experimentId"],
+        requestContextKeys: ["user.id", "session.data.experimentId"],
         exporters: [new DefaultExporter()],
       },
     },
   },
 });
 
-const runtimeContext = new RuntimeContext();
-runtimeContext.set("user", { id: "user-456", name: "John Doe" });
-runtimeContext.set("session", { data: { experimentId: "exp-999" } });
+const requestContext = new RequestContext();
+requestContext.set("user", { id: "user-456", name: "John Doe" });
+requestContext.set("session", { data: { experimentId: "exp-999" } });
 
 // Metadata will include: { user: { id: 'user-456' }, session: { data: { experimentId: 'exp-999' } } }
 ```
@@ -12261,38 +12261,38 @@ runtimeContext.set("session", { data: { experimentId: "exp-999" } });
 #### How It Works
 
 1. **TraceState Computation**: At the start of a trace (root span creation), Mastra computes which keys to extract by merging configuration-level and per-request keys
-2. **Automatic Extraction**: Root spans (agent runs, workflow executions) automatically extract metadata from RuntimeContext
-3. **Child Span Extraction**: Child spans can also extract metadata if you pass `runtimeContext` when creating them
+2. **Automatic Extraction**: Root spans (agent runs, workflow executions) automatically extract metadata from RequestContext
+3. **Child Span Extraction**: Child spans can also extract metadata if you pass `requestContext` when creating them
 4. **Metadata Precedence**: Explicit metadata passed to span options always takes precedence over extracted metadata
 
 #### Child Spans and Metadata Extraction
 
-When creating child spans within tools or workflow steps, you can pass the `runtimeContext` parameter to enable metadata extraction:
+When creating child spans within tools or workflow steps, you can pass the `requestContext` parameter to enable metadata extraction:
 
 ```ts showLineNumbers copy
-execute: async ({ tracingContext, runtimeContext }) => {
-  // Create child span WITH runtimeContext - gets metadata extraction
+execute: async ({ tracingContext, requestContext }) => {
+  // Create child span WITH requestContext - gets metadata extraction
   const dbSpan = tracingContext.currentSpan?.createChildSpan({
     type: "generic",
     name: "database-query",
-    runtimeContext, // Pass to enable metadata extraction
+    requestContext, // Pass to enable metadata extraction
   });
 
   const results = await db.query("SELECT * FROM users");
   dbSpan?.end({ output: results });
 
-  // Or create child span WITHOUT runtimeContext - no metadata extraction
+  // Or create child span WITHOUT requestContext - no metadata extraction
   const cacheSpan = tracingContext.currentSpan?.createChildSpan({
     type: "generic",
     name: "cache-check",
-    // No runtimeContext - won't extract metadata
+    // No requestContext - won't extract metadata
   });
 
   return results;
 };
 ```
 
-This gives you fine-grained control over which child spans include RuntimeContext metadata. Root spans (agent/workflow executions) always extract metadata automatically, while child spans only extract when you explicitly pass `runtimeContext`.
+This gives you fine-grained control over which child spans include RequestContext metadata. Root spans (agent/workflow executions) always extract metadata automatically, while child spans only extract when you explicitly pass `requestContext`.
 
 ## Creating Child Spans
 
@@ -13939,13 +13939,13 @@ const lanceQueryTool = createVectorQueryTool({
 - Quality-gated search results
 - Embedded, file-based vector storage with LanceDB for edge deployment scenarios
 
-You can also override these configurations at runtime using the runtime context:
+You can also override these configurations at runtime using the request context:
 
 ```ts showLineNumbers copy
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 
-const runtimeContext = new RuntimeContext();
-runtimeContext.set("databaseConfig", {
+const requestContext = new RequestContext();
+requestContext.set("databaseConfig", {
   pinecone: {
     namespace: "runtime-namespace",
   },
@@ -13954,7 +13954,7 @@ runtimeContext.set("databaseConfig", {
 await pineconeQueryTool.execute({
   context: { queryText: "search query" },
   mastra,
-  runtimeContext,
+  requestContext,
 });
 ```
 
@@ -16261,13 +16261,13 @@ be inspected by middleware to tailor behaviour:
 - `x-mastra-client-type`: identifies the client SDK, e.g. `js` or `python`
 - `x-mastra-dev-playground`: request triggered from a local playground
 
-### Setting `runtimeContext`
+### Setting `requestContext`
 
-You can populate `runtimeContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
+You can populate `requestContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 import { testWeatherAgent } from "./agents/test-weather-agent";
 
 export const mastra = new Mastra({
@@ -16276,9 +16276,9 @@ export const mastra = new Mastra({
     middleware: [
       async (context, next) => {
         const country = context.req.header("CF-IPCountry");
-        const runtimeContext = context.get("runtimeContext");
+        const requestContext = context.get("requestContext");
 
-        runtimeContext.set(
+        requestContext.set(
           "temperature-unit",
           country === "US" ? "fahrenheit" : "celsius",
         );
@@ -16292,7 +16292,7 @@ export const mastra = new Mastra({
 
 # Related
 
-- [Runtime Context](./runtime-context)
+- [Request Context](./request-context)
 
 
 ---
@@ -16388,22 +16388,22 @@ export const mastra = new Mastra({
 
 
 ---
-title: "Runtime Context | Server & DB | Mastra Docs"
-description: Learn how to use Mastra's RuntimeContext to provide dynamic, request-specific configuration to agents.
+title: "Request Context | Server & DB | Mastra Docs"
+description: Learn how to use Mastra's RequestContext to provide dynamic, request-specific configuration to agents.
 ---
 
-# Runtime Context
-[EN] Source: https://mastra.ai/en/docs/server-db/runtime-context
+# Request Context
+[EN] Source: https://mastra.ai/en/docs/server-db/request-context
 
-Agents, tools, and workflows can all accept `RuntimeContext` as a parameter, making request-specific values available to the underlying primitives.
+Agents, tools, and workflows can all accept `RequestContext` as a parameter, making request-specific values available to the underlying primitives.
 
-## When to use `RuntimeContext`
+## When to use `RequestContext`
 
-Use `RuntimeContext` when a primitive’s behavior should change based on runtime conditions. For example, you might switch models or storage backends based on user attributes, or adjust instructions and tool selection based on language.
+Use `RequestContext` when a primitive’s behavior should change based on runtime conditions. For example, you might switch models or storage backends based on user attributes, or adjust instructions and tool selection based on language.
 
 :::note
 
-**Note:** `RuntimeContext` is primarily used for passing data into specific
+**Note:** `RequestContext` is primarily used for passing data into specific
 requests. It's distinct from agent memory, which handles conversation
 history and state persistence across multiple calls.
 
@@ -16411,7 +16411,7 @@ history and state persistence across multiple calls.
 
 ## Setting values
 
-Pass `runtimeContext` into an agent, network, workflow, or tool call to make values available to all underlying primitives during execution. Use `.set()` to define values before making the call.
+Pass `requestContext` into an agent, network, workflow, or tool call to make values available to all underlying primitives during execution. Use `.set()` to define values before making the call.
 
 The `.set()` method takes two arguments:
 
@@ -16419,23 +16419,23 @@ The `.set()` method takes two arguments:
 2. **value**: The data to associate with that key.
 
 ```typescript showLineNumbers
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
 
-const runtimeContext = new RuntimeContext<UserTier>();
-runtimeContext.set("user-tier", "enterprise");
+const requestContext = new RequestContext<UserTier>();
+requestContext.set("user-tier", "enterprise");
 
 const agent = mastra.getAgent("weatherAgent");
 await agent.generate("What's the weather in London?", {
-  runtimeContext,
+  requestContext,
 });
 
 const routingAgent = mastra.getAgent("routingAgent");
 routingAgent.network("What's the weather in London?", {
-  runtimeContext,
+  requestContext,
 });
 
 const run = await mastra.getWorkflow("weatherWorkflow").createRunAsync();
@@ -16443,30 +16443,30 @@ await run.start({
   inputData: {
     location: "London",
   },
-  runtimeContext,
+  requestContext,
 });
 await run.resume({
   resumeData: {
     city: "New York",
   },
-  runtimeContext,
+  requestContext,
 });
 
 await weatherTool.execute({
   context: {
     location: "London",
   },
-  runtimeContext,
+  requestContext,
 });
 ```
 
 ### Setting values based on request headers
 
-You can populate `runtimeContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
+You can populate `requestContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 import { testWeatherAgent } from "./agents/test-weather-agent";
 
 export const mastra = new Mastra({
@@ -16475,9 +16475,9 @@ export const mastra = new Mastra({
     middleware: [
       async (context, next) => {
         const country = context.req.header("CF-IPCountry");
-        const runtimeContext = context.get("runtimeContext");
+        const requestContext = context.get("requestContext");
 
-        runtimeContext.set(
+        requestContext.set(
           "temperature-unit",
           country === "US" ? "fahrenheit" : "celsius",
         );
@@ -16493,7 +16493,7 @@ export const mastra = new Mastra({
 
 ## Accessing values with agents
 
-You can access the `runtimeContext` argument from any supported configuration options in agents. These functions can be sync or `async`. Use the `.get()` method to read values from `runtimeContext`.
+You can access the `requestContext` argument from any supported configuration options in agents. These functions can be sync or `async`. Use the `.get()` method to read values from `requestContext`.
 
 ```typescript {7-8,15,18,21} title="src/mastra/agents/weather-agent.ts" showLineNumbers
 export type UserTier = {
@@ -16502,33 +16502,33 @@ export type UserTier = {
 
 export const weatherAgent = new Agent({
   name: "weather-agent",
-  instructions: async ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+  instructions: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     if (userTier === "enterprise") {
       // ...
     }
     // ...
   },
-  model: ({ runtimeContext }) => {
+  model: ({ requestContext }) => {
     // ...
   },
-  tools: ({ runtimeContext }) => {
+  tools: ({ requestContext }) => {
     // ...
   },
-  memory: ({ runtimeContext }) => {
+  memory: ({ requestContext }) => {
     // ...
   },
 });
 ```
 
-You can also use `runtimeContext` with other options like `agents`, `workflows`, `scorers`, `inputProcessors`, and `outputProcessors`.
+You can also use `requestContext` with other options like `agents`, `workflows`, `scorers`, `inputProcessors`, and `outputProcessors`.
 
 > See [Agent](/reference/agents/agent) for a full list of configuration options.
 
 ## Accessing values from workflow steps
 
-You can access the `runtimeContext` argument from a workflow step's `execute` function. This function can be sync or async. Use the `.get()` method to read values from `runtimeContext`.
+You can access the `requestContext` argument from a workflow step's `execute` function. This function can be sync or async. Use the `.get()` method to read values from `requestContext`.
 
 ```typescript {7-8} title="src/mastra/workflows/weather-workflow.ts" showLineNumbers copy
 export type UserTier = {
@@ -16537,8 +16537,8 @@ export type UserTier = {
 
 const stepOne = createStep({
   id: "step-one",
-  execute: async ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+  execute: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     if (userTier === "enterprise") {
       // ...
@@ -16552,7 +16552,7 @@ const stepOne = createStep({
 
 ## Accessing values with tools
 
-You can access the `runtimeContext` argument from a tool’s `execute` function. This function is `async`. Use the `.get()` method to read values from `runtimeContext`.
+You can access the `requestContext` argument from a tool’s `execute` function. This function is `async`. Use the `.get()` method to read values from `requestContext`.
 
 ```typescript {7-8} title="src/mastra/tools/weather-tool.ts" showLineNumbers
 export type UserTier = {
@@ -16561,8 +16561,8 @@ export type UserTier = {
 
 export const weatherTool = createTool({
   id: "weather-tool",
-  execute: async ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+  execute: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     if (userTier === "enterprise") {
       // ...
@@ -16576,11 +16576,11 @@ export const weatherTool = createTool({
 
 ## Related
 
-- [Runtime Context Example](/examples/agents/runtime-context)
-- [Agent Runtime Context](/docs/agents/overview#using-runtimecontext)
-- [Workflow Runtime Context](../workflows/overview#using-runtimecontext)
-- [Tool Runtime Context](../tools-mcp/overview#using-runtimecontext)
-- [Server Middleware Runtime Context](/docs/server-db/middleware)
+- [Request Context Example](/examples/agents/request-context)
+- [Agent Request Context](/docs/agents/overview#using-requestcontext)
+- [Workflow Request Context](../workflows/overview#using-requestcontext)
+- [Tool Request Context](../tools-mcp/overview#using-requestcontext)
+- [Server Middleware Request Context](/docs/server-db/middleware)
 
 
 ---
@@ -18332,9 +18332,9 @@ When creating tools, keep tool descriptions simple and focused on **what** the t
 
 To make tools available to an agent, you configure them in the agent's definition. Mentioning available tools and their general purpose in the agent's system prompt can also improve tool usage. For detailed steps and examples, see the guide on [Using Tools with Agents](/docs/agents/using-tools#adding-tools-to-an-agent).
 
-## Using `RuntimeContext`
+## Using `RequestContext`
 
-Use [RuntimeContext](/docs/server-db/runtime-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RequestContext](/docs/server-db/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript title="src/mastra/tools/test-tool.ts" showLineNumbers
 export type UserTier = {
@@ -18351,15 +18351,15 @@ const baseTools = () => {
 
 export const testTool = createTool({
   // ...
-  execute: async ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+  execute: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     return userTier === "enterprise" ? advancedTools : baseTools;
   },
 });
 ```
 
-> See [Runtime Context](/docs/server-db/runtime-context) for more information.
+> See [Request Context](/docs/server-db/request-context) for more information.
 
 ## Testing with Mastra Playground
 
@@ -19725,14 +19725,14 @@ import { testTool } from "../tools/test-tool";
 
 const step2 = createStep({
   // ...
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     const { formatted } = inputData;
 
     const response = await testTool.execute({
       context: {
         text: formatted,
       },
-      runtimeContext,
+      requestContext,
     });
 
     return {
@@ -20907,7 +20907,7 @@ description: "Learn how to use workflow input mapping to create more dynamic dat
 Input data mapping allows explicit mapping of values for the inputs of the next step. These values can come from a number of sources:
 
 - The outputs of a previous step
-- The runtime context
+- The request context
 - A constant value
 - The initial input of the workflow
 
@@ -21247,9 +21247,9 @@ The workflow output includes the full execution lifecycle, showing the input and
 }
 ```
 
-## Using `RuntimeContext`
+## Using `RequestContext`
 
-Use [RuntimeContext](/docs/server-db/runtime-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RequestContext](/docs/server-db/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers
 export type UserTier = {
@@ -21258,8 +21258,8 @@ export type UserTier = {
 
 const step1 = createStep({
   // ...
-  execute: async ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+  execute: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     const maxResults = userTier === "enterprise" ? 1000 : 50;
 
@@ -21268,7 +21268,7 @@ const step1 = createStep({
 });
 ```
 
-> See [Runtime Context](/docs/server-db/runtime-context) for more information.
+> See [Request Context](/docs/server-db/request-context) for more information.
 
 ## Testing with Mastra Playground
 
@@ -21363,7 +21363,7 @@ Each snapshot includes the `runId`, input, step status (`success`, `suspended`, 
   "suspendedPaths": {},
   "waitingPaths": {},
   "result": { "value": 100, "approved": true },
-  "runtimeContext": {},
+  "requestContext": {},
   "timestamp": 1758027578740
 }
 ```
@@ -21767,19 +21767,19 @@ const resumedResult = await run.resume({
 });
 ```
 
-You can pass `runtimeContext` as an argument to both the `start` and `resume` commands.
+You can pass `requestContext` as an argument to both the `start` and `resume` commands.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 
-const runtimeContext = new RuntimeContext();
+const requestContext = new RequestContext();
 
 const result = await run.start({
   step: "step-1",
   inputData: {
     city: "London",
   },
-  runtimeContext,
+  requestContext,
 });
 
 const resumedResult = await run.resume({
@@ -21787,11 +21787,11 @@ const resumedResult = await run.resume({
   resumeData: {
     city: "New York",
   },
-  runtimeContext,
+  requestContext,
 });
 ```
 
-> See [Runtime Context](/docs/server-db/runtime-context) for more information.
+> See [Request Context](/docs/server-db/request-context) for more information.
 
 ### Resuming nested workflows
 
@@ -22527,14 +22527,14 @@ console.log(response.text);
 
 
 ---
-title: "Example: Runtime Context | Agents | Mastra Docs"
-description: Learn how to create and configure dynamic agents using runtime context to adapt behavior based on user subscription tiers.
+title: "Example: Request Context | Agents | Mastra Docs"
+description: Learn how to create and configure dynamic agents using request context to adapt behavior based on user subscription tiers.
 ---
 
-# Runtime Context
-[EN] Source: https://mastra.ai/en/examples/agents/runtime-context
+# Request Context
+[EN] Source: https://mastra.ai/en/examples/agents/request-context
 
-This example demonstrates how to use runtime context to create a single agent that dynamically adapts its behavior, capabilities, model selection, tools, memory configuration, input/output processing, and quality scoring based on user subscription tiers.
+This example demonstrates how to use request context to create a single agent that dynamically adapts its behavior, capabilities, model selection, tools, memory configuration, input/output processing, and quality scoring based on user subscription tiers.
 
 ## Prerequisites
 
@@ -22553,7 +22553,7 @@ import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 import { TokenLimiterProcessor } from "@mastra/core/processors";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 import {
   knowledgeBase,
   ticketSystem,
@@ -22564,7 +22564,7 @@ import { CharacterLimiterProcessor } from "../processors/character-limiter";
 import { responseQualityScorer } from "../scorers/response-quality";
 
 export type UserTier = "free" | "pro" | "enterprise";
-export type SupportRuntimeContext = {
+export type SupportRequestContext = {
   "user-tier": UserTier;
   language: "en" | "es" | "ja" | "fr";
 };
@@ -22574,12 +22574,12 @@ export const supportAgent = new Agent({
   description: "AI support agent that adapts to user subscription tiers",
 
   instructions: async ({
-    runtimeContext,
+    requestContext,
   }: {
-    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+    requestContext: RequestContext<SupportRequestContext>;
   }) => {
-    const userTier = runtimeContext.get("user-tier");
-    const language = runtimeContext.get("language");
+    const userTier = requestContext.get("user-tier");
+    const language = requestContext.get("language");
 
     return `You are a customer support agent for our SaaS platform.
     The current user is on the ${userTier} tier and prefers ${language} language.
@@ -22594,11 +22594,11 @@ export const supportAgent = new Agent({
   },
 
   model: ({
-    runtimeContext,
+    requestContext,
   }: {
-    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+    requestContext: RequestContext<SupportRequestContext>;
   }) => {
-    const userTier = runtimeContext.get("user-tier");
+    const userTier = requestContext.get("user-tier");
 
     if (userTier === "enterprise") return "openai/gpt-5";
     if (userTier === "pro") return "openai/gpt-4o";
@@ -22606,11 +22606,11 @@ export const supportAgent = new Agent({
   },
 
   tools: ({
-    runtimeContext,
+    requestContext,
   }: {
-    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+    requestContext: RequestContext<SupportRequestContext>;
   }) => {
-    const userTier = runtimeContext.get("user-tier");
+    const userTier = requestContext.get("user-tier");
     const baseTools = [knowledgeBase, ticketSystem];
 
     if (userTier === "pro" || userTier === "enterprise") {
@@ -22625,11 +22625,11 @@ export const supportAgent = new Agent({
   },
 
   memory: ({
-    runtimeContext,
+    requestContext,
   }: {
-    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+    requestContext: RequestContext<SupportRequestContext>;
   }) => {
-    const userTier = runtimeContext.get("user-tier");
+    const userTier = requestContext.get("user-tier");
 
     switch (userTier) {
       case "enterprise":
@@ -22661,11 +22661,11 @@ export const supportAgent = new Agent({
   },
 
   inputProcessors: ({
-    runtimeContext,
+    requestContext,
   }: {
-    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+    requestContext: RequestContext<SupportRequestContext>;
   }) => {
-    const userTier = runtimeContext.get("user-tier");
+    const userTier = requestContext.get("user-tier");
 
     switch (userTier) {
       case "enterprise":
@@ -22679,11 +22679,11 @@ export const supportAgent = new Agent({
   },
 
   outputProcessors: ({
-    runtimeContext,
+    requestContext,
   }: {
-    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+    requestContext: RequestContext<SupportRequestContext>;
   }) => {
-    const userTier = runtimeContext.get("user-tier");
+    const userTier = requestContext.get("user-tier");
 
     switch (userTier) {
       case "enterprise":
@@ -22703,11 +22703,11 @@ export const supportAgent = new Agent({
   },
 
   scorers: ({
-    runtimeContext,
+    requestContext,
   }: {
-    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+    requestContext: RequestContext<SupportRequestContext>;
   }) => {
-    const userTier = runtimeContext.get("user-tier");
+    const userTier = requestContext.get("user-tier");
 
     if (userTier === "enterprise") {
       return [responseQualityScorer];
@@ -22740,18 +22740,18 @@ export const mastra = new Mastra({
 ```typescript title="src/examples/free-tier-usage.ts" showLineNumbers copy
 import "dotenv/config";
 import { mastra } from "../mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
-import type { SupportRuntimeContext } from "../mastra/agents/support-agent";
+import { RequestContext } from "@mastra/core/request-context";
+import type { SupportRequestContext } from "../mastra/agents/support-agent";
 
 const agent = mastra.getAgent("supportAgent");
-const runtimeContext = new RuntimeContext<SupportRuntimeContext>();
+const requestContext = new RequestContext<SupportRequestContext>();
 
-runtimeContext.set("user-tier", "free");
-runtimeContext.set("language", "en");
+requestContext.set("user-tier", "free");
+requestContext.set("language", "en");
 
 const response = await agent.generate(
   "I'm having trouble with API rate limits. Can you help?",
-  { runtimeContext },
+  { requestContext },
 );
 
 console.log(response.text);
@@ -22762,18 +22762,18 @@ console.log(response.text);
 ```typescript title="src/examples/pro-tier-usage.ts" showLineNumbers copy
 import "dotenv/config";
 import { mastra } from "../mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
-import type { SupportRuntimeContext } from "../mastra/agents/support-agent";
+import { RequestContext } from "@mastra/core/request-context";
+import type { SupportRequestContext } from "../mastra/agents/support-agent";
 
 const agent = mastra.getAgent("supportAgent");
-const runtimeContext = new RuntimeContext<SupportRuntimeContext>();
+const requestContext = new RequestContext<SupportRequestContext>();
 
-runtimeContext.set("user-tier", "pro");
-runtimeContext.set("language", "es");
+requestContext.set("user-tier", "pro");
+requestContext.set("language", "es");
 
 const response = await agent.generate(
   "I need detailed analytics on my API usage patterns and optimization recommendations.",
-  { runtimeContext },
+  { requestContext },
 );
 
 console.log(response.text);
@@ -22784,18 +22784,18 @@ console.log(response.text);
 ```typescript title="src/examples/enterprise-tier-usage.ts" showLineNumbers copy
 import "dotenv/config";
 import { mastra } from "../mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
-import type { SupportRuntimeContext } from "../mastra/agents/support-agent";
+import { RequestContext } from "@mastra/core/request-context";
+import type { SupportRequestContext } from "../mastra/agents/support-agent";
 
 const agent = mastra.getAgent("supportAgent");
-const runtimeContext = new RuntimeContext<SupportRuntimeContext>();
+const requestContext = new RequestContext<SupportRequestContext>();
 
-runtimeContext.set("user-tier", "enterprise");
-runtimeContext.set("language", "ja");
+requestContext.set("user-tier", "enterprise");
+requestContext.set("language", "ja");
 
 const response = await agent.generate(
   "I need to integrate our custom webhook system with your platform and get real-time analytics on our usage across multiple environments.",
-  { runtimeContext },
+  { requestContext },
 );
 
 console.log(response.text);
@@ -22803,7 +22803,7 @@ console.log(response.text);
 
 ## Key Benefits
 
-This runtime context approach provides:
+This request context approach provides:
 
 - **Cost Optimization**: Enterprise users get premium models and features while free users get basic functionality
 - **Resource Management**: Input and output limits prevent abuse on lower subscription tiers
@@ -22813,7 +22813,7 @@ This runtime context approach provides:
 
 ## Related
 
-- [Runtime Context Documentation](/docs/server-db/runtime-context)
+- [Request Context Documentation](/docs/server-db/request-context)
 - [Agent Reference](/reference/agents/agent)
 - [Input Processors](/docs/agents/guardrails)
 - [Output Processors](/docs/agents/guardrails)
@@ -26882,7 +26882,7 @@ The Examples section is a short list of example projects demonstrating basic AI 
         title: "Image Analysis Agent",
         href: "/examples/agents/image-analysis",
       },
-      { title: "Runtime Context", href: "/examples/agents/runtime-context" },
+      { title: "Request Context", href: "/examples/agents/request-context" },
       {
         title: "Deploying an MCP Server",
         href: "/examples/agents/deploying-mcp-server",
@@ -31236,7 +31236,7 @@ Use different configurations for different environments:
 ```typescript
 import { openai } from "@ai-sdk/openai";
 import { createVectorQueryTool } from "@mastra/rag";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 
 // Base configuration
 const createSearchTool = (environment: "dev" | "staging" | "prod") => {
@@ -31265,8 +31265,8 @@ const dynamicSearchTool = createVectorQueryTool({
 
 // Switch environment at runtime
 const switchEnvironment = async (environment: string, query: string) => {
-  const runtimeContext = new RuntimeContext();
-  runtimeContext.set("databaseConfig", {
+  const requestContext = new RequestContext();
+  requestContext.set("databaseConfig", {
     pinecone: {
       namespace: environment,
     },
@@ -31275,7 +31275,7 @@ const switchEnvironment = async (environment: string, query: string) => {
   return await dynamicSearchTool.execute({
     context: { queryText: query },
     mastra,
-    runtimeContext,
+    requestContext,
   });
 };
 ```
@@ -31286,7 +31286,7 @@ const switchEnvironment = async (environment: string, query: string) => {
 ```javascript
 import { openai } from "@ai-sdk/openai";
 import { createVectorQueryTool } from "@mastra/rag";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 
 // Base configuration
 const createSearchTool = (environment) => {
@@ -31315,8 +31315,8 @@ const dynamicSearchTool = createVectorQueryTool({
 
 // Switch environment at runtime
 const switchEnvironment = async (environment, query) => {
-  const runtimeContext = new RuntimeContext();
-  runtimeContext.set("databaseConfig", {
+  const requestContext = new RequestContext();
+  requestContext.set("databaseConfig", {
     pinecone: {
       namespace: environment,
     },
@@ -31325,7 +31325,7 @@ const switchEnvironment = async (environment, query) => {
   return await dynamicSearchTool.execute({
     context: { queryText: query },
     mastra,
-    runtimeContext,
+    requestContext,
   });
 };
 ```
@@ -31417,11 +31417,11 @@ const balancedTool = createVectorQueryTool({
 
 // Adjust parameters based on load
 const adaptiveSearch = async (query: string, isHighLoad: boolean) => {
-  const runtimeContext = new RuntimeContext();
+  const requestContext = new RequestContext();
 
   if (isHighLoad) {
     // Reduce quality for speed during high load
-    runtimeContext.set("databaseConfig", {
+    requestContext.set("databaseConfig", {
       pgvector: {
         ef: 75,
         probes: 5,
@@ -31433,7 +31433,7 @@ const adaptiveSearch = async (query: string, isHighLoad: boolean) => {
   return await balancedTool.execute({
     context: { queryText: query },
     mastra,
-    runtimeContext,
+    requestContext,
   });
 };
 ```
@@ -31464,10 +31464,10 @@ class MultiTenantSearchService {
   }
 
   async searchForTenant(tenant: Tenant, query: string) {
-    const runtimeContext = new RuntimeContext();
+    const requestContext = new RequestContext();
 
     // Isolate search to tenant's namespace
-    runtimeContext.set("databaseConfig", {
+    requestContext.set("databaseConfig", {
       pinecone: {
         namespace: tenant.namespace,
       },
@@ -31479,7 +31479,7 @@ class MultiTenantSearchService {
         topK: 10,
       },
       mastra,
-      runtimeContext,
+      requestContext,
     });
 
     // Add tenant context to results
@@ -31556,11 +31556,11 @@ const generateSparseVector = (keywords: string[]) => {
 };
 
 const hybridSearch = async (query: string, keywords: string[]) => {
-  const runtimeContext = new RuntimeContext();
+  const requestContext = new RequestContext();
 
   if (keywords.length > 0) {
     const sparseVector = generateSparseVector(keywords);
-    runtimeContext.set("databaseConfig", {
+    requestContext.set("databaseConfig", {
       pinecone: {
         namespace: "production",
         sparseVector,
@@ -31571,7 +31571,7 @@ const hybridSearch = async (query: string, keywords: string[]) => {
   return await hybridSearchTool.execute({
     context: { queryText: query },
     mastra,
-    runtimeContext,
+    requestContext,
   });
 };
 
@@ -37083,14 +37083,14 @@ const reasoningAgent = new Agent({
 ```
 ## Dynamic model selection
 
-Since models are just strings, you can select them dynamically based on [runtime context](/docs/server-db/runtime-context), variables, or any other logic.
+Since models are just strings, you can select them dynamically based on [request context](/docs/server-db/request-context), variables, or any other logic.
 
 ```typescript showLineNumbers
 const agent = new Agent({
   name: "dynamic-assistant",
-  model: ({ runtimeContext }) => {
-    const provider = runtimeContext.get("provider-id");
-    const model = runtimeContext.get("model-id");
+  model: ({ requestContext }) => {
+    const provider = requestContext.get("provider-id");
+    const model = requestContext.get("model-id");
     return `${provider}/${model}`;
   },
 });
@@ -38038,8 +38038,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "alibaba-cn/tongyi-intent-detect-v3"
       : "alibaba-cn/deepseek-r1";
@@ -38596,8 +38596,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "alibaba/qwq-plus"
       : "alibaba/qvq-max";
@@ -38931,8 +38931,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "anthropic/claude-sonnet-4-5-20250929"
       : "anthropic/claude-3-5-haiku-20241022";
@@ -39141,8 +39141,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "baseten/zai-org/GLM-4.6"
       : "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct";
@@ -39268,8 +39268,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "cerebras/qwen-3-coder-480b"
       : "cerebras/gpt-oss-120b";
@@ -39764,8 +39764,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "chutes/zai-org/GLM-4.6-turbo"
       : "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507";
@@ -40009,8 +40009,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "cortecs/qwen3-coder-480b-a35b-instruct"
       : "cortecs/claude-4-5-sonnet";
@@ -40148,8 +40148,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "deepinfra/zai-org/GLM-4.5"
       : "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct";
@@ -40272,8 +40272,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "deepseek/deepseek-reasoner"
       : "deepseek/deepseek-chat";
@@ -40530,8 +40530,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "fastrouter/x-ai/grok-4"
       : "fastrouter/anthropic/claude-opus-4.1";
@@ -40740,8 +40740,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "fireworks-ai/accounts/fireworks/models/qwen3-coder-480b-a35b-instruct"
       : "fireworks-ai/accounts/fireworks/models/deepseek-r1-0528";
@@ -41490,8 +41490,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "github-models/xai/grok-3-mini"
       : "github-models/ai21-labs/ai21-jamba-1.5-large";
@@ -41885,8 +41885,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "google/gemini-live-2.5-flash-preview-native-audio"
       : "google/gemini-1.5-flash";
@@ -42271,8 +42271,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "groq/qwen/qwen3-32b"
       : "groq/deepseek-r1-distill-llama-70b";
@@ -42539,8 +42539,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "huggingface/zai-org/GLM-4.6"
       : "huggingface/MiniMaxAI/MiniMax-M2";
@@ -42653,8 +42653,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "inception/mercury-coder"
       : "inception/mercury";
@@ -43094,8 +43094,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "inference/qwen/qwen3-embedding-4b"
       : "inference/google/gemma-3";
@@ -43268,8 +43268,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "llama/llama-4-scout-17b-16e-instruct-fp8"
       : "llama/cerebras-llama-4-maverick-17b-128e-instruct";
@@ -43394,8 +43394,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "lmstudio/qwen/qwen3-coder-30b"
       : "lmstudio/openai/gpt-oss-20b";
@@ -43508,8 +43508,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "lucidquery/lucidquery-nexus-coder"
       : "lucidquery/lucidnova-rf1-100b";
@@ -43827,8 +43827,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "mistral/pixtral-large-latest"
       : "mistral/codestral-latest";
@@ -44011,8 +44011,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "modelscope/ZhipuAI/GLM-4.6"
       : "modelscope/Qwen/Qwen3-235B-A22B-Instruct-2507";
@@ -44137,8 +44137,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "moonshotai-cn/kimi-k2-turbo-preview"
       : "moonshotai-cn/kimi-k2-0711-preview";
@@ -44263,8 +44263,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "moonshotai/kimi-k2-turbo-preview"
       : "moonshotai/kimi-k2-0711-preview";
@@ -44389,8 +44389,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "morph/morph-v3-large"
       : "morph/auto";
@@ -44659,8 +44659,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "nebius/zai-org/glm-4.5-air"
       : "nebius/NousResearch/hermes-4-405b";
@@ -44941,8 +44941,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "nvidia/qwen/qwen3-coder-480b-a35b-instruct"
       : "nvidia/black-forest-labs/flux.1-dev";
@@ -45420,8 +45420,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "openai/text-embedding-ada-002"
       : "openai/codex-mini-latest";
@@ -45811,8 +45811,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "opencode/qwen3-coder"
       : "opencode/an-gbt";
@@ -45950,8 +45950,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "perplexity/sonar-reasoning-pro"
       : "perplexity/sonar";
@@ -46206,8 +46206,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "requesty/openai/o4-mini"
       : "requesty/anthropic/claude-3-7-sonnet";
@@ -46452,8 +46452,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "scaleway/whisper-large-v3"
       : "scaleway/bge-multilingual-gemma2";
@@ -46650,8 +46650,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "submodel/zai-org/GLM-4.5-FP8"
       : "submodel/Qwen/Qwen3-235B-A22B-Instruct-2507";
@@ -47004,8 +47004,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "synthetic/hf:zai-org/GLM-4.6"
       : "synthetic/hf:MiniMaxAI/MiniMax-M2";
@@ -47167,8 +47167,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "togetherai/openai/gpt-oss-120b"
       : "togetherai/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8";
@@ -47291,8 +47291,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "upstage/solar-pro2"
       : "upstage/solar-mini";
@@ -47537,8 +47537,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "venice/venice-uncensored"
       : "venice/deepseek-coder-v2-lite";
@@ -47687,8 +47687,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "vultr/qwen2.5-coder-32b-instruct"
       : "vultr/deepseek-r1-distill-llama-70b";
@@ -47897,8 +47897,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "wandb/moonshotai/Kimi-K2-Instruct"
       : "wandb/Qwen/Qwen3-235B-A22B-Instruct-2507";
@@ -48221,8 +48221,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "xai/grok-vision-beta"
       : "xai/grok-2";
@@ -48414,8 +48414,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "zai-coding-plan/glm-4.6"
       : "zai-coding-plan/glm-4.5";
@@ -48564,8 +48564,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "zai/glm-4.6"
       : "zai/glm-4.5";
@@ -48870,8 +48870,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "zenmux/z-ai/glm-4.6"
       : "zenmux/anthropic/claude-haiku-4.5";
@@ -49020,8 +49020,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "zhipuai-coding-plan/glm-4.6"
       : "zhipuai-coding-plan/glm-4.5";
@@ -49170,8 +49170,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "zhipuai/glm-4.6"
       : "zhipuai/glm-4.5";
@@ -49307,7 +49307,7 @@ export const agent = new Agent({
     },
     {
       name: "instructions",
-      type: "SystemMessage | ({ runtimeContext: RuntimeContext }) => SystemMessage | Promise<SystemMessage>",
+      type: "SystemMessage | ({ requestContext: RequestContext }) => SystemMessage | Promise<SystemMessage>",
       isOptional: false,
       description: `Instructions that guide the agent's behavior. Can be a string, array of strings, system message object, 
         array of system messages, or a function that returns any of these types dynamically. 
@@ -49315,47 +49315,47 @@ export const agent = new Agent({
     },
     {
       name: "model",
-      type: "MastraLanguageModel | ({ runtimeContext: RuntimeContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
+      type: "MastraLanguageModel | ({ requestContext: RequestContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
       isOptional: false,
       description:
         "The language model used by the agent. Can be provided statically or resolved at runtime.",
     },
     {
       name: "agents",
-      type: "Record<string, Agent> | ({ runtimeContext: RuntimeContext }) => Record<string, Agent> | Promise<Record<string, Agent>>",
+      type: "Record<string, Agent> | ({ requestContext: RequestContext }) => Record<string, Agent> | Promise<Record<string, Agent>>",
       isOptional: true,
       description:
         "Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.",
     },
     {
       name: "tools",
-      type: "ToolsInput | ({ runtimeContext: RuntimeContext }) => ToolsInput | Promise<ToolsInput>",
+      type: "ToolsInput | ({ requestContext: RequestContext }) => ToolsInput | Promise<ToolsInput>",
       isOptional: true,
       description:
         "Tools that the agent can access. Can be provided statically or resolved dynamically.",
     },
     {
       name: "workflows",
-      type: "Record<string, Workflow> | ({ runtimeContext: RuntimeContext }) => Record<string, Workflow> | Promise<Record<string, Workflow>>",
+      type: "Record<string, Workflow> | ({ requestContext: RequestContext }) => Record<string, Workflow> | Promise<Record<string, Workflow>>",
       isOptional: true,
       description:
         "Workflows that the agent can execute. Can be static or dynamically resolved.",
     },
     {
       name: "defaultGenerateOptions",
-      type: "AgentGenerateOptions | ({ runtimeContext: RuntimeContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>",
+      type: "AgentGenerateOptions | ({ requestContext: RequestContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>",
       isOptional: true,
       description: "Default options used when calling `generate()`.",
     },
     {
       name: "defaultStreamOptions",
-      type: "AgentStreamOptions | ({ runtimeContext: RuntimeContext }) => AgentStreamOptions | Promise<AgentStreamOptions>",
+      type: "AgentStreamOptions | ({ requestContext: RequestContext }) => AgentStreamOptions | Promise<AgentStreamOptions>",
       isOptional: true,
       description: "Default options used when calling `stream()`.",
     },
     {
       name: "defaultStreamOptions",
-      type: "AgentExecutionOptions | ({ runtimeContext: RuntimeContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>",
+      type: "AgentExecutionOptions | ({ requestContext: RequestContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>",
       isOptional: true,
       description:
         "Default options used when calling `stream()` in vNext mode.",
@@ -49369,7 +49369,7 @@ export const agent = new Agent({
     },
     {
       name: "scorers",
-      type: "MastraScorers | ({ runtimeContext: RuntimeContext }) => MastraScorers | Promise<MastraScorers>",
+      type: "MastraScorers | ({ requestContext: RequestContext }) => MastraScorers | Promise<MastraScorers>",
       isOptional: true,
       description:
         "Scoring configuration for runtime evaluation and telemetry. Can be static or dynamically provided.",
@@ -49382,7 +49382,7 @@ export const agent = new Agent({
     },
     {
       name: "memory",
-      type: "MastraMemory | ({ runtimeContext: RuntimeContext }) => MastraMemory | Promise<MastraMemory>",
+      type: "MastraMemory | ({ requestContext: RequestContext }) => MastraMemory | Promise<MastraMemory>",
       isOptional: true,
       description:
         "Memory module used for storing and retrieving stateful context.",
@@ -49395,14 +49395,14 @@ export const agent = new Agent({
     },
     {
       name: "inputProcessors",
-      type: "Processor[] | ({ runtimeContext: RuntimeContext }) => Processor[] | Promise<Processor[]>",
+      type: "Processor[] | ({ requestContext: RequestContext }) => Processor[] | Promise<Processor[]>",
       isOptional: true,
       description:
         "Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.",
     },
     {
       name: "outputProcessors",
-      type: "Processor[] | ({ runtimeContext: RuntimeContext }) => Processor[] | Promise<Processor[]>",
+      type: "Processor[] | ({ requestContext: RequestContext }) => Processor[] | Promise<Processor[]>",
       isOptional: true,
       description:
         "Output processors that can modify or validate messages from the agent, before it is sent to the client. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
@@ -50038,11 +50038,11 @@ const aiSdkResult = await agent.generate("message for agent", {
       description: "Unique identifier for this execution run.",
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       description:
-        "Runtime context containing dynamic configuration and state.",
+        "Request Context containing dynamic configuration and state.",
     },
     {
       name: "tracingContext",
@@ -50517,11 +50517,11 @@ await agent.generateLegacy("message for agent");
       ],
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
     {
       name: "maxTokens",
@@ -50749,10 +50749,10 @@ await agent.getDefaultGenerateOptions();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
       defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
+      description: "Optional configuration object containing request context.",
     },
   ]}
 />
@@ -50774,7 +50774,7 @@ await agent.getDefaultGenerateOptions();
 
 ```typescript copy
 await agent.getDefaultGenerateOptions({
-  runtimeContext: new RuntimeContext(),
+  requestContext: new RequestContext(),
 });
 ```
 
@@ -50783,12 +50783,12 @@ await agent.getDefaultGenerateOptions({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
+      defaultValue: "new RequestContext()",
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
   ]}
 />
@@ -50796,7 +50796,7 @@ await agent.getDefaultGenerateOptions({
 ## Related
 
 - [Agent generation](/docs/agents/overview#generating-responses)
-- [Runtime Context](/docs/server-db/runtime-context)
+- [Request Context](/docs/server-db/request-context)
 
 
 ---
@@ -50821,10 +50821,10 @@ await agent.getDefaultStreamOptions();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
       defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
+      description: "Optional configuration object containing request context.",
     },
   ]}
 />
@@ -50846,7 +50846,7 @@ await agent.getDefaultStreamOptions();
 
 ```typescript copy
 await agent.getDefaultStreamOptions({
-  runtimeContext: new RuntimeContext(),
+  requestContext: new RequestContext(),
 });
 ```
 
@@ -50855,12 +50855,12 @@ await agent.getDefaultStreamOptions({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
+      defaultValue: "new RequestContext()",
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
   ]}
 />
@@ -50868,7 +50868,7 @@ await agent.getDefaultStreamOptions({
 ## Related
 
 - [Streaming with agents](/docs/streaming/overview#streaming-with-agents)
-- [Runtime Context](/docs/server-db/runtime-context)
+- [Request Context](/docs/server-db/request-context)
 
 
 ---
@@ -50931,10 +50931,10 @@ await agent.getInstructions();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
       defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
+      description: "Optional configuration object containing request context.",
     },
   ]}
 />
@@ -50956,7 +50956,7 @@ await agent.getInstructions();
 
 ```typescript copy
 await agent.getInstructions({
-  runtimeContext: new RuntimeContext(),
+  requestContext: new RequestContext(),
 });
 ```
 
@@ -50965,12 +50965,12 @@ await agent.getInstructions({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       defaultValue: "undefined",
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
   ]}
 />
@@ -50978,7 +50978,7 @@ await agent.getInstructions({
 ## Related
 
 - [Agents overview](/docs/agents/overview)
-- [Runtime Context](/docs/server-db/runtime-context)
+- [Request Context](/docs/server-db/request-context)
 
 
 ---
@@ -51003,11 +51003,11 @@ await agent.getLLM();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext; model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel> }",
+      type: "{ requestContext?: RequestContext; model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel> }",
       isOptional: true,
       defaultValue: "{}",
       description:
-        "Optional configuration object containing runtime context and optional model override.",
+        "Optional configuration object containing request context and optional model override.",
     },
   ]}
 />
@@ -51029,7 +51029,7 @@ await agent.getLLM();
 
 ```typescript copy
 await agent.getLLM({
-  runtimeContext: new RuntimeContext(),
+  requestContext: new RequestContext(),
   model: openai("gpt-4"),
 });
 ```
@@ -51039,12 +51039,12 @@ await agent.getLLM({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
+      defaultValue: "new RequestContext()",
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
     {
       name: "model",
@@ -51059,7 +51059,7 @@ await agent.getLLM({
 ## Related
 
 - [Agents overview](/docs/agents/overview)
-- [Runtime Context](/docs/server-db/runtime-context)
+- [Request Context](/docs/server-db/request-context)
 
 
 ---
@@ -51084,10 +51084,10 @@ await agent.getMemory();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
       defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
+      description: "Optional configuration object containing request context.",
     },
   ]}
 />
@@ -51109,7 +51109,7 @@ await agent.getMemory();
 
 ```typescript copy
 await agent.getMemory({
-  runtimeContext: new RuntimeContext(),
+  requestContext: new RequestContext(),
 });
 ```
 
@@ -51118,12 +51118,12 @@ await agent.getMemory({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
+      defaultValue: "new RequestContext()",
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
   ]}
 />
@@ -51131,7 +51131,7 @@ await agent.getMemory({
 ## Related
 
 - [Agent memory](/docs/agents/agent-memory)
-- [Runtime Context](/docs/server-db/runtime-context)
+- [Request Context](/docs/server-db/request-context)
 
 
 ---
@@ -51155,11 +51155,11 @@ await agent.getModel();
 <PropertiesTable
   content={[
     {
-      name: "{ runtimeContext = new RuntimeContext() }",
-      type: "{ runtimeContext?: RuntimeContext }",
+      name: "{ requestContext = new RequestContext() }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
-      description: "Optional configuration object containing runtime context.",
+      defaultValue: "new RequestContext()",
+      description: "Optional configuration object containing request context.",
     },
   ]}
 />
@@ -51181,7 +51181,7 @@ await agent.getModel();
 
 ```typescript copy
 await agent.getModel({
-  runtimeContext: new RuntimeContext(),
+  requestContext: new RequestContext(),
 });
 ```
 
@@ -51190,12 +51190,12 @@ await agent.getModel({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       defaultValue: "undefined",
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
   ]}
 />
@@ -51203,7 +51203,7 @@ await agent.getModel({
 ## Related
 
 - [Agents overview](/docs/agents/overview)
-- [Runtime Context](/docs/server-db/runtime-context)
+- [Request Context](/docs/server-db/request-context)
 
 
 ---
@@ -51228,10 +51228,10 @@ await agent.getVoice();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
       defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
+      description: "Optional configuration object containing request context.",
     },
   ]}
 />
@@ -51253,7 +51253,7 @@ await agent.getVoice();
 
 ```typescript copy
 await agent.getVoice({
-  runtimeContext: new RuntimeContext(),
+  requestContext: new RequestContext(),
 });
 ```
 
@@ -51262,12 +51262,12 @@ await agent.getVoice({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
+      defaultValue: "new RequestContext()",
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
   ]}
 />
@@ -51300,10 +51300,10 @@ await agent.listAgents();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
       defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
+      description: "Optional configuration object containing request context.",
     },
   ]}
 />
@@ -51324,10 +51324,10 @@ await agent.listAgents();
 ## Extended usage example
 
 ```typescript copy
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 
 await agent.listAgents({
-  runtimeContext: new RuntimeContext(),
+  requestContext: new RequestContext(),
 });
 ```
 
@@ -51336,12 +51336,12 @@ await agent.listAgents({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
+      defaultValue: "new RequestContext()",
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
   ]}
 />
@@ -51373,10 +51373,10 @@ await agent.listScorers();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
       defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
+      description: "Optional configuration object containing request context.",
     },
   ]}
 />
@@ -51398,7 +51398,7 @@ await agent.listScorers();
 
 ```typescript copy
 await agent.listScorers({
-  runtimeContext: new RuntimeContext(),
+  requestContext: new RequestContext(),
 });
 ```
 
@@ -51407,12 +51407,12 @@ await agent.listScorers({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
+      defaultValue: "new RequestContext()",
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
   ]}
 />
@@ -51420,7 +51420,7 @@ await agent.listScorers({
 ## Related
 
 - [Agents overview](/docs/agents/overview)
-- [Runtime Context](/docs/server-db/runtime-context)
+- [Request Context](/docs/server-db/request-context)
 
 
 ---
@@ -51445,10 +51445,10 @@ await agent.listTools();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
       defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
+      description: "Optional configuration object containing request context.",
     },
   ]}
 />
@@ -51470,7 +51470,7 @@ await agent.listTools();
 
 ```typescript copy
 await agent.listTools({
-  runtimeContext: new RuntimeContext(),
+  requestContext: new RequestContext(),
 });
 ```
 
@@ -51479,12 +51479,12 @@ await agent.listTools({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
+      defaultValue: "new RequestContext()",
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
   ]}
 />
@@ -51517,10 +51517,10 @@ await agent.listWorkflows();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
       defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
+      description: "Optional configuration object containing request context.",
     },
   ]}
 />
@@ -51542,7 +51542,7 @@ await agent.listWorkflows();
 
 ```typescript copy
 await agent.listWorkflows({
-  runtimeContext: new RuntimeContext(),
+  requestContext: new RequestContext(),
 });
 ```
 
@@ -51551,12 +51551,12 @@ await agent.listWorkflows({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
+      defaultValue: "new RequestContext()",
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
   ]}
 />
@@ -51870,11 +51870,11 @@ await agent.network(`
         "Unique ID for this generation run. Useful for tracking and debugging purposes.",
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
     {
       name: "traceId",
@@ -59969,7 +59969,7 @@ type ConfigSelector = (
 ```typescript
 interface ConfigSelectorOptions {
   metadata?: Record<string, any>;
-  runtimeContext?: Map<string, any>;
+  requestContext?: Map<string, any>;
 }
 ```
 
@@ -62144,7 +62144,7 @@ Options passed when using a custom sampler strategy.
 
 ```typescript
 interface CustomSamplerOptions {
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   metadata?: Record<string, any>;
 }
 ```
@@ -62168,8 +62168,8 @@ Options passed when using a custom tracing config selector.
 
 ```typescript
 interface ConfigSelectorOptions {
-  /** Runtime context */
-  runtimeContext?: RuntimeContext;
+  /** Request Context */
+  requestContext?: RequestContext;
 }
 ```
 
@@ -63803,7 +63803,7 @@ Access your traces and analytics in the Traceloop dashboard at [app.traceloop.co
 
 
 ---
-title: "Reference: BatchPartsProcessor | Processors | Mastra Docs"
+title: "Reference: Batch Parts Processor | Processors | Mastra Docs"
 description: "Documentation for the BatchPartsProcessor in Mastra, which batches multiple stream parts together to reduce frequency of emissions."
 ---
 
@@ -63820,7 +63820,7 @@ import { BatchPartsProcessor } from "@mastra/core/processors";
 const processor = new BatchPartsProcessor({
   batchSize: 5,
   maxWaitTime: 100,
-  emitOnNonText: true,
+  emitOnNonText: true
 });
 ```
 
@@ -63851,16 +63851,14 @@ const processor = new BatchPartsProcessor({
     {
       name: "maxWaitTime",
       type: "number",
-      description:
-        "Maximum time to wait before emitting a batch (in milliseconds). If set, will emit the current batch even if it hasn't reached batchSize",
+      description: "Maximum time to wait before emitting a batch (in milliseconds). If set, will emit the current batch even if it hasn't reached batchSize",
       isOptional: true,
       default: "undefined (no timeout)",
     },
     {
       name: "emitOnNonText",
       type: "boolean",
-      description:
-        "Whether to emit immediately when a non-text part is encountered",
+      description: "Whether to emit immediately when a non-text part is encountered",
       isOptional: true,
       default: "true",
     },
@@ -63886,8 +63884,7 @@ const processor = new BatchPartsProcessor({
     {
       name: "flush",
       type: "(state?: BatchPartsState) => ChunkType | null",
-      description:
-        "Force flush any remaining batched parts when the stream ends",
+      description: "Force flush any remaining batched parts when the stream ends",
       isOptional: false,
     },
   ]}
@@ -63896,31 +63893,30 @@ const processor = new BatchPartsProcessor({
 ## Extended usage example
 
 ```typescript title="src/mastra/agents/batched-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { BatchPartsProcessor } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "batched-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   outputProcessors: [
     new BatchPartsProcessor({
       batchSize: 5,
       maxWaitTime: 100,
-      emitOnNonText: true,
-    }),
-  ],
+      emitOnNonText: true
+    })
+  ]
 });
 ```
 
 ## Related
 
-- [Output Processors documentation](/docs/agents/guardrails)
+- [Guardrails](/docs/agents/guardrails)
 
 
 ---
-title: "Reference: LanguageDetector | Processors | Mastra Docs"
+title: "Reference: Language Detector | Processors | Mastra Docs"
 description: "Documentation for the LanguageDetector in Mastra, which detects language and can translate content in AI responses."
 ---
 
@@ -63932,14 +63928,13 @@ The `LanguageDetector` is an **input processor** that identifies the language of
 ## Usage example
 
 ```typescript copy
-import { openai } from "@ai-sdk/openai";
 import { LanguageDetector } from "@mastra/core/processors";
 
 const processor = new LanguageDetector({
-  model: openai("gpt-4.1-nano"),
+  model: "openai/gpt-4.1-nano",
   targetLanguages: ["English", "en"],
   threshold: 0.8,
-  strategy: "translate",
+  strategy: "translate"
 });
 ```
 
@@ -63950,8 +63945,7 @@ const processor = new LanguageDetector({
     {
       name: "options",
       type: "Options",
-      description:
-        "Configuration options for language detection and translation",
+      description: "Configuration options for language detection and translation",
       isOptional: false,
     },
   ]}
@@ -63963,55 +63957,49 @@ const processor = new LanguageDetector({
   content={[
     {
       name: "model",
-      type: "MastraLanguageModel",
+      type: "MastraModelConfig",
       description: "Model configuration for the detection/translation agent",
       isOptional: false,
     },
     {
       name: "targetLanguages",
       type: "string[]",
-      description:
-        "Target language(s) for the project. If content is detected in a different language, it may be translated. Can be language name ('English') or ISO code ('en')",
+      description: "Target language(s) for the project. If content is detected in a different language, it may be translated. Can be language name ('English') or ISO code ('en')",
       isOptional: true,
       default: "['English', 'en']",
     },
     {
       name: "threshold",
       type: "number",
-      description:
-        "Confidence threshold for language detection (0-1). Only process when detection confidence exceeds this threshold",
+      description: "Confidence threshold for language detection (0-1). Only process when detection confidence exceeds this threshold",
       isOptional: true,
       default: "0.7",
     },
     {
       name: "strategy",
       type: "'detect' | 'translate' | 'block' | 'warn'",
-      description:
-        "Strategy when non-target language is detected: 'detect' only detects language, 'translate' automatically translates to target language, 'block' rejects content not in target language, 'warn' logs warning but allows through",
+      description: "Strategy when non-target language is detected: 'detect' only detects language, 'translate' automatically translates to target language, 'block' rejects content not in target language, 'warn' logs warning but allows through",
       isOptional: true,
       default: "'detect'",
     },
     {
       name: "preserveOriginal",
       type: "boolean",
-      description:
-        "Whether to preserve original content in message metadata. Useful for audit trails and debugging",
+      description: "Whether to preserve original content in message metadata. Useful for audit trails and debugging",
       isOptional: true,
       default: "true",
     },
     {
       name: "instructions",
       type: "string",
-      description:
-        "Custom detection instructions for the agent. If not provided, uses default instructions",
+      description: "Custom detection instructions for the agent. If not provided, uses default instructions",
       isOptional: true,
       default: "undefined",
     },
     {
       name: "minTextLength",
       type: "number",
-      description:
-        "Minimum text length to perform detection. Short text is often unreliable for language detection",
+      description: "Minimum text length to perform detection. Short text is often unreliable for language detection",
       isOptional: true,
       default: "10",
     },
@@ -64025,8 +64013,7 @@ const processor = new LanguageDetector({
     {
       name: "translationQuality",
       type: "'speed' | 'quality' | 'balanced'",
-      description:
-        "Translation quality preference: 'speed' prioritizes fast translation, 'quality' prioritizes accuracy, 'balanced' balances between speed and quality",
+      description: "Translation quality preference: 'speed' prioritizes fast translation, 'quality' prioritizes accuracy, 'balanced' balances between speed and quality",
       isOptional: true,
       default: "'quality'",
     },
@@ -64046,8 +64033,7 @@ const processor = new LanguageDetector({
     {
       name: "processInput",
       type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
-      description:
-        "Processes input messages to detect language and optionally translate content before sending to LLM",
+      description: "Processes input messages to detect language and optionally translate content before sending to LLM",
       isOptional: false,
     },
   ]}
@@ -64056,38 +64042,36 @@ const processor = new LanguageDetector({
 ## Extended usage example
 
 ```typescript title="src/mastra/agents/multilingual-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { LanguageDetector } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "multilingual-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new LanguageDetector({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       targetLanguages: ["English", "en"],
       threshold: 0.8,
       strategy: "translate",
       preserveOriginal: true,
-      instructions:
-        "Detect language and translate non-English content to English while preserving original intent",
+      instructions: "Detect language and translate non-English content to English while preserving original intent",
       minTextLength: 10,
       includeDetectionDetails: true,
-      translationQuality: "quality",
-    }),
-  ],
+      translationQuality: "quality"
+    })
+  ]
 });
 ```
 
 ## Related
 
-- [Input Processors](/docs/agents/guardrails)
+- [Guardrails](/docs/agents/guardrails)
 
 
 ---
-title: "Reference: ModerationProcessor | Processors | Mastra Docs"
+title: "Reference: Moderation Processor | Processors | Mastra Docs"
 description: "Documentation for the ModerationProcessor in Mastra, which provides content moderation using LLM to detect inappropriate content across multiple categories."
 ---
 
@@ -64099,14 +64083,13 @@ The `ModerationProcessor` is a **hybrid processor** that can be used for both in
 ## Usage example
 
 ```typescript copy
-import { openai } from "@ai-sdk/openai";
 import { ModerationProcessor } from "@mastra/core/processors";
 
 const processor = new ModerationProcessor({
-  model: openai("gpt-4.1-nano"),
+  model: "openai/gpt-4.1-nano",
   threshold: 0.7,
   strategy: "block",
-  categories: ["hate", "harassment", "violence"],
+  categories: ["hate", "harassment", "violence"]
 });
 ```
 
@@ -64129,56 +64112,49 @@ const processor = new ModerationProcessor({
   content={[
     {
       name: "model",
-      type: "MastraLanguageModel",
+      type: "MastraModelConfig",
       description: "Model configuration for the moderation agent",
       isOptional: false,
     },
     {
       name: "categories",
       type: "string[]",
-      description:
-        "Categories to check for moderation. If not specified, uses default OpenAI categories",
+      description: "Categories to check for moderation. If not specified, uses default OpenAI categories",
       isOptional: true,
-      default:
-        "['hate', 'hate/threatening', 'harassment', 'harassment/threatening', 'self-harm', 'self-harm/intent', 'self-harm/instructions', 'sexual', 'sexual/minors', 'violence', 'violence/graphic']",
+      default: "['hate', 'hate/threatening', 'harassment', 'harassment/threatening', 'self-harm', 'self-harm/intent', 'self-harm/instructions', 'sexual', 'sexual/minors', 'violence', 'violence/graphic']",
     },
     {
       name: "threshold",
       type: "number",
-      description:
-        "Confidence threshold for flagging (0-1). Content is flagged if any category score exceeds this threshold",
+      description: "Confidence threshold for flagging (0-1). Content is flagged if any category score exceeds this threshold",
       isOptional: true,
       default: "0.5",
     },
     {
       name: "strategy",
       type: "'block' | 'warn' | 'filter'",
-      description:
-        "Strategy when content is flagged: 'block' rejects with error, 'warn' logs warning but allows through, 'filter' removes flagged messages",
+      description: "Strategy when content is flagged: 'block' rejects with error, 'warn' logs warning but allows through, 'filter' removes flagged messages",
       isOptional: true,
       default: "'block'",
     },
     {
       name: "instructions",
       type: "string",
-      description:
-        "Custom moderation instructions for the agent. If not provided, uses default instructions based on categories",
+      description: "Custom moderation instructions for the agent. If not provided, uses default instructions based on categories",
       isOptional: true,
       default: "undefined",
     },
     {
       name: "includeScores",
       type: "boolean",
-      description:
-        "Whether to include confidence scores in logs. Useful for tuning thresholds and debugging",
+      description: "Whether to include confidence scores in logs. Useful for tuning thresholds and debugging",
       isOptional: true,
       default: "false",
     },
     {
       name: "chunkWindow",
       type: "number",
-      description:
-        "Number of previous chunks to include for context when moderating stream chunks. If set to 1, includes the previous part, etc.",
+      description: "Number of previous chunks to include for context when moderating stream chunks. If set to 1, includes the previous part, etc.",
       isOptional: true,
       default: "0 (no context window)",
     },
@@ -64198,15 +64174,13 @@ const processor = new ModerationProcessor({
     {
       name: "processInput",
       type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
-      description:
-        "Processes input messages to moderate content before sending to LLM",
+      description: "Processes input messages to moderate content before sending to LLM",
       isOptional: false,
     },
     {
       name: "processOutputStream",
       type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>",
-      description:
-        "Processes streaming output parts to moderate content during streaming",
+      description: "Processes streaming output parts to moderate content during streaming",
       isOptional: false,
     },
   ]}
@@ -64214,37 +64188,63 @@ const processor = new ModerationProcessor({
 
 ## Extended usage example
 
+### Input processing
+
 ```typescript title="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { ModerationProcessor } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "moderated-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new ModerationProcessor({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       categories: ["hate", "harassment", "violence"],
       threshold: 0.7,
       strategy: "block",
       instructions: "Detect and flag inappropriate content in user messages",
-      includeScores: true,
+      includeScores: true
+    })
+  ]
+});
+```
+
+### Output processing with batching
+
+When using `ModerationProcessor` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the moderator, reducing the number of LLM calls required for moderation.
+
+```typescript title="src/mastra/agents/output-moderated-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { BatchPartsProcessor, ModerationProcessor } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "output-moderated-agent",
+  instructions: "You are a helpful assistant",
+  model: "openai/gpt-4o-mini",
+  outputProcessors: [
+    // Batch stream parts first to reduce LLM calls
+    new BatchPartsProcessor({
+      batchSize: 10,
+    }),
+    // Then apply moderation on batched content
+    new ModerationProcessor({
+      model: "openai/gpt-4.1-nano",
+      strategy: "filter",
       chunkWindow: 1,
     }),
-  ],
+  ]
 });
 ```
 
 ## Related
 
-- [Input Processors](/docs/agents/guardrails)
-- [Output Processors](/docs/agents/guardrails)
+- [Guardrails](/docs/agents/guardrails)
 
 
 ---
-title: "Reference: PIIDetector | Processors | Mastra Docs"
+title: "Reference: PII Detector | Processors | Mastra Docs"
 description: "Documentation for the PIIDetector in Mastra, which detects and redacts personally identifiable information (PII) from AI responses."
 ---
 
@@ -64256,14 +64256,13 @@ The `PIIDetector` is a **hybrid processor** that can be used for both input and 
 ## Usage example
 
 ```typescript copy
-import { openai } from "@ai-sdk/openai";
 import { PIIDetector } from "@mastra/core/processors";
 
 const processor = new PIIDetector({
-  model: openai("gpt-4.1-nano"),
+  model: "openai/gpt-4.1-nano",
   threshold: 0.6,
   strategy: "redact",
-  detectionTypes: ["email", "phone", "credit-card", "ssn"],
+  detectionTypes: ["email", "phone", "credit-card", "ssn"]
 });
 ```
 
@@ -64286,7 +64285,7 @@ const processor = new PIIDetector({
   content={[
     {
       name: "model",
-      type: "MastraLanguageModel",
+      type: "MastraModelConfig",
       description: "Model configuration for the detection agent",
       isOptional: false,
     },
@@ -64295,54 +64294,47 @@ const processor = new PIIDetector({
       type: "string[]",
       description: "PII types to detect. If not specified, uses default types",
       isOptional: true,
-      default:
-        "['email', 'phone', 'credit-card', 'ssn', 'api-key', 'ip-address', 'name', 'address', 'date-of-birth', 'url', 'uuid', 'crypto-wallet', 'iban']",
+      default: "['email', 'phone', 'credit-card', 'ssn', 'api-key', 'ip-address', 'name', 'address', 'date-of-birth', 'url', 'uuid', 'crypto-wallet', 'iban']",
     },
     {
       name: "threshold",
       type: "number",
-      description:
-        "Confidence threshold for flagging (0-1). PII is flagged if any category score exceeds this threshold",
+      description: "Confidence threshold for flagging (0-1). PII is flagged if any category score exceeds this threshold",
       isOptional: true,
       default: "0.6",
     },
     {
       name: "strategy",
       type: "'block' | 'warn' | 'filter' | 'redact'",
-      description:
-        "Strategy when PII is detected: 'block' rejects with error, 'warn' logs warning but allows through, 'filter' removes flagged messages, 'redact' replaces PII with redacted versions",
+      description: "Strategy when PII is detected: 'block' rejects with error, 'warn' logs warning but allows through, 'filter' removes flagged messages, 'redact' replaces PII with redacted versions",
       isOptional: true,
       default: "'redact'",
     },
     {
       name: "redactionMethod",
       type: "'mask' | 'hash' | 'remove' | 'placeholder'",
-      description:
-        "Redaction method for PII: 'mask' replaces with asterisks, 'hash' replaces with SHA256 hash, 'remove' removes entirely, 'placeholder' replaces with type placeholder",
+      description: "Redaction method for PII: 'mask' replaces with asterisks, 'hash' replaces with SHA256 hash, 'remove' removes entirely, 'placeholder' replaces with type placeholder",
       isOptional: true,
       default: "'mask'",
     },
     {
       name: "instructions",
       type: "string",
-      description:
-        "Custom detection instructions for the agent. If not provided, uses default instructions based on detection types",
+      description: "Custom detection instructions for the agent. If not provided, uses default instructions based on detection types",
       isOptional: true,
       default: "undefined",
     },
     {
       name: "includeDetections",
       type: "boolean",
-      description:
-        "Whether to include detection details in logs. Useful for compliance auditing and debugging",
+      description: "Whether to include detection details in logs. Useful for compliance auditing and debugging",
       isOptional: true,
       default: "false",
     },
     {
       name: "preserveFormat",
       type: "boolean",
-      description:
-        "Whether to preserve PII format during redaction. When true, maintains structure like ***-**-1234 for phone numbers",
+      description: "Whether to preserve PII format during redaction. When true, maintains structure like ***-**-1234 for phone numbers",
       isOptional: true,
       default: "true",
     },
@@ -64362,15 +64354,13 @@ const processor = new PIIDetector({
     {
       name: "processInput",
       type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
-      description:
-        "Processes input messages to detect and redact PII before sending to LLM",
+      description: "Processes input messages to detect and redact PII before sending to LLM",
       isOptional: false,
     },
     {
       name: "processOutputStream",
       type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>",
-      description:
-        "Processes streaming output parts to detect and redact PII during streaming",
+      description: "Processes streaming output parts to detect and redact PII during streaming",
       isOptional: false,
     },
   ]}
@@ -64378,39 +64368,64 @@ const processor = new PIIDetector({
 
 ## Extended usage example
 
+### Input processing
+
 ```typescript title="src/mastra/agents/private-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { PIIDetector } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "private-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new PIIDetector({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       detectionTypes: ["email", "phone", "credit-card", "ssn"],
       threshold: 0.6,
       strategy: "redact",
       redactionMethod: "mask",
-      instructions:
-        "Detect and redact personally identifiable information while preserving message intent",
+      instructions: "Detect and redact personally identifiable information while preserving message intent",
       includeDetections: true,
-      preserveFormat: true,
+      preserveFormat: true
+    })
+  ]
+});
+```
+
+### Output processing with batching
+
+When using `PIIDetector` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the PII detector, reducing the number of LLM calls required for detection.
+
+```typescript title="src/mastra/agents/output-pii-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { BatchPartsProcessor, PIIDetector } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "output-pii-agent",
+  instructions: "You are a helpful assistant",
+  model: "openai/gpt-4o-mini",
+  outputProcessors: [
+    // Batch stream parts first to reduce LLM calls
+    new BatchPartsProcessor({
+      batchSize: 10,
     }),
-  ],
+    // Then apply PII detection on batched content
+    new PIIDetector({
+      model: "openai/gpt-4.1-nano",
+      strategy: "redact",
+    })
+  ]
 });
 ```
 
 ## Related
 
-- [Input Processors](/docs/agents/guardrails)
-- [Output Processors](/docs/agents/guardrails)
+- [Guardrails](/docs/agents/guardrails)
 
 
 ---
-title: "Reference: PromptInjectionDetector | Processors | Mastra Docs"
+title: "Reference: Prompt Injection Detector | Processors | Mastra Docs"
 description: "Documentation for the PromptInjectionDetector in Mastra, which detects prompt injection attempts in user input."
 ---
 
@@ -64422,14 +64437,13 @@ The `PromptInjectionDetector` is an **input processor** that detects and prevent
 ## Usage example
 
 ```typescript copy
-import { openai } from "@ai-sdk/openai";
 import { PromptInjectionDetector } from "@mastra/core/processors";
 
 const processor = new PromptInjectionDetector({
-  model: openai("gpt-4.1-nano"),
+  model: "openai/gpt-4.1-nano",
   threshold: 0.8,
   strategy: "rewrite",
-  detectionTypes: ["injection", "jailbreak", "system-override"],
+  detectionTypes: ["injection", "jailbreak", "system-override"]
 });
 ```
 
@@ -64452,48 +64466,42 @@ const processor = new PromptInjectionDetector({
   content={[
     {
       name: "model",
-      type: "MastraLanguageModel",
+      type: "MastraModelConfig",
       description: "Model configuration for the detection agent",
       isOptional: false,
     },
     {
       name: "detectionTypes",
       type: "string[]",
-      description:
-        "Detection types to check for. If not specified, uses default categories",
+      description: "Detection types to check for. If not specified, uses default categories",
       isOptional: true,
-      default:
-        "['injection', 'jailbreak', 'tool-exfiltration', 'data-exfiltration', 'system-override', 'role-manipulation']",
+      default: "['injection', 'jailbreak', 'tool-exfiltration', 'data-exfiltration', 'system-override', 'role-manipulation']",
     },
     {
       name: "threshold",
       type: "number",
-      description:
-        "Confidence threshold for flagging (0-1). Higher threshold = less sensitive to avoid false positives",
+      description: "Confidence threshold for flagging (0-1). Higher threshold = less sensitive to avoid false positives",
       isOptional: true,
       default: "0.7",
     },
     {
       name: "strategy",
       type: "'block' | 'warn' | 'filter' | 'rewrite'",
-      description:
-        "Strategy when injection is detected: 'block' rejects with error, 'warn' logs warning but allows through, 'filter' removes flagged messages, 'rewrite' attempts to neutralize the injection",
+      description: "Strategy when injection is detected: 'block' rejects with error, 'warn' logs warning but allows through, 'filter' removes flagged messages, 'rewrite' attempts to neutralize the injection",
       isOptional: true,
       default: "'block'",
     },
     {
       name: "instructions",
       type: "string",
-      description:
-        "Custom detection instructions for the agent. If not provided, uses default instructions based on detection types",
+      description: "Custom detection instructions for the agent. If not provided, uses default instructions based on detection types",
       isOptional: true,
       default: "undefined",
     },
     {
       name: "includeScores",
       type: "boolean",
-      description:
-        "Whether to include confidence scores in logs. Useful for tuning thresholds and debugging",
+      description: "Whether to include confidence scores in logs. Useful for tuning thresholds and debugging",
       isOptional: true,
       default: "false",
     },
@@ -64513,8 +64521,7 @@ const processor = new PromptInjectionDetector({
     {
       name: "processInput",
       type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
-      description:
-        "Processes input messages to detect prompt injection attempts before sending to LLM",
+      description: "Processes input messages to detect prompt injection attempts before sending to LLM",
       isOptional: false,
     },
   ]}
@@ -64523,35 +64530,33 @@ const processor = new PromptInjectionDetector({
 ## Extended usage example
 
 ```typescript title="src/mastra/agents/secure-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { PromptInjectionDetector } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "secure-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new PromptInjectionDetector({
-      model: openai("gpt-4.1-nano"),
-      detectionTypes: ["injection", "jailbreak", "system-override"],
+      model: "openai/gpt-4.1-nano",
+      detectionTypes: ['injection', 'jailbreak', 'system-override'],
       threshold: 0.8,
-      strategy: "rewrite",
-      instructions:
-        "Detect and neutralize prompt injection attempts while preserving legitimate user intent",
-      includeScores: true,
-    }),
-  ],
+      strategy: 'rewrite',
+      instructions: 'Detect and neutralize prompt injection attempts while preserving legitimate user intent',
+      includeScores: true
+    })
+  ]
 });
 ```
 
 ## Related
 
-- [Input Processors](/docs/agents/guardrails)
+- [Guardrails](/docs/agents/guardrails)
 
 
 ---
-title: "Reference: SystemPromptScrubber | Processors | Mastra Docs"
+title: "Reference: System Prompt Scrubber | Processors | Mastra Docs"
 description: "Documentation for the SystemPromptScrubber in Mastra, which detects and redacts system prompts from AI responses."
 ---
 
@@ -64570,7 +64575,7 @@ const processor = new SystemPromptScrubber({
   model: openai("gpt-4.1-nano"),
   strategy: "redact",
   redactionMethod: "mask",
-  includeDetections: true,
+  includeDetections: true
 });
 ```
 
@@ -64581,8 +64586,7 @@ const processor = new SystemPromptScrubber({
     {
       name: "options",
       type: "Options",
-      description:
-        "Configuration options for system prompt detection and handling",
+      description: "Configuration options for system prompt detection and handling",
       isOptional: false,
     },
   ]}
@@ -64594,15 +64598,14 @@ const processor = new SystemPromptScrubber({
   content={[
     {
       name: "model",
-      type: "MastraLanguageModel",
+      type: "MastraModelConfig",
       description: "Model configuration for the detection agent",
       isOptional: false,
     },
     {
       name: "strategy",
       type: "'block' | 'warn' | 'filter' | 'redact'",
-      description:
-        "Strategy when system prompts are detected: 'block' rejects with error, 'warn' logs warning but allows through, 'filter' removes flagged messages, 'redact' replaces with redacted versions",
+      description: "Strategy when system prompts are detected: 'block' rejects with error, 'warn' logs warning but allows through, 'filter' removes flagged messages, 'redact' replaces with redacted versions",
       isOptional: true,
       default: "'redact'",
     },
@@ -64616,32 +64619,28 @@ const processor = new SystemPromptScrubber({
     {
       name: "includeDetections",
       type: "boolean",
-      description:
-        "Whether to include detection details in warnings. Useful for debugging and monitoring",
+      description: "Whether to include detection details in warnings. Useful for debugging and monitoring",
       isOptional: true,
       default: "false",
     },
     {
       name: "instructions",
       type: "string",
-      description:
-        "Custom instructions for the detection agent. If not provided, uses default instructions",
+      description: "Custom instructions for the detection agent. If not provided, uses default instructions",
       isOptional: true,
       default: "undefined",
     },
     {
       name: "redactionMethod",
       type: "'mask' | 'placeholder' | 'remove'",
-      description:
-        "Redaction method for system prompts: 'mask' replaces with asterisks, 'placeholder' replaces with placeholder text, 'remove' removes entirely",
+      description: "Redaction method for system prompts: 'mask' replaces with asterisks, 'placeholder' replaces with placeholder text, 'remove' removes entirely",
       isOptional: true,
       default: "'mask'",
     },
     {
       name: "placeholderText",
       type: "string",
-      description:
-        "Custom placeholder text for redaction when redactionMethod is 'placeholder'",
+      description: "Custom placeholder text for redaction when redactionMethod is 'placeholder'",
       isOptional: true,
       default: "'[SYSTEM_PROMPT]'",
     },
@@ -64661,15 +64660,13 @@ const processor = new SystemPromptScrubber({
     {
       name: "processOutputStream",
       type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null>",
-      description:
-        "Processes streaming output parts to detect and handle system prompts during streaming",
+      description: "Processes streaming output parts to detect and handle system prompts during streaming",
       isOptional: false,
     },
     {
       name: "processOutputResult",
       type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }) => Promise<MastraMessageV2[]>",
-      description:
-        "Processes final output results to detect and handle system prompts in non-streaming scenarios",
+      description: "Processes final output results to detect and handle system prompts in non-streaming scenarios",
       isOptional: false,
     },
   ]}
@@ -64677,38 +64674,41 @@ const processor = new SystemPromptScrubber({
 
 ## Extended usage example
 
+When using `SystemPromptScrubber` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the scrubber, reducing the number of LLM calls required for detection.
+
 ```typescript title="src/mastra/agents/scrubbed-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
-import { SystemPromptScrubber } from "@mastra/core/processors";
+import { BatchPartsProcessor, SystemPromptScrubber } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "scrubbed-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   outputProcessors: [
+    // Batch stream parts first to reduce LLM calls
+    new BatchPartsProcessor({
+      batchSize: 10,
+    }),
+    // Then apply system prompt detection on batched content
     new SystemPromptScrubber({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       strategy: "redact",
       customPatterns: ["system prompt", "internal instructions"],
       includeDetections: true,
-      instructions:
-        "Detect and redact system prompts, internal instructions, and security-sensitive content",
       redactionMethod: "placeholder",
-      placeholderText: "[REDACTED]",
+      placeholderText: "[REDACTED]"
     }),
-  ],
+  ]
 });
 ```
 
 ## Related
 
-- [Input Processors](/docs/agents/guardrails)
-- [Output Processors](/docs/agents/guardrails)
+- [Guardrails](/docs/agents/guardrails)
 
 
 ---
-title: "Reference: TokenLimiterProcessor | Processors | Mastra Docs"
+title: "Reference: Token Limiter Processor | Processors | Mastra Docs"
 description: "Documentation for the TokenLimiterProcessor in Mastra, which limits the number of tokens in AI responses."
 ---
 
@@ -64725,7 +64725,7 @@ import { TokenLimiterProcessor } from "@mastra/core/processors";
 const processor = new TokenLimiterProcessor({
   limit: 1000,
   strategy: "truncate",
-  countMode: "cumulative",
+  countMode: "cumulative"
 });
 ```
 
@@ -64736,8 +64736,7 @@ const processor = new TokenLimiterProcessor({
     {
       name: "options",
       type: "number | Options",
-      description:
-        "Either a simple number for token limit, or configuration options object",
+      description: "Either a simple number for token limit, or configuration options object",
       isOptional: false,
     },
   ]}
@@ -64756,24 +64755,21 @@ const processor = new TokenLimiterProcessor({
     {
       name: "encoding",
       type: "TiktokenBPE",
-      description:
-        "Optional encoding to use. Defaults to o200k_base which is used by gpt-4o",
+      description: "Optional encoding to use. Defaults to o200k_base which is used by gpt-4o",
       isOptional: true,
       default: "o200k_base",
     },
     {
       name: "strategy",
       type: "'truncate' | 'abort'",
-      description:
-        "Strategy when token limit is reached: 'truncate' stops emitting chunks, 'abort' calls abort() to stop the stream",
+      description: "Strategy when token limit is reached: 'truncate' stops emitting chunks, 'abort' calls abort() to stop the stream",
       isOptional: true,
       default: "'truncate'",
     },
     {
       name: "countMode",
       type: "'cumulative' | 'part'",
-      description:
-        "Whether to count tokens from the beginning of the stream or just the current part: 'cumulative' counts all tokens from start, 'part' only counts tokens in current part",
+      description: "Whether to count tokens from the beginning of the stream or just the current part: 'cumulative' counts all tokens from start, 'part' only counts tokens in current part",
       isOptional: true,
       default: "'cumulative'",
     },
@@ -64793,22 +64789,19 @@ const processor = new TokenLimiterProcessor({
     {
       name: "processOutputStream",
       type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never }) => Promise<ChunkType | null>",
-      description:
-        "Processes streaming output parts to limit token count during streaming",
+      description: "Processes streaming output parts to limit token count during streaming",
       isOptional: false,
     },
     {
       name: "processOutputResult",
       type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }) => Promise<MastraMessageV2[]>",
-      description:
-        "Processes final output results to limit token count in non-streaming scenarios",
+      description: "Processes final output results to limit token count in non-streaming scenarios",
       isOptional: false,
     },
     {
       name: "reset",
       type: "() => void",
-      description:
-        "Reset the token counter (useful for testing or reusing the processor)",
+      description: "Reset the token counter (useful for testing or reusing the processor)",
       isOptional: false,
     },
     {
@@ -64829,32 +64822,30 @@ const processor = new TokenLimiterProcessor({
 ## Extended usage example
 
 ```typescript title="src/mastra/agents/limited-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { TokenLimiterProcessor } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "limited-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   outputProcessors: [
     new TokenLimiterProcessor({
       limit: 1000,
       strategy: "truncate",
-      countMode: "cumulative",
-    }),
-  ],
+      countMode: "cumulative"
+    })
+  ]
 });
 ```
 
 ## Related
 
-- [Input Processors](/docs/agents/guardrails)
-- [Output Processors](/docs/agents/guardrails)
+- [Guardrails](/docs/agents/guardrails)
 
 
 ---
-title: "Reference: UnicodeNormalizer | Processors | Mastra Docs"
+title: "Reference: Unicode Normalizer | Processors | Mastra Docs"
 description: "Documentation for the UnicodeNormalizer in Mastra, which normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters."
 ---
 
@@ -64870,7 +64861,7 @@ import { UnicodeNormalizer } from "@mastra/core/processors";
 
 const processor = new UnicodeNormalizer({
   stripControlChars: true,
-  collapseWhitespace: true,
+  collapseWhitespace: true
 });
 ```
 
@@ -64894,24 +64885,21 @@ const processor = new UnicodeNormalizer({
     {
       name: "stripControlChars",
       type: "boolean",
-      description:
-        "Whether to strip control characters. When enabled, removes control characters except \t, \n, \r",
+      description: "Whether to strip control characters. When enabled, removes control characters except \t, \n, \r",
       isOptional: true,
       default: "false",
     },
     {
       name: "preserveEmojis",
       type: "boolean",
-      description:
-        "Whether to preserve emojis. When disabled, emojis may be removed if they contain control characters",
+      description: "Whether to preserve emojis. When disabled, emojis may be removed if they contain control characters",
       isOptional: true,
       default: "true",
     },
     {
       name: "collapseWhitespace",
       type: "boolean",
-      description:
-        "Whether to collapse consecutive whitespace. When enabled, multiple spaces/tabs/newlines are collapsed to single instances",
+      description: "Whether to collapse consecutive whitespace. When enabled, multiple spaces/tabs/newlines are collapsed to single instances",
       isOptional: true,
       default: "true",
     },
@@ -64944,31 +64932,32 @@ const processor = new UnicodeNormalizer({
   ]}
 />
 
+
 ## Extended usage example
 
 ```typescript title="src/mastra/agents/normalized-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { UnicodeNormalizer } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "normalized-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new UnicodeNormalizer({
       stripControlChars: true,
       preserveEmojis: true,
       collapseWhitespace: true,
-      trim: true,
-    }),
-  ],
+      trim: true
+    })
+  ]
 });
 ```
 
+
 ## Related
 
-- [Input Processors](/docs/agents/guardrails)
+- [Guardrails](/docs/agents/guardrails)
 
 
 ---
@@ -65628,7 +65617,7 @@ whereDocument: { "$contains": "API documentation" }
     ### Runtime Configuration Override
 
     ```typescript
-    import { RuntimeContext } from '@mastra/core/runtime-context';
+    import { RequestContext } from '@mastra/core/request-context';
 
     // Initial configuration
     const vectorTool = createVectorQueryTool({
@@ -65643,8 +65632,8 @@ whereDocument: { "$contains": "API documentation" }
     });
 
     // Override at runtime
-    const runtimeContext = new RuntimeContext();
-    runtimeContext.set('databaseConfig', {
+    const requestContext = new RequestContext();
+    requestContext.set('databaseConfig', {
       pinecone: {
         namespace: 'production'
       }
@@ -65653,7 +65642,7 @@ whereDocument: { "$contains": "API documentation" }
     await vectorTool.execute({
       context: { queryText: 'search query' },
       mastra,
-      runtimeContext
+      requestContext
     });
     ```
 
@@ -69821,11 +69810,11 @@ Function: `({ run, results }) => any`
       description: "Unique identifier for this scoring run.",
     },
     {
-      name: "run.runtimeContext",
+      name: "run.requestContext",
       type: "object",
       required: false,
       description:
-        "Runtime context from the agent or workflow step being evaluated (optional).",
+        "Request Context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results",
@@ -69902,11 +69891,11 @@ Function: `({ run, results }) => any`
       description: "Unique identifier for this scoring run.",
     },
     {
-      name: "run.runtimeContext",
+      name: "run.requestContext",
       type: "object",
       required: false,
       description:
-        "Runtime context from the agent or workflow step being evaluated (optional).",
+        "Request Context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results.preprocessStepResult",
@@ -69983,11 +69972,11 @@ Function: `({ run, results }) => number`
       description: "Unique identifier for this scoring run.",
     },
     {
-      name: "run.runtimeContext",
+      name: "run.requestContext",
       type: "object",
       required: false,
       description:
-        "Runtime context from the agent or workflow step being evaluated (optional).",
+        "Request Context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results.preprocessStepResult",
@@ -70085,11 +70074,11 @@ Function: `({ run, results, score }) => string`
       description: "Unique identifier for this scoring run.",
     },
     {
-      name: "run.runtimeContext",
+      name: "run.requestContext",
       type: "object",
       required: false,
       description:
-        "Runtime context from the agent or workflow step being evaluated (optional).",
+        "Request Context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results.preprocessStepResult",
@@ -70913,7 +70902,7 @@ const result = await scorer.run({
   input: "What is machine learning?",
   output: "Machine learning is a subset of artificial intelligence...",
   runId: "optional-run-id",
-  runtimeContext: {
+  requestContext: {
     /* optional context */
   },
 });
@@ -70944,11 +70933,11 @@ const result = await scorer.run({
       description: "Optional unique identifier for this scoring run.",
     },
     {
-      name: "runtimeContext",
+      name: "requestContext",
       type: "any",
       required: false,
       description:
-        "Optional runtime context from the agent or workflow step being evaluated.",
+        "Optional request context from the agent or workflow step being evaluated.",
     },
     {
       name: "groundTruth",
@@ -72654,9 +72643,9 @@ console.log(`Processed ${result.summary.totalItems} items`);
       isOptional: true,
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      description: "Runtime context to pass to the target during execution.",
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request Context to pass to the target during execution.",
       isOptional: true,
     },
     {
@@ -77695,11 +77684,11 @@ const aiSdkStream = await agent.stream("message for agent", {
         "Unique ID for this generation run. Useful for tracking and debugging purposes.",
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
     {
       name: "tracingContext",
@@ -78288,11 +78277,11 @@ await agent.streamLegacy("message for agent");
         "Unique ID for this generation run. Useful for tracking and debugging purposes.",
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
     {
       name: "maxTokens",
@@ -78624,9 +78613,9 @@ if (result!.status === "suspended") {
       isOptional: true,
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      description: "Runtime context data to use during workflow execution",
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request Context data to use during workflow execution",
       isOptional: true,
     },
     {
@@ -78735,9 +78724,9 @@ const { stream } = await run.stream({
       isOptional: true,
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      description: "Runtime context data to use during workflow execution",
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request Context data to use during workflow execution",
       isOptional: true,
     },
     {
@@ -78876,9 +78865,9 @@ const stream = run.streamVNext({
       isOptional: true,
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      description: "Runtime context data to use during workflow execution",
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request Context data to use during workflow execution",
       isOptional: true,
     },
     {
@@ -79613,7 +79602,7 @@ export const tool = createTool({
       name: "execute",
       type: "function",
       description:
-        "The function that contains the tool's logic. It receives an object with `context` (the parsed input based on `inputSchema`), `runtimeContext`, `tracingContext`, and an object containing `abortSignal`.",
+        "The function that contains the tool's logic. It receives an object with `context` (the parsed input based on `inputSchema`), `requestContext`, `tracingContext`, and an object containing `abortSignal`.",
       isOptional: false,
       properties: [
         {
@@ -79628,11 +79617,11 @@ export const tool = createTool({
         {
           parameters: [
             {
-              name: "runtimeContext",
-              type: "RuntimeContext",
+              name: "requestContext",
+              type: "RequestContext",
               isOptional: true,
               description:
-                "Runtime context for accessing shared state and dependencies",
+                "Request Context for accessing shared state and dependencies",
             },
           ],
         },
@@ -79681,7 +79670,7 @@ The `createTool()` function returns a `Tool` object.
 
 - [Tools Overview](/docs/tools-mcp/overview)
 - [Using Tools with Agents](/docs/agents/using-tools)
-- [Tool Runtime Context](/docs/tools-mcp/overview#using-runtimecontext)
+- [Tool Request Context](/docs/tools-mcp/overview#using-requestcontext)
 - [Advanced Tool Usage](/docs/tools-mcp/advanced-usage)
 
 
@@ -79863,7 +79852,7 @@ const graphTool = createGraphRAGTool({
 :::note
 
 **Parameter Requirements:** Most fields can be set at creation as defaults.
-Some fields can be overridden at runtime via the runtime context or input. If
+Some fields can be overridden at runtime via the request context or input. If
 a required field is missing from both creation and runtime, an error will be
 thrown. Note that `model`, `id`, and `description` can only be set at creation
 time.
@@ -79911,7 +79900,7 @@ time.
       name: "enableFilter",
       type: "boolean",
       description:
-        "Enable filtering of results based on metadata. (Set at creation only, but will be automatically enabled if a filter is provided in the runtime context.)",
+        "Enable filtering of results based on metadata. (Set at creation only, but will be automatically enabled if a filter is provided in the request context.)",
       isOptional: true,
       defaultValue: "false",
     },
@@ -80049,7 +80038,7 @@ const graphTool = createGraphRAGTool({
 
 This example shows how to customize the tool description for a specific use case while maintaining its core purpose of relationship analysis.
 
-## Example: Using Runtime Context
+## Example: Using Request Context
 
 ```typescript
 const graphTool = createGraphRAGTool({
@@ -80059,34 +80048,34 @@ const graphTool = createGraphRAGTool({
 });
 ```
 
-When using runtime context, provide required parameters at execution time via the runtime context:
+When using request context, provide required parameters at execution time via the request context:
 
 ```typescript
-const runtimeContext = new RuntimeContext<{
+const requestContext = new RequestContext<{
   vectorStoreName: string;
   indexName: string;
   topK: number;
   filter: any;
 }>();
-runtimeContext.set("vectorStoreName", "my-store");
-runtimeContext.set("indexName", "my-index");
-runtimeContext.set("topK", 5);
-runtimeContext.set("filter", { category: "docs" });
-runtimeContext.set("randomWalkSteps", 100);
-runtimeContext.set("restartProb", 0.15);
+requestContext.set("vectorStoreName", "my-store");
+requestContext.set("indexName", "my-index");
+requestContext.set("topK", 5);
+requestContext.set("filter", { category: "docs" });
+requestContext.set("randomWalkSteps", 100);
+requestContext.set("restartProb", 0.15);
 
 const response = await agent.generate(
   "Find documentation from the knowledge base.",
   {
-    runtimeContext,
+    requestContext,
   },
 );
 ```
 
-For more information on runtime context, please see:
+For more information on request context, please see:
 
-- [Agent Runtime Context](/docs/server-db/runtime-context)
-- [Tool Runtime Context](/docs/tools-mcp/overview#using-runtimecontext)
+- [Agent Request Context](/docs/server-db/request-context)
+- [Tool Request Context](/docs/tools-mcp/overview#using-requestcontext)
 
 ## Related
 
@@ -82059,7 +82048,7 @@ const queryTool = createVectorQueryTool({
 :::note
 
 **Parameter Requirements:** Most fields can be set at creation as defaults.
-Some fields can be overridden at runtime via the runtime context or input. If
+Some fields can be overridden at runtime via the request context or input. If
 a required field is missing from both creation and runtime, an error will be
 thrown. Note that `model`, `id`, and `description` can only be set at creation
 time.
@@ -82107,7 +82096,7 @@ time.
       name: "enableFilter",
       type: "boolean",
       description:
-        "Enable filtering of results based on metadata. (Set at creation only, but will be automatically enabled if a filter is provided in the runtime context.)",
+        "Enable filtering of results based on metadata. (Set at creation only, but will be automatically enabled if a filter is provided in the request context.)",
       isOptional: true,
       defaultValue: "false",
     },
@@ -82527,7 +82516,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
 You can override database configurations at runtime to adapt to different scenarios:
 
 ```typescript
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
@@ -82541,15 +82530,15 @@ const queryTool = createVectorQueryTool({
 });
 
 // Override at runtime
-const runtimeContext = new RuntimeContext();
-runtimeContext.set("databaseConfig", {
+const requestContext = new RequestContext();
+requestContext.set("databaseConfig", {
   pinecone: {
     namespace: "production", // Switch to production namespace
   },
 });
 
 const response = await agent.generate("Find information about deployment", {
-  runtimeContext,
+  requestContext,
 });
 ```
 
@@ -82559,7 +82548,7 @@ This approach allows you to:
 - Adjust performance parameters based on load
 - Apply different filtering strategies per request
 
-## Example: Using Runtime Context
+## Example: Using Request Context
 
 ```typescript
 const queryTool = createVectorQueryTool({
@@ -82569,37 +82558,37 @@ const queryTool = createVectorQueryTool({
 });
 ```
 
-When using runtime context, provide required parameters at execution time via the runtime context:
+When using request context, provide required parameters at execution time via the request context:
 
 ```typescript
-const runtimeContext = new RuntimeContext<{
+const requestContext = new RequestContext<{
   vectorStoreName: string;
   indexName: string;
   topK: number;
   filter: VectorFilter;
   databaseConfig: DatabaseConfig;
 }>();
-runtimeContext.set("vectorStoreName", "my-store");
-runtimeContext.set("indexName", "my-index");
-runtimeContext.set("topK", 5);
-runtimeContext.set("filter", { category: "docs" });
-runtimeContext.set("databaseConfig", {
+requestContext.set("vectorStoreName", "my-store");
+requestContext.set("indexName", "my-index");
+requestContext.set("topK", 5);
+requestContext.set("filter", { category: "docs" });
+requestContext.set("databaseConfig", {
   pinecone: { namespace: "runtime-namespace" },
 });
-runtimeContext.set("model", openai.embedding("text-embedding-3-small"));
+requestContext.set("model", openai.embedding("text-embedding-3-small"));
 
 const response = await agent.generate(
   "Find documentation from the knowledge base.",
   {
-    runtimeContext,
+    requestContext,
   },
 );
 ```
 
-For more information on runtime context, please see:
+For more information on request context, please see:
 
-- [Agent Runtime Context](/docs/server-db/runtime-context)
-- [Tool Runtime Context](/docs/tools-mcp/overview#using-runtimecontext)
+- [Agent Request Context](/docs/server-db/request-context)
+- [Tool Request Context](/docs/tools-mcp/overview#using-requestcontext)
 
 ## Usage Without a Mastra Server
 
@@ -82607,7 +82596,7 @@ The tool can be used by itself to retrieve documents matching a query:
 
 ```typescript copy showLineNumbers title="src/index.ts"
 import { openai } from "@ai-sdk/openai";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 import { createVectorQueryTool } from "@mastra/rag";
 import { PgVector } from "@mastra/pg";
 
@@ -82622,10 +82611,10 @@ const vectorQueryTool = createVectorQueryTool({
   model: openai.embedding("text-embedding-3-small"),
 });
 
-const runtimeContext = new RuntimeContext();
+const requestContext = new RequestContext();
 const queryResult = await vectorQueryTool.execute({
   context: { queryText: "foo", topK: 1 },
-  runtimeContext,
+  requestContext,
 });
 
 console.log(queryResult.sources);
@@ -88629,9 +88618,9 @@ Establishes a connection to the Gemini Live API. Must be called before using spe
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
+      name: "requestContext",
       type: "object",
-      description: "Optional runtime context for the connection.",
+      description: "Optional request context for the connection.",
       isOptional: true,
     },
     {
@@ -92758,9 +92747,9 @@ if (result.status === "suspended") {
       isOptional: true,
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      description: "Runtime context data to use when resuming",
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request Context data to use when resuming",
       isOptional: true,
     },
     {
@@ -92904,9 +92893,9 @@ const result = await run.start({
       isOptional: true,
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      description: "Runtime context data to use during workflow execution",
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request Context data to use during workflow execution",
       isOptional: true,
     },
     {
@@ -92999,18 +92988,18 @@ const result = await run.start({
 ## Extended usage example
 
 ```typescript showLineNumbers copy
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 
 const run = await workflow.createRunAsync();
 
-const runtimeContext = new RuntimeContext();
-runtimeContext.set("variable", false);
+const requestContext = new RequestContext();
+requestContext.set("variable", false);
 
 const result = await run.start({
   inputData: {
     value: "initial data",
   },
-  runtimeContext,
+  requestContext,
 });
 ```
 
@@ -93339,11 +93328,11 @@ const step1 = createStep({
       description: "Current run id",
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
     {
       name: "runCount",

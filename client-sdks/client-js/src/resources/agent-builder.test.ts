@@ -286,19 +286,19 @@ describe('AgentBuilder Streaming Methods (fetch-mocked)', () => {
     expect(body.resumeData).toEqual({ userInput: 'proceed' });
   });
 
-  it('resumeStream passes runtimeContext correctly', async () => {
-    const runtimeContext = { userId: 'user-123', tenantId: 'tenant-456' };
+  it('resumeStream passes requestContext correctly', async () => {
+    const requestContext = { userId: 'user-123', tenantId: 'tenant-456' };
 
     await agentBuilder.resumeStream({
       runId: 'run-context',
       step: 'step1',
-      runtimeContext,
+      requestContext,
     });
 
     const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/resume-stream?runId='));
     expect(call).toBeTruthy();
     const options = call[1];
     const body = JSON.parse(options.body);
-    expect(body.runtimeContext).toEqual(runtimeContext);
+    expect(body.requestContext).toEqual(requestContext);
   });
 });

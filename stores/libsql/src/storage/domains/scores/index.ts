@@ -118,7 +118,7 @@ export class ScoresLibSQL extends ScoresStorage {
     const inputValue = safelyParseJSON(row.input ?? '{}');
     const outputValue = safelyParseJSON(row.output ?? '{}');
     const additionalLLMContextValue = row.additionalLLMContext ? safelyParseJSON(row.additionalLLMContext) : null;
-    const runtimeContextValue = row.runtimeContext ? safelyParseJSON(row.runtimeContext) : null;
+    const requestContextValue = row.requestContext ? safelyParseJSON(row.requestContext) : null;
     const metadataValue = row.metadata ? safelyParseJSON(row.metadata) : null;
     const entityValue = row.entity ? safelyParseJSON(row.entity) : null;
     const preprocessStepResultValue = row.preprocessStepResult ? safelyParseJSON(row.preprocessStepResult) : null;
@@ -142,7 +142,7 @@ export class ScoresLibSQL extends ScoresStorage {
       input: inputValue,
       output: outputValue,
       additionalContext: additionalLLMContextValue,
-      runtimeContext: runtimeContextValue,
+      requestContext: requestContextValue,
       entityType: row.entityType,
       entity: entityValue,
       entityId: row.entityId,

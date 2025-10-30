@@ -922,7 +922,7 @@ createTestSuite(new CloudflareStore(TEST_CONFIG));
 //         suspendedPaths: {},
 //         status: 'success',
 //         serializedStepGraph: [],
-//         runtimeContext: {},
+//         requestContext: {},
 //       };
 
 //       await store.persistWorkflowSnapshot({

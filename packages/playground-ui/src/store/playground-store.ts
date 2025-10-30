@@ -2,15 +2,15 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 interface PlaygroundStore {
-  runtimeContext: Record<string, any>;
-  setRuntimeContext: (runtimeContext: Record<string, any>) => void;
+  requestContext: Record<string, any>;
+  setRequestContext: (requestContext: Record<string, any>) => void;
 }
 
 export const usePlaygroundStore = create<PlaygroundStore>()(
   persist(
     set => ({
-      runtimeContext: {},
-      setRuntimeContext: runtimeContext => set({ runtimeContext }),
+      requestContext: {},
+      setRequestContext: requestContext => set({ requestContext }),
     }),
     {
       name: 'mastra-playground-store',
