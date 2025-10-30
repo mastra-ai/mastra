@@ -46,7 +46,7 @@ const createTestMessage = (
   type: 'text' | 'tool-call' | 'tool-result' = 'text',
 ): MastraDBMessage => {
   messageCounter++;
-  
+
   // Convert content to MastraDBMessage format
   let parts: (TextPart | ToolCallPart | ToolResultPart)[];
   if (typeof content === 'string') {
@@ -54,7 +54,7 @@ const createTestMessage = (
   } else {
     parts = content;
   }
-  
+
   return {
     id: randomUUID(),
     threadId,
