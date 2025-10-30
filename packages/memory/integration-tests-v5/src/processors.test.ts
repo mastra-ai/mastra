@@ -3,7 +3,7 @@ import { afterEach } from 'node:test';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { openai } from '@ai-sdk/openai';
-import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { MastraMessageV2, MessageListInput } from '@mastra/core/agent';
 import { Agent, MessageList } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { MemoryProcessorOpts } from '@mastra/core/memory';
@@ -26,7 +26,7 @@ function v2ToCoreMessages(messages: MastraMessageV2[] | UIMessage[]): CoreMessag
 }
 
 async function applyInputProcessors(
-  messages: CoreMessage[],
+  messages: MessageListInput,
   processors: InputProcessor[],
   threadId: string,
   resourceId: string,
@@ -110,7 +110,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result = await applyInputProcessors(
-      v2ToCoreMessages(queryResult.uiMessages),
+      queryResult.uiMessages,
       [new TokenLimiter(250)], // Limit to 250 tokens
       thread.id,
       resourceId,
