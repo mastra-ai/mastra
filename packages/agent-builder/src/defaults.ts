@@ -265,7 +265,7 @@ const fetchWeather = createStep({
   }),
   outputSchema: forecastSchema,
   execute: async (inputData) => {
-    if (!input) {
+    if (!inputData) {
       throw new Error('Input data not found');
     }
 

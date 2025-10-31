@@ -1540,13 +1540,7 @@ export class GeminiLiveVoice extends MastraVoice<
         this.log('Executing tool', { toolName, toolArgs });
 
         // Execute with proper context
-        result = await tool.execute(
-          { context: toolArgs, requestContext: this.requestContext },
-          {
-            toolCallId: toolId,
-            messages: [],
-          },
-        );
+        result = await tool.execute(toolArgs, { requestContext: this.requestContext });
 
         this.log('Tool executed successfully', { toolName, result });
       } else {
