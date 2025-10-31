@@ -692,11 +692,6 @@ export async function createNetworkLoop({
         runId,
       });
 
-      // await emitter.emit('watch-v2', {
-      //     type: 'tool-call-streaming-start',
-      //     ...toolData,
-      // });
-
       const stream = run.streamVNext({
         inputData: input,
         requestContext: requestContext,

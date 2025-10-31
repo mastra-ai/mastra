@@ -124,6 +124,47 @@ const agent = new Agent({
 
 If you're not using semantic recall (it's disabled by default), no changes are needed.
 
+### Removed: Legacy Watch Events (Client SDK)
+
+**Breaking Changes:**
+
+- The `.watch()` method has been removed from the client-js SDK's `Workflow` and `AgentBuilder` classes
+- The `/api/workflows/:workflowId/watch` and `/api/agent-builder/:actionId/watch` HTTP endpoints have been removed
+- Server-side code using `watch-v2` event types should update to the simplified `watch` API
+
+**Why this change?**
+
+- Simplify the workflow streaming API by consolidating on one implementation
+- Remove legacy v1 event system that was superseded by v2
+- Improve performance by eliminating duplicate event handling code
+- Reduce API surface area and maintenance burden
+
+**Migration:**
+
+If you were using `run.watch()` from `@mastra/client-js`, switch to using `run.stream()`:
+
+```typescript
+// Before (v0.22 and earlier)
+const workflow = mastraClient.getWorkflow('my-workflow');
+const run = await workflow.createRunAsync();
+
+await run.watch((event) => {
+  console.log('Step completed:', event);
+});
+
+// After (v0.23+)
+const workflow = mastraClient.getWorkflow('my-workflow');
+const run = await workflow.createRunAsync();
+
+const stream = await run.stream({
+  inputData: { /* your input */ }
+});
+
+for await (const chunk of stream) {
+  console.log('Step completed:', chunk);
+}
+```
+
 ### Changed: Message Format
 
 An internal intermediary format has been removed. Messages now convert directly between `MastraMessageV2` (storage format) and AI SDK v5 `UIMessage`, simplifying the architecture and improving accuracy.
