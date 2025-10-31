@@ -1,4 +1,5 @@
-import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from 'ai';
+import type { UIMessage as AIV4UIMessage } from 'ai';
+import type { CoreMessageV4 } from '@internal/external-types';
 import { isToolUIPart } from 'ai-v5';
 import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from 'ai-v5';
 import { describe, expect, it } from 'vitest';
@@ -30,7 +31,7 @@ describe('MessageList V5 Support', () => {
       });
 
       it('should detect v4 messages with result in tool-result parts', () => {
-        const v4Message: AIV4CoreMessage = {
+        const v4Message: CoreMessageV4 = {
           role: 'tool',
           content: [
             {
@@ -62,7 +63,7 @@ describe('MessageList V5 Support', () => {
       });
 
       it('should detect v4 messages with args in tool-call parts', () => {
-        const v4Message: AIV4CoreMessage = {
+        const v4Message: CoreMessageV4 = {
           role: 'assistant',
           content: [
             {
@@ -93,7 +94,7 @@ describe('MessageList V5 Support', () => {
       });
 
       it('should detect v4 messages with mimeType in file parts', () => {
-        const v4Message: AIV4CoreMessage = {
+        const v4Message: CoreMessageV4 = {
           role: 'user',
           content: [
             {
@@ -108,7 +109,7 @@ describe('MessageList V5 Support', () => {
       });
 
       it('should detect v4 messages with experimental_providerMetadata', () => {
-        const v4Message: AIV4CoreMessage = {
+        const v4Message: CoreMessageV4 = {
           role: 'assistant',
           content: 'Hello',
           experimental_providerMetadata: { custom: { stuff: 'data' } }, // v4-only property
@@ -118,7 +119,7 @@ describe('MessageList V5 Support', () => {
       });
 
       it('should detect v4 messages with redacted-reasoning type', () => {
-        const v4Message: AIV4CoreMessage = {
+        const v4Message: CoreMessageV4 = {
           role: 'assistant',
           content: [
             {
@@ -132,7 +133,7 @@ describe('MessageList V5 Support', () => {
       });
 
       it('should treat identical messages as v5-compatible', () => {
-        const identicalMessage: AIV4CoreMessage | AIV5ModelMessage = {
+        const identicalMessage: CoreMessageV4 | AIV5ModelMessage = {
           role: 'user',
           content: 'Hello world', // string content is identical in both
         };
@@ -142,7 +143,7 @@ describe('MessageList V5 Support', () => {
       });
 
       it('should treat messages with no distinguishing features as v5-compatible', () => {
-        const simpleMessage: AIV4CoreMessage | AIV5ModelMessage = {
+        const simpleMessage: CoreMessageV4 | AIV5ModelMessage = {
           role: 'assistant',
           content: [
             {
@@ -445,7 +446,7 @@ describe('MessageList V5 Support', () => {
 
       it.skip('should convert tool calls from v4 to v5 format', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v4CoreMessage: AIV4CoreMessage = {
+        const v4CoreMessage: CoreMessageV4 = {
           role: 'assistant',
           content: [
             {
@@ -721,7 +722,7 @@ describe('MessageList V5 Support', () => {
     it.skip('should handle v4 CoreMessage with tools → v5 with correct tool format', () => {
       const list = new MessageList({ threadId, resourceId });
 
-      const v4CoreWithTool: AIV4CoreMessage = {
+      const v4CoreWithTool: CoreMessageV4 = {
         role: 'assistant',
         content: [
           {

@@ -1,7 +1,8 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
 import slugify from '@sindresorhus/slugify';
-import type { CoreMessage, StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
+import type { StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
+import type { CoreMessageV4 as CoreMessage } from '@internal/external-types';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';

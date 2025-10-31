@@ -1,4 +1,4 @@
-import type { CoreMessage } from 'ai';
+import type { CoreMessageV4 as CoreMessage } from '@internal/external-types';
 import type { ModelMessage } from 'ai-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../../error';
 

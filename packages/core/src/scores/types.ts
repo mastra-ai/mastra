@@ -1,4 +1,4 @@
-import type { CoreMessage, CoreSystemMessage } from 'ai';
+import type { CoreMessageV4 as CoreMessage, CoreSystemMessageV4 as CoreSystemMessage } from '@internal/external-types';
 import { z } from 'zod';
 import type { UIMessageWithMetadata } from '../agent';
 import { AISpanType } from '../ai-tracing';

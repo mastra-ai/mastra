@@ -1,5 +1,6 @@
 import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
-import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserContent } from 'ai';
+import type { AssistantContent, EmbeddingModel, ToolContent, UserContent } from 'ai';
+import type { CoreMessageV4 as CoreMessage } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 
 export type { MastraMessageV2 } from '../agent';

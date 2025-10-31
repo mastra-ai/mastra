@@ -1,7 +1,5 @@
 import type {
   CoreAssistantMessage as AiCoreAssistantMessage,
-  CoreMessage as AiCoreMessage,
-  CoreSystemMessage as AiCoreSystemMessage,
   CoreToolMessage as AiCoreToolMessage,
   CoreUserMessage as AiCoreUserMessage,
   EmbedManyResult as AiEmbedManyResult,
@@ -14,6 +12,10 @@ import type {
   StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
 } from 'ai';
+import type {
+  CoreMessageV4 as AiCoreMessage,
+  CoreSystemMessageV4 as AiCoreSystemMessage,
+} from '@internal/external-types';
 import type { SystemModelMessage } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';

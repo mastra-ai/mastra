@@ -1,6 +1,14 @@
-export type { Tool, ToolExecutionOptions, Schema, LanguageModelV1 } from 'ai-v4';
+export type {
+  Tool,
+  ToolExecutionOptions,
+  Schema,
+  LanguageModelV1,
+  CoreSystemMessage as CoreSystemMessageV4,
+} from 'ai-v4';
 export type { Tool as ToolV5, ToolCallOptions, FlexibleSchema } from '@ai-sdk/provider-utils';
 export type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+export type { CoreMessage as CoreMessageV4 } from 'ai-v4';
+export type { CoreMessage as CoreMessageV5 } from 'ai-v5';
 
 /**
  * Structural type to accept provider-defined tools from external packages.
