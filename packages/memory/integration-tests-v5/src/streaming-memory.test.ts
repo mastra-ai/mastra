@@ -5,10 +5,9 @@ import { createServer } from 'node:net';
 import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { useChat } from '@ai-sdk/react';
-import { Agent } from '@mastra/core/agent';
+import { Agent, MessageList } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import type { UIMessage } from 'ai';
 import { DefaultChatTransport, isToolUIPart } from 'ai';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
@@ -264,7 +263,10 @@ describe('Memory Streaming Tests', () => {
       await weatherAgent.generate(`LA weather`, { threadId, resourceId });
 
       const agentMemory = (await weatherAgent.getMemory())!;
-      const initialMessages = (await agentMemory.query({ threadId })).messages;
+      const dbMessages = (await agentMemory.query({ threadId })).messages;
+      const initialMessages = dbMessages.map((m) =>
+        MessageList.mastraDBMessageToAIV5UIMessage(m),
+      );
       const state = { clipboard: '' };
       const { result } = renderHook(() => {
         const chat = useChat({
@@ -280,7 +282,7 @@ describe('Memory Streaming Tests', () => {
               };
             },
           }),
-          messages: initialMessages as UIMessage[],
+          messages: initialMessages,
           onFinish(message) {
             console.log('useChat finished', message);
           },
