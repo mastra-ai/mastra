@@ -91,7 +91,7 @@ Workflows can be composed using a number of different methods. The method you ch
 
 ## Workflow state
 
-Workflow state lets you share values across steps without passing them through every step’s inputSchema and outputSchema. All state values are defined in the workflow’s stateSchema, but each step only declares the values it needs. To set initial values, use initialState when running the workflow. See Running workflows for details.
+Workflow state lets you share values across steps without passing them through every step’s inputSchema and outputSchema. All state values are defined in the workflow’s stateSchema, but each step only declares the values it needs. To set initial values, use initialState when running the workflow.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
@@ -144,10 +144,6 @@ export const testWorkflow = createWorkflow({
   .then(step2)
   .commit();
 ```
-
-:::note
-Workflow state is currently supported only when using [Run.start()](/reference/workflows/run-methods/start). Support for `Run.stream()` will be added soon.
-:::
 
 ## Registering a workflow
 
