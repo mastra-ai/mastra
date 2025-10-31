@@ -51,14 +51,16 @@ const createTestThread = (title: string, metadata = {}) => ({
   updatedAt: new Date(),
 });
 
-const createTestMessage = (threadId: string, content: string, role: 'user' | 'assistant' = 'user'): MastraMessageV1 => {
+const createTestMessage = (threadId: string, content: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage => {
   messageCounter++;
   return {
     id: randomUUID(),
     threadId,
-    content,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text: content }],
+    },
     role,
-    type: 'text',
     createdAt: new Date(Date.now() + messageCounter * 1000),
     resourceId,
   };
@@ -187,13 +189,8 @@ describe('Working Memory Tests', () => {
         config: { lastMessages: 10 },
       });
 
-      // Debug: log the structure of retrieved messages
-      console.log('DEBUG: remembered.messages:', JSON.stringify(remembered.messages, null, 2));
-      console.log('DEBUG: remembered.messages[1]:', JSON.stringify(remembered.messages[1], null, 2));
-
       // Working memory tags should be stripped from the messages
       const content = getTextContent(remembered.messages[1]);
-      console.log('DEBUG: extracted content:', content);
       expect(content).not.toContain('<working_memory>');
       expect(content).toContain('Hello John!');
     });

@@ -670,8 +670,11 @@ ${workingMemory}`;
 
     const config = this.getMergedThreadConfig(memoryConfig);
 
+    // Convert messages to MastraDBMessage format if needed
+    const dbMessages = new MessageList().add(updatedMessages, 'memory').get.all.db();
+
     const result = await this.storage.saveMessages({
-      messages: new MessageList().add(updatedMessages, 'memory').get.all.db(),
+      messages: dbMessages,
     });
 
     if (this.vector && config.semanticRecall) {
