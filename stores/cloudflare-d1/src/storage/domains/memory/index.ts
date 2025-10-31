@@ -270,8 +270,8 @@ export class MemoryStorageD1 extends MemoryStorage {
       return {
         threads: [],
         total: 0,
-        page: limit > 0 ? Math.floor(offset / limit) : 0,
-        perPage: limit,
+        page,
+        perPage,
         hasMore: false,
       };
     }

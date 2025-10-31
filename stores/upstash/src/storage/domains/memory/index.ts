@@ -123,8 +123,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             resourceId,
-            page: limit > 0 ? Math.floor(offset / limit) : 0,
-            perPage: limit,
+            page,
+            perPage,
           },
         },
         error,
@@ -134,8 +134,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
       return {
         threads: [],
         total: 0,
-        page: limit > 0 ? Math.floor(offset / limit) : 0,
-        perPage: limit,
+        page,
+        perPage,
         hasMore: false,
       };
     }

@@ -688,7 +688,7 @@ export class MemoryMSSQL extends MemoryStorage {
       return {
         messages: [],
         total: 0,
-        page: errorPerPage === 0 ? 0 : Math.floor((page * perPage) / errorPerPage),
+        page,
         perPage: errorPerPage,
         hasMore: false,
       };

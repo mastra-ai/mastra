@@ -68,8 +68,8 @@ export async function listThreadsHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
     const resourceId = c.req.query('resourceId');
-    const offset = parseInt(c.req.query('offset') || '0', 10);
-    const limit = parseInt(c.req.query('limit') || '100', 10);
+    const page = parseInt(c.req.query('page') || '0', 10);
+    const perPage = parseInt(c.req.query('perPage') || '100', 10);
     const field = c.req.query('orderBy') as ThreadOrderBy | undefined;
     const direction = c.req.query('sortDirection') as ThreadSortDirection | undefined;
     const requestContext = c.get('requestContext');
@@ -95,8 +95,8 @@ export async function listThreadsHandler(c: Context) {
       mastra,
       agentId,
       resourceId,
-      offset,
-      limit,
+      page,
+      perPage,
       orderBy,
       requestContext,
     });

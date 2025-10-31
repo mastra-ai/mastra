@@ -74,8 +74,8 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
     it('should list messages with pagination', async () => {
       const page1 = await storage.listMessages({
         threadId: thread.id,
-        limit: 2,
-        offset: 0,
+        perPage: 2,
+        page: 0,
       });
 
       expect(page1.messages).toHaveLength(2);
@@ -86,8 +86,8 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
       const page2 = await storage.listMessages({
         threadId: thread.id,
-        limit: 2,
-        offset: 2,
+        perPage: 2,
+        page: 1,
       });
 
       expect(page2.messages).toHaveLength(2);
@@ -97,8 +97,8 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
       const page3 = await storage.listMessages({
         threadId: thread.id,
-        limit: 2,
-        offset: 4,
+        perPage: 2,
+        page: 2,
       });
 
       expect(page3.messages).toHaveLength(1);
@@ -325,8 +325,8 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           },
         ],
         orderBy: { field: 'createdAt', direction: 'ASC' },
-        limit: 3,
-        offset: 0,
+        perPage: 3,
+        page: 0,
       });
 
       // Pagination gets first 3 (1,2,3) + include adds remaining (4,5)
@@ -380,8 +380,8 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       const cutoffDate = new Date(now.getTime() + 5000);
       const result = await storage.listMessages({
         threadId: dateThread.id,
-        limit: 3,
-        offset: 0,
+        perPage: 3,
+        page: 0,
         filter: {
           dateRange: { start: cutoffDate },
         },
@@ -393,10 +393,10 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
     });
 
     describe('limit parameter', () => {
-      it('should use limit to restrict number of messages returned', async () => {
+      it('should use perPage to restrict number of messages returned', async () => {
         const result = await storage.listMessages({
           threadId: thread.id,
-          limit: 3,
+          perPage: 3,
         });
 
         expect(result.messages).toHaveLength(3);
@@ -406,7 +406,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.hasMore).toBe(true);
       });
 
-      it('should return ALL messages when limit is false', async () => {
+      it('should return ALL messages when perPage is false', async () => {
         // Create more messages to test the "get all" functionality
         const manyMessages = Array.from({ length: 50 }, (_, i) =>
           createSampleMessageV2({
@@ -420,7 +420,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
         const result = await storage.listMessages({
           threadId: thread.id,
-          limit: false,
+          perPage: false,
         });
 
         expect(result.messages).toHaveLength(55); // 5 original + 50 extra
@@ -429,11 +429,11 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.perPage).toBeGreaterThanOrEqual(55); // Should be a very large number
       });
 
-      it('should use offset to skip messages', async () => {
+      it('should use page to skip messages', async () => {
         const result = await storage.listMessages({
           threadId: thread.id,
-          limit: 2,
-          offset: 2, // Skip first 2 messages
+          perPage: 2,
+          page: 1, // Skip first page (first 2 messages)
         });
 
         expect(result.messages).toHaveLength(2);
@@ -441,27 +441,27 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.hasMore).toBe(true);
       });
 
-      it('should handle offset with limit for pagination', async () => {
-        // Page 1 (messages 0-1)
-        const page0 = await storage.listMessages({ threadId: thread.id, limit: 2, offset: 0 });
+      it('should handle page with perPage for pagination', async () => {
+        // Page 0 (messages 0-1)
+        const page0 = await storage.listMessages({ threadId: thread.id, perPage: 2, page: 0 });
         expect(page0.messages).toHaveLength(2);
         expect(page0.hasMore).toBe(true);
 
-        // Page 2 (messages 2-3)
-        const page1 = await storage.listMessages({ threadId: thread.id, limit: 2, offset: 2 });
+        // Page 1 (messages 2-3)
+        const page1 = await storage.listMessages({ threadId: thread.id, perPage: 2, page: 1 });
         expect(page1.messages).toHaveLength(2);
         expect(page1.hasMore).toBe(true);
 
-        // Page 3 (message 4)
-        const page2 = await storage.listMessages({ threadId: thread.id, limit: 2, offset: 4 });
+        // Page 2 (message 4)
+        const page2 = await storage.listMessages({ threadId: thread.id, perPage: 2, page: 2 });
         expect(page2.messages).toHaveLength(1);
         expect(page2.hasMore).toBe(false);
       });
 
-      it('should work with limit and include parameter', async () => {
+      it('should work with perPage and include parameter', async () => {
         const result = await storage.listMessages({
           threadId: thread.id,
-          limit: 2,
+          perPage: 2,
           orderBy: { field: 'createdAt', direction: 'ASC' },
           include: [
             {
@@ -476,7 +476,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 1', 'Message 2', 'Message 3']);
       });
 
-      it('should work with limit and date range', async () => {
+      it('should work with perPage and date range', async () => {
         const dateThread = createSampleThread();
         await storage.saveThread({ thread: dateThread });
 
@@ -493,7 +493,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         const cutoffDate = new Date(now.getTime() + 4000);
         const result = await storage.listMessages({
           threadId: dateThread.id,
-          limit: 3,
+          perPage: 3,
           filter: {
             dateRange: { start: cutoffDate },
           },
@@ -505,7 +505,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.messages.every(m => new Date(m.createdAt) >= cutoffDate)).toBe(true);
       });
 
-      it('should handle limit with resourceId filter', async () => {
+      it('should handle perPage with resourceId filter', async () => {
         // Add messages with different resourceId
         const otherMessages = Array.from({ length: 3 }, (_, i) =>
           createSampleMessageV2({
@@ -521,27 +521,27 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         const result = await storage.listMessages({
           threadId: thread.id,
           resourceId: thread.resourceId,
-          limit: 3,
+          perPage: 3,
         });
 
         expect(result.messages).toHaveLength(3);
         expect(result.messages.every(m => m.resourceId === thread.resourceId)).toBe(true);
       });
 
-      it('should handle invalid limit values gracefully', async () => {
-        // Test limit: 0 - should return zero results
+      it('should handle invalid perPage values gracefully', async () => {
+        // Test perPage: 0 - should return zero results
         const result0 = await storage.listMessages({
           threadId: thread.id,
-          limit: 0,
+          perPage: 0,
         });
         expect(result0.messages).toHaveLength(0);
         expect(result0.total).toBe(5); // Total should still reflect actual count
         expect(result0.perPage).toBe(0);
 
-        // Test negative limit - should fall back to default behavior
+        // Test negative perPage - should fall back to default behavior
         const resultNeg = await storage.listMessages({
           threadId: thread.id,
-          limit: -5,
+          perPage: -5,
         });
         // Should fall back to default behavior
         expect(resultNeg.messages).toHaveLength(5);
