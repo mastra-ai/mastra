@@ -60,13 +60,41 @@ const createTestMessage = (
 export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
   beforeEach(async () => {
     messageCounter = 0;
-    const { threads } = await memory.listThreadsByResourceId({ resourceId, offset: 0, limit: 10 });
-    await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
+    // Fetch all threads for complete cleanup
+    let allThreads: any[] = [];
+    let offset = 0;
+    const limit = 100;
+    while (true) {
+      const { threads, hasMore } = await memory.listThreadsByResourceId({
+        resourceId,
+        offset,
+        limit,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
+      allThreads.push(...threads);
+      if (!hasMore) break;
+      offset += limit;
+    }
+    await Promise.all(allThreads.map(thread => memory.deleteThread(thread.id)));
   });
 
   afterAll(async () => {
-    const { threads } = await memory.listThreadsByResourceId({ resourceId, offset: 0, limit: 10 });
-    await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
+    // Fetch all threads for complete cleanup
+    let allThreads: any[] = [];
+    let offset = 0;
+    const limit = 100;
+    while (true) {
+      const { threads, hasMore } = await memory.listThreadsByResourceId({
+        resourceId,
+        offset,
+        limit,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
+      allThreads.push(...threads);
+      if (!hasMore) break;
+      offset += limit;
+    }
+    await Promise.all(allThreads.map(thread => memory.deleteThread(thread.id)));
   });
 
   describe('Memory Features', () => {

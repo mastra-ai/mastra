@@ -377,6 +377,11 @@ export class StoreMemoryLance extends MemoryStorage {
         const aValue = field === 'createdAt' ? a.createdAt : a[field];
         const bValue = field === 'createdAt' ? b.createdAt : b[field];
 
+        // Handle null/undefined - treat as "smallest" values
+        if (aValue == null && bValue == null) return 0;
+        if (aValue == null) return direction === 'ASC' ? -1 : 1;
+        if (bValue == null) return direction === 'ASC' ? 1 : -1;
+
         if (typeof aValue === 'string' && typeof bValue === 'string') {
           return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
         }
@@ -435,6 +440,11 @@ export class StoreMemoryLance extends MemoryStorage {
       finalMessages = finalMessages.sort((a, b) => {
         const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
         const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+
+        // Handle null/undefined - treat as "smallest" values
+        if (aValue == null && bValue == null) return 0;
+        if (aValue == null) return direction === 'ASC' ? -1 : 1;
+        if (bValue == null) return direction === 'ASC' ? 1 : -1;
 
         if (typeof aValue === 'string' && typeof bValue === 'string') {
           return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
@@ -571,6 +581,11 @@ export class StoreMemoryLance extends MemoryStorage {
       records.sort((a, b) => {
         const aValue = ['createdAt', 'updatedAt'].includes(field) ? new Date(a[field]).getTime() : a[field];
         const bValue = ['createdAt', 'updatedAt'].includes(field) ? new Date(b[field]).getTime() : b[field];
+
+        // Handle null/undefined - treat as "smallest" values
+        if (aValue == null && bValue == null) return 0;
+        if (aValue == null) return direction === 'ASC' ? -1 : 1;
+        if (bValue == null) return direction === 'ASC' ? 1 : -1;
 
         if (typeof aValue === 'string' && typeof bValue === 'string') {
           return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
