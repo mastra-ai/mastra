@@ -237,7 +237,7 @@ export class BenchmarkStore extends MastraStorage {
     messages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
     const list = new MessageList().add(messages, 'memory');
-    return format === 'v2' ? list.get.all.v2() : list.get.all.v1();
+    return format === 'v2' ? list.get.all.db() : list.get.all.v1();
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
@@ -254,7 +254,7 @@ export class BenchmarkStore extends MastraStorage {
     }
 
     const list = new MessageList().add(messages, 'memory');
-    return format === 'v2' ? list.get.all.v2() : list.get.all.v1();
+    return format === 'v2' ? list.get.all.db() : list.get.all.v1();
   }
 
   async updateMessages(args: { messages: Partial<MastraMessageV2> & { id: string }[] }): Promise<MastraMessageV2[]> {

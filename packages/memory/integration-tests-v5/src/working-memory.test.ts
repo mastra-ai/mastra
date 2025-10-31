@@ -4,11 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import type { MastraMessageV1 } from '@mastra/core/memory';
+import type { MastraDBMessage } from '@mastra/core/memory';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import type { ToolCallPart } from 'ai';
+
 import { config } from 'dotenv';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
@@ -422,7 +422,8 @@ describe('Working Memory Tests', () => {
       ];
 
       // Save messages
-      const saved = await memory.saveMessages({ messages: messages as MastraMessageV1[] });
+      const result = await memory.saveMessages({ messages: messages as MastraDBMessage[] });
+      const saved = result.messages;
 
       // Should not include any updateWorkingMemory tool-call messages (pure or mixed)
       expect(
@@ -440,7 +441,6 @@ describe('Working Memory Tests', () => {
       const assistantMessages = saved.filter(m => m.role === 'assistant');
       expect(
         assistantMessages.every(m => {
-          // TODO: seems like saveMessages says it returns MastraDBMessage but it's returning V1
           return JSON.stringify(m).includes(`updateWorkingMemory`);
         }),
       ).toBe(false);
@@ -449,19 +449,24 @@ describe('Working Memory Tests', () => {
         saved.some(
           m =>
             (m.type === 'tool-call' || m.type === 'tool-result') &&
-            Array.isArray(m.content) &&
-            m.content.some(c => (c as ToolCallPart).toolName === 'updateWorkingMemory'),
+            Array.isArray(m.content.parts) &&
+            m.content.parts.some(
+              c => c.type === 'tool-invocation' && c.toolInvocation.toolName === 'updateWorkingMemory',
+            ),
         ),
       ).toBe(false);
 
-      // TODO: again seems like we're getting V1 here but types say V2
-      // It actually should return V1 for now (CoreMessage compatible)
-
-      // Pure text message should be present
-      expect(saved.some(m => m.content.content === 'Another normal message')).toBe(true);
-      // User message should be present
+      // Pure text message should be present (check parts array for text)
       expect(
-        saved.some(m => typeof m.content.content === 'string' && m.content.content.includes('User says something')),
+        saved.some(m => 
+          m.content.parts?.some(p => p.type === 'text' && p.text === 'Another normal message')
+        )
+      ).toBe(true);
+      // User message should be present (check parts array for text)
+      expect(
+        saved.some(m => 
+          m.content.parts?.some(p => p.type === 'text' && p.text.includes('User says something'))
+        )
       ).toBe(true);
     });
   });
