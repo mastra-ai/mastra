@@ -588,7 +588,7 @@ export class Workflow<
   }
 
   /**
-   * @deprecated waitForEvent has been deprecated. Please use suspend/resume instead.
+   * @deprecated waitForEvent has been removed. Please use suspend/resume instead.
    */
   waitForEvent<
     TStepState extends z.ZodObject<any>,
@@ -603,10 +603,10 @@ export class Workflow<
     },
   ) {
     throw new MastraError({
-      id: 'WORKFLOW_WAIT_FOR_EVENT_DEPRECATED',
+      id: 'WORKFLOW_WAIT_FOR_EVENT_REMOVED',
       domain: ErrorDomain.MASTRA_WORKFLOW,
       category: ErrorCategory.USER,
-      text: 'waitForEvent has been deprecated. Please use suspend & resume flow instead. See https://mastra.ai/en/docs/workflows/suspend-and-resume for more details.',
+      text: 'waitForEvent has been removed. Please use suspend & resume flow instead. See https://mastra.ai/en/docs/workflows/suspend-and-resume for more details.',
     });
   }
 

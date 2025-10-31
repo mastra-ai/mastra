@@ -3288,7 +3288,7 @@ describe('Workflow', () => {
         expect(error).toBeInstanceOf(MastraError);
         expect(error).toHaveProperty(
           'message',
-          'waitForEvent has been deprecated. Please use suspend & resume flow instead. See https://mastra.ai/en/docs/workflows/suspend-and-resume for more details.',
+          'waitForEvent has been removed. Please use suspend & resume flow instead. See https://mastra.ai/en/docs/workflows/suspend-and-resume for more details.',
         );
       }
     });
