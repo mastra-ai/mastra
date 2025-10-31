@@ -845,11 +845,11 @@ The example at the beginning of this page also demonstrates how to instantiate `
 
 Elicitation is a feature in the Model Context Protocol (MCP) that allows servers to request structured information from users. This enables interactive workflows where servers can collect additional data dynamically.
 
-The `MCPServer` class automatically includes elicitation capabilities. Tools receive an `options` parameter in their `execute` function that includes an `elicitation.sendRequest()` method for requesting user input.
+The `MCPServer` class automatically includes elicitation capabilities. Tools receive a `context.mcp` object in their `execute` function that includes an `elicitation.sendRequest()` method for requesting user input.
 
 ### Tool Execution Signature
 
-When tools are executed within an MCP server context, they receive an additional `options` parameter:
+When tools are executed within an MCP server context, they receive MCP-specific capabilities via the `context.mcp` object:
 
 ```typescript
 execute: async (inputData, context) => {
@@ -875,9 +875,9 @@ execute: async (inputData, context) => {
 
 ### How Elicitation Works
 
-A common use case is during tool execution. When a tool needs user input, it can use the elicitation functionality provided through the tool's execution options:
+A common use case is during tool execution. When a tool needs user input, it can use the elicitation functionality provided through the context parameter:
 
-1. The tool calls `options.elicitation.sendRequest()` with a message and schema
+1. The tool calls `context.mcp.elicitation.sendRequest()` with a message and schema
 2. The request is sent to the connected MCP client
 3. The client presents the request to the user (via UI, command line, etc.)
 4. The user provides input, declines, or cancels the request
@@ -1030,8 +1030,8 @@ execute: async (inputData, context) => {
   }): Promise<ElicitResult>
 
   // Access authentication info if needed
-  if (options.extra?.authInfo) {
-    // Use options.extra.authInfo.token, etc.
+  if (context.mcp?.extra?.authInfo) {
+    // Use context.mcp.extra.authInfo.token, etc.
   }
 }
 ```
@@ -1049,7 +1049,7 @@ type ElicitResult = {
 
 ## Authentication Context
 
-Tools can access request metadata via `options.extra` when using HTTP-based transports:
+Tools can access request metadata via `context.mcp.extra` when using HTTP-based transports:
 
 ```typescript
 execute: async (inputData, context) => {
