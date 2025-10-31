@@ -73,6 +73,7 @@ export class MockMemory extends MastraMemory {
 
   async query(args: StorageGetMessagesArg & { threadConfig?: MemoryConfig }): Promise<{
     messages: MastraDBMessage[];
+    uiMessages: AIV5Type.UIMessage[];
   }> {
     // Get raw messages from storage
     const result = await this.storage.getMessages({
@@ -81,7 +82,11 @@ export class MockMemory extends MastraMemory {
       selectBy: args.selectBy,
     });
 
-    return result;
+    // Convert MastraDBMessage to AIV5 UIMessage
+    const { MessageList } = await import('../agent/message-list');
+    const uiMessages = result.messages.map(msg => MessageList.mastraDBMessageToAIV5UIMessage(msg));
+
+    return { messages: result.messages, uiMessages };
   }
   async deleteThread(threadId: string) {
     return this.storage.deleteThread({ threadId });

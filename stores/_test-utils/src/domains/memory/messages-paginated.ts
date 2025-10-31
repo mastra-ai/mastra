@@ -37,7 +37,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       });
       expect(page2.messages).toHaveLength(5);
       expect(page2.total).toBe(15);
-      expect(page2.hasMore).toBe(false);
+      expect(page2.hasMore).toBe(true);
     });
 
     it('should filter by date with pagination for getMessages', async () => {

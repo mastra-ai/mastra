@@ -2059,7 +2059,7 @@ export class MessageList {
   /**
    * Direct conversion from MastraDBMessage to AIV5 UIMessage
    */
-  private static mastraDBMessageToAIV5UIMessage(dbMsg: MastraDBMessage): AIV5Type.UIMessage {
+  public static mastraDBMessageToAIV5UIMessage(dbMsg: MastraDBMessage): AIV5Type.UIMessage {
     const parts: AIV5Type.UIMessage['parts'] = [];
     const metadata: Record<string, unknown> = { ...(dbMsg.content.metadata || {}) };
 
