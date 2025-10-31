@@ -860,7 +860,9 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const results = await pipeline.exec();
 
       // Process messages and apply filters - handle undefined results from pipeline
-      let messagesData = results.filter((msg): msg is MastraDBMessage => msg !== null) as MastraDBMessage[];
+      let messagesData = results
+        .filter((msg): msg is MastraDBMessage & { _index?: number } => msg !== null)
+        .map(msg => this.parseStoredMessage(msg));
 
       // Apply date filters if provided
       if (fromDate) {

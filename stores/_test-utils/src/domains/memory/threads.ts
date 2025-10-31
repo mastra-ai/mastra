@@ -113,7 +113,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       expect(retrievedThread).toBeNull();
 
       // Verify messages were also deleted
-      const retrievedMessages = await storage.getMessages({ threadId: thread.id });
+      const { messages: retrievedMessages } = await storage.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(0);
     });
 

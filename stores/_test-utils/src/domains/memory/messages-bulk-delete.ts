@@ -27,7 +27,7 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
         return msg;
       });
 
-      const savedMessages = await storage.saveMessages({ messages });
+      const { messages: savedMessages } = await storage.saveMessages({ messages });
       expect(savedMessages).toHaveLength(5);
 
       // Delete messages 1, 2, and 4
