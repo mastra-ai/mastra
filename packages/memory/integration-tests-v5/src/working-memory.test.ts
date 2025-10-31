@@ -342,7 +342,7 @@ describe('Working Memory Tests', () => {
 
       const memoryArgs: string[] = [];
 
-      for (const message of history.messages) {
+      for (const message of history.uiMessages) {
         if (message.role === `assistant`) {
           for (const part of message.content) {
             if (typeof part === `string`) continue;
