@@ -14,7 +14,8 @@ const storage = new LibSQLStore({
 });
 
 const testScorer = createScorer({
-  name: 'scorer1',
+  id: 'scorer1',
+  name: 'My Scorer',
   description: 'Scorer 1',
 }).generateScore(() => {
   return 1;

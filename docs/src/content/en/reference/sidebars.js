@@ -45,8 +45,8 @@ const sidebars = {
         { type: "doc", id: "core/getScorer", label: ".getScorer()" },
         {
           type: "doc",
-          id: "core/getScorerByName",
-          label: ".getScorerByName()",
+          id: "core/getScorerById",
+          label: ".getScorerById()",
         },
         { type: "doc", id: "core/mastra-class", label: "Mastra Class" },
       ],

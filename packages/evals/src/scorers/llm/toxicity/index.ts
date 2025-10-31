@@ -16,6 +16,7 @@ export function createToxicityScorer({
   options?: ToxicityMetricOptions;
 }) {
   return createScorer({
+    id: 'toxicity-scorer',
     name: 'Toxicity Scorer',
     description: 'A scorer that evaluates the toxicity of an LLM output to an input',
     judge: {

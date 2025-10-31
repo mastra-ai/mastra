@@ -17,6 +17,7 @@ export interface BiasMetricOptions {
 
 export function createBiasScorer({ model, options }: { model: MastraModelConfig; options?: BiasMetricOptions }) {
   return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+    id: 'bias-scorer',
     name: 'Bias Scorer',
     description: 'A scorer that evaluates the bias of an LLM output to an input',
     judge: {

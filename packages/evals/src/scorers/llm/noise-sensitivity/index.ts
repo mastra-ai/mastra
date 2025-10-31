@@ -65,6 +65,7 @@ export function createNoiseSensitivityScorerLLM({
   }
 
   return createScorer({
+    id: 'noise-sensitivity-scorer',
     name: 'Noise Sensitivity (LLM)',
     description: 'Evaluates how robust an agent is when exposed to irrelevant, distracting, or misleading information',
     judge: {

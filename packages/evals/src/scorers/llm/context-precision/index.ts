@@ -40,6 +40,7 @@ export function createContextPrecisionScorer({
   }
 
   return createScorer({
+    id: 'context-precision-scorer',
     name: 'Context Precision Scorer',
     description:
       'A scorer that evaluates the relevance and precision of retrieved context nodes for generating expected outputs',

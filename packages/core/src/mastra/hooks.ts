@@ -17,8 +17,10 @@ export function createOnScorerHook(mastra: Mastra) {
     const entityId = hookData.entity.id;
     const entityType = hookData.entityType;
     const scorer = hookData.scorer;
+    const scorerId = scorer.id;
+
     try {
-      const scorerToUse = await findScorer(mastra, entityId, entityType, scorer.name);
+      const scorerToUse = await findScorer(mastra, entityId, entityType, scorerId);
 
       if (!scorerToUse) {
         throw new MastraError({
@@ -52,7 +54,7 @@ export function createOnScorerHook(mastra: Mastra) {
         ...rest,
         ...runResult,
         entityId,
-        scorerId: hookData.scorer.name,
+        scorerId: hookData.scorer.id,
         spanId,
         traceId,
         metadata: {
@@ -69,9 +71,9 @@ export function createOnScorerHook(mastra: Mastra) {
               await exporter.addScoreToTrace({
                 traceId: traceId,
                 spanId: spanId,
-                score: runResult.score,
-                reason: runResult.reason,
-                scorerName: scorerToUse.scorer.name,
+                score: runResult.score as number,
+                reason: runResult.reason as string,
+                scorerName: scorerToUse.scorer.id ?? scorerToUse.scorer.name,
                 metadata: {
                   ...(currentSpan.metadata ?? {}),
                 },
@@ -107,12 +109,12 @@ export async function validateAndSaveScore(storage: MastraStorage, payload: unkn
   await storage?.saveScore(payloadToSave);
 }
 
-async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerName: string) {
+async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerId: string) {
   let scorerToUse;
   if (entityType === 'AGENT') {
     const scorers = await mastra.getAgentById(entityId).listScorers();
     for (const [_, scorer] of Object.entries(scorers)) {
-      if (scorer.scorer.name === scorerName) {
+      if (scorer.scorer.id === scorerId) {
         scorerToUse = scorer;
         break;
       }
@@ -120,7 +122,7 @@ async function findScorer(mastra: Mastra, entityId: string, entityType: string, 
   } else if (entityType === 'WORKFLOW') {
     const scorers = await mastra.getWorkflowById(entityId).listScorers();
     for (const [_, scorer] of Object.entries(scorers)) {
-      if (scorer.scorer.name === scorerName) {
+      if (scorer.scorer.id === scorerId) {
         scorerToUse = scorer;
         break;
       }
@@ -129,7 +131,7 @@ async function findScorer(mastra: Mastra, entityId: string, entityType: string, 
 
   // Fallback to mastra-registered scorer
   if (!scorerToUse) {
-    const mastraRegisteredScorer = mastra.getScorerByName(scorerName);
+    const mastraRegisteredScorer = mastra.getScorerById(scorerId);
     scorerToUse = mastraRegisteredScorer ? { scorer: mastraRegisteredScorer } : undefined;
   }
 

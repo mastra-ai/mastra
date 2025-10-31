@@ -22,6 +22,7 @@ export function createFaithfulnessScorer({
   options?: FaithfulnessMetricOptions;
 }) {
   return createScorer({
+    id: 'faithfulness-scorer',
     name: 'Faithfulness Scorer',
     description: 'A scorer that evaluates the faithfulness of an LLM output to an input',
     judge: {

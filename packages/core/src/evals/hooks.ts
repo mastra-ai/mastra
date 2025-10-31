@@ -54,8 +54,8 @@ export function runScorer({
 
   const payload: ScoringHookInput = {
     scorer: {
-      id: scorerId,
-      name: scorerObject.scorer.name,
+      id: scorerObject.scorer?.id || scorerId,
+      name: scorerObject.scorer?.name,
       description: scorerObject.scorer.description,
     },
     input,

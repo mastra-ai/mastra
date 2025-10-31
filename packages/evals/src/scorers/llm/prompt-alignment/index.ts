@@ -78,6 +78,7 @@ export function createPromptAlignmentScorerLLM({
   const evaluationMode = options?.evaluationMode || 'both';
 
   return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+    id: 'prompt-alignment-scorer',
     name: 'Prompt Alignment (LLM)',
     description: 'Evaluates how well the agent response aligns with the intent and requirements of the user prompt',
     judge: {

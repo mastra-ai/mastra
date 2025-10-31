@@ -102,7 +102,7 @@ describe('createOnScorerHook', () => {
       }),
       getAgentById: vi.fn(),
       getWorkflowById: vi.fn(),
-      getScorerByName: vi.fn(),
+      getScorerById: vi.fn(),
     };
 
     hook = createOnScorerHook(mockMastra);
@@ -183,7 +183,7 @@ describe('createOnScorerHook', () => {
     mockMastra.getAgentById.mockReturnValue({
       listScorers: vi.fn().mockReturnValue({}), // Empty scorers
     });
-    mockMastra.getScorerByName.mockReturnValue(null);
+    mockMastra.getScorerById.mockReturnValue(null);
 
     // Confirm it doesn't throw
     await expect(hook(hookData)).resolves.not.toThrow();

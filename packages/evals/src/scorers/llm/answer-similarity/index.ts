@@ -69,6 +69,7 @@ export function createAnswerSimilarityScorer({
 }) {
   const mergedOptions = { ...ANSWER_SIMILARITY_DEFAULT_OPTIONS, ...options };
   return createScorer({
+    id: 'answer-similarity-scorer',
     name: 'Answer Similarity Scorer',
     description: 'Evaluates how similar an agent output is to a ground truth answer for CI/CD testing',
     judge: {

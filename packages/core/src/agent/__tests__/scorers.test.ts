@@ -89,11 +89,13 @@ function scorersTests(version: 'v1' | 'v2') {
     beforeEach(() => {
       vi.clearAllMocks();
       scorerTest = createScorer({
+        id: 'scorer-test',
         name: 'scorerTest',
         description: 'Test Scorer',
       }).generateScore(() => 0.95);
 
       scorer1 = createScorer({
+        id: 'scorer-1',
         name: 'scorer1',
         description: 'Test Scorer 1',
       }).generateScore(() => 0.95);

@@ -10,6 +10,7 @@ export function createContentSimilarityScorer(
   { ignoreCase, ignoreWhitespace }: ContentSimilarityOptions = { ignoreCase: true, ignoreWhitespace: true },
 ) {
   return createScorer({
+    id: 'content-similarity-scorer',
     name: 'Content Similarity Scorer',
     description: 'Calculates content similarity between input and output messages using string comparison algorithms.',
     type: 'agent',

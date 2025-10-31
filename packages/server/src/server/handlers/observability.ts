@@ -11,6 +11,7 @@ interface ObservabilityContext extends Context {
 
 interface ScoreTracesContext extends Context {
   body?: {
+    // scorer.id
     scorerName: string;
     targets: Array<{
       traceId: string;
@@ -105,7 +106,7 @@ export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
     const { scorerName, targets } = body;
 
     if (!scorerName) {
-      throw new HTTPException(400, { message: 'Scorer Name is required' });
+      throw new HTTPException(400, { message: 'Scorer ID is required' });
     }
 
     if (!targets || targets.length === 0) {
@@ -117,14 +118,15 @@ export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
       throw new HTTPException(500, { message: 'Storage is not available' });
     }
 
-    const scorer = mastra.getScorerByName(scorerName);
+    const scorer = mastra.getScorerById(scorerName);
     if (!scorer) {
       throw new HTTPException(404, { message: `Scorer '${scorerName}' not found` });
     }
 
     const logger = mastra.getLogger();
+
     scoreTraces({
-      scorerName,
+      scorerId: scorer.config.id || scorer.config.name,
       targets,
       mastra,
     }).catch(error => {

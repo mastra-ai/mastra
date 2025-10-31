@@ -350,6 +350,7 @@ export const completenessScorer = createCompletenessScorer();
 
 // Custom LLM-judged scorer: evaluates if non-English locations are translated appropriately
 export const translationScorer = createScorer({
+  id: 'translation-quality-scorer',
   name: 'Translation Quality',
   description: 'Checks that non-English location names are translated and used correctly',
   type: 'agent',

@@ -259,16 +259,16 @@ async function runScorers(
           tracingContext: item.tracingContext,
         });
 
-        scorerResults[scorer.name] = score;
+        scorerResults[scorer.id] = score;
       } catch (error) {
         throw new MastraError(
           {
             domain: 'SCORER',
             id: 'RUN_EXPERIMENT_SCORER_FAILED_TO_SCORE_RESULT',
             category: 'USER',
-            text: `Failed to run experiment: Error running scorer ${scorer.name}`,
+            text: `Failed to run experiment: Error running scorer ${scorer.id}`,
             details: {
-              scorerName: scorer.name,
+              scorerId: scorer.id,
               item: JSON.stringify(item),
             },
           },
@@ -288,7 +288,7 @@ async function runScorers(
           requestContext: item.requestContext,
           tracingContext: item.tracingContext,
         });
-        workflowScorerResults[scorer.name] = score;
+        workflowScorerResults[scorer.id] = score;
       }
       if (Object.keys(workflowScorerResults).length > 0) {
         scorerResults.workflow = workflowScorerResults;
@@ -310,16 +310,16 @@ async function runScorers(
                 requestContext: item.requestContext,
                 tracingContext: item.tracingContext,
               });
-              stepResults[scorer.name] = score;
+              stepResults[scorer.id] = score;
             } catch (error) {
               throw new MastraError(
                 {
                   domain: 'SCORER',
                   id: 'RUN_EXPERIMENT_SCORER_FAILED_TO_SCORE_STEP_RESULT',
                   category: 'USER',
-                  text: `Failed to run experiment: Error running scorer ${scorer.name} on step ${stepId}`,
+                  text: `Failed to run experiment: Error running scorer ${scorer.id} on step ${stepId}`,
                   details: {
-                    scorerName: scorer.name,
+                    scorerId: scorer.id,
                     stepId,
                   },
                 },

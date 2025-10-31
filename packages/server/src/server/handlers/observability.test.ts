@@ -22,7 +22,7 @@ vi.mock('./error', () => ({
 const createMockMastra = (storage?: Partial<MastraStorage>): Mastra =>
   ({
     getStorage: vi.fn(() => storage as MastraStorage),
-    getScorerByName: vi.fn(),
+    getScorerById: vi.fn(),
     getLogger: vi.fn(() => ({ warn: vi.fn(), error: vi.fn() })),
   }) as any;
 
@@ -437,7 +437,7 @@ describe('Observability Handlers', () => {
 
     it('should score traces successfully with valid request', async () => {
       const mockScorer = { name: 'test-scorer', run: vi.fn() };
-      (mockMastra.getScorerByName as any).mockReturnValue(mockScorer);
+      (mockMastra.getScorerById as any).mockReturnValue(mockScorer);
       scoreTracesMock.mockResolvedValue(undefined);
 
       const requestBody = {
@@ -456,7 +456,7 @@ describe('Observability Handlers', () => {
         status: 'success',
       });
 
-      expect(mockMastra.getScorerByName).toHaveBeenCalledWith('test-scorer');
+      expect(mockMastra.getScorerById).toHaveBeenCalledWith('test-scorer');
       expect(scoreTracesMock).toHaveBeenCalledWith({
         scorerName: 'test-scorer',
         targets: requestBody.targets,
@@ -535,7 +535,7 @@ describe('Observability Handlers', () => {
     });
 
     it('should throw 404 when scorer is not found', async () => {
-      (mockMastra.getScorerByName as any).mockReturnValue(null);
+      (mockMastra.getScorerById as any).mockReturnValue(null);
 
       await expect(
         scoreTracesHandler({
@@ -591,8 +591,8 @@ describe('Observability Handlers', () => {
     });
 
     it('should handle scoreTraces errors gracefully', async () => {
-      const mockScorer = { name: 'test-scorer', run: vi.fn() };
-      (mockMastra.getScorerByName as any).mockReturnValue(mockScorer);
+      const mockScorer = { id: 'test-scorer', name: 'test-scorer', run: vi.fn() };
+      (mockMastra.getScorerById as any).mockReturnValue(mockScorer);
 
       const processingError = new Error('Processing failed');
       scoreTracesMock.mockRejectedValue(processingError);

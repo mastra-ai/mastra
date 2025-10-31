@@ -997,7 +997,7 @@ do:
    *
    * // Check scorer configurations
    * for (const [id, scorer] of Object.entries(allScorers)) {
-   *   console.log(`Scorer ${id}:`, scorer.name, scorer.description);
+   *   console.log(`Scorer ${id}:`, scorer.id, scorer.name, scorer.description);
    * }
    * ```
    */
@@ -1076,25 +1076,25 @@ do:
    * });
    *
    * // Find scorer by its internal name, not the registration key
-   * const scorer = mastra.getScorerByName('helpfulness-evaluator');
+   * const scorer = mastra.getScorerById('helpfulness-evaluator');
    * const score = await scorer.score({
    *   input: 'question',
    *   output: 'answer'
    * });
    * ```
    */
-  public getScorerByName(name: string): MastraScorer<any, any, any, any> {
+  public getScorerById(id: string): MastraScorer<any, any, any, any> {
     for (const [_key, value] of Object.entries(this.#scorers ?? {})) {
-      if (value.name === name) {
+      if (value.id === id || value?.name === id) {
         return value;
       }
     }
 
     const error = new MastraError({
-      id: 'MASTRA_GET_SCORER_BY_NAME_NOT_FOUND',
+      id: 'MASTRA_GET_SCORER_BY_ID_NOT_FOUND',
       domain: ErrorDomain.MASTRA,
       category: ErrorCategory.USER,
-      text: `Scorer with name ${String(name)} not found`,
+      text: `Scorer with id ${String(id)} not found`,
     });
     this.#logger?.trackException(error);
     throw error;

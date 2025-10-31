@@ -152,7 +152,7 @@ export class ScoresPG extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer.name,
+            scorer: score.scorer.id,
             entityId: score.entityId,
             entityType: score.entityType,
             traceId: score.traceId || '',

@@ -7888,6 +7888,7 @@ describe('MastraInngestWorkflow', () => {
       beforeEach(() => {
         const createMockScorer = (name: string, score: number = 0.8): MastraScorer => {
           const scorer = createScorer({
+            id: `mock-scorer-${name}`,
             description: 'Mock scorer',
             name,
           }).generateScore(() => {
@@ -9068,6 +9069,7 @@ describe('MastraInngestWorkflow', () => {
       beforeEach(() => {
         const createMockScorer = (name: string, score: number = 0.8): MastraScorer => {
           const scorer = createScorer({
+            id: `mock-scorer-${name}`,
             description: 'Mock scorer',
             name,
           }).generateScore(() => {

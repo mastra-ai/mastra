@@ -23,6 +23,7 @@ export function createHallucinationScorer({
   options?: HallucinationMetricOptions;
 }) {
   return createScorer({
+    id: 'hallucination-scorer',
     name: 'Hallucination Scorer',
     description: 'A scorer that evaluates the hallucination of an LLM output to an input',
     judge: {

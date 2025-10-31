@@ -94,7 +94,7 @@ export function SpanScoreList({
                   date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
                   time: format(createdAtDate, 'h:mm:ss aaa'),
                   score: score?.score,
-                  scorer: score?.scorer?.name,
+                  scorer: score?.scorer?.name || score?.scorer?.id,
                 };
 
                 return (
@@ -126,7 +126,7 @@ export function SpanScoreList({
         />
       </EntryList>
       <ScoreDialog
-        scorerName={selectedScore?.scorer?.name || ''}
+        scorerName={selectedScore?.scorer?.name || selectedScore?.scorer?.id || ''}
         score={selectedScore as ClientScoreRowData}
         isOpen={dialogIsOpen}
         onClose={() => {

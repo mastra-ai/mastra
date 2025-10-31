@@ -52,6 +52,7 @@ export function createContextRelevanceScorerLLM({
   }
 
   return createScorer({
+    id: 'context-relevance-scorer',
     name: 'Context Relevance (LLM)',
     description: 'Evaluates how relevant and useful the provided context was for generating the agent response',
     judge: {

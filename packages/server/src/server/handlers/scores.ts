@@ -26,12 +26,12 @@ async function listScorersFromSystem({
 
     if (Object.keys(scorers).length > 0) {
       for (const [_scorerId, scorer] of Object.entries(scorers)) {
-        const scorerName = scorer.scorer.name;
-        if (scorersMap.has(scorerName)) {
-          scorersMap.get(scorerName)?.agentIds.push(agentId);
-          scorersMap.get(scorerName)?.agentNames.push(agent.name);
+        const scorerId = scorer.scorer.id;
+        if (scorersMap.has(scorerId)) {
+          scorersMap.get(scorerId)?.agentIds.push(agentId);
+          scorersMap.get(scorerId)?.agentNames.push(agent.name);
         } else {
-          scorersMap.set(scorerName, {
+          scorersMap.set(scorerId, {
             workflowIds: [],
             ...scorer,
             agentNames: [agent.name],
@@ -69,11 +69,11 @@ async function listScorersFromSystem({
 
   const registeredScorers = await mastra.listScorers();
   for (const [_scorerId, scorer] of Object.entries(registeredScorers || {})) {
-    const scorerName = scorer.name;
-    if (scorersMap.has(scorerName)) {
-      scorersMap.get(scorerName)!.isRegistered = true;
+    const scorerId = scorer.id;
+    if (scorersMap.has(scorerId)) {
+      scorersMap.get(scorerId)!.isRegistered = true;
     } else {
-      scorersMap.set(scorerName, {
+      scorersMap.set(scorerId, {
         scorer: scorer,
         agentIds: [],
         agentNames: [],

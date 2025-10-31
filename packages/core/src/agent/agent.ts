@@ -2621,7 +2621,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     if (Object.keys(scorers || {}).length > 0) {
       for (const [_id, scorerObject] of Object.entries(scorers)) {
         runScorer({
-          scorerId: overrideScorers ? scorerObject.scorer.name : scorerObject.scorer.name,
+          scorerId: overrideScorers ? scorerObject.scorer.id : scorerObject.scorer.id,
           scorerObject: scorerObject,
           runId,
           input: scorerInput,
@@ -2663,7 +2663,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
             });
           }
 
-          const scorer = this.#mastra.getScorerByName(scorerObject.scorer);
+          const scorer = this.#mastra.getScorerById(scorerObject.scorer);
           result[id] = { scorer, sampling: scorerObject.sampling };
         } catch (error) {
           this.logger.warn(`[Agent:${this.name}] - Failed to get scorer ${scorerObject.scorer}: ${error}`);

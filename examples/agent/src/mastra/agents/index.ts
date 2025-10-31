@@ -3,7 +3,7 @@ import { google } from '@ai-sdk/google';
 import { jsonSchema, tool } from 'ai';
 import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
-import { Agent, InputProcessor } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
@@ -85,23 +85,6 @@ export const dynamicAgent = new Agent({
     return tools;
   },
 });
-
-const vegetarianProcessor: InputProcessor = {
-  name: 'eat-more-tofu',
-  process: async ({ messages }) => {
-    messages.push({
-      id: crypto.randomUUID(),
-      createdAt: new Date(),
-      role: 'user',
-      content: {
-        format: 2,
-        parts: [{ type: 'text', text: 'Make the suggested recipe, but remove any meat and add tofu instead' }],
-      },
-    });
-
-    return messages;
-  },
-};
 
 const piiDetector = new PIIDetector({
   // model: google('gemini-2.0-flash-001'),

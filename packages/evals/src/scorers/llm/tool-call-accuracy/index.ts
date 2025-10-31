@@ -30,6 +30,7 @@ export function createToolCallAccuracyScorerLLM({ model, availableTools }: ToolC
   const toolDefinitions = availableTools.map(tool => `${tool.id}: ${tool.description}`).join('\n');
 
   return createScorer({
+    id: 'tool-call-accuracy-scorer',
     name: 'Tool Call Accuracy (LLM)',
     description: 'Evaluates whether an agent selected appropriate tools for the given task using LLM analysis',
     judge: {

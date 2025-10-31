@@ -74,6 +74,7 @@ function calculateCoverage({ original, simplified }: { original: string[]; simpl
 
 export function createCompletenessScorer() {
   return createScorer({
+    id: 'completeness-scorer',
     name: 'Completeness Scorer',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
