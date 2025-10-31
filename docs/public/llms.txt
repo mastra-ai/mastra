@@ -205,7 +205,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 48+ AI providers and 834+ models through Mastras model router.
+- [Models](https://mastra.ai/en/models): Access 48+ AI providers and 835+ models through Mastras model router.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
 - [Alibaba | Models | Mastra](https://mastra.ai/en/models/providers/alibaba): Use Alibaba models with Mastra. 39 models available.
@@ -213,7 +213,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Anthropic | Models | Mastra](https://mastra.ai/en/models/providers/anthropic): Use Anthropic models with Mastra. 19 models available.
 - [Azure](https://mastra.ai/en/models/providers/azure): Use Azure models via the AI SDK.
 - [Baseten | Models | Mastra](https://mastra.ai/en/models/providers/baseten): Use Baseten models with Mastra. 3 models available.
-- [Cerebras | Models | Mastra](https://mastra.ai/en/models/providers/cerebras): Use Cerebras models with Mastra. 3 models available.
+- [Cerebras | Models | Mastra](https://mastra.ai/en/models/providers/cerebras): Use Cerebras models with Mastra. 4 models available.
 - [Chutes | Models | Mastra](https://mastra.ai/en/models/providers/chutes): Use Chutes models with Mastra. 33 models available.
 - [Cloudflare Workers AI](https://mastra.ai/en/models/providers/cloudflare-workers-ai): Use Cloudflare Workers AI models via the AI SDK.
 - [Cortecs | Models | Mastra](https://mastra.ai/en/models/providers/cortecs): Use Cortecs models with Mastra. 11 models available.
@@ -263,8 +263,9 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Agent Class | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/agent): Documentation for the `Agent` class in Mastra, which provides the foundation for creating AI agents with various capabilities.
 - [Reference: Agent.generate() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/generate): Documentation for the `Agent.generate()` method in Mastra agents, which enables non-streaming generation of responses with enhanced capabilities.
 - [Reference: Agent.generateLegacy() (Legacy) | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/generateLegacy): Documentation for the legacy `Agent.generateLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version.
-- [Reference: Agent.getDefaultGenerateOptions() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/getDefaultGenerateOptions): Documentation for the `Agent.getDefaultGenerateOptions()` method in Mastra agents, which retrieves the default options used for generate calls.
-- [Reference: Agent.getDefaultStreamOptions() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/getDefaultStreamOptions): Documentation for the `Agent.getDefaultStreamOptions()` method in Mastra agents, which retrieves the default options used for stream calls.
+- [Reference: Agent.getDefaultGenerateOptionsLegacy() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/getDefaultGenerateOptions): Documentation for the `Agent.getDefaultGenerateOptionsLegacy()` method in Mastra agents, which retrieves the default options used for generateLegacy calls.
+- [Reference: Agent.getDefaultOptions() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/getDefaultOptions): Documentation for the `Agent.getDefaultOptions()` method in Mastra agents, which retrieves the default options used for stream and generate calls.
+- [Reference: Agent.getDefaultStreamOptionsLegacy() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/getDefaultStreamOptions): Documentation for the `Agent.getDefaultStreamOptionsLegacy()` method in Mastra agents, which retrieves the default options used for streamLegacy calls.
 - [Reference: Agent.getDescription() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/getDescription): Documentation for the `Agent.getDescription()` method in Mastra agents, which retrieves the agents description.
 - [Reference: Agent.getInstructions() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/getInstructions): Documentation for the `Agent.getInstructions()` method in Mastra agents, which retrieves the instructions that guide the agents behavior.
 - [Reference: Agent.getLLM() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/getLLM): Documentation for the `Agent.getLLM()` method in Mastra agents, which retrieves the language model instance.
@@ -313,7 +314,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Mastra.listLogs() | Core | Mastra Docs](https://mastra.ai/en/reference/core/listLogs): Documentation for the `Mastra.listLogs()` method in Mastra, which retrieves all logs for a specific transport ID.
 - [Reference: Mastra.listLogsByRunId() | Core | Mastra Docs](https://mastra.ai/en/reference/core/listLogsByRunId): Documentation for the `Mastra.listLogsByRunId()` method in Mastra, which retrieves logs for a specific run ID and transport ID.
 - [Reference: listScorers() | Core | Mastra Docs](https://mastra.ai/en/reference/core/listScorers): Documentation for the `listScorers()` method in Mastra, which returns all registered scorers for evaluating AI outputs.
-- [Reference: Mastra.getWorkflows() | Core | Mastra Docs](https://mastra.ai/en/reference/core/listWorkflows): Documentation for the `Mastra.getWorkflows()` method in Mastra, which retrieves all configured workflows.
+- [Reference: Mastra.listWorkflows() | Core | Mastra Docs](https://mastra.ai/en/reference/core/listWorkflows): Documentation for the `Mastra.listWorkflows()` method in Mastra, which retrieves all configured workflows.
 - [Reference: Mastra Class | Core | Mastra Docs](https://mastra.ai/en/reference/core/mastra-class): Documentation for the `Mastra` class in Mastra, the core entry point for managing agents, workflows, MCP servers, and server endpoints.
 - [Reference: Mastra.setLogger() | Core | Mastra Docs](https://mastra.ai/en/reference/core/setLogger): Documentation for the `Mastra.setLogger()` method in Mastra, which sets the logger for all components (agents, workflows, etc.).
 - [Reference: Mastra.setStorage() | Core | Mastra Docs](https://mastra.ai/en/reference/core/setStorage): Documentation for the `Mastra.setStorage()` method in Mastra, which sets the storage instance for the Mastra instance.
@@ -384,7 +385,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Unicode Normalizer | Processors | Mastra Docs](https://mastra.ai/en/reference/processors/unicode-normalizer): Documentation for the UnicodeNormalizer in Mastra, which normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters.
 - [Reference: Reference: .chunk() | RAG | Mastra Docs](https://mastra.ai/en/reference/rag/chunk): Documentation for the chunk function in Mastra, which splits documents into smaller segments using various strategies.
 - [Reference: DatabaseConfig | RAG | Mastra Docs](https://mastra.ai/en/reference/rag/database-config): API reference for database-specific configuration types used with vector query tools in Mastra RAG systems.
-- [Reference: MDocument | RAG | Mastra Docs](https://mastra.ai/en/reference/rag/document): Documentation for the MDocument class in Mastra, which handles document processing and chunking.
+- [Reference: MDocument | Document Processing | RAG | Mastra Docs](https://mastra.ai/en/reference/rag/document): Documentation for the MDocument class in Mastra, which handles document processing and chunking.
 - [Reference: Embed | RAG | Mastra Docs](https://mastra.ai/en/reference/rag/embeddings): Documentation for embedding functionality in Mastra using the AI SDK.
 - [Reference: ExtractParams | RAG | Mastra Docs](https://mastra.ai/en/reference/rag/extract-params): Documentation for metadata extraction configuration in Mastra.
 - [Reference: GraphRAG | RAG | Mastra Docs](https://mastra.ai/en/reference/rag/graph-rag): Documentation for the GraphRAG class in Mastra, which implements a graph-based approach to retrieval augmented generation.

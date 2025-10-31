@@ -10,6 +10,7 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   PaginationInfo,
+  StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import { writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -329,21 +330,14 @@ export class BenchmarkStore extends MastraStorage {
     return evals as EvalRow[];
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     let runs = Array.from(this.data.mastra_workflow_snapshot.values());
 
     if (workflowName) runs = runs.filter((run: any) => run.workflow_name === workflowName);
