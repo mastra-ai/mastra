@@ -94,7 +94,7 @@ export class ProcessorRunner {
 
     for (const [index, processor] of this.outputProcessors.entries()) {
       const abort = (reason?: string): never => {
-        throw new TripWire(reason || `Tripwire triggered by ${processor.name}`);
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`);
       };
 
       ctx.abort = abort;
@@ -299,7 +299,7 @@ export class ProcessorRunner {
 
     for (const [index, processor] of this.inputProcessors.entries()) {
       const abort = (reason?: string): never => {
-        throw new TripWire(reason || `Tripwire triggered by ${processor.name}`);
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`);
       };
 
       ctx.abort = abort;
@@ -316,7 +316,7 @@ export class ProcessorRunner {
       const parentSpan = currentSpan?.findParent(AISpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
         type: AISpanType.PROCESSOR_RUN,
-        name: `input processor: ${processor.name}`,
+        name: `input processor: ${processor.id}`,
         attributes: {
           processorName: processor.name ?? processor.id,
           processorType: 'input',
