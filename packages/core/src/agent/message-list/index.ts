@@ -2357,7 +2357,6 @@ export class MessageList {
       toolInvocations = toolInvocationParts.map(p => {
         const toolName = getToolName(p);
         if (p.state === 'output-available') {
-          console.log('p123', p);
           return {
             args: p.input,
             result:
