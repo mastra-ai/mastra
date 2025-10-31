@@ -898,12 +898,24 @@ function runStreamTest(version: 'v1' | 'v2') {
           },
         });
 
+        // request.body.input contains the actual API request format (OpenAI's function_call format)
+        // not the AI SDK v5 abstraction (tool-call format)
+        // Note: There are duplicate function_call messages in the request
         expect(secondResponse.request.body.input).toEqual([
           expect.objectContaining({ role: 'system' }),
           expect.objectContaining({ role: 'user' }),
-          expect.objectContaining({ type: 'function_call', name: 'get_weather' }),
-          expect.objectContaining({ type: 'function_call', call_id: expect.any(String) }),
-          expect.objectContaining({ type: 'function_call_output' }),
+          expect.objectContaining({ 
+            type: 'function_call',
+            name: 'get_weather'
+          }),
+          expect.objectContaining({ 
+            type: 'function_call',
+            name: 'get_weather'
+          }),
+          expect.objectContaining({ 
+            type: 'function_call_output',
+            call_id: expect.any(String)
+          }),
           expect.objectContaining({ role: 'assistant' }),
           expect.objectContaining({ role: 'user' }),
         ]);

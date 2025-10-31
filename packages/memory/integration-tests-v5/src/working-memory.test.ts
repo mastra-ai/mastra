@@ -423,7 +423,7 @@ describe('Working Memory Tests', () => {
       ];
 
       // Save messages
-      const saved = await memory.saveMessages({ messages: messages as MastraMessageV1[], format: 'v2' });
+      const saved = await memory.saveMessages({ messages: messages as MastraMessageV1[] });
 
       // Should not include any updateWorkingMemory tool-call messages (pure or mixed)
       expect(

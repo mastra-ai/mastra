@@ -4479,11 +4479,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         expect(saveCallCount).toBe(1);
 
-        messages = await mockMemory.getMessages({
+        const result = await mockMemory.getMessages({
           threadId: `thread-2-${version}-generate`,
           resourceId: `resource-2-${version}-generate`,
-          format: 'v2',
         });
+        messages = result?.messages || [];
 
         expect(messages.length).toBe(1);
         expect(messages[0].role).toBe('user');
@@ -5805,14 +5805,14 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       }
       // Verify messages were saved correctly
-      const savedMessages = await mockMemory.getMessages({
+      const result = await mockMemory.getMessages({
         threadId: 'mixed-thread',
         resourceId: 'mixed-user',
-        format: 'v2',
         selectBy: {
           last: 10,
         },
       });
+      const savedMessages = result?.messages || [];
 
       expect(savedMessages.length).toBeGreaterThan(0);
 
