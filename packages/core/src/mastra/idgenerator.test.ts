@@ -706,12 +706,18 @@ describe('Mastra ID Generator', () => {
       // Add workflow steps
       const steps = ['Initialize', 'Process', 'Validate', 'Complete'];
       for (const step of steps) {
-        await agentMemory.addMessage({
-          threadId: thread.id,
-          resourceId: 'workflow-resource',
-          content: `${step} workflow step`,
-          role: 'user',
-          type: 'text',
+        await agentMemory.saveMessages({
+          messages: [{
+            id: `msg-${Date.now()}-${Math.random()}`,
+            threadId: thread.id,
+            resourceId: 'workflow-resource',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: `${step} workflow step` }],
+            },
+            role: 'user',
+            createdAt: new Date(),
+          }],
         });
       }
 

@@ -767,7 +767,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
 
         expect(result.messages).toHaveLength(1);
-        expect(result.messages[0].content).toBe('Test message');
+        const textContent = result.messages[0].content.parts?.find((p: any) => p.type === 'text')?.text;
+        expect(textContent).toBe('Test message');
       });
 
       it('should reject access with incorrect resourceId', async () => {
@@ -795,7 +796,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
 
         expect(result.messages).toHaveLength(1);
-        expect(result.messages[0].content).toBe('Test message');
+        const textContent = result.messages[0].content.parts?.find((p: any) => p.type === 'text')?.text;
+        expect(textContent).toBe('Test message');
       });
     });
     describe('Concurrent Operations', () => {

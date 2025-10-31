@@ -467,7 +467,6 @@ describe('Working Memory Tests', () => {
       expect(
         saved.some(
           m =>
-            (m.type === 'tool-call' || m.type === 'tool-result') &&
             Array.isArray(m.content.parts) &&
             m.content.parts.some(
               c => c.type === 'tool-invocation' && c.toolInvocation.toolName === 'updateWorkingMemory',
