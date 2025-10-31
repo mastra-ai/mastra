@@ -127,7 +127,7 @@ function scorersTests(version: 'v1' | 'v2') {
 
       expect(runScorer).toHaveBeenCalledWith(
         expect.objectContaining({
-          scorerId: 'scorerTest',
+          scorerId: 'scorer-test',
           scorerObject: expect.objectContaining({
             scorer: scorerTest,
           }),
@@ -152,7 +152,7 @@ function scorersTests(version: 'v1' | 'v2') {
 
       expect(runScorer).toHaveBeenCalledWith(
         expect.objectContaining({
-          scorerId: 'scorer1',
+          scorerId: 'scorer-1',
           scorerObject: expect.objectContaining({
             scorer: expect.any(Object),
           }),
@@ -161,7 +161,7 @@ function scorersTests(version: 'v1' | 'v2') {
 
       expect(runScorer).not.toHaveBeenCalledWith(
         expect.objectContaining({
-          scorerId: 'scorerTest',
+          scorerId: 'scorer-test',
           scorerObject: expect.objectContaining({
             scorer: scorerTest,
           }),
@@ -190,7 +190,7 @@ function scorersTests(version: 'v1' | 'v2') {
 
       expect(runScorer).toHaveBeenCalledWith(
         expect.objectContaining({
-          scorerId: 'scorer1',
+          scorerId: 'scorer-1',
           scorerObject: expect.objectContaining({
             scorer: expect.any(Object),
           }),
@@ -215,7 +215,7 @@ function scorersTests(version: 'v1' | 'v2') {
 
       expect(runScorer).toHaveBeenCalledWith(
         expect.objectContaining({
-          scorerId: 'scorer1',
+          scorerId: 'scorer-1',
           scorerObject: expect.objectContaining({
             scorer: scorer1,
           }),
@@ -240,7 +240,7 @@ function scorersTests(version: 'v1' | 'v2') {
 
       // Verify the exact call parameters
       expect(runScorer).toHaveBeenCalledWith({
-        scorerId: 'scorer1',
+        scorerId: 'scorer-1',
         scorerObject: { scorer: scorer1 },
         runId: expect.any(String),
         input: expect.any(Object),
