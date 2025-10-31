@@ -62,6 +62,7 @@ export const create = async (args: {
       llmApiKey: result?.llmApiKey as string | undefined,
       components: ['agents', 'tools', 'workflows', 'scorers'],
       addExample: true,
+      versionTag: args.createVersionTag,
     });
     postCreate({ projectName });
     return;
@@ -85,6 +86,7 @@ export const create = async (args: {
     addExample,
     llmApiKey,
     configureEditorWithDocsMCP: args.mcpServer,
+    versionTag: args.createVersionTag,
   });
 
   postCreate({ projectName });

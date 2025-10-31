@@ -171,6 +171,18 @@ for await (const chunk of stream) {
 }
 ```
 
+### Changed: Message Format
+
+An internal intermediary format has been removed. Messages now convert directly between `MastraMessageV2` (storage format) and AI SDK v5 `UIMessage`, simplifying the architecture and improving accuracy.
+
+**Action required only if** you have messages stored in the old `MastraMessageV1` format **and** you:
+
+1. **Directly inspect message metadata** - `__originalContent` is no longer present
+2. **Rely on exact V1 message shape preservation** - Shape may differ after conversion (content is still preserved)
+3. **Have custom message processing logic** - Verify it works with the new direct conversion flow
+
+The storage format (`MastraMessageV2`) and all public APIs remain unchanged.
+
 ### Agent class
 
 - Removed `generateVNext()` method. Use `generate()` instead.

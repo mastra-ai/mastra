@@ -595,7 +595,7 @@ export class InngestWorkflow<
     this.inngest = inngest;
   }
 
-  async getWorkflowRuns(args?: {
+  async listWorkflowRuns(args?: {
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
@@ -608,7 +608,7 @@ export class InngestWorkflow<
       return { runs: [], total: 0 };
     }
 
-    return storage.getWorkflowRuns({ workflowName: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
+    return storage.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
   }
 
   async getWorkflowRunById(runId: string): Promise<WorkflowRun | null> {

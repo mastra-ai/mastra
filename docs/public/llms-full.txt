@@ -4673,16 +4673,24 @@ The recommended way of using Mastra and AI SDK together is by installing the `@m
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy npm install @mastra/ai-sdk ```
+    ```bash copy
+    npm install @mastra/ai-sdk
+    ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm add @mastra/ai-sdk ```
+    ```bash copy
+    pnpm add @mastra/ai-sdk
+    ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
-    ```bash copy yarn add @mastra/ai-sdk ```
+    ```bash copy
+    yarn add @mastra/ai-sdk
+    ```
   </TabItem>
   <TabItem value="bun" label="bun">
-    ```bash copy bun add @mastra/ai-sdk ```
+    ```bash copy
+    bun add @mastra/ai-sdk
+    ```
   </TabItem>
 </Tabs>
 
@@ -4991,16 +4999,24 @@ Install the required AI SDK React package:
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy npm install @ai-sdk/react ```
+    ```bash copy
+    npm install @ai-sdk/react
+    ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm add @ai-sdk/react ```
+    ```bash copy
+    pnpm add @ai-sdk/react
+    ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
-    ```bash copy yarn add @ai-sdk/react ```
+    ```bash copy
+    yarn add @ai-sdk/react
+    ```
   </TabItem>
   <TabItem value="bun" label="bun">
-    ```bash copy bun add @ai-sdk/react ```
+    ```bash copy
+    bun add @ai-sdk/react
+    ```
   </TabItem>
 </Tabs>
 
@@ -7374,19 +7390,23 @@ Install the required Mastra packages:
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy npm install mastra@latest @mastra/core@latest
-    @mastra/libsql@latest ```
+    ```bash copy
+    npm install mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
-    ```bash copy yarn add mastra@latest @mastra/core@latest
-    @mastra/libsql@latest ```
+    ```bash copy
+    yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm add mastra@latest @mastra/core@latest
-    @mastra/libsql@latest ```
+    ```bash copy
+    pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
   </TabItem>
   <TabItem value="bun" label="bun">
-    ```bash copy bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```bash copy
+    bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
     ```
   </TabItem>
 </Tabs>
@@ -7489,10 +7509,14 @@ Start the Mastra Dev Server to expose your agents as REST endpoints:
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy npm run dev:mastra ```
+    ```bash copy
+    npm run dev:mastra
+    ```
   </TabItem>
   <TabItem value="cli" label="CLI">
-    ```bash copy mastra dev:mastra ```
+    ```bash copy
+    mastra dev:mastra
+    ```
   </TabItem>
 </Tabs>
 
@@ -7597,19 +7621,23 @@ Install the required Mastra packages:
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy npm install mastra@latest @mastra/core@latest
-    @mastra/libsql@latest ```
+    ```bash copy
+    npm install mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
-    ```bash copy yarn add mastra@latest @mastra/core@latest
-    @mastra/libsql@latest ```
+    ```bash copy
+    yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm add mastra@latest @mastra/core@latest
-    @mastra/libsql@latest ```
+    ```bash copy
+    pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
   </TabItem>
   <TabItem value="bun" label="bun">
-    ```bash copy bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```bash copy
+    bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
     ```
   </TabItem>
 </Tabs>
@@ -7712,10 +7740,14 @@ Start the Mastra Dev Server to expose your agents as REST endpoints:
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy npm run dev:mastra ```
+    ```bash copy
+    npm run dev:mastra
+    ```
   </TabItem>
   <TabItem value="cli" label="CLI">
-    ```bash copy mastra dev:mastra ```
+    ```bash copy
+    mastra dev:mastra
+    ```
   </TabItem>
 </Tabs>
 
@@ -8442,7 +8474,7 @@ title: "Mastra Docs Server | Getting Started | Mastra Docs"
 description: "Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert."
 ---
 
-import Youtube from "@site/src/components/YouTube-player";
+import YouTube from "@site/src/components/YouTube-player";
 
 # Mastra Docs Server
 [EN] Source: https://mastra.ai/en/docs/getting-started/mcp-docs-server
@@ -8695,7 +8727,7 @@ title: "Playground | Getting Started | Mastra Docs"
 description: Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
 ---
 
-import Youtube from "@site/src/components/YouTube-player";
+import YouTube from "@site/src/components/YouTube-player";
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 import { VideoPlayer } from "@site/src/components/video-player";
@@ -8717,19 +8749,29 @@ If you created your application with `create mastra`, start the local developmen
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy npm run dev ```
+    ```bash copy
+    npm run dev
+    ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm run dev ```
+    ```bash copy
+    pnpm run dev
+    ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
-    ```bash copy yarn run dev ```
+    ```bash copy
+    yarn run dev
+    ```
   </TabItem>
   <TabItem value="bun" label="bun">
-    ```bash copy bun run dev ```
+    ```bash copy
+    bun run dev
+    ```
   </TabItem>
   <TabItem value="mastra" label="mastra">
-    ```bash copy mastra dev ```
+    ```bash copy
+    mastra dev
+    ```
   </TabItem>
 </Tabs>
 
@@ -8852,16 +8894,24 @@ Install a template using the `create-mastra` command:
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy npx create-mastra@latest --template template-name ```
+    ```bash copy
+    npx create-mastra@latest --template template-name
+    ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
-    ```bash copy yarn dlx create-mastra@latest --template template-name ```
+    ```bash copy
+    yarn dlx create-mastra@latest --template template-name
+    ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm create mastra@latest --template template-name ```
+    ```bash copy
+    pnpm create mastra@latest --template template-name
+    ```
   </TabItem>
   <TabItem value="bun" label="bun">
-    ```bash copy bun create mastra@latest --template template-name ```
+    ```bash copy
+    bun create mastra@latest --template template-name
+    ```
   </TabItem>
 </Tabs>
 
@@ -8908,7 +8958,7 @@ sidebar_label: "Introduction"
 description: "Mastra is an all-in-one framework for building AI-powered applications and agents with a modern TypeScript stack."
 ---
 
-import Youtube from "@site/src/components/YouTube-player";
+import YouTube from "@site/src/components/YouTube-player";
 
 # About Mastra
 [EN] Source: https://mastra.ai/en/docs
@@ -10345,7 +10395,7 @@ title: "Working Memory | Memory | Mastra Docs"
 description: "Learn how to configure working memory in Mastra to store persistent user data, preferences."
 ---
 
-import Youtube from "@site/src/components/YouTube-player";
+import YouTube from "@site/src/components/YouTube-player";
 
 # Working Memory
 [EN] Source: https://mastra.ai/en/docs/memory/working-memory
@@ -17072,16 +17122,12 @@ const messagesV2 = await mastra
   .getMessages({ threadId: "your-thread-id", format: "v2" });
 ```
 
-You can also retrieve messages using an array of message IDs. Note that unlike `getMessages`, this defaults to the V2 format:
+You can also retrieve messages using an array of message IDs:
 
 ```typescript copy
-const messagesV1 = await mastra
+const messages = await mastra
   .getStorage()
-  .getMessagesById({ messageIds: messageIdArr, format: "v1" });
-
-const messagesV2 = await mastra
-  .getStorage()
-  .getMessagesById({ messageIds: messageIdArr });
+  .listMessagesById({ messageIds: messageIdArr });
 ```
 
 ## Storage Providers
@@ -27819,7 +27865,7 @@ export class MessageLengthLimiter implements Processor {
           sum +
           msg.content.parts
             .filter((part) => part.type === "text")
-            .reduce((partSum, part) => partSum + (part as any).text.length, 0)
+            .reduce((partSum, part) => partSum + (part.type === "text" ? part.text.length : 0), 0)
         );
       }, 0);
 
@@ -27865,14 +27911,12 @@ export class MessageLengthLimiter implements Processor {
       for (let j = 0; j < parts.length; j++) {
         const part = parts[j];
         if (part.type === "text") {
-          const textPart = part as any;
-          const partLength = textPart.text.length;
+          const partLength = part.text.length;
 
           if (currentLength + partLength > maxLength) {
             const remainingChars = maxLength - currentLength;
             if (remainingChars > 0) {
-              textPart.text =
-                textPart.text.substring(0, remainingChars) + "...";
+              part.text = part.text.substring(0, remainingChars) + "...";
             } else {
               parts.splice(j);
               break;
@@ -28129,7 +28173,7 @@ export class ResponseLengthLimiter implements Processor {
   }: {
     part: ChunkType;
     streamParts: ChunkType[];
-    state: Record<string, any>;
+    state: Record<string, unknown>;
     abort: (reason?: string) => never;
   }): Promise<ChunkType | null | undefined> {
     if (!state.cumulativeLength) {
@@ -28430,7 +28474,7 @@ export class ResponseValidator implements Processor {
       .map((msg) =>
         msg.content.parts
           .filter((part) => part.type === "text")
-          .map((part) => (part as any).text)
+          .map((part) => (part.type === "text" ? part.text : ""))
           .join(""),
       )
       .join("");
@@ -28619,7 +28663,7 @@ export class AdvancedResponseValidator implements Processor {
       .map((msg) =>
         msg.content.parts
           .filter((part) => part.type === "text")
-          .map((part) => (part as any).text)
+          .map((part) => (part.type === "text" ? part.text : ""))
           .join(""),
       )
       .join("");
@@ -33880,7 +33924,7 @@ description: Guide on creating a Chef Assistant agent in Mastra to help users co
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
-import Youtube from "@site/src/components/YouTube-player";
+import YouTube from "@site/src/components/YouTube-player";
 
 # Building an AI Chef Assistant
 [EN] Source: https://mastra.ai/en/guides/guide/chef-michel
@@ -35204,10 +35248,14 @@ Install dependencies
 
 <Tabs>
   <TabItem value="openai" label="Open AI">
-    ```bash copy npm install @ai-sdk/openai ```
+    ```bash copy
+    npm install @ai-sdk/openai
+    ```
   </TabItem>
   <TabItem value="gemini" label="Gemini">
-    ```bash copy npm install @ai-sdk/google ```
+    ```bash copy
+    npm install @ai-sdk/google
+    ```
   </TabItem>
 </Tabs>
 
@@ -35468,32 +35516,32 @@ While examples show quick implementations and docs explain specific features, th
   <CardGridItem
     title="AI Recruiter"
     description="Create a workflow that processes candidate resumes and conducts interviews, demonstrating branching logic and LLM integration in Mastra workflows."
-    href="./guide/ai-recruiter"
+    href="/guides/guide/ai-recruiter"
   />
   <CardGridItem
     title="Chef Assistant"
     description="Build an AI chef agent that helps users cook meals with available ingredients, showing how to create interactive agents with custom tools."
-    href="./guide/chef-michel"
+    href="/guides/guide/chef-michel"
   />
   <CardGridItem
     title="Research Assistant"
     description="Develop an AI research assistant that analyzes academic papers using Retrieval Augmented Generation (RAG), demonstrating document processing and question answering."
-    href="./guide/research-assistant"
+    href="/guides/guide/research-assistant"
   />
   <CardGridItem
     title="Stock Agent"
     description="Implement a simple agent that fetches stock prices, illustrating the basics of creating tools and integrating them with Mastra agents."
-    href="./guide/stock-agent"
+    href="/guides/guide/stock-agent"
   />
   <CardGridItem
     title="Notes MCP Server"
     description="Build an AI notes assistant that helps users manage their notes, showing how to create interactive agents with custom tools."
-    href="./guide/notes-mcp-server"
+    href="/guides/guide/notes-mcp-server"
   />
   <CardGridItem
     title="Web Search"
     description="A step-by-step guide to creating an agent that can search the web."
-    href="./guide/web-search"
+    href="/guides/guide/web-search"
   />
 </CardGrid>
 
@@ -35503,7 +35551,7 @@ title: "Migration: AgentNetwork to .network() | Migration Guide"
 description: "Learn how to migrate from AgentNetwork primitives to .network() in Mastra."
 ---
 
-## Overview
+# Migrate from AgentNetwork to `.network()`
 [EN] Source: https://mastra.ai/en/guides/migrations/agentnetwork
 
 As of `v0.20.0` for `@mastra/core`, the following changes apply.
@@ -35512,13 +35560,21 @@ As of `v0.20.0` for `@mastra/core`, the following changes apply.
 
 - Bump all your model provider packages by a major version.
 
-> This will ensure that they are all v5 models now.
+:::note
+
+This will ensure that they are all v5 models now.
+
+:::
 
 ### Memory is required
 
 - Memory is now required for the agent network to function properly.
 
-> You must configure memory for the agent.
+:::note
+
+You must configure memory for the agent.
+
+:::
 
 ## Migration paths
 
@@ -35738,6 +35794,18 @@ const agent = new Agent({
 
 If you're not using semantic recall (it's disabled by default), no changes are needed.
 
+### Changed: Message Format
+
+An internal intermediary format has been removed. Messages now convert directly between `MastraMessageV2` (storage format) and AI SDK v5 `UIMessage`, simplifying the architecture and improving accuracy.
+
+**Action required only if** you have messages stored in the old `MastraMessageV1` format **and** you:
+
+1. **Directly inspect message metadata** - `__originalContent` is no longer present
+2. **Rely on exact V1 message shape preservation** - Shape may differ after conversion (content is still preserved)
+3. **Have custom message processing logic** - Verify it works with the new direct conversion flow
+
+The storage format (`MastraMessageV2`) and all public APIs remain unchanged.
+
 ### Agent class
 
 - Removed `generateVNext()` method. Use `generate()` instead.
@@ -35842,6 +35910,72 @@ export const accountBalance = createTool({
 - Removed the `@mastra/core/agent/input-processors` exports. They can found at `@mastra/core/processors` now.
 - `InputProcessor` type removed in favour of `Processor` which implements a `processInput` function.
 
+### Changed: `RuntimeContext` renamed to `RequestContext`
+
+The `RuntimeContext` class has been renamed to `RequestContext`, and all parameter names have been updated from `runtimeContext` to `requestContext` across all APIs.
+
+**Why this change?**
+
+- **Clearer naming**: "requestContext" better describes its purpose as request-specific data
+- **Consistency**: Aligns with web framework conventions where "request context" is a common pattern
+- **Less confusion**: Avoids ambiguity with "runtime" which could refer to execution environment
+
+**Migration:**
+
+Update imports, class instantiation, and parameter names:
+
+```typescript
+// Before
+import { RuntimeContext } from "@mastra/core/runtime-context"; // ❌
+
+const runtimeContext = new RuntimeContext(); // ❌
+runtimeContext.set("userTier", "enterprise");
+
+// After
+import { RequestContext } from "@mastra/core/request-context"; // ✅
+
+const requestContext = new RequestContext(); // ✅
+requestContext.set("userTier", "enterprise");
+```
+
+**Agents:**
+
+```typescript
+// Before
+await agent.generate(messages, {
+  runtimeContext, // ❌
+});
+
+// After
+await agent.generate(messages, {
+  requestContext, // ✅
+});
+```
+
+**Tools:**
+
+```typescript
+// Before
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async ({ context, runtimeContext }) => {
+    // ❌
+    const userTier = runtimeContext.get("userTier");
+  },
+});
+
+// After
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async ({ context, requestContext }) => {
+    // ✅
+    const userTier = requestContext.get("userTier");
+  },
+});
+```
+
+This change also affects workflow steps, dynamic configuration functions (memory, model, etc.), and anywhere else you pass or receive `runtimeContext` as a parameter.
+
 ## Migrate to v0.22
 
 ### Changed: Memory Scope Defaults
@@ -35931,7 +36065,7 @@ title: "Migration: VNext to Standard APIs | Migration Guide"
 description: "Learn how to migrate from VNext methods to the new standard agent APIs in Mastra."
 ---
 
-## Overview
+#  Migrate from VNext to Standard APIs
 [EN] Source: https://mastra.ai/en/guides/migrations/vnext-to-standard-apis
 
 As of `v0.20.0` for `@mastra/core`, the following changes apply.
@@ -36908,7 +37042,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 48+ AI providers and 834+ models through Mastra's model router."
+description: "Access 48+ AI providers and 835+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -36921,7 +37055,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 834 models from 48 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 835 models from 48 providers through a single API.
 
 ## Features
 
@@ -39155,7 +39289,7 @@ const agent = new Agent({
 
 ---
 title: "Cerebras | Models | Mastra"
-description: "Use Cerebras models with Mastra. 3 models available."
+description: "Use Cerebras models with Mastra. 4 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -39169,7 +39303,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/cerebras.svg" alt="Cerebras logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cerebras
 [EN] Source: https://mastra.ai/en/models/providers/cerebras
 
-Access 3 Cerebras models through Mastra's model router. Authentication is handled automatically using the `CEREBRAS_API_KEY` environment variable.
+Access 4 Cerebras models through Mastra's model router. Authentication is handled automatically using the `CEREBRAS_API_KEY` environment variable.
 
 Learn more in the [Cerebras documentation](https://inference-docs.cerebras.ai/models/overview).
 
@@ -39241,6 +39375,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32000,
     "inputCost": 2,
     "outputCost": 2
+  },
+  {
+    "model": "cerebras/zai-glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 40960,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -39271,7 +39417,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "cerebras/qwen-3-coder-480b"
+      ? "cerebras/zai-glm-4.6"
       : "cerebras/gpt-oss-120b";
   }
 });
@@ -42732,7 +42878,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/baseten.svg"
     />    <CardGridItem
       title="Cerebras"
-      description="3 models"
+      description="4 models"
       href="/models/providers/cerebras"
       logo="https://models.dev/logos/cerebras.svg"
     />    <CardGridItem
@@ -54967,19 +55113,19 @@ This method takes no parameters.
 
 
 ---
-title: "Reference: Mastra.getWorkflows() | Core | Mastra Docs"
-description: "Documentation for the `Mastra.getWorkflows()` method in Mastra, which retrieves all configured workflows."
+title: "Reference: Mastra.listWorkflows() | Core | Mastra Docs"
+description: "Documentation for the `Mastra.listWorkflows()` method in Mastra, which retrieves all configured workflows."
 ---
 
-# Mastra.getWorkflows()
+# Mastra.listWorkflows()
 [EN] Source: https://mastra.ai/en/reference/core/listWorkflows
 
-The `.getWorkflows()` method is used to retrieve all workflows that have been configured in the Mastra instance. The method accepts an optional options object.
+The `.listWorkflows()` method is used to retrieve all workflows that have been configured in the Mastra instance. The method accepts an optional options object.
 
 ## Usage example
 
 ```typescript copy
-mastra.getWorkflows();
+mastra.listWorkflows();
 ```
 
 ## Parameters
@@ -65782,7 +65928,7 @@ const vectorTool = createVectorQueryTool({
 
 
 ---
-title: "Reference: MDocument | RAG | Mastra Docs"
+title: "Reference: MDocument | Document Processing | RAG | Mastra Docs"
 description: Documentation for the MDocument class in Mastra, which handles document processing and chunking.
 ---
 
@@ -74767,7 +74913,7 @@ const storage = new MSSQLStore({
       name: "connectionString",
       type: "string",
       description:
-        "MSSQL connection string (e.g., mssql://user:pass@host:1433/dbname)",
+        "MSSQL connection string (e.g., Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true)",
       isOptional: false,
     },
     {
@@ -74789,12 +74935,12 @@ import { MSSQLStore } from "@mastra/mssql";
 
 // Using a connection string only
 const store1 = new MSSQLStore({
-  connectionString: "mssql://user:password@localhost:1433/mydb",
+  connectionString: "Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true",
 });
 
 // Using a connection string with a custom schema name
 const store2 = new MSSQLStore({
-  connectionString: "mssql://user:password@localhost:1433/mydb",
+  connectionString: "Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true",
   schemaName: "custom_schema", // optional
 });
 
