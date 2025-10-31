@@ -416,7 +416,7 @@ describe('Tool Input Validation Integration Tests', () => {
         },
       });
 
-      const result = await tool.execute({ anything: 'goes' });
+      const result = await tool.execute({ anything: 'goes' } as any);
 
       expect(result.error).toBeUndefined();
       expect(result.received).toEqual({ anything: 'goes' });

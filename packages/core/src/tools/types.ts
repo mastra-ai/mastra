@@ -222,10 +222,11 @@ export interface ToolAction<
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata
   // Returns: The expected output OR a validation error if input validation fails
+  // Note: When no outputSchema is provided, returns any to allow property access
   execute?: (
     inputData: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
     context?: TContext,
-  ) => Promise<(TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown) | ValidationError>;
+  ) => Promise<(TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : any) | ValidationError>;
   mastra?: Mastra;
   requireApproval?: boolean;
   onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
