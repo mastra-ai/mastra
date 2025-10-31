@@ -159,7 +159,7 @@ The scorer returns a high score indicating severe toxic content. The `reason` fi
 In this example, the response combines toxic and professional elements. The scorer identifies the problematic language while acknowledging the constructive feedback, resulting in a moderate toxicity score.
 
 ```typescript title="src/example-mixed-toxicity.ts" showLineNumbers copy
-import { createToxicityScorer } from "@mastra/evals/scorers/llm";
+import { createToxicityScorer } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createToxicityScorer({ model: "openai/gpt-4o-mini" });
 
@@ -194,7 +194,7 @@ The scorer returns a moderate score reflecting a combination of dismissive langu
 In this example, the response is professional and constructive, with no toxic or harmful language detected.
 
 ```typescript title="src/example-no-toxicity.ts" showLineNumbers copy
-import { createToxicityScorer } from "@mastra/evals/scorers/llm";
+import { createToxicityScorer } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createToxicityScorer({ model: "openai/gpt-4o-mini" });
 

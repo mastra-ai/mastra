@@ -259,7 +259,7 @@ export const textualDifferenceScorer = createTextualDifferenceScorer();`,
     category: 'output-quality',
     type: 'code',
     filename: 'tone-scorer.ts',
-    content: `import { createToneScorer } from '@mastra/evals/scorers/code';
+    content: `import { createToneScorer } from '@mastra/evals/scorers/prebuilt';
 
 export const toneScorer = createToneScorer();`,
   },
@@ -270,7 +270,7 @@ export const toneScorer = createToneScorer();`,
     category: 'accuracy-and-reliability',
     type: 'code',
     filename: 'code-tool-call-accuracy-scorer.ts',
-    content: `import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/code';
+    content: `import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt';
 
 export const codeToolCallAccuracyScorer = createToolCallAccuracyScorerCode({
   expectedTool: 'weather-tool', // The tool that should be called

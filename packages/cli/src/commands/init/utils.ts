@@ -337,8 +337,8 @@ export async function writeToolSample(destPath: string) {
 export async function writeScorersSample(llmProvider: LLMProvider, destPath: string) {
   const modelString = getModelIdentifier(llmProvider);
   const content = `import { z } from 'zod';
-import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/code';
-import { createCompletenessScorer } from '@mastra/evals/scorers/code';
+import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt';
+import { createCompletenessScorer } from '@mastra/evals/scorers/prebuilt';
 import { createScorer } from '@mastra/core/evals';
 
 export const toolCallAppropriatenessScorer = createToolCallAccuracyScorerCode({
