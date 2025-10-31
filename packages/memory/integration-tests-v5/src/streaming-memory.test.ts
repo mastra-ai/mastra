@@ -6,7 +6,7 @@ import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { useChat } from '@ai-sdk/react';
 import { Agent } from '@mastra/core/agent';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import type { UIMessage } from 'ai';
 import { DefaultChatTransport, isToolUIPart } from 'ai';

@@ -4,7 +4,7 @@ import { openai } from '@ai-sdk/openai';
 import { serve } from '@hono/node-server';
 import { realtimeMiddleware } from '@inngest/realtime/middleware';
 import { Agent } from '@mastra/core/agent';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { MastraScorer } from '@mastra/core/scores';
 import { createScorer, runExperiment } from '@mastra/core/scores';

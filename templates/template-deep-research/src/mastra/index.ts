@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 import { researchWorkflow } from './workflows/researchWorkflow';
 import { learningExtractionAgent } from './agents/learningExtractionAgent';

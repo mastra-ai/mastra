@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { createLogger } from '@mastra/core/logger';
 import { weatherAgent } from '@/agents';
 import { TestDeployer } from '@mastra/deployer/test';

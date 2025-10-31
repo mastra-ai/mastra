@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { myAgent, contentCreatorAgent } from './agents';
 
 export const mastra = new Mastra({

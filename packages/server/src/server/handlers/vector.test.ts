@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { MastraVector } from '@mastra/core/vector';
 import type { QueryResult, IndexStats } from '@mastra/core/vector';
 import type { Mock } from 'vitest';

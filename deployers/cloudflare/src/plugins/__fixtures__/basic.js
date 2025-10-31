@@ -1,5 +1,5 @@
 import { createLogger } from '@mastra/core/logger';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { createApiRoute } from '@mastra/core/server';
 import { TestDeployer } from '@mastra/deployer/test';
 import { PostgresStore } from '@mastra/pg';

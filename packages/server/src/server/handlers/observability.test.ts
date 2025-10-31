@@ -1,5 +1,5 @@
 import { createSampleScore } from '@internal/storage-test-utils';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import type { MastraStorage, AITraceRecord } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';

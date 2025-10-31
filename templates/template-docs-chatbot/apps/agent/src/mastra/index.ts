@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
 import { PinoLogger } from '@mastra/loggers';
 import { docsAgent } from './agents/docs-agent';

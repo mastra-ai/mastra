@@ -3,7 +3,7 @@ import { openai as openaiV5 } from '@ai-sdk/openai-v5';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { UnicodeNormalizer, TokenLimiterProcessor } from '@mastra/core/processors';
 import type { MastraStorage } from '@mastra/core/storage';
 import type { AISDKV5OutputStream } from '@mastra/core/stream';

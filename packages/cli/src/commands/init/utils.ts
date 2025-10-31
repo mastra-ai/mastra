@@ -480,7 +480,7 @@ export const writeIndexFile = async ({
       await fs.writeFile(
         destPath,
         `
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 
 export const mastra = new Mastra()
         `,
@@ -491,7 +491,7 @@ export const mastra = new Mastra()
     await fs.writeFile(
       destPath,
       `
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 ${addWorkflow ? `import { weatherWorkflow } from './workflows/weather-workflow';` : ''}

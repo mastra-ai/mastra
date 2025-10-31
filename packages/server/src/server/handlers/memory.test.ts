@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
