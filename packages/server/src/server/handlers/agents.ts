@@ -27,7 +27,8 @@ type GetHITLBody<
 > = Parameters<Agent[T]>[0];
 
 export interface SerializedProcessor {
-  name: string;
+  id: string;
+  name?: string;
 }
 
 export interface SerializedTool {

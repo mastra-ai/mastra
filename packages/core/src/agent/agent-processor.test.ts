@@ -744,7 +744,8 @@ describe('Input and Output Processors', () => {
 
     it('should skip processors that do not implement processOutputResult', async () => {
       class CompleteProcessor implements Processor {
-        readonly name = 'complete-processor';
+        readonly id = 'complete-processor';
+        readonly name = 'Complete Processor';
 
         async processOutputResult({ messages }) {
           return messages.map(msg => ({
