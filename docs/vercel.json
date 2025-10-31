@@ -782,7 +782,7 @@
     },
     {
       "source": "/reference/observability/ai-tracing",
-      "destination": "/reference/observability/ai-tracing/",
+      "destination": "/docs/observability/ai-tracing/overview",
       "permanent": true
     },
     {
