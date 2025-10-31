@@ -1,5 +1,6 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { AIV5Type } from '@mastra/core/agent/message-list/types';
 import { MastraMemory } from '@mastra/core/memory';
 import type {
   MastraMessageV1,
@@ -105,7 +106,7 @@ export class Memory extends MastraMemory {
     args: StorageGetMessagesArg & {
       threadConfig?: MemoryConfig;
     },
-  ): Promise<{ messages: MastraDBMessage[] }> {
+  ): Promise<{ messages: MastraDBMessage[]; uiMessages: AIV5Type.UIMessage[] }> {
     const { threadId, resourceId, selectBy, threadConfig } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
@@ -243,8 +244,9 @@ export class Memory extends MastraMemory {
 
     // Always return mastra-db format (V2)
     const messages = list.get.all.db();
+    const uiMessages = messages.map(msg => MessageList.mastraDBMessageToAIV5UIMessage(msg));
 
-    return { messages };
+    return { messages, uiMessages };
   }
 
   async rememberMessages(args: {
