@@ -15,43 +15,6 @@ import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
 import type { MastraMemory } from '../../memory';
 
-async function getMemoryInstructions(memoryToUse?: MastraMemory) {
-  if (!memoryToUse) {
-    return { memoryTools: {}, memoryInstructions: '' };
-  }
-
-  const memoryTools = await memoryToUse?.listTools?.();
-
-  const memoryToolList = Object.entries({ ...memoryTools })
-    .map(([name, tool]) => {
-      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema((tool as any).inputSchema || z.object({})),
-      )}`;
-    })
-    .join('\n');
-
-  const memoryInstructions = `
-            ## Memory Tools
-
-            Memory tools are available for storing and updating user information:
-            ${memoryToolList}
-
-            **IMPORTANT DISTINCTION:**
-            - Memory tools should be called BY YOU DIRECTLY using your tool-calling capability
-            - After calling a memory tool, you MUST still provide a routing decision in your response
-            - If the user's request ONLY requires updating memory (no other action needed), call the memory tool AND return next_step="none" with primitiveType="none"
-            - If the user's request requires BOTH memory update AND another action (like calling an agent or tool), call the memory tool AND route to the appropriate primitive
-
-            **Response Format When Using Memory Tools:**
-            1. First, call the memory tool directly (if needed)
-            2. Then, provide your routing decision JSON:
-               - If only memory was needed: {"primitiveId": "none", "primitiveType": "none", ...}
-               - If another action is needed: {"primitiveId": "...", "primitiveType": "agent|workflow|tool", ...}
-  `;
-
-  return { memoryTools, memoryInstructions };
-}
-
 async function getRoutingAgent({ requestContext, agent }: { agent: Agent; requestContext: RequestContext }) {
   const instructionsToUse = await agent.getInstructions({ requestContext: requestContext });
   const agentsToUse = await agent.listAgents({ requestContext: requestContext });
@@ -75,15 +38,14 @@ async function getRoutingAgent({ requestContext, agent }: { agent: Agent; reques
     })
     .join('\n');
 
-  const toolList = Object.entries({ ...toolsToUse })
+  const memoryTools = await memoryToUse?.listTools?.();
+  const toolList = Object.entries({ ...toolsToUse, ...memoryTools })
     .map(([name, tool]) => {
       return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(
         zodToJsonSchema((tool as any).inputSchema || z.object({})),
       )}`;
     })
     .join('\n');
-
-  const { memoryInstructions, memoryTools } = await getMemoryInstructions(memoryToUse);
 
   const instructions = `
           You are a router in a network of specialized AI agents.
@@ -106,7 +68,6 @@ async function getRoutingAgent({ requestContext, agent }: { agent: Agent; reques
           When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.
           When calling an agent, the prompt should be a text value, like you would call an LLM in a chat interface.
           Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.
-          ${memoryInstructions}
         `;
 
   return new Agent({
@@ -115,7 +76,6 @@ async function getRoutingAgent({ requestContext, agent }: { agent: Agent; reques
     instructions,
     model: model,
     memory: memoryToUse,
-    tools: { ...memoryTools },
     // @ts-ignore
     _agentNetworkAppend: true,
   });
@@ -310,9 +270,6 @@ export async function createNetworkLoop({
 
       const routingAgent = await getRoutingAgent({ requestContext, agent });
 
-      const memoryToUse = await agent.getMemory({ requestContext });
-      const { memoryInstructions } = await getMemoryInstructions(memoryToUse);
-
       let completionResult;
 
       let iterationCount = (inputData.iteration ?? -1) + 1;
@@ -480,8 +437,6 @@ export async function createNetworkLoop({
                     }
 
                     The 'selectionReason' property should explain why you picked the primitive${inputData.verboseIntrospection ? ', as well as why the other primitives were not picked.' : '.'}
-
-                    ${memoryInstructions}
                     `,
         },
       ];
@@ -506,9 +461,6 @@ export async function createNetworkLoop({
       };
 
       console.log('\n=== ROUTING AGENT CALL (iteration', iterationCount, ') ===');
-
-      const routingAgentTools = await routingAgent.listTools({ requestContext });
-      console.log('Routing agent tools:', Object.keys(routingAgentTools || {}));
 
       const result = await tryGenerateWithJsonFallback(routingAgent, prompt, options);
 
@@ -662,32 +614,29 @@ export async function createNetworkLoop({
         format: 'v2',
       });
 
+      const resultText = await result.text;
+
       const endPayload = {
         task: inputData.task,
-        agentId: inputData.primitiveId,
-        result: await result.text,
+        result: resultText,
         isComplete: false,
         iteration: inputData.iteration,
+        primitiveId: inputData.primitiveId,
+        primitiveType: inputData.primitiveType,
       };
 
       await writer.write({
         type: 'agent-execution-end',
         payload: {
           ...endPayload,
+          agentId: inputData.primitiveId,
           usage: await result.usage,
         },
         from: ChunkFrom.NETWORK,
         runId,
       });
 
-      return {
-        task: inputData.task,
-        primitiveId: inputData.primitiveId,
-        primitiveType: inputData.primitiveType,
-        result: await result.text,
-        isComplete: false,
-        iteration: inputData.iteration,
-      };
+      return endPayload;
     },
   });
 
@@ -879,25 +828,6 @@ export async function createNetworkLoop({
 
       const toolId = inputData.primitiveId;
       let tool = toolsMap[toolId];
-
-      // If tool not found with exact match, try stripping common prefixes
-      // LLMs often add prefixes like "functions." or "tools." to tool names
-      if (!tool) {
-        const prefixesToTry = ['functions.', 'tools.', 'tool.', 'function.'];
-        for (const prefix of prefixesToTry) {
-          if (toolId.startsWith(prefix)) {
-            const strippedId = toolId.slice(prefix.length);
-            tool = toolsMap[strippedId];
-            if (tool) {
-              console.warn(
-                `Tool lookup: Found tool "${strippedId}" by stripping prefix "${prefix}" from "${toolId}". ` +
-                  `Consider updating the routing agent instructions to avoid adding prefixes.`,
-              );
-              break;
-            }
-          }
-        }
-      }
 
       if (!tool) {
         const mastraError = new MastraError({
