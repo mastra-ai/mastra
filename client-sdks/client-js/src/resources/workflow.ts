@@ -181,18 +181,6 @@ export class Workflow extends BaseResource {
   }
 
   /**
-   * Sends an event to a specific workflow run by its ID
-   * @param params - Object containing the runId, event and data
-   * @returns Promise containing a success message
-   */
-  sendRunEvent(params: { runId: string; event: string; data: unknown }): Promise<{ message: string }> {
-    return this.request(`/api/workflows/${this.workflowId}/runs/${params.runId}/send-event`, {
-      method: 'POST',
-      body: { event: params.event, data: params.data },
-    });
-  }
-
-  /**
    * @deprecated Use createRunAsync() instead.
    * @throws {Error} Always throws an error directing users to use createRunAsync()
    */

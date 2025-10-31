@@ -18,7 +18,6 @@ import {
   watchWorkflowHandler,
   observeStreamWorkflowHandler,
   cancelWorkflowRunHandler,
-  sendWorkflowRunEventHandler,
   listWorkflowRunsHandler,
   getWorkflowRunExecutionResultHandler,
 } from './workflows';
@@ -750,43 +749,6 @@ describe('vNext Workflow Handlers', () => {
 
       // Verify resourceId is preserved
       const runAfter = await freshWorkflow.getWorkflowRunById('test-run-cancel-resource');
-      expect(runAfter?.resourceId).toBe(resourceId);
-    });
-  });
-
-  describe('sendEventToWorkflowHandler', () => {
-    it('should preserve resourceId when sending event after server restart', async () => {
-      const resourceId = 'user-event-test';
-
-      // Create run with resourceId
-      const run = await mockWorkflow.createRunAsync({
-        runId: 'test-run-event-resource',
-        resourceId,
-      });
-      await run.start({ inputData: {} });
-
-      const runBefore = await mockWorkflow.getWorkflowRunById('test-run-event-resource');
-      expect(runBefore?.resourceId).toBe(resourceId);
-
-      // Simulate server restart
-      const freshWorkflow = createMockWorkflow('test-workflow');
-      const freshMastra = new Mastra({
-        logger: false,
-        workflows: { 'test-workflow': freshWorkflow },
-        storage: mockMastra.getStorage(),
-      });
-
-      const result = await sendWorkflowRunEventHandler({
-        mastra: freshMastra,
-        workflowId: 'test-workflow',
-        runId: 'test-run-event-resource',
-        event: 'test-event',
-        data: { test: 'data' },
-      });
-      expect(result).toEqual({ message: 'Workflow run event sent' });
-
-      // Verify resourceId is preserved
-      const runAfter = await freshWorkflow.getWorkflowRunById('test-run-event-resource');
       expect(runAfter?.resourceId).toBe(resourceId);
     });
   });
