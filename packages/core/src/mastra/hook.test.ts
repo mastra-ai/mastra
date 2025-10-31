@@ -120,7 +120,7 @@ describe('createOnScorerHook', () => {
 
     await hookWithoutStorage({
       runId: 'test-run',
-      scorer: { name: 'test-scorer' },
+      scorer: { id: 'test-scorer' },
       input: [],
       output: {},
       source: 'LIVE',
@@ -135,7 +135,7 @@ describe('createOnScorerHook', () => {
   it('should save score', async () => {
     const hookData = {
       runId: 'test-run',
-      scorer: { name: 'test-scorer' },
+      scorer: { id: 'test-scorer' },
       input: [{ message: 'test' }],
       output: { result: 'test' },
       source: 'LIVE' as const,
@@ -147,6 +147,7 @@ describe('createOnScorerHook', () => {
     };
 
     const mockScorer = {
+      id: 'test-scorer',
       name: 'test-scorer',
       run: vi.fn().mockResolvedValue({ score: 0.8 }),
     };
@@ -195,7 +196,7 @@ describe('createOnScorerHook', () => {
   it('should handle scorer run failure without throwing', async () => {
     const hookData = {
       runId: 'test-run',
-      scorer: { name: 'test-scorer' },
+      scorer: { id: 'test-scorer' },
       input: [],
       output: {},
       source: 'LIVE' as const,
@@ -204,6 +205,7 @@ describe('createOnScorerHook', () => {
     };
 
     const mockScorer = {
+      id: 'test-scorer',
       run: vi.fn().mockRejectedValue(new Error('Scorer failed')),
     };
 
@@ -221,7 +223,7 @@ describe('createOnScorerHook', () => {
   it('should handle validation errors without throwing', async () => {
     const hookData = {
       runId: 'test-run',
-      scorer: { name: 'test-scorer' },
+      scorer: { id: 'test-scorer' },
       input: [],
       output: {},
       source: 'LIVE' as const,
@@ -230,6 +232,7 @@ describe('createOnScorerHook', () => {
     };
 
     const mockScorer = {
+      id: 'test-scorer',
       run: vi.fn().mockResolvedValue({
         // Missing required fields that will cause validation to fail
         invalidField: 'invalid',
@@ -254,7 +257,7 @@ describe('createOnScorerHook', () => {
 
     const hookData = {
       runId: 'run-1',
-      scorer: { name: 'test-scorer' },
+      scorer: { id: 'test-scorer' },
       input: [],
       output: {},
       source: 'LIVE' as const,
@@ -274,6 +277,7 @@ describe('createOnScorerHook', () => {
     };
 
     const mockScorer = {
+      id: 'test-scorer',
       name: 'test-scorer',
       run: vi.fn().mockResolvedValue({ score: 0.9, reason: 'great' }),
     };
@@ -301,7 +305,7 @@ describe('createOnScorerHook', () => {
 
     const hookData = {
       runId: 'run-2',
-      scorer: { name: 'perf-scorer' },
+      scorer: { id: 'perf-scorer' },
       input: [],
       output: {},
       source: 'LIVE' as const,
@@ -321,6 +325,7 @@ describe('createOnScorerHook', () => {
     };
 
     const mockScorer = {
+      id: 'perf-scorer',
       name: 'perf-scorer',
       run: vi.fn().mockResolvedValue({ score: 0.42, reason: 'ok' }),
     };
@@ -352,7 +357,7 @@ describe('createOnScorerHook', () => {
 
     const hookData = {
       runId: 'run-3',
-      scorer: { name: 'test-scorer' },
+      scorer: { id: 'test-scorer' },
       input: [],
       output: {},
       source: 'LIVE' as const,
@@ -372,6 +377,7 @@ describe('createOnScorerHook', () => {
     };
 
     const mockScorer = {
+      id: 'test-scorer',
       name: 'test-scorer',
       run: vi.fn().mockResolvedValue({ score: 0.7 }),
     };
@@ -401,7 +407,7 @@ describe('createOnScorerHook', () => {
 
     const hookData = {
       runId: 'run-4',
-      scorer: { name: 'test-scorer' },
+      scorer: { id: 'test-scorer' },
       input: [],
       output: {},
       source: 'LIVE' as const,
@@ -421,6 +427,7 @@ describe('createOnScorerHook', () => {
     };
 
     const mockScorer = {
+      id: 'test-scorer',
       name: 'test-scorer',
       run: vi.fn().mockResolvedValue({ score: 0.8, reason: 'good' }),
     };
