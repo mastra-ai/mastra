@@ -107,8 +107,7 @@ describe('Memory Handlers', () => {
           agentId: 'test-agent',
           offset: 0,
           limit: 10,
-          orderBy: 'createdAt',
-          sortDirection: 'DESC',
+          orderBy: { field: 'createdAt', direction: 'DESC' },
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
     });
@@ -124,8 +123,7 @@ describe('Memory Handlers', () => {
           agentId: 'test-agent',
           offset: 0,
           limit: 10,
-          orderBy: 'createdAt',
-          sortDirection: 'DESC',
+          orderBy: { field: 'createdAt', direction: 'DESC' },
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Argument "resourceId" is required' }));
     });
@@ -146,8 +144,7 @@ describe('Memory Handlers', () => {
         agentId: 'test-agent',
         offset: 0,
         limit: 10,
-        orderBy: 'createdAt',
-        sortDirection: 'DESC',
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(result.total).toEqual(1);
@@ -160,8 +157,7 @@ describe('Memory Handlers', () => {
         resourceId: 'test-resource',
         offset: 0,
         limit: 10,
-        orderBy: 'createdAt',
-        sortDirection: 'DESC',
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
     });
 
@@ -182,8 +178,7 @@ describe('Memory Handlers', () => {
         agentId: 'test-agent',
         offset: 0,
         limit: 20,
-        orderBy: 'updatedAt',
-        sortDirection: 'ASC',
+        orderBy: { field: 'updatedAt', direction: 'ASC' },
       });
 
       expect(result.threads).toHaveLength(1);
@@ -191,8 +186,7 @@ describe('Memory Handlers', () => {
         resourceId: 'test-resource',
         offset: 0,
         limit: 20,
-        orderBy: 'updatedAt',
-        sortDirection: 'ASC',
+        orderBy: { field: 'updatedAt', direction: 'ASC' },
       });
     });
 
@@ -215,8 +209,7 @@ describe('Memory Handlers', () => {
         agentId: 'test-agent',
         offset: 0,
         limit: 10,
-        orderBy: 'updatedAt',
-        sortDirection: 'DESC',
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
       });
 
       expect(result.threads).toHaveLength(2);
@@ -224,8 +217,7 @@ describe('Memory Handlers', () => {
         resourceId: 'test-resource',
         offset: 0,
         limit: 10,
-        orderBy: 'updatedAt',
-        sortDirection: 'DESC',
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
       });
     });
 
@@ -244,8 +236,7 @@ describe('Memory Handlers', () => {
         agentId: 'test-agent',
         offset: 0,
         limit: 10,
-        orderBy: 'createdAt',
-        sortDirection: 'DESC',
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(result.threads).toHaveLength(0);

@@ -73,10 +73,7 @@ export type StorageListMessagesInput = {
       end?: Date;
     };
   };
-  orderBy?: {
-    field: 'createdAt';
-    direction: 'ASC' | 'DESC';
-  };
+  orderBy?: StorageOrderBy;
 };
 
 export type StorageListMessagesOutput = PaginationInfo & {
@@ -96,7 +93,8 @@ export type StorageListThreadsByResourceIdInput = {
   resourceId: string;
   limit: number;
   offset: number;
-} & ThreadSortOptions;
+  orderBy?: StorageOrderBy;
+};
 
 export type StorageListThreadsByResourceIdOutput = PaginationInfo & {
   threads: StorageThreadType[];
@@ -138,9 +136,9 @@ export type StorageMessageType = {
   resourceId: string | null;
 };
 
-export interface ThreadSortOptions {
-  orderBy?: ThreadOrderBy;
-  sortDirection?: ThreadSortDirection;
+export interface StorageOrderBy {
+  field?: ThreadOrderBy;
+  direction?: ThreadSortDirection;
 }
 
 export type ThreadOrderBy = 'createdAt' | 'updatedAt';

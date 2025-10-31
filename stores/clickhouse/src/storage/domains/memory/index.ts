@@ -228,7 +228,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_MESSAGES_BY_ID_FAILED',
+          id: 'CLICKHOUSE_STORAGE_LIST_MESSAGES_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: JSON.stringify(messageIds) },
@@ -272,10 +272,6 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       // Convert offset to page for pagination metadata
       const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
-      // Determine sort field and direction
-      const sortField = orderBy?.field || 'createdAt';
-      const sortDirection = orderBy?.direction || 'DESC';
-
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
       let dataQuery = `
         SELECT 
@@ -315,9 +311,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       }
 
       // Build ORDER BY clause
-      const orderByField = sortField === 'createdAt' ? 'createdAt' : `"${sortField}"`;
-      const orderByDirection = sortDirection === 'ASC' ? 'ASC' : 'DESC';
-      dataQuery += ` ORDER BY ${orderByField} ${orderByDirection}`;
+      const { field, direction } = this.parseOrderBy(orderBy);
+      dataQuery += ` ORDER BY "${field}" ${direction}`;
 
       // Apply pagination
       if (perPage === Number.MAX_SAFE_INTEGER) {
@@ -468,15 +463,22 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {
-        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+        const isDateField = field === 'createdAt' || field === 'updatedAt';
+        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
 
         // Handle tiebreaker for stable sorting
         if (aValue === bValue) {
           return a.id.localeCompare(b.id);
         }
 
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        }
+        // Fallback to string comparison for non-numeric fields
+        return direction === 'ASC'
+          ? String(aValue).localeCompare(String(bValue))
+          : String(bValue).localeCompare(String(aValue));
       });
 
       // Calculate hasMore based on pagination window
@@ -755,50 +757,6 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    try {
-      const result = await this.client.query({
-        query: `SELECT 
-          id,
-          "resourceId",
-          title,
-          metadata,
-          toDateTime64(createdAt, 3) as createdAt,
-          toDateTime64(updatedAt, 3) as updatedAt
-        FROM "${TABLE_THREADS}"
-        WHERE "resourceId" = {var_resourceId:String}`,
-        query_params: { var_resourceId: resourceId },
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-
-      const rows = await result.json();
-      const threads = transformRows(rows.data) as StorageThreadType[];
-
-      return threads.map((thread: StorageThreadType) => ({
-        ...thread,
-        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-        createdAt: thread.createdAt,
-        updatedAt: thread.updatedAt,
-      }));
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId },
-        },
-        error,
-      );
-    }
-  }
-
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
       await this.client.insert({
@@ -928,16 +886,13 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page?: number;
-    perPage?: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page = 0, perPage = 100 } = args;
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, offset = 0, limit = 100, orderBy } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
-      const currentOffset = page * perPage;
-
       // Get total count
       const countResult = await this.client.query({
         query: `SELECT count() as total FROM ${TABLE_THREADS} WHERE resourceId = {resourceId:String}`,
@@ -956,16 +911,16 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         return {
           threads: [],
           total: 0,
-          page,
-          perPage,
+          page: 0,
+          perPage: limit,
           hasMore: false,
         };
       }
 
-      // Get paginated threads
+      // Get paginated threads with dynamic sorting
       const dataResult = await this.client.query({
         query: `
-              SELECT 
+              SELECT
                 id,
                 resourceId,
                 title,
@@ -974,13 +929,13 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 toDateTime64(updatedAt, 3) as updatedAt
               FROM ${TABLE_THREADS}
               WHERE resourceId = {resourceId:String}
-              ORDER BY createdAt DESC
+              ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}
               LIMIT {limit:Int64} OFFSET {offset:Int64}
             `,
         query_params: {
           resourceId,
-          limit: perPage,
-          offset: currentOffset,
+          limit: limit,
+          offset: offset,
         },
         clickhouse_settings: {
           date_time_input_format: 'best_effort',
@@ -996,34 +951,21 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       return {
         threads,
         total,
-        page,
-        perPage,
-        hasMore: currentOffset + threads.length < total,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
+        perPage: limit,
+        hasMore: offset + threads.length < total,
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+          id: 'CLICKHOUSE_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId, page },
+          details: { resourceId, page: limit > 0 ? Math.floor(offset / limit) : 0 },
         },
         error,
       );
     }
-  }
-
-  /**
-   * @todo When migrating from getThreadsByResourceIdPaginated to this method,
-   * implement orderBy and sortDirection support for full sorting capabilities
-   */
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
   }
 
   async getMessagesPaginated(
