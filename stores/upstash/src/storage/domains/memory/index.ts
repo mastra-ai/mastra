@@ -731,27 +731,12 @@ export class StoreMemoryUpstash extends MemoryStorage {
         return 0;
       };
 
-      // Sort messages by their position in the sorted set (or by orderBy if specified)
-      if (orderBy) {
-        messagesData.sort((a, b) => {
-          const aValue = getFieldValue(a);
-          const bValue = getFieldValue(b);
-          return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
-        });
-      } else {
-        // Default: sort by position in sorted set
-        // Build Map for O(1) lookups instead of O(n) indexOf
-        const messageIdToPosition = new Map<string, number>();
-        allMessageIds.forEach((id, index) => {
-          messageIdToPosition.set(id as string, index);
-        });
-
-        messagesData.sort((a, b) => {
-          const aPos = messageIdToPosition.get(a.id) ?? Number.MAX_SAFE_INTEGER;
-          const bPos = messageIdToPosition.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-          return aPos - bPos;
-        });
-      }
+      // Sort messages by createdAt DESC by default (or by orderBy if specified)
+      messagesData.sort((a, b) => {
+        const aValue = getFieldValue(a);
+        const bValue = getFieldValue(b);
+        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
 
       const total = messagesData.length;
 
@@ -780,26 +765,12 @@ export class StoreMemoryUpstash extends MemoryStorage {
         }
       }
 
-      // Final sort to maintain order
-      if (orderBy) {
-        allMessages.sort((a, b) => {
-          const aValue = getFieldValue(a);
-          const bValue = getFieldValue(b);
-          return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
-        });
-      } else {
-        // Build Map for O(1) lookups instead of O(n) indexOf
-        const messageIdToPosition = new Map<string, number>();
-        allMessageIds.forEach((id, index) => {
-          messageIdToPosition.set(id as string, index);
-        });
-
-        allMessages.sort((a, b) => {
-          const aPos = messageIdToPosition.get(a.id) ?? Number.MAX_SAFE_INTEGER;
-          const bPos = messageIdToPosition.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-          return aPos - bPos;
-        });
-      }
+      // Final sort to maintain order by createdAt DESC by default (or by orderBy if specified)
+      allMessages.sort((a, b) => {
+        const aValue = getFieldValue(a);
+        const bValue = getFieldValue(b);
+        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
 
       // Use MessageList for proper deduplication and format conversion
       const list = new MessageList().add(allMessages, 'memory');
