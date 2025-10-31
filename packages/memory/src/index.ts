@@ -1,6 +1,5 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import type * as AIV5Type from 'ai-v5';
 import { MastraMemory } from '@mastra/core/memory';
 import type {
   MastraMessageV1,
@@ -23,6 +22,7 @@ import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { embedMany } from 'ai';
 import type { TextPart } from 'ai';
 import { embedMany as embedManyV5 } from 'ai-v5';
+import type * as AIV5Type from 'ai-v5';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
