@@ -34,11 +34,8 @@ myWorkflow
         incrementedValue: z.number(),
       }),
       execute: async (inputData, context) => {
-        if (context?.workflow?.state?.steps.stepOne.status === 'success') {
-          const incrementedValue = context?.workflow?.state?.steps.stepOne.output.doubledValue + 1;
-          return { incrementedValue };
-        }
-        return { incrementedValue: 0 };
+        const incrementedValue = inputData.valueToIncrement + 1;
+        return { incrementedValue };
       },
     }),
   )
