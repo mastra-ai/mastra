@@ -13,6 +13,29 @@ import type { ToolCallPart } from 'ai';
 import { config } from 'dotenv';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+
+// Helper to extract text content from MastraDBMessage
+function getTextContent(message: any): string {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+  if (message.content?.parts && Array.isArray(message.content.parts)) {
+    // Concatenate all text parts
+    const textParts = message.content.parts.filter((p: any) => p.type === 'text' && p.text).map((p: any) => p.text);
+    if (textParts.length > 0) {
+      return textParts.join(' ');
+    }
+  }
+  // Fallback: check if content has a direct text property
+  if (message.content?.text) {
+    return message.content.text;
+  }
+  // Fallback: check if content.content exists (nested structure)
+  if (message.content?.content && typeof message.content.content === 'string') {
+    return message.content.content;
+  }
+  return '';
+}
 import { z } from 'zod';
 
 const resourceId = 'test-resource';
@@ -165,8 +188,9 @@ describe('Working Memory Tests', () => {
       });
 
       // Working memory tags should be stripped from the messages
-      expect(remembered.messages[1].content).not.toContain('<working_memory>');
-      expect(remembered.messages[1].content).toContain('Hello John!');
+      const content = getTextContent(remembered.messages[1]);
+      expect(content).not.toContain('<working_memory>');
+      expect(content).toContain('Hello John!');
     });
 
     it('should respect working memory enabled/disabled setting', async () => {
