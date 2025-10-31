@@ -387,7 +387,7 @@ const httpServer = http.createServer(async (req, res) => {
     req,
     res,
     options: {
-      sessionIdGenerator: undefined,
+      sessionIdGenerator: () => randomUUID(),
     },
   });
 });
@@ -396,6 +396,62 @@ httpServer.listen(PORT, () => {
   console.log(`HTTP server listening on port ${PORT}`);
 });
 ```
+
+For **serverless environments** (Supabase Edge Functions, Cloudflare Workers, Vercel Edge, etc.), use `serverless: true` to enable stateless operation:
+
+```typescript
+// Supabase Edge Function example
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { MCPServer } from "@mastra/mcp";
+
+const server = new MCPServer({
+  name: "my-serverless-mcp",
+  version: "1.0.0",
+  tools: { /* your tools */ },
+});
+
+serve(async (req) => {
+  const url = new URL(req.url);
+  
+  if (url.pathname === "/mcp") {
+    // Convert Deno Request to Node.js-compatible format
+    const { req: nodeReq, res: nodeRes } = toReqRes(req);
+    
+    await server.startHTTP({
+      url,
+      httpPath: "/mcp",
+      req: nodeReq,
+      res: nodeRes,
+      options: {
+        serverless: true, // ← Enable stateless mode for serverless
+      },
+    });
+    
+    return toFetchResponse(nodeRes);
+  }
+  
+  return new Response("Not found", { status: 404 });
+});
+```
+
+<Callout type="info">
+**When to use `serverless: true`**
+
+Use `serverless: true` when deploying to environments where each request runs in a fresh, stateless execution context:
+- ✅ Supabase Edge Functions
+- ✅ Cloudflare Workers
+- ✅ Vercel Edge Functions
+- ✅ Netlify Edge Functions
+- ✅ AWS Lambda
+- ✅ Deno Deploy
+
+Use the default session-based mode (without `serverless: true`) for:
+- ✅ Long-lived Node.js servers
+- ✅ Docker containers
+- ✅ Traditional hosting (VPS, dedicated servers)
+
+The serverless mode disables session management and creates fresh server instances per request, which is necessary for stateless environments where memory doesn't persist between invocations.
+</Callout>
 
 Here are the details for the values needed by the `startHTTP` method:
 
@@ -437,6 +493,13 @@ The `StreamableHTTPServerTransportOptions` object allows you to customize the be
 
 <PropertiesTable
   content={[
+    {
+      name: "serverless",
+      type: "boolean",
+      description:
+        "If `true`, runs in stateless mode without session management. Each request is handled independently with a fresh server instance. Essential for serverless environments (Cloudflare Workers, Supabase Edge Functions, Vercel Edge, etc.) where sessions cannot persist between invocations. Defaults to `false`.",
+      optional: true,
+    },
     {
       name: "sessionIdGenerator",
       type: "(() => string) | undefined",
