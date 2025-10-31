@@ -1234,6 +1234,11 @@
       "source": "/examples/agents/runtime-context",
       "destination": "/examples/agents/request-context",
       "permanent": true
+    },
+    {
+      "source": "/reference/workflows/run-methods/watch",
+      "destination": "/reference/workflows/run",
+      "permanent": true
     }
   ]
 }
