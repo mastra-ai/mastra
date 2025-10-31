@@ -136,7 +136,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       expect(retrievedMessages.messages).toHaveLength(2);
 
       expect(retrievedMessages.messages).toEqual(
-        expect.arrayContaining(messages.map(msg => expect.objectContaining(msg)))
+        expect.arrayContaining(messages.map(msg => expect.objectContaining(msg))),
       );
     });
 
