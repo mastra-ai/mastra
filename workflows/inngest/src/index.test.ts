@@ -4,6 +4,7 @@ import { openai } from '@ai-sdk/openai';
 import { serve } from '@hono/node-server';
 import { realtimeMiddleware } from '@inngest/realtime/middleware';
 import { Agent } from '@mastra/core/agent';
+import { MastraError } from '@mastra/core/error';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { MastraScorer } from '@mastra/core/scores';
@@ -19,7 +20,6 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { z } from 'zod';
 import { init, serve as inngestServe } from './index';
-import { MastraError } from '@mastra/core/error';
 
 interface LocalTestContext {
   inngestPort: number;
