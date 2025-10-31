@@ -14,7 +14,6 @@ import { MastraError } from '../error';
 import { MockStore } from '../storage/mock';
 import type { ChunkType, StreamEvent, WatchEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
-import { MastraError } from '../error';
 
 const testStorage = new MockStore();
 

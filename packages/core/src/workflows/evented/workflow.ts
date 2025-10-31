@@ -20,7 +20,6 @@ import type {
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
 import { WorkflowEventProcessor } from './workflow-event-processor';
-import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 
 export type EventedEngineType = {};
 
