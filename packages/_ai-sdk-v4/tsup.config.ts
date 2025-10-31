@@ -1,8 +1,7 @@
 import { defineConfig } from 'tsup';
-import { bundleTypes } from './scripts/bundle-types';
 
 export default defineConfig({
-  entry: ['src/schema.ts'],
+  entry: ['src/schema.ts', 'src/test.ts'],
   format: ['esm'],
   clean: true,
   dts: true,
@@ -12,10 +11,4 @@ export default defineConfig({
   },
   metafile: true,
   sourcemap: true,
-  onSuccess: async () => {
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    for (const input of ['schema.d.ts']) {
-      await bundleTypes(input);
-    }
-  },
 });

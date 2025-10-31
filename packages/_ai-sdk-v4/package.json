@@ -5,40 +5,21 @@
   "type": "module",
   "private": true,
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
-    ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "require": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.cjs"
-      }
-    },
-    "./v4": {
-      "import": {
-        "types": "./dist/v4.d.ts",
-        "default": "./dist/v4.js"
-      },
-      "require": {
-        "types": "./dist/v4.d.ts",
-        "default": "./dist/v4.cjs"
-      }
-    },
     "./schema": {
       "import": {
         "types": "./dist/schema.d.ts",
         "default": "./dist/schema.js"
-      },
-      "require": {
-        "types": "./dist/schema.d.ts",
-        "default": "./dist/schema.cjs"
+      }
+    },
+    "./test": {
+      "import": {
+        "types": "./dist/test.d.ts",
+        "default": "./dist/test.js"
       }
     }
   },
@@ -54,14 +35,9 @@
   "devDependencies": {
     "ai": "^4.3.19",
     "@internal/lint": "workspace:*",
-    "@internal/types-builder": "workspace:*",
-    "@microsoft/api-extractor": "^7.53.1",
-    "@types/node": "^20.19.0",
     "eslint": "^9.36.0",
     "tsup": "^8.5.0",
-    "tsx": "^4.19.2",
-    "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "typescript": "^5.8.3"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
