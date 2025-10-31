@@ -52,12 +52,6 @@ if (result.status === "suspended") {
       required: true,
     },
     {
-      name: "watch",
-      type: "(callback: WatchCallback, type?: WatchType) => UnwatchFunction",
-      description: "Monitors workflow execution with callback-based events",
-      required: true,
-    },
-    {
       name: "cancel",
       type: "() => Promise<void>",
       description: "Cancels the workflow execution",
@@ -97,5 +91,4 @@ A workflow run's `status` indicates its current execution state. The possible va
 
 - [Run.start()](./run-methods/start)
 - [Run.resume()](./run-methods/resume)
-- [Run.watch()](./run-methods/watch)
 - [Run.cancel()](./run-methods/cancel)

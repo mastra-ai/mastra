@@ -13,7 +13,6 @@ import type {
   SerializedStepFlowEntry,
   WorkflowConfig,
   WorkflowResult,
-  WatchEvent,
   StepWithComponent,
   WorkflowStreamEvent,
 } from '../../workflows/types';
@@ -204,20 +203,20 @@ export function createStep<
           args: inputData,
         };
 
-        await emitter.emit('watch-v2', {
+        await emitter.emit('watch', {
           type: 'tool-call-streaming-start',
           ...(toolData ?? {}),
         });
         for await (const chunk of fullStream) {
           if (chunk.type === 'text-delta') {
-            await emitter.emit('watch-v2', {
+            await emitter.emit('watch', {
               type: 'tool-call-delta',
               ...(toolData ?? {}),
               argsTextDelta: chunk.textDelta,
             });
           }
         }
-        await emitter.emit('watch-v2', {
+        await emitter.emit('watch', {
           type: 'tool-call-streaming-finish',
           ...(toolData ?? {}),
         });
@@ -581,12 +580,7 @@ export class EventedRun<
     return executionResultPromise;
   }
 
-  watch(cb: (event: WatchEvent) => void, type: 'watch'): () => void;
-  watch(cb: (event: WorkflowStreamEvent) => void, type: 'watch-v2'): () => void;
-  watch(
-    cb: ((event: WatchEvent) => void) | ((event: WorkflowStreamEvent) => void),
-    type: 'watch' | 'watch-v2' = 'watch',
-  ): () => void {
+  watch(cb: (event: WorkflowStreamEvent) => void): () => void {
     const watchCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId !== this.runId) {
         return;
@@ -596,27 +590,14 @@ export class EventedRun<
       await ack?.();
     };
 
-    if (type === 'watch-v2') {
-      this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
-    } else {
-      this.mastra?.pubsub.subscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
-    }
+    this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
 
     return () => {
-      if (type === 'watch-v2') {
-        this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
-      } else {
-        this.mastra?.pubsub.unsubscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
-      }
+      this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
     };
   }
 
-  async watchAsync(cb: (event: WatchEvent) => void, type: 'watch'): Promise<() => void>;
-  async watchAsync(cb: (event: WorkflowStreamEvent) => void, type: 'watch-v2'): Promise<() => void>;
-  async watchAsync(
-    cb: ((event: WatchEvent) => void) | ((event: WorkflowStreamEvent) => void),
-    type: 'watch' | 'watch-v2' = 'watch',
-  ): Promise<() => void> {
+  async watchAsync(cb: (event: WorkflowStreamEvent) => void): Promise<() => void> {
     const watchCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId !== this.runId) {
         return;
@@ -626,18 +607,10 @@ export class EventedRun<
       await ack?.();
     };
 
-    if (type === 'watch-v2') {
-      await this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
-    } else {
-      await this.mastra?.pubsub.subscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
-    }
+    await this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
 
     return async () => {
-      if (type === 'watch-v2') {
-        await this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
-      } else {
-        await this.mastra?.pubsub.unsubscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
-      }
+      await this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
     };
   }
 
