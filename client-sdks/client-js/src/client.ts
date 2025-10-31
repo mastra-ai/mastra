@@ -641,14 +641,6 @@ export class MastraClient extends BaseResource {
     });
   }
 
-  /**
-   * Retrieves model providers with available keys
-   * @returns Promise containing model providers with available keys
-   */
-  getModelProviders(): Promise<string[]> {
-    return this.request(`/api/model-providers`);
-  }
-
   getAITrace(traceId: string): Promise<AITraceRecord> {
     return this.observability.getTrace(traceId);
   }

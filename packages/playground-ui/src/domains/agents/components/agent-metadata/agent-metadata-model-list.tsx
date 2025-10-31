@@ -10,14 +10,12 @@ type AgentMetadataModelListType = NonNullable<GetAgentResponse['modelList']>;
 
 export interface AgentMetadataModelListProps {
   modelList: AgentMetadataModelListType;
-  modelProviders: string[];
   updateModelInModelList: AgentMetadataModelListItemProps['updateModelInModelList'];
   reorderModelList: (params: ReorderModelListParams) => void;
 }
 
 export const AgentMetadataModelList = ({
   modelList,
-  modelProviders,
   updateModelInModelList,
   reorderModelList,
 }: AgentMetadataModelListProps) => {
@@ -68,7 +66,6 @@ export const AgentMetadataModelList = ({
                   <div ref={provided.innerRef} {...provided.draggableProps} style={provided.draggableProps.style}>
                     <AgentMetadataModelListItem
                       modelConfig={modelConfig}
-                      modelProviders={modelProviders}
                       updateModelInModelList={updateModel}
                       showDragHandle={hasMultipleModels}
                       dragHandleProps={provided.dragHandleProps}
@@ -87,7 +84,6 @@ export const AgentMetadataModelList = ({
 
 interface AgentMetadataModelListItemProps {
   modelConfig: AgentMetadataModelListType[number];
-  modelProviders: string[];
   updateModelInModelList: (params: UpdateModelInModelListParams) => Promise<{ message: string }>;
   showDragHandle: boolean;
   dragHandleProps?: any;
@@ -95,7 +91,6 @@ interface AgentMetadataModelListItemProps {
 
 const AgentMetadataModelListItem = ({
   modelConfig,
-  modelProviders,
   updateModelInModelList,
   showDragHandle,
   dragHandleProps,
@@ -117,7 +112,6 @@ const AgentMetadataModelListItem = ({
             defaultProvider={modelConfig.model.provider}
             defaultModel={modelConfig.model.modelId}
             updateModel={params => updateModelInModelList({ modelConfigId: modelConfig.id, model: params })}
-            modelProviders={modelProviders}
             autoSave={true}
           />
         </div>
