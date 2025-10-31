@@ -493,7 +493,7 @@ export const useWatchTemplateInstall = (workflowInfo?: any) => {
 
           // Use correct callback API (fix the TypeScript issue when possible)
           await template.watch(
-            { runId, eventType: 'watch-v2' },
+            { runId, eventType: 'watch' },
             (record: { type: string; payload: any; runId?: string; eventTimestamp?: string }) => {
               try {
                 processTemplateRecord(record);

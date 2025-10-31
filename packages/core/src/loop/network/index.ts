@@ -269,7 +269,7 @@ export async function createNetworkLoop({
 
       let completionResult;
 
-      let iterationCount = (inputData.iteration ?? -1) + 1;
+      let iterationCount = (inputData.iteration ? inputData.iteration : -1) + 1;
 
       await writer.write({
         type: 'routing-agent-start',
@@ -687,11 +687,6 @@ export async function createNetworkLoop({
         from: ChunkFrom.NETWORK,
         runId,
       });
-
-      // await emitter.emit('watch-v2', {
-      //     type: 'tool-call-streaming-start',
-      //     ...toolData,
-      // });
 
       const stream = run.streamVNext({
         inputData: input,

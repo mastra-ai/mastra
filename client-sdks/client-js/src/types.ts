@@ -33,7 +33,7 @@ import type {
 import type { OutputSchema } from '@mastra/core/stream';
 
 import type { QueryResult } from '@mastra/core/vector';
-import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
+import type { Workflow, WorkflowResult, WorkflowState } from '@mastra/core/workflows';
 
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -77,6 +77,7 @@ type WithoutMethods<T> = {
 export type NetworkStreamParams = {
   messages: MessageListInput;
 } & MultiPrimitiveExecutionOptions;
+
 export interface GetAgentResponse {
   name: string;
   instructions: AgentInstructions;
@@ -86,8 +87,6 @@ export interface GetAgentResponse {
   provider: string;
   modelId: string;
   modelVersion: string;
-  defaultGenerateOptions: WithoutMethods<AgentGenerateOptions>;
-  defaultStreamOptions: WithoutMethods<AgentStreamOptions>;
   modelList:
     | Array<{
         id: string;
@@ -100,6 +99,9 @@ export interface GetAgentResponse {
         };
       }>
     | undefined;
+  defaultOptions: WithoutMethods<AgentExecutionOptions>;
+  defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
+  defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -169,7 +171,7 @@ export type ListWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowRun;
 
-export type GetWorkflowRunExecutionResultResponse = WatchEvent['payload']['workflowState'];
+export type GetWorkflowRunExecutionResultResponse = WorkflowState;
 
 export interface GetWorkflowResponse {
   name: string;
@@ -199,8 +201,6 @@ export interface GetWorkflowResponse {
   inputSchema: string;
   outputSchema: string;
 }
-
-export type WorkflowWatchResult = WatchEvent & { runId: string };
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
 export interface UpsertVectorParams {

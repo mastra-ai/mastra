@@ -176,7 +176,7 @@ import { createReadStream } from "fs";
 import { Agent } from "@mastra/core/agent";
 import { CompositeVoice } from "@mastra/core/voice";
 import { OpenAIVoice } from "@mastra/voice-openai";
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { openai } from "@ai-sdk/openai";
 
 // Saves an audio stream to a file in the audio directory, creating the directory if it doesn't exist.
@@ -367,7 +367,7 @@ See the [Memory Class](/reference/memory/memory-class) docs for a full list of c
 Add a storage provider to your main Mastra instance to enable memory across all configured agents.
 
 ```typescript {6-8} title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
@@ -1244,7 +1244,7 @@ instructions: {
 Register your agent in the Mastra instance to make it available throughout your application. Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features:
 
 ```typescript {6} showLineNumbers title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { testAgent } from "./agents/test-agent";
 
 export const mastra = new Mastra({
@@ -1679,7 +1679,7 @@ npm install @mastra/auth-auth0@latest
 ### Basic usage with environment variables
 
 ```typescript {2,7} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 export const mastra = new Mastra({
@@ -1693,7 +1693,7 @@ export const mastra = new Mastra({
 ### Custom configuration
 
 ```typescript {2,7-10} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 export const mastra = new Mastra({
@@ -1910,7 +1910,7 @@ npm install @mastra/auth-clerk@latest
 ## Usage example
 
 ```typescript {2,7-11} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthClerk } from "@mastra/auth-clerk";
 
 export const mastra = new Mastra({
@@ -2067,7 +2067,7 @@ npm install @mastra/auth-firebase@latest
 If you set the required environment variables (`FIREBASE_SERVICE_ACCOUNT` and `FIRESTORE_DATABASE_ID`), you can initialize `MastraAuthFirebase` without any constructor arguments. The class will automatically read these environment variables as configuration:
 
 ```typescript {2,7} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 // Automatically uses FIREBASE_SERVICE_ACCOUNT and FIRESTORE_DATABASE_ID env vars
@@ -2082,7 +2082,7 @@ export const mastra = new Mastra({
 ### Custom configuration
 
 ```typescript {2,7-10} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 export const mastra = new Mastra({
@@ -2358,7 +2358,7 @@ npm install @mastra/auth@latest
 ## Usage example
 
 ```typescript {2,7-9} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraJwtAuth } from "@mastra/auth";
 
 export const mastra = new Mastra({
@@ -2475,7 +2475,7 @@ npm install @mastra/auth-supabase@latest
 ## Usage example
 
 ```typescript {2,7-9} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthSupabase } from "@mastra/auth-supabase";
 
 export const mastra = new Mastra({
@@ -2617,7 +2617,7 @@ npm install @mastra/auth-workos@latest
 ### Basic usage with environment variables
 
 ```typescript {2,7} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
@@ -2631,7 +2631,7 @@ export const mastra = new Mastra({
 ### Custom configuration
 
 ```typescript {2,7-10} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
@@ -4032,7 +4032,7 @@ Common issues to watch for when deploying Mastra in a monorepo:
 Use `transpilePackages` to compile TypeScript workspace packages or libraries. List package names exactly as they appear in each `package.json`. Use `externals` to exclude dependencies resolved at runtime, and `sourcemap` to emit readable stack traces.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   // ...
@@ -4251,7 +4251,7 @@ npm install @mastra/deployer-cloudflare@latest
 ## Usage example
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 export const mastra = new Mastra({
@@ -4398,7 +4398,7 @@ npm install @mastra/deployer-netlify@latest
 ## Usage example
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
 export const mastra = new Mastra({
@@ -4486,7 +4486,7 @@ npm install @mastra/deployer-vercel@latest
 ## Usage example
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
@@ -4699,7 +4699,7 @@ The recommended way of using Mastra and AI SDK together is by installing the `@m
 When setting up a [custom API route](/docs/server-db/custom-api-routes), use the `chatRoute()` utility to create a route handler that automatically formats the agent stream into an AI SDK-compatible format.
 
 ```typescript title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { chatRoute } from "@mastra/ai-sdk";
 
 export const mastra = new Mastra({
@@ -4751,7 +4751,7 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
 Use the `workflowRoute()` utility to create a route handler that automatically formats the workflow stream into an AI SDK-compatible format.
 
 ```typescript title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { workflowRoute } from "@mastra/ai-sdk";
 
 export const mastra = new Mastra({
@@ -4790,7 +4790,7 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
 Use the `networkRoute()` utility to create a route handler that automatically formats the agent network stream into an AI SDK-compatible format.
 
 ```typescript title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { networkRoute } from "@mastra/ai-sdk";
 
 export const mastra = new Mastra({
@@ -5186,7 +5186,7 @@ export async function POST(req: Request) {
 You can also populate the `RequestContext` by reading custom data in a server middleware:
 
 ```typescript {8,17} title="mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   agents: { weatherAgent },
@@ -5712,7 +5712,7 @@ pnpm add @copilotkit/runtime @ag-ui/mastra
 Configure your Mastra instance to include CopilotKit's runtime endpoint:
 
 ```typescript title="src/mastra/index.ts" copy {2,5-8,12-28}
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { registerCopilotKit } from "@ag-ui/mastra/copilotkit";
 import { weatherAgent } from "./agents/weather-agent";
 
@@ -6204,7 +6204,7 @@ Each LLM provider uses a different env var. See [Model Capabilities](https://sdk
 Create a Mastra configuration file at `src/mastra/index.ts`:
 
 ```ts title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({});
 ```
@@ -6261,7 +6261,7 @@ export const weatherAgent = new Agent({
 Lastly, add the `weatherAgent` to `src/mastra/index.ts`:
 
 ```ts title="src/mastra/index.ts" copy {2, 5}
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { weatherAgent } from "./agents/weather-agent";
 
 export const mastra = new Mastra({
@@ -8419,7 +8419,7 @@ touch src/mastra/index.ts
 Add the following code:
 
 ```ts title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { weatherAgent } from "./agents/weather-agent";
 
 export const mastra = new Mastra({
@@ -8723,7 +8723,7 @@ Top-level files define how your Mastra project is configured, built, and connect
 
 
 ---
-title: "Playground | Getting Started | Mastra Docs"
+title: "Studio | Getting Started | Mastra Docs"
 description: Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
 ---
 
@@ -8732,18 +8732,18 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 import { VideoPlayer } from "@site/src/components/video-player";
 
-# Playground
+# Studio
 [EN] Source: https://mastra.ai/en/docs/getting-started/studio
 
-Playground provides an interactive UI for building and testing your agents, along with a REST API that exposes your Mastra application as a local service. This lets you start building without worrying about integration right away.
+Studio provides an interactive UI for building and testing your agents, along with a REST API that exposes your Mastra application as a local service. This lets you start building without worrying about integration right away.
 
-As your project evolves, Playground's development environment helps you iterate on your agent quickly. Meanwhile, Observability and Scorer features give you visibility into performance at every stage.
+As your project evolves, Studio's development environment helps you iterate on your agent quickly. Meanwhile, Observability and Scorer features give you visibility into performance at every stage.
 
-To get started, run Playground locally using the instructions below, or [deploy to Mastra Cloud](https://mastra.ai/docs/mastra-cloud/setting-up) to collaborate with your team.
+To get started, run Studio locally using the instructions below, or [create a project in Mastra Cloud](https://mastra.ai/docs/mastra-cloud/setting-up) to collaborate with your team.
 
-<YouTube id="spGlcTEjuXY" startTime={126} />
+<YouTube id="ojGu6Bi4wYk" />
 
-## Start Playground
+## Start Studio
 
 If you created your application with `create mastra`, start the local development server using the `dev` script. You can also run it directly with `mastra dev`.
 
@@ -8777,12 +8777,12 @@ If you created your application with `create mastra`, start the local developmen
 
 Once the server's running, you can:
 
-- Open the Playground UI at http://localhost:4111/ to test your agent interactively.
+- Open the Studio UI at http://localhost:4111/ to test your agent interactively.
 - Visit http://localhost:4111/swagger-ui to discover and interact with the underlying REST API.
 
-## Playground UI
+## Studio UI
 
-The Playground UI provides an interactive development environment for you to test your agents, workflows, and tools, observe exactly what happens under the hood with each interaction, and tweak things as you go.
+The Studio UI provides an interactive development environment for you to test your agents, workflows, and tools, observe exactly what happens under the hood with each interaction, and tweak things as you go.
 
 ### Agents
 
@@ -8841,7 +8841,7 @@ The OpenAPI and Swagger endpoints are disabled in production by default. To enab
 By default, the development server runs at http://localhost:4111. You can change the `host` and `port` in the Mastra server configuration:
 
 ```typescript
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   server: {
@@ -8856,7 +8856,7 @@ export const mastra = new Mastra({
 Mastra supports local HTTPS development through the [`--https`](/reference/cli/mastra#--https) flag, which automatically creates and manages certificates for your project. When you run `mastra dev --https`, a private key and certificate are generated for localhost (or your configured host). For custom certificate management, you can provide your own key and certificate files through the server configuration:
 
 ```typescript
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import fs from "node:fs";
 
 export const mastra = new Mastra({
@@ -9477,9 +9477,8 @@ const memoryWithMultipleProcessors = new Memory({
 You can create custom logic by extending the base `MemoryProcessor` class.
 
 ```typescript copy showLineNumbers {5-20,24-27}
-import { Memory } from "@mastra/memory";
-import { CoreMessage, MemoryProcessorOpts } from "@mastra/core";
-import { MemoryProcessor } from "@mastra/core/memory";
+import { Memory, MemoryProcessorOpts, MemoryProcessor } from "@mastra/memory";
+import { CoreMessage } from "@mastra/core/llm";
 
 class ConversationOnlyFilter extends MemoryProcessor {
   constructor() {
@@ -9535,7 +9534,7 @@ npm install @mastra/core @mastra/memory @mastra/libsql
 Then add a storage adapter to the main Mastra instance. Any agent with memory enabled will use this shared storage to store and recall interactions.
 
 ```typescript {6-8} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
@@ -12969,7 +12968,7 @@ When deploying to Mastra Cloud, logs are shown on the [Logs](../mastra-cloud/obs
 When [initializing a new Mastra project](../getting-started/installation) using the CLI, `PinoLogger` is included by default.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { PinoLogger } from "@mastra/loggers";
 
 export const mastra = new Mastra({
@@ -13412,7 +13411,7 @@ Configure Observability in your Mastra instance:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
-import { PinoLogger } from "@mastra/core";
+import { PinoLogger } from "@mastra/loggers";
 import { LibSqlStorage } from "@mastra/libsql";
 
 export const mastra = new Mastra({
@@ -13525,7 +13524,7 @@ Transform chunks into embeddings using your preferred provider. Mastra supports 
 The simplest way is to use Mastra's model router with `provider/model` strings:
 
 ```ts showLineNumbers copy
-import { ModelRouterEmbeddingModel } from "@mastra/core";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { embedMany } from "ai";
 
 const embeddingModel = new ModelRouterEmbeddingModel(
@@ -15829,7 +15828,7 @@ By default Mastra automatically exposes registered agents and workflows via the 
 Routes are provided with a helper `registerApiRoute` from `@mastra/core/server`. Routes can live in the same file as the `Mastra` instance but separating them helps keep configuration concise.
 
 ```typescript title="src/mastra/index.ts" copy showLineNumbers
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { registerApiRoute } from "@mastra/core/server";
 
 export const mastra = new Mastra({
@@ -15861,7 +15860,7 @@ Each route's handler receives the Hono `Context`. Within the handler you can acc
 To add route-specific middleware pass a `middleware` array when calling `registerApiRoute`.
 
 ```typescript title="src/mastra/index.ts" copy showLineNumbers
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { registerApiRoute } from "@mastra/core/server";
 
 export const mastra = new Mastra({
@@ -16316,7 +16315,7 @@ be inspected by middleware to tailor behaviour:
 You can populate `requestContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { RequestContext } from "@mastra/core/request-context";
 import { testWeatherAgent } from "./agents/test-weather-agent";
 
@@ -16378,7 +16377,7 @@ adding additional server behaviour.
 You can configure server `port` and `timeout` in the Mastra instance.
 
 ```typescript title="src/mastra/index.ts" copy showLineNumbers
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   // ...
@@ -16421,7 +16420,7 @@ Mastra requires `module` and `moduleResolution` values that support modern Node.
 Mastra allows you to configure CORS (Cross-Origin Resource Sharing) settings for your server.
 
 ```typescript title="src/mastra/index.ts" copy showLineNumbers
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   // ...
@@ -16515,7 +16514,7 @@ await weatherTool.execute({
 You can populate `requestContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { RequestContext } from "@mastra/core/request-context";
 import { testWeatherAgent } from "./agents/test-weather-agent";
 
@@ -16667,7 +16666,7 @@ Mastra provides different storage providers, but you can treat them as interchan
 Mastra can be configured with a default storage option:
 
 ```typescript copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
 const mastra = new Mastra({
@@ -17122,16 +17121,12 @@ const messagesV2 = await mastra
   .getMessages({ threadId: "your-thread-id", format: "v2" });
 ```
 
-You can also retrieve messages using an array of message IDs. Note that unlike `getMessages`, this defaults to the V2 format:
+You can also retrieve messages using an array of message IDs:
 
 ```typescript copy
-const messagesV1 = await mastra
+const messages = await mastra
   .getStorage()
-  .getMessagesById({ messageIds: messageIdArr, format: "v1" });
-
-const messagesV2 = await mastra
-  .getStorage()
-  .getMessagesById({ messageIds: messageIdArr });
+  .listMessagesById({ messageIds: messageIdArr });
 ```
 
 ## Storage Providers
@@ -18069,7 +18064,7 @@ export const testMcpServer = new MCPServer({
 To make an MCP server available to other systems or agents that support the protocol, register it in the main `Mastra` instance using `mcpServers`.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 import { testMcpServer } from "./mcp/test-mcp-server";
 
@@ -20557,7 +20552,7 @@ export const headsUpWorkflow = createWorkflow({
 To use a workflow or an agent, register them in your main Mastra instance.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 import { headsUpWorkflow } from "./workflows/example-heads-up-workflow";
 import { famousPersonAgent } from "./agents/example-famous-person-agent";
@@ -20693,7 +20688,7 @@ export { workflow as incrementWorkflow };
 Register the workflow with Mastra and configure the Inngest API endpoint:
 
 ```ts showLineNumbers copy title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { serve as inngestServe } from "@mastra/inngest";
 import { incrementWorkflow } from "./workflows";
 import { inngest } from "./inngest";
@@ -20904,7 +20899,7 @@ export const customWebhookFunction = inngest.createFunction(
 Update your Mastra configuration to include the custom functions:
 
 ```ts showLineNumbers copy title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { serve as inngestServe } from "@mastra/inngest";
 import { incrementWorkflow } from "./workflows";
 import { inngest } from "./inngest";
@@ -21192,7 +21187,7 @@ export const testWorkflow = createWorkflow({
 Register your workflow in the Mastra instance to make it available throughout your application. Once registered, it can be called from agents or tools and has access to shared resources such as logging and observability features:
 
 ```typescript {6} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { testWorkflow } from "./workflows/test-workflow";
 
 export const mastra = new Mastra({
@@ -21468,7 +21463,7 @@ Snapshots are persisted using a `storage` instance configured on the `Mastra` cl
 This example demonstrates how to use snapshots with LibSQL.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
@@ -21484,7 +21479,7 @@ export const mastra = new Mastra({
 This example demonstrates how to use snapshots with Upstash.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { UpstashStore } from "@mastra/upstash";
 
 export const mastra = new Mastra({
@@ -21501,7 +21496,7 @@ export const mastra = new Mastra({
 This example demonstrates how to use snapshots with PostgreSQL.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { PostgresStore } from "@mastra/pg";
 
 export const mastra = new Mastra({
@@ -21926,7 +21921,7 @@ First, set up your Mastra agent with memory and tools:
 
 ```typescript showLineNumbers copy title="src/mastra/index.ts"
 import { ConsoleLogger } from "@mastra/core/logger";
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { weatherAgent } from "./agents";
 
 export const mastra = new Mastra({
@@ -22495,7 +22490,7 @@ export const imageAnalysisAgent = new Agent({
 To use an agent, register it in your main Mastra instance.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 import { imageAnalysisAgent } from "./agents/example-image-analysis-agent";
 
@@ -22775,7 +22770,7 @@ export const supportAgent = new Agent({
 Register the agent in your main Mastra instance:
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { supportAgent } from "./agents/support-agent";
 
 export const mastra = new Mastra({
@@ -23013,7 +23008,7 @@ export const publisherAgent = new Agent({
 All three agents are registered in the main Mastra instance so they can be accessed by each other.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 import { publisherAgent } from "./agents/example-publisher-agent";
 import { copywriterAgent } from "./agents/example-copywriter-agent";
@@ -23101,7 +23096,7 @@ export const harryPotterAgent = new Agent({
 To use an agent, register it in your main Mastra instance.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 import { harryPotterAgent } from "./agents/example-harry-potter-agent";
 
@@ -23467,7 +23462,7 @@ chatWorkflow.commit();
 Configure your Mastra instance with the agents, workflow, and WhatsApp webhook endpoints.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { registerApiRoute } from "@mastra/core/server";
 import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";
@@ -27869,7 +27864,7 @@ export class MessageLengthLimiter implements Processor {
           sum +
           msg.content.parts
             .filter((part) => part.type === "text")
-            .reduce((partSum, part) => partSum + (part as any).text.length, 0)
+            .reduce((partSum, part) => partSum + (part.type === "text" ? part.text.length : 0), 0)
         );
       }, 0);
 
@@ -27915,14 +27910,12 @@ export class MessageLengthLimiter implements Processor {
       for (let j = 0; j < parts.length; j++) {
         const part = parts[j];
         if (part.type === "text") {
-          const textPart = part as any;
-          const partLength = textPart.text.length;
+          const partLength = part.text.length;
 
           if (currentLength + partLength > maxLength) {
             const remainingChars = maxLength - currentLength;
             if (remainingChars > 0) {
-              textPart.text =
-                textPart.text.substring(0, remainingChars) + "...";
+              part.text = part.text.substring(0, remainingChars) + "...";
             } else {
               parts.splice(j);
               break;
@@ -28179,7 +28172,7 @@ export class ResponseLengthLimiter implements Processor {
   }: {
     part: ChunkType;
     streamParts: ChunkType[];
-    state: Record<string, any>;
+    state: Record<string, unknown>;
     abort: (reason?: string) => never;
   }): Promise<ChunkType | null | undefined> {
     if (!state.cumulativeLength) {
@@ -28480,7 +28473,7 @@ export class ResponseValidator implements Processor {
       .map((msg) =>
         msg.content.parts
           .filter((part) => part.type === "text")
-          .map((part) => (part as any).text)
+          .map((part) => (part.type === "text" ? part.text : ""))
           .join(""),
       )
       .join("");
@@ -28669,7 +28662,7 @@ export class AdvancedResponseValidator implements Processor {
       .map((msg) =>
         msg.content.parts
           .filter((part) => part.type === "text")
-          .map((part) => (part as any).text)
+          .map((part) => (part.type === "text" ? part.text : ""))
           .join(""),
       )
       .join("");
@@ -32433,7 +32426,7 @@ This snippet demonstrates how to register the STT-enabled agent with your Mastra
 
 ```typescript title="src/mastra/index.ts"
 import { PinoLogger } from "@mastra/loggers";
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 import { noteTakerAgent } from "./agents";
 
@@ -32529,7 +32522,7 @@ This snippet demonstrates how to register the agent with your Mastra instance:
 
 ```typescript title="src/mastra/index.ts"
 import { PinoLogger } from "@mastra/loggers";
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { storyTellerAgent } from "./agents";
 
 export const mastra = new Mastra({
@@ -32698,7 +32691,7 @@ Next, register both agents with your Mastra instance:
 
 ```typescript title="src/mastra/index.ts"
 import { PinoLogger } from "@mastra/loggers";
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { optimistAgent, skepticAgent } from "./agents";
 
 export const mastra = new Mastra({
@@ -33446,7 +33439,7 @@ export { activityPlanningWorkflow };
 Register the agents and workflow with the mastra instance. This allows access to the agents within the workflow.
 
 ```ts showLineNumbers copy title="index.ts"
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { serve as inngestServe } from "@mastra/inngest";
 import { PinoLogger } from "@mastra/loggers";
 import { Inngest } from "inngest";
@@ -34246,7 +34239,7 @@ rm -rf src/mastra/agents src/mastra/workflows src/mastra/tools/weather-tool.ts
 You should also change the `src/mastra/index.ts` file like so:
 
 ```ts copy title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";
 
@@ -34769,7 +34762,7 @@ In the root of your project, grab the absolute path with the `pwd` command. The 
 In your `src/mastra/index.ts` file, add the following to your existing file and configuration:
 
 ```ts copy title="src/mastra/index.ts" {2, 4-6, 9}
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { LibSQLVector } from "@mastra/libsql";
 
 const libSqlVector = new LibSQLVector({
@@ -34798,7 +34791,7 @@ use a remote persistent database then.
 In the `src/mastra/index.ts` file, add the agent to Mastra:
 
 ```ts copy title="src/mastra/index.ts" {3, 10}
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { LibSQLVector } from "@mastra/libsql";
 import { researchAgent } from "./agents/researchAgent";
 
@@ -35687,13 +35680,7 @@ All Mastra packages have a peer dependency on `@mastra/core` so your package man
 
 :::
 
-## Migrate to v0.23 (unreleased)
-
-:::note
-
-This version isn't released yet but we're adding changes as we make them.
-
-:::
+## Migrate to v1.0.0-beta
 
 ### Changed: Thread Title Generation Location and Default
 
@@ -35800,6 +35787,18 @@ const agent = new Agent({
 
 If you're not using semantic recall (it's disabled by default), no changes are needed.
 
+### Changed: Message Format
+
+An internal intermediary format has been removed. Messages now convert directly between `MastraMessageV2` (storage format) and AI SDK v5 `UIMessage`, simplifying the architecture and improving accuracy.
+
+**Action required only if** you have messages stored in the old `MastraMessageV1` format **and** you:
+
+1. **Directly inspect message metadata** - `__originalContent` is no longer present
+2. **Rely on exact V1 message shape preservation** - Shape may differ after conversion (content is still preserved)
+3. **Have custom message processing logic** - Verify it works with the new direct conversion flow
+
+The storage format (`MastraMessageV2`) and all public APIs remain unchanged.
+
 ### Agent class
 
 - Removed `generateVNext()` method. Use `generate()` instead.
@@ -35814,7 +35813,7 @@ If you're not using semantic recall (it's disabled by default), no changes are n
 - `agent.toStep` → Add agent directly to the step, workflows handle the transformation
 - `getDefaultGenerateOptions()` → `getDefaultGenerateOptionsLegacy()`
 - `getDefaultStreamOptions()` → `getDefaultStreamOptionsLegacy()`
-- `getDefaultVNextStreamOptions()` → `getDefaultStreamOptions()`
+- `getDefaultVNextStreamOptions()` → `getDefaultOptions()`
 
 #### Output Options
 
@@ -35969,6 +35968,28 @@ export const weatherTool = createTool({
 ```
 
 This change also affects workflow steps, dynamic configuration functions (memory, model, etc.), and anywhere else you pass or receive `runtimeContext` as a parameter.
+
+### Changed: `@mastra/core` subpath imports
+
+The `@mastra/core` package no longer allows top-level imports except for `Mastra` and `type Config`. You must use subpath imports for all other imports.
+
+Here are some examples of how to migrate your imports:
+
+```typescript
+// Before
+import { Mastra, type Config } from "@mastra/core"; // ✅
+import { Agent } from "@mastra/core"; // ❌
+import { createTool } from "@mastra/core"; // ❌
+import { createStep } from "@mastra/core"; // ❌
+
+// After
+import { Mastra, type Config } from "@mastra/core"; // ✅
+import { Agent } from "@mastra/core/agent"; // ✅
+import { createTool } from "@mastra/core/tools"; // ✅
+import { createStep } from "@mastra/core/workflows"; // ✅
+```
+
+Read the [package README](https://github.com/mastra-ai/mastra/blob/main/packages/core/README.md) or the [package.json](https://github.com/mastra-ai/mastra/blob/main/packages/core/package.json) for a full list of available subpath imports.
 
 ## Migrate to v0.22
 
@@ -36439,7 +36460,7 @@ Mastra's model router supports embedding models using the same `provider/model` 
 ## Quick Start
 
 ```typescript
-import { ModelRouterEmbeddingModel } from "@mastra/core";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { embedMany } from "ai";
 
 // Create an embedding model
@@ -36491,7 +36512,7 @@ GOOGLE_GENERATIVE_AI_API_KEY=...
 You can use any OpenAI-compatible embedding endpoint with a custom URL:
 
 ```typescript
-import { ModelRouterEmbeddingModel } from "@mastra/core";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const embedder = new ModelRouterEmbeddingModel({
   providerId: "ollama",
@@ -36507,7 +36528,7 @@ The embedding model router integrates seamlessly with Mastra's memory system:
 
 ```typescript
 import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -36534,7 +36555,7 @@ The `embedder` field accepts:
 Use embedding models for document chunking and retrieval:
 
 ```typescript
-import { ModelRouterEmbeddingModel } from "@mastra/core";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { embedMany } from "ai";
 
 const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
@@ -36560,7 +36581,7 @@ await vectorStore.upsert(
 The model router provides full TypeScript autocomplete for embedding model IDs:
 
 ```typescript
-import type { EmbeddingModelId } from "@mastra/core";
+import type { EmbeddingModelId } from "@mastra/core/llm";
 
 // Type-safe embedding model selection
 const modelId: EmbeddingModelId = "openai/text-embedding-3-small";
@@ -36658,7 +36679,7 @@ Learn more in the [Netlify documentation](https://docs.netlify.com/build/ai-gate
 ## Usage
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -36745,7 +36766,7 @@ Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 ## Usage
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -36916,7 +36937,7 @@ Learn more in the [Vercel documentation](https://ai-sdk.dev/providers/ai-sdk-pro
 ## Usage
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -37036,7 +37057,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 48+ AI providers and 834+ models through Mastra's model router."
+description: "Access 48+ AI providers and 835+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -37049,7 +37070,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 834 models from 48 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 835 models from 48 providers through a single API.
 
 ## Features
 
@@ -37070,7 +37091,7 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
 <Tabs>
   <TabItem value="OpenAI" label="OpenAI">
     ```typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
       name: "my-agent",
@@ -37081,7 +37102,7 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
   </TabItem>
   <TabItem value="Anthropic" label="Anthropic">
     ```typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
       name: "my-agent",
@@ -37092,7 +37113,7 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
   </TabItem>
   <TabItem value="Google Gemini" label="Google Gemini">
     ```typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
       name: "my-agent",
@@ -37103,7 +37124,7 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
   </TabItem>
   <TabItem value="xAI" label="xAI">
     ```typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
       name: "my-agent",
@@ -37114,7 +37135,7 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
   </TabItem>
   <TabItem value="OpenRouter" label="OpenRouter">
     ```typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
       name: "my-agent",
@@ -37193,7 +37214,7 @@ In development, we auto-refresh your local model list every hour, ensuring your 
 Some models are faster but less capable, while others offer larger context windows or stronger reasoning skills. Use different models from the same provider, or mix and match across providers to fit each task.
 
 ```typescript showLineNumbers
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 // Use a cost-effective model for document processing
 const documentProcessor = new Agent({
@@ -37292,7 +37313,7 @@ Relying on a single model creates a single point of failure for your application
 
 
 ```typescript showLineNumbers
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 
 const agent = new Agent({
   name: 'resilient-assistant',
@@ -37324,7 +37345,7 @@ Mastra supports AI SDK provider modules, should you need to use them directly.
 
 ```typescript showLineNumbers
 import { groq } from '@ai-sdk/groq';
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -37380,7 +37401,7 @@ DASHSCOPE_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -38202,7 +38223,7 @@ DASHSCOPE_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -38784,7 +38805,7 @@ ANTHROPIC_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -39179,7 +39200,7 @@ BASETEN_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -39283,7 +39304,7 @@ const agent = new Agent({
 
 ---
 title: "Cerebras | Models | Mastra"
-description: "Use Cerebras models with Mastra. 3 models available."
+description: "Use Cerebras models with Mastra. 4 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -39297,7 +39318,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/cerebras.svg" alt="Cerebras logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cerebras
 [EN] Source: https://mastra.ai/en/models/providers/cerebras
 
-Access 3 Cerebras models through Mastra's model router. Authentication is handled automatically using the `CEREBRAS_API_KEY` environment variable.
+Access 4 Cerebras models through Mastra's model router. Authentication is handled automatically using the `CEREBRAS_API_KEY` environment variable.
 
 Learn more in the [Cerebras documentation](https://inference-docs.cerebras.ai/models/overview).
 
@@ -39306,7 +39327,7 @@ CEREBRAS_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -39369,6 +39390,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32000,
     "inputCost": 2,
     "outputCost": 2
+  },
+  {
+    "model": "cerebras/zai-glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 40960,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -39399,7 +39432,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "cerebras/qwen-3-coder-480b"
+      ? "cerebras/zai-glm-4.6"
       : "cerebras/gpt-oss-120b";
   }
 });
@@ -39442,7 +39475,7 @@ CHUTES_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -39951,7 +39984,7 @@ CORTECS_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -40174,7 +40207,7 @@ DEEPINFRA_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -40322,7 +40355,7 @@ DEEPSEEK_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -40436,7 +40469,7 @@ FASTROUTER_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -40694,7 +40727,7 @@ FIREWORKS_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -40904,7 +40937,7 @@ GITHUB_TOKEN=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -41678,7 +41711,7 @@ GOOGLE_GENERATIVE_AI_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -42141,7 +42174,7 @@ GROQ_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -42445,7 +42478,7 @@ HF_TOKEN=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -42703,7 +42736,7 @@ INCEPTION_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -42860,7 +42893,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/baseten.svg"
     />    <CardGridItem
       title="Cerebras"
-      description="3 models"
+      description="4 models"
       href="/models/providers/cerebras"
       logo="https://models.dev/logos/cerebras.svg"
     />    <CardGridItem
@@ -43060,7 +43093,7 @@ INFERENCE_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -43258,7 +43291,7 @@ LLAMA_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -43432,7 +43465,7 @@ LMSTUDIO_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -43558,7 +43591,7 @@ LUCIDQUERY_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -43673,7 +43706,7 @@ MISTRAL_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -44001,7 +44034,7 @@ MODELSCOPE_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -44175,7 +44208,7 @@ MOONSHOT_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -44301,7 +44334,7 @@ MOONSHOT_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -44427,7 +44460,7 @@ MORPH_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -44553,7 +44586,7 @@ NEBIUS_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -44823,7 +44856,7 @@ NVIDIA_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -45129,7 +45162,7 @@ OPENAI_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -45717,7 +45750,7 @@ OPENCODE_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -45976,7 +46009,7 @@ PERPLEXITY_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -46124,7 +46157,7 @@ REQUESTY_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -46370,7 +46403,7 @@ SCALEWAY_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -46616,7 +46649,7 @@ SUBMODEL_INSTAGEN_ACCESS_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -46814,7 +46847,7 @@ SYNTHETIC_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -47169,7 +47202,7 @@ TOGETHER_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -47341,7 +47374,7 @@ UPSTAGE_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -47455,7 +47488,7 @@ VENICE_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -47701,7 +47734,7 @@ VULTR_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -47851,7 +47884,7 @@ WANDB_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -48062,7 +48095,7 @@ XAI_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -48428,7 +48461,7 @@ ZHIPU_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -48578,7 +48611,7 @@ ZHIPU_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -48728,7 +48761,7 @@ ZENMUX_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -49034,7 +49067,7 @@ ZHIPU_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -49184,7 +49217,7 @@ ZHIPU_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -49470,23 +49503,23 @@ export const agent = new Agent({
         "Workflows that the agent can execute. Can be static or dynamically resolved.",
     },
     {
-      name: "defaultGenerateOptions",
-      type: "AgentGenerateOptions | ({ requestContext: RequestContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>",
-      isOptional: true,
-      description: "Default options used when calling `generate()`.",
-    },
-    {
-      name: "defaultStreamOptions",
-      type: "AgentStreamOptions | ({ requestContext: RequestContext }) => AgentStreamOptions | Promise<AgentStreamOptions>",
-      isOptional: true,
-      description: "Default options used when calling `stream()`.",
-    },
-    {
-      name: "defaultStreamOptions",
+      name: "defaultOptions",
       type: "AgentExecutionOptions | ({ requestContext: RequestContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>",
       isOptional: true,
       description:
-        "Default options used when calling `stream()` in vNext mode.",
+        "Default options used when calling `stream()` and `generate()`.",
+    },
+    {
+      name: "defaultGenerateOptionsLegacy",
+      type: "AgentGenerateOptions | ({ requestContext: RequestContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>",
+      isOptional: true,
+      description: "Default options used when calling `generateLegacy()`.",
+    },
+    {
+      name: "defaultStreamOptionsLegacy",
+      type: "AgentStreamOptions | ({ requestContext: RequestContext }) => AgentStreamOptions | Promise<AgentStreamOptions>",
+      isOptional: true,
+      description: "Default options used when calling `streamLegacy()`.",
     },
     {
       name: "mastra",
@@ -50856,19 +50889,25 @@ await agent.generateLegacy(
 
 
 ---
-title: "Reference: Agent.getDefaultGenerateOptions() | Agents | Mastra Docs"
-description: "Documentation for the `Agent.getDefaultGenerateOptions()` method in Mastra agents, which retrieves the default options used for generate calls."
+title: "Reference: Agent.getDefaultGenerateOptionsLegacy() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getDefaultGenerateOptionsLegacy()` method in Mastra agents, which retrieves the default options used for generateLegacy calls."
 ---
 
-# Agent.getDefaultGenerateOptions()
+# Agent.getDefaultGenerateOptionsLegacy()
 [EN] Source: https://mastra.ai/en/reference/agents/getDefaultGenerateOptions
 
-Agents can be configured with default generation options for controlling model behavior, output formatting and tool and workflow calls. The `.getDefaultGenerateOptions()` method retrieves these defaults, resolving them if they are functions. These options apply to all `generate()`calls unless overridden and are useful for inspecting an agent’s unknown defaults.
+:::warning
+
+**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.getDefaultOptions()`](./getDefaultOptions) method instead. See the [migration guide](../../guides/migrations/upgrade-to-v1) for details on upgrading.
+
+:::
+
+Agents can be configured with default generation options for controlling model behavior, output formatting and tool and workflow calls. The `.getDefaultGenerateOptionsLegacy()` method retrieves these defaults, resolving them if they are functions. These options apply to all `generateLegacy()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
 
 ## Usage example
 
 ```typescript copy
-await agent.getDefaultGenerateOptions();
+await agent.getDefaultGenerateOptionsLegacy();
 ```
 
 ## Parameters
@@ -50901,7 +50940,7 @@ await agent.getDefaultGenerateOptions();
 ## Extended usage example
 
 ```typescript copy
-await agent.getDefaultGenerateOptions({
+await agent.getDefaultGenerateOptionsLegacy({
   requestContext: new RequestContext(),
 });
 ```
@@ -50928,19 +50967,19 @@ await agent.getDefaultGenerateOptions({
 
 
 ---
-title: "Reference: Agent.getDefaultStreamOptions() | Agents | Mastra Docs"
-description: "Documentation for the `Agent.getDefaultStreamOptions()` method in Mastra agents, which retrieves the default options used for stream calls."
+title: "Reference: Agent.getDefaultOptions() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getDefaultOptions()` method in Mastra agents, which retrieves the default options used for stream and generate calls."
 ---
 
-# Agent.getDefaultStreamOptions()
-[EN] Source: https://mastra.ai/en/reference/agents/getDefaultStreamOptions
+# Agent.getDefaultOptions()
+[EN] Source: https://mastra.ai/en/reference/agents/getDefaultOptions
 
-Agents can be configured with default streaming options for memory usage, output format, and iteration steps. The `.getDefaultStreamOptions()` method returns these defaults, resolving them if they are functions. These options apply to all `stream()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
+Agents can be configured with default options for memory usage, output format, and iteration steps. The `.getDefaultOptions()` method returns these defaults, resolving them if they are functions. These options apply to all `stream()` and `generate()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
 
 ## Usage example
 
 ```typescript copy
-await agent.getDefaultStreamOptions();
+await agent.getDefaultOptions();
 ```
 
 ## Parameters
@@ -50965,6 +51004,84 @@ await agent.getDefaultStreamOptions();
       name: "defaultOptions",
       type: "AgentExecutionOptions<Output> | Promise<AgentExecutionOptions<Output>>",
       description:
+        "The default streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
+    },
+  ]}
+/>
+
+## Extended usage example
+
+```typescript copy
+await agent.getDefaultOptions({
+  requestContext: new RequestContext(),
+});
+```
+
+### Options parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description:
+        "Request Context for dependency injection and contextual information.",
+    },
+  ]}
+/>
+
+## Related
+
+- [Streaming with agents](/docs/streaming/overview#streaming-with-agents)
+- [Request Context](/docs/server-db/request-context)
+
+
+---
+title: "Reference: Agent.getDefaultStreamOptionsLegacy() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getDefaultStreamOptionsLegacy()` method in Mastra agents, which retrieves the default options used for streamLegacy calls."
+---
+
+# Agent.getDefaultStreamOptionsLegacy()
+[EN] Source: https://mastra.ai/en/reference/agents/getDefaultStreamOptions
+
+:::warning
+
+**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.getDefaultOptions()`](./getDefaultOptions) method instead. See the [migration guide](../../guides/migrations/upgrade-to-v1) for details on upgrading.
+
+:::
+
+Agents can be configured with default streaming options for memory usage, output format, and iteration steps. The `.getDefaultStreamOptionsLegacy()` method returns these defaults, resolving them if they are functions. These options apply to all `streamLegacy()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
+
+## Usage example
+
+```typescript copy
+await agent.getDefaultStreamOptionsLegacy();
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ requestContext?: RequestContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "Optional configuration object containing request context.",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "defaultOptions",
+      type: "AgentStreamOptions | Promise<AgentStreamOptions>",
+      description:
         "The default vNext streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
     },
   ]}
@@ -50973,7 +51090,7 @@ await agent.getDefaultStreamOptions();
 ## Extended usage example
 
 ```typescript copy
-await agent.getDefaultStreamOptions({
+await agent.getDefaultStreamOptionsLegacy({
   requestContext: new RequestContext(),
 });
 ```
@@ -52056,7 +52173,7 @@ The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It v
 ## Usage example
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 export const mastra = new Mastra({
@@ -52180,7 +52297,7 @@ The `MastraAuthClerk` class provides authentication for Mastra applications usin
 ## Usage example
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthClerk } from "@mastra/auth-clerk";
 
 export const mastra = new Mastra({
@@ -52259,7 +52376,7 @@ The `MastraAuthFirebase` class provides authentication for Mastra using Firebase
 ### Basic usage with environment variables
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 // Automatically uses FIREBASE_SERVICE_ACCOUNT and FIRESTORE_DATABASE_ID env vars
@@ -52274,7 +52391,7 @@ export const mastra = new Mastra({
 ### Custom configuration
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 export const mastra = new Mastra({
@@ -52395,7 +52512,7 @@ The `MastraJwtAuth` class provides a lightweight authentication mechanism for Ma
 ## Usage example
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraJwtAuth } from "@mastra/auth";
 
 export const mastra = new Mastra({
@@ -52440,7 +52557,7 @@ The `MastraAuthSupabase` class provides authentication for Mastra using Supabase
 ## Usage example
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthSupabase } from "@mastra/auth-supabase";
 
 export const mastra = new Mastra({
@@ -52508,7 +52625,7 @@ The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It
 ## Usage example
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
@@ -55160,7 +55277,7 @@ Think of `Mastra` as a top-level registry:
 ## Usage example
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";
 import { weatherWorkflow } from "./workflows/weather-workflow";
@@ -55434,7 +55551,7 @@ The `CloudflareDeployer` class handles deployment of standalone Mastra applicati
 ## Usage example
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 export const mastra = new Mastra({
@@ -55701,7 +55818,7 @@ The `NetlifyDeployer` class handles deployment of standalone Mastra applications
 ## Usage example
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
 export const mastra = new Mastra({
@@ -55724,7 +55841,7 @@ The `VercelDeployer` class handles deployment of standalone Mastra applications 
 ## Usage example
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
@@ -55746,7 +55863,7 @@ These options are merged into `.vercel/output/functions/index.func/.vc-config.js
 ### Example with overrides
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
@@ -62926,7 +63043,7 @@ When deploying to Mastra Cloud, logs are displayed on the [Logs](/docs/mastra-cl
 ## Usage example
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { PinoLogger } from "@mastra/loggers";
 
 export const mastra = new Mastra({
@@ -63543,7 +63660,7 @@ Configure with KeywordsAI telemetry in `src/mastra/index.ts`:
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
 
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { KeywordsAIExporter } from "@keywordsai/exporter-vercel";
 
 telemetry: {

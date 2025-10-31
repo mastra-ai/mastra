@@ -55,7 +55,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Install Mastra | Getting Started | Mastra Docs](https://mastra.ai/en/docs/getting-started/installation): Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
 - [Mastra Docs Server | Getting Started | Mastra Docs](https://mastra.ai/en/docs/getting-started/mcp-docs-server): Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert.
 - [Project Structure | Getting Started | Mastra Docs](https://mastra.ai/en/docs/getting-started/project-structure): Guide on organizing folders and files in Mastra, including best practices and recommended structures.
-- [Playground | Getting Started | Mastra Docs](https://mastra.ai/en/docs/getting-started/studio): Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
+- [Studio | Getting Started | Mastra Docs](https://mastra.ai/en/docs/getting-started/studio): Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
 - [Templates | Getting Started | Mastra Docs](https://mastra.ai/en/docs/getting-started/templates): Pre-built project structures that demonstrate common Mastra use cases and patterns
 - [About Mastra | Mastra Docs](https://mastra.ai/en/docs): Mastra is an all-in-one framework for building AI-powered applications and agents with a modern TypeScript stack.
 - [Navigating the Dashboard | Mastra Cloud | Mastra Docs](https://mastra.ai/en/docs/mastra-cloud/dashboard): Details of each feature available in Mastra Cloud
@@ -205,7 +205,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 48+ AI providers and 834+ models through Mastras model router.
+- [Models](https://mastra.ai/en/models): Access 48+ AI providers and 835+ models through Mastras model router.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
 - [Alibaba | Models | Mastra](https://mastra.ai/en/models/providers/alibaba): Use Alibaba models with Mastra. 39 models available.
@@ -213,7 +213,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Anthropic | Models | Mastra](https://mastra.ai/en/models/providers/anthropic): Use Anthropic models with Mastra. 19 models available.
 - [Azure](https://mastra.ai/en/models/providers/azure): Use Azure models via the AI SDK.
 - [Baseten | Models | Mastra](https://mastra.ai/en/models/providers/baseten): Use Baseten models with Mastra. 3 models available.
-- [Cerebras | Models | Mastra](https://mastra.ai/en/models/providers/cerebras): Use Cerebras models with Mastra. 3 models available.
+- [Cerebras | Models | Mastra](https://mastra.ai/en/models/providers/cerebras): Use Cerebras models with Mastra. 4 models available.
 - [Chutes | Models | Mastra](https://mastra.ai/en/models/providers/chutes): Use Chutes models with Mastra. 33 models available.
 - [Cloudflare Workers AI](https://mastra.ai/en/models/providers/cloudflare-workers-ai): Use Cloudflare Workers AI models via the AI SDK.
 - [Cortecs | Models | Mastra](https://mastra.ai/en/models/providers/cortecs): Use Cortecs models with Mastra. 11 models available.
@@ -263,8 +263,9 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Agent Class | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/agent): Documentation for the `Agent` class in Mastra, which provides the foundation for creating AI agents with various capabilities.
 - [Reference: Agent.generate() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/generate): Documentation for the `Agent.generate()` method in Mastra agents, which enables non-streaming generation of responses with enhanced capabilities.
 - [Reference: Agent.generateLegacy() (Legacy) | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/generateLegacy): Documentation for the legacy `Agent.generateLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version.
-- [Reference: Agent.getDefaultGenerateOptions() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/getDefaultGenerateOptions): Documentation for the `Agent.getDefaultGenerateOptions()` method in Mastra agents, which retrieves the default options used for generate calls.
-- [Reference: Agent.getDefaultStreamOptions() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/getDefaultStreamOptions): Documentation for the `Agent.getDefaultStreamOptions()` method in Mastra agents, which retrieves the default options used for stream calls.
+- [Reference: Agent.getDefaultGenerateOptionsLegacy() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/getDefaultGenerateOptions): Documentation for the `Agent.getDefaultGenerateOptionsLegacy()` method in Mastra agents, which retrieves the default options used for generateLegacy calls.
+- [Reference: Agent.getDefaultOptions() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/getDefaultOptions): Documentation for the `Agent.getDefaultOptions()` method in Mastra agents, which retrieves the default options used for stream and generate calls.
+- [Reference: Agent.getDefaultStreamOptionsLegacy() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/getDefaultStreamOptions): Documentation for the `Agent.getDefaultStreamOptionsLegacy()` method in Mastra agents, which retrieves the default options used for streamLegacy calls.
 - [Reference: Agent.getDescription() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/getDescription): Documentation for the `Agent.getDescription()` method in Mastra agents, which retrieves the agents description.
 - [Reference: Agent.getInstructions() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/getInstructions): Documentation for the `Agent.getInstructions()` method in Mastra agents, which retrieves the instructions that guide the agents behavior.
 - [Reference: Agent.getLLM() | Agents | Mastra Docs](https://mastra.ai/en/reference/agents/getLLM): Documentation for the `Agent.getLLM()` method in Mastra agents, which retrieves the language model instance.
