@@ -3,7 +3,7 @@ import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import type { UIMessageWithMetadata } from '@mastra/core/agent';
+import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
@@ -197,7 +197,7 @@ describe('Agent Memory Tests', () => {
 
     // Mock the listMemoryMessages method to track if it's called
     let listMemoryMessagesCalled = false;
-    let retrievedMemoryMessages: any[] = [];
+    let retrievedMemoryMessages: MastraMessageV2[] = [];
     const originalGetMemoryMessages = (agent as any).listMemoryMessages;
     (agent as any).listMemoryMessages = async (...args: any[]) => {
       listMemoryMessagesCalled = true;
@@ -224,7 +224,13 @@ describe('Agent Memory Tests', () => {
     // Verify that the retrieved messages contain content from the first thread
     const hasMessagesFromFirstThread = retrievedMemoryMessages.some(
       msg =>
-        msg.threadId === thread1Id || (typeof msg.content === 'string' && msg.content.toLowerCase().includes('cat')),
+        msg.threadId === thread1Id ||
+        msg.content.parts
+          .filter(p => p.type === 'text')
+          .map(p => p.text)
+          .join(' ')
+          .toLowerCase()
+          .includes('cat'),
     );
     expect(hasMessagesFromFirstThread).toBe(true);
     expect(secondResponse.text.toLowerCase()).toMatch(/(cat|animal|discuss)/);
@@ -272,10 +278,12 @@ describe('Agent Memory Tests', () => {
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
       const { messages, uiMessages } = await agentMemory.query({ threadId });
-      const userMessages = messages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
-      const userUiMessages = uiMessages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
+      const userMessages = messages.filter(m => m.role === 'user').map(m => m.content);
+      const userUiMessages = uiMessages.filter(m => m.role === 'user').map(m => m.content);
 
-      expect(userMessages).toEqual(expect.arrayContaining(['First message', 'Second message']));
+      expect(userMessages.flatMap(m => m.parts.filter(p => p.type === 'text').map(p => p.text))).toEqual(
+        expect.arrayContaining(['First message', 'Second message']),
+      );
       expect(userUiMessages).toEqual(expect.arrayContaining(['First message', 'Second message']));
     });
 
@@ -308,11 +316,13 @@ describe('Agent Memory Tests', () => {
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
       const { messages, uiMessages } = await agentMemory.query({ threadId });
-      const userMessages = messages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
-      const userUiMessages = uiMessages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
-      const assistantMessages = messages.filter((m: any) => m.role === 'assistant').map((m: any) => m.content);
-      const assistantUiMessages = uiMessages.filter((m: any) => m.role === 'assistant').map((m: any) => m.content);
-      expect(userMessages).toEqual(expect.arrayContaining(['What is 2+2?', 'Give me JSON']));
+      const userMessages = messages.filter(m => m.role === 'user').map(m => m.content);
+      const userUiMessages = uiMessages.filter(m => m.role === 'user').map(m => m.content);
+      const assistantMessages = messages.filter(m => m.role === 'assistant').map(m => m.content);
+      const assistantUiMessages = uiMessages.filter(m => m.role === 'assistant').map(m => m.content);
+      expect(userMessages.flatMap(m => m.parts.filter(p => p.type === 'text').map(p => p.text))).toEqual(
+        expect.arrayContaining(['What is 2+2?', 'Give me JSON']),
+      );
       expect(userUiMessages).toEqual(expect.arrayContaining(['What is 2+2?', 'Give me JSON']));
       function flattenAssistantMessages(messages: any[]) {
         return messages.flatMap(msg =>
@@ -320,7 +330,7 @@ describe('Agent Memory Tests', () => {
         );
       }
 
-      expect(flattenAssistantMessages(assistantMessages)).toEqual(
+      expect(assistantMessages.flatMap(m => m.parts.filter(p => p.type === 'text').map(p => p.text))).toEqual(
         expect.arrayContaining([expect.stringMatching(/2\s*\+\s*2/), expect.stringContaining('"result"')]),
       );
 
@@ -353,14 +363,28 @@ describe('Agent Memory Tests', () => {
 
       // Assert that the context messages are NOT saved
       const savedContextMessages = messages.filter(
-        (m: any) => m.content === contextMessageContent1 || m.content === contextMessageContent2,
+        m =>
+          m.content.parts
+            .filter(p => p.type === 'text')
+            .map(p => p.text)
+            .join(' ') === contextMessageContent1 ||
+          m.content.parts
+            .filter(p => p.type === 'text')
+            .map(p => p.text)
+            .join(' ') === contextMessageContent2,
       );
+
       expect(savedContextMessages.length).toBe(0);
 
       // Assert that the user message IS saved
-      const savedUserMessages = messages.filter((m: any) => m.role === 'user');
+      const savedUserMessages = messages.filter(m => m.role === 'user');
       expect(savedUserMessages.length).toBe(1);
-      expect(savedUserMessages[0].content).toBe(userMessageContent);
+      expect(
+        savedUserMessages[0].content.parts
+          .filter(p => p.type === 'text')
+          .map(p => p.text)
+          .join(' '),
+      ).toBe(userMessageContent);
     });
 
     it('should persist UIMessageWithMetadata through agent generate and memory', async () => {
@@ -404,12 +428,12 @@ describe('Agent Memory Tests', () => {
       const { uiMessages } = await agentMemory.query({ threadId });
 
       // Check that all user messages were saved
-      const savedUserMessages = uiMessages.filter((m: any) => m.role === 'user');
+      const savedUserMessages = uiMessages.filter(m => m.role === 'user');
       expect(savedUserMessages.length).toBe(2);
 
       // Check that metadata was persisted in the stored messages
-      const firstMessage = uiMessages.find((m: any) => m.content === 'Hello with metadata');
-      const secondMessage = uiMessages.find((m: any) => m.content === 'Another message with different metadata');
+      const firstMessage = uiMessages.find(m => m.content === 'Hello with metadata');
+      const secondMessage = uiMessages.find(m => m.content === 'Another message with different metadata');
 
       expect(firstMessage).toBeDefined();
       expect(firstMessage!.metadata).toEqual({
@@ -468,26 +492,25 @@ describe('Agent Memory Tests', () => {
       const { messages } = await agentMemory.query({ threadId });
 
       const assistantMessage = messages.find(
-        (m: any) =>
-          m.role === 'assistant' && Array.isArray(m.content) && m.content.some((p: any) => p?.type === 'reasoning'),
+        m => m.role === 'assistant' && m.content.parts.some(p => p.type === 'reasoning'),
       );
 
       expect(assistantMessage).toBeDefined();
 
-      const retrievedReasoningParts = Array.isArray((assistantMessage as any).content)
-        ? (assistantMessage as any).content.filter((p: any) => p?.type === 'reasoning')
-        : [];
+      const retrievedReasoningParts = assistantMessage?.content.parts.filter(p => p.type === 'reasoning');
 
       expect(retrievedReasoningParts).toBeDefined();
-      expect(retrievedReasoningParts.length).toBeGreaterThan(0);
+      expect(retrievedReasoningParts?.length).toBeGreaterThan(0);
 
-      const retrievedReasoningText = retrievedReasoningParts.map((p: any) => p.text || '').join('');
+      const retrievedReasoningText = retrievedReasoningParts
+        ?.flatMap(p => p.details?.filter(d => d.type === 'text').map(d => d.text) || '')
+        .join('');
 
-      expect(retrievedReasoningText.length).toBeGreaterThan(0);
+      expect(retrievedReasoningText?.length).toBeGreaterThan(0);
       expect(retrievedReasoningText).toBe(originalReasoningText);
 
       // This is the key fix for issue #8073 - before the fix, reasoning was split into many parts
-      expect(retrievedReasoningParts.length).toBe(1);
+      expect(retrievedReasoningParts?.length).toBe(1);
     }, 30000);
   });
 
