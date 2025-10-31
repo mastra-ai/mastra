@@ -341,7 +341,7 @@ describe('Working Memory Tests', () => {
 
       for (const message of history.messages) {
         if (message.role === `assistant`) {
-          for (const part of message.content) {
+          for (const part of message.content.parts) {
             if (typeof part === `string`) continue;
             if (part.type === `tool-call` && part.toolName === `updateWorkingMemory`) {
               memoryArgs.push((part.args as any).memory);

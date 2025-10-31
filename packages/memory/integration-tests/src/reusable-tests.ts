@@ -708,7 +708,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const savedMessages = await memory.saveMessages({ messages: [textMessage, complexMessage] });
 
         // Delete the complex message
-        await memory.deleteMessages([savedMessages[1].id]);
+        await memory.deleteMessages([savedMessages.messages[1].id]);
 
         const remainingMessages = await memory.query({
           threadId: thread.id,

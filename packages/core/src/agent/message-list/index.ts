@@ -1456,6 +1456,11 @@ export class MessageList {
       for (const part of coreMessage.content) {
         switch (part.type) {
           case 'text':
+            // Add step-start only after tool invocations, not at the beginning
+            const prevPart = parts.at(-1);
+            if (coreMessage.role === 'assistant' && prevPart && prevPart.type === 'tool-invocation') {
+              parts.push({ type: 'step-start' });
+            }
             // Merge part-level and message-level providerOptions
             // Part-level takes precedence over message-level
             const mergedProviderMetadata = {
