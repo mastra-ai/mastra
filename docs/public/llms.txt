@@ -205,7 +205,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 48+ AI providers and 835+ models through Mastras model router.
+- [Models](https://mastra.ai/en/models): Access 48+ AI providers and 833+ models through Mastras model router.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
 - [Alibaba | Models | Mastra](https://mastra.ai/en/models/providers/alibaba): Use Alibaba models with Mastra. 39 models available.
@@ -214,7 +214,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Azure](https://mastra.ai/en/models/providers/azure): Use Azure models via the AI SDK.
 - [Baseten | Models | Mastra](https://mastra.ai/en/models/providers/baseten): Use Baseten models with Mastra. 3 models available.
 - [Cerebras | Models | Mastra](https://mastra.ai/en/models/providers/cerebras): Use Cerebras models with Mastra. 4 models available.
-- [Chutes | Models | Mastra](https://mastra.ai/en/models/providers/chutes): Use Chutes models with Mastra. 33 models available.
+- [Chutes | Models | Mastra](https://mastra.ai/en/models/providers/chutes): Use Chutes models with Mastra. 31 models available.
 - [Cloudflare Workers AI](https://mastra.ai/en/models/providers/cloudflare-workers-ai): Use Cloudflare Workers AI models via the AI SDK.
 - [Cortecs | Models | Mastra](https://mastra.ai/en/models/providers/cortecs): Use Cortecs models with Mastra. 11 models available.
 - [Deep Infra | Models | Mastra](https://mastra.ai/en/models/providers/deepinfra): Use Deep Infra models with Mastra. 4 models available.
@@ -481,7 +481,6 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Run.cancel() | Workflows | Mastra Docs](https://mastra.ai/en/reference/workflows/run-methods/cancel): Documentation for the `Run.cancel()` method in workflows, which cancels a workflow run.
 - [Reference: Run.resume() | Workflows | Mastra Docs](https://mastra.ai/en/reference/workflows/run-methods/resume): Documentation for the `Run.resume()` method in workflows, which resumes a suspended workflow run with new data.
 - [Reference: Run.start() | Workflows | Mastra Docs](https://mastra.ai/en/reference/workflows/run-methods/start): Documentation for the `Run.start()` method in workflows, which starts a workflow run with input data.
-- [Reference: Run.watch() | Workflows | Mastra Docs](https://mastra.ai/en/reference/workflows/run-methods/watch): Documentation for the `Run.watch()` method in workflows, which allows you to monitor the execution of a workflow run.
 - [Reference: Run Class | Workflows | Mastra Docs](https://mastra.ai/en/reference/workflows/run): Documentation for the Run class in Mastra, which represents a workflow execution instance.
 - [Reference: Step Class | Workflows | Mastra Docs](https://mastra.ai/en/reference/workflows/step): Documentation for the Step class in Mastra, which defines individual units of work within a workflow.
 - [Reference: Workflow.branch() | Workflows | Mastra Docs](https://mastra.ai/en/reference/workflows/workflow-methods/branch): Documentation for the `Workflow.branch()` method in workflows, which creates conditional branches between steps.

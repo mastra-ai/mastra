@@ -83,11 +83,6 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "providers/aihubmix",
-          label: "AIHubMix",
-        },
-        {
-          type: "doc",
           id: "providers/alibaba",
           label: "Alibaba",
         },
