@@ -145,15 +145,15 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
   /**
    * Default options used when calling `generate()`.
    */
-  defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
+  defaultGenerateOptionsLegacy?: DynamicArgument<AgentGenerateOptions>;
   /**
    * Default options used when calling `stream()`.
    */
-  defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
+  defaultStreamOptionsLegacy?: DynamicArgument<AgentStreamOptions>;
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
-  defaultVNextStreamOptions?: DynamicArgument<AgentExecutionOptions>;
+  defaultOptions?: DynamicArgument<AgentExecutionOptions>;
   /**
    * Reference to the Mastra runtime instance (injected automatically).
    */

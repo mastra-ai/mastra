@@ -24,7 +24,6 @@ import type { MastraIdGenerator } from '../types';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import type { LegacyWorkflow } from '../workflows/legacy';
 import { createOnScorerHook } from './hooks';
 
 /**
@@ -34,7 +33,6 @@ import { createOnScorerHook } from './hooks';
  * with a Mastra instance, including agents, workflows, storage, logging, and more.
  *
  * @template TAgents - Record of agent instances keyed by their names
- * @template TLegacyWorkflows - Record of legacy workflow instances
  * @template TWorkflows - Record of workflow instances
  * @template TVectors - Record of vector store instances
  * @template TTTS - Record of text-to-speech instances
@@ -60,7 +58,6 @@ import { createOnScorerHook } from './hooks';
  */
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
-  TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
   TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
     string,
     Workflow<any, any, any, any, any, any>
@@ -94,12 +91,6 @@ export interface Config<
    * @default `INFO` level in development, `WARN` in production.
    */
   logger?: TLogger | false;
-
-  /**
-   * Legacy workflow definitions for backward compatibility.
-   * @deprecated Use `workflows` instead.
-   */
-  legacy_workflows?: TLegacyWorkflows;
 
   /**
    * Workflows provide type-safe, composable task execution with built-in error handling.
@@ -185,7 +176,6 @@ export interface Config<
  * It coordinates the interaction between agents, workflows, storage systems, and other services.
 
  * @template TAgents - Record of agent instances keyed by their names
- * @template TLegacyWorkflows - Record of legacy workflow instances for backward compatibility
  * @template TWorkflows - Record of modern workflow instances
  * @template TVectors - Record of vector store instances for semantic search and RAG
  * @template TTTS - Record of text-to-speech provider instances
@@ -213,7 +203,6 @@ export interface Config<
  */
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
-  TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
   TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
     string,
     Workflow<any, any, any, any, any, any>
@@ -227,7 +216,6 @@ export class Mastra<
   #vectors?: TVectors;
   #agents: TAgents;
   #logger: TLogger;
-  #legacy_workflows: TLegacyWorkflows;
   #workflows: TWorkflows;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
@@ -361,7 +349,7 @@ export class Mastra<
    * });
    * ```
    */
-  constructor(config?: Config<TAgents, TLegacyWorkflows, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers>) {
+  constructor(config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers>) {
     // Store server middleware with default path
     if (config?.serverMiddleware) {
       this.#serverMiddleware = config.serverMiddleware.map(m => ({
@@ -540,35 +528,6 @@ do:
       });
     }
     this.#scorers = scorers as TScorers;
-
-    /*
-    Legacy Workflows
-    */
-    this.#legacy_workflows = {} as TLegacyWorkflows;
-
-    if (config?.legacy_workflows) {
-      Object.entries(config.legacy_workflows).forEach(([key, workflow]) => {
-        workflow.__registerMastra(this);
-        workflow.__registerPrimitives({
-          logger: this.getLogger(),
-          storage: this.storage,
-          memory: this.memory,
-          agents: agents,
-          tts: this.#tts,
-          vectors: this.#vectors,
-        });
-        // @ts-ignore
-        this.#legacy_workflows[key] = workflow;
-
-        const workflowSteps = Object.values(workflow.steps).filter(step => !!step.workflowId && !!step.workflow);
-        if (workflowSteps.length > 0) {
-          workflowSteps.forEach(step => {
-            // @ts-ignore
-            this.#legacy_workflows[step.workflowId] = step.workflow;
-          });
-        }
-      });
-    }
 
     this.#workflows = {} as TWorkflows;
     if (config?.workflows) {
@@ -874,57 +833,6 @@ do:
   }
 
   /**
-   * Retrieves a registered legacy workflow by its ID.
-   *
-   * Legacy workflows are the previous generation of workflow system in Mastra,
-   * maintained for backward compatibility. For new implementations, use the
-   * modern workflow system accessed via `getWorkflow()`.
-   *
-   * @template TWorkflowId - The specific workflow ID type from the registered legacy workflows
-   * @throws {MastraError} When the legacy workflow with the specified ID is not found
-   * @deprecated Use `getWorkflow()` for new implementations
-   *
-   * @example Getting a legacy workflow
-   * ```typescript
-   * const mastra = new Mastra({
-   *   legacy_workflows: {
-   *     oldDataFlow: legacyWorkflowInstance
-   *   }
-   * });
-   *
-   * const workflow = mastra.legacy_getWorkflow('oldDataFlow');
-   * const result = await workflow.execute({ input: 'data' });
-   * ```
-   */
-  public legacy_getWorkflow<TWorkflowId extends keyof TLegacyWorkflows>(
-    id: TWorkflowId,
-    { serialized }: { serialized?: boolean } = {},
-  ): TLegacyWorkflows[TWorkflowId] {
-    const workflow = this.#legacy_workflows?.[id];
-    if (!workflow) {
-      const error = new MastraError({
-        id: 'MASTRA_GET_LEGACY_WORKFLOW_BY_ID_NOT_FOUND',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `Workflow with ID ${String(id)} not found`,
-        details: {
-          status: 404,
-          workflowId: String(id),
-          workflows: Object.keys(this.#legacy_workflows ?? {}).join(', '),
-        },
-      });
-      this.#logger?.trackException(error);
-      throw error;
-    }
-
-    if (serialized) {
-      return { name: workflow.name } as TLegacyWorkflows[TWorkflowId];
-    }
-
-    return workflow;
-  }
-
-  /**
    * Retrieves a registered workflow by its ID.
    *
    * @template TWorkflowId - The specific workflow ID type from the registered workflows
@@ -1067,44 +975,6 @@ do:
     }
 
     return workflow;
-  }
-
-  /**
-   * Returns all registered legacy workflows as a record keyed by their IDs.
-   *
-   * Legacy workflows are the previous generation of workflow system in Mastra,
-   * maintained for backward compatibility. For new implementations, use `listWorkflows()`.
-   *
-   * @deprecated Use `listWorkflows()` for new implementations
-   *
-   * @example Listing all legacy workflows
-   * ```typescript
-   * const mastra = new Mastra({
-   *   legacy_workflows: {
-   *     oldFlow1: legacyWorkflow1,
-   *     oldFlow2: legacyWorkflow2
-   *   }
-   * });
-   *
-   * const allLegacyWorkflows = mastra.legacy_getWorkflows();
-   * console.log(Object.keys(allLegacyWorkflows)); // ['oldFlow1', 'oldFlow2']
-   *
-   * // Execute all legacy workflows
-   * for (const [id, workflow] of Object.entries(allLegacyWorkflows)) {
-   *   console.log(`Legacy workflow ${id}:`, workflow.name);
-   * }
-   * ```
-   */
-  public legacy_getWorkflows(props: { serialized?: boolean } = {}): Record<string, LegacyWorkflow> {
-    if (props.serialized) {
-      return Object.entries(this.#legacy_workflows).reduce((acc, [k, v]) => {
-        return {
-          ...acc,
-          [k]: { name: v.name },
-        };
-      }, {});
-    }
-    return this.#legacy_workflows;
   }
 
   /**

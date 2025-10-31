@@ -1,16 +1,22 @@
 ---
-title: "Reference: Agent.getDefaultGenerateOptions() | Agents | Mastra Docs"
-description: "Documentation for the `Agent.getDefaultGenerateOptions()` method in Mastra agents, which retrieves the default options used for generate calls."
+title: "Reference: Agent.getDefaultGenerateOptionsLegacy() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getDefaultGenerateOptionsLegacy()` method in Mastra agents, which retrieves the default options used for generateLegacy calls."
 ---
 
-# Agent.getDefaultGenerateOptions()
+# Agent.getDefaultGenerateOptionsLegacy()
 
-Agents can be configured with default generation options for controlling model behavior, output formatting and tool and workflow calls. The `.getDefaultGenerateOptions()` method retrieves these defaults, resolving them if they are functions. These options apply to all `generate()`calls unless overridden and are useful for inspecting an agent’s unknown defaults.
+:::warning
+
+**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.getDefaultOptions()`](./getDefaultOptions) method instead. See the [migration guide](../../guides/migrations/upgrade-to-v1) for details on upgrading.
+
+:::
+
+Agents can be configured with default generation options for controlling model behavior, output formatting and tool and workflow calls. The `.getDefaultGenerateOptionsLegacy()` method retrieves these defaults, resolving them if they are functions. These options apply to all `generateLegacy()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
 
 ## Usage example
 
 ```typescript copy
-await agent.getDefaultGenerateOptions();
+await agent.getDefaultGenerateOptionsLegacy();
 ```
 
 ## Parameters
@@ -43,7 +49,7 @@ await agent.getDefaultGenerateOptions();
 ## Extended usage example
 
 ```typescript copy
-await agent.getDefaultGenerateOptions({
+await agent.getDefaultGenerateOptionsLegacy({
   requestContext: new RequestContext(),
 });
 ```
