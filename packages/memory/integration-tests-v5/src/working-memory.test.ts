@@ -458,15 +458,11 @@ describe('Working Memory Tests', () => {
 
       // Pure text message should be present (check parts array for text)
       expect(
-        saved.some(m => 
-          m.content.parts?.some(p => p.type === 'text' && p.text === 'Another normal message')
-        )
+        saved.some(m => m.content.parts?.some(p => p.type === 'text' && p.text === 'Another normal message')),
       ).toBe(true);
       // User message should be present (check parts array for text)
       expect(
-        saved.some(m => 
-          m.content.parts?.some(p => p.type === 'text' && p.text.includes('User says something'))
-        )
+        saved.some(m => m.content.parts?.some(p => p.type === 'text' && p.text.includes('User says something'))),
       ).toBe(true);
     });
   });
