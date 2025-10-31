@@ -48,7 +48,7 @@ export function toAISdkFormat(
     | MastraWorkflowStream<any, any, any, any>
     | MastraModelOutput
     | WorkflowRunOutput<WorkflowResult<any, any, any, any>>,
-  options: { from: ToAISDKFrom } = { from: 'agent' },
+  options: { from: ToAISDKFrom; lastMessageId?: string } = { from: 'agent' },
 ): ReadableStream<InferUIMessageChunk<UIMessage>> {
   const from = options?.from;
 
@@ -66,7 +66,7 @@ export function toAISdkFormat(
 
   const agentReadable: ReadableStream<ChunkType> =
     'fullStream' in stream ? (stream as MastraModelOutput).fullStream : (stream as ReadableStream<ChunkType>);
-  return agentReadable.pipeThrough(AgentStreamToAISDKTransformer<any>(lastMessageId)) as ReadableStream<
+  return agentReadable.pipeThrough(AgentStreamToAISDKTransformer<any>(options?.lastMessageId)) as ReadableStream<
     InferUIMessageChunk<UIMessage>
   >;
 }
