@@ -419,13 +419,13 @@ export type ClientScoreRowData = Omit<ScoreRowData, 'createdAt' | 'updatedAt'> &
 } & { spanId?: string };
 
 // Scores-related types
-export interface GetScoresByRunIdParams {
+export interface ListScoresByRunIdParams {
   runId: string;
   page?: number;
   perPage?: number;
 }
 
-export interface GetScoresByScorerIdParams {
+export interface ListScoresByScorerIdParams {
   scorerId: string;
   entityId?: string;
   entityType?: string;
@@ -433,7 +433,7 @@ export interface GetScoresByScorerIdParams {
   perPage?: number;
 }
 
-export interface GetScoresByEntityIdParams {
+export interface ListScoresByEntityIdParams {
   entityId: string;
   entityType: string;
   page?: number;

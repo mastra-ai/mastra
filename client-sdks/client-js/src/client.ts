@@ -29,10 +29,10 @@ import type {
   McpServerListResponse,
   McpServerToolListResponse,
   GetScorerResponse,
-  GetScoresByScorerIdParams,
+  ListScoresByScorerIdParams,
   ListScoresResponse,
-  GetScoresByRunIdParams,
-  GetScoresByEntityIdParams,
+  ListScoresByRunIdParams,
+  ListScoresByEntityIdParams,
   ListScoresBySpanParams,
   SaveScoreParams,
   SaveScoreResponse,
@@ -540,7 +540,7 @@ export class MastraClient extends BaseResource {
     return this.request(`/api/scores/scorers/${encodeURIComponent(scorerId)}`);
   }
 
-  public listScoresByScorerId(params: GetScoresByScorerIdParams): Promise<ListScoresResponse> {
+  public listScoresByScorerId(params: ListScoresByScorerIdParams): Promise<ListScoresResponse> {
     const { page, perPage, scorerId, entityId, entityType } = params;
     const searchParams = new URLSearchParams();
 
@@ -566,7 +566,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing run ID and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public listScoresByRunId(params: GetScoresByRunIdParams): Promise<ListScoresResponse> {
+  public listScoresByRunId(params: ListScoresByRunIdParams): Promise<ListScoresResponse> {
     const { runId, page, perPage } = params;
     const searchParams = new URLSearchParams();
 
@@ -586,7 +586,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing entity ID, type, and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public listScoresByEntityId(params: GetScoresByEntityIdParams): Promise<ListScoresResponse> {
+  public listScoresByEntityId(params: ListScoresByEntityIdParams): Promise<ListScoresResponse> {
     const { entityId, entityType, page, perPage } = params;
     const searchParams = new URLSearchParams();
 
