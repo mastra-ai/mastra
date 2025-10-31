@@ -1046,12 +1046,27 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           resourceId,
           config: { lastMessages: totalMessages },
         });
+
         expect(result.messages).toHaveLength(totalMessages);
 
         // Sort based on numeric part of content for consistent comparison
         const sortedResultMessages = [...result.messages].sort((a, b) => {
-          const numA = parseInt(((a.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
-          const numB = parseInt(((b.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
+          const numA = parseInt(
+            (
+              (a.content.parts
+                .filter(p => p.type === 'text')
+                .map(p => p.text)
+                .join(' ') as string) || ''
+            ).match(/Message (\d+)/)?.[1] || '0',
+          );
+          const numB = parseInt(
+            (
+              (b.content.parts
+                .filter(p => p.type === 'text')
+                .map(p => p.text)
+                .join(' ') as string) || ''
+            ).match(/Message (\d+)/)?.[1] || '0',
+          );
           return numA - numB;
         });
 
@@ -1063,9 +1078,18 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
         sortedExpectedMessages.forEach((expectedMessage, index) => {
           const resultContent = sortedResultMessages[index].content;
+
+          const resultContentText = resultContent.parts
+            .filter(p => p.type === 'text')
+            .map(p => p.text)
+            .join(' ');
+
           // messagesToSave contains the direct output of createTestMessage
           const expectedContent = expectedMessage.content;
-          expect(resultContent).toBe(expectedContent);
+
+          console.log('expectedContent', expectedContent);
+
+          expect(resultContentText).toBe(expectedContent);
         });
       });
     });

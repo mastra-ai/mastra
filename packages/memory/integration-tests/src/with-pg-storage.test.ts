@@ -96,8 +96,6 @@ describe('Memory with PostgresStore Integration', () => {
         offset: 0,
       });
 
-      console.log('result1', JSON.stringify(result1.messages, null, 2));
-
       expect(result1.messages, 'Page 0 with perPage 3 should return exactly 3 messages').toHaveLength(3);
       // Database orders by createdAt DESC (newest first), so page 0 gets the 3 newest messages
       // But MessageList sorts them chronologically (oldest to newest) for display
