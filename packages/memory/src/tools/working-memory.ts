@@ -30,12 +30,14 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
     description: `Update the working memory with new information. Any data not included will be overwritten.${schema ? ' Always pass data as string to the memory field. Never pass an object.' : ''}`,
     inputSchema,
     execute: async (input, context) => {
-      // Support both agent context (nested) and direct execution (top-level)
-      // Note: TypeScript types don't include top-level threadId/resourceId but they exist at runtime
+      // Get threadId/resourceId from agent context (when agent is calling)
+      // Fallback to top-level for backwards compatibility with direct calls
       const threadId = context?.agent?.threadId ?? (context as any)?.threadId;
       const resourceId = context?.agent?.resourceId ?? (context as any)?.resourceId;
 
-      // Memory can be accessed via context.mastra.memory OR directly via context.memory
+      // Memory can be accessed via:
+      // - context.mastra.memory (when agent is part of a Mastra instance)
+      // - context.memory (when agent is standalone with memory passed directly)
       const memory = context?.mastra?.memory || (context as any)?.memory;
 
       if (!threadId || !memory || !resourceId) {
@@ -86,12 +88,14 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
         ),
     }),
     execute: async (input, context) => {
-      // Support both agent context (nested) and direct execution (top-level)
-      // Note: TypeScript types don't include top-level threadId/resourceId but they exist at runtime
+      // Get threadId/resourceId from agent context (when agent is calling)
+      // Fallback to top-level for backwards compatibility with direct calls
       const threadId = context?.agent?.threadId ?? (context as any)?.threadId;
       const resourceId = context?.agent?.resourceId ?? (context as any)?.resourceId;
 
-      // Memory can be accessed via context.mastra.memory OR directly via context.memory
+      // Memory can be accessed via:
+      // - context.mastra.memory (when agent is part of a Mastra instance)
+      // - context.memory (when agent is standalone with memory passed directly)
       const memory = context?.mastra?.memory || (context as any)?.memory;
 
       if (!threadId || !memory || !resourceId) {
