@@ -436,8 +436,12 @@ describe('Observability Handlers', () => {
     });
 
     it('should score traces successfully with valid request', async () => {
-      const mockScorer = { name: 'test-scorer', run: vi.fn() };
-      (mockMastra.getScorerById as any).mockReturnValue(mockScorer);
+      (mockMastra.getScorerById as any).mockReturnValue({
+        config: {
+          id: 'test-scorer',
+          name: 'test-scorer',
+        },
+      });
       scoreTracesMock.mockResolvedValue(undefined);
 
       const requestBody = {
@@ -458,7 +462,7 @@ describe('Observability Handlers', () => {
 
       expect(mockMastra.getScorerById).toHaveBeenCalledWith('test-scorer');
       expect(scoreTracesMock).toHaveBeenCalledWith({
-        scorerName: 'test-scorer',
+        scorerId: 'test-scorer',
         targets: requestBody.targets,
         mastra: mockMastra,
       });
@@ -504,7 +508,7 @@ describe('Observability Handlers', () => {
       } catch (error) {
         expect(error).toBeInstanceOf(HTTPException);
         expect(error.status).toBe(400);
-        expect(error.message).toBe('Scorer Name is required');
+        expect(error.message).toBe('Scorer ID is required');
       }
     });
 
@@ -592,7 +596,12 @@ describe('Observability Handlers', () => {
 
     it('should handle scoreTraces errors gracefully', async () => {
       const mockScorer = { id: 'test-scorer', name: 'test-scorer', run: vi.fn() };
-      (mockMastra.getScorerById as any).mockReturnValue(mockScorer);
+      (mockMastra.getScorerById as any).mockReturnValue({
+        config: {
+          id: 'test-scorer',
+          name: 'test-scorer',
+        },
+      });
 
       const processingError = new Error('Processing failed');
       scoreTracesMock.mockRejectedValue(processingError);

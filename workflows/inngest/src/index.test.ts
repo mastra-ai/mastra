@@ -7958,7 +7958,7 @@ describe('MastraInngestWorkflow', () => {
 
         await resetInngest();
 
-        const result = await runExperiment({
+        const result = await runEvals({
           data: [
             { input: { input: 'Test input 1' }, groundTruth: 'Expected 1' },
             { input: { input: 'Test input 2' }, groundTruth: 'Expected 2' },
@@ -9139,7 +9139,7 @@ describe('MastraInngestWorkflow', () => {
 
         await resetInngest();
 
-        const result = await runExperiment({
+        const result = await runEvals({
           data: [
             { input: { input: 'Test input 1' }, groundTruth: 'Expected 1' },
             { input: { input: 'Test input 2' }, groundTruth: 'Expected 2' },

@@ -5,7 +5,7 @@ description: "Learn how to run scorer experiments in your CI/CD pipeline using t
 
 # Running Scorers in CI
 
-Running scorers in your CI pipeline provides quantifiable metrics for measuring agent quality over time. The `runExperiment` function processes multiple test cases through your agent or workflow and returns aggregate scores.
+Running scorers in your CI pipeline provides quantifiable metrics for measuring agent quality over time. The `runEvals` function processes multiple test cases through your agent or workflow and returns aggregate scores.
 
 ## Basic Setup
 
@@ -13,17 +13,17 @@ You can use any testing framework that supports ESM modules, such as [Vitest](ht
 
 ## Creating Test Cases
 
-Use `runExperiment` to evaluate your agent against multiple test cases. The function accepts an array of data items, each containing an `input` and optional `groundTruth` for scorer validation.
+Use `runEvals` to evaluate your agent against multiple test cases. The function accepts an array of data items, each containing an `input` and optional `groundTruth` for scorer validation.
 
 ```typescript copy showLineNumbers title="src/mastra/agents/weather-agent.test.ts"
 import { describe, it, expect } from 'vitest';
-import { createScorer, runExperiment } from "@mastra/core/scores";
+import { createScorer, runEvals } from "@mastra/core/evals";
 import { weatherAgent } from "./weather-agent";
 import { locationScorer } from "../scorers/location-scorer";
 
 describe('Weather Agent Tests', () => {
   it('should correctly extract locations from queries', async () => {
-    const result = await runExperiment({
+    const result = await runEvals({
       data: [
         {
           input: 'weather in Berlin',
@@ -53,7 +53,7 @@ View the full example [here](/examples/scorers/running-in-ci)
 
 ## Understanding Results
 
-The `runExperiment` function returns an object with:
+The `runEvals` function returns an object with:
 
 - `scores`: Average scores for each scorer across all test cases
 - `summary.totalItems`: Total number of test cases processed
@@ -79,7 +79,7 @@ describe('Weather Agent Tests', () => {
   const locationScorer = createScorer({ /* ... */ });
 
   it('should handle location disambiguation', async () => {
-    const result = await runExperiment({
+    const result = await runEvals({
       data: [
         { input: 'weather in Berlin', groundTruth: { /* ... */ } },
         { input: 'weather in Berlin, Maryland', groundTruth: { /* ... */ } },
@@ -92,7 +92,7 @@ describe('Weather Agent Tests', () => {
   });
 
   it('should handle typos and misspellings', async () => {
-    const result = await runExperiment({
+    const result = await runEvals({
       data: [
         { input: 'weather in Berln', groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'DE' } },
         { input: 'weather in Parris', groundTruth: { expectedLocation: 'Paris', expectedCountry: 'FR' } },

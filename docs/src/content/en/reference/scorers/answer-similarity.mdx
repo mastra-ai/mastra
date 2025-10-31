@@ -153,15 +153,15 @@ Score calculation: `max(0, base_score - contradiction_penalty - missing_penalty 
 
 ### Usage with runExperiment
 
-This scorer is designed for use with `runExperiment` for CI/CD testing:
+This scorer is designed for use with `runEvals` for CI/CD testing:
 
 ```typescript
-import { runExperiment } from "@mastra/core/evals";
+import { runEvals } from "@mastra/core/evals";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createAnswerSimilarityScorer({ model });
 
-await runExperiment({
+await runEvals({
   data: [
     {
       input: "What is the capital of France?",
@@ -184,13 +184,13 @@ await runExperiment({
 In this example, the agent's output semantically matches the ground truth perfectly.
 
 ```typescript title="src/example-perfect-similarity.ts" showLineNumbers copy
-import { runExperiment } from "@mastra/core/evals";
+import { runEvals } from "@mastra/core/evals";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
 const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
 
-const result = await runExperiment({
+const result = await runEvals({
   data: [
     {
       input: "What is 2+2?",
@@ -222,13 +222,13 @@ The output receives a perfect score because both the agent's answer and ground t
 In this example, the agent provides the same information as the ground truth but with different phrasing.
 
 ```typescript title="src/example-semantic-similarity.ts" showLineNumbers copy
-import { runExperiment } from "@mastra/core/evals";
+import { runEvals } from "@mastra/core/evals";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
 const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
 
-const result = await runExperiment({
+const result = await runEvals({
   data: [
     {
       input: "What is the capital of France?",
@@ -260,13 +260,13 @@ The output receives a high score because it conveys the same information with eq
 In this example, the agent's response is partially correct but missing key information.
 
 ```typescript title="src/example-partial-similarity.ts" showLineNumbers copy
-import { runExperiment } from "@mastra/core/evals";
+import { runEvals } from "@mastra/core/evals";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
 const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
 
-const result = await runExperiment({
+const result = await runEvals({
   data: [
     {
       input: "What are the primary colors?",
@@ -298,13 +298,13 @@ The output receives a moderate score because it includes some correct informatio
 In this example, the agent provides factually incorrect information that contradicts the ground truth.
 
 ```typescript title="src/example-contradiction.ts" showLineNumbers copy
-import { runExperiment } from "@mastra/core/evals";
+import { runEvals } from "@mastra/core/evals";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
 const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
 
-const result = await runExperiment({
+const result = await runEvals({
   data: [
     {
       input: "Who wrote Romeo and Juliet?",
@@ -337,7 +337,7 @@ Use the scorer in your test suites to ensure agent consistency over time:
 
 ```typescript title="src/ci-integration.test.ts" showLineNumbers copy
 import { describe, it, expect } from "vitest";
-import { runExperiment } from "@mastra/core/evals";
+import { runEvals } from "@mastra/core/evals";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
@@ -345,7 +345,7 @@ describe("Agent Consistency Tests", () => {
   const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
 
   it("should provide accurate factual answers", async () => {
-    const result = await runExperiment({
+    const result = await runEvals({
       data: [
         {
           input: "What is the speed of light?",
@@ -376,9 +376,9 @@ describe("Agent Consistency Tests", () => {
 
     // Run multiple times to check consistency
     const results = await Promise.all([
-      runExperiment({ data: [testData], scorers: [scorer], target: myAgent }),
-      runExperiment({ data: [testData], scorers: [scorer], target: myAgent }),
-      runExperiment({ data: [testData], scorers: [scorer], target: myAgent }),
+      runEvals({ data: [testData], scorers: [scorer], target: myAgent }),
+      runEvals({ data: [testData], scorers: [scorer], target: myAgent }),
+      runEvals({ data: [testData], scorers: [scorer], target: myAgent }),
     ]);
 
     // Check that all runs produce similar scores (within 0.1 tolerance)
@@ -396,7 +396,7 @@ describe("Agent Consistency Tests", () => {
 Customize the scorer behavior for specific use cases:
 
 ```typescript title="src/custom-config.ts" showLineNumbers copy
-import { runExperiment } from "@mastra/core/evals";
+import { runEvals } from "@mastra/core/evals";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
@@ -422,7 +422,7 @@ const lenientScorer = createAnswerSimilarityScorer({
   },
 });
 
-const result = await runExperiment({
+const result = await runEvals({
   data: [
     {
       input: "Explain photosynthesis",
