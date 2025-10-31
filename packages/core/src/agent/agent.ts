@@ -362,7 +362,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Resolves and returns output processors from agent configuration.
    * @internal
    */
-  private async getResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessor[]> {
+  private async listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessor[]> {
     if (!this.#outputProcessors) {
       return [];
     }
@@ -378,7 +378,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Resolves and returns input processors from agent configuration.
    * @internal
    */
-  private async getResolvedInputProcessors(requestContext?: RequestContext): Promise<InputProcessor[]> {
+  private async listResolvedInputProcessors(requestContext?: RequestContext): Promise<InputProcessor[]> {
     if (!this.#inputProcessors) {
       return [];
     }
@@ -393,15 +393,15 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   /**
    * Returns the input processors for this agent, resolving function-based processors if necessary.
    */
-  public async getInputProcessors(requestContext?: RequestContext): Promise<InputProcessor[]> {
-    return this.getResolvedInputProcessors(requestContext);
+  public async listInputProcessors(requestContext?: RequestContext): Promise<InputProcessor[]> {
+    return this.listResolvedInputProcessors(requestContext);
   }
 
   /**
    * Returns the output processors for this agent, resolving function-based processors if necessary.
    */
-  public async getOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessor[]> {
-    return this.getResolvedOutputProcessors(requestContext);
+  public async listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessor[]> {
+    return this.listResolvedOutputProcessors(requestContext);
   }
 
   /**
@@ -4132,7 +4132,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         ...llmOptions,
         experimental_output,
         tracingContext,
-        outputProcessors: await this.getResolvedOutputProcessors(mergedStreamOptions.requestContext),
+        outputProcessors: await this.listResolvedOutputProcessors(mergedStreamOptions.requestContext),
         onFinish: async result => {
           try {
             const outputText = result.text;

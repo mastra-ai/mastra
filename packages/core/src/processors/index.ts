@@ -3,7 +3,8 @@ import type { TracingContext } from '../ai-tracing';
 import type { ChunkType } from '../stream';
 
 export interface Processor {
-  readonly name: string;
+  readonly id: string;
+  readonly name?: string;
 
   /**
    * Process input messages before they are sent to the LLM
@@ -40,10 +41,10 @@ export interface Processor {
 type WithRequired<T, K extends keyof T> = T & { [P in K]-?: NonNullable<T[P]> };
 
 // Your stricter union types can wrap this for Agent typing:
-export type InputProcessor = WithRequired<Processor, 'name' | 'processInput'> & Processor;
+export type InputProcessor = WithRequired<Processor, 'id' | 'processInput'> & Processor;
 export type OutputProcessor =
-  | (WithRequired<Processor, 'name' | 'processOutputStream'> & Processor)
-  | (WithRequired<Processor, 'name' | 'processOutputResult'> & Processor);
+  | (WithRequired<Processor, 'id' | 'processOutputStream'> & Processor)
+  | (WithRequired<Processor, 'id' | 'processOutputResult'> & Processor);
 
 export type ProcessorTypes = InputProcessor | OutputProcessor;
 
