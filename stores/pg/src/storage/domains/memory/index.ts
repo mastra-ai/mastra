@@ -458,13 +458,23 @@ export class MemoryPG extends MemoryStorage {
 
       const excludeIds = rows.map(m => m.id);
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
-      const excludeIdsParam = excludeIds.map((_, idx) => `$${idx + 2}`).join(', ');
-      let query = `${selectStatement} FROM ${tableName} WHERE thread_id = $1 
-        ${excludeIds.length ? `AND id NOT IN (${excludeIdsParam})` : ''}
-        ${orderByStatement}
-        LIMIT $${excludeIds.length + 2}
-        `;
-      const queryParams: any[] = [threadId, ...excludeIds, limit];
+      let paramIdx = 1;
+      const queryParams: any[] = [threadId];
+      let query = `${selectStatement} FROM ${tableName} WHERE thread_id = $${paramIdx++}`;
+      
+      if (resourceId) {
+        query += ` AND "resourceId" = $${paramIdx++}`;
+        queryParams.push(resourceId);
+      }
+      
+      if (excludeIds.length) {
+        const excludeIdsParam = excludeIds.map(() => `$${paramIdx++}`).join(', ');
+        query += ` AND id NOT IN (${excludeIdsParam})`;
+        queryParams.push(...excludeIds);
+      }
+      
+      query += ` ${orderByStatement} LIMIT $${paramIdx}`;
+      queryParams.push(limit);
       const remainingRows = await this.client.manyOrNone(query, queryParams);
       rows.push(...remainingRows);
 

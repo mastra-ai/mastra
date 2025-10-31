@@ -128,6 +128,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const collection = await this.operations.getCollection(TABLE_MESSAGES);
 
       const query: any = { thread_id: threadId };
+      if (resourceId) {
+        query.resourceId = resourceId;
+      }
       if (excludeIds.length > 0) {
         query.id = { $nin: excludeIds };
       }

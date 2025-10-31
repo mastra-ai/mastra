@@ -138,11 +138,12 @@ export class MemoryLibSQL extends MemoryStorage {
           "resourceId"
         FROM "${TABLE_MESSAGES}"
         WHERE thread_id = ?
+        ${resourceId ? `AND "resourceId" = ?` : ''}
         ${excludeIds.length ? `AND id NOT IN (${excludeIds.map(() => '?').join(', ')})` : ''}
         ORDER BY "createdAt" DESC
         LIMIT ?
       `;
-      const remainingArgs = [threadId, ...(excludeIds.length ? excludeIds : []), limit];
+      const remainingArgs = [threadId, ...(resourceId ? [resourceId] : []), ...(excludeIds.length ? excludeIds : []), limit];
       const remainingResult = await this.client.execute({ sql: remainingSql, args: remainingArgs });
       if (remainingResult.rows) {
         messages.push(...remainingResult.rows.map((row: any) => this.parseRow(row)));

@@ -114,6 +114,18 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       }
 
       // Then get the remaining messages, excluding the ids we just fetched
+      let whereClause = 'WHERE thread_id = {threadId:String}';
+      const queryParams: any = {
+        threadId,
+        exclude: messages.map(m => m.id),
+        limit,
+      };
+
+      if (resourceId) {
+        whereClause += ' AND "resourceId" = {resourceId:String}';
+        queryParams.resourceId = resourceId;
+      }
+
       const result = await this.client.query({
         query: `
         SELECT 
@@ -124,16 +136,12 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             toDateTime64(createdAt, 3) as createdAt,
             thread_id AS "threadId"
         FROM "${TABLE_MESSAGES}"
-        WHERE thread_id = {threadId:String}
+        ${whereClause}
         AND id NOT IN ({exclude:Array(String)})
         ORDER BY "createdAt" DESC
         LIMIT {limit:Int64}
         `,
-        query_params: {
-          threadId,
-          exclude: messages.map(m => m.id),
-          limit,
-        },
+        query_params: queryParams,
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',

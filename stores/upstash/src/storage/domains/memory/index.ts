@@ -540,6 +540,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Remove _index before returning and handle format conversion properly
       const prepared = dedupedMessages
         .filter(message => message !== null && message !== undefined)
+        .filter(message => !resourceId || message.resourceId === resourceId)
         .map(message => {
           const { _index, ...messageWithoutIndex } = message as MastraDBMessage & { _index?: number };
           return messageWithoutIndex as MastraDBMessage;

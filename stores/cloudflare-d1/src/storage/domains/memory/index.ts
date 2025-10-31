@@ -625,6 +625,10 @@ export class MemoryStorageD1 extends MemoryStorage {
         .from(fullTableName)
         .where('thread_id = ?', threadId);
 
+      if (resourceId) {
+        query.andWhere('resourceId = ?', resourceId);
+      }
+
       if (excludeIds.length > 0) {
         query.andWhere(`id NOT IN (${excludeIds.map(() => '?').join(',')})`, ...excludeIds);
       }
