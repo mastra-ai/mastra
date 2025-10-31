@@ -772,7 +772,7 @@ export class MCPServer extends MCPServerBase {
               }
             }
 
-            // Store only mcp.extra in RequestContext (elicitation is not serializable)
+            // Store mcp.extra in RequestContext
             if (mcp?.extra) {
               isolatedContext.set('mcp.extra', mcp.extra);
             }
