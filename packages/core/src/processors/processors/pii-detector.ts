@@ -136,7 +136,8 @@ export interface PIIDetectorOptions {
  * for compliance with GDPR, CCPA, HIPAA, and other privacy regulations.
  */
 export class PIIDetector implements Processor {
-  readonly name = 'pii-detector';
+  readonly id = 'pii-detector';
+  readonly name = 'PII Detector';
 
   private detectionAgent: Agent;
   private detectionTypes: string[];

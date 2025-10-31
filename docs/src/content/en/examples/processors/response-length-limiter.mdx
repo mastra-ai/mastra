@@ -21,7 +21,8 @@ type ResponseLengthLimiterOptions = {
 };
 
 export class ResponseLengthLimiter implements Processor {
-  readonly name = "response-length-limiter";
+  readonly id = "response-length-limiter";
+  readonly name = "Response Length Limiter";
   private maxLength: number;
   private strategy: "block" | "warn" | "truncate";
 
