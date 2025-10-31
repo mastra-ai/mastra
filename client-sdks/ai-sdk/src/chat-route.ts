@@ -160,7 +160,7 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
         requestContext: requestContext || defaultOptions?.requestContext,
       });
 
-      let lastMessageId: string;
+      let lastMessageId: string | undefined;
       if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
         lastMessageId = messages[messages.length - 1].id;
       }
