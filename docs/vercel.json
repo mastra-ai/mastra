@@ -1234,6 +1234,11 @@
       "source": "/examples/agents/runtime-context",
       "destination": "/examples/agents/request-context",
       "permanent": true
+    },
+    {
+      "source": "/docs/workflows/input-data-mapping",
+      "destination": "/docs/workflows/control-flow",
+      "permanent": true
     }
   ]
 }
