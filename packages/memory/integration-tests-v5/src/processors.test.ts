@@ -82,7 +82,7 @@ describe('Memory with Processors', () => {
     });
     const result = await memory.processMessages({
       messages: new MessageList({ threadId: thread.id, resourceId })
-        .add(queryResult.uiMessages, 'memory')
+        .add(queryResult.messages, 'memory')
         .get.all.core(),
       processors: [new TokenLimiter(250)], // Limit to 250 tokens
     });
@@ -155,7 +155,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult.uiMessages),
+      messages: v2ToCoreMessages(queryResult.messages),
       processors: [new ToolCallFilter({ exclude: ['weather'] })],
     });
     const messages = new MessageList({ threadId: thread.id, resourceId }).add(result, 'response').get.all.db();
@@ -237,7 +237,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult.uiMessages),
+      messages: v2ToCoreMessages(queryResult.messages),
       processors: [new ToolCallFilter({ exclude: ['weather'] }), new TokenLimiter(250)],
     });
 
@@ -532,7 +532,7 @@ describe('Memory with Processors', () => {
 
     // Retrieve the message (no TokenLimiter, just get the message back)
     const result = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult.uiMessages),
+      messages: v2ToCoreMessages(queryResult.messages),
     });
 
     // Should have retrieved the message
