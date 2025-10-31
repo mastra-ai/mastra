@@ -342,10 +342,9 @@ describe('Working Memory Tests', () => {
 
       const memoryArgs: string[] = [];
 
-      for (const message of history.uiMessages) {
+      for (const message of history.messages) {
         if (message.role === `assistant`) {
-          for (const part of message.content) {
-            if (typeof part === `string`) continue;
+          for (const part of message.content.parts) {
             if (part.type === `tool-call` && part.toolName === `updateWorkingMemory`) {
               memoryArgs.push((part.args as any).memory);
             }

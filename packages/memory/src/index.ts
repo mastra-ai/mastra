@@ -22,7 +22,6 @@ import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { embedMany } from 'ai';
 import type { TextPart } from 'ai';
 import { embedMany as embedManyV5 } from 'ai-v5';
-import type * as AIV5Type from 'ai-v5';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
@@ -106,7 +105,7 @@ export class Memory extends MastraMemory {
     args: StorageGetMessagesArg & {
       threadConfig?: MemoryConfig;
     },
-  ): Promise<{ messages: MastraDBMessage[]; uiMessages: AIV5Type.UIMessage[] }> {
+  ): Promise<{ messages: MastraDBMessage[] }> {
     const { threadId, resourceId, selectBy, threadConfig } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
@@ -244,9 +243,8 @@ export class Memory extends MastraMemory {
 
     // Always return mastra-db format (V2)
     const messages = list.get.all.db();
-    const uiMessages = messages.map(msg => MessageList.mastraDBMessageToAIV5UIMessage(msg));
 
-    return { messages, uiMessages };
+    return { messages };
   }
 
   async rememberMessages(args: {

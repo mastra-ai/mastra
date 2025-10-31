@@ -2,7 +2,6 @@ import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai';
 
 import type { MastraDBMessage } from '../agent/message-list';
-import type { AIV5Type } from '../agent/message-list/types';
 import { MastraBase } from '../base';
 import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
@@ -355,7 +354,7 @@ export abstract class MastraMemory extends MastraBase {
     args: StorageGetMessagesArg & {
       threadConfig?: MemoryConfig;
     },
-  ): Promise<{ messages: MastraDBMessage[]; uiMessages: AIV5Type.UIMessage[] }>;
+  ): Promise<{ messages: MastraDBMessage[] }>;
 
   /**
    * Helper method to create a new thread
