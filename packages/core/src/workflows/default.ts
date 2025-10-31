@@ -154,10 +154,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
       const errorSource = error || lastOutput.error;
       const errorInstance = getErrorFromUnknown(errorSource, {
-        includeStack: false,
+        includeStack: true,
         fallbackMessage: 'Unknown workflow error',
       });
-      base.error = typeof errorSource === 'string' ? errorInstance.message : `Error: ${errorInstance.message}`;
+      base.error = errorInstance;
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
@@ -961,12 +961,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         });
 
         const errorInstance = getErrorFromUnknown(error, {
-          includeStack: false,
+          includeStack: true,
           fallbackMessage: 'Unknown step execution error',
         });
         execResults = {
           status: 'failed',
-          error: `Error: ${errorInstance.message}`,
+          error: errorInstance,
           endedAt: Date.now(),
         };
       }
@@ -1236,7 +1236,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     if (execResults.status === 'failed') {
       parallelSpan?.error({
-        error: new Error(execResults.error),
+        error: execResults.error instanceof Error ? execResults.error : new Error(String(execResults.error)),
       });
     } else {
       parallelSpan?.end({
@@ -1468,7 +1468,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     if (execResults.status === 'failed') {
       conditionalSpan?.error({
-        error: new Error(execResults.error),
+        error: execResults.error instanceof Error ? execResults.error : new Error(String(execResults.error)),
       });
     } else {
       conditionalSpan?.end({
