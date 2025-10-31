@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { LanguageModelV1Message } from '@ai-sdk/provider';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 import * as AIV4 from 'ai';
 import * as AIV5 from 'ai-v5';
 
@@ -20,7 +21,6 @@ import {
 import type { AIV4Type, AIV5Type } from './types';
 import { ensureGeminiCompatibleMessages } from './utils/ai-v5/gemini-compatibility';
 import { getToolName } from './utils/ai-v5/tool';
-import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 
 type AIV5LanguageModelV2Message = LanguageModelV2Prompt[0];
 export type AIV5ResponseMessage = AIV5Type.AssistantModelMessage | AIV5Type.ToolModelMessage;
