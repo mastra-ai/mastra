@@ -1242,117 +1242,117 @@
     },
     {
       "source": "/docs/scorers/evals-old-api/textual-evals",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/answer-relevancy",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/bias",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/completeness",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/content-similarity",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/context-position",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/context-precision",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/context-relevancy",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/contextual-recall",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/custom-llm-judge-eval",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/custom-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/custom-native-javascript-eval",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/custom-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/faithfulness",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/hallucination",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/keyword-coverage",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/prompt-alignment",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/summarization",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/textual-difference",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/tone-consistency",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/examples/evals/toxicity",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/reference/evals/answer-relevancy",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/reference/evals/bias",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/reference/evals/completeness",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/reference/evals/content-similarity",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
