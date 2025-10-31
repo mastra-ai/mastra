@@ -228,7 +228,7 @@ function toolsTest(version: 'v1' | 'v2') {
         inputSchema: z.object({
           name: z.string(),
         }),
-        execute: (input, context) => {
+        execute: (input, _context) => {
           return mockFindUser(input) as Promise<Record<string, any>>;
         },
       });
