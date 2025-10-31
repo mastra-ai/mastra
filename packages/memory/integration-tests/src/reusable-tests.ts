@@ -639,7 +639,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
             lastMessages: 10,
           },
         });
-        expect(result.messages[0].content).toEqual(complexMessage);
+        expect(result.messages[0].content.parts).toEqual(complexMessage);
       });
     });
 
