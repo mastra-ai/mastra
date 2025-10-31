@@ -585,7 +585,7 @@ describe('Agent Memory Tests', () => {
 describe('Agent with message processors', () => {
   it('should apply processors to filter tool messages from context', async () => {
     const threadId = randomUUID();
-    const resourceId = 'processor-filter-tool-message';
+    const resourceId = `processor-filter-tool-message-${randomUUID()}`;
 
     // First, ask a question that will trigger a tool call
     const firstResponse = await memoryProcessorAgent.generateLegacy('What is the weather in London?', {
@@ -614,12 +614,12 @@ describe('Agent with message processors', () => {
 
     const secondResponseRequestMessages: CoreMessage[] = JSON.parse(secondResponse.request.body as string).messages;
 
-    expect(secondResponseRequestMessages.length).toBe(5);
+    expect(secondResponseRequestMessages.length).toBe(4);
     // Filter out tool messages and tool results, should be the same as above.
     expect(
       secondResponseRequestMessages.filter(m => m.role !== 'tool' || (m as any)?.tool_calls?.[0]?.type !== 'function')
         .length,
-    ).toBe(5);
+    ).toBe(4);
   }, 30_000);
 });
 
