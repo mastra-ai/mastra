@@ -11,7 +11,7 @@ describe('createTool type improvements', () => {
         name: z.string(),
         age: z.number(),
       }),
-      execute: async (input) => {
+      execute: async input => {
         return { message: `Hello ${input.name}` };
       },
     });
@@ -32,7 +32,7 @@ describe('createTool type improvements', () => {
         greeting: z.string(),
         timestamp: z.number(),
       }),
-      execute: async (input) => {
+      execute: async input => {
         return {
           greeting: `Hello ${input.name}`,
           timestamp: Date.now(),
@@ -61,7 +61,7 @@ describe('createTool type improvements', () => {
         age: z.number().min(0),
         email: z.string().email().optional(),
       }),
-      execute: async (input) => {
+      execute: async input => {
         // TypeScript should know input.name is a string
         // input.age is a number, and input.email is optional
         expectTypeOf(input).toMatchTypeOf<{
@@ -128,7 +128,7 @@ describe('createTool type improvements', () => {
         result: z.number(),
         operation: z.string(),
       }),
-      execute: async (input) => {
+      execute: async input => {
         let result: number;
         switch (input.operation) {
           case 'add':

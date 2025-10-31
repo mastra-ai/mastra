@@ -30,9 +30,15 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
     description: `Update the working memory with new information. Any data not included will be overwritten.${schema ? ' Always pass data as string to the memory field. Never pass an object.' : ''}`,
     inputSchema,
     execute: async (input, context) => {
-      const { threadId, resourceId } = context?.agent || {};
+      // Support both agent context (nested) and direct execution (top-level)
+      // Note: TypeScript types don't include top-level threadId/resourceId but they exist at runtime
+      const threadId = context?.agent?.threadId ?? (context as any)?.threadId;
+      const resourceId = context?.agent?.resourceId ?? (context as any)?.resourceId;
 
-      if (!threadId || !context?.mastra?.memory || !resourceId) {
+      // Memory can be accessed via context.mastra.memory OR directly via context.memory
+      const memory = context?.mastra?.memory || (context as any)?.memory;
+
+      if (!threadId || !memory || !resourceId) {
         throw new Error('Thread ID, Memory instance, and resourceId are required for working memory updates');
       }
 
@@ -43,7 +49,7 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
       const workingMemory = typeof input.memory === 'string' ? input.memory : JSON.stringify(input.memory);
 
       // Use the new updateWorkingMemory method which handles both thread and resource scope
-      await context?.mastra?.memory.updateWorkingMemory({
+      await memory.updateWorkingMemory({
         threadId,
         resourceId,
         workingMemory,
@@ -80,8 +86,14 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
         ),
     }),
     execute: async (input, context) => {
-      const { threadId, resourceId } = context?.agent || {};
-      const { memory } = context?.mastra || {};
+      // Support both agent context (nested) and direct execution (top-level)
+      // Note: TypeScript types don't include top-level threadId/resourceId but they exist at runtime
+      const threadId = context?.agent?.threadId ?? (context as any)?.threadId;
+      const resourceId = context?.agent?.resourceId ?? (context as any)?.resourceId;
+
+      // Memory can be accessed via context.mastra.memory OR directly via context.memory
+      const memory = context?.mastra?.memory || (context as any)?.memory;
+
       if (!threadId || !memory || !resourceId) {
         throw new Error('Thread ID, Memory instance, and resourceId are required for working memory updates');
       }
@@ -128,7 +140,7 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
       }
 
       // Use the new updateWorkingMemory method which handles both thread and resource scope
-      const result = await memory.__experimental_updateWorkingMemoryVNext({
+      const result = await memory!.__experimental_updateWorkingMemoryVNext({
         threadId,
         resourceId,
         workingMemory: workingMemory,
