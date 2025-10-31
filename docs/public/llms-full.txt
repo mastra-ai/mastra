@@ -35820,7 +35820,7 @@ The storage format (`MastraMessageV2`) and all public APIs remain unchanged.
 - `agent.toStep` → Add agent directly to the step, workflows handle the transformation
 - `getDefaultGenerateOptions()` → `getDefaultGenerateOptionsLegacy()`
 - `getDefaultStreamOptions()` → `getDefaultStreamOptionsLegacy()`
-- `getDefaultVNextStreamOptions()` → `getDefaultStreamOptions()`
+- `getDefaultVNextStreamOptions()` → `getDefaultOptions()`
 
 #### Output Options
 
@@ -49488,23 +49488,23 @@ export const agent = new Agent({
         "Workflows that the agent can execute. Can be static or dynamically resolved.",
     },
     {
-      name: "defaultGenerateOptions",
-      type: "AgentGenerateOptions | ({ requestContext: RequestContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>",
-      isOptional: true,
-      description: "Default options used when calling `generate()`.",
-    },
-    {
-      name: "defaultStreamOptions",
-      type: "AgentStreamOptions | ({ requestContext: RequestContext }) => AgentStreamOptions | Promise<AgentStreamOptions>",
-      isOptional: true,
-      description: "Default options used when calling `stream()`.",
-    },
-    {
-      name: "defaultStreamOptions",
+      name: "defaultOptions",
       type: "AgentExecutionOptions | ({ requestContext: RequestContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>",
       isOptional: true,
       description:
-        "Default options used when calling `stream()` in vNext mode.",
+        "Default options used when calling `stream()` and `generate()`.",
+    },
+    {
+      name: "defaultGenerateOptionsLegacy",
+      type: "AgentGenerateOptions | ({ requestContext: RequestContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>",
+      isOptional: true,
+      description: "Default options used when calling `generateLegacy()`.",
+    },
+    {
+      name: "defaultStreamOptionsLegacy",
+      type: "AgentStreamOptions | ({ requestContext: RequestContext }) => AgentStreamOptions | Promise<AgentStreamOptions>",
+      isOptional: true,
+      description: "Default options used when calling `streamLegacy()`.",
     },
     {
       name: "mastra",
@@ -50874,19 +50874,25 @@ await agent.generateLegacy(
 
 
 ---
-title: "Reference: Agent.getDefaultGenerateOptions() | Agents | Mastra Docs"
-description: "Documentation for the `Agent.getDefaultGenerateOptions()` method in Mastra agents, which retrieves the default options used for generate calls."
+title: "Reference: Agent.getDefaultGenerateOptionsLegacy() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getDefaultGenerateOptionsLegacy()` method in Mastra agents, which retrieves the default options used for generateLegacy calls."
 ---
 
-# Agent.getDefaultGenerateOptions()
+# Agent.getDefaultGenerateOptionsLegacy()
 [EN] Source: https://mastra.ai/en/reference/agents/getDefaultGenerateOptions
 
-Agents can be configured with default generation options for controlling model behavior, output formatting and tool and workflow calls. The `.getDefaultGenerateOptions()` method retrieves these defaults, resolving them if they are functions. These options apply to all `generate()`calls unless overridden and are useful for inspecting an agent’s unknown defaults.
+:::warning
+
+**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.getDefaultOptions()`](./getDefaultOptions) method instead. See the [migration guide](../../guides/migrations/upgrade-to-v1) for details on upgrading.
+
+:::
+
+Agents can be configured with default generation options for controlling model behavior, output formatting and tool and workflow calls. The `.getDefaultGenerateOptionsLegacy()` method retrieves these defaults, resolving them if they are functions. These options apply to all `generateLegacy()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
 
 ## Usage example
 
 ```typescript copy
-await agent.getDefaultGenerateOptions();
+await agent.getDefaultGenerateOptionsLegacy();
 ```
 
 ## Parameters
@@ -50919,7 +50925,7 @@ await agent.getDefaultGenerateOptions();
 ## Extended usage example
 
 ```typescript copy
-await agent.getDefaultGenerateOptions({
+await agent.getDefaultGenerateOptionsLegacy({
   requestContext: new RequestContext(),
 });
 ```
@@ -50946,19 +50952,19 @@ await agent.getDefaultGenerateOptions({
 
 
 ---
-title: "Reference: Agent.getDefaultStreamOptions() | Agents | Mastra Docs"
-description: "Documentation for the `Agent.getDefaultStreamOptions()` method in Mastra agents, which retrieves the default options used for stream calls."
+title: "Reference: Agent.getDefaultOptions() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getDefaultOptions()` method in Mastra agents, which retrieves the default options used for stream and generate calls."
 ---
 
-# Agent.getDefaultStreamOptions()
-[EN] Source: https://mastra.ai/en/reference/agents/getDefaultStreamOptions
+# Agent.getDefaultOptions()
+[EN] Source: https://mastra.ai/en/reference/agents/getDefaultOptions
 
-Agents can be configured with default streaming options for memory usage, output format, and iteration steps. The `.getDefaultStreamOptions()` method returns these defaults, resolving them if they are functions. These options apply to all `stream()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
+Agents can be configured with default options for memory usage, output format, and iteration steps. The `.getDefaultOptions()` method returns these defaults, resolving them if they are functions. These options apply to all `stream()` and `generate()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
 
 ## Usage example
 
 ```typescript copy
-await agent.getDefaultStreamOptions();
+await agent.getDefaultOptions();
 ```
 
 ## Parameters
@@ -50983,6 +50989,84 @@ await agent.getDefaultStreamOptions();
       name: "defaultOptions",
       type: "AgentExecutionOptions<Output> | Promise<AgentExecutionOptions<Output>>",
       description:
+        "The default streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
+    },
+  ]}
+/>
+
+## Extended usage example
+
+```typescript copy
+await agent.getDefaultOptions({
+  requestContext: new RequestContext(),
+});
+```
+
+### Options parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description:
+        "Request Context for dependency injection and contextual information.",
+    },
+  ]}
+/>
+
+## Related
+
+- [Streaming with agents](/docs/streaming/overview#streaming-with-agents)
+- [Request Context](/docs/server-db/request-context)
+
+
+---
+title: "Reference: Agent.getDefaultStreamOptionsLegacy() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getDefaultStreamOptionsLegacy()` method in Mastra agents, which retrieves the default options used for streamLegacy calls."
+---
+
+# Agent.getDefaultStreamOptionsLegacy()
+[EN] Source: https://mastra.ai/en/reference/agents/getDefaultStreamOptions
+
+:::warning
+
+**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.getDefaultOptions()`](./getDefaultOptions) method instead. See the [migration guide](../../guides/migrations/upgrade-to-v1) for details on upgrading.
+
+:::
+
+Agents can be configured with default streaming options for memory usage, output format, and iteration steps. The `.getDefaultStreamOptionsLegacy()` method returns these defaults, resolving them if they are functions. These options apply to all `streamLegacy()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
+
+## Usage example
+
+```typescript copy
+await agent.getDefaultStreamOptionsLegacy();
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ requestContext?: RequestContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "Optional configuration object containing request context.",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "defaultOptions",
+      type: "AgentStreamOptions | Promise<AgentStreamOptions>",
+      description:
         "The default vNext streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
     },
   ]}
@@ -50991,7 +51075,7 @@ await agent.getDefaultStreamOptions();
 ## Extended usage example
 
 ```typescript copy
-await agent.getDefaultStreamOptions({
+await agent.getDefaultStreamOptionsLegacy({
   requestContext: new RequestContext(),
 });
 ```
