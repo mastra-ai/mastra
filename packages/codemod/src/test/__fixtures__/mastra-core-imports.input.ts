@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { Mastra } from '@mastra/core';
+import { Mastra as MastraSubpath } from '@mastra/core/mastra';
 import { Agent } from '@mastra/core';
 import { createTool } from '@mastra/core';
 
