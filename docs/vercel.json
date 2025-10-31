@@ -1239,6 +1239,11 @@
       "source": "/reference/workflows/run-methods/watch",
       "destination": "/reference/workflows/run",
       "permanent": true
+    },
+    {
+      "source": "/reference/core/getScorerByName",
+      "destination": "/reference/core/getScorerById",
+      "permanent": true
     }
   ]
 }

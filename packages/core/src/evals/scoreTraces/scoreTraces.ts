@@ -14,8 +14,6 @@ export async function scoreTraces({
   try {
     const run = await workflow.createRunAsync();
 
-    console.log(scorerId, 'SUHHHHHH');
-
     await run.start({ inputData: { targets, scorerId } });
   } catch (error) {
     const mastraError = new MastraError(
