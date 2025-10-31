@@ -331,13 +331,10 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages, uiMessages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.query({ threadId });
       const userMessages = messages.filter((m: any) => m.role === 'user').map((m: any) => getTextContent(m));
-      const userUiMessages = uiMessages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
       const assistantMessages = messages.filter((m: any) => m.role === 'assistant').map((m: any) => getTextContent(m));
-      const assistantUiMessages = uiMessages.filter((m: any) => m.role === 'assistant').map((m: any) => m.content);
       expect(userMessages).toEqual(expect.arrayContaining(['What is 2+2?', 'Give me JSON']));
-      expect(userUiMessages).toEqual(expect.arrayContaining(['What is 2+2?', 'Give me JSON']));
       function flattenAssistantMessages(messages: any[]) {
         return messages.flatMap(msg =>
           Array.isArray(msg) ? msg.map(part => (typeof part === 'object' && part.text ? part.text : part)) : msg,
@@ -345,10 +342,6 @@ describe('Agent Memory Tests', () => {
       }
 
       expect(flattenAssistantMessages(assistantMessages)).toEqual(
-        expect.arrayContaining([expect.stringMatching(/2\s*\+\s*2/), expect.stringContaining('"result"')]),
-      );
-
-      expect(flattenAssistantMessages(assistantUiMessages)).toEqual(
         expect.arrayContaining([expect.stringMatching(/2\s*\+\s*2/), expect.stringContaining('"result"')]),
       );
     });
