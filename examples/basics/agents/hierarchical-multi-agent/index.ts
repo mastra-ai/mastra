@@ -20,8 +20,8 @@ const copywriterTool = createTool({
   outputSchema: z.object({
     copy: z.string().describe('Blog post copy'),
   }),
-  execute: async input => {
-    const result = await copywriterAgent.generate(`Create a blog post about ${inputData.topic}`);
+  execute: async (input, context) => {
+    const result = await copywriterAgent.generate(`Create a blog post about ${input.topic}`);
     console.log('copywriter result', result.text);
     return {
       copy: result.text,
@@ -44,9 +44,9 @@ const editorTool = createTool({
   outputSchema: z.object({
     copy: z.string().describe('Edited blog post copy'),
   }),
-  execute: async input => {
+  execute: async (input, context) => {
     const result = await editorAgent.generate(
-      `Edit the following blog post only returning the edited copy: ${inputData.copy}`,
+      `Edit the following blog post only returning the edited copy: ${input.copy}`,
     );
     console.log('editor result', result.text);
     return {
