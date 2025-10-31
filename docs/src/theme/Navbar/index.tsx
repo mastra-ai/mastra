@@ -1,13 +1,14 @@
 import Link from "@docusaurus/Link";
 import { GithubStarCount } from "@site/src/components/github-star-count";
+import { PulsingDots } from "@site/src/components/loading";
+import { MobileDocsDropdown } from "@site/src/components/mobile-docs-dropdown";
 import { ThemeSwitcher } from "@site/src/components/theme-switcher";
 import NavbarLayout from "@theme/Navbar/Layout";
 import NavbarMobileSidebarToggle from "@theme/Navbar/MobileSidebar/Toggle";
-import { type ReactNode } from "react";
-import SearchContainer from "./Search";
+import { lazy, Suspense, type ReactNode } from "react";
 import { Logo } from "./logo";
 import { TabSwitcher } from "./tab-switcher";
-import { MobileDocsDropdown } from "@site/src/components/mobile-docs-dropdown";
+const SearchContainer = lazy(() => import("./Search"));
 
 function NavbarContentDesktop() {
   return (
@@ -27,7 +28,9 @@ function NavbarContentDesktop() {
 
         <div className="flex gap-2 items-center">
           <div className="hidden @[798px]:block">
-            <SearchContainer locale="en" />
+            <Suspense fallback={<PulsingDots />}>
+              <SearchContainer locale="en" />
+            </Suspense>
           </div>
           <div className="flex gap-4 items-center">
             <GithubStarCount />

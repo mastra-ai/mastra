@@ -1,12 +1,13 @@
-import React, { type ReactNode, useState } from "react";
 import { useDocsSidebar } from "@docusaurus/plugin-content-docs/client";
 import BackToTopButton from "@theme/BackToTopButton";
-import DocRootLayoutSidebar from "@theme/DocRoot/Layout/Sidebar";
-import DocRootLayoutMain from "./Main";
 import type { Props } from "@theme/DocRoot/Layout";
+import DocRootLayoutSidebar from "@theme/DocRoot/Layout/Sidebar";
+import { lazy, type ReactNode, Suspense, useState } from "react";
+import DocRootLayoutMain from "./Main";
 
+import { PulsingDots } from "@site/src/components/loading";
 import styles from "./styles.module.css";
-import ChatbotSidebar from "./ChatbotSidebar";
+const ChatbotSidebar = lazy(() => import("./ChatbotSidebar"));
 
 export default function DocRootLayout({ children }: Props): ReactNode {
   const sidebar = useDocsSidebar();
@@ -30,10 +31,14 @@ export default function DocRootLayout({ children }: Props): ReactNode {
         >
           {children}
         </DocRootLayoutMain>
-        <ChatbotSidebar
-          hiddenChatbotSidebar={hiddenChatbotSidebar}
-          setHiddenChatbotSidebar={setHiddenChatbotSidebar}
-        />
+        {!hiddenSidebarContainer && (
+          <Suspense fallback={<PulsingDots />}>
+            <ChatbotSidebar
+              hiddenChatbotSidebar={hiddenChatbotSidebar}
+              setHiddenChatbotSidebar={setHiddenChatbotSidebar}
+            />
+          </Suspense>
+        )}
       </div>
     </div>
   );
