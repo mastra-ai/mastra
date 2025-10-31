@@ -2437,7 +2437,7 @@ export class MessageList {
           });
           break;
 
-        case 'reasoning':
+        case 'reasoning': {
           const text =
             part.reasoning ||
             (part.details?.reduce((p, c) => {
@@ -2454,6 +2454,7 @@ export class MessageList {
             });
           }
           break;
+        }
 
         case 'file': {
           // Categorize the file data
@@ -2702,7 +2703,7 @@ export class MessageList {
     } else if (Array.isArray(coreMessage.content)) {
       for (const part of coreMessage.content) {
         switch (part.type) {
-          case 'text':
+          case 'text': {
             // Add step-start only after tool results for assistant messages
             const prevPart = parts.at(-1);
             if (
@@ -2730,6 +2731,7 @@ export class MessageList {
                 : {}),
             });
             break;
+          }
 
           case 'tool-call':
             parts.push({
