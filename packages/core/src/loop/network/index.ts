@@ -355,6 +355,7 @@ export async function createNetworkLoop({
         }
 
         // If error detected, retry with JSON prompt injection fallback
+        // TODO ujpdate tryStreamWithJsonFallback to not await the result so we can re-use it here
         if (completionStream.error) {
           console.warn('Error detected in structured output stream. Attempting fallback with JSON prompt injection.');
 
