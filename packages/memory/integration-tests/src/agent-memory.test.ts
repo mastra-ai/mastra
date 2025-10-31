@@ -307,7 +307,9 @@ describe('Agent Memory Tests', () => {
       const userMessages = messages
         .filter((m: any) => m.role === 'user')
         .map((m: any) => m.content.parts?.find((p: any) => p.type === 'text')?.text || '');
-      const assistantMessages = messages.filter((m: any) => m.role === 'assistant').map((m: any) => m.content);
+      const assistantMessages = messages
+        .filter((m: any) => m.role === 'assistant')
+        .map((m: any) => m.content.parts?.find((p: any) => p.type === 'text')?.text || '');
       expect(userMessages).toEqual(expect.arrayContaining(['What is 2+2?', 'Give me JSON']));
       function flattenAssistantMessages(messages: any[]) {
         return messages.flatMap(msg =>
