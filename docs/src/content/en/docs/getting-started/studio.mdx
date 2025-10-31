@@ -116,7 +116,7 @@ The OpenAPI and Swagger endpoints are disabled in production by default. To enab
 By default, the development server runs at http://localhost:4111. You can change the `host` and `port` in the Mastra server configuration:
 
 ```typescript
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   server: {
@@ -131,7 +131,7 @@ export const mastra = new Mastra({
 Mastra supports local HTTPS development through the [`--https`](/reference/cli/mastra#--https) flag, which automatically creates and manages certificates for your project. When you run `mastra dev --https`, a private key and certificate are generated for localhost (or your configured host). For custom certificate management, you can provide your own key and certificate files through the server configuration:
 
 ```typescript
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import fs from "node:fs";
 
 export const mastra = new Mastra({

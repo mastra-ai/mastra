@@ -32,7 +32,7 @@ export MASTRA_CLOUD_ACCESS_TOKEN=your_token_here
 Create your Mastra configuration with AI tracing enabled:
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { LibSQLStorage } from "@mastra/libsql";
 
 export const mastra = new Mastra({

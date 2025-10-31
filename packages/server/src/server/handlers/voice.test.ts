@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 import type { MastraVoice } from '@mastra/core/voice';
 import { CompositeVoice } from '@mastra/core/voice';
 import { describe, it, expect, vi, beforeEach } from 'vitest';

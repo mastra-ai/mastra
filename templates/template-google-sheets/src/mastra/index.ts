@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 import { PinoLogger } from '@mastra/loggers';
 import { financialModelingAgent } from './agents/financial-modeling-agent';
 import { RequestContext } from '@mastra/core/request-context';

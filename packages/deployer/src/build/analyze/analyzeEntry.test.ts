@@ -121,7 +121,7 @@ describe('analyzeEntry', () => {
 
   it('should handle dynamic imports', async () => {
     const entryWithDynamicImport = `
-      import { Mastra } from '@mastra/core/mastra';
+      import { Mastra } from '@mastra/core';
       
       export async function loadAgent() {
         const { Agent } = await import('@mastra/core/agent');

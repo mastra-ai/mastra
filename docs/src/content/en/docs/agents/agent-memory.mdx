@@ -62,7 +62,7 @@ See the [Memory Class](/reference/memory/memory-class) docs for a full list of c
 Add a storage provider to your main Mastra instance to enable memory across all configured agents.
 
 ```typescript {6-8} title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({

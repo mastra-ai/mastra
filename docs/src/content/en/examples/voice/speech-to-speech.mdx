@@ -79,7 +79,7 @@ export const speechToSpeechServer = new Agent({
 Register the agent with Mastra:
 
 ```ts title="speech-to-speech/call-analysis/src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { speechToSpeechServer } from "./agents";
 
 export const mastra = new Mastra({

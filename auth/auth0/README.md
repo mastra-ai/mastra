@@ -15,7 +15,7 @@ pnpm add @mastra/auth-auth0
 ## Usage
 
 ```typescript
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 import { MastraAuthAuth0 } from '@mastra/auth-auth0';
 
 // Initialize with options

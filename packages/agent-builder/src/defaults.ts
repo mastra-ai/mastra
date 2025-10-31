@@ -373,7 +373,7 @@ export { weatherWorkflow };
 \`\`\`
 // ./src/mastra.ts
 
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { weatherWorkflow } from './workflows/weather-workflow';

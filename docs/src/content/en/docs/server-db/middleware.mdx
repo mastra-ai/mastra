@@ -14,7 +14,7 @@ function. If it returns a `Response` the request is short-circuited. Calling
 `next()` continues processing the next middleware or route handler.
 
 ```typescript copy showLineNumbers
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   server: {
@@ -148,7 +148,7 @@ be inspected by middleware to tailor behaviour:
 You can populate `requestContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { RequestContext } from "@mastra/core/request-context";
 import { testWeatherAgent } from "./agents/test-weather-agent";
 

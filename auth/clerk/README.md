@@ -15,7 +15,7 @@ pnpm add @mastra/auth-clerk
 ## Usage
 
 ```typescript
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 import { MastraAuthClerk } from '@mastra/auth-clerk';
 
 // Initialize the Clerk auth provider

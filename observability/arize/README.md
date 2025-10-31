@@ -18,7 +18,7 @@ You can add `ArizeExporter` to your Mastra configuration to export traces to Ari
 
 ```typescript
 import { ArizeExporter } from '@mastra/arize';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 
 // required, ends in /v1/traces
 const ENDPOINT = process.env.PHOENIX_ENDPOINT!;
@@ -62,7 +62,7 @@ const mastra = new Mastra({
 
 ```typescript
 import { ArizeExporter } from '@mastra/arize';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 
 // required space destination for trace exports
 const SPACE_ID = process.env.ARIZE_SPACE_ID!;
@@ -99,7 +99,7 @@ You can configure the `ArizeExporter` to tweak the underlying OpenTelemetry `Bat
 
 ```typescript
 import { ArizeExporter } from '@mastra/arize';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
   ...,

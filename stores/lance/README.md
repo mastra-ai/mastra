@@ -14,7 +14,7 @@ pnpm add @mastra/lance @lancedb/lancedb apache-arrow
 
 ```typescript
 import { LanceStorage } from '@mastra/lance';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 
 // Initialize LanceStorage
 const storage = await LanceStorage.create(

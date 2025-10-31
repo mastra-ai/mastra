@@ -49,7 +49,7 @@ Here's how to configure Mastra to use Phoenix with OpenTelemetry:
 ### Phoenix Cloud Configuration
 
 ```typescript
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import {
   OpenInferenceOTLPTraceExporter,
   isOpenInferenceSpan,
@@ -77,7 +77,7 @@ export const mastra = new Mastra({
 ### Self-Hosted Phoenix Configuration
 
 ```typescript
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import {
   OpenInferenceOTLPTraceExporter,
   isOpenInferenceSpan,

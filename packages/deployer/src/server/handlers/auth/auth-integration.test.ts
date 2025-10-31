@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 import type { MastraAuthConfig } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { describe, it, expect } from 'vitest';

@@ -20,7 +20,7 @@ pnpm add @mastra/deployer-netlify
 The Netlify deployer is used as part of the Mastra framework:
 
 ```typescript
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 import { NetlifyDeployer } from '@mastra/deployer-netlify';
 
 const deployer = new NetlifyDeployer({

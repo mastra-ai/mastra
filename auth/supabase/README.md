@@ -15,7 +15,7 @@ pnpm add @mastra/auth-supabase
 ## Usage
 
 ```typescript
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 import { MastraAuthSupabase } from '@mastra/auth-supabase';
 
 // Initialize with environment variables

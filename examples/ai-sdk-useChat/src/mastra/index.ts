@@ -1,5 +1,5 @@
 import { PinoLogger } from '@mastra/loggers';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 
 import { weatherAgent } from './agents';
 import { weatherWorkflow } from './workflows';

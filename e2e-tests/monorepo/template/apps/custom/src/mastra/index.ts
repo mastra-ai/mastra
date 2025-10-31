@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 import { ConsoleLogger } from '@mastra/core/logger';
 import { innerAgent } from '@/agents';
 import { testRoute } from '@/api/route/test';

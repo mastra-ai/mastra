@@ -1,6 +1,6 @@
 import { createSampleScore } from '@internal/storage-test-utils';
 import { Agent } from '@mastra/core/agent';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 import { RequestContext } from '@mastra/core/request-context';
 import type { StoragePagination } from '@mastra/core/storage';
 import { InMemoryStore } from '@mastra/core/storage';

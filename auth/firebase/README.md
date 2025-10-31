@@ -23,7 +23,7 @@ pnpm add @mastra/auth-firebase
 ## Usage
 
 ```typescript
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 import { MastraAuthFirebase } from '@mastra/auth-firebase';
 
 // Initialize with default configuration

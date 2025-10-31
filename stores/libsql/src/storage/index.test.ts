@@ -1,5 +1,5 @@
 import { createTestSuite } from '@internal/storage-test-utils';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 
 import { LibSQLStore } from './index';
 

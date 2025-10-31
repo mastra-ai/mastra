@@ -19,7 +19,7 @@ npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-grpc @grpc/
 
 ```typescript
 import { OtelExporter } from '@mastra/otel-exporter';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
   ...,
@@ -58,7 +58,7 @@ npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-proto
 
 ```typescript
 import { OtelExporter } from '@mastra/otel-exporter';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
   ...,
@@ -95,7 +95,7 @@ npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-proto
 
 ```typescript
 import { OtelExporter } from '@mastra/otel-exporter';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
   ...,
@@ -132,7 +132,7 @@ npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-http
 
 ```typescript
 import { OtelExporter } from '@mastra/otel-exporter';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
   ...,
@@ -169,7 +169,7 @@ npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-proto
 
 ```typescript
 import { OtelExporter } from '@mastra/otel-exporter';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
   ...,
@@ -208,7 +208,7 @@ npm install @mastra/otel-exporter @opentelemetry/exporter-zipkin
 
 ```typescript
 import { OtelExporter } from '@mastra/otel-exporter';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
   ...,
@@ -258,7 +258,7 @@ Most providers recommend HTTP/Protobuf for production use.
 
 ```typescript
 import { OtelExporter } from '@mastra/otel-exporter';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
   ...,

@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import type { ToolAction, VercelTool } from '@mastra/core/tools';
