@@ -595,7 +595,6 @@ describe('Observability Handlers', () => {
     });
 
     it('should handle scoreTraces errors gracefully', async () => {
-      const mockScorer = { id: 'test-scorer', name: 'test-scorer', run: vi.fn() };
       (mockMastra.getScorerById as any).mockReturnValue({
         config: {
           id: 'test-scorer',

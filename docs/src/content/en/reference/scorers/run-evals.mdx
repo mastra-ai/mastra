@@ -1,11 +1,11 @@
 ---
-title: "Reference: runExperiment | Scorers | Mastra Docs"
-description: "Documentation for the runExperiment function in Mastra, which enables batch evaluation of agents and workflows using multiple scorers."
+title: "Reference: runEvals | Scorers | Mastra Docs"
+description: "Documentation for the runEvals function in Mastra, which enables batch evaluation of agents and workflows using multiple scorers."
 ---
 
-# runExperiment
+# runEvals
 
-The `runExperiment` function enables batch evaluation of agents and workflows by running multiple test cases against scorers concurrently. This is essential for systematic testing, performance analysis, and validation of AI systems.
+The `runEvals` function enables batch evaluation of agents and workflows by running multiple test cases against scorers concurrently. This is essential for systematic testing, performance analysis, and validation of AI systems.
 
 ## Usage Example
 
@@ -45,7 +45,7 @@ console.log(`Processed ${result.summary.totalItems} items`);
     },
     {
       name: "data",
-      type: "RunExperimentDataItem[]",
+      type: "RunEvalsDataItem[]",
       description:
         "Array of test cases with input data and optional ground truth.",
       isOptional: false,
@@ -157,7 +157,7 @@ For workflows, you can specify scorers at different levels using `WorkflowScorer
 ### Agent Evaluation
 
 ```typescript
-import { createScorer, runExperiment } from "@mastra/core/evals";
+import { createScorer, runEvals } from "@mastra/core/evals";
 
 const myScorer = createScorer({
   name: "My Scorer",
@@ -222,3 +222,4 @@ const workflowResult = await runEvals({
 - [MastraScorer](../../reference/scorers/mastra-scorer) - Learn about scorer structure and methods
 - [Custom Scorers](../../docs/scorers/custom-scorers) - Guide to building evaluation logic
 - [Scorers Overview](../../docs/scorers/overview) - Understanding scorer concepts
+

@@ -661,7 +661,7 @@ const sidebars = {
           id: "scorers/content-similarity",
           label: "Content Similarity Scorer",
         },
-        { type: "doc", id: "scorers/run-experiment", label: "runExperiment" },
+        { type: "doc", id: "scorers/run-evals", label: "runEvals" },
         {
           type: "doc",
           id: "scorers/answer-relevancy",
