@@ -118,11 +118,31 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
 
     // 2. Math agent was queried (should see agent-execution chunks)
     const stepTypes = chunks.map(c => c.type);
-    expect(stepTypes).toContain('agent-execution');
+    expect(stepTypes).toContain('agent-execution-start');
+    expect(stepTypes).toContain('agent-execution-end');
 
     // 3. Final result contains calculation answer (126)
-    const textChunks = chunks.filter(c => c.type === 'text-delta' || c.type === 'text');
-    const fullText = textChunks.map(c => c.textDelta || c.text || '').join('');
+    const textChunks = chunks.filter(
+      c =>
+        c.type === 'agent-execution-event-text-delta' ||
+        c.type === 'routing-agent-text-delta' ||
+        c.type === 'text-delta' ||
+        c.type === 'text',
+    );
+    const fullText = textChunks
+      .map(c => {
+        // Agent execution chunks have nested payload structure
+        if (c.type === 'agent-execution-event-text-delta') {
+          return c.payload?.payload?.textDelta || '';
+        }
+        // Routing agent chunks have text in payload
+        if (c.type === 'routing-agent-text-delta') {
+          return c.payload?.text || '';
+        }
+        // Direct text chunks
+        return c.textDelta || c.text || '';
+      })
+      .join('');
     expect(fullText).toContain('126');
 
     // 4. No errors occurred
@@ -178,14 +198,33 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
     const workingMemory = await memory.getWorkingMemory({ threadId, resourceId });
     expect(workingMemory?.toLowerCase()).toContain('san francisco');
 
-    // 2. Weather tool was executed (should see tool-call chunks)
-    const toolCalls = chunks.filter(c => c.type === 'tool-call');
-    expect(toolCalls.length).toBeGreaterThan(0);
-    expect(toolCalls.some((t: any) => t.toolName === 'get-weather')).toBe(true);
+    // 2. Weather tool was executed (should see tool-execution chunks)
+    const stepTypes = chunks.map(c => c.type);
+    expect(stepTypes).toContain('tool-execution-start');
+    expect(stepTypes).toContain('tool-execution-end');
 
     // 3. Final result contains weather information
-    const textChunks = chunks.filter(c => c.type === 'text-delta' || c.type === 'text');
-    const fullText = textChunks.map(c => c.textDelta || c.text || '').join('');
+    const textChunks = chunks.filter(
+      c =>
+        c.type === 'agent-execution-event-text-delta' ||
+        c.type === 'routing-agent-text-delta' ||
+        c.type === 'text-delta' ||
+        c.type === 'text',
+    );
+    const fullText = textChunks
+      .map(c => {
+        // Agent execution chunks have nested payload structure
+        if (c.type === 'agent-execution-event-text-delta') {
+          return c.payload?.payload?.textDelta || '';
+        }
+        // Routing agent chunks have text in payload
+        if (c.type === 'routing-agent-text-delta') {
+          return c.payload?.text || '';
+        }
+        // Direct text chunks
+        return c.textDelta || c.text || '';
+      })
+      .join('');
     expect(fullText.toLowerCase()).toMatch(/weather|sunny|72/);
 
     // 4. No errors occurred
