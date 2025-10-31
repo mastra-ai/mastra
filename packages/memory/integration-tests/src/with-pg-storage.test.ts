@@ -93,9 +93,11 @@ describe('Memory with PostgresStore Integration', () => {
           id: randomUUID(),
           threadId,
           resourceId,
-          content: `Message ${i + 1}`,
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: `Message ${i + 1}` }],
+          },
           role: 'user' as const,
-          type: 'text' as const,
           createdAt: new Date(Date.now() + i * 1000), // Ensure different timestamps
         });
       }

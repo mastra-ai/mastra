@@ -673,6 +673,15 @@ describe('Mastra ID Generator', () => {
 
     it('should handle complex workflow with memory operations', async () => {
       const memory = new MockMemory();
+
+      const mastra = new Mastra({
+        idGenerator: customIdGenerator,
+        logger: false,
+      });
+
+      // Register mastra with memory so it can use the custom ID generator
+      memory.__registerMastra(mastra);
+
       const agent = new Agent({
         name: 'workflowAgent',
         instructions: 'You are a workflow assistant',
@@ -687,11 +696,7 @@ describe('Mastra ID Generator', () => {
         memory,
       });
 
-      const _mastra = new Mastra({
-        idGenerator: customIdGenerator,
-        logger: false,
-        agents: { workflowAgent: agent },
-      });
+      mastra.agents({ workflowAgent: agent });
 
       const agentMemory = await agent.getMemory();
       if (!agentMemory) throw new Error('Memory not found');

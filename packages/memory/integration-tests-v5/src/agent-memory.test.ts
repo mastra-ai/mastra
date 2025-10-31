@@ -418,15 +418,20 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { uiMessages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.query({ threadId });
 
       // Check that all user messages were saved
-      const savedUserMessages = uiMessages.filter((m: any) => m.role === 'user');
+      const savedUserMessages = messages.filter((m: any) => m.role === 'user');
       expect(savedUserMessages.length).toBe(2);
 
       // Check that metadata was persisted in the stored messages
-      const firstMessage = uiMessages.find((m: any) => m.content === 'Hello with metadata');
-      const secondMessage = uiMessages.find((m: any) => m.content === 'Another message with different metadata');
+      const firstMessage = messages.find(
+        (m: any) => m.content.parts?.some((p: any) => p.type === 'text' && p.text === 'Hello with metadata'),
+      );
+      const secondMessage = messages.find(
+        (m: any) =>
+          m.content.parts?.some((p: any) => p.type === 'text' && p.text === 'Another message with different metadata'),
+      );
 
       expect(firstMessage).toBeDefined();
       expect(firstMessage!.metadata).toEqual({

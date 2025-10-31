@@ -218,7 +218,7 @@ describe('Memory with Processors', () => {
     });
 
     // Generate conversation with tool calls
-    const { messages } = generateConversationHistory({
+    const { messagesV2 } = generateConversationHistory({
       threadId: thread.id,
       resourceId,
       messageCount: 8,
@@ -227,7 +227,7 @@ describe('Memory with Processors', () => {
     });
 
     // Save messages
-    await memory.saveMessages({ messages });
+    await memory.saveMessages({ messages: messagesV2 });
 
     // Apply multiple processors: first remove weather tool calls, then limit to 250 tokens
     const queryResult = await memory.query({
