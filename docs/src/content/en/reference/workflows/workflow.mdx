@@ -115,54 +115,6 @@ A workflow's `status` indicates its current execution state. The possible values
   ]}
 />
 
-## Nested example
-
-```typescript {26} title="src/mastra/workflows/test-workflow.ts" showLineNumbers cop
-const step1 = createStep({...});
-const step2 = createStep({...});
-
-const childWorkflow = createWorkflow({
-  id: "child-workflow",
-  inputSchema: z.object({
-    message: z.string()
-  }),
-  outputSchema: z.object({
-    emphasized: z.string()
-  })
-})
-  .then(step1)
-  .then(step2)
-  .commit();
-
-export const testWorkflow = createWorkflow({
-  id: "nested-workflow",
-  inputSchema: z.object({
-    message: z.string()
-  }),
-  outputSchema: z.object({
-    emphasized: z.string()
-  })
-})
-  .then(childWorkflow)
-  .commit();
-```
-
-## Cloned example
-
-```typescript {6} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { cloneWorkflow } from "@mastra/core/workflows";
-
-const step1 = createStep({...});
-
-const parentWorkflow = createWorkflow({...})
-const clonedWorkflow = cloneWorkflow(parentWorkflow, { id: "cloned-workflow" });
-
-export const testWorkflow = createWorkflow({...})
-  .then(step1)
-  .then(clonedWorkflow)
-  .commit();
-```
-
 ## Related
 
 - [Step Class](./step)

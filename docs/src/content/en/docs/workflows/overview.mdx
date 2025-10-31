@@ -80,7 +80,6 @@ export const testWorkflow = createWorkflow({
 })
   .then(step1)
   .commit();
-
 ```
 
 > See the [Workflow Class](/reference/workflows/workflow) for a full list of configuration options.
@@ -142,6 +141,58 @@ export const testWorkflow = createWorkflow({
 })
   .then(step1)
   .then(step2)
+  .commit();
+```
+
+## Workflows as steps
+
+Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/workflows/control-flow).
+
+```typescript {26} title="src/mastra/workflows/test-workflow.ts" showLineNumbers cop
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+const childWorkflow = createWorkflow({
+  id: "child-workflow",
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
+  .then(childWorkflow)
+  .commit();
+```
+
+### Cloning a workflow
+
+Clone a workflow using `cloneWorkflow()` when you want to reuse its logic but track it separately under a new ID. Each clone runs independently and appears as a distinct workflow in logs and observability tools.
+
+```typescript {6} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { cloneWorkflow } from "@mastra/core/workflows";
+
+const step1 = createStep({...});
+
+const parentWorkflow = createWorkflow({...})
+const clonedWorkflow = cloneWorkflow(parentWorkflow, { id: "cloned-workflow" });
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .then(clonedWorkflow)
   .commit();
 ```
 
