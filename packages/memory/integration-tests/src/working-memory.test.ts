@@ -340,7 +340,7 @@ describe('Working Memory Tests', () => {
       const memoryArgs: string[] = [];
 
       for (const message of history.messages) {
-        if (message.role === `assistant`) {
+        if (message.role === `assistant` && message.content.parts) {
           for (const part of message.content.parts) {
             if (typeof part === `string`) continue;
             if (part.type === `tool-call` && part.toolName === `updateWorkingMemory`) {

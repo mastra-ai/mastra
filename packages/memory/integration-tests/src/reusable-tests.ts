@@ -715,7 +715,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           selectBy: { last: 10 },
         });
 
-        expect(remainingMessages.messages).toHaveLength(2);
+        expect(remainingMessages.messages).toHaveLength(1);
         expect(getTextContent(remainingMessages.messages[0])).toBe('Simple text');
       });
 
