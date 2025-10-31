@@ -55,7 +55,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Install Mastra | Getting Started | Mastra Docs](https://mastra.ai/en/docs/getting-started/installation): Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
 - [Mastra Docs Server | Getting Started | Mastra Docs](https://mastra.ai/en/docs/getting-started/mcp-docs-server): Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert.
 - [Project Structure | Getting Started | Mastra Docs](https://mastra.ai/en/docs/getting-started/project-structure): Guide on organizing folders and files in Mastra, including best practices and recommended structures.
-- [Playground | Getting Started | Mastra Docs](https://mastra.ai/en/docs/getting-started/studio): Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
+- [Studio | Getting Started | Mastra Docs](https://mastra.ai/en/docs/getting-started/studio): Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
 - [Templates | Getting Started | Mastra Docs](https://mastra.ai/en/docs/getting-started/templates): Pre-built project structures that demonstrate common Mastra use cases and patterns
 - [About Mastra | Mastra Docs](https://mastra.ai/en/docs): Mastra is an all-in-one framework for building AI-powered applications and agents with a modern TypeScript stack.
 - [Navigating the Dashboard | Mastra Cloud | Mastra Docs](https://mastra.ai/en/docs/mastra-cloud/dashboard): Details of each feature available in Mastra Cloud
