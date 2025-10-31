@@ -2621,7 +2621,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     if (Object.keys(scorers || {}).length > 0) {
       for (const [_id, scorerObject] of Object.entries(scorers)) {
         runScorer({
-          scorerId: overrideScorers ? scorerObject.scorer.id : scorerObject.scorer.id,
+          scorerId: scorerObject.scorer.id,
           scorerObject: scorerObject,
           runId,
           input: scorerInput,
