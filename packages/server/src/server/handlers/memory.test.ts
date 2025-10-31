@@ -105,8 +105,8 @@ describe('Memory Handlers', () => {
           mastra,
           resourceId: 'test-resource',
           agentId: 'test-agent',
-          offset: 0,
-          limit: 10,
+          page: 0,
+          perPage: 10,
           orderBy: { field: 'createdAt', direction: 'DESC' },
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
@@ -121,8 +121,8 @@ describe('Memory Handlers', () => {
         listThreadsHandler({
           mastra,
           agentId: 'test-agent',
-          offset: 0,
-          limit: 10,
+          page: 0,
+          perPage: 10,
           orderBy: { field: 'createdAt', direction: 'DESC' },
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Argument "resourceId" is required' }));
@@ -142,8 +142,8 @@ describe('Memory Handlers', () => {
         mastra,
         resourceId: 'test-resource',
         agentId: 'test-agent',
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
@@ -155,8 +155,8 @@ describe('Memory Handlers', () => {
 
       expect(spy).toBeCalledWith({
         resourceId: 'test-resource',
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
     });
@@ -176,16 +176,16 @@ describe('Memory Handlers', () => {
         mastra,
         resourceId: 'test-resource',
         agentId: 'test-agent',
-        offset: 0,
-        limit: 20,
+        page: 0,
+        perPage: 20,
         orderBy: { field: 'updatedAt', direction: 'ASC' },
       });
 
       expect(result.threads).toHaveLength(1);
       expect(spy).toHaveBeenCalledWith({
         resourceId: 'test-resource',
-        offset: 0,
-        limit: 20,
+        page: 0,
+        perPage: 20,
         orderBy: { field: 'updatedAt', direction: 'ASC' },
       });
     });
@@ -207,16 +207,16 @@ describe('Memory Handlers', () => {
         mastra,
         resourceId: 'test-resource',
         agentId: 'test-agent',
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
         orderBy: { field: 'updatedAt', direction: 'DESC' },
       });
 
       expect(result.threads).toHaveLength(2);
       expect(spy).toHaveBeenCalledWith({
         resourceId: 'test-resource',
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
         orderBy: { field: 'updatedAt', direction: 'DESC' },
       });
     });
@@ -234,8 +234,8 @@ describe('Memory Handlers', () => {
         mastra,
         resourceId: 'non-existent-resource',
         agentId: 'test-agent',
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
