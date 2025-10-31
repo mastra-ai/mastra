@@ -131,18 +131,17 @@ describe('Tools Handlers', () => {
       });
 
       expect(result).toEqual(mockResult);
-      expect(mockExecute).toHaveBeenCalledWith(
-        {
-          context,
-          mastra: mockMastra,
-          runId: 'test-run',
-          requestContext: requestContext,
-          tracingContext: {
-            currentSpan: undefined,
-          },
+      expect(mockExecute).toHaveBeenCalledWith(context, {
+        mastra: mockMastra,
+        requestContext: requestContext,
+        tracingContext: {
+          currentSpan: undefined,
         },
-        undefined,
-      );
+        workflow: {
+          runId: 'test-run',
+          suspend: expect.any(Function),
+        },
+      });
     });
 
     it.skip('should execute Vercel tool successfully', async () => {
@@ -243,18 +242,18 @@ describe('Tools Handlers', () => {
       });
 
       expect(result).toEqual(mockResult);
-      expect(mockExecute).toHaveBeenCalledWith(
-        {
-          context,
-          mastra: mockMastra,
-          runId: 'test-agent',
-          requestContext: requestContext,
-          tracingContext: {
-            currentSpan: undefined,
-          },
+      expect(mockExecute).toHaveBeenCalledWith(context, {
+        mastra: mockMastra,
+        requestContext: requestContext,
+        tracingContext: {
+          currentSpan: undefined,
         },
-        undefined,
-      );
+        agent: {
+          messages: [],
+          toolCallId: '',
+          suspend: expect.any(Function),
+        },
+      });
     });
 
     it.skip('should execute Vercel tool successfully', async () => {
