@@ -264,9 +264,7 @@ describe('Memory Streaming Tests', () => {
 
       const agentMemory = (await weatherAgent.getMemory())!;
       const dbMessages = (await agentMemory.query({ threadId })).messages;
-      const initialMessages = dbMessages.map((m) =>
-        MessageList.mastraDBMessageToAIV5UIMessage(m),
-      );
+      const initialMessages = dbMessages.map(m => MessageList.mastraDBMessageToAIV5UIMessage(m));
       const state = { clipboard: '' };
       const { result } = renderHook(() => {
         const chat = useChat({
