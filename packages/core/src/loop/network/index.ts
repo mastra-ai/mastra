@@ -603,7 +603,6 @@ export async function createNetworkLoop({
         type: 'agent-execution-end',
         payload: {
           ...endPayload,
-          agentId: inputData.primitiveId,
           usage: await result.usage,
         },
         from: ChunkFrom.NETWORK,
