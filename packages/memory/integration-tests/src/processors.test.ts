@@ -21,10 +21,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { filterToolCallsByName, filterToolResultsByName, generateConversationHistory } from './test-utils';
 
-function v2ToCoreMessages(messages: MastraMessageV2[] | UIMessage[]): CoreMessage[] {
-  return new MessageList().add(messages, 'input').get.input.aiV4.core();
-}
-
 /**
  * Helper function to apply input processors to messages
  * Replaces the deprecated memory.processMessages() method
@@ -214,7 +210,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result = await applyInputProcessors(
-      v2ToCoreMessages(queryResult.uiMessages),
+      queryResult.uiMessages,
       [new ToolCallFilter({ exclude: ['weather'] })],
       thread.id,
       resourceId,
@@ -231,7 +227,7 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       selectBy: { last: 20 },
     });
-    const result2 = await applyInputProcessors(v2ToCoreMessages(queryResult2.uiMessages), [], thread.id, resourceId);
+    const result2 = await applyInputProcessors(queryResult2.uiMessages, [], thread.id, resourceId);
     const messages2 = new MessageList({ threadId: thread.id, resourceId }).add(result2, 'response').get.all.v2();
     expect(new MessageList().add(messages2, 'memory').get.all.v2()).toHaveLength(messagesV2.length);
     expect(filterToolCallsByName(result2, 'weather')).toHaveLength(1);
@@ -245,7 +241,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result3 = await applyInputProcessors(
-      v2ToCoreMessages(queryResult3.uiMessages),
+      queryResult3.uiMessages,
       [new ToolCallFilter({ exclude: ['weather', 'calculator'] })],
       thread.id,
       resourceId,
@@ -262,7 +258,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result4 = await applyInputProcessors(
-      v2ToCoreMessages(queryResult4.uiMessages),
+      queryResult4.uiMessages,
       [new ToolCallFilter()],
       thread.id,
       resourceId,
@@ -299,7 +295,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result = await applyInputProcessors(
-      v2ToCoreMessages(queryResult.uiMessages),
+      queryResult.uiMessages,
       [new ToolCallFilter({ exclude: ['weather'] }), new TokenLimiter(250)],
       thread.id,
       resourceId,
@@ -481,7 +477,7 @@ describe('Memory with Processors', () => {
 
     // For this test, we'll process all messages together
     const baselineResult = await applyInputProcessors(
-      v2ToCoreMessages(queryResult.messagesV2),
+      queryResult.messagesV2,
       [],
       threadId,
       resourceId,
@@ -502,7 +498,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const weatherFilteredResult = await applyInputProcessors(
-      v2ToCoreMessages(weatherQueryResult.messagesV2),
+      weatherQueryResult.messagesV2,
       [new ToolCallFilter({ exclude: ['get_weather'] })],
       threadId,
       resourceId,
@@ -524,7 +520,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const tokenLimitedResult = await applyInputProcessors(
-      v2ToCoreMessages(tokenLimitQuery.messages),
+      tokenLimitQuery.messages,
       [new TokenLimiter(100)], // Small limit to only get a subset
       threadId,
       resourceId,
@@ -539,7 +535,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const combinedResult = await applyInputProcessors(
-      v2ToCoreMessages(combinedQuery.messages),
+      combinedQuery.messages,
       [new ToolCallFilter({ exclude: ['get_weather', 'calculator'] }), new TokenLimiter(500)],
       threadId,
       resourceId,
@@ -593,9 +589,12 @@ describe('Memory with Processors', () => {
     });
 
     // Retrieve the message (no TokenLimiter, just get the message back)
-    const result = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult.uiMessages),
-    });
+    const result = await applyInputProcessors(
+      queryResult.uiMessages,
+      [],
+      thread.id,
+      resourceId,
+    );
 
     // Should have retrieved the message
     expect(result.length).toBe(1);

@@ -462,6 +462,7 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           content: {
             format: 2,
+            content: 'Okay, checking the weather.',
             parts: [
               { type: 'text', text: 'Okay, checking the weather.' },
               {
@@ -533,6 +534,7 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           content: {
             format: 2,
+            content: 'Okay, I can do that.',
             parts: [
               { type: 'text', text: 'Okay, I can do that.' },
               {
@@ -604,6 +606,7 @@ describe('MessageList', () => {
           createdAt: msg4.createdAt,
           content: {
             format: 2,
+            content: msg2.content[0].text,
             parts: [
               { type: 'text', text: msg2.content[0].text },
               {
@@ -614,6 +617,7 @@ describe('MessageList', () => {
                   toolCallId: msg2.content[1].toolCallId,
                   args: msg2.content[1].args,
                   result: msg3.content[0].result,
+                  step: undefined,
                 },
               },
               { type: 'step-start' },
@@ -629,6 +633,7 @@ describe('MessageList', () => {
                 toolCallId: msg2.content[1].toolCallId,
                 args: msg2.content[1].args,
                 result: msg3.content[0].result,
+                step: undefined,
               },
             ],
           },
@@ -707,6 +712,7 @@ describe('MessageList', () => {
           role: 'assistant',
           createdAt: expect.any(Date),
           content: {
+            content: 'Step 1: AnalyzeResult of step 1.',
             format: 2,
             parts: [
               {
@@ -741,6 +747,7 @@ describe('MessageList', () => {
           role: 'user',
           createdAt: expect.any(Date),
           content: {
+            content: 'Here is an image:',
             format: 2,
             parts: [
               { type: 'text', text: 'Here is an image:' },
@@ -776,6 +783,7 @@ describe('MessageList', () => {
           role: inputV1Message.role,
           createdAt: expect.any(Date),
           content: {
+            content: 'Analyzing data...Analysis complete.',
             format: 2,
             parts: [
               {
@@ -815,6 +823,7 @@ describe('MessageList', () => {
           role: inputV1Message.role,
           createdAt: expect.any(Date),
           content: {
+            content: 'Here is a document:',
             format: 2,
             parts: [
               { type: 'text', text: 'Here is a document:' },
@@ -970,6 +979,7 @@ describe('MessageList', () => {
           createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
           content: {
             format: 2,
+            content: 'Data gathered, now processing.Task completed successfully with gathered data.',
             parts: [
               {
                 type: 'reasoning',
@@ -985,6 +995,7 @@ describe('MessageList', () => {
                   toolCallId: 'call-data-1',
                   args: { query: 'required data' },
                   result: '{"data": "gathered"}', // Result from the tool message
+                  step: undefined,
                 },
               },
               {
@@ -1001,6 +1012,7 @@ describe('MessageList', () => {
                 toolCallId: 'call-data-1',
                 args: { query: 'required data' },
                 result: '{"data": "gathered"}', // Result from the tool message
+                step: undefined,
               },
             ],
           },
@@ -1038,6 +1050,7 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           content: {
             format: 2,
+            content: 'Here is an image URL:',
             parts: [
               { type: 'text', text: 'Here is an image URL:' },
               {
@@ -1076,6 +1089,7 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           content: {
             format: 2,
+            content: 'Here is another image URL:',
             parts: [
               { type: 'text', text: 'Here is another image URL:' },
               {
@@ -1241,6 +1255,7 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           content: {
             format: 2,
+            content: 'Searching...',
             parts: [
               { type: 'text', text: 'Searching...' },
               {
@@ -1251,6 +1266,7 @@ describe('MessageList', () => {
                   toolCallId: 'call-mix-1',
                   args: { query: 'info' },
                   result: 'Found relevant data.', // Result from the tool message
+                  step: undefined,
                 },
               },
               { type: 'step-start' },
@@ -1263,6 +1279,7 @@ describe('MessageList', () => {
                 toolCallId: 'call-mix-1',
                 args: { query: 'info' },
                 result: 'Found relevant data.', // Result from the tool message
+                step: undefined,
               },
             ],
           },
@@ -1380,6 +1397,7 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           content: {
             format: 2,
+            content: 'Here is an embedded image:',
             parts: [
               { type: 'text', text: 'Here is an embedded image:' },
               {
@@ -1414,6 +1432,7 @@ describe('MessageList', () => {
           role: 'assistant',
           createdAt: expect.any(Date),
           content: {
+            content: 'First, I need to gather some data.Gathering data...Data gathered, now I will process it.',
             format: 2,
             parts: [
               {
@@ -1429,6 +1448,7 @@ describe('MessageList', () => {
                   toolName: 'data-tool',
                   toolCallId: 'call-data-1',
                   args: { query: 'required data' },
+                  step: undefined,
                 },
               },
               {
@@ -1573,6 +1593,7 @@ describe('MessageList', () => {
           role: 'assistant',
           createdAt: expect.any(Date),
           content: {
+            content: 'Thinking step 1...Final thought.',
             format: 2,
             parts: [
               {
