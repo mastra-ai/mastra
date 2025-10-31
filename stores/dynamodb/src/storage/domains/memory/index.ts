@@ -359,7 +359,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
     if (!threadId.trim()) {
       throw new MastraError(
@@ -377,20 +377,19 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       // Determine how many results to return
       // Default pagination is always 40 unless explicitly specified
       let perPage = 40;
-      if (limit !== undefined) {
-        if (limit === false) {
-          // limit: false means get ALL messages
+      if (perPageInput !== undefined) {
+        if (perPageInput === false) {
+          // perPageInput: false means get ALL messages
           perPage = Number.MAX_SAFE_INTEGER;
-        } else if (limit === 0) {
-          // limit: 0 means return zero results
+        } else if (perPageInput === 0) {
+          // perPageInput: 0 means return zero results
           perPage = 0;
-        } else if (typeof limit === 'number' && limit > 0) {
-          perPage = limit;
+        } else if (typeof perPageInput === 'number' && perPageInput > 0) {
+          perPage = perPageInput;
         }
       }
 
-      // Convert offset to page for pagination metadata
-      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
+      const offset = page * perPage;
 
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -398,7 +397,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       this.logger.debug('Getting messages with listMessages', {
         threadId,
         resourceId,
-        limit,
+        perPageInput,
         offset,
         perPage,
         page,
@@ -507,7 +506,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = limit === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
+      const hasMore =
+        perPageInput === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
 
       return {
         messages: finalMessages,
@@ -534,8 +534,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       return {
         messages: [],
         total: 0,
-        page: Math.floor(offset / (limit === false ? Number.MAX_SAFE_INTEGER : limit || 40)),
-        perPage: limit === false ? Number.MAX_SAFE_INTEGER : limit || 40,
+        page,
+        perPage: perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput || 40,
         hasMore: false,
       };
     }
@@ -635,13 +635,14 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset = 0, limit = 100, orderBy } = args;
+    const { resourceId, page = 0, perPage = 100, orderBy } = args;
+    const offset = page * perPage;
     const { field, direction } = this.parseOrderBy(orderBy);
 
     this.logger.debug('Getting threads by resource ID with pagination', {
       resourceId,
-      page: limit > 0 ? Math.floor(offset / limit) : 0,
-      perPage: limit,
+      page,
+      perPage,
       field,
       direction,
     });
@@ -657,18 +658,18 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const allThreads = this.transformAndSortThreads(results.data, field, direction);
 
       // Apply pagination in memory
-      const endIndex = offset + limit;
+      const endIndex = offset + perPage;
       const paginatedThreads = allThreads.slice(offset, endIndex);
 
       // Calculate pagination info
       const total = allThreads.length;
-      const hasMore = offset + limit < total;
+      const hasMore = offset + perPage < total;
 
       return {
         threads: paginatedThreads,
         total,
-        page: limit > 0 ? Math.floor(offset / limit) : 0,
-        perPage: limit,
+        page,
+        perPage,
         hasMore,
       };
     } catch (error) {
@@ -677,7 +678,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           id: 'DYNAMODB_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId, page: limit > 0 ? Math.floor(offset / limit) : 0, perPage: limit },
+          details: { resourceId, page, perPage },
         },
         error,
       );

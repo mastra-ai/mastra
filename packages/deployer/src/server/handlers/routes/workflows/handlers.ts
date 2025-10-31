@@ -416,14 +416,14 @@ export async function listWorkflowRunsHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
-    const { fromDate, toDate, limit, offset, resourceId } = c.req.query();
+    const { fromDate, toDate, perPage, page, resourceId } = c.req.query();
     const workflowRuns = await getOriginalListWorkflowRunsHandler({
       mastra,
       workflowId,
       fromDate: fromDate ? new Date(fromDate) : undefined,
       toDate: toDate ? new Date(toDate) : undefined,
-      limit: limit ? Number(limit) : undefined,
-      offset: offset ? Number(offset) : undefined,
+      perPage: perPage ? Number(perPage) : undefined,
+      page: page ? Number(page) : undefined,
       resourceId,
     });
 

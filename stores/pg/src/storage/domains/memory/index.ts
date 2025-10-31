@@ -108,13 +108,14 @@ export class MemoryPG extends MemoryStorage {
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset = 0, limit: limitInput, orderBy } = args;
+    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
       const baseQuery = `FROM ${tableName} WHERE "resourceId" = $1`;
       const queryParams: any[] = [resourceId];
-      const limit = limitInput !== undefined ? limitInput : 100;
+      const perPage = perPageInput !== undefined ? perPageInput : 100;
+      const offset = page * perPage;
 
       const countQuery = `SELECT COUNT(*) ${baseQuery}`;
       const countResult = await this.client.one(countQuery, queryParams);
@@ -124,14 +125,14 @@ export class MemoryPG extends MemoryStorage {
         return {
           threads: [],
           total: 0,
-          page: 0,
-          perPage: limit,
+          page,
+          perPage,
           hasMore: false,
         };
       }
 
       const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`;
-      const rows = await this.client.manyOrNone(dataQuery, [...queryParams, limit, offset]);
+      const rows = await this.client.manyOrNone(dataQuery, [...queryParams, perPage, offset]);
 
       const threads = (rows || []).map(thread => ({
         ...thread,
@@ -143,8 +144,8 @@ export class MemoryPG extends MemoryStorage {
       return {
         threads,
         total,
-        page: limit > 0 ? Math.floor(offset / limit) : 0,
-        perPage: limit,
+        page,
+        perPage,
         hasMore: offset + threads.length < total,
       };
     } catch (error) {
@@ -155,7 +156,7 @@ export class MemoryPG extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             resourceId,
-            page: limitInput && limitInput > 0 ? Math.floor(offset / limitInput) : 0,
+            page,
           },
         },
         error,
@@ -165,8 +166,8 @@ export class MemoryPG extends MemoryStorage {
       return {
         threads: [],
         total: 0,
-        page: limitInput && limitInput > 0 ? Math.floor(offset / limitInput) : 0,
-        perPage: limitInput || 100,
+        page,
+        perPage: perPageInput || 100,
         hasMore: false,
       };
     }
@@ -526,7 +527,7 @@ export class MemoryPG extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
     if (!threadId.trim()) {
       throw new MastraError(
@@ -544,20 +545,20 @@ export class MemoryPG extends MemoryStorage {
       // Determine how many results to return
       // Default pagination is always 40 unless explicitly specified
       let perPage = 40;
-      if (limit !== undefined) {
-        if (limit === false) {
-          // limit: false means get ALL messages
+      if (perPageInput !== undefined) {
+        if (perPageInput === false) {
+          // perPage: false means get ALL messages
           perPage = Number.MAX_SAFE_INTEGER;
-        } else if (limit === 0) {
-          // limit: 0 means return zero results
+        } else if (perPageInput === 0) {
+          // perPage: 0 means return zero results
           perPage = 0;
-        } else if (typeof limit === 'number' && limit > 0) {
-          perPage = limit;
+        } else if (typeof perPageInput === 'number' && perPageInput > 0) {
+          perPage = perPageInput;
         }
       }
 
-      // Convert offset to page for pagination metadata
-      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
+      // Calculate offset from page
+      const offset = page * perPage;
 
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -669,8 +670,8 @@ export class MemoryPG extends MemoryStorage {
       return {
         messages: [],
         total: 0,
-        page: Math.floor(offset / (limit === false ? Number.MAX_SAFE_INTEGER : limit || 40)),
-        perPage: limit === false ? Number.MAX_SAFE_INTEGER : limit || 40,
+        page,
+        perPage: perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput || 40,
         hasMore: false,
       };
     }

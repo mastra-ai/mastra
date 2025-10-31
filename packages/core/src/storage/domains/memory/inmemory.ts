@@ -96,8 +96,8 @@ export class InMemoryMemory extends MemoryStorage {
     resourceId,
     include,
     filter,
-    limit,
-    offset = 0,
+    perPage: perPageInput,
+    page = 0,
     orderBy,
   }: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     this.logger.debug(`MockStore: listMessages called for thread ${threadId}`);
@@ -110,19 +110,19 @@ export class InMemoryMemory extends MemoryStorage {
     // Default pagination is always 40 unless explicitly specified
     let perPage = 40;
 
-    if (limit !== undefined) {
-      // Explicit limit provided
-      if (limit === false) {
-        // limit: false means get ALL messages
+    if (perPageInput !== undefined) {
+      // Explicit perPage provided
+      if (perPageInput === false) {
+        // perPage: false means get ALL messages
         perPage = Number.MAX_SAFE_INTEGER;
-      } else if (typeof limit === 'number' && limit > 0) {
-        // limit: number means get that many messages
-        perPage = limit;
+      } else if (typeof perPageInput === 'number' && perPageInput > 0) {
+        // perPage: number means get that many messages
+        perPage = perPageInput;
       }
     }
 
-    // Calculate page from offset
-    const page = Math.floor(offset / perPage);
+    // Calculate offset from page
+    const offset = page * perPage;
 
     // Step 1: Get regular paginated messages from the thread first
     let threadMessages = Array.from(this.collection.messages.values()).filter((msg: any) => {
@@ -604,7 +604,7 @@ export class InMemoryMemory extends MemoryStorage {
   async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset, limit, orderBy } = args;
+    const { resourceId, page, perPage, orderBy } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
     this.logger.debug(`MockStore: listThreadsByResourceId called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
@@ -614,12 +614,13 @@ export class InMemoryMemory extends MemoryStorage {
       ...thread,
       metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
     })) as StorageThreadType[];
+    const offset = page * perPage;
     return {
-      threads: clonedThreads.slice(offset, offset + limit),
+      threads: clonedThreads.slice(offset, offset + perPage),
       total: clonedThreads.length,
-      page: limit > 0 ? Math.floor(offset / limit) : 0,
-      perPage: limit,
-      hasMore: offset + limit < clonedThreads.length,
+      page,
+      perPage,
+      hasMore: offset + perPage < clonedThreads.length,
     };
   }
 

@@ -188,7 +188,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
     if (!threadId.trim()) {
       throw new MastraError(
@@ -206,20 +206,19 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Determine how many results to return
       // Default pagination is always 40 unless explicitly specified
       let perPage = 40;
-      if (limit !== undefined) {
-        if (limit === false) {
-          // limit: false means get ALL messages
+      if (perPageInput !== undefined) {
+        if (perPageInput === false) {
+          // perPageInput: false means get ALL messages
           perPage = Number.MAX_SAFE_INTEGER;
-        } else if (limit === 0) {
-          // limit: 0 means return zero results
+        } else if (perPageInput === 0) {
+          // perPageInput: 0 means return zero results
           perPage = 0;
-        } else if (typeof limit === 'number' && limit > 0) {
-          perPage = limit;
+        } else if (typeof perPageInput === 'number' && perPageInput > 0) {
+          perPage = perPageInput;
         }
       }
 
-      // Convert offset to page for pagination metadata
-      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
+      const offset = page * perPage;
 
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -252,7 +251,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Only apply limit if not unlimited and perPage > 0
       // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
       // So we skip limit when perPage === 0 and handle it by returning empty array
-      if (limit !== false && perPage > 0) {
+      if (perPageInput !== false && perPage > 0) {
         cursor = cursor.limit(perPage);
       }
 
@@ -320,7 +319,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = limit === false ? false : allThreadMessagesReturned ? false : offset + dataResult.length < total;
+      const hasMore =
+        perPageInput === false ? false : allThreadMessagesReturned ? false : offset + dataResult.length < total;
 
       return {
         messages: finalMessages,
@@ -330,7 +330,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
-      const errorPerPage = limit === false ? Number.MAX_SAFE_INTEGER : limit === 0 ? 0 : limit || 40;
+      const errorPerPage =
+        perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput === 0 ? 0 : perPageInput || 40;
       const mastraError = new MastraError(
         {
           id: 'MONGODB_STORE_LIST_MESSAGES_FAILED',
@@ -348,7 +349,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       return {
         messages: [],
         total: 0,
-        page: errorPerPage === 0 ? 0 : Math.floor(offset / errorPerPage),
+        page: errorPerPage === 0 ? 0 : Math.floor((page * perPage) / errorPerPage),
         perPage: errorPerPage,
         hasMore: false,
       };
@@ -776,18 +777,19 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
-      const { resourceId, offset, limit, orderBy } = args;
+      const { resourceId, page = 0, perPage = 100, orderBy } = args;
+      const offset = page * perPage;
       const { field, direction } = this.parseOrderBy(orderBy);
       const collection = await this.operations.getCollection(TABLE_THREADS);
 
       const query = { resourceId };
       const total = await collection.countDocuments(query);
 
-      if (limit === 0) {
+      if (perPage === 0) {
         return {
           threads: [],
           total,
-          page: 0,
+          page,
           perPage: 0,
           hasMore: offset < total,
         };
@@ -800,7 +802,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         .find(query)
         .sort({ [field]: sortOrder })
         .skip(offset)
-        .limit(limit)
+        .limit(perPage)
         .toArray();
 
       return {
@@ -813,9 +815,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           metadata: thread.metadata || {},
         })),
         total,
-        page: limit > 0 ? Math.floor(offset / limit) : 0,
-        perPage: limit,
-        hasMore: offset + threads.length < total,
+        page,
+        perPage,
+        hasMore: offset + perPage < total,
       };
     } catch (error) {
       throw new MastraError(

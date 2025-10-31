@@ -196,8 +196,8 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    perPage,
+    page,
     resourceId,
   }: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     try {
@@ -252,8 +252,9 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       const total = runs.length;
 
       // Apply pagination if requested
-      if (limit !== undefined && offset !== undefined) {
-        runs = runs.slice(offset, offset + limit);
+      if (perPage !== undefined && page !== undefined) {
+        const offset = page * perPage;
+        runs = runs.slice(offset, offset + perPage);
       }
 
       return { runs, total };

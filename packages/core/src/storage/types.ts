@@ -65,8 +65,8 @@ export type StorageListMessagesInput = {
     withPreviousMessages?: number;
     withNextMessages?: number;
   }[];
-  limit?: number | false;
-  offset?: number;
+  perPage?: number | false;
+  page?: number;
   filter?: {
     dateRange?: {
       start?: Date;
@@ -84,15 +84,15 @@ export type StorageListWorkflowRunsInput = {
   workflowName?: string;
   fromDate?: Date;
   toDate?: Date;
-  limit?: number;
-  offset?: number;
+  perPage?: number;
+  page?: number;
   resourceId?: string;
 };
 
 export type StorageListThreadsByResourceIdInput = {
   resourceId: string;
-  limit: number;
-  offset: number;
+  perPage: number;
+  page: number;
   orderBy?: StorageOrderBy;
 };
 

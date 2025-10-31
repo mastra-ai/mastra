@@ -203,8 +203,8 @@ export class WorkflowsPG extends WorkflowsStorage {
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    perPage,
+    page,
     resourceId,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
@@ -243,8 +243,9 @@ export class WorkflowsPG extends WorkflowsStorage {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       let total = 0;
+      const usePagination = perPage !== undefined && page !== undefined;
       // Only get total count when using pagination
-      if (limit !== undefined && offset !== undefined) {
+      if (usePagination) {
         const countResult = await this.client.one(
           `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} ${whereClause}`,
           values,
@@ -252,15 +253,17 @@ export class WorkflowsPG extends WorkflowsStorage {
         total = Number(countResult.count);
       }
 
+      const offset = usePagination ? page * perPage : undefined;
+
       // Get results
       const query = `
           SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })}
           ${whereClause}
           ORDER BY "createdAt" DESC
-          ${limit !== undefined && offset !== undefined ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
+          ${usePagination ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
         `;
 
-      const queryValues = limit !== undefined && offset !== undefined ? [...values, limit, offset] : values;
+      const queryValues = usePagination ? [...values, perPage, offset] : values;
 
       const result = await this.client.manyOrNone(query, queryValues);
 

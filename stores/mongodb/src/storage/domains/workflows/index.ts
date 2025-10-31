@@ -148,11 +148,10 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       const total = await collection.countDocuments(query);
 
       let cursor = collection.find(query).sort({ createdAt: -1 });
-      if (options.offset) {
-        cursor = cursor.skip(options.offset);
-      }
-      if (options.limit) {
-        cursor = cursor.limit(options.limit);
+      if (options.page !== undefined && options.perPage !== undefined) {
+        const offset = options.page * options.perPage;
+        cursor = cursor.skip(offset);
+        cursor = cursor.limit(options.perPage);
       }
 
       const results = await cursor.toArray();

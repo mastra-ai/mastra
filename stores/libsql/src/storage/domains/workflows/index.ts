@@ -349,8 +349,8 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    page,
+    perPage,
     resourceId,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
@@ -386,7 +386,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
       let total = 0;
       // Only get total count when using pagination
-      if (limit !== undefined && offset !== undefined) {
+      if (perPage !== undefined && page !== undefined) {
         const countResult = await this.client.execute({
           sql: `SELECT COUNT(*) as count FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
           args,
@@ -395,9 +395,11 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       }
 
       // Get results
+      const usePagination = perPage !== undefined && page !== undefined;
+      const offset = usePagination ? page * perPage : undefined;
       const result = await this.client.execute({
-        sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC${limit !== undefined && offset !== undefined ? ` LIMIT ? OFFSET ?` : ''}`,
-        args: limit !== undefined && offset !== undefined ? [...args, limit, offset] : args,
+        sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC${usePagination ? ` LIMIT ? OFFSET ?` : ''}`,
+        args: usePagination ? [...args, perPage, offset] : args,
       });
 
       const runs = (result.rows || []).map(row => parseWorkflowRun(row));

@@ -109,12 +109,12 @@ export async function listThreadsHandler({
   agentId,
   resourceId,
   requestContext,
-  offset,
-  limit,
+  page,
+  perPage,
   orderBy,
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'requestContext'> & {
-  offset: number;
-  limit: number;
+  page: number;
+  perPage: number;
   orderBy?: StorageOrderBy;
 }) {
   try {
@@ -128,8 +128,8 @@ export async function listThreadsHandler({
 
     const result = await memory.listThreadsByResourceId({
       resourceId: resourceId!,
-      offset,
-      limit,
+      page,
+      perPage,
       orderBy,
     });
     return result;
@@ -568,8 +568,8 @@ export async function searchMemoryHandler({
     if (!threadId) {
       const { threads } = await memory.listThreadsByResourceId({
         resourceId,
-        offset: 0,
-        limit: 1,
+        page: 0,
+        perPage: 1,
         orderBy: { field: 'updatedAt', direction: 'DESC' },
       });
 

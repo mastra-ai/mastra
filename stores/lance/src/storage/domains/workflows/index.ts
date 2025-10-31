@@ -211,12 +211,10 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
         total = await table.countRows();
       }
 
-      if (args?.limit) {
-        query.limit(args.limit);
-      }
-
-      if (args?.offset) {
-        query.offset(args.offset);
+      if (args?.perPage !== undefined && args?.page !== undefined) {
+        const offset = args.page * args.perPage;
+        query.limit(args.perPage);
+        query.offset(offset);
       }
 
       const records = await query.toArray();

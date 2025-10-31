@@ -178,8 +178,8 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    perPage,
+    page,
     resourceId,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     let runs = Array.from(this.collection.values());
@@ -204,9 +204,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     runs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     // Apply pagination
-    if (limit !== undefined && offset !== undefined) {
+    if (perPage !== undefined && page !== undefined) {
+      const offset = page * perPage;
       const start = offset;
-      const end = start + limit;
+      const end = start + perPage;
       runs = runs.slice(start, end);
     }
 

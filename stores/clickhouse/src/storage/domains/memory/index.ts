@@ -239,7 +239,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
     if (!threadId.trim()) {
       throw new MastraError(
@@ -257,20 +257,19 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       // Determine how many results to return
       // Default pagination is always 40 unless explicitly specified
       let perPage = 40;
-      if (limit !== undefined) {
-        if (limit === false) {
-          // limit: false means get ALL messages
+      if (perPageInput !== undefined) {
+        if (perPageInput === false) {
+          // perPage: false means get ALL messages
           perPage = Number.MAX_SAFE_INTEGER;
-        } else if (limit === 0) {
-          // limit: 0 means return zero results
+        } else if (perPageInput === 0) {
+          // perPage: 0 means return zero results
           perPage = 0;
-        } else if (typeof limit === 'number' && limit > 0) {
-          perPage = limit;
+        } else if (typeof perPageInput === 'number' && perPageInput > 0) {
+          perPage = perPageInput;
         }
       }
 
-      // Convert offset to page for pagination metadata
-      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
+      const offset = page * perPage;
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
       let dataQuery = `
@@ -486,7 +485,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = limit === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
+      const hasMore =
+        perPageInput === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
 
       return {
         messages: finalMessages,
@@ -496,7 +496,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         hasMore,
       };
     } catch (error: any) {
-      const errorPerPage = limit === false ? Number.MAX_SAFE_INTEGER : limit === 0 ? 0 : limit || 40;
+      const errorPerPage =
+        perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput === 0 ? 0 : perPageInput || 40;
       const mastraError = new MastraError(
         {
           id: 'STORAGE_CLICKHOUSE_STORE_LIST_MESSAGES_FAILED',
@@ -514,7 +515,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       return {
         messages: [],
         total: 0,
-        page: errorPerPage === 0 ? 0 : Math.floor(offset / errorPerPage),
+        page: errorPerPage === 0 ? 0 : Math.floor((page * perPage) / errorPerPage),
         perPage: errorPerPage,
         hasMore: false,
       };
@@ -889,7 +890,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset = 0, limit = 100, orderBy } = args;
+    const { resourceId, page = 0, perPage = 100, orderBy } = args;
+    const offset = page * perPage;
     const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
@@ -911,8 +913,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         return {
           threads: [],
           total: 0,
-          page: 0,
-          perPage: limit,
+          page,
+          perPage,
           hasMore: false,
         };
       }
@@ -930,11 +932,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
               FROM ${TABLE_THREADS}
               WHERE resourceId = {resourceId:String}
               ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}
-              LIMIT {limit:Int64} OFFSET {offset:Int64}
+              LIMIT {perPage:Int64} OFFSET {offset:Int64}
             `,
         query_params: {
           resourceId,
-          limit: limit,
+          perPage: perPage,
           offset: offset,
         },
         clickhouse_settings: {
@@ -951,9 +953,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       return {
         threads,
         total,
-        page: limit > 0 ? Math.floor(offset / limit) : 0,
-        perPage: limit,
-        hasMore: offset + threads.length < total,
+        page,
+        perPage,
+        hasMore: offset + perPage < total,
       };
     } catch (error) {
       throw new MastraError(
@@ -961,7 +963,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           id: 'CLICKHOUSE_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId, page: limit > 0 ? Math.floor(offset / limit) : 0 },
+          details: { resourceId, page },
         },
         error,
       );

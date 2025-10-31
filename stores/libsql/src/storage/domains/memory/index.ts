@@ -204,7 +204,7 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
     if (!threadId.trim()) {
       throw new MastraError(
@@ -222,20 +222,19 @@ export class MemoryLibSQL extends MemoryStorage {
       // Determine how many results to return
       // Default pagination is always 40 unless explicitly specified
       let perPage = 40;
-      if (limit !== undefined) {
-        if (limit === false) {
-          // limit: false means get ALL messages
+      if (perPageInput !== undefined) {
+        if (perPageInput === false) {
+          // perPageInput: false means get ALL messages
           perPage = Number.MAX_SAFE_INTEGER;
-        } else if (limit === 0) {
-          // limit: 0 means return zero results
+        } else if (perPageInput === 0) {
+          // perPageInput: 0 means return zero results
           perPage = 0;
-        } else if (typeof limit === 'number' && limit > 0) {
-          perPage = limit;
+        } else if (typeof perPageInput === 'number' && perPageInput > 0) {
+          perPage = perPageInput;
         }
       }
 
-      // Convert offset to page for pagination metadata
-      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
+      const offset = page * perPage;
 
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -330,7 +329,7 @@ export class MemoryLibSQL extends MemoryStorage {
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
       const hasMore =
-        limit === false ? false : allThreadMessagesReturned ? false : offset + dataResult.rows.length < total;
+        perPageInput === false ? false : allThreadMessagesReturned ? false : offset + dataResult.rows.length < total;
 
       return {
         messages: finalMessages,
@@ -357,8 +356,8 @@ export class MemoryLibSQL extends MemoryStorage {
       return {
         messages: [],
         total: 0,
-        page: Math.floor(offset / (limit === false ? Number.MAX_SAFE_INTEGER : limit || 40)),
-        perPage: limit === false ? Number.MAX_SAFE_INTEGER : limit || 40,
+        page,
+        perPage: perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput || 40,
         hasMore: false,
       };
     }
@@ -864,7 +863,8 @@ export class MemoryLibSQL extends MemoryStorage {
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset = 0, limit = 100, orderBy } = args;
+    const { resourceId, page = 0, perPage = 100, orderBy } = args;
+    const offset = page * perPage;
     const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
@@ -890,15 +890,15 @@ export class MemoryLibSQL extends MemoryStorage {
         return {
           threads: [],
           total: 0,
-          page: 0,
-          perPage: limit,
+          page,
+          perPage,
           hasMore: false,
         };
       }
 
       const dataResult = await this.client.execute({
         sql: `SELECT * ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
-        args: [...queryParams, limit, offset],
+        args: [...queryParams, perPage, offset],
       });
 
       const threads = (dataResult.rows || []).map(mapRowToStorageThreadType);
@@ -906,9 +906,9 @@ export class MemoryLibSQL extends MemoryStorage {
       return {
         threads,
         total,
-        page: limit > 0 ? Math.floor(offset / limit) : 0,
-        perPage: limit,
-        hasMore: offset + threads.length < total,
+        page,
+        perPage,
+        hasMore: offset + perPage < total,
       };
     } catch (error) {
       const mastraError = new MastraError(
@@ -925,8 +925,8 @@ export class MemoryLibSQL extends MemoryStorage {
       return {
         threads: [],
         total: 0,
-        page: limit > 0 ? Math.floor(offset / limit) : 0,
-        perPage: limit,
+        page,
+        perPage,
         hasMore: false,
       };
     }

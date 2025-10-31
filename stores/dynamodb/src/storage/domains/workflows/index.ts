@@ -156,8 +156,9 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
     try {
       // Default values
-      const limit = args?.limit || 10;
-      const offset = args?.offset || 0;
+      const perPage = args?.perPage || 10;
+      const page = args?.page || 0;
+      const offset = page * perPage;
 
       let query;
 
@@ -220,7 +221,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
       // Apply offset and limit to the accumulated filtered results
       const total = allMatchingSnapshots.length;
-      const paginatedData = allMatchingSnapshots.slice(offset, offset + limit);
+      const paginatedData = allMatchingSnapshots.slice(offset, offset + perPage);
 
       // Format and return the results
       const runs = paginatedData.map((snapshot: WorkflowSnapshotDBItem) => formatWorkflowRun(snapshot));

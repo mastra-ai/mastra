@@ -67,7 +67,8 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
-      const { resourceId, offset = 0, limit = 100, orderBy } = args;
+      const { resourceId, page = 0, perPage = 100, orderBy } = args;
+      const offset = page * perPage;
       const { field, direction } = this.parseOrderBy(orderBy);
 
       // List all keys in the threads table
@@ -94,14 +95,14 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       });
 
       // Apply pagination
-      const end = offset + limit;
+      const end = offset + perPage;
       const paginatedThreads = threads.slice(offset, end);
 
       return {
-        page: limit > 0 ? Math.floor(offset / limit) : 0,
-        perPage: limit,
+        page,
+        perPage,
         total: threads.length,
-        hasMore: offset + limit < threads.length,
+        hasMore: offset + perPage < threads.length,
         threads: paginatedThreads,
       };
     } catch (error) {
@@ -802,7 +803,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
     if (!threadId.trim()) {
       throw new MastraError(
@@ -820,20 +821,19 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       // Determine how many results to return
       // Default pagination is always 40 unless explicitly specified
       let perPage = 40;
-      if (limit !== undefined) {
-        if (limit === false) {
-          // limit: false means get ALL messages
+      if (perPageInput !== undefined) {
+        if (perPageInput === false) {
+          // perPageInput: false means get ALL messages
           perPage = Number.MAX_SAFE_INTEGER;
-        } else if (limit === 0) {
-          // limit: 0 means return zero results
+        } else if (perPageInput === 0) {
+          // perPageInput: 0 means return zero results
           perPage = 0;
-        } else if (typeof limit === 'number' && limit > 0) {
-          perPage = limit;
+        } else if (typeof perPageInput === 'number' && perPageInput > 0) {
+          perPage = perPageInput;
         }
       }
 
-      // Convert offset to page for pagination metadata
-      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
+      const offset = page * perPage;
 
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -1040,7 +1040,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
 
       let hasMore: boolean;
-      if (limit === false || allThreadMessagesReturned) {
+      if (perPageInput === false || allThreadMessagesReturned) {
         hasMore = false;
       } else if (direction === 'ASC') {
         // ASC: check if there are more messages after the current window
@@ -1079,8 +1079,8 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       return {
         messages: [],
         total: 0,
-        page: Math.floor(offset / (limit === false ? Number.MAX_SAFE_INTEGER : limit || 40)),
-        perPage: limit === false ? Number.MAX_SAFE_INTEGER : limit || 40,
+        page,
+        perPage: perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput || 40,
         hasMore: false,
       };
     }

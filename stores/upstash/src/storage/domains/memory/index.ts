@@ -75,7 +75,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset = 0, limit = 100, orderBy } = args;
+    const { resourceId, page = 0, perPage = 100, orderBy } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
@@ -103,15 +103,16 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const sortedThreads = this.sortThreads(allThreads, field, direction);
 
       const total = sortedThreads.length;
-      const end = offset + limit;
+      const offset = page * perPage;
+      const end = offset + perPage;
       const paginatedThreads = sortedThreads.slice(offset, end);
-      const hasMore = offset + limit < total;
+      const hasMore = offset + perPage < total;
 
       return {
         threads: paginatedThreads,
         total,
-        page: limit > 0 ? Math.floor(offset / limit) : 0,
-        perPage: limit,
+        page,
+        perPage,
         hasMore,
       };
     } catch (error) {
@@ -585,7 +586,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
     if (!threadId.trim()) {
       throw new MastraError(
@@ -605,20 +606,19 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Determine how many results to return
       // Default pagination is always 40 unless explicitly specified
       let perPage = 40;
-      if (limit !== undefined) {
-        if (limit === false) {
-          // limit: false means get ALL messages
+      if (perPageInput !== undefined) {
+        if (perPageInput === false) {
+          // perPageInput: false means get ALL messages
           perPage = Number.MAX_SAFE_INTEGER;
-        } else if (limit === 0) {
-          // limit: 0 means return zero results
+        } else if (perPageInput === 0) {
+          // perPageInput: 0 means return zero results
           perPage = 0;
-        } else if (typeof limit === 'number' && limit > 0) {
-          perPage = limit;
+        } else if (typeof perPageInput === 'number' && perPageInput > 0) {
+          perPage = perPageInput;
         }
       }
 
-      // Convert offset to page for pagination metadata
-      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
+      const offset = page * perPage;
 
       // Get included messages with context if specified
       let includedMessages: MastraMessageV2[] = [];
@@ -713,7 +713,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       // Apply pagination
       const start = offset;
-      const end = limit === false ? total : start + perPage;
+      const end = perPageInput === false ? total : start + perPage;
       const paginatedMessages = messagesData.slice(start, end);
 
       // Combine paginated messages with included messages, deduplicating
@@ -766,7 +766,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = limit === false ? false : allThreadMessagesReturned ? false : end < total;
+      const hasMore = perPageInput === false ? false : allThreadMessagesReturned ? false : end < total;
 
       return {
         messages: finalMessages,
@@ -793,8 +793,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
       return {
         messages: [],
         total: 0,
-        page: Math.floor(offset / (limit === false ? Number.MAX_SAFE_INTEGER : limit || 40)),
-        perPage: limit === false ? Number.MAX_SAFE_INTEGER : limit || 40,
+        page,
+        perPage: perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput || 40,
         hasMore: false,
       };
     }

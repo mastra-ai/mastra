@@ -169,8 +169,8 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    page,
+    perPage,
     resourceId,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
@@ -203,12 +203,14 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-      const limitClause = limit !== undefined ? `LIMIT ${limit}` : '';
-      const offsetClause = offset !== undefined ? `OFFSET ${offset}` : '';
+      const usePagination = perPage !== undefined && page !== undefined;
+      const offset = usePagination ? page * perPage : 0;
+      const limitClause = usePagination ? `LIMIT ${perPage}` : '';
+      const offsetClause = usePagination ? `OFFSET ${offset}` : '';
 
       let total = 0;
       // Only get total count when using pagination
-      if (limit !== undefined && offset !== undefined) {
+      if (usePagination) {
         const countResult = await this.client.query({
           query: `SELECT COUNT(*) as count FROM ${TABLE_WORKFLOW_SNAPSHOT} ${TABLE_ENGINES[TABLE_WORKFLOW_SNAPSHOT].startsWith('ReplacingMergeTree') ? 'FINAL' : ''} ${whereClause}`,
           query_params: values,

@@ -212,7 +212,8 @@ export class MemoryStorageD1 extends MemoryStorage {
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset, limit, orderBy } = args;
+    const { resourceId, page = 0, perPage = 100, orderBy } = args;
+    const offset = page * perPage;
     const { field, direction } = this.parseOrderBy(orderBy);
     const fullTableName = this.operations.getTableName(TABLE_THREADS);
 
@@ -238,7 +239,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         .from(fullTableName)
         .where('resourceId = ?', resourceId)
         .orderBy(field, direction)
-        .limit(limit)
+        .limit(perPage)
         .offset(offset);
 
       const results = (await this.operations.executeQuery(selectQuery.build())) as Record<string, any>[];
@@ -247,9 +248,9 @@ export class MemoryStorageD1 extends MemoryStorage {
       return {
         threads,
         total,
-        page: limit > 0 ? Math.floor(offset / limit) : 0,
-        perPage: limit,
-        hasMore: offset + threads.length < total,
+        page,
+        perPage,
+        hasMore: offset + perPage < total,
       };
     } catch (error) {
       const mastraError = new MastraError(
@@ -698,7 +699,7 @@ export class MemoryStorageD1 extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
     if (!threadId.trim()) {
       throw new MastraError(
@@ -716,20 +717,19 @@ export class MemoryStorageD1 extends MemoryStorage {
       // Determine how many results to return
       // Default pagination is always 40 unless explicitly specified
       let perPage = 40;
-      if (limit !== undefined) {
-        if (limit === false) {
-          // limit: false means get ALL messages
+      if (perPageInput !== undefined) {
+        if (perPageInput === false) {
+          // perPageInput: false means get ALL messages
           perPage = Number.MAX_SAFE_INTEGER;
-        } else if (limit === 0) {
-          // limit: 0 means return zero results
+        } else if (perPageInput === 0) {
+          // perPageInput: 0 means return zero results
           perPage = 0;
-        } else if (typeof limit === 'number' && limit > 0) {
-          perPage = limit;
+        } else if (typeof perPageInput === 'number' && perPageInput > 0) {
+          perPage = perPageInput;
         }
       }
 
-      // Convert offset to page for pagination metadata
-      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
+      const offset = page * perPage;
 
       const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
 
@@ -873,7 +873,8 @@ export class MemoryStorageD1 extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = limit === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
+      const hasMore =
+        perPageInput === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
 
       return {
         messages: finalMessages,
@@ -903,8 +904,8 @@ export class MemoryStorageD1 extends MemoryStorage {
       return {
         messages: [],
         total: 0,
-        page: Math.floor(offset / (limit === false ? Number.MAX_SAFE_INTEGER : limit || 40)),
-        perPage: limit === false ? Number.MAX_SAFE_INTEGER : limit || 40,
+        page,
+        perPage: perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput || 40,
         hasMore: false,
       };
     }

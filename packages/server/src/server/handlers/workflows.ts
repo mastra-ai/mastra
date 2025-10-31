@@ -682,14 +682,14 @@ export async function listWorkflowRunsHandler({
   workflowId,
   fromDate,
   toDate,
-  limit,
-  offset,
+  perPage,
+  page,
   resourceId,
 }: WorkflowContext & {
   fromDate?: Date;
   toDate?: Date;
-  limit?: number;
-  offset?: number;
+  perPage?: number;
+  page?: number;
   resourceId?: string;
 }): Promise<WorkflowRuns> {
   try {
@@ -703,7 +703,7 @@ export async function listWorkflowRunsHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
-    const workflowRuns = (await workflow.listWorkflowRuns({ fromDate, toDate, limit, offset, resourceId })) || {
+    const workflowRuns = (await workflow.listWorkflowRuns({ fromDate, toDate, perPage, page, resourceId })) || {
       runs: [],
       total: 0,
     };
