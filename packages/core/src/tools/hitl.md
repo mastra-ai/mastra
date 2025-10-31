@@ -69,7 +69,7 @@ const findUserTool = createTool({
     }
 
     return {
-      name: resumeData?.name,
+      name: workflow?.resumeData?.name,
       email: 'test@test.com',
     };
   },
