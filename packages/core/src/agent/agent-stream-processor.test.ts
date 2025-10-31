@@ -10,7 +10,8 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
 
   // Test processor that replaces "SENSITIVE" with "[REDACTED]"
   class RedactionProcessor implements Processor {
-    name = 'redaction-processor';
+    readonly id = 'redaction-processor';
+    readonly name = 'Redaction Processor';
 
     async processOutputStream({ part }: any) {
       // Handle both internal format (payload.text) and AISDK format (text)
