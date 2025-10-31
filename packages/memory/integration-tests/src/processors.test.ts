@@ -256,12 +256,7 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       selectBy: { last: 20 },
     });
-    const result4 = await applyInputProcessors(
-      queryResult4.uiMessages,
-      [new ToolCallFilter()],
-      thread.id,
-      resourceId,
-    );
+    const result4 = await applyInputProcessors(queryResult4.uiMessages, [new ToolCallFilter()], thread.id, resourceId);
     expect(result4.length).toBeLessThan(messagesV2.length);
     expect(filterToolCallsByName(result4, 'weather')).toHaveLength(0);
     expect(filterToolResultsByName(result4, 'weather')).toHaveLength(0);
@@ -475,12 +470,7 @@ describe('Memory with Processors', () => {
     });
 
     // For this test, we'll process all messages together
-    const baselineResult = await applyInputProcessors(
-      queryResult.messagesV2,
-      [],
-      threadId,
-      resourceId,
-    );
+    const baselineResult = await applyInputProcessors(queryResult.messagesV2, [], threadId, resourceId);
 
     // There should be at least 6 messages (3 user + 3 assistant responses)
     expect(baselineResult.length).toBeGreaterThanOrEqual(6);
@@ -588,12 +578,7 @@ describe('Memory with Processors', () => {
     });
 
     // Retrieve the message (no TokenLimiter, just get the message back)
-    const result = await applyInputProcessors(
-      queryResult.uiMessages,
-      [],
-      thread.id,
-      resourceId,
-    );
+    const result = await applyInputProcessors(queryResult.uiMessages, [], thread.id, resourceId);
 
     // Should have retrieved the message
     expect(result.length).toBe(1);
