@@ -987,12 +987,14 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         }
       }
 
-      // If perPage is 0, return empty array immediately
-      if (perPage === 0) {
+      // If perPage is 0, skip pagination but still process include messages
+      // Only return early if there are no messages AND no include parameter
+      // When limit: 0 with include, we still need to process semantic recall results
+      if (perPage === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total,
-          page,
+          page: 0,
           perPage: 0,
           hasMore: false,
         };
@@ -1092,6 +1094,17 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
         return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
       });
+
+      // If perPage is 0, return after processing include messages
+      if (perPage === 0) {
+        return {
+          messages: finalMessages,
+          total,
+          page: 0,
+          perPage: 0,
+          hasMore: false,
+        };
+      }
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false

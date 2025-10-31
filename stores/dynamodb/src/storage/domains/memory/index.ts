@@ -446,7 +446,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       let allThreadMessages = results.data
         .map((data: any) => this.parseMessageData(data))
-        .filter((msg: any): msg is MastraMessageV2 => 'content' in msg && typeof msg.content === 'object');
+        .filter((msg: any) => msg && 'content' in msg);
 
       // Apply resourceId filter
       if (resourceId) {

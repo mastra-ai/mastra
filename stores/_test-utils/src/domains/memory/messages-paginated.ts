@@ -14,9 +14,13 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       resetRole();
       // Create messages sequentially to ensure unique timestamps
       for (let i = 0; i < 15; i++) {
-        const message = createSampleMessageV1({ threadId: thread.id, content: `Message ${i + 1}` });
+        const message = createSampleMessageV2({
+          threadId: thread.id,
+          content: { parts: [{ type: 'text', text: `Message ${i + 1}` }] },
+        });
         await storage.saveMessages({
           messages: [message],
+          format: 'v2',
         });
         await new Promise(r => setTimeout(r, 5));
       }
@@ -26,6 +30,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
         limit: 5,
         offset: 0,
       });
+
       expect(page1.messages).toHaveLength(5);
       expect(page1.total).toBe(15);
       expect(page1.page).toBe(0);

@@ -258,18 +258,20 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       }
 
       const dataResult = await cursor.toArray();
+      const messages: any[] = dataResult.map((row: any) => this.parseRow(row));
 
-      // If perPage is 0, return empty array regardless of query results
-      if (perPage === 0) {
+      // If perPage is 0, skip paginated messages but still process include messages
+      // Only return early if there are no messages AND no include parameter
+      // When limit: 0 with include, we still need to process semantic recall results
+      if (perPage === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total,
-          page,
+          page: 0,
           perPage: 0,
           hasMore: false,
         };
       }
-      const messages: any[] = dataResult.map((row: any) => this.parseRow(row));
 
       // Only return early if there are no messages AND no include parameter
       // When limit: 0 with include, we still need to process semantic recall results
@@ -297,6 +299,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
             }
           }
         }
+      }
+
+      // If perPage is 0, return after processing include messages
+      if (perPage === 0) {
+        return {
+          messages,
+          total,
+          page: 0,
+          perPage: 0,
+          hasMore: false,
+        };
       }
 
       // Use MessageList for proper deduplication and format conversion to V2
