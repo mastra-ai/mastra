@@ -22,7 +22,7 @@ import type { ZodSchema } from 'zod';
 import type { MessageList } from '../../agent/types';
 import type { TracingContext, TracingProperties } from '../../ai-tracing';
 import type { OutputProcessor } from '../../processors';
-import type { RuntimeContext } from '../../runtime-context';
+import type { RequestContext } from '../../request-context';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
 import type { inferOutput, ScoringProperties, TripwireProperties } from './shared.types';
 
@@ -32,7 +32,7 @@ type MastraCustomLLMOptions = {
   tools?: Record<string, Tool>;
   threadId?: string;
   resourceId?: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   tracingContext: TracingContext;
   runId?: string;
   outputProcessors?: OutputProcessor[];

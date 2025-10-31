@@ -30,7 +30,7 @@ export class ResponseValidator implements Processor {
       .map((msg) =>
         msg.content.parts
           .filter((part) => part.type === "text")
-          .map((part) => (part as any).text)
+          .map((part) => (part.type === "text" ? part.text : ""))
           .join(""),
       )
       .join("");
@@ -219,7 +219,7 @@ export class AdvancedResponseValidator implements Processor {
       .map((msg) =>
         msg.content.parts
           .filter((part) => part.type === "text")
-          .map((part) => (part as any).text)
+          .map((part) => (part.type === "text" ? part.text : ""))
           .join(""),
       )
       .join("");

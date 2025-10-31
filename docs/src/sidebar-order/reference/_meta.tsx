@@ -9,10 +9,6 @@ const meta: Meta = {
   cli: "CLI",
   agents: "Agents",
   workflows: "Workflows",
-  legacyWorkflows: {
-    title: "Legacy Workflows",
-    display: "hidden",
-  },
   streaming: "Streaming",
   tools: "Tools & MCP",
   memory: "Memory",

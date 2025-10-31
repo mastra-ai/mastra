@@ -28,8 +28,8 @@ const mockLogger: IMastraLogger = {
   error: vi.fn(),
   trackException: vi.fn(),
   getTransports: vi.fn(() => []),
-  getLogs: vi.fn(() => []),
-  getLogsByRunId: vi.fn(() => []),
+  listLogs: vi.fn(() => []),
+  listLogsByRunId: vi.fn(() => []),
 } as any;
 
 describe('ProcessorRunner', () => {

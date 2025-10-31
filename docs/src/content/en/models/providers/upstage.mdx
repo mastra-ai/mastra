@@ -1,5 +1,5 @@
 ---
-title: "Providers: Upstage | Models | Mastra"
+title: "Upstage | Models | Mastra"
 description: "Use Upstage models with Mastra. 2 models available."
 ---
 
@@ -7,6 +7,8 @@ description: "Use Upstage models with Mastra. 2 models available."
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
 import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
 
 # <img src="https://models.dev/logos/upstage.svg" alt="Upstage logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Upstage
 
@@ -24,7 +26,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "upstage/solar-mini",
+  model: "upstage/solar-mini"
 });
 
 // Generate a response
@@ -47,31 +49,31 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-    {
-      model: "upstage/solar-mini",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: false,
-      contextWindow: 32768,
-      maxOutput: 4096,
-      inputCost: 0.15,
-      outputCost: 0.15,
-    },
-    {
-      model: "upstage/solar-pro2",
-      imageInput: false,
-      audioInput: false,
-      videoInput: false,
-      toolUsage: true,
-      reasoning: true,
-      contextWindow: 65536,
-      maxOutput: 8192,
-      inputCost: 0.25,
-      outputCost: 0.25,
-    },
-  ]}
+  {
+    "model": "upstage/solar-mini",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 4096,
+    "inputCost": 0.15,
+    "outputCost": 0.15
+  },
+  {
+    "model": "upstage/solar-pro2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 8192,
+    "inputCost": 0.25,
+    "outputCost": 0.25
+  }
+]}
 />
 
 ## Advanced Configuration
@@ -86,9 +88,9 @@ const agent = new Agent({
     id: "upstage/solar-mini",
     apiKey: process.env.UPSTAGE_API_KEY,
     headers: {
-      "X-Custom-Header": "value",
-    },
-  },
+      "X-Custom-Header": "value"
+    }
+  }
 });
 ```
 
@@ -97,9 +99,13 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced ? "upstage/solar-pro2" : "upstage/solar-mini";
-  },
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "upstage/solar-pro2"
+      : "upstage/solar-mini";
+  }
 });
 ```
+
+

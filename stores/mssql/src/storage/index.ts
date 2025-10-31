@@ -5,7 +5,6 @@ import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
-  EvalRow,
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
@@ -13,7 +12,6 @@ import type {
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
-  PaginationArgs,
   StoragePagination,
   ThreadSortOptions,
   StorageDomains,
@@ -24,10 +22,10 @@ import type {
   CreateIndexOptions,
   IndexInfo,
   StorageIndexStats,
+  StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
-import { LegacyEvalsMSSQL } from './domains/legacy-evals';
 import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
 import { StoreOperationsMSSQL } from './domains/operations';
@@ -91,7 +89,6 @@ export class MSSQLStore extends MastraStorage {
               options: config.options || { encrypt: true, trustServerCertificate: true },
             });
 
-      const legacyEvals = new LegacyEvalsMSSQL({ pool: this.pool, schema: this.schema });
       const operations = new StoreOperationsMSSQL({ pool: this.pool, schemaName: this.schema });
       const scores = new ScoresMSSQL({ pool: this.pool, operations, schema: this.schema });
       const workflows = new WorkflowsMSSQL({ pool: this.pool, operations, schema: this.schema });
@@ -102,7 +99,6 @@ export class MSSQLStore extends MastraStorage {
         operations,
         scores,
         workflows,
-        legacyEvals,
         memory,
         observability,
       };
@@ -177,20 +173,6 @@ export class MSSQLStore extends MastraStorage {
       aiTracing: true,
       indexManagement: true,
     };
-  }
-
-  /** @deprecated use getEvals instead */
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
-  }
-
-  async getEvals(
-    options: {
-      agentName?: string;
-      type?: 'test' | 'live';
-    } & PaginationArgs = {},
-  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
   }
 
   async createTable({
@@ -293,18 +275,6 @@ export class MSSQLStore extends MastraStorage {
     return this.stores.memory.getMessages(args);
   }
 
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
-  async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    return this.stores.memory.getMessagesById({ messageIds, format });
-  }
-
   public async getMessagesPaginated(
     args: StorageGetMessagesArg & {
       format?: 'v1' | 'v2';
@@ -367,15 +337,15 @@ export class MSSQLStore extends MastraStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
+    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
   }
 
   async updateWorkflowState({
@@ -420,22 +390,15 @@ export class MSSQLStore extends MastraStorage {
     return this.stores.workflows.loadWorkflowSnapshot({ workflowName, runId });
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.getWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
+    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
   }
 
   async getWorkflowRunById({

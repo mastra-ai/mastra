@@ -28,7 +28,7 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     input: parseField(row.input),
     output: parseField(row.output),
     additionalContext: parseField(row.additionalContext),
-    runtimeContext: parseField(row.runtimeContext),
+    requestContext: parseField(row.requestContext),
     entity: parseField(row.entity),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

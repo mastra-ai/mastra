@@ -1,5 +1,5 @@
 import type { AgentExecutionOptions } from '@mastra/core/agent';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import type { OutputSchema } from '@mastra/core/stream';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
@@ -123,7 +123,7 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
     handler: async c => {
       const { messages, ...rest } = await c.req.json();
       const mastra = c.get('mastra');
-      const runtimeContext = (c as any).get('runtimeContext') as RuntimeContext | undefined;
+      const requestContext = (c as any).get('requestContext') as RequestContext | undefined;
 
       let agentToUse: string | undefined = agent;
       if (!agent) {
@@ -139,10 +139,10 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
           );
       }
 
-      if (runtimeContext && defaultOptions?.runtimeContext) {
+      if (requestContext && defaultOptions?.requestContext) {
         mastra
           .getLogger()
-          ?.warn(`"runtimeContext" set in the route options will be overridden by the request's "runtimeContext".`);
+          ?.warn(`"requestContext" set in the route options will be overridden by the request's "requestContext".`);
       }
 
       if (!agentToUse) {
@@ -157,7 +157,7 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
       const result = await agentObj.stream<OUTPUT, 'mastra'>(messages, {
         ...defaultOptions,
         ...rest,
-        runtimeContext: runtimeContext || defaultOptions?.runtimeContext,
+        requestContext: requestContext || defaultOptions?.requestContext,
       });
 
       const uiMessageStream = createUIMessageStream({

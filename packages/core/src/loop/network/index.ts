@@ -6,7 +6,7 @@ import { MessageList } from '../../agent/message-list';
 import type { MastraMessageV2, MessageListInput } from '../../agent/message-list';
 import type { TracingContext } from '../../ai-tracing/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
-import type { RuntimeContext } from '../../runtime-context';
+import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
@@ -20,7 +20,7 @@ async function getMemoryInstructions(memoryToUse?: MastraMemory) {
     return { memoryTools: {}, memoryInstructions: '' };
   }
 
-  const memoryTools = await memoryToUse?.getTools?.();
+  const memoryTools = await memoryToUse?.listTools?.();
 
   const memoryToolList = Object.entries({ ...memoryTools })
     .map(([name, tool]) => {
@@ -52,13 +52,13 @@ async function getMemoryInstructions(memoryToUse?: MastraMemory) {
   return { memoryTools, memoryInstructions };
 }
 
-async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtimeContext: RuntimeContext }) {
-  const instructionsToUse = await agent.getInstructions({ runtimeContext: runtimeContext });
-  const agentsToUse = await agent.listAgents({ runtimeContext: runtimeContext });
-  const workflowsToUse = await agent.getWorkflows({ runtimeContext: runtimeContext });
-  const toolsToUse = await agent.getTools({ runtimeContext: runtimeContext });
-  const model = await agent.getModel({ runtimeContext: runtimeContext });
-  const memoryToUse = await agent.getMemory({ runtimeContext: runtimeContext });
+async function getRoutingAgent({ requestContext, agent }: { agent: Agent; requestContext: RequestContext }) {
+  const instructionsToUse = await agent.getInstructions({ requestContext: requestContext });
+  const agentsToUse = await agent.listAgents({ requestContext: requestContext });
+  const workflowsToUse = await agent.listWorkflows({ requestContext: requestContext });
+  const toolsToUse = await agent.listTools({ requestContext: requestContext });
+  const model = await agent.getModel({ requestContext: requestContext });
+  const memoryToUse = await agent.getMemory({ requestContext: requestContext });
 
   const agentList = Object.entries(agentsToUse)
     .map(([name, agent]) => {
@@ -150,7 +150,7 @@ export async function prepareMemoryStep({
   resourceId,
   messages,
   routingAgent,
-  runtimeContext,
+  requestContext,
   generateId,
   tracingContext,
   memoryConfig,
@@ -159,12 +159,12 @@ export async function prepareMemoryStep({
   resourceId: string;
   messages: MessageListInput;
   routingAgent: Agent;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   generateId: () => string;
   tracingContext?: TracingContext;
   memoryConfig?: any;
 }) {
-  const memory = await routingAgent.getMemory({ runtimeContext });
+  const memory = await routingAgent.getMemory({ requestContext });
   let thread = await memory?.getThreadById({ threadId });
   if (!thread) {
     thread = await memory?.createThread({
@@ -236,7 +236,7 @@ export async function prepareMemoryStep({
         routingAgent
           .genTitle(
             userMessage,
-            runtimeContext,
+            requestContext,
             tracingContext || { currentSpan: undefined },
             titleModel,
             titleInstructions,
@@ -263,14 +263,14 @@ export async function prepareMemoryStep({
 
 export async function createNetworkLoop({
   networkName,
-  runtimeContext,
+  requestContext,
   runId,
   agent,
   generateId,
   routingAgentOptions,
 }: {
   networkName: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   runId: string;
   agent: Agent;
   routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'modelSettings'>;
@@ -308,9 +308,9 @@ export async function createNetworkLoop({
         completionReason: z.string(),
       });
 
-      const routingAgent = await getRoutingAgent({ runtimeContext, agent });
+      const routingAgent = await getRoutingAgent({ requestContext, agent });
 
-      const memoryToUse = await agent.getMemory({ runtimeContext: runtimeContext });
+      const memoryToUse = await agent.getMemory({ requestContext });
       const { memoryInstructions } = await getMemoryInstructions(memoryToUse);
 
       let completionResult;
@@ -354,7 +354,7 @@ export async function createNetworkLoop({
           structuredOutput: {
             schema: completionSchema,
           },
-          runtimeContext: runtimeContext,
+          requestContext: requestContext,
           maxSteps: 1,
           memory: {
             thread: initData?.threadId ?? runId,
@@ -420,7 +420,7 @@ export async function createNetworkLoop({
             runId,
           });
 
-          const memory = await agent.getMemory({ runtimeContext: runtimeContext });
+          const memory = await agent.getMemory({ requestContext: requestContext });
           await memory?.saveMessages({
             messages: [
               {
@@ -495,8 +495,8 @@ export async function createNetworkLoop({
             selectionReason: z.string().describe('The reason you picked the primitive'),
           }),
         },
-        runtimeContext: runtimeContext,
-        maxSteps: 10,
+        requestContext: requestContext,
+        maxSteps: 1,
         memory: {
           thread: initData?.threadId ?? runId,
           resource: initData?.threadResourceId ?? networkName,
@@ -507,7 +507,7 @@ export async function createNetworkLoop({
 
       console.log('\n=== ROUTING AGENT CALL (iteration', iterationCount, ') ===');
 
-      const routingAgentTools = await routingAgent.getTools({ runtimeContext });
+      const routingAgentTools = await routingAgent.listTools({ requestContext });
       console.log('Routing agent tools:', Object.keys(routingAgentTools || {}));
 
       const result = await tryGenerateWithJsonFallback(routingAgent, prompt, options);
@@ -581,7 +581,7 @@ export async function createNetworkLoop({
       iteration: z.number(),
     }),
     execute: async ({ inputData, writer, getInitData }) => {
-      const agentsMap = await agent.listAgents({ runtimeContext });
+      const agentsMap = await agent.listAgents({ requestContext });
 
       const agentId = inputData.primitiveId;
 
@@ -614,7 +614,7 @@ export async function createNetworkLoop({
       const result = await agentForStep.stream(inputData.prompt, {
         // resourceId: inputData.resourceId,
         // threadId: inputData.threadId,
-        runtimeContext: runtimeContext,
+        requestContext: requestContext,
         runId,
       });
 
@@ -627,7 +627,7 @@ export async function createNetworkLoop({
         });
       }
 
-      const memory = await agent.getMemory({ runtimeContext: runtimeContext });
+      const memory = await agent.getMemory({ requestContext: requestContext });
 
       const initData = await getInitData();
       const messages = result.messageList.get.all.v1();
@@ -712,7 +712,7 @@ export async function createNetworkLoop({
       iteration: z.number(),
     }),
     execute: async ({ inputData, writer, getInitData }) => {
-      const workflowsMap = await agent.getWorkflows({ runtimeContext: runtimeContext });
+      const workflowsMap = await agent.listWorkflows({ requestContext: requestContext });
       const workflowId = inputData.primitiveId;
       const wf = workflowsMap[workflowId];
 
@@ -770,7 +770,7 @@ export async function createNetworkLoop({
 
       const stream = run.streamVNext({
         inputData: input,
-        runtimeContext: runtimeContext,
+        requestContext: requestContext,
       });
 
       // let result: any;
@@ -808,7 +808,7 @@ export async function createNetworkLoop({
         },
       });
 
-      const memory = await agent.getMemory({ runtimeContext: runtimeContext });
+      const memory = await agent.getMemory({ requestContext: requestContext });
       const initData = await getInitData();
       await memory?.saveMessages({
         messages: [
@@ -872,9 +872,9 @@ export async function createNetworkLoop({
     execute: async ({ inputData, getInitData, writer }) => {
       const initData = await getInitData();
 
-      const agentTools = await agent.getTools({ runtimeContext });
-      const memory = await agent.getMemory({ runtimeContext });
-      const memoryTools = await memory?.getTools?.();
+      const agentTools = await agent.listTools({ requestContext });
+      const memory = await agent.getMemory({ requestContext });
+      const memoryTools = await memory?.listTools?.();
       const toolsMap = { ...agentTools, ...memoryTools };
 
       const toolId = inputData.primitiveId;
@@ -963,7 +963,7 @@ export async function createNetworkLoop({
 
       const finalResult = await tool.execute(
         {
-          runtimeContext,
+          requestContext,
           mastra: agent.getMastraInstance(),
           resourceId: initData.threadResourceId || networkName,
           threadId: initData.threadId,
@@ -1166,7 +1166,7 @@ export async function networkLoop<
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
 >({
   networkName,
-  runtimeContext,
+  requestContext,
   runId,
   routingAgent,
   routingAgentOptions,
@@ -1177,7 +1177,7 @@ export async function networkLoop<
   messages,
 }: {
   networkName: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   runId: string;
   routingAgent: Agent;
   routingAgentOptions?: AgentExecutionOptions<OUTPUT, FORMAT>;
@@ -1188,7 +1188,7 @@ export async function networkLoop<
   messages: MessageListInput;
 }) {
   // Validate that memory is available before starting the network
-  const memoryToUse = await routingAgent.getMemory({ runtimeContext });
+  const memoryToUse = await routingAgent.getMemory({ requestContext });
 
   if (!memoryToUse) {
     throw new MastraError({
@@ -1206,7 +1206,7 @@ export async function networkLoop<
 
   const { networkWorkflow } = await createNetworkLoop({
     networkName,
-    runtimeContext,
+    requestContext,
     runId,
     agent: routingAgent,
     routingAgentOptions: routingAgentOptionsWithoutMemory,
@@ -1274,7 +1274,7 @@ export async function networkLoop<
   });
 
   const { thread } = await prepareMemoryStep({
-    runtimeContext: runtimeContext,
+    requestContext: requestContext,
     threadId: threadId || run.runId,
     resourceId: resourceId || networkName,
     messages,
