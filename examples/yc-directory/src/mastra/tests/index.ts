@@ -1,5 +1,5 @@
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
-import { runExperiment } from '@mastra/core/scores';
+import { runExperiment } from '@mastra/core/evals';
 import { ycAgent } from '../agents';
 
 const scorer = createAnswerRelevancyScorer({

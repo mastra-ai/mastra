@@ -4,10 +4,10 @@ import type { MastraStorage, AITraceRecord } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import * as errorHandler from './error';
-import { getAITraceHandler, getAITracesPaginatedHandler, getScoresBySpan, scoreTracesHandler } from './observability';
+import { getAITraceHandler, getAITracesPaginatedHandler, listScoresBySpan, scoreTracesHandler } from './observability';
 
 // Mock scoreTraces
-vi.mock('@mastra/core/scores/scoreTraces', () => ({
+vi.mock('@mastra/core/evals/scoreTraces', () => ({
   scoreTraces: vi.fn(),
 }));
 
@@ -430,7 +430,7 @@ describe('Observability Handlers', () => {
     let scoreTracesMock: ReturnType<typeof vi.fn>;
 
     beforeEach(async () => {
-      const scoresModule = vi.mocked(await import('@mastra/core/scores/scoreTraces'));
+      const scoresModule = vi.mocked(await import('@mastra/core/evals/scoreTraces'));
       scoreTracesMock = scoresModule.scoreTraces as any;
       scoreTracesMock.mockClear();
     });
@@ -614,7 +614,7 @@ describe('Observability Handlers', () => {
     });
   });
 
-  describe('getScoresBySpan', () => {
+  describe('listScoresBySpan', () => {
     it('should get scores by span successfully', async () => {
       const mockScores = [
         createSampleScore({ traceId: 'test-trace-1', spanId: 'test-span-1', scorerId: 'test-scorer' }),
@@ -622,7 +622,7 @@ describe('Observability Handlers', () => {
       const pagination = { page: 0, perPage: 10 };
 
       // Mock the storage method to return our test data
-      mockStorage.getScoresBySpan = vi.fn().mockResolvedValue({
+      mockStorage.listScoresBySpan = vi.fn().mockResolvedValue({
         scores: mockScores,
         pagination: {
           total: 1,
@@ -632,14 +632,14 @@ describe('Observability Handlers', () => {
         },
       });
 
-      const result = await getScoresBySpan({
+      const result = await listScoresBySpan({
         mastra: mockMastra,
         traceId: 'test-trace-1',
         spanId: 'test-span-1',
         pagination,
       });
 
-      expect(mockStorage.getScoresBySpan).toHaveBeenCalledWith({
+      expect(mockStorage.listScoresBySpan).toHaveBeenCalledWith({
         traceId: 'test-trace-1',
         spanId: 'test-span-1',
         pagination,
@@ -662,7 +662,7 @@ describe('Observability Handlers', () => {
       });
 
       await expect(
-        getScoresBySpan({
+        listScoresBySpan({
           mastra: mastraWithoutStorage,
           traceId: 'test-trace-1',
           spanId: 'test-span-1',
@@ -678,7 +678,7 @@ describe('Observability Handlers', () => {
       });
 
       await expect(
-        getScoresBySpan({
+        listScoresBySpan({
           mastra: mastraWithoutStorage,
           traceId: 'test-trace-1',
           spanId: 'test-span-1',
@@ -694,10 +694,10 @@ describe('Observability Handlers', () => {
         status: 404,
       };
 
-      mockStorage.getScoresBySpan = vi.fn().mockRejectedValue(apiError);
+      mockStorage.listScoresBySpan = vi.fn().mockRejectedValue(apiError);
 
       try {
-        await getScoresBySpan({
+        await listScoresBySpan({
           mastra: mockMastra,
           traceId: 'test-trace-1',
           spanId: 'test-span-1',
@@ -713,7 +713,7 @@ describe('Observability Handlers', () => {
       const pagination = { page: 0, perPage: 10 };
 
       await expect(
-        getScoresBySpan({
+        listScoresBySpan({
           mastra: mockMastra,
           traceId: '',
           spanId: 'test-span-1',
@@ -726,7 +726,7 @@ describe('Observability Handlers', () => {
       const pagination = { page: 0, perPage: 10 };
 
       await expect(
-        getScoresBySpan({
+        listScoresBySpan({
           mastra: mockMastra,
           traceId: 'test-trace-1',
           spanId: '',
@@ -739,7 +739,7 @@ describe('Observability Handlers', () => {
       const pagination = { page: 0, perPage: 10 };
 
       await expect(
-        getScoresBySpan({
+        listScoresBySpan({
           mastra: mockMastra,
           traceId: '',
           spanId: '',

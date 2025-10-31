@@ -1,5 +1,5 @@
+import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 import type { StoragePagination } from '@mastra/core/storage';
 import type { Context } from '../types';
 import { handleError } from './error';
@@ -114,13 +114,13 @@ export async function getScorerHandler({
   return scorer;
 }
 
-export async function getScoresByRunIdHandler({
+export async function listScoresByRunIdHandler({
   mastra,
   runId,
   pagination,
 }: Context & { runId: string; pagination: StoragePagination }) {
   try {
-    const scoreResults = (await mastra.getStorage()?.getScoresByRunId?.({
+    const scoreResults = (await mastra.getStorage()?.listScoresByRunId?.({
       runId,
       pagination,
     })) || { pagination: { total: 0, page: 0, perPage: 0, hasMore: false }, scores: [] };
@@ -133,7 +133,7 @@ export async function getScoresByRunIdHandler({
   }
 }
 
-export async function getScoresByScorerIdHandler({
+export async function listScoresByScorerIdHandler({
   mastra,
   scorerId,
   pagination,
@@ -141,7 +141,7 @@ export async function getScoresByScorerIdHandler({
   entityType,
 }: Context & { scorerId: string; pagination: StoragePagination; entityId?: string; entityType?: string }) {
   try {
-    const scoreResults = (await mastra.getStorage()?.getScoresByScorerId?.({
+    const scoreResults = (await mastra.getStorage()?.listScoresByScorerId?.({
       scorerId,
       pagination,
       entityId,
@@ -156,7 +156,7 @@ export async function getScoresByScorerIdHandler({
   }
 }
 
-export async function getScoresByEntityIdHandler({
+export async function listScoresByEntityIdHandler({
   mastra,
   entityId,
   entityType,
@@ -173,7 +173,7 @@ export async function getScoresByEntityIdHandler({
       entityIdToUse = workflow.id;
     }
 
-    const scoreResults = (await mastra.getStorage()?.getScoresByEntityId?.({
+    const scoreResults = (await mastra.getStorage()?.listScoresByEntityId?.({
       entityId: entityIdToUse,
       entityType,
       pagination,

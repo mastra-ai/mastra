@@ -7,7 +7,7 @@ import {
 } from '@/components/ui/elements';
 import { ScoreDialog } from '@/domains/scores';
 import { useLinkComponent } from '@/lib/framework';
-import { ClientScoreRowData, GetScoresResponse } from '@mastra/client-js';
+import { ClientScoreRowData, ListScoresResponse } from '@mastra/client-js';
 import { isToday, format } from 'date-fns';
 import { useEffect, useState } from 'react';
 
@@ -20,7 +20,7 @@ export const traceScoresListColumns = [
 ];
 
 type SpanScoreListProps = {
-  scoresData?: GetScoresResponse | null;
+  scoresData?: ListScoresResponse | null;
   isLoadingScoresData?: boolean;
   initialScoreId?: string;
   traceId?: string;

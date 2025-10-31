@@ -1,4 +1,4 @@
-import { createScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
 import { SequenceMatcher } from 'difflib';
 
 export function createTextualDifferenceScorer() {

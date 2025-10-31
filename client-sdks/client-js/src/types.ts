@@ -9,6 +9,7 @@ import type {
   AgentInstructions,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
@@ -20,7 +21,6 @@ import type {
   StorageThreadType,
 } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 
 import type {
   AITraceRecord,
@@ -440,7 +440,7 @@ export interface GetScoresByEntityIdParams {
   perPage?: number;
 }
 
-export interface GetScoresBySpanParams {
+export interface ListScoresBySpanParams {
   traceId: string;
   spanId: string;
   page?: number;
@@ -451,7 +451,7 @@ export interface SaveScoreParams {
   score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>;
 }
 
-export interface GetScoresResponse {
+export interface ListScoresResponse {
   pagination: {
     total: number;
     page: number;

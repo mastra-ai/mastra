@@ -1,4 +1,4 @@
-import { scoreTraces } from '@mastra/core/scores/scoreTraces';
+import { scoreTraces } from '@mastra/core/evals/scoreTraces';
 import type { AITracesPaginatedArg, StoragePagination } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
@@ -142,7 +142,7 @@ export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
   }
 }
 
-export async function getScoresBySpan({
+export async function listScoresBySpan({
   mastra,
   traceId,
   spanId,
@@ -158,7 +158,7 @@ export async function getScoresBySpan({
       throw new HTTPException(400, { message: 'Trace ID and span ID are required' });
     }
 
-    return await storage.getScoresBySpan({ traceId, spanId, pagination });
+    return await storage.listScoresBySpan({ traceId, spanId, pagination });
   } catch (error) {
     return handleError(error, 'Error getting scores by span');
   }

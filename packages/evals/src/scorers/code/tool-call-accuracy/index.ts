@@ -1,4 +1,4 @@
-import { createScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
 import { extractToolCalls } from '../../utils';
 interface ToolCallAccuracyOptions {
   expectedTool?: string;

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createScorer } from '../../evals';
+import { runScorer } from '../../evals/hooks';
 import { Mastra } from '../../mastra';
-import { createScorer } from '../../scores';
-import { runScorer } from '../../scores/hooks';
 import { Agent } from '../agent';
 import { getDummyResponseModel } from './mock-model';
 
-vi.mock('../../scores/hooks', () => ({
+vi.mock('../../evals/hooks', () => ({
   runScorer: vi.fn(),
 }));
 

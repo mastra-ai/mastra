@@ -1,10 +1,10 @@
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData } from '@mastra/core/evals';
 import type { StoragePagination } from '@mastra/core/storage';
 import {
   listScorersHandler as getOriginalListScorersHandler,
-  getScoresByRunIdHandler as getOriginalScoresByRunIdHandler,
-  getScoresByScorerIdHandler as getOriginalScoresByScorerIdHandler,
-  getScoresByEntityIdHandler as getOriginalScoresByEntityIdHandler,
+  listScoresByRunIdHandler as getOriginalScoresByRunIdHandler,
+  listScoresByScorerIdHandler as getOriginalScoresByScorerIdHandler,
+  listScoresByEntityIdHandler as getOriginalScoresByEntityIdHandler,
   saveScoreHandler as getOriginalSaveScoreHandler,
   getScorerHandler as getOriginalScorerHandler,
 } from '@mastra/server/handlers/scores';

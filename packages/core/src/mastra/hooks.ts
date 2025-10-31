@@ -1,8 +1,8 @@
 import pMap from 'p-map';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
+import { saveScorePayloadSchema } from '../evals';
+import type { ScoringHookInput } from '../evals/types';
 import type { Mastra } from '../mastra';
-import { saveScorePayloadSchema } from '../scores';
-import type { ScoringHookInput } from '../scores/types';
 import type { MastraStorage } from '../storage';
 
 export function createOnScorerHook(mastra: Mastra) {

@@ -256,10 +256,10 @@ MSSQLStore supports multiple connection methods:
 
 - `saveScore(score)`: Save evaluation score
 - `getScoreById({ id })`: Get score by ID
-- `getScoresByScorerId({ scorerId, pagination, entityId?, entityType?, source? })`: Get scores by scorer
-- `getScoresByRunId({ runId, pagination })`: Get scores for a run
-- `getScoresByEntityId({ entityId, entityType, pagination })`: Get scores for an entity
-- `getScoresBySpan({ traceId, spanId, pagination })`: Get scores for a trace span
+- `listScoresByScorerId({ scorerId, pagination, entityId?, entityType?, source? })`: Get scores by scorer
+- `listScoresByRunId({ runId, pagination })`: Get scores for a run
+- `listScoresByEntityId({ entityId, entityType, pagination })`: Get scores for an entity
+- `listScoresBySpan({ traceId, spanId, pagination })`: Get scores for a trace span
 
 ### Traces (Legacy)
 

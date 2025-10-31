@@ -30,10 +30,10 @@ import type {
   McpServerToolListResponse,
   GetScorerResponse,
   GetScoresByScorerIdParams,
-  GetScoresResponse,
+  ListScoresResponse,
   GetScoresByRunIdParams,
   GetScoresByEntityIdParams,
-  GetScoresBySpanParams,
+  ListScoresBySpanParams,
   SaveScoreParams,
   SaveScoreResponse,
   GetAITracesResponse,
@@ -540,7 +540,7 @@ export class MastraClient extends BaseResource {
     return this.request(`/api/scores/scorers/${encodeURIComponent(scorerId)}`);
   }
 
-  public getScoresByScorerId(params: GetScoresByScorerIdParams): Promise<GetScoresResponse> {
+  public listScoresByScorerId(params: GetScoresByScorerIdParams): Promise<ListScoresResponse> {
     const { page, perPage, scorerId, entityId, entityType } = params;
     const searchParams = new URLSearchParams();
 
@@ -566,7 +566,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing run ID and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public getScoresByRunId(params: GetScoresByRunIdParams): Promise<GetScoresResponse> {
+  public listScoresByRunId(params: GetScoresByRunIdParams): Promise<ListScoresResponse> {
     const { runId, page, perPage } = params;
     const searchParams = new URLSearchParams();
 
@@ -586,7 +586,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing entity ID, type, and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public getScoresByEntityId(params: GetScoresByEntityIdParams): Promise<GetScoresResponse> {
+  public listScoresByEntityId(params: GetScoresByEntityIdParams): Promise<ListScoresResponse> {
     const { entityId, entityType, page, perPage } = params;
     const searchParams = new URLSearchParams();
 
@@ -623,8 +623,8 @@ export class MastraClient extends BaseResource {
     return this.observability.getTraces(params);
   }
 
-  getScoresBySpan(params: GetScoresBySpanParams): Promise<GetScoresResponse> {
-    return this.observability.getScoresBySpan(params);
+  listScoresBySpan(params: ListScoresBySpanParams): Promise<ListScoresResponse> {
+    return this.observability.listScoresBySpan(params);
   }
 
   score(params: {

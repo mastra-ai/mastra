@@ -2,8 +2,8 @@ import type { MastraMessageContentV2, MastraMessageV2 } from '../agent';
 import type { TracingStrategy } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../evals';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../scores';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 
 import {
@@ -94,7 +94,7 @@ export abstract class MastraStorage extends MastraBase {
     deleteMessages: boolean;
     aiTracing?: boolean;
     indexManagement?: boolean;
-    getScoresBySpan?: boolean;
+    listScoresBySpan?: boolean;
   } {
     return {
       selectByIncludeResourceScope: false,
@@ -104,7 +104,7 @@ export abstract class MastraStorage extends MastraBase {
       deleteMessages: false,
       aiTracing: false,
       indexManagement: false,
-      getScoresBySpan: false,
+      listScoresBySpan: false,
     };
   }
 
@@ -481,12 +481,12 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract saveScore(score: ValidatedSaveScorePayload): Promise<{ score: ScoreRowData }>;
 
-  abstract getScoresByScorerId({
+  abstract listScoresByScorerId({
     scorerId,
-    pagination,
+    source,
     entityId,
     entityType,
-    source,
+    pagination,
   }: {
     scorerId: string;
     pagination: StoragePagination;
@@ -495,7 +495,7 @@ export abstract class MastraStorage extends MastraBase {
     source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
 
-  abstract getScoresByRunId({
+  abstract listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -503,7 +503,7 @@ export abstract class MastraStorage extends MastraBase {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
 
-  abstract getScoresByEntityId({
+  abstract listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -513,7 +513,7 @@ export abstract class MastraStorage extends MastraBase {
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination: _pagination,

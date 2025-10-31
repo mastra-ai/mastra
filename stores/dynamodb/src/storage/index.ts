@@ -2,9 +2,9 @@ import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType, MastraMessageV2, MastraMessageV1 } from '@mastra/core/memory';
 
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
   StorageGetMessagesArg,
@@ -114,7 +114,7 @@ export class DynamoDBStore extends MastraStorage {
       hasColumn: false,
       createTable: false,
       deleteMessages: false,
-      getScoresBySpan: true,
+      listScoresBySpan: true,
     };
   }
 
@@ -435,17 +435,17 @@ export class DynamoDBStore extends MastraStorage {
     return this.stores.scores.saveScore(_score);
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId: _runId,
     pagination: _pagination,
   }: {
     runId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByRunId({ runId: _runId, pagination: _pagination });
+    return this.stores.scores.listScoresByRunId({ runId: _runId, pagination: _pagination });
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId: _entityId,
     entityType: _entityType,
     pagination: _pagination,
@@ -454,14 +454,14 @@ export class DynamoDBStore extends MastraStorage {
     entityId: string;
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByEntityId({
+    return this.stores.scores.listScoresByEntityId({
       entityId: _entityId,
       entityType: _entityType,
       pagination: _pagination,
     });
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     source,
     entityId,
@@ -474,10 +474,10 @@ export class DynamoDBStore extends MastraStorage {
     source?: ScoringSource;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByScorerId({ scorerId, source, entityId, entityType, pagination });
+    return this.stores.scores.listScoresByScorerId({ scorerId, source, entityId, entityType, pagination });
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,
@@ -486,6 +486,6 @@ export class DynamoDBStore extends MastraStorage {
     spanId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
+    return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
   }
 }

@@ -10,11 +10,11 @@ The `runExperiment` function enables batch evaluation of agents and workflows by
 ## Usage Example
 
 ```typescript
-import { runExperiment } from "@mastra/core/scores";
+import { runEvals } from "@mastra/core/evals";
 import { myAgent } from "./agents/my-agent";
 import { myScorer1, myScorer2 } from "./scorers";
 
-const result = await runExperiment({
+const result = await runEvals({
   target: myAgent,
   data: [
     { input: "What is machine learning?" },
@@ -157,8 +157,8 @@ For workflows, you can specify scorers at different levels using `WorkflowScorer
 ### Agent Evaluation
 
 ```typescript
-import { runExperiment } from "@mastra/core/scores";
-import { createScorer } from "@mastra/core/scores";
+import { runExperiment } from "@mastra/core/evals";
+import { createScorer } from "@mastra/core/evals";
 
 const myScorer = createScorer({
   name: "My Scorer",

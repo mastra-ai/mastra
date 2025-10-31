@@ -10,6 +10,14 @@ import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
 import type { AISpan, TracingContext, TracingOptions, TracingProperties } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import type {
+  ScorerRunInputForAgent,
+  ScorerRunOutputForAgent,
+  MastraScorers,
+  MastraScorer,
+  ScoringSamplingConfig,
+} from '../evals';
+import { runScorer } from '../evals/hooks';
 import { resolveModelConfig } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type {
@@ -41,14 +49,6 @@ import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext } from '../request-context';
-import type {
-  ScorerRunInputForAgent,
-  ScorerRunOutputForAgent,
-  MastraScorers,
-  MastraScorer,
-  ScoringSamplingConfig,
-} from '../scores';
-import { runScorer } from '../scores/hooks';
 import type { AISDKV5OutputStream } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';

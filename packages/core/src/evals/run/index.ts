@@ -8,7 +8,7 @@ import type { WorkflowResult, StepResult } from '../../workflows';
 import type { MastraScorer } from '../base';
 import { ScoreAccumulator } from './scorerAccumulator';
 
-type RunExperimentDataItem<TTarget = unknown> = {
+type RunEvalsDataItem<TTarget = unknown> = {
   input: TTarget extends Workflow<any, any>
     ? any
     : TTarget extends Agent
@@ -24,7 +24,7 @@ type WorkflowScorerConfig = {
   steps?: Record<string, MastraScorer<any, any, any, any>[]>;
 };
 
-type RunExperimentResult = {
+type RunEvalsResult = {
   scores: Record<string, any>;
   summary: {
     totalItems: number;
@@ -32,38 +32,38 @@ type RunExperimentResult = {
 };
 
 // Agent with scorers array
-export function runExperiment<TAgent extends Agent>(config: {
-  data: RunExperimentDataItem<TAgent>[];
+export function runEvals<TAgent extends Agent>(config: {
+  data: RunEvalsDataItem<TAgent>[];
   scorers: MastraScorer<any, any, any, any>[];
   target: TAgent;
   onItemComplete?: (params: {
-    item: RunExperimentDataItem<TAgent>;
+    item: RunEvalsDataItem<TAgent>;
     targetResult: ReturnType<Agent['generate']>;
     scorerResults: Record<string, any>; // Flat structure: { scorerName: result }
   }) => void | Promise<void>;
   concurrency?: number;
-}): Promise<RunExperimentResult>;
+}): Promise<RunEvalsResult>;
 
 // Workflow with scorers array
-export function runExperiment<TWorkflow extends Workflow>(config: {
-  data: RunExperimentDataItem<TWorkflow>[];
+export function runEvals<TWorkflow extends Workflow>(config: {
+  data: RunEvalsDataItem<TWorkflow>[];
   scorers: MastraScorer<any, any, any, any>[];
   target: TWorkflow;
   onItemComplete?: (params: {
-    item: RunExperimentDataItem<TWorkflow>;
+    item: RunEvalsDataItem<TWorkflow>;
     targetResult: WorkflowResult<any, any, any, any>;
     scorerResults: Record<string, any>; // Flat structure: { scorerName: result }
   }) => void | Promise<void>;
   concurrency?: number;
-}): Promise<RunExperimentResult>;
+}): Promise<RunEvalsResult>;
 
 // Workflow with workflow configuration
-export function runExperiment<TWorkflow extends Workflow>(config: {
-  data: RunExperimentDataItem<TWorkflow>[];
+export function runEvals<TWorkflow extends Workflow>(config: {
+  data: RunEvalsDataItem<TWorkflow>[];
   scorers: WorkflowScorerConfig;
   target: TWorkflow;
   onItemComplete?: (params: {
-    item: RunExperimentDataItem<TWorkflow>;
+    item: RunEvalsDataItem<TWorkflow>;
     targetResult: WorkflowResult<any, any, any, any>;
     scorerResults: {
       workflow?: Record<string, any>;
@@ -71,21 +71,21 @@ export function runExperiment<TWorkflow extends Workflow>(config: {
     };
   }) => void | Promise<void>;
   concurrency?: number;
-}): Promise<RunExperimentResult>;
-export async function runExperiment(config: {
-  data: RunExperimentDataItem<any>[];
+}): Promise<RunEvalsResult>;
+export async function runEvals(config: {
+  data: RunEvalsDataItem<any>[];
   scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig;
   target: Agent | Workflow;
   onItemComplete?: (params: {
-    item: RunExperimentDataItem<any>;
+    item: RunEvalsDataItem<any>;
     targetResult: any;
     scorerResults: any;
   }) => void | Promise<void>;
   concurrency?: number;
-}): Promise<RunExperimentResult> {
+}): Promise<RunEvalsResult> {
   const { data, scorers, target, onItemComplete, concurrency = 1 } = config;
 
-  validateExperimentInputs(data, scorers, target);
+  validateEvalsInputs(data, scorers, target);
 
   let totalItems = 0;
   const scoreAccumulator = new ScoreAccumulator();
@@ -93,7 +93,7 @@ export async function runExperiment(config: {
   const pMap = (await import('p-map')).default;
   await pMap(
     data,
-    async (item: RunExperimentDataItem<any>) => {
+    async (item: RunEvalsDataItem<any>) => {
       const targetResult = await executeTarget(target, item);
       const scorerResults = await runScorers(scorers, targetResult, item);
       scoreAccumulator.addScores(scorerResults);
@@ -127,8 +127,8 @@ function isWorkflowScorerConfig(scorers: any): scorers is WorkflowScorerConfig {
   return typeof scorers === 'object' && !Array.isArray(scorers) && ('workflow' in scorers || 'steps' in scorers);
 }
 
-function validateExperimentInputs(
-  data: RunExperimentDataItem<any>[],
+function validateEvalsInputs(
+  data: RunEvalsDataItem<any>[],
   scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig,
   target: Agent | Workflow,
 ): void {
@@ -185,7 +185,7 @@ function validateExperimentInputs(
   }
 }
 
-async function executeTarget(target: Agent | Workflow, item: RunExperimentDataItem<any>) {
+async function executeTarget(target: Agent | Workflow, item: RunEvalsDataItem<any>) {
   try {
     if (isWorkflow(target)) {
       return await executeWorkflow(target, item);
@@ -208,7 +208,7 @@ async function executeTarget(target: Agent | Workflow, item: RunExperimentDataIt
   }
 }
 
-async function executeWorkflow(target: Workflow, item: RunExperimentDataItem<any>) {
+async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>) {
   const run = await target.createRunAsync({ disableScorers: true });
   const workflowResult = await run.start({
     inputData: item.input,
@@ -224,7 +224,7 @@ async function executeWorkflow(target: Workflow, item: RunExperimentDataItem<any
   };
 }
 
-async function executeAgent(agent: Agent, item: RunExperimentDataItem<any>) {
+async function executeAgent(agent: Agent, item: RunEvalsDataItem<any>) {
   const model = await agent.getModel();
   if (model.specificationVersion === 'v2') {
     return await agent.generate(item.input as any, {
@@ -244,7 +244,7 @@ async function executeAgent(agent: Agent, item: RunExperimentDataItem<any>) {
 async function runScorers(
   scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig,
   targetResult: any,
-  item: RunExperimentDataItem<any>,
+  item: RunEvalsDataItem<any>,
 ): Promise<Record<string, any>> {
   const scorerResults: Record<string, any> = {};
 
