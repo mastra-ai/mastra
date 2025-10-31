@@ -242,7 +242,7 @@ describe('Tool Input Validation Integration Tests', () => {
           },
         },
         runId: 'test-run',
-        runtimeContext: {},
+        requestContext: {},
       };
 
       const result = await tool.execute(stepContext as any);

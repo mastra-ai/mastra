@@ -85,9 +85,7 @@ describe('Working Memory Tests', () => {
             topK: 3,
             messageRange: 2,
           },
-          threads: {
-            generateTitle: false,
-          },
+          generateTitle: false,
         },
         storage,
         vector,
@@ -196,9 +194,7 @@ describe('Working Memory Tests', () => {
             topK: 3,
             messageRange: 2,
           },
-          threads: {
-            generateTitle: false,
-          },
+          generateTitle: false,
         },
       });
 
@@ -463,9 +459,7 @@ describe('Working Memory Tests', () => {
             }),
           },
           lastMessages: 1,
-          threads: {
-            generateTitle: false,
-          },
+          generateTitle: false,
         },
       });
       // Reset message counter
@@ -545,9 +539,7 @@ describe('Working Memory Tests', () => {
               topK: 3,
               messageRange: 2,
             },
-            threads: {
-              generateTitle: false,
-            },
+            generateTitle: false,
           },
         });
         // Reset message counter
@@ -633,9 +625,7 @@ describe('Working Memory Tests', () => {
                   temperature: z.number().optional(),
                 }),
               },
-              threads: {
-                generateTitle: false,
-              },
+              generateTitle: false,
             },
           },
           temperature: 0,
@@ -723,9 +713,7 @@ describe('Working Memory Tests', () => {
             topK: 3,
             messageRange: 2,
           },
-          threads: {
-            generateTitle: false,
-          },
+          generateTitle: false,
         },
       });
 
@@ -915,9 +903,7 @@ describe('Working Memory Tests', () => {
             topK: 3,
             messageRange: 2,
           },
-          threads: {
-            generateTitle: false,
-          },
+          generateTitle: false,
         },
         storage,
         vector,
@@ -1279,9 +1265,7 @@ describe('Working Memory Tests', () => {
             topK: 3,
             messageRange: 2,
           },
-          threads: {
-            generateTitle: false,
-          },
+          generateTitle: false,
         },
         storage,
         vector,

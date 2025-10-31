@@ -58,15 +58,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     if (environment) {
       opts['controllerHostUrl'] = environment;
     }
-    const baseClient = new Pinecone(opts);
-    const telemetry = this.__getTelemetry();
-    this.client =
-      telemetry?.traceClass(baseClient, {
-        spanNamePrefix: 'pinecone-vector',
-        attributes: {
-          'vector.type': 'pinecone',
-        },
-      }) ?? baseClient;
+    this.client = new Pinecone(opts);
   }
 
   get indexSeparator(): string {

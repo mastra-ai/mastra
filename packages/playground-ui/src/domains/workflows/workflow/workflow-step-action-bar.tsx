@@ -13,7 +13,6 @@ export interface WorkflowStepActionBarProps {
   error?: any;
   stepName: string;
   mapConfig?: string;
-  onShowTrace?: () => void;
   onShowNestedGraph?: () => void;
   status?: 'running' | 'success' | 'failed' | 'suspended' | 'waiting';
 }
@@ -25,7 +24,6 @@ export const WorkflowStepActionBar = ({
   error,
   mapConfig,
   stepName,
-  onShowTrace,
   onShowNestedGraph,
   status,
 }: WorkflowStepActionBarProps) => {
@@ -129,8 +127,6 @@ export const WorkflowStepActionBar = ({
               </Dialog>
             </>
           )}
-
-          {onShowTrace && <Button onClick={onShowTrace}>Show trace</Button>}
         </div>
       )}
     </>

@@ -23,13 +23,7 @@ export const WorkflowNestedGraphContext = createContext<WorkflowNestedGraphConte
   {} as WorkflowNestedGraphContextType,
 );
 
-export function WorkflowNestedGraphProvider({
-  children,
-  onShowTrace,
-}: {
-  children: React.ReactNode;
-  onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
-}) {
+export function WorkflowNestedGraphProvider({ children }: { children: React.ReactNode }) {
   const [stepGraph, setStepGraph] = useState<SerializedStepFlowEntry[] | null>(null);
   const [parentStepGraphList, setParentStepGraphList] = useState<
     { stepGraph: SerializedStepFlowEntry[]; label: string; fullStep: string }[]
@@ -90,12 +84,7 @@ export function WorkflowNestedGraphProvider({
               </Text>
             </DialogTitle>
             <ReactFlowProvider>
-              <WorkflowNestedGraph
-                stepGraph={stepGraph!}
-                open={openDialog}
-                workflowName={fullStep}
-                onShowTrace={onShowTrace}
-              />
+              <WorkflowNestedGraph stepGraph={stepGraph!} open={openDialog} workflowName={fullStep} />
             </ReactFlowProvider>
           </DialogContent>
         </DialogPortal>

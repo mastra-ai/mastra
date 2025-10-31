@@ -221,26 +221,24 @@ describe('InMemoryStore - Message Fetching', () => {
     store = new InMemoryStore();
   });
 
-  it('getMessages should throw when threadId is an empty string or whitespace only', async () => {
-    await expect(() => store.getMessages({ threadId: '' })).rejects.toThrowError('threadId must be a non-empty string');
+  it('getMessages should return empty array if threadId is an empty string or whitespace only', async () => {
+    const messages = await store.getMessages({ threadId: '' });
+    expect(messages).toHaveLength(0);
 
-    await expect(() => store.getMessages({ threadId: '   ' })).rejects.toThrowError(
-      'threadId must be a non-empty string',
-    );
+    const messages2 = await store.getMessages({ threadId: '   ' });
+    expect(messages2).toHaveLength(0);
   });
 
-  it('getMessagesPaginated should throw when threadId is an empty string or whitespace only', async () => {
-    await expect(() => store.getMessagesPaginated({ threadId: '' })).rejects.toThrowError(
-      'threadId must be a non-empty string',
-    );
+  it('getMessagesPaginated should return empty array if threadId is an empty string or whitespace only', async () => {
+    const result = await store.getMessagesPaginated({ threadId: '' });
+    expect(result.messages).toHaveLength(0);
 
-    await expect(() => store.getMessagesPaginated({ threadId: '   ' })).rejects.toThrowError(
-      'threadId must be a non-empty string',
-    );
+    const result2 = await store.getMessagesPaginated({ threadId: '   ' });
+    expect(result2.messages).toHaveLength(0);
   });
 });
 
-describe('InMemoryStore - getMessagesById', () => {
+describe('InMemoryStore - listMessagesById', () => {
   let store: InMemoryStore;
   const resourceId = 'test-resource-id';
   const resourceId2 = 'test-resource-id-2';
@@ -324,7 +322,7 @@ describe('InMemoryStore - getMessagesById', () => {
   });
 
   it('should return an empty array if no message IDs are provided', async () => {
-    const messages = await store.getMessagesById({ messageIds: [] });
+    const messages = await store.listMessagesById({ messageIds: [] });
     expect(messages).toHaveLength(0);
   });
 
@@ -336,7 +334,7 @@ describe('InMemoryStore - getMessagesById', () => {
       thread1Messages[0]!.id,
       thread2Messages[1]!.id,
     ];
-    const messages = await store.getMessagesById({
+    const messages = await store.listMessagesById({
       messageIds,
     });
 
@@ -344,33 +342,17 @@ describe('InMemoryStore - getMessagesById', () => {
     expect(messages.every((msg, i, arr) => i === 0 || msg.createdAt >= arr[i - 1]!.createdAt)).toBe(true);
   });
 
-  it('should return V2 messages by default', async () => {
-    const messages: MastraMessageV2[] = await store.getMessagesById({ messageIds: thread1Messages.map(msg => msg.id) });
+  it('should return V2 messages', async () => {
+    const messages: MastraMessageV2[] = await store.listMessagesById({
+      messageIds: thread1Messages.map(msg => msg.id),
+    });
 
     expect(messages.length).toBeGreaterThan(0);
     expect(messages.every(MessageList.isMastraMessageV2)).toBe(true);
   });
 
-  it('should return messages in the specified format', async () => {
-    const v1messages: MastraMessageV1[] = await store.getMessagesById({
-      messageIds: thread1Messages.map(msg => msg.id),
-      format: 'v1',
-    });
-
-    expect(v1messages.length).toBeGreaterThan(0);
-    expect(v1messages.every(MessageList.isMastraMessageV1)).toBe(true);
-
-    const v2messages: MastraMessageV2[] = await store.getMessagesById({
-      messageIds: thread1Messages.map(msg => msg.id),
-      format: 'v2',
-    });
-
-    expect(v2messages.length).toBeGreaterThan(0);
-    expect(v2messages.every(MessageList.isMastraMessageV2)).toBe(true);
-  });
-
   it('should return messages from multiple threads', async () => {
-    const messages = await store.getMessagesById({
+    const messages = await store.listMessagesById({
       messageIds: [...thread1Messages.map(msg => msg.id), ...thread2Messages.map(msg => msg.id)],
     });
 
@@ -380,7 +362,7 @@ describe('InMemoryStore - getMessagesById', () => {
   });
 
   it('should return messages from multiple resources', async () => {
-    const messages = await store.getMessagesById({
+    const messages = await store.listMessagesById({
       messageIds: [...thread1Messages.map(msg => msg.id), ...resource2Messages.map(msg => msg.id)],
     });
 

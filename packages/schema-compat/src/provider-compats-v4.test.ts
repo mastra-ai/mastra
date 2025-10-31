@@ -41,15 +41,15 @@ describe('OpenAIReasoningSchemaCompatLayer with Zod v4', () => {
     // Check that defaults are included in descriptions
     const forceNewLoginProp = jsonSchema.properties.force_new_login;
     expect(forceNewLoginProp.description).toContain('Force a new login');
-    expect(forceNewLoginProp.description).toContain('"defaultValue":false');
+    expect(forceNewLoginProp.description).toContain('constraints: the default value is false');
 
     const optionalTextProp = jsonSchema.properties.optional_text;
     expect(optionalTextProp.description).toContain('Optional text with default');
-    expect(optionalTextProp.description).toContain('"defaultValue":"default text"');
+    expect(optionalTextProp.description).toContain('constraints: the default value is default text');
 
     const numberProp = jsonSchema.properties.number_with_default;
     expect(numberProp.description).toContain('Number with default value');
-    expect(numberProp.description).toContain('"defaultValue":42');
+    expect(numberProp.description).toContain('the default value is 42');
 
     const validData = {
       force_new_login: true,

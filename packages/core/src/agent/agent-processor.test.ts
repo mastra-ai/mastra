@@ -5,7 +5,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { Processor } from '../processors/index';
-import { RuntimeContext } from '../runtime-context';
+import { RequestContext } from '../request-context';
 import type { MastraMessageV2 } from './types';
 import { Agent } from './index';
 
@@ -404,15 +404,15 @@ describe('Input and Output Processors', () => {
     });
 
     it('should support function-based input processors', async () => {
-      const runtimeContext = new RuntimeContext<{ processorMessage: string }>();
-      runtimeContext.set('processorMessage', 'Dynamic message');
+      const requestContext = new RequestContext<{ processorMessage: string }>();
+      requestContext.set('processorMessage', 'Dynamic message');
 
       const agentWithDynamicProcessors = new Agent({
         name: 'test-agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
-        inputProcessors: ({ runtimeContext }) => {
-          const message: string = runtimeContext.get('processorMessage') || 'Default message';
+        inputProcessors: ({ requestContext }) => {
+          const message: string = requestContext.get('processorMessage') || 'Default message';
           return [
             {
               name: 'dynamic-processor',
@@ -426,7 +426,7 @@ describe('Input and Output Processors', () => {
       });
 
       const result = await agentWithDynamicProcessors.generate('Test dynamic', {
-        runtimeContext,
+        requestContext,
       });
 
       expect((result.response.messages[0].content[0] as any).text).toContain('Dynamic message');
@@ -1126,10 +1126,12 @@ describe('Input and Output Processors', () => {
 
       async function testWithFormat(format: 'aisdk' | 'mastra') {
         const response = await agent.stream('Who won the 2012 US presidential election?', {
-          output: z.object({
-            winner: z.string(),
-            year: z.string(),
-          }),
+          structuredOutput: {
+            schema: z.object({
+              winner: z.string(),
+              year: z.string(),
+            }),
+          },
           format,
         });
 
@@ -1487,8 +1489,6 @@ describe('Input and Output Processors', () => {
 
           // Should preserve natural text but return fallback object
           expect(result.text).toBeTruthy();
-
-          expect(() => JSON.parse(result.text)).toThrow();
 
           expect(result.object).toEqual(fallbackValue);
 

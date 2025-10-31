@@ -4,10 +4,10 @@ import { GetWorkflowResponse } from '@mastra/client-js';
 
 import { constructNodesAndEdges } from './utils';
 import { WorkflowConditionNode } from './workflow-condition-node';
-import { DefaultNode, WorkflowDefaultNode } from './workflow-default-node';
+import { WorkflowDefaultNode } from './workflow-default-node';
 import { WorkflowAfterNode } from './workflow-after-node';
 import { WorkflowLoopResultNode } from './workflow-loop-result-node';
-import { NestedNode, WorkflowNestedNode } from './workflow-nested-node';
+import { WorkflowNestedNode } from './workflow-nested-node';
 import { ZoomSlider } from './zoom-slider';
 
 import { useCurrentRun } from '../context/use-current-run';
@@ -16,21 +16,20 @@ export interface WorkflowGraphInnerProps {
   workflow: {
     stepGraph: GetWorkflowResponse['stepGraph'];
   };
-  onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
 }
 
-export function WorkflowGraphInner({ workflow, onShowTrace }: WorkflowGraphInnerProps) {
+export function WorkflowGraphInner({ workflow }: WorkflowGraphInnerProps) {
   const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges(workflow);
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);
   const { steps } = useCurrentRun();
 
   const nodeTypes = {
-    'default-node': (props: NodeProps<DefaultNode>) => <WorkflowDefaultNode onShowTrace={onShowTrace} {...props} />,
+    'default-node': WorkflowDefaultNode,
     'condition-node': WorkflowConditionNode,
     'after-node': WorkflowAfterNode,
     'loop-result-node': WorkflowLoopResultNode,
-    'nested-node': (props: NodeProps<NestedNode>) => <WorkflowNestedNode onShowTrace={onShowTrace} {...props} />,
+    'nested-node': WorkflowNestedNode,
   };
 
   return (

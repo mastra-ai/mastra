@@ -17,10 +17,9 @@ export interface WorkflowNestedGraphProps {
   stepGraph: SerializedStepFlowEntry[];
   open: boolean;
   workflowName: string;
-  onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
 }
 
-export function WorkflowNestedGraph({ stepGraph, open, workflowName, onShowTrace }: WorkflowNestedGraphProps) {
+export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowNestedGraphProps) {
   const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges({
     stepGraph,
   });
@@ -31,13 +30,13 @@ export function WorkflowNestedGraph({ stepGraph, open, workflowName, onShowTrace
 
   const nodeTypes = {
     'default-node': (props: NodeProps<DefaultNode>) => (
-      <WorkflowDefaultNode parentWorkflowName={workflowName} onShowTrace={onShowTrace} {...props} />
+      <WorkflowDefaultNode parentWorkflowName={workflowName} {...props} />
     ),
     'condition-node': WorkflowConditionNode,
     'after-node': WorkflowAfterNode,
     'loop-result-node': WorkflowLoopResultNode,
     'nested-node': (props: NodeProps<NestedNode>) => (
-      <WorkflowNestedNode parentWorkflowName={workflowName} onShowTrace={onShowTrace} {...props} />
+      <WorkflowNestedNode parentWorkflowName={workflowName} {...props} />
     ),
   };
 

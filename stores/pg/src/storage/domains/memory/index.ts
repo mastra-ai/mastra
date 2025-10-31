@@ -14,6 +14,10 @@ import type {
   PaginationInfo,
   StorageResourceType,
   ThreadSortOptions,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
@@ -344,11 +348,9 @@ export class MemoryPG extends MemoryStorage {
   private async _getIncludedMessages({
     threadId,
     selectBy,
-    orderByStatement,
   }: {
     threadId: string;
     selectBy: StorageGetMessagesArg['selectBy'];
-    orderByStatement: string;
   }) {
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
@@ -370,7 +372,7 @@ export class MemoryPG extends MemoryStorage {
               WITH ordered_messages AS (
                 SELECT 
                   *,
-                  ROW_NUMBER() OVER (${orderByStatement}) as row_num
+                  ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
                 FROM ${tableName}
                 WHERE thread_id = $${paramIdx}
               )
@@ -389,11 +391,11 @@ export class MemoryPG extends MemoryStorage {
                 SELECT 1 FROM ordered_messages target
                 WHERE target.id = $${paramIdx + 1}
                 AND (
-                  -- Get previous messages based on the max withPreviousMessages
-                  (m.row_num <= target.row_num + $${paramIdx + 2} AND m.row_num > target.row_num)
+                  -- Get previous messages (messages that come BEFORE the target)
+                  (m.row_num < target.row_num AND m.row_num >= target.row_num - $${paramIdx + 2})
                   OR
-                  -- Get next messages based on the max withNextMessages
-                  (m.row_num >= target.row_num - $${paramIdx + 3} AND m.row_num < target.row_num)
+                  -- Get next messages (messages that come AFTER the target)
+                  (m.row_num > target.row_num AND m.row_num <= target.row_num + $${paramIdx + 3})
                 )
               )
             ) AS query_${paramIdx}
@@ -454,7 +456,7 @@ export class MemoryPG extends MemoryStorage {
       const include = selectBy?.include || [];
 
       if (include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
         if (includeMessages) {
           rows.push(...includeMessages);
         }
@@ -515,27 +517,7 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
     if (messageIds.length === 0) return [];
     const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
 
@@ -552,7 +534,6 @@ export class MemoryPG extends MemoryStorage {
         resultRows.map(row => this.parseRow(row)),
         'memory',
       );
-      if (format === `v1`) return list.get.all.v1();
       return list.get.all.v2();
     } catch (error) {
       const mastraError = new MastraError(
@@ -570,6 +551,167 @@ export class MemoryPG extends MemoryStorage {
       this.logger?.trackException(mastraError);
       return [];
     }
+  }
+
+  public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+
+    if (!threadId.trim()) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_PG_LIST_MESSAGES_INVALID_THREAD_ID',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        new Error('threadId must be a non-empty string'),
+      );
+    }
+
+    try {
+      // Determine how many results to return
+      // Default pagination is always 40 unless explicitly specified
+      let perPage = 40;
+      if (limit !== undefined) {
+        if (limit === false) {
+          // limit: false means get ALL messages
+          perPage = Number.MAX_SAFE_INTEGER;
+        } else if (limit === 0) {
+          // limit: 0 means return zero results
+          perPage = 0;
+        } else if (typeof limit === 'number' && limit > 0) {
+          perPage = limit;
+        }
+      }
+
+      // Convert offset to page for pagination metadata
+      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
+
+      // Determine sort field and direction
+      const sortField = orderBy?.field || 'createdAt';
+      const sortDirection = orderBy?.direction || 'DESC';
+      const orderByStatement = `ORDER BY "${sortField}" ${sortDirection}`;
+
+      const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
+      const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
+
+      // Build WHERE conditions
+      const conditions: string[] = [`thread_id = $1`];
+      const queryParams: any[] = [threadId];
+      let paramIndex = 2;
+
+      if (resourceId) {
+        conditions.push(`"resourceId" = $${paramIndex++}`);
+        queryParams.push(resourceId);
+      }
+
+      if (filter?.dateRange?.start) {
+        conditions.push(`"createdAt" >= $${paramIndex++}`);
+        queryParams.push(filter.dateRange.start);
+      }
+
+      if (filter?.dateRange?.end) {
+        conditions.push(`"createdAt" <= $${paramIndex++}`);
+        queryParams.push(filter.dateRange.end);
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      // Get total count
+      const countQuery = `SELECT COUNT(*) FROM ${tableName} ${whereClause}`;
+      const countResult = await this.client.one(countQuery, queryParams);
+      const total = parseInt(countResult.count, 10);
+
+      // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+      const rows = await this.client.manyOrNone(dataQuery, [...queryParams, perPage, offset]);
+      const messages: MessageRowFromDB[] = [...(rows || [])];
+
+      if (total === 0 && messages.length === 0) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      // Step 2: Add included messages with context (if any), excluding duplicates
+      const messageIds = new Set(messages.map(m => m.id));
+      if (include && include.length > 0) {
+        const selectBy = { include };
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
+        if (includeMessages) {
+          // Deduplicate: only add messages that aren't already in the paginated results
+          for (const includeMsg of includeMessages) {
+            if (!messageIds.has(includeMsg.id)) {
+              messages.push(includeMsg);
+              messageIds.add(includeMsg.id);
+            }
+          }
+        }
+      }
+
+      const messagesWithParsedContent = messages.map(row => this.parseRow(row));
+
+      // Use MessageList for proper deduplication and format conversion to V2
+      const list = new MessageList().add(messagesWithParsedContent, 'memory');
+      let finalMessages = list.get.all.v2();
+
+      // Sort all messages (paginated + included) for final output
+      finalMessages = finalMessages.sort((a, b) => {
+        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
+        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
+
+      // Calculate hasMore based on pagination window
+      // If all thread messages have been returned (through pagination or include), hasMore = false
+      // Otherwise, check if there are more pages in the pagination window
+      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
+      const hasMore = limit === false ? false : allThreadMessagesReturned ? false : offset + rows.length < total;
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage,
+        hasMore,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_LIST_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+            resourceId: resourceId ?? '',
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      return {
+        messages: [],
+        total: 0,
+        page: Math.floor(offset / (limit === false ? Number.MAX_SAFE_INTEGER : limit || 40)),
+        perPage: limit === false ? Number.MAX_SAFE_INTEGER : limit || 40,
+        hasMore: false,
+      };
+    }
+  }
+
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, limit, offset, orderBy, sortDirection } = args;
+    const page = Math.floor(offset / limit);
+    const perPage = limit;
+    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage, orderBy, sortDirection });
   }
 
   public async getMessagesPaginated(
@@ -591,7 +733,7 @@ export class MemoryPG extends MemoryStorage {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
       if (selectBy?.include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
         if (includeMessages) {
           messages.push(...includeMessages);
         }

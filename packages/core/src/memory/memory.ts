@@ -5,7 +5,14 @@ import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-li
 import { MastraBase } from '../base';
 import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
-import type { MastraStorage, PaginationInfo, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
+import type {
+  MastraStorage,
+  PaginationInfo,
+  StorageGetMessagesArg,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
+  ThreadSortOptions,
+} from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
 import { deepMerge } from '../utils';
@@ -17,6 +24,7 @@ import type {
   MemoryConfig,
   MastraMessageV1,
   WorkingMemoryTemplate,
+  MessageDeleteInput,
 } from './types';
 
 export type MemoryProcessorOpts = {
@@ -42,9 +50,7 @@ export abstract class MemoryProcessor extends MastraBase {
 export const memoryDefaultOptions = {
   lastMessages: 10,
   semanticRecall: false,
-  threads: {
-    generateTitle: true,
-  },
+  generateTitle: false,
   workingMemory: {
     enabled: false,
     template: `
@@ -167,7 +173,7 @@ export abstract class MastraMemory extends MastraBase {
    * This will be called when converting tools for the agent.
    * Implementations can override this to provide additional tools.
    */
-  public getTools(_config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
+  public listTools(_config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
     return {};
   }
 
@@ -212,6 +218,13 @@ export abstract class MastraMemory extends MastraBase {
     if (config?.workingMemory && 'use' in config.workingMemory) {
       throw new Error('The workingMemory.use option has been removed. Working memory always uses tool-call mode.');
     }
+
+    if (config?.threads?.generateTitle !== undefined) {
+      throw new Error(
+        'The threads.generateTitle option has been moved. Use the top-level generateTitle option instead.',
+      );
+    }
+
     const mergedConfig = deepMerge(this.threadConfig, config || {});
 
     if (config?.workingMemory?.schema) {
@@ -309,6 +322,10 @@ export abstract class MastraMemory extends MastraBase {
       perPage: number;
     } & ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
+
+  abstract listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput>;
 
   /**
    * Saves or updates a thread
@@ -515,5 +532,5 @@ export abstract class MastraMemory extends MastraBase {
    * @param messageIds - Array of message IDs to delete
    * @returns Promise that resolves when all messages are deleted
    */
-  abstract deleteMessages(messageIds: string[]): Promise<void>;
+  abstract deleteMessages(messageIds: MessageDeleteInput): Promise<void>;
 }

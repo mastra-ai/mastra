@@ -7,8 +7,15 @@ import type {
   SharedMemoryConfig,
   StorageThreadType,
   WorkingMemoryTemplate,
+  MessageDeleteInput,
 } from '@mastra/core/memory';
-import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
+import type {
+  StorageGetMessagesArg,
+  ThreadSortOptions,
+  PaginationInfo,
+  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsByResourceIdInput,
+} from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
@@ -22,14 +29,11 @@ import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
 import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
 
-// Type for flexible message deletion input
-export type MessageDeleteInput = string[] | { id: string }[];
-
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
 
-const DEFAULT_MESSAGE_RANGE = { before: 2, after: 2 } as const;
-const DEFAULT_TOP_K = 2;
+const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
+const DEFAULT_TOP_K = 4;
 
 const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
 
@@ -55,8 +59,7 @@ export class Memory extends MastraMemory {
 
   protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string, config: MemoryConfig) {
     const resourceScope =
-      (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== 'thread') ||
-      // resource scope is now default
+      (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
       config.semanticRecall === true;
 
     const thread = await this.storage.getThreadById({ threadId });
@@ -140,7 +143,6 @@ export class Memory extends MastraMemory {
 
     const resourceScope =
       (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
-      // new default is resource scope
       config.semanticRecall === true;
 
     // Guard: If resource-scoped semantic recall is enabled but no resourceId is provided, throw an error
@@ -341,6 +343,12 @@ export class Memory extends MastraMemory {
     });
   }
 
+  async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    return this.storage.listThreadsByResourceId(args);
+  }
+
   private async handleWorkingMemoryFromMetadata({
     workingMemory,
     resourceId,
@@ -535,7 +543,10 @@ export class Memory extends MastraMemory {
             reason = `appended newMemory to end of working memory`;
           }
 
-          workingMemory = existingWorkingMemory + `\n${workingMemory}`;
+          workingMemory =
+            existingWorkingMemory +
+            `
+${workingMemory}`;
         }
       } else if (workingMemory === template?.content) {
         return {
@@ -1096,7 +1107,7 @@ ${
     return Boolean(isMDWorkingMemory && isMDWorkingMemory.version === `vnext`);
   }
 
-  public getTools(config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
+  public listTools(config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
     if (mergedConfig.workingMemory?.enabled) {
       return {

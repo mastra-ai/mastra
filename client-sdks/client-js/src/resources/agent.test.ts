@@ -1,6 +1,6 @@
 import type { WritableStream } from 'stream/web';
 import type { ToolsInput } from '@mastra/core/agent';
-import { RuntimeContext as RuntimeContextClass } from '@mastra/core/runtime-context';
+import { RequestContext as RequestContextClass } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import { z } from 'zod';
@@ -66,62 +66,29 @@ describe('Agent.stream', () => {
     expect(agent.lastProcessedParams?.structuredOutput).toEqual({ schema: jsonSchema });
   });
 
-  it('should transform params.output using zodToJsonSchema when provided', async () => {
-    // Arrange: Create a sample Zod schema and params
-    const outputSchema = z.object({
-      name: z.string(),
-      age: z.number(),
-    });
-
-    const params: StreamParams<typeof outputSchema> = {
-      messages: [] as any,
-      output: outputSchema,
-    };
-
-    // Act: Call stream with the params
-    await agent.stream(params);
-
-    // Assert: Verify output schema transformation
-    const expectedSchema = zodToJsonSchema(outputSchema);
-    expect(agent.lastProcessedParams?.output).toEqual(expectedSchema);
-  });
-
-  it('should set processedParams.output to undefined when params.output is not provided', async () => {
-    // Arrange: Create params without output schema
-    const params: StreamParams<undefined> = {
-      messages: [] as any,
-    };
-
-    // Act: Call stream with the params
-    await agent.stream(params);
-
-    // Assert: Verify output is undefined
-    expect(agent.lastProcessedParams?.output).toBeUndefined();
-  });
-
-  it('should process runtimeContext through parseClientRuntimeContext', async () => {
-    // Arrange: Create a RuntimeContext-like instance with test data
+  it('should process requestContext through parseClientRequestContext', async () => {
+    // Arrange: Create a RequestContext-like instance with test data
     const contextData = new Map([
       ['env', 'test'],
       ['userId', '123'],
     ]);
 
-    const runtimeContext: any = {
+    const requestContext: any = {
       entries: () => contextData,
     };
-    // Ensure instanceof RuntimeContext succeeds so parseClientRuntimeContext converts it
-    Object.setPrototypeOf(runtimeContext, RuntimeContextClass.prototype);
+    // Ensure instanceof RequestContext succeeds so parseClientRequestContext converts it
+    Object.setPrototypeOf(requestContext, RequestContextClass.prototype);
 
     const params: StreamParams<undefined> = {
       messages: [] as any,
-      runtimeContext,
+      requestContext,
     };
 
     // Act: Call stream with the params
     await agent.stream(params);
 
-    // Assert: Verify runtimeContext was converted to plain object
-    expect(agent.lastProcessedParams?.runtimeContext).toEqual({
+    // Assert: Verify requestContext was converted to plain object
+    expect(agent.lastProcessedParams?.requestContext).toEqual({
       env: 'test',
       userId: '123',
     });
@@ -432,7 +399,7 @@ describe('Agent Client Methods', () => {
       agent2: { name: 'Agent 2', model: 'gpt-3.5' },
     };
     mockFetchResponse(mockResponse);
-    const result = await client.getAgents();
+    const result = await client.listAgents();
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
       `${clientOptions.baseUrl}/api/agents`,
@@ -442,20 +409,20 @@ describe('Agent Client Methods', () => {
     );
   });
 
-  it('should get all agents with runtimeContext', async () => {
+  it('should get all agents with requestContext', async () => {
     const mockResponse = {
       agent1: { name: 'Agent 1', model: 'gpt-4' },
       agent2: { name: 'Agent 2', model: 'gpt-3.5' },
     };
-    const runtimeContext = { userId: '123', sessionId: 'abc' };
-    const expectedBase64 = btoa(JSON.stringify(runtimeContext));
+    const requestContext = { userId: '123', sessionId: 'abc' };
+    const expectedBase64 = btoa(JSON.stringify(requestContext));
     const expectedEncodedBase64 = encodeURIComponent(expectedBase64);
 
     mockFetchResponse(mockResponse);
-    const result = await client.getAgents(runtimeContext);
+    const result = await client.listAgents(requestContext);
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
-      `${clientOptions.baseUrl}/api/agents?runtimeContext=${expectedEncodedBase64}`,
+      `${clientOptions.baseUrl}/api/agents?requestContext=${expectedEncodedBase64}`,
       expect.objectContaining({
         headers: expect.objectContaining(clientOptions.headers),
       }),

@@ -25,16 +25,11 @@ export type NestedNode = Node<
 >;
 
 export interface WorkflowNestedNodeProps {
-  onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
   parentWorkflowName?: string;
 }
 
-export function WorkflowNestedNode({
-  data,
-  parentWorkflowName,
-  onShowTrace,
-}: NodeProps<NestedNode> & WorkflowNestedNodeProps) {
-  const { steps, runId } = useCurrentRun();
+export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<NestedNode> & WorkflowNestedNodeProps) {
+  const { steps } = useCurrentRun();
   const { showNestedGraph } = useContext(WorkflowNestedGraphContext);
 
   const { label, description, withoutTopHandle, withoutBottomHandle, stepGraph, mapConfig } = data;
@@ -87,7 +82,6 @@ export function WorkflowNestedNode({
           output={step?.output}
           error={step?.error}
           mapConfig={mapConfig}
-          onShowTrace={runId && onShowTrace ? () => onShowTrace?.({ runId, stepName: fullLabel }) : undefined}
           onShowNestedGraph={() => showNestedGraph({ label, fullStep: fullLabel, stepGraph })}
           status={step?.status}
         />

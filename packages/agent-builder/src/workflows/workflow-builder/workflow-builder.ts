@@ -31,7 +31,7 @@ const workflowDiscoveryStep = createStep({
   description: 'Discover existing workflows in the project',
   inputSchema: WorkflowBuilderInputSchema,
   outputSchema: WorkflowDiscoveryResultSchema,
-  execute: async ({ inputData, runtimeContext: _runtimeContext }) => {
+  execute: async ({ inputData, requestContext: _requestContext }) => {
     console.info('Starting workflow discovery...');
     const { projectPath = process.cwd() } = inputData;
 
@@ -104,7 +104,7 @@ const projectDiscoveryStep = createStep({
   description: 'Analyze the project structure and setup',
   inputSchema: WorkflowDiscoveryResultSchema,
   outputSchema: ProjectDiscoveryResultSchema,
-  execute: async ({ inputData: _inputData, runtimeContext: _runtimeContext }) => {
+  execute: async ({ inputData: _inputData, requestContext: _requestContext }) => {
     console.info('Starting project discovery...');
 
     try {
@@ -174,13 +174,13 @@ const workflowResearchStep = createStep({
   description: 'Research Mastra workflows and gather relevant documentation',
   inputSchema: ProjectDiscoveryResultSchema,
   outputSchema: WorkflowResearchResultSchema,
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     console.info('Starting workflow research...');
 
     try {
       // const filteredMcpTools = await initializeMcpTools();
 
-      const model = await resolveModel({ runtimeContext });
+      const model = await resolveModel({ requestContext });
 
       const researchAgent = new Agent({
         model,
@@ -196,7 +196,9 @@ const workflowResearchStep = createStep({
       });
 
       const result = await researchAgent.generate(researchPrompt, {
-        output: WorkflowResearchResultSchema,
+        structuredOutput: {
+          schema: WorkflowResearchResultSchema,
+        },
         // stopWhen: stepCountIs(10),
       });
 
@@ -251,7 +253,7 @@ const taskExecutionStep = createStep({
   outputSchema: TaskExecutionResultSchema,
   suspendSchema: TaskExecutionSuspendSchema,
   resumeSchema: TaskExecutionResumeSchema,
-  execute: async ({ inputData, resumeData, suspend, runtimeContext }) => {
+  execute: async ({ inputData, resumeData, suspend, requestContext }) => {
     const {
       action,
       workflowName,
@@ -268,7 +270,7 @@ const taskExecutionStep = createStep({
     console.info(`Executing ${tasks.length} tasks using AgentBuilder stream...`);
 
     try {
-      const model = await resolveModel({ runtimeContext });
+      const model = await resolveModel({ requestContext });
       const currentProjectPath = projectPath || process.cwd();
 
       // Pre-populate taskManager with the planned tasks
@@ -320,18 +322,12 @@ ${workflowBuilderPrompts.validation.instructions}`,
         resumeData,
       });
 
-      const originalInstructions = await executionAgent.getInstructions({ runtimeContext: runtimeContext });
-      const additionalInstructions = executionAgent.instructions;
-
-      let enhancedInstructions = originalInstructions as string;
-      if (additionalInstructions) {
-        enhancedInstructions = `${originalInstructions}\n\n${additionalInstructions}`;
-      }
+      const originalInstructions = await executionAgent.getInstructions({ requestContext: requestContext });
 
       const enhancedOptions = {
         stopWhen: stepCountIs(100),
         temperature: 0.3,
-        instructions: enhancedInstructions,
+        instructions: originalInstructions,
       };
 
       // Loop until all tasks are completed

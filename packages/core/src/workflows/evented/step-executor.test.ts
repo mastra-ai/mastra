@@ -1,15 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { Mastra } from '../..';
 import type { StepFlowEntry, StepResult } from '../..';
+import { MastraError } from '../../error';
 import { EventEmitterPubSub } from '../../events/event-emitter';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
+import { createStep } from '../workflow';
 import { StepExecutor } from './step-executor';
 
 interface SleepFnContext {
   workflowId: string;
   runId: string;
   mastra: Mastra;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   inputData: any;
   retryCount: number;
   resumeData: any;
@@ -29,13 +32,13 @@ describe('StepExecutor', () => {
   let stepExecutor: StepExecutor;
   let mastra: Mastra;
   let capturedContexts: SleepFnContext[];
-  let runtimeContext: RuntimeContext;
+  let requestContext: RequestContext;
 
   beforeEach(() => {
     mastra = new Mastra();
     stepExecutor = new StepExecutor({ mastra });
     capturedContexts = [];
-    runtimeContext = new RuntimeContext();
+    requestContext = new RequestContext();
   });
 
   it('should return step.duration directly when provided', async () => {
@@ -53,7 +56,7 @@ describe('StepExecutor', () => {
       workflowId: 'test-workflow',
       step,
       runId: 'test-run',
-      runtimeContext,
+      requestContext,
       stepResults: {},
       emitter: {
         runtime: new EventEmitterPubSub(),
@@ -71,7 +74,7 @@ describe('StepExecutor', () => {
     const baseParams = {
       workflowId: 'test-workflow',
       runId: 'test-run',
-      runtimeContext,
+      requestContext,
       stepResults: {},
       emitter: {
         runtime: new EventEmitterPubSub(),
@@ -112,7 +115,7 @@ describe('StepExecutor', () => {
     const inputData = { key: 'value' };
     const resumeData = { state: 'resumed' };
     const retryCount = 2;
-    const runtimeContext = new RuntimeContext();
+    const requestContext = new RequestContext();
 
     const step: Extract<StepFlowEntry, { type: 'sleep' }> = {
       id: 'sleep-1',
@@ -148,7 +151,7 @@ describe('StepExecutor', () => {
       resumeData,
       stepResults,
       emitter,
-      runtimeContext,
+      requestContext,
       retryCount,
     });
 
@@ -159,7 +162,7 @@ describe('StepExecutor', () => {
     expect(capturedContext.workflowId).toBe(workflowId);
     expect(capturedContext.runId).toBe(runId);
     expect(capturedContext.mastra).toBe(mastra);
-    expect(capturedContext.runtimeContext).toBe(runtimeContext);
+    expect(capturedContext.requestContext).toBe(requestContext);
     expect(capturedContext.inputData).toBe(inputData);
     expect(capturedContext.retryCount).toBe(retryCount);
     expect(capturedContext.resumeData).toBe(resumeData);
@@ -191,11 +194,81 @@ describe('StepExecutor', () => {
         runtime: new EventEmitterPubSub(),
         events: new EventEmitterPubSub(),
       },
-      runtimeContext,
+      requestContext,
     };
 
     // Act & Assert: Call resolveSleep and verify it returns 0
     const result = await stepExecutor.resolveSleep(params);
     expect(result).toBe(0);
+  });
+
+  it('should save only error message without stack trace when step fails', async () => {
+    const errorMessage = 'Test error: step execution failed.';
+    const failingStep = createStep({
+      id: 'failing-step',
+      execute: vi.fn().mockImplementation(() => {
+        throw new Error(errorMessage);
+      }),
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    });
+
+    const emitter = new EventEmitterPubSub();
+
+    const result = await stepExecutor.execute({
+      workflowId: 'test-workflow',
+      step: failingStep,
+      runId: 'test-run',
+      input: {},
+      stepResults: {},
+      state: {},
+      emitter: emitter as any,
+      requestContext,
+    });
+
+    expect(result.status).toBe('failed');
+    const failedResult = result as Extract<typeof result, { status: 'failed' }>;
+    expect(failedResult.error).toBe('Error: ' + errorMessage);
+    expect(String(failedResult.error)).not.toContain('at Object.execute');
+    expect(String(failedResult.error)).not.toContain('at ');
+    expect(String(failedResult.error)).not.toContain('\n');
+  });
+
+  it('should save MastraError message without stack trace when step fails', async () => {
+    const errorMessage = 'Test MastraError: step execution failed.';
+    const failingStep = createStep({
+      id: 'failing-step',
+      execute: vi.fn().mockImplementation(() => {
+        throw new MastraError({
+          id: 'VALIDATION_ERROR',
+          domain: 'MASTRA_WORKFLOW',
+          category: 'USER',
+          text: errorMessage,
+          details: { field: 'test' },
+        });
+      }),
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    });
+
+    const emitter = new EventEmitterPubSub();
+
+    const result = await stepExecutor.execute({
+      workflowId: 'test-workflow',
+      step: failingStep,
+      runId: 'test-run',
+      input: {},
+      stepResults: {},
+      state: {},
+      emitter: emitter as any,
+      requestContext,
+    });
+
+    expect(result.status).toBe('failed');
+    const failedResult = result as Extract<typeof result, { status: 'failed' }>;
+    expect(failedResult.error).toBe('Error: ' + errorMessage);
+    expect(String(failedResult.error)).not.toContain('at Object.execute');
+    expect(String(failedResult.error)).not.toContain('at ');
+    expect(String(failedResult.error)).not.toContain('\n');
   });
 });
