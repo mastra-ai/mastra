@@ -193,7 +193,7 @@ export const weatherAgent = new Agent({
 Define a scorer that validates the agent's tool calls:
 
 ```typescript title="src/mastra/scorers/location-scorer.ts" showLineNumbers copy
-import { createScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
 
 export const locationScorer = createScorer({
   name: 'location-accuracy',

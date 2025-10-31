@@ -75,7 +75,7 @@ export function createToolCallAccuracyScorerCode(options: ToolCallAccuracyOption
   };
 
   return createScorer({
-    id: 'tool-call-accuracy-scorer',
+    id: 'code-tool-call-accuracy-scorer',
     name: 'Tool Call Accuracy Scorer',
     description: getDescription(),
     type: 'agent',
