@@ -217,8 +217,8 @@ export const webSearch = createTool({
       publishedDate: z.string().optional(),
     }),
   ),
-  execute: async ({ context }) => {
-    const { results } = await exa.searchAndContents(context.query, {
+  execute: async (input) => {
+    const { results } = await exa.searchAndContents(input.query, {
       livecrawl: "always",
       numResults: 2,
     });

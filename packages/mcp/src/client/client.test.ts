@@ -121,7 +121,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
 
     it('should call a tool', async () => {
       const tools = await client.tools();
-      const result = await tools.greet.execute({ context: { name: 'Stateless' } });
+      const result = await tools.greet.execute({ name: 'Stateless' });
       expect(result).toEqual({ content: [{ type: 'text', text: 'Hello, Stateless!' }] });
     });
 
@@ -199,7 +199,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
 
     it('should call a tool', async () => {
       const tools = await client.tools();
-      const result = await tools.greet.execute({ context: { name: 'Stateful' } });
+      const result = await tools.greet.execute({ name: 'Stateful' });
       expect(result).toEqual({ content: [{ type: 'text', text: 'Hello, Stateful!' }] });
     });
   });

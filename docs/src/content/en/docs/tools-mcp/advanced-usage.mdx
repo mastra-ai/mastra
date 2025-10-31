@@ -23,20 +23,20 @@ export const longRunningTool = createTool({
   id: "long-computation",
   description: "Performs a potentially long computation",
   inputSchema: z.object({ /* ... */ }),
-  execute: async ({ context }, { abortSignal }) => {
+  execute: async (input, context) => {
     // Example: Forwarding signal to fetch
     const response = await fetch("https://api.example.com/data", {
-      signal: abortSignal, // Pass the signal here
+      signal: context?.abortSignal, // Pass the signal here
     });
 
-    if (abortSignal?.aborted) {
+    if (context?.abortSignal?.aborted) {
       console.log("Tool execution aborted.");
       throw new Error("Aborted");
     }
 
     // Example: Checking signal during a loop
     for (let i = 0; i < 1000000; i++) {
-      if (abortSignal?.aborted) {
+      if (context?.abortSignal?.aborted) {
         console.log("Tool execution aborted during loop.");
         throw new Error("Aborted");
       }

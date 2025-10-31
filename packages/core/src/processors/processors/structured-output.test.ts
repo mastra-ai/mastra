@@ -623,8 +623,8 @@ describe('Structured Output with Tool Execution', () => {
       inputSchema: z.object({
         location: z.string(),
       }),
-      execute: async context => {
-        const { location } = context.context;
+      execute: async (input, context) => {
+        const { location } = input;
         return {
           temperature: 70,
           feelsLike: 65,

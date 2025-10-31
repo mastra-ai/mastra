@@ -5179,8 +5179,8 @@ describe('Workflow', () => {
       });
 
       // @ts-ignore
-      const toolAction = vi.fn<any>().mockImplementation(async ({ context }) => {
-        return { name: context.name };
+      const toolAction = vi.fn<any>().mockImplementation(async (input: { name: string }) => {
+        return { name: input.name };
       });
 
       const randomTool = createTool({
@@ -5197,6 +5197,7 @@ describe('Workflow', () => {
         outputSchema: z.object({ name: z.string() }),
       });
 
+      // @ts-ignore
       workflow.then(step1).then(createStep(randomTool)).commit();
 
       const mastra = new Mastra({
@@ -5560,8 +5561,8 @@ describe('Workflow', () => {
       });
 
       // @ts-ignore
-      const toolAction = vi.fn<any>().mockImplementation(async ({ context }) => {
-        return { name: context.name };
+      const toolAction = vi.fn<any>().mockImplementation(async (input: { name: string }) => {
+        return { name: input.name };
       });
 
       const randomTool = createTool({
@@ -5578,6 +5579,7 @@ describe('Workflow', () => {
         outputSchema: z.object({ name: z.string() }),
       });
 
+      // @ts-ignore
       workflow.then(step1).then(createStep(randomTool)).commit();
 
       const mastra = new Mastra({

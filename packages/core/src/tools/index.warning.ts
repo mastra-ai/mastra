@@ -10,8 +10,7 @@ export class Tool<
   TSchemaOut extends z.ZodSchema | undefined = undefined,
   TSuspendSchema extends z.ZodSchema = any,
   TResumeSchema extends z.ZodSchema = any,
-  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema> = ToolExecutionContext<
-    TSchemaIn,
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema> = ToolExecutionContext<
     TSuspendSchema,
     TResumeSchema
   >,

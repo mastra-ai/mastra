@@ -29,8 +29,8 @@ const weatherTool = createTool({
     conditions: z.string(),
     location: z.string(),
   }),
-  execute: async ({ context }) => {
-    return await getWeather(context.location);
+  execute: async input => {
+    return await getWeather(input.location);
   },
 });
 

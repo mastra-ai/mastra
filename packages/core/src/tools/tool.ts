@@ -1,7 +1,7 @@
 import type { Mastra } from '../mastra';
-import { RuntimeContext } from '../runtime-context';
+import { RequestContext } from '../request-context';
 import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
-import type { ToolAction, ToolExecutionContext, MastraToolInvocationOptions } from './types';
+import type { ToolAction, ToolExecutionContext } from './types';
 import { validateToolInput } from './validation';
 
 /**
@@ -22,8 +22,8 @@ import { validateToolInput } from './validation';
  *     location: z.string(),
  *     units: z.enum(['celsius', 'fahrenheit']).optional()
  *   }),
- *   execute: async ({ context }) => {
- *     return await fetchWeather(context.location, context.units);
+ *   execute: async (input) => {
+ *     return await fetchWeather(input.location, input.units);
  *   }
  * });
  * ```
@@ -35,8 +35,8 @@ import { validateToolInput } from './validation';
  *   description: 'Delete a file',
  *   requireApproval: true,
  *   inputSchema: z.object({ filepath: z.string() }),
- *   execute: async ({ context }) => {
- *     await fs.unlink(context.filepath);
+ *   execute: async (input) => {
+ *     await fs.unlink(input.filepath);
  *     return { deleted: true };
  *   }
  * });
@@ -48,9 +48,9 @@ import { validateToolInput } from './validation';
  *   id: 'save-data',
  *   description: 'Save data to storage',
  *   inputSchema: z.object({ key: z.string(), value: z.any() }),
- *   execute: async ({ context, mastra }) => {
- *     const storage = mastra?.getStorage();
- *     await storage?.set(context.key, context.value);
+ *   execute: async (input, context) => {
+ *     const storage = context?.mastra?.getStorage();
+ *     await storage?.set(input.key, input.value);
  *     return { saved: true };
  *   }
  * });
@@ -61,8 +61,7 @@ export class Tool<
   TSchemaOut extends ZodLikeSchema | undefined = undefined,
   TSuspendSchema extends ZodLikeSchema = any,
   TResumeSchema extends ZodLikeSchema = any,
-  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema> = ToolExecutionContext<
-    TSchemaIn,
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema> = ToolExecutionContext<
     TSuspendSchema,
     TResumeSchema
   >,
@@ -87,7 +86,7 @@ export class Tool<
   resumeSchema?: TResumeSchema;
 
   /**
-   * BREAKING CHANGE v1.0: New execute signature
+   * Tool execution function
    * @param input - The raw, validated input data
    * @param context - Optional execution context with metadata
    * @returns Promise resolving to tool output
@@ -117,7 +116,7 @@ export class Tool<
    *   id: 'my-tool',
    *   description: 'Does something useful',
    *   inputSchema: z.object({ name: z.string() }),
-   *   execute: async ({ context }) => ({ greeting: `Hello ${context.name}` })
+   *   execute: async (input) => ({ greeting: `Hello ${input.name}` })
    * });
    * ```
    */
@@ -131,7 +130,7 @@ export class Tool<
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
 
-    // BREAKING CHANGE v1.0: Tools now receive two parameters:
+    // Tools receive two parameters:
     // 1. input - The raw, validated input data
     // 2. context - Execution metadata (mastra, suspend, etc.)
     if (opts.execute) {
@@ -146,9 +145,9 @@ export class Tool<
         // Organize context based on execution source
         let organizedContext = context;
         if (!context) {
-          // No context provided - create a minimal context with runtimeContext
+          // No context provided - create a minimal context with requestContext
           organizedContext = {
-            runtimeContext: new RuntimeContext(),
+            requestContext: new RequestContext(),
             mastra: undefined,
           };
         } else {
@@ -156,23 +155,30 @@ export class Tool<
           const isAgentExecution = context.toolCallId && context.messages;
 
           // Check if this is workflow execution (has workflow properties)
-          const isWorkflowExecution = context.workflow || context.workflowId || context.runId;
+          // Agent execution takes precedence - don't treat as workflow if it's an agent call
+          const isWorkflowExecution = !isAgentExecution && (context.workflow || context.workflowId);
 
           if (isAgentExecution && !context.agent) {
             // Reorganize agent context - nest agent-specific properties under 'agent' key
-            const { toolCallId, messages, ...rest } = context;
+            const { toolCallId, messages, suspend, resumeData, threadId, resourceId, writableStream, ...rest } =
+              context;
             organizedContext = {
               ...rest,
               agent: {
                 toolCallId,
                 messages,
+                suspend,
+                resumeData,
+                threadId,
+                resourceId,
+                writableStream,
               },
-              // Ensure runtimeContext is always present
-              runtimeContext: rest.runtimeContext || new RuntimeContext(),
+              // Ensure requestContext is always present
+              requestContext: rest.requestContext || new RequestContext(),
             };
           } else if (isWorkflowExecution && !context.workflow) {
             // Reorganize workflow context - nest workflow-specific properties under 'workflow' key
-            const { workflowId, runId, state, setState, ...rest } = context;
+            const { workflowId, runId, state, setState, suspend, resumeData, ...rest } = context;
             organizedContext = {
               ...rest,
               workflow: {
@@ -180,15 +186,17 @@ export class Tool<
                 runId,
                 state,
                 setState,
+                suspend,
+                resumeData,
               },
-              // Ensure runtimeContext is always present
-              runtimeContext: rest.runtimeContext || new RuntimeContext(),
+              // Ensure requestContext is always present
+              requestContext: rest.requestContext || new RequestContext(),
             };
           } else {
-            // Ensure runtimeContext is always present even for direct execution
+            // Ensure requestContext is always present even for direct execution
             organizedContext = {
               ...context,
-              runtimeContext: context.runtimeContext || new RuntimeContext(),
+              requestContext: context.requestContext || new RequestContext(),
             };
           }
         }
@@ -232,10 +240,10 @@ export class Tool<
  *     a: z.number(),
  *     b: z.number()
  *   }),
- *   execute: async ({ context }) => {
- *     const result = context.operation === 'add'
- *       ? context.a + context.b
- *       : context.a - context.b;
+ *   execute: async (input) => {
+ *     const result = input.operation === 'add'
+ *       ? input.a + input.b
+ *       : input.a - input.b;
  *     return { result };
  *   }
  * });
@@ -252,8 +260,8 @@ export class Tool<
  *     name: z.string(),
  *     email: z.string()
  *   }),
- *   execute: async ({ context }) => {
- *     return await fetchUser(context.userId);
+ *   execute: async (input) => {
+ *     return await fetchUser(input.userId);
  *   }
  * });
  * ```
@@ -267,9 +275,9 @@ export class Tool<
  *     city: z.string(),
  *     units: z.enum(['metric', 'imperial']).default('metric')
  *   }),
- *   execute: async ({ context }) => {
+ *   execute: async (input) => {
  *     const response = await fetch(
- *       `https://api.weather.com/v1/weather?q=${context.city}&units=${context.units}`
+ *       `https://api.weather.com/v1/weather?q=${input.city}&units=${input.units}`
  *     );
  *     return response.json();
  *   }
@@ -281,29 +289,17 @@ export function createTool<
   TSchemaOut extends ZodLikeSchema | undefined = undefined,
   TSuspendSchema extends ZodLikeSchema = any,
   TResumeSchema extends ZodLikeSchema = any,
-  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema> = ToolExecutionContext<
-    TSchemaIn,
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema> = ToolExecutionContext<
     TSuspendSchema,
     TResumeSchema
   >,
-  TExecute extends ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext>['execute'] = ToolAction<
-    TSchemaIn,
-    TSchemaOut,
-    TSuspendSchema,
-    TResumeSchema,
-    TContext
-  >['execute'],
 >(
-  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
-    execute?: TExecute;
-  },
-): TExecute extends Function
-  ? Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
-      execute: (
-        input: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
-        context?: TContext | MastraToolInvocationOptions,
-      ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
-    }
-  : Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> {
+  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext>,
+): Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
+  execute: (
+    input: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
+    context?: TContext,
+  ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
+} {
   return new Tool(opts) as any;
 }

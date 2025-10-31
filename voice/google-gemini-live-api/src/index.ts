@@ -1915,14 +1915,14 @@ export class GeminiLiveVoice extends MastraVoice<
    *   inputSchema: z.object({
    *     location: z.string().describe("The city and state, e.g. San Francisco, CA"),
    *   }),
-   *   execute: async ({ context }) => {
+   *   execute: async (input) => {
    *     // Fetch weather data from an API
    *     const response = await fetch(
-   *       `https://api.weather.com?location=${encodeURIComponent(context.location)}`,
+   *       `https://api.weather.com?location=${encodeURIComponent(input.location)}`,
    *     );
    *     const data = await response.json();
    *     return {
-   *       message: `The current temperature in ${context.location} is ${data.temperature}°F with ${data.conditions}.`,
+   *       message: `The current temperature in ${input.location} is ${data.temperature}°F with ${data.conditions}.`,
    *     };
    *   },
    * });

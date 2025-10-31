@@ -19,22 +19,22 @@ const getIssue = new Step({
     body: z.string(),
     labelNames: z.array(z.string()),
   }),
-  execute: async ({ context }) => {
+  execute: async (input, context) => {
     const client = await github.getApiClient();
 
     const issue = await client.issuesGet({
       path: {
         // TODO: Type triggerData in context to the triggerSchema
-        owner: context?.triggerData?.owner,
-        repo: context?.triggerData?.repo,
-        issue_number: context?.triggerData?.issue_number,
+        owner: context?.workflow?.state?.triggerData?.owner,
+        repo: context?.workflow?.state?.triggerData?.repo,
+        issue_number: context?.workflow?.state?.triggerData?.issue_number,
       },
     });
 
     const labels = await client.issuesListLabelsForRepo({
       path: {
-        owner: context?.triggerData?.owner,
-        repo: context?.triggerData?.repo,
+        owner: context?.workflow?.state?.triggerData?.owner,
+        repo: context?.workflow?.state?.triggerData?.repo,
       },
     });
 
@@ -51,13 +51,13 @@ const labelIssue = new Step({
   outputSchema: z.object({
     labels: z.array(z.string()),
   }),
-  execute: async ({ context, mastra }) => {
-    const parentStep = context?.steps?.getIssue;
+  execute: async (input, context) => {
+    const parentStep = context?.workflow?.state?.steps?.getIssue;
     if (!parentStep || parentStep.status !== 'success') {
       return { labels: [] };
     }
 
-    const daneIssueLabeler = mastra?.getAgent('daneIssueLabeler');
+    const daneIssueLabeler = context?.mastra?.getAgent('daneIssueLabeler');
 
     const res = await daneIssueLabeler?.generate(
       `
@@ -81,8 +81,8 @@ const labelIssue = new Step({
 
 const applyLabels = new Step({
   id: 'applyLabels',
-  execute: async ({ context }) => {
-    const parentStep = context?.steps?.labelIssue;
+  execute: async (input, context) => {
+    const parentStep = context?.workflow?.state?.steps?.labelIssue;
 
     if (!parentStep || parentStep.status !== 'success') {
       return;
@@ -92,9 +92,9 @@ const applyLabels = new Step({
 
     await client.issuesAddLabels({
       path: {
-        owner: context?.triggerData?.owner,
-        repo: context?.triggerData?.repo,
-        issue_number: context?.triggerData?.issue_number,
+        owner: context?.workflow?.state?.triggerData?.owner,
+        repo: context?.workflow?.state?.triggerData?.repo,
+        issue_number: context?.workflow?.state?.triggerData?.issue_number,
       },
       body: {
         labels: parentStep.output.labels,

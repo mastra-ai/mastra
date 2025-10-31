@@ -348,8 +348,8 @@ const testTools = runSchemasIndividually
         id: `testTool_${key}` as const,
         description: `Test tool for schema type: ${key}. Call this tool to test the schema.`,
         inputSchema: z.object({ [key]: schema as z.ZodTypeAny }),
-        execute: async ({ context }) => {
-          return { success: true, receivedContext: context };
+        execute: async input => {
+          return { success: true, receivedContext: input };
         },
       } as const;
 
@@ -360,8 +360,8 @@ const testTools = runSchemasIndividually
         id: `testTool_manySchemas`,
         description: `A tool to test many schema property types`,
         inputSchema: z.object(allSchemas).describe(`A schema to test many schema configuration properties`),
-        execute: async ({ context }) => {
-          return { success: true, receivedContext: context };
+        execute: async input => {
+          return { success: true, receivedContext: input };
         },
       }),
     ];
@@ -455,7 +455,7 @@ describe('CoreToolBuilder ID Preservation', () => {
       id: 'test-tool-id',
       description: 'A test tool',
       inputSchema: z.object({ value: z.string() }),
-      execute: async ({ context }) => ({ result: context.value }),
+      execute: async input => ({ result: input.value }),
     });
 
     const builder = new CoreToolBuilder({
@@ -529,7 +529,7 @@ describe('CoreToolBuilder ID Preservation', () => {
       id: 'verify-id-exists',
       description: 'A test tool',
       inputSchema: z.object({ value: z.string() }),
-      execute: async ({ context }) => ({ result: context.value }),
+      execute: async input => ({ result: input.value }),
     });
 
     // Verify that the tool created with createTool() has an ID
@@ -545,9 +545,9 @@ describe('Tool Tracing Context Injection', () => {
       id: 'tracing-test-tool',
       description: 'Test tool that captures tracing context',
       inputSchema: z.object({ message: z.string() }),
-      execute: async ({ context, tracingContext }) => {
-        receivedTracingContext = tracingContext;
-        return { result: `processed: ${context.message}` };
+      execute: async (input, context) => {
+        receivedTracingContext = context?.tracingContext;
+        return { result: `processed: ${input.message}` };
       },
     });
 
@@ -610,9 +610,9 @@ describe('Tool Tracing Context Injection', () => {
       id: 'no-tracing-tool',
       description: 'Test tool without agent span',
       inputSchema: z.object({ message: z.string() }),
-      execute: async ({ context, tracingContext }) => {
-        receivedTracingContext = tracingContext;
-        return { result: `processed: ${context.message}` };
+      execute: async (input, context) => {
+        receivedTracingContext = context?.tracingContext;
+        return { result: `processed: ${input.message}` };
       },
     });
 
@@ -763,7 +763,7 @@ describe('Tool Tracing Context Injection', () => {
       id: 'toolset-tool',
       description: 'Tool from a toolset',
       inputSchema: z.object({ message: z.string() }),
-      execute: async ({ context }) => ({ result: context.message }),
+      execute: async input => ({ result: input.message }),
     });
 
     // Mock agent span
@@ -821,26 +821,21 @@ describe('Tool Input Validation', () => {
       email: z.string().email('Invalid email format').optional(),
       tags: z.array(z.string()).min(1, 'At least one tag required').optional(),
     }),
-    execute: async ({ context }) => {
+    execute: async input => {
       return {
-        message: `Hello ${context.name}, you are ${context.age} years old`,
-        email: context.email,
-        tags: context.tags,
+        message: `Hello ${input.name}, you are ${input.age} years old`,
+        email: input.email,
+        tags: input.tags,
       };
     },
   });
 
   it('should execute successfully with valid inputs', async () => {
     const result = await toolWithValidation.execute!({
-      context: {
-        name: 'John Doe',
-        age: 30,
-        email: 'john@example.com',
-        tags: ['developer', 'typescript'],
-      },
-      requestContext: new RequestContext(),
-      tracingContext: {},
-      suspend: async () => {},
+      name: 'John Doe',
+      age: 30,
+      email: 'john@example.com',
+      tags: ['developer', 'typescript'],
     });
 
     expect(result).toEqual({
@@ -852,13 +847,8 @@ describe('Tool Input Validation', () => {
 
   it('should execute successfully with only required fields', async () => {
     const result = await toolWithValidation.execute!({
-      context: {
-        name: 'Jane',
-        age: 25,
-      },
-      requestContext: new RequestContext(),
-      tracingContext: {},
-      suspend: async () => {},
+      name: 'Jane',
+      age: 25,
     });
 
     expect(result).toEqual({
@@ -871,13 +861,8 @@ describe('Tool Input Validation', () => {
   it('should return validation error for short name', async () => {
     // With graceful error handling, validation errors are returned as results
     const result: any = await toolWithValidation.execute!({
-      context: {
-        name: 'Jo', // Too short
-        age: 30,
-      },
-      requestContext: new RequestContext(),
-      tracingContext: {},
-      suspend: async () => {},
+      name: 'Jo', // Too short
+      age: 30,
     });
 
     expect(result).toHaveProperty('error', true);
@@ -890,13 +875,8 @@ describe('Tool Input Validation', () => {
   it('should return validation error for negative age', async () => {
     // With graceful error handling, validation errors are returned as results
     const result: any = await toolWithValidation.execute!({
-      context: {
-        name: 'John',
-        age: -5, // Negative age
-      },
-      requestContext: new RequestContext(),
-      tracingContext: {},
-      suspend: async () => {},
+      name: 'John',
+      age: -5, // Negative age
     });
 
     expect(result).toHaveProperty('error', true);
@@ -909,14 +889,9 @@ describe('Tool Input Validation', () => {
   it('should return validation error for invalid email', async () => {
     // With graceful error handling, validation errors are returned as results
     const result: any = await toolWithValidation.execute!({
-      context: {
-        name: 'John',
-        age: 30,
-        email: 'not-an-email', // Invalid email
-      },
-      requestContext: new RequestContext(),
-      tracingContext: {},
-      suspend: async () => {},
+      name: 'John',
+      age: 30,
+      email: 'not-an-email', // Invalid email
     });
 
     expect(result).toHaveProperty('error', true);
@@ -928,14 +903,10 @@ describe('Tool Input Validation', () => {
 
   it('should return validation error for missing required fields', async () => {
     // With graceful error handling, validation errors are returned as results
+    // @ts-expect-error intentionally incorrect input
+    // Missing name
     const result: any = await toolWithValidation.execute!({
-      // @ts-expect-error intentionally incorrect input
-      context: {
-        // Missing name
-        age: 30,
-      },
-      requestContext: new RequestContext(),
-      suspend: async () => {},
+      age: 30,
     });
 
     expect(result).toHaveProperty('error', true);
@@ -948,14 +919,9 @@ describe('Tool Input Validation', () => {
   it('should return validation error for empty tags array when provided', async () => {
     // With graceful error handling, validation errors are returned as results
     const result: any = await toolWithValidation.execute!({
-      context: {
-        name: 'John',
-        age: 30,
-        tags: [], // Empty array when min(1) required
-      },
-      requestContext: new RequestContext(),
-      tracingContext: {},
-      suspend: async () => {},
+      name: 'John',
+      age: 30,
+      tags: [], // Empty array when min(1) required
     });
 
     expect(result).toHaveProperty('error', true);
@@ -968,15 +934,10 @@ describe('Tool Input Validation', () => {
   it('should show provided arguments in validation error message', async () => {
     // Test that the error message includes the problematic arguments
     const result: any = await toolWithValidation.execute!({
-      context: {
-        name: 'A', // Too short
-        age: 200, // Too old
-        email: 'bad-email',
-        tags: [],
-      },
-      requestContext: new RequestContext(),
-      tracingContext: {},
-      suspend: async () => {},
+      name: 'A', // Too short
+      age: 200, // Too old
+      email: 'bad-email',
+      tags: [],
     });
 
     expect(result).toHaveProperty('error', true);

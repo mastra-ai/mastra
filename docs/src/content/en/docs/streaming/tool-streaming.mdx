@@ -47,17 +47,17 @@ import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
   // ...
-  execute: async ({ context, writer }) => {
-    const { value } = context;
+  execute: async (input, context) => {
+    const { value } = input;
 
-   await writer?.write({
+   await context?.writer?.write({
       type: "custom-event",
       status: "pending"
     });
 
     const response = await fetch(...);
 
-   await writer?.write({
+   await context?.writer?.write({
       type: "custom-event",
       status: "success"
     });
@@ -126,13 +126,13 @@ import { z } from "zod";
 
 export const testTool = createTool({
   // ...
-  execute: async ({ context, mastra, writer }) => {
-    const { city } = context;
+  execute: async (input, context) => {
+    const { city } = input;
 
-    const testAgent = mastra?.getAgent("testAgent");
+    const testAgent = context?.mastra?.getAgent("testAgent");
     const stream = await testAgent?.stream(`What is the weather in ${city}?`);
 
-    await stream!.textStream.pipeTo(writer!);
+    await stream!.textStream.pipeTo(context?.writer!);
 
     return {
       value: await stream!.text,

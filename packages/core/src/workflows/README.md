@@ -834,7 +834,7 @@ The vNext workflow API introduces several improvements over the original impleme
    // Original Mastra API
    const myStep = new Step({
      id: 'my-step',
-     execute: async ({ context }) => {
+     execute: async (input, context) => {
        // Logic with different access pattern
        return { result: 'success' };
      },

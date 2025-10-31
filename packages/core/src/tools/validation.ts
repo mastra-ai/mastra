@@ -8,8 +8,7 @@ export interface ValidationError<T = any> {
 }
 
 /**
- * BREAKING CHANGE v1.0: Simplified validation for the new tool argument structure.
- * This function now ONLY validates raw input data - no unwrapping of context objects.
+ * Validates raw input data against a Zod schema.
  *
  * @param schema The Zod schema to validate against
  * @param input The raw input data to validate

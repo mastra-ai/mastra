@@ -22,25 +22,26 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
     description: toolDescription,
     inputSchema,
     outputSchema,
-    execute: async ({ context, mastra, requestContext }) => {
-      const indexName: string = requestContext.get('indexName') ?? options.indexName;
+    execute: async (input, context) => {
+      const { requestContext, mastra } = context || {};
+      const indexName: string = requestContext?.get('indexName') ?? options.indexName;
       const vectorStoreName: string =
-        'vectorStore' in options ? storeName : (requestContext.get('vectorStoreName') ?? storeName);
-      const includeVectors: boolean = requestContext.get('includeVectors') ?? options.includeVectors ?? false;
-      const includeSources: boolean = requestContext.get('includeSources') ?? options.includeSources ?? true;
-      const reranker: RerankConfig = requestContext.get('reranker') ?? options.reranker;
-      const databaseConfig = requestContext.get('databaseConfig') ?? options.databaseConfig;
-      const model: MastraEmbeddingModel<string> = requestContext.get('model') ?? options.model;
+        'vectorStore' in options ? storeName : (requestContext?.get('vectorStoreName') ?? storeName);
+      const includeVectors: boolean = requestContext?.get('includeVectors') ?? options.includeVectors ?? false;
+      const includeSources: boolean = requestContext?.get('includeSources') ?? options.includeSources ?? true;
+      const reranker: RerankConfig | undefined = requestContext?.get('reranker') ?? options.reranker;
+      const databaseConfig = requestContext?.get('databaseConfig') ?? options.databaseConfig;
+      const model: MastraEmbeddingModel<string> = requestContext?.get('model') ?? options.model;
       const providerOptions: Record<string, Record<string, any>> | undefined =
-        requestContext.get('providerOptions') ?? options.providerOptions;
+        requestContext?.get('providerOptions') ?? options.providerOptions;
 
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
       if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`); // won't fire
 
-      const topK: number = requestContext.get('topK') ?? context.topK ?? 10;
-      const filter: Record<string, any> = requestContext.get('filter') ?? context.filter;
-      const queryText = context.queryText;
-      const enableFilter = !!requestContext.get('filter') || (options.enableFilter ?? false);
+      const topK: number = requestContext?.get('topK') ?? input.topK ?? 10;
+      const filter: Record<string, any> = requestContext?.get('filter') ?? (input.filter as Record<string, any>);
+      const queryText = input.queryText;
+      const enableFilter = !!requestContext?.get('filter') || (options.enableFilter ?? false);
 
       const logger = mastra?.getLogger();
       if (!logger) {

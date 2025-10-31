@@ -34,7 +34,7 @@ describe('Tool Input Validation Integration Tests', () => {
           count: z.number(),
           active: z.boolean(),
         }),
-        execute: async (input) => {
+        execute: async input => {
           return { success: true, data: input };
         },
       });
@@ -63,7 +63,7 @@ describe('Tool Input Validation Integration Tests', () => {
               'Password must be at least 8 characters with letters and numbers',
             ),
         }),
-        execute: async (input) => {
+        execute: async input => {
           return { success: true, data: input };
         },
       });
@@ -91,7 +91,7 @@ describe('Tool Input Validation Integration Tests', () => {
             deadline: z.string().datetime().optional(),
           }),
         }),
-        execute: async (input) => {
+        execute: async input => {
           return { success: true, data: input };
         },
       });
@@ -117,7 +117,7 @@ describe('Tool Input Validation Integration Tests', () => {
           age: z.number().min(0),
           email: z.string().email(),
         }),
-        execute: async (input) => {
+        execute: async input => {
           return { success: true, data: input };
         },
       });
@@ -145,7 +145,7 @@ describe('Tool Input Validation Integration Tests', () => {
           name: z.string().trim().toLowerCase(),
           age: z.string().transform(val => parseInt(val, 10)),
         }),
-        execute: async (input) => {
+        execute: async input => {
           return { transformed: input };
         },
       });
@@ -172,7 +172,7 @@ describe('Tool Input Validation Integration Tests', () => {
           email: z.string().email(),
           age: z.number().min(18, 'Must be 18 or older'),
         }),
-        execute: async (input) => {
+        execute: async input => {
           return { validated: true, user: input };
         },
       });
@@ -215,14 +215,13 @@ describe('Tool Input Validation Integration Tests', () => {
         inputSchema: z.object({
           name: z.string(),
         }),
-        execute: async (input) => {
+        execute: async input => {
           // In v1.0, input is already the raw data
           return { result: input.name };
         },
       });
 
-      // BREAKING CHANGE v1.0: Pass raw data directly
-      const result = await tool.execute({ name: 'test'}, { runId: 'test-run' });
+      const result = await tool.execute({ name: 'test' }, { runId: 'test-run' });
 
       expect(result).toEqual({ result: 'test' });
     });
@@ -237,12 +236,11 @@ describe('Tool Input Validation Integration Tests', () => {
           context: z.string(),
           otherField: z.number(),
         }),
-        execute: async (input) => {
+        execute: async input => {
           return { received: input };
         },
       });
 
-      // BREAKING CHANGE v1.0: No unwrapping, pass data directly
       const result: any = await tool?.execute?.({
         context: 'my-context-value',
         otherField: 42,
@@ -265,12 +263,11 @@ describe('Tool Input Validation Integration Tests', () => {
             timestamp: z.number(),
           }),
         }),
-        execute: async (input) => {
+        execute: async input => {
           return { received: input };
         },
       });
 
-      // BREAKING CHANGE v1.0: No unwrapping, pass data directly
       const result: any = await tool?.execute?.({
         inputData: 'my-input-data',
         metadata: { timestamp: 123456 },
@@ -292,12 +289,11 @@ describe('Tool Input Validation Integration Tests', () => {
           context: z.string(), // Schema expects a 'context' field
           otherValue: z.number(),
         }),
-        execute: async (input) => {
+        execute: async input => {
           return { received: input };
         },
       });
 
-      // BREAKING CHANGE v1.0: Pass raw data directly
       const result: any = await tool?.execute?.({
         context: 'my-context-string-value',
         otherValue: 42,
@@ -319,12 +315,11 @@ describe('Tool Input Validation Integration Tests', () => {
           inputData: z.number(),
           regularField: z.boolean(),
         }),
-        execute: async (input) => {
+        execute: async input => {
           return { received: input };
         },
       });
 
-      // BREAKING CHANGE v1.0: Pass raw data directly
       const result: any = await tool?.execute?.({
         context: 'context-value',
         inputData: 42,
@@ -347,12 +342,11 @@ describe('Tool Input Validation Integration Tests', () => {
           name: z.string(),
           value: z.number(),
         }),
-        execute: async (input) => {
+        execute: async input => {
           return { received: input };
         },
       });
 
-      // BREAKING CHANGE v1.0: No unwrapping - pass data directly
       const result: any = await tool?.execute?.({
         name: 'test',
         value: 123,
@@ -373,12 +367,11 @@ describe('Tool Input Validation Integration Tests', () => {
           context: z.string(),
           other: z.number(),
         }),
-        execute: async (input) => {
+        execute: async input => {
           return { received: input };
         },
       });
 
-      // BREAKING CHANGE v1.0: Pass raw data directly
       const result: any = await tool?.execute?.({
         context: 123, // Wrong type - should be string
         other: 456,
@@ -399,12 +392,11 @@ describe('Tool Input Validation Integration Tests', () => {
           }),
           metadata: z.string(),
         }),
-        execute: async (input) => {
+        execute: async input => {
           return { received: input };
         },
       });
 
-      // BREAKING CHANGE v1.0: Pass raw data directly
       const result: any = await tool?.execute?.({
         inputData: 'should-be-object', // Wrong type - should be object
         metadata: 'valid-string',
@@ -421,7 +413,7 @@ describe('Tool Input Validation Integration Tests', () => {
       const tool = createTool({
         id: 'no-schema',
         description: 'Tool without schema',
-        execute: async (input) => {
+        execute: async input => {
           return { received: input };
         },
       });
@@ -439,12 +431,11 @@ describe('Tool Input Validation Integration Tests', () => {
         inputSchema: z.object({
           required: z.string(),
         }),
-        execute: async (input) => {
+        execute: async input => {
           return { data: input };
         },
       });
 
-      // BREAKING CHANGE v1.0: Pass raw data directly - missing required field
       const result = await tool.execute({} as any);
       expect(result.error).toBe(true);
       expect(result.message).toContain('Tool validation failed');
@@ -460,7 +451,7 @@ describe('Tool Input Validation Integration Tests', () => {
             required: z.string(),
           })
           .passthrough(),
-        execute: async (input) => {
+        execute: async input => {
           return { data: input };
         },
       });
@@ -491,12 +482,11 @@ describe('Tool Input Validation Integration Tests', () => {
           }),
           action: z.enum(['create', 'update', 'delete']),
         }),
-        execute: async (input) => {
+        execute: async input => {
           return { processed: input };
         },
       });
 
-      // BREAKING CHANGE v1.0: Pass raw data directly
       const result: any = await tool?.execute?.({
         context: {
           user: { id: '123', name: 'John' },

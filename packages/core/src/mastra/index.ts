@@ -650,7 +650,7 @@ do:
    *
    * This method searches for an agent using its internal ID property. If no agent
    * is found with the given ID, it also attempts to find an agent using the ID as
-   * a name (for backward compatibility).
+   * a name.
    *
    * @throws {MastraError} When no agent is found with the specified ID
    *
@@ -923,7 +923,7 @@ do:
    *
    * This method searches for a workflow using its internal ID property. If no workflow
    * is found with the given ID, it also attempts to find a workflow using the ID as
-   * a name (for backward compatibility).
+   * a name.
    *
    * @throws {MastraError} When no workflow is found with the specified ID
    *

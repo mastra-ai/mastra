@@ -13,16 +13,16 @@ export const fsTool = createTool({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ context: { action, file, data } }) => {
+  execute: async input => {
     try {
-      switch (action) {
+      switch (input.action) {
         case 'write':
-          writeFileSync(file, data);
+          writeFileSync(input.file, input.data);
           break;
         case 'read':
-          return { message: readFileSync(file, 'utf8') };
+          return { message: readFileSync(input.file, 'utf8') };
         case 'append':
-          writeFileSync(file, data, { flag: 'a' });
+          writeFileSync(input.file, input.data, { flag: 'a' });
           break;
         default:
           return { message: 'Invalid action' };

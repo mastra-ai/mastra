@@ -190,9 +190,102 @@ const result = await agent.stream(messages, {
 });
 ```
 
-#### MCP tools
+#### Tool execute signature
 
-- Removed `elicitation` and `extra` from top level arguments. Use the `mcp` property instead.
+**Breaking Change:**
+
+The tool `execute` function signature has been updated to use separate `input` and `context` parameters instead of a single destructured object.
+
+```typescript
+// Before
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async ({ context }) => {
+    return getWeather(context.location);
+  },
+});
+
+// After
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async (input) => {
+    return getWeather(input.location);
+  },
+});
+```
+
+**Accessing execution context:**
+
+Context properties like `mastra`, `requestContext`, `agent`, `workflow`, and `mcp` are now passed as the second parameter:
+
+```typescript
+// Before
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async ({ context, requestContext, mastra }) => {
+    const userTier = requestContext.get("userTier");
+    const location = context.location;
+    return getWeather(location, userTier);
+  },
+});
+
+// After
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async (input, context) => {
+    const userTier = context?.requestContext?.get("userTier");
+    return getWeather(input.location, userTier);
+  },
+});
+```
+
+**Agent-specific context:**
+
+Agent-specific properties like `toolCallId`, `messages`, `suspend`, and `resumeData` are nested under `context.agent`:
+
+```typescript
+// After
+export const suspendableTool = createTool({
+  id: "suspendable-tool",
+  suspendSchema: z.object({
+    message: z.string(),
+  }),
+  resumeSchema: z.object({
+    approval: z.boolean(),
+  }),
+  execute: async (input, context) => {
+    if (!context?.agent?.resumeData) {
+      return await context?.agent?.suspend({
+        message: "Waiting for approval",
+      });
+    }
+
+    if (context.agent.resumeData.approval) {
+      return { success: true };
+    }
+  },
+});
+```
+
+**Workflow-specific context:**
+
+Workflow-specific properties like `workflowId`, `runId`, `state`, and `setState` are nested under `context.workflow`:
+
+```typescript
+// After
+export const workflowTool = createTool({
+  id: "workflow-tool",
+  execute: async (input, context) => {
+    const currentState = context?.workflow?.state;
+    context?.workflow?.setState({ step: "completed" });
+    return { result: "done" };
+  },
+});
+```
+
+**MCP tools:**
+
+MCP-specific properties `elicitation` and `extra` are nested under `context.mcp`:
 
 ```typescript
 export const accountBalance = createTool({
@@ -204,12 +297,12 @@ export const accountBalance = createTool({
   outputSchema: z.object({
     balance: z.number(),
   }),
-  execute: async ({ context, mcp }) => {
-    if (mcp) {
-      await checkAuth(mcp.extra.authInfo);
+  execute: async (input, context) => {
+    if (context?.mcp) {
+      await checkAuth(context.mcp.extra.authInfo);
 
-      const result = await mcp.elicitation.sendRequest({
-        message: `Is it ok to fetch the account balance for account ${context.accountId}?`,
+      const result = await context.mcp.elicitation.sendRequest({
+        message: `Is it ok to fetch the account balance for account ${input.accountId}?`,
         requestedSchema: {
           type: "object",
           properties: {
@@ -221,7 +314,7 @@ export const accountBalance = createTool({
 
       if (result.action === "accept") {
         return {
-          balance: getAccountBalance(context.accountId),
+          balance: getAccountBalance(input.accountId),
         };
       }
     }
@@ -276,29 +369,7 @@ await agent.generate(messages, {
 });
 ```
 
-**Tools:**
-
-```typescript
-// Before
-export const weatherTool = createTool({
-  id: "weather-tool",
-  execute: async ({ context, runtimeContext }) => {
-    // ❌
-    const userTier = runtimeContext.get("userTier");
-  },
-});
-
-// After
-export const weatherTool = createTool({
-  id: "weather-tool",
-  execute: async ({ context, requestContext }) => {
-    // ✅
-    const userTier = requestContext.get("userTier");
-  },
-});
-```
-
-This change also affects workflow steps, dynamic configuration functions (memory, model, etc.), and anywhere else you pass or receive `runtimeContext` as a parameter.
+**Note**: This also affects workflow steps, dynamic configuration functions (memory, model, etc.), and anywhere else you pass or receive `runtimeContext`/`requestContext` as a parameter. See the "Tool execute signature" section above for the updated tool signature pattern.
 
 ## Migrate to v0.22
 

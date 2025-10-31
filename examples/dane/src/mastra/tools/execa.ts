@@ -24,10 +24,10 @@ export const execaTool = createTool({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ context: { command, args } }) => {
+  execute: async input => {
     try {
-      console.log(chalk.green(`Running command: ${command} ${args.join(' ')}`));
-      const p = execa(command, args);
+      console.log(chalk.green(`Running command: ${input.command} ${input.args.join(' ')}`));
+      const p = execa(input.command, input.args);
       console.log(`\n`);
       p.stdout.pipe(colorTransform).pipe(process.stdout);
       p.stderr.pipe(colorTransform).pipe(process.stderr);

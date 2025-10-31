@@ -34,7 +34,7 @@ const weatherTool = createTool({
   id: "getWeather",
   description: "Gets the current weather for a location.",
   inputSchema: z.object({ location: z.string() }),
-  execute: async ({ context }) => `Weather in ${context.location} is sunny.`,
+  execute: async (input) => `Weather in ${input.location} is sunny.`,
 });
 
 const server = new MCPServer({
@@ -852,17 +852,17 @@ The `MCPServer` class automatically includes elicitation capabilities. Tools rec
 When tools are executed within an MCP server context, they receive an additional `options` parameter:
 
 ```typescript
-execute: async ({ context }, options) => {
-  // context contains the tool's input parameters
-  // options contains server capabilities like elicitation and authentication info
+execute: async (input, context) => {
+  // input contains the tool's input parameters
+  // context.mcp contains server capabilities like elicitation and authentication info
 
   // Access authentication information (when available)
-  if (options.extra?.authInfo) {
-    console.log("Authenticated request from:", options.extra.authInfo.clientId);
+  if (context.mcp?.extra?.authInfo) {
+    console.log("Authenticated request from:", context.mcp.extra.authInfo.clientId);
   }
 
   // Use elicitation capabilities
-  const result = await options.elicitation.sendRequest({
+  const result = await context.mcp.elicitation.sendRequest({
     message: "Please provide information",
     requestedSchema: {
       /* schema */
@@ -906,15 +906,15 @@ const server = new MCPServer({
           .optional()
           .describe("Reason for collecting contact info"),
       }),
-      execute: async ({ context }, options) => {
-        const { reason } = context;
+      execute: async (input, context) => {
+        const { reason } = input;
 
         // Log session info if available
-        console.log("Request from session:", options.extra?.sessionId);
+        console.log("Request from session:", context.mcp?.extra?.sessionId);
 
         try {
           // Request user input via elicitation
-          const result = await options.elicitation.sendRequest({
+          const result = await context.mcp.elicitation.sendRequest({
             message: reason
               ? `Please provide your contact information. ${reason}`
               : "Please provide your contact information",
@@ -1022,9 +1022,9 @@ The elicitation functionality is available through the `options` parameter in to
 
 ```typescript
 // Within a tool's execute function
-execute: async ({ context }, options) => {
+execute: async (input, context) => {
   // Use elicitation for user input
-  const result = await options.elicitation.sendRequest({
+  const result = await context.mcp.elicitation.sendRequest({
     message: string,           // Message to display to user
     requestedSchema: object    // JSON schema defining expected response structure
   }): Promise<ElicitResult>
@@ -1052,15 +1052,15 @@ type ElicitResult = {
 Tools can access request metadata via `options.extra` when using HTTP-based transports:
 
 ```typescript
-execute: async ({ context }, options) => {
-  if (!options.extra?.authInfo?.token) {
+execute: async (input, context) => {
+  if (!context.mcp?.extra?.authInfo?.token) {
     return "Authentication required";
   }
 
   // Use the auth token
   const response = await fetch("/api/data", {
-    headers: { Authorization: `Bearer ${options.extra.authInfo.token}` },
-    signal: options.extra.signal,
+    headers: { Authorization: `Bearer ${context.mcp.extra.authInfo.token}` },
+    signal: context.mcp.extra.signal,
   });
 
   return response.json();

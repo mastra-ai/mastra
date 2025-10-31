@@ -9,7 +9,7 @@ import type {
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/types.js';
 
-import type { IAction, IExecutionContext, MastraUnion } from '../action';
+import type { MastraUnion } from '../action';
 import type { TracingContext } from '../ai-tracing';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
@@ -24,7 +24,45 @@ export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
 /**
  * MCP-specific context properties available during tool execution in MCP environments.
  */
-export interface MCPExecutionContext {
+// Agent tool execution context - properties specific when tools are executed by agents
+export interface AgentToolExecutionContext<
+  TSuspendSchema extends ZodLikeSchema = any,
+  TResumeSchema extends ZodLikeSchema = any,
+> {
+  // Always present when called from agent context
+  toolCallId: string;
+  messages: any[];
+  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>) => Promise<any>;
+
+  // Optional - memory identifiers (memory itself is accessed via mastra.memory)
+  threadId?: string;
+  resourceId?: string;
+
+  // Optional - only present if tool was previously suspended
+  resumeData?: InferZodLikeSchema<TResumeSchema>;
+
+  // Optional - original WritableStream passed from AI SDK (without Mastra metadata wrapping)
+  writableStream?: WritableStream<any>;
+}
+
+// Workflow tool execution context - properties specific when tools are executed in workflows
+export interface WorkflowToolExecutionContext<
+  TSuspendSchema extends ZodLikeSchema = any,
+  TResumeSchema extends ZodLikeSchema = any,
+> {
+  // Always present when called from workflow context
+  runId: string;
+  workflowId: string;
+  state: any;
+  setState: (state: any) => void;
+  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>) => Promise<any>;
+
+  // Optional - only present if workflow step was previously suspended
+  resumeData?: InferZodLikeSchema<TResumeSchema>;
+}
+
+// MCP tool execution context - properties specific when tools are executed via Model Context Protocol
+export interface MCPToolExecutionContext {
   /** MCP protocol context passed by the server */
   extra: RequestHandlerExtra<any, any>;
   /** Elicitation handler for interactive user input during tool execution */
@@ -36,6 +74,14 @@ export interface MCPExecutionContext {
 /**
  * Extended version of ToolInvocationOptions that includes Mastra-specific properties
  * for suspend/resume functionality, stream writing, and tracing context.
+ *
+ * This is used by CoreTool/InternalCoreTool for AI SDK compatibility (AI SDK expects this signature).
+ * Mastra v1.0 tools (ToolAction) use ToolExecutionContext instead.
+ *
+ * CoreToolBuilder acts as the adapter layer:
+ * - Receives: AI SDK calls with MastraToolInvocationOptions
+ * - Converts to: ToolExecutionContext for Mastra tool execution
+ * - Returns: Results back to AI SDK
  */
 export type MastraToolInvocationOptions = ToolInvocationOptions & {
   suspend?: (suspendPayload: any) => Promise<any>;
@@ -46,7 +92,7 @@ export type MastraToolInvocationOptions = ToolInvocationOptions & {
    * Optional MCP-specific context passed when tool is executed in MCP server.
    * This is populated by the MCP server and passed through to the tool's execution context.
    */
-  mcp?: MCPExecutionContext;
+  mcp?: MCPToolExecutionContext;
 };
 
 /**
@@ -66,7 +112,18 @@ export interface MCPToolProperties {
   toolType?: MCPToolType;
 }
 
-// Define CoreTool as a discriminated union to match the AI SDK's Tool type
+/**
+ * CoreTool is the AI SDK-compatible tool format used when passing tools to the AI SDK.
+ * This matches the AI SDK's Tool interface.
+ *
+ * CoreToolBuilder converts Mastra tools (ToolAction) to this format and handles the
+ * signature transformation from Mastra's (input, context) to AI SDK format (params, options).
+ *
+ * Key differences from ToolAction:
+ * - Uses 'parameters' instead of 'inputSchema' (AI SDK naming)
+ * - Execute signature: (params, options: MastraToolInvocationOptions) (AI SDK format)
+ * - Supports FlexibleSchema | Schema for broader AI SDK compatibility
+ */
 export type CoreTool = {
   description?: string;
   parameters: FlexibleSchema<any> | Schema;
@@ -89,7 +146,12 @@ export type CoreTool = {
     }
 );
 
-// Duplicate of CoreTool but with parameters as Schema to make it easier to work with internally
+/**
+ * InternalCoreTool is identical to CoreTool but with stricter typing.
+ * Used internally where we know the schema has already been converted to AI SDK Schema format.
+ *
+ * The only difference: parameters must be Schema (not FlexibleSchema | Schema)
+ */
 export type InternalCoreTool = {
   description?: string;
   parameters: Schema;
@@ -112,22 +174,31 @@ export type InternalCoreTool = {
     }
 );
 
+// Unified tool execution context that works for all scenarios
 export interface ToolExecutionContext<
-  TSchemaIn extends ZodLikeSchema | undefined = undefined,
   TSuspendSchema extends ZodLikeSchema = any,
   TResumeSchema extends ZodLikeSchema = any,
-> extends IExecutionContext<TSchemaIn> {
+> {
+  // ============ Common properties (available in all contexts) ============
   mastra?: MastraUnion;
-  requestContext: RequestContext;
-  writer?: ToolStream<any>;
+  requestContext?: RequestContext;
   tracingContext?: TracingContext;
-  suspend?: (suspendPayload: InferZodLikeSchema<TSuspendSchema>) => Promise<any>;
-  resumeData?: InferZodLikeSchema<TResumeSchema>;
-  /**
-   * Optional MCP-specific context.
-   * Only populated when the tool is executed in an MCP server context.
-   */
-  mcp?: MCPExecutionContext;
+  abortSignal?: AbortSignal;
+
+  // Writer is created by Mastra for ALL contexts (agent, workflow, direct execution)
+  // Wraps chunks with metadata (toolCallId, toolName, runId) before passing to underlying stream
+  writer?: ToolStream<any>;
+
+  // ============ Context-specific nested properties ============
+
+  // Agent-specific properties
+  agent?: AgentToolExecutionContext<TSuspendSchema, TResumeSchema>;
+
+  // Workflow-specific properties
+  workflow?: WorkflowToolExecutionContext<TSuspendSchema, TResumeSchema>;
+
+  // MCP (Model Context Protocol) specific context
+  mcp?: MCPToolExecutionContext;
 }
 
 export interface ToolAction<
@@ -135,21 +206,23 @@ export interface ToolAction<
   TSchemaOut extends ZodLikeSchema | undefined = undefined,
   TSuspendSchema extends ZodLikeSchema = any,
   TResumeSchema extends ZodLikeSchema = any,
-  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema> = ToolExecutionContext<
-    TSchemaIn,
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema> = ToolExecutionContext<
     TSuspendSchema,
     TResumeSchema
   >,
-> extends IAction<string, TSchemaIn, TSchemaOut, TContext, MastraToolInvocationOptions> {
+> {
+  id: string;
+  description: string;
+  inputSchema?: TSchemaIn;
+  outputSchema?: TSchemaOut;
   suspendSchema?: TSuspendSchema;
   resumeSchema?: TResumeSchema;
-  description: string;
-  // BREAKING CHANGE v1.0: New execute signature
+  // Execute signature with unified context type
   // First parameter: raw input data (validated against inputSchema)
-  // Second parameter: execution context with metadata
+  // Second parameter: unified execution context with all metadata
   execute?: (
     input: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
-    context?: TContext | MastraToolInvocationOptions,
+    context?: TContext,
   ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
   mastra?: Mastra;
   requireApproval?: boolean;

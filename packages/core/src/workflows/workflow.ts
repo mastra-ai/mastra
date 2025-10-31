@@ -118,7 +118,7 @@ type ToolStep<
   TSuspendSchema extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema>,
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
 > = Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
   inputSchema: TSchemaIn;
   outputSchema: TSchemaOut;
@@ -162,7 +162,7 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema>,
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
 >(
   tool: ToolStep<TSchemaIn, TSuspendSchema, TResumeSchema, TSchemaOut, TContext>,
 ): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, DefaultEngineType>;
@@ -299,7 +299,18 @@ export function createStep<
       description: params.description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra, requestContext, tracingContext, suspend, resumeData, runId, workflowId, state, setState }) => {
+      execute: async ({
+        inputData,
+        mastra,
+        requestContext,
+        tracingContext,
+        suspend,
+        resumeData,
+        runId,
+        workflowId,
+        state,
+        setState,
+      }) => {
         // BREAKING CHANGE v1.0: Pass raw input as first arg, context as second
         const toolContext = {
           mastra,

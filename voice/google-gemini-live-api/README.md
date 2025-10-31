@@ -337,8 +337,8 @@ const searchTool = createTool({
   id: 'search',
   description: 'Search the web',
   inputSchema: z.object({ query: z.string() }),
-  execute: async ({ context }) => {
-    const { query } = context;
+  execute: async input => {
+    const { query } = input;
     // ... perform search
     return { results: [] };
   },
@@ -355,7 +355,7 @@ voice.addTools({
     id: 'search',
     description: 'Search the web',
     inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
-    execute: async ({ context }) => ({ results: [] }),
+    execute: async (input, context) => ({ results: [] }),
   },
 });
 ```

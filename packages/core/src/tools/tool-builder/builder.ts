@@ -212,7 +212,7 @@ export class CoreToolBuilder extends MastraBase {
           // Wrap mastra with tracing context - wrapMastra will handle whether it's a full instance or primitives
           const wrappedMastra = options.mastra ? wrapMastra(options.mastra, { currentSpan: toolSpan }) : options.mastra;
 
-          // BREAKING CHANGE v1.0: Pass raw args as first parameter, context as second
+          // Pass raw args as first parameter, context as second
           // Properly structure context based on execution source
           const baseContext = {
             threadId: options.threadId,
@@ -220,7 +220,7 @@ export class CoreToolBuilder extends MastraBase {
             mastra: wrappedMastra,
             memory: options.memory,
             runId: options.runId,
-            runtimeContext: options.requestContext ?? new RequestContext(),
+            requestContext: options.requestContext ?? new RequestContext(),
             writer: new ToolStream(
               {
                 prefix: 'tool',
@@ -236,30 +236,44 @@ export class CoreToolBuilder extends MastraBase {
           };
 
           // Check if this is agent execution (has toolCallId and messages)
+          // Agent execution takes precedence over workflow execution because agents may
+          // use workflows internally for their agentic loop
           const isAgentExecution = execOptions.toolCallId && execOptions.messages;
 
           // Check if this is workflow execution (has workflow properties in options)
-          const isWorkflowExecution = options.workflow || options.workflowId;
+          // Only consider it workflow execution if it's NOT agent execution
+          const isWorkflowExecution = !isAgentExecution && (options.workflow || options.workflowId);
 
           let toolContext;
           if (isAgentExecution) {
             // Nest agent-specific properties under 'agent' key
+            // Do NOT include workflow context even if workflow properties exist
+            // (agents use workflows internally but tools should see agent context)
+            const { suspend, resumeData, threadId, resourceId, ...restBaseContext } = baseContext;
             toolContext = {
-              ...baseContext,
+              ...restBaseContext,
               agent: {
                 toolCallId: execOptions.toolCallId,
                 messages: execOptions.messages,
+                suspend,
+                resumeData,
+                threadId,
+                resourceId,
+                writableStream: execOptions.writableStream,
               },
             };
           } else if (isWorkflowExecution) {
             // Nest workflow-specific properties under 'workflow' key
+            const { suspend, resumeData, ...restBaseContext } = baseContext;
             toolContext = {
-              ...baseContext,
+              ...restBaseContext,
               workflow: options.workflow || {
                 runId: options.runId,
                 workflowId: options.workflowId,
                 state: options.state,
                 setState: options.setState,
+                suspend,
+                resumeData,
               },
             };
           } else if (execOptions.mcp) {

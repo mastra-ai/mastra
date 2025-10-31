@@ -10,8 +10,8 @@ const stepOne = new Step({
   outputSchema: z.object({
     doubledValue: z.number(),
   }),
-  execute: async ({ context }) => {
-    const doubledValue = context.inputValue * 2;
+  execute: async input => {
+    const doubledValue = input.inputValue * 2;
     return { doubledValue };
   },
 });
@@ -25,8 +25,8 @@ const stepTwo = new Step({
   outputSchema: z.object({
     incrementedValue: z.number(),
   }),
-  execute: async ({ context }) => {
-    const incrementedValue = context.valueToIncrement + 1;
+  execute: async input => {
+    const incrementedValue = input.valueToIncrement + 1;
     return { incrementedValue };
   },
 });
@@ -40,8 +40,8 @@ const stepThree = new Step({
   outputSchema: z.object({
     squaredValue: z.number(),
   }),
-  execute: async ({ context }) => {
-    const squaredValue = context.valueToSquare * context.valueToSquare;
+  execute: async input => {
+    const squaredValue = input.valueToSquare * input.valueToSquare;
     return { squaredValue };
   },
 });
@@ -55,8 +55,8 @@ const stepFour = new Step({
   outputSchema: z.object({
     rootValue: z.number(),
   }),
-  execute: async ({ context }) => {
-    return { rootValue: Math.sqrt(context.valueToRoot) };
+  execute: async input => {
+    return { rootValue: Math.sqrt(input.valueToRoot) };
   },
 });
 
@@ -69,8 +69,8 @@ const stepFive = new Step({
   outputSchema: z.object({
     tripledValue: z.number(),
   }),
-  execute: async ({ context }) => {
-    const tripledValue = context.inputValue * 3;
+  execute: async input => {
+    const tripledValue = input.inputValue * 3;
     return { tripledValue };
   },
 });
@@ -84,9 +84,9 @@ const stepSix = new Step({
   outputSchema: z.object({
     rawText: z.string(),
   }),
-  execute: async ({ context }) => {
-    console.log(context.inputValue);
-    return { rawText: context.inputValue.toString() };
+  execute: async input => {
+    console.log(input.inputValue);
+    return { rawText: input.inputValue.toString() };
   },
 });
 

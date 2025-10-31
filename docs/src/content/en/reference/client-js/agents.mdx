@@ -97,8 +97,8 @@ const colorChangeTool = createTool({
   inputSchema: z.object({
     color: z.string(),
   }),
-  execute: async ({ context }) => {
-    document.body.style.backgroundColor = context.color;
+  execute: async (input) => {
+    document.body.style.backgroundColor = input.color;
     return { success: true };
   },
 });

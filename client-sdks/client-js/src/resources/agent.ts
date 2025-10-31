@@ -70,21 +70,17 @@ async function executeToolCallAndRespond({
       const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
 
       if (clientTool && clientTool.execute) {
-        const result = await clientTool.execute(
-          {
-            context: toolCall?.args,
-            runId,
-            resourceId,
-            threadId,
-            requestContext: requestContext as RequestContext,
-            tracingContext: { currentSpan: undefined },
-            suspend: async () => {},
-          },
-          {
+        const result = await clientTool.execute(toolCall?.args, {
+          requestContext: requestContext as RequestContext,
+          tracingContext: { currentSpan: undefined },
+          agent: {
             messages: (response as unknown as { messages: CoreMessage[] }).messages,
             toolCallId: toolCall?.toolCallId,
+            suspend: async () => {},
+            threadId,
+            resourceId,
           },
-        );
+        });
 
         // Build updated messages from the response, adding the tool result
         // Do NOT re-include the original user message to avoid storage duplicates
@@ -261,21 +257,17 @@ export class Agent extends BaseResource {
         const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
 
         if (clientTool && clientTool.execute) {
-          const result = await clientTool.execute(
-            {
-              context: toolCall?.args,
-              runId,
-              resourceId,
-              threadId,
-              requestContext: requestContext as RequestContext,
-              tracingContext: { currentSpan: undefined },
-              suspend: async () => {},
-            },
-            {
+          const result = await clientTool.execute(toolCall?.args, {
+            requestContext: requestContext as RequestContext,
+            tracingContext: { currentSpan: undefined },
+            agent: {
               messages: (response as unknown as { messages: CoreMessage[] }).messages,
               toolCallId: toolCall?.toolCallId,
+              suspend: async () => {},
+              threadId,
+              resourceId,
             },
-          );
+          });
 
           // Build updated messages from the response, adding the tool result
           // Do NOT re-include the original user message to avoid storage duplicates
@@ -1190,22 +1182,18 @@ export class Agent extends BaseResource {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
                 shouldExecuteClientTool = true;
-                const result = await clientTool.execute(
-                  {
-                    context: toolCall?.args,
-                    runId: processedParams.runId,
-                    resourceId: processedParams.resourceId,
-                    threadId: processedParams.threadId,
-                    requestContext: processedParams.requestContext as RequestContext,
-                    // TODO: Pass proper tracing context when client-js supports tracing
-                    tracingContext: { currentSpan: undefined },
-                    suspend: async () => {},
-                  },
-                  {
+                const result = await clientTool.execute(toolCall?.args, {
+                  requestContext: processedParams.requestContext as RequestContext,
+                  // TODO: Pass proper tracing context when client-js supports tracing
+                  tracingContext: { currentSpan: undefined },
+                  agent: {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
                     toolCallId: toolCall?.toolCallId,
+                    suspend: async () => {},
+                    threadId: processedParams.threadId,
+                    resourceId: processedParams.resourceId,
                   },
-                );
+                });
 
                 const lastMessageRaw = messages[messages.length - 1];
                 const lastMessage: UIMessage | undefined =
@@ -1554,22 +1542,18 @@ export class Agent extends BaseResource {
             for (const toolCall of toolCalls) {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
-                const result = await clientTool.execute(
-                  {
-                    context: toolCall?.args,
-                    runId: processedParams.runId,
-                    resourceId: processedParams.resourceId,
-                    threadId: processedParams.threadId,
-                    requestContext: processedParams.requestContext as RequestContext,
-                    // TODO: Pass proper tracing context when client-js supports tracing
-                    tracingContext: { currentSpan: undefined },
-                    suspend: async () => {},
-                  },
-                  {
+                const result = await clientTool.execute(toolCall?.args, {
+                  requestContext: processedParams.requestContext as RequestContext,
+                  // TODO: Pass proper tracing context when client-js supports tracing
+                  tracingContext: { currentSpan: undefined },
+                  agent: {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
                     toolCallId: toolCall?.toolCallId,
+                    suspend: async () => {},
+                    threadId: processedParams.threadId,
+                    resourceId: processedParams.resourceId,
                   },
-                );
+                });
 
                 const lastMessage: UIMessage = JSON.parse(JSON.stringify(messages[messages.length - 1]));
 

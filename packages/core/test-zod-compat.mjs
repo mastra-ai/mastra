@@ -42,9 +42,8 @@ const v4Tool = createTool({
   outputSchema: zv4.object({
     output: zv4.string()
   }),
-  execute: async ({ context }) => {
-    const { input } = context;
-    const reversed = input.split("").reverse().join("");
+  execute: async (input) => {
+    const reversed = input.input.split("").reverse().join("");
     return {
       output: reversed
     };
@@ -61,8 +60,8 @@ const v3Tool = createTool({
   outputSchema: z.object({
     result: z.string()
   }),
-  execute: async ({ context }) => ({
-    result: context.message.toUpperCase()
+  execute: async (input) => ({
+    result: input.message.toUpperCase()
   })
 });
 

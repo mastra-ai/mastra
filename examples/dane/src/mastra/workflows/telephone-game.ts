@@ -53,12 +53,12 @@ const stepB2 = new Step({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ context }) => {
-    if (context?.steps.stepA2?.status !== 'success') {
+  execute: async (input, context) => {
+    if (context?.workflow?.state?.steps.stepA2?.status !== 'success') {
       throw new Error('Message not found');
     }
 
-    const msg = context.steps.stepA2.output.message;
+    const msg = context.workflow.state.steps.stepA2.output.message;
 
     return {
       message: msg,
@@ -72,10 +72,10 @@ const stepC2 = new Step({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ suspend, context }) => {
-    const oMsg = getStepResult(context?.steps.stepA2);
-    if (context?.steps.stepC2?.status === 'success') {
-      const msg = getStepResult(context?.steps.stepC2);
+  execute: async (input, context) => {
+    const oMsg = getStepResult(context?.workflow?.state?.steps.stepA2);
+    if (context?.workflow?.state?.steps.stepC2?.status === 'success') {
+      const msg = getStepResult(context?.workflow?.state?.steps.stepC2);
       if (msg.confirm) {
         const result = await agent.generate(`
             You are playing a game of telephone.
@@ -90,7 +90,7 @@ const stepC2 = new Step({
 
       return oMsg;
     }
-    await suspend();
+    await context?.workflow?.suspend();
     return { message: 'Suspended' };
   },
 });
@@ -101,8 +101,8 @@ const stepD2 = new Step({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ context }) => {
-    const msg = getStepResult(context?.steps.stepC2);
+  execute: async (input, context) => {
+    const msg = getStepResult(context?.workflow?.state?.steps.stepC2);
     return msg;
   },
 });

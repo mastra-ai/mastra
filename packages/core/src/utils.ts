@@ -233,6 +233,11 @@ export interface ToolOptions {
   model?: MastraLanguageModel;
   writableStream?: WritableStream<ChunkType>;
   requireApproval?: boolean;
+  // Workflow-specific properties
+  workflow?: any;
+  workflowId?: string;
+  state?: any;
+  setState?: (state: any) => void;
 }
 
 /**

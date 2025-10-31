@@ -9355,8 +9355,8 @@ describe('Workflow', () => {
       });
 
       // @ts-ignore
-      const toolAction = vi.fn<any>().mockImplementation(async ({ context }) => {
-        return { name: context.name };
+      const toolAction = vi.fn<any>().mockImplementation(async (input, context) => {
+        return { name: input.name };
       });
 
       const randomTool = createTool({
@@ -9703,8 +9703,8 @@ describe('Workflow', () => {
       });
 
       // @ts-ignore
-      const toolAction = vi.fn<any>().mockImplementation(async ({ context }) => {
-        return { name: context.name };
+      const toolAction = vi.fn<any>().mockImplementation(async (input, context) => {
+        return { name: input.name };
       });
 
       const randomTool = createTool({

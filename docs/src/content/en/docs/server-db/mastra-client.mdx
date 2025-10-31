@@ -215,8 +215,8 @@ const handleClientTool = async () => {
       outputSchema: z.object({
         success: z.boolean(),
       }),
-      execute: async ({ context }) => {
-        const { color } = context;
+      execute: async (input) => {
+        const { color } = input;
 
         document.body.style.backgroundColor = color;
         return { success: true };

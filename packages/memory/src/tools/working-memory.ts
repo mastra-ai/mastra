@@ -29,30 +29,21 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
     id: 'update-working-memory',
     description: `Update the working memory with new information. Any data not included will be overwritten.${schema ? ' Always pass data as string to the memory field. Never pass an object.' : ''}`,
     inputSchema,
-    execute: async params => {
-      const { context, threadId, memory, resourceId } = params;
-      if (!threadId || !memory || !resourceId) {
+    execute: async (input, context) => {
+      const { threadId, resourceId } = context?.agent || {};
+
+      if (!threadId || !context?.mastra?.memory || !resourceId) {
         throw new Error('Thread ID, Memory instance, and resourceId are required for working memory updates');
       }
 
-      let thread = await memory.getThreadById({ threadId });
-
-      if (!thread) {
-        thread = await memory.createThread({
-          threadId,
-          resourceId,
-          memoryConfig,
-        });
-      }
-
-      if (thread.resourceId && thread.resourceId !== resourceId) {
+      if (resourceId && resourceId !== resourceId) {
         throw new Error(`Thread with id ${threadId} resourceId does not match the current resourceId ${resourceId}`);
       }
 
-      const workingMemory = typeof context.memory === 'string' ? context.memory : JSON.stringify(context.memory);
+      const workingMemory = typeof input.memory === 'string' ? input.memory : JSON.stringify(input.memory);
 
       // Use the new updateWorkingMemory method which handles both thread and resource scope
-      await memory.updateWorkingMemory({
+      await context?.mastra?.memory.updateWorkingMemory({
         threadId,
         resourceId,
         workingMemory,
@@ -88,8 +79,9 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
           "The reason you're updating working memory. Passing any value other than 'append-new-memory' requires a searchString to be provided. Defaults to append-new-memory",
         ),
     }),
-    execute: async params => {
-      const { context, threadId, memory, resourceId } = params;
+    execute: async (input, context) => {
+      const { threadId, resourceId } = context?.agent || {};
+      const { memory } = context?.mastra || {};
       if (!threadId || !memory || !resourceId) {
         throw new Error('Thread ID, Memory instance, and resourceId are required for working memory updates');
       }
@@ -108,30 +100,30 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
         throw new Error(`Thread with id ${threadId} resourceId does not match the current resourceId ${resourceId}`);
       }
 
-      const workingMemory = context.newMemory || '';
-      if (!context.updateReason) context.updateReason = `append-new-memory`;
+      const workingMemory = input.newMemory || '';
+      if (!input.updateReason) input.updateReason = `append-new-memory`;
 
       if (
-        context.searchString &&
+        input.searchString &&
         config.workingMemory?.scope === `resource` &&
-        context.updateReason === `replace-irrelevant-memory`
+        input.updateReason === `replace-irrelevant-memory`
       ) {
         // don't allow replacements due to something not being relevant to the current conversation
         // if there's no searchString, then we will append.
-        context.searchString = undefined;
+        input.searchString = undefined;
       }
 
-      if (context.updateReason === `append-new-memory` && context.searchString) {
+      if (input.updateReason === `append-new-memory` && input.searchString) {
         // do not find/replace when append-new-memory is selected
         // some models get confused and pass a search string even when they don't want to replace it.
         // TODO: maybe they're trying to add new info after the search string?
-        context.searchString = undefined;
+        input.searchString = undefined;
       }
 
-      if (context.updateReason !== `append-new-memory` && !context.searchString) {
+      if (input.updateReason !== `append-new-memory` && !input.searchString) {
         return {
           success: false,
-          reason: `updateReason was ${context.updateReason} but no searchString was provided. Unable to replace undefined with "${context.newMemory}"`,
+          reason: `updateReason was ${input.updateReason} but no searchString was provided. Unable to replace undefined with "${input.newMemory}"`,
         };
       }
 
@@ -140,7 +132,7 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
         threadId,
         resourceId,
         workingMemory: workingMemory,
-        searchString: context.searchString,
+        searchString: input.searchString,
         memoryConfig: config,
       });
 

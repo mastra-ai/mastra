@@ -1,18 +1,28 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  "files": [],
-  "references": [
-    { "path": "./packages/core" },
-    { "path": "./packages/evals" },
-    { "path": "./packages/agent-builder" },
-    { "path": "./client-sdks/client-js" },
-    { "path": "./packages/server" },
-    { "path": "./stores/mssql" },
-    { "path": "./client-sdks/ai-sdk" },
-    { "path": "./deployers/cloud" },
-    { "path": "./deployers/cloudflare" },
-    { "path": "./packages/cli" },
-    { "path": "./packages/deployer" },
-    { "path": "./packages/memory" }
-  ]
+  "compilerOptions": {
+    "allowJs": true,
+    "allowSyntheticDefaultImports": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "checkJs": true,
+    "declaration": true,
+    "declarationMap": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "module": "ES2022",
+    "moduleResolution": "Node",
+    "noEmit": true,
+    "noImplicitReturns": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2020"
+  },
+  "include": ["eslint.config.js", "prettier.config.js"]
 }

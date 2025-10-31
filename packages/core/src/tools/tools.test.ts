@@ -22,14 +22,12 @@ describe('createTool', () => {
     inputSchema: z.object({
       name: z.string(),
     }),
-    // BREAKING CHANGE v1.0: New signature - input as first param, context as second
     execute: (input, context) => {
       return mockFindUser(input.name) as Promise<Record<string, any>>;
     },
   });
 
   it('should call mockFindUser', async () => {
-    // BREAKING CHANGE v1.0: Pass raw input as first arg, context as second
     await testTool.execute?.(
       { name: 'Dero Israel' },
       {
