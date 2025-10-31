@@ -264,7 +264,7 @@ describe('Memory Streaming Tests', () => {
       await weatherAgent.generate(`LA weather`, { threadId, resourceId });
 
       const agentMemory = (await weatherAgent.getMemory())!;
-      const initialMessages = (await agentMemory.query({ threadId })).uiMessages;
+      const initialMessages = (await agentMemory.query({ threadId })).messages;
       const state = { clipboard: '' };
       const { result } = renderHook(() => {
         const chat = useChat({

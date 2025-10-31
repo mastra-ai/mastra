@@ -390,15 +390,21 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { uiMessages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.query({ threadId });
 
       // Check that all user messages were saved
-      const savedUserMessages = uiMessages.filter((m: any) => m.role === 'user');
+      const savedUserMessages = messages.filter((m: any) => m.role === 'user');
       expect(savedUserMessages.length).toBe(2);
 
       // Check that metadata was persisted in the stored messages
-      const firstMessage = uiMessages.find((m: any) => m.content === 'Hello with metadata');
-      const secondMessage = uiMessages.find((m: any) => m.content === 'Another message with different metadata');
+      const firstMessage = messages.find((m: any) => {
+        const textContent = m.content?.parts?.find((p: any) => p.type === 'text')?.text;
+        return textContent === 'Hello with metadata';
+      });
+      const secondMessage = messages.find((m: any) => {
+        const textContent = m.content?.parts?.find((p: any) => p.type === 'text')?.text;
+        return textContent === 'Another message with different metadata';
+      });
 
       expect(firstMessage).toBeDefined();
       expect(firstMessage!.metadata).toEqual({
@@ -414,17 +420,23 @@ describe('Agent Memory Tests', () => {
         userId: 'user-123',
       });
 
-      // Check UI messages also preserve metadata
-      const firstUIMessage = uiMessages.find((m: any) => m.content === 'Hello with metadata');
-      const secondUIMessage = uiMessages.find((m: any) => m.content === 'Another message with different metadata');
+      // Check stored messages also preserve metadata
+      const firstStoredMessage = messages.find((m: any) => {
+        const textContent = m.content?.parts?.find((p: any) => p.type === 'text')?.text;
+        return textContent === 'Hello with metadata';
+      });
+      const secondStoredMessage = messages.find((m: any) => {
+        const textContent = m.content?.parts?.find((p: any) => p.type === 'text')?.text;
+        return textContent === 'Another message with different metadata';
+      });
 
-      expect(firstUIMessage?.metadata).toEqual({
+      expect(firstStoredMessage?.metadata).toEqual({
         source: 'web-ui',
         timestamp: expect.any(Number),
         customField: 'custom-value',
       });
 
-      expect(secondUIMessage?.metadata).toEqual({
+      expect(secondStoredMessage?.metadata).toEqual({
         source: 'mobile-app',
         version: '1.0.0',
         userId: 'user-123',

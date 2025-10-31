@@ -110,7 +110,7 @@ describe('Memory with Processors', () => {
 
     const allMessagesResult = await memory.processMessages({
       messages: new MessageList({ threadId: thread.id, resourceId })
-        .add(allMessagesQuery.uiMessages, 'memory')
+        .add(allMessagesQuery.messages, 'memory')
         .get.all.core(),
       processors: [new TokenLimiter(3000)], // High limit that should exceed total tokens
     });
@@ -169,7 +169,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result2 = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult2.uiMessages),
+      messages: v2ToCoreMessages(queryResult2.messages),
       processors: [],
     });
     const messages2 = new MessageList({ threadId: thread.id, resourceId }).add(result2, 'response').get.all.db();
@@ -185,7 +185,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result3 = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult3.uiMessages),
+      messages: v2ToCoreMessages(queryResult3.messages),
       processors: [new ToolCallFilter({ exclude: ['weather', 'calculator'] })],
     });
     expect(result3.length).toBeLessThan(messagesV2.length);
@@ -200,7 +200,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result4 = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult4.uiMessages),
+      messages: v2ToCoreMessages(queryResult4.messages),
       processors: [new ToolCallFilter()],
     });
     expect(result4.length).toBeLessThan(messagesV2.length);
