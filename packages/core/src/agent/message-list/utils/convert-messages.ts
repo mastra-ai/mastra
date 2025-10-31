@@ -9,21 +9,12 @@ import { MessageList } from '../index';
  * Available output formats for message conversion.
  *
  * @remarks
- * Supports both old (uppercase, dotted) and new (lowercase, hyphenated) format keys:
- *
- * **Old keys (backward compatibility):**
  * - `Mastra.V2` - Current database storage format, compatible with AI SDK v4
  * - `AIV4.UI` - AI SDK v4 UIMessage format (for frontend components)
  * - `AIV4.Core` - AI SDK v4 CoreMessage format (for LLM API calls)
  * - `AIV5.UI` - AI SDK v5 UIMessage format (for frontend components)
  * - `AIV5.Model` - AI SDK v5 ModelMessage format (for LLM API calls)
  *
- * **New keys (recommended):**
- * - `mastra-db` - Mastra database storage format (same as Mastra.V2)
- * - `aiv4-ui` - AI SDK v4 UIMessage (same as AIV4.UI)
- * - `aiv4-core` - AI SDK v4 CoreMessage (same as AIV4.Core)
- * - `aiv5-ui` - AI SDK v5 UIMessage (same as AIV5.UI)
- * - `aiv5-model` - AI SDK v5 ModelMessage (same as AIV5.Model)
  */
 export type OutputFormat = 'Mastra.V2' | 'AIV4.UI' | 'AIV4.Core' | 'AIV5.UI' | 'AIV5.Model';
 

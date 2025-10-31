@@ -461,18 +461,18 @@ export class MemoryPG extends MemoryStorage {
       let paramIdx = 1;
       const queryParams: any[] = [threadId];
       let query = `${selectStatement} FROM ${tableName} WHERE thread_id = $${paramIdx++}`;
-      
+
       if (resourceId) {
         query += ` AND "resourceId" = $${paramIdx++}`;
         queryParams.push(resourceId);
       }
-      
+
       if (excludeIds.length) {
         const excludeIdsParam = excludeIds.map(() => `$${paramIdx++}`).join(', ');
         query += ` AND id NOT IN (${excludeIdsParam})`;
         queryParams.push(...excludeIds);
       }
-      
+
       query += ` ${orderByStatement} LIMIT $${paramIdx}`;
       queryParams.push(limit);
       const remainingRows = await this.client.manyOrNone(query, queryParams);

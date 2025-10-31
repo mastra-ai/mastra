@@ -143,7 +143,12 @@ export class MemoryLibSQL extends MemoryStorage {
         ORDER BY "createdAt" DESC
         LIMIT ?
       `;
-      const remainingArgs = [threadId, ...(resourceId ? [resourceId] : []), ...(excludeIds.length ? excludeIds : []), limit];
+      const remainingArgs = [
+        threadId,
+        ...(resourceId ? [resourceId] : []),
+        ...(excludeIds.length ? excludeIds : []),
+        limit,
+      ];
       const remainingResult = await this.client.execute({ sql: remainingSql, args: remainingArgs });
       if (remainingResult.rows) {
         messages.push(...remainingResult.rows.map((row: any) => this.parseRow(row)));
