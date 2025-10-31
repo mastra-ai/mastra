@@ -1357,62 +1357,62 @@
     },
     {
       "source": "/reference/evals/context-position",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/reference/evals/context-precision",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/reference/evals/context-relevancy",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/reference/evals/contextual-recall",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/reference/evals/faithfulness",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/reference/evals/hallucination",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/reference/evals/keyword-coverage",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/reference/evals/prompt-alignment",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/reference/evals/summarization",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/reference/evals/textual-difference",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/reference/evals/tone-consistency",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/reference/evals/toxicity",
-      "destination": "/docs/scorers/overview",
+      "destination": "/docs/scorers/off-the-shelf-scorers",
       "permanent": true
     },
     {
