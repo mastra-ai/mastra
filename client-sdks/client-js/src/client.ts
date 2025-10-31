@@ -1,6 +1,7 @@
-import type { AITraceRecord, AITracesPaginatedArg, WorkflowInfo } from '@mastra/core';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { AITraceRecord, AITracesPaginatedArg } from '@mastra/core/storage';
+import type { WorkflowInfo } from '@mastra/core/workflows';
 import {
   Agent,
   MemoryThread,
@@ -612,14 +613,6 @@ export class MastraClient extends BaseResource {
       method: 'POST',
       body: params,
     });
-  }
-
-  /**
-   * Retrieves model providers with available keys
-   * @returns Promise containing model providers with available keys
-   */
-  getModelProviders(): Promise<string[]> {
-    return this.request(`/api/model-providers`);
   }
 
   getAITrace(traceId: string): Promise<AITraceRecord> {

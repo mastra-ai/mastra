@@ -17,13 +17,7 @@ All Mastra packages have a peer dependency on `@mastra/core` so your package man
 
 :::
 
-## Migrate to v0.23 (unreleased)
-
-:::note
-
-This version isn't released yet but we're adding changes as we make them.
-
-:::
+## Migrate to v1.0.0-beta
 
 ### Changed: Thread Title Generation Location and Default
 
@@ -130,6 +124,59 @@ const agent = new Agent({
 
 If you're not using semantic recall (it's disabled by default), no changes are needed.
 
+### Removed: Legacy Watch Events (Client SDK)
+
+**Breaking Changes:**
+
+- The `.watch()` method has been removed from the client-js SDK's `Workflow` and `AgentBuilder` classes
+- The `/api/workflows/:workflowId/watch` and `/api/agent-builder/:actionId/watch` HTTP endpoints have been removed
+- Server-side code using `watch-v2` event types should update to the simplified `watch` API
+
+**Why this change?**
+
+- Simplify the workflow streaming API by consolidating on one implementation
+- Remove legacy v1 event system that was superseded by v2
+- Improve performance by eliminating duplicate event handling code
+- Reduce API surface area and maintenance burden
+
+**Migration:**
+
+If you were using `run.watch()` from `@mastra/client-js`, switch to using `run.stream()`:
+
+```typescript
+// Before (v0.22 and earlier)
+const workflow = mastraClient.getWorkflow('my-workflow');
+const run = await workflow.createRunAsync();
+
+await run.watch((event) => {
+  console.log('Step completed:', event);
+});
+
+// After (v0.23+)
+const workflow = mastraClient.getWorkflow('my-workflow');
+const run = await workflow.createRunAsync();
+
+const stream = await run.stream({
+  inputData: { /* your input */ }
+});
+
+for await (const chunk of stream) {
+  console.log('Step completed:', chunk);
+}
+```
+
+### Changed: Message Format
+
+An internal intermediary format has been removed. Messages now convert directly between `MastraMessageV2` (storage format) and AI SDK v5 `UIMessage`, simplifying the architecture and improving accuracy.
+
+**Action required only if** you have messages stored in the old `MastraMessageV1` format **and** you:
+
+1. **Directly inspect message metadata** - `__originalContent` is no longer present
+2. **Rely on exact V1 message shape preservation** - Shape may differ after conversion (content is still preserved)
+3. **Have custom message processing logic** - Verify it works with the new direct conversion flow
+
+The storage format (`MastraMessageV2`) and all public APIs remain unchanged.
+
 ### Agent class
 
 - Removed `generateVNext()` method. Use `generate()` instead.
@@ -144,7 +191,7 @@ If you're not using semantic recall (it's disabled by default), no changes are n
 - `agent.toStep` → Add agent directly to the step, workflows handle the transformation
 - `getDefaultGenerateOptions()` → `getDefaultGenerateOptionsLegacy()`
 - `getDefaultStreamOptions()` → `getDefaultStreamOptionsLegacy()`
-- `getDefaultVNextStreamOptions()` → `getDefaultStreamOptions()`
+- `getDefaultVNextStreamOptions()` → `getDefaultOptions()`
 
 #### Output Options
 
@@ -370,6 +417,28 @@ await agent.generate(messages, {
 ```
 
 **Note**: This also affects workflow steps, dynamic configuration functions (memory, model, etc.), and anywhere else you pass or receive `runtimeContext`/`requestContext` as a parameter. See the "Tool execute signature" section above for the updated tool signature pattern.
+
+### Changed: `@mastra/core` subpath imports
+
+The `@mastra/core` package no longer allows top-level imports except for `Mastra` and `type Config`. You must use subpath imports for all other imports.
+
+Here are some examples of how to migrate your imports:
+
+```typescript
+// Before
+import { Mastra, type Config } from "@mastra/core"; // ✅
+import { Agent } from "@mastra/core"; // ❌
+import { createTool } from "@mastra/core"; // ❌
+import { createStep } from "@mastra/core"; // ❌
+
+// After
+import { Mastra, type Config } from "@mastra/core"; // ✅
+import { Agent } from "@mastra/core/agent"; // ✅
+import { createTool } from "@mastra/core/tools"; // ✅
+import { createStep } from "@mastra/core/workflows"; // ✅
+```
+
+Read the [package README](https://github.com/mastra-ai/mastra/blob/main/packages/core/README.md) or the [package.json](https://github.com/mastra-ai/mastra/blob/main/packages/core/package.json) for a full list of available subpath imports.
 
 ## Migrate to v0.22
 

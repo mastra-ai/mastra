@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
-import slugify from '@sindresorhus/slugify';
 import type { CoreMessage, StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
@@ -145,7 +144,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
-  #defaultStreamOptions: DynamicArgument<AgentExecutionOptions>;
+  #defaultOptions: DynamicArgument<AgentExecutionOptions>;
   #tools: DynamicArgument<TTools>;
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
@@ -233,9 +232,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       this.#workflows = config.workflows;
     }
 
-    this.#defaultGenerateOptionsLegacy = config.defaultGenerateOptions || {};
-    this.#defaultStreamOptionsLegacy = config.defaultStreamOptions || {};
-    this.#defaultStreamOptions = config.defaultVNextStreamOptions || {};
+    this.#defaultGenerateOptionsLegacy = config.defaultGenerateOptionsLegacy || {};
+    this.#defaultStreamOptionsLegacy = config.defaultStreamOptionsLegacy || {};
+    this.#defaultOptions = config.defaultOptions || {};
 
     this.#tools = config.tools || ({} as TTools);
 
@@ -730,7 +729,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   }
 
   /**
-   * Gets the default stream options for this agent, resolving function-based options if necessary.
+   * Gets the default options for this agent, resolving function-based options if necessary.
    * These options are used as defaults when calling `stream()` or `generate()` without explicit options.
    *
    * @example
@@ -739,27 +738,27 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * console.log(options.maxSteps); // 5
    * ```
    */
-  public getDefaultStreamOptions<OUTPUT extends OutputSchema = undefined>({
+  public getDefaultOptions<OUTPUT extends OutputSchema = undefined>({
     requestContext = new RequestContext(),
   }: { requestContext?: RequestContext } = {}): AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>> {
-    if (typeof this.#defaultStreamOptions !== 'function') {
-      return this.#defaultStreamOptions as AgentExecutionOptions<OUTPUT>;
+    if (typeof this.#defaultOptions !== 'function') {
+      return this.#defaultOptions as AgentExecutionOptions<OUTPUT>;
     }
 
-    const result = this.#defaultStreamOptions({ requestContext, mastra: this.#mastra }) as
+    const result = this.#defaultOptions({ requestContext, mastra: this.#mastra }) as
       | AgentExecutionOptions<OUTPUT>
       | Promise<AgentExecutionOptions<OUTPUT>>;
 
     return resolveMaybePromise(result, options => {
       if (!options) {
         const mastraError = new MastraError({
-          id: 'AGENT_GET_DEFAULT_VNEXT_STREAM_OPTIONS_FUNCTION_EMPTY_RETURN',
+          id: 'AGENT_GET_DEFAULT_OPTIONS_FUNCTION_EMPTY_RETURN',
           domain: ErrorDomain.AGENT,
           category: ErrorCategory.USER,
           details: {
             agentName: this.name,
           },
-          text: `[Agent:${this.name}] - Function-based default vnext stream options returned empty value`,
+          text: `[Agent:${this.name}] - Function-based default options returned empty value`,
         });
         this.logger.trackException(mastraError);
         this.logger.error(mastraError.toString());
@@ -1643,7 +1642,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                   agent.__setMemory(this.#memory);
                 }
                 const subAgentThreadId = randomUUID();
-                const subAgentResourceId = `${slugify(this.id)}-${agentName}`;
+                const slugify = await import(`@sindresorhus/slugify`); // this is an esm package, need to dynamic import incase we're running in cjs
+                const subAgentResourceId = `${slugify.default(this.id)}-${agentName}`;
 
                 const streamResult = await agent.stream((input as any).prompt, {
                   requestContext,
@@ -3075,7 +3075,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   }
 
   /**
-   * Executes the agent with VNext execution model, handling tools, memory, and streaming.
+   * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
   async #execute<
@@ -3449,16 +3449,16 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    const defaultStreamOptions = await this.getDefaultStreamOptions<OUTPUT>({
+    const defaultOptions = await this.getDefaultOptions<OUTPUT>({
       requestContext: streamOptions?.requestContext,
     });
-    const mergedStreamOptions = {
-      ...defaultStreamOptions,
+    const mergedOptions = {
+      ...defaultOptions,
       ...(streamOptions ?? {}),
     };
 
     const llm = await this.getLLM({
-      requestContext: mergedStreamOptions.requestContext,
+      requestContext: mergedOptions.requestContext,
     });
 
     const modelInfo = llm.getModel();
@@ -3482,7 +3482,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     }
 
     const executeOptions = {
-      ...mergedStreamOptions,
+      ...mergedOptions,
       messages,
       methodType: 'stream',
     } as InnerAgentExecutionOptions<OUTPUT, FORMAT>;
@@ -3518,13 +3518,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   }
 
   /**
-   * Resumes a previously suspended VNext stream execution.
+   * Resumes a previously suspended stream execution.
    * Used to continue execution after a suspension point (e.g., tool approval, workflow suspend).
    *
    * @example
    * ```typescript
    * // Resume after suspension
-   * const stream = await agent.resumeStreamVNext(
+   * const stream = await agent.resumeStream(
    *   { approved: true },
    *   { runId: 'previous-run-id' }
    * );
@@ -3537,12 +3537,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     resumeData: any,
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT> & { toolCallId?: string },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    const defaultStreamOptions = await this.getDefaultStreamOptions({
+    const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });
 
     let mergedStreamOptions = {
-      ...defaultStreamOptions,
+      ...defaultOptions,
       ...streamOptions,
     };
 
@@ -3552,7 +3552,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     if (llm.getModel().specificationVersion !== 'v2') {
       throw new MastraError({
-        id: 'AGENT_STREAM_VNEXT_V1_MODEL_NOT_SUPPORTED',
+        id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text: 'V1 models are not supported for stream. Please use streamLegacy instead.',
@@ -3578,7 +3578,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       if (result.status === 'failed') {
         throw new MastraError(
           {
-            id: 'AGENT_STREAM_VNEXT_FAILED',
+            id: 'AGENT_STREAM_FAILED',
             domain: ErrorDomain.AGENT,
             category: ErrorCategory.USER,
           },
@@ -3587,7 +3587,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         );
       }
       throw new MastraError({
-        id: 'AGENT_STREAM_VNEXT_UNKNOWN_ERROR',
+        id: 'AGENT_STREAM_UNKNOWN_ERROR',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text: 'An unknown error occurred while streaming',
@@ -3647,7 +3647,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
   /**
    * Legacy implementation of generate method using AI SDK v4 models.
-   * Use this method if you need to continue using AI SDK v4 models after `generate()` switches to VNext.
+   * Use this method if you need to continue using AI SDK v4 models.
    *
    * @example
    * ```typescript
@@ -3685,14 +3685,14 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         text: 'This method does not support structured output. Please use generate() instead.',
       });
     }
-    const defaultGenerateOptions = await this.getDefaultGenerateOptionsLegacy({
+    const defaultGenerateOptionsLegacy = await this.getDefaultGenerateOptionsLegacy({
       requestContext: generateOptions.requestContext,
     });
     const mergedGenerateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
-      ...defaultGenerateOptions,
+      ...defaultGenerateOptionsLegacy,
       ...generateOptions,
       experimental_generateMessageId:
-        defaultGenerateOptions.experimental_generateMessageId || this.#mastra?.generateId?.bind(this.#mastra),
+        defaultGenerateOptionsLegacy.experimental_generateMessageId || this.#mastra?.generateId?.bind(this.#mastra),
     };
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedGenerateOptions, 'generate');
@@ -3970,7 +3970,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
   /**
    * Legacy implementation of stream method using AI SDK v4 models.
-   * Use this method if you need to continue using AI SDK v4 models after `stream()` switches to VNext.
+   * Use this method if you need to continue using AI SDK v4 models.
    *
    * @example
    * ```typescript
@@ -4025,15 +4025,15 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
     | (StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties)
   > {
-    const defaultStreamOptions = await this.getDefaultStreamOptionsLegacy({
+    const defaultStreamOptionsLegacy = await this.getDefaultStreamOptionsLegacy({
       requestContext: streamOptions.requestContext,
     });
 
     const mergedStreamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
-      ...defaultStreamOptions,
+      ...defaultStreamOptionsLegacy,
       ...streamOptions,
       experimental_generateMessageId:
-        defaultStreamOptions.experimental_generateMessageId || this.#mastra?.generateId?.bind(this.#mastra),
+        defaultStreamOptionsLegacy.experimental_generateMessageId || this.#mastra?.generateId?.bind(this.#mastra),
     };
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions, 'stream');
