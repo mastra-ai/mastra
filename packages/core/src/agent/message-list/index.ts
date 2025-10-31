@@ -1631,7 +1631,17 @@ export class MessageList {
     };
 
     if (toolInvocations.length) content.toolInvocations = toolInvocations;
-    if (typeof coreMessage.content === `string`) content.content = coreMessage.content;
+    if (typeof coreMessage.content === `string`) {
+      content.content = coreMessage.content;
+    } else if (Array.isArray(coreMessage.content)) {
+      // Join text parts for content.content field
+      const textParts = coreMessage.content
+        .filter((part): part is Extract<typeof part, { type: 'text' }> => part.type === 'text')
+        .map(part => part.text);
+      if (textParts.length > 0) {
+        content.content = textParts.join('');
+      }
+    }
 
     if (experimentalAttachments.length) content.experimental_attachments = experimentalAttachments;
 
