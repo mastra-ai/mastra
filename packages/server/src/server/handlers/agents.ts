@@ -218,8 +218,8 @@ async function formatAgentList({
   const serializedAgentAgents = await getSerializedAgentDefinition({ agent, requestContext });
 
   // Get and serialize processors
-  const inputProcessors = await agent.getInputProcessors(requestContext);
-  const outputProcessors = await agent.getOutputProcessors(requestContext);
+  const inputProcessors = await agent.listInputProcessors(requestContext);
+  const outputProcessors = await agent.listOutputProcessors(requestContext);
   const serializedInputProcessors = getSerializedProcessors(inputProcessors);
   const serializedOutputProcessors = getSerializedProcessors(outputProcessors);
 
@@ -410,8 +410,8 @@ async function formatAgent({
   const serializedAgentAgents = await getSerializedAgentDefinition({ agent, requestContext: proxyRequestContext });
 
   // Get and serialize processors
-  const inputProcessors = await agent.getInputProcessors(proxyRequestContext);
-  const outputProcessors = await agent.getOutputProcessors(proxyRequestContext);
+  const inputProcessors = await agent.listInputProcessors(proxyRequestContext);
+  const outputProcessors = await agent.listOutputProcessors(proxyRequestContext);
   const serializedInputProcessors = getSerializedProcessors(inputProcessors);
   const serializedOutputProcessors = getSerializedProcessors(outputProcessors);
 
