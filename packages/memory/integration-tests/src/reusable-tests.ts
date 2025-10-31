@@ -651,7 +651,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           createTestMessage(thread.id, 'Message 3'),
         ];
         const savedMessages = await memory.saveMessages({ messages });
-        const messageToDelete = savedMessages[1];
+        const messageToDelete = savedMessages.messages[1];
 
         // Delete the middle message
         await memory.deleteMessages([messageToDelete.id]);
