@@ -425,12 +425,11 @@ describe('Agent Memory Tests', () => {
       expect(savedUserMessages.length).toBe(2);
 
       // Check that metadata was persisted in the stored messages
-      const firstMessage = messages.find(
-        (m: any) => m.content.parts?.some((p: any) => p.type === 'text' && p.text === 'Hello with metadata'),
+      const firstMessage = messages.find((m: any) =>
+        m.content.parts?.some((p: any) => p.type === 'text' && p.text === 'Hello with metadata'),
       );
-      const secondMessage = messages.find(
-        (m: any) =>
-          m.content.parts?.some((p: any) => p.type === 'text' && p.text === 'Another message with different metadata'),
+      const secondMessage = messages.find((m: any) =>
+        m.content.parts?.some((p: any) => p.type === 'text' && p.text === 'Another message with different metadata'),
       );
 
       expect(firstMessage).toBeDefined();
