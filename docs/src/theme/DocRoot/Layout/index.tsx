@@ -31,7 +31,7 @@ export default function DocRootLayout({ children }: Props): ReactNode {
         >
           {children}
         </DocRootLayoutMain>
-        {!hiddenSidebarContainer && (
+        {!hiddenChatbotSidebar && (
           <Suspense fallback={<PulsingDots />}>
             <ChatbotSidebar
               hiddenChatbotSidebar={hiddenChatbotSidebar}
