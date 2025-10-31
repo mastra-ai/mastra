@@ -24,7 +24,6 @@ import type {
   StorageGetMessagesArg,
   StorageResourceType,
   StoragePagination,
-  ThreadSortOptions,
   WorkflowRun,
   WorkflowRuns,
   AISpanRecord,
@@ -195,12 +194,6 @@ export abstract class MastraStorage extends MastraBase {
   abstract load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<R | null>;
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
-
-  abstract getThreadsByResourceId({
-    resourceId,
-    orderBy,
-    sortDirection,
-  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]>;
 
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
@@ -531,14 +524,6 @@ export abstract class MastraStorage extends MastraBase {
   }
 
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
-
-  abstract getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
 
   abstract getMessagesPaginated(
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },

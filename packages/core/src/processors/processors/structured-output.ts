@@ -26,7 +26,8 @@ export const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
  * - Automatic instruction generation based on schema
  */
 export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements Processor {
-  readonly name = STRUCTURED_OUTPUT_PROCESSOR_NAME;
+  readonly id = STRUCTURED_OUTPUT_PROCESSOR_NAME;
+  readonly name = 'Structured Output';
 
   public schema: OUTPUT;
   private structuringAgent: Agent;

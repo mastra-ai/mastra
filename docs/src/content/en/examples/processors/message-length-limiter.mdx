@@ -22,7 +22,8 @@ type MessageLengthLimiterOptions = {
 };
 
 export class MessageLengthLimiter implements Processor {
-  readonly name = "message-length-limiter";
+  readonly id  = "message-length-limiter";
+  readonly name = "Message Length Limiter";
   private maxLength: number;
   private strategy: "block" | "warn" | "truncate";
 

@@ -32,7 +32,8 @@ export interface TokenLimiterOptions {
  * Implements both processOutputStream for streaming and processOutputResult for non-streaming.
  */
 export class TokenLimiterProcessor implements Processor {
-  public readonly name = 'token-limiter';
+  public readonly id = 'token-limiter';
+  public readonly name = 'Token Limiter';
   private encoder: Tiktoken;
   private maxTokens: number;
   private currentTokens: number = 0;

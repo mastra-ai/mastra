@@ -177,7 +177,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_GET_MESSAGES_BY_ID_FAILED',
+          id: 'MONGODB_STORE_LIST_MESSAGES_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: JSON.stringify(messageIds) },
@@ -222,9 +222,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
       // Determine sort field and direction
-      const sortField = orderBy?.field || 'createdAt';
-      const sortDirection = orderBy?.direction || 'DESC';
-      const sortOrder = sortDirection === 'ASC' ? 1 : -1;
+      const { field, direction } = this.parseOrderBy(orderBy);
+      const sortOrder = direction === 'ASC' ? 1 : -1;
 
       const collection = await this.operations.getCollection(TABLE_MESSAGES);
 
@@ -247,7 +246,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const total = await collection.countDocuments(query);
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
-      const sortObj: any = { [sortField]: sortOrder };
+      const sortObj: any = { [field]: sortOrder };
       let cursor = collection.find(query).sort(sortObj).skip(offset);
 
       // Only apply limit if not unlimited and perPage > 0
@@ -303,9 +302,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {
-        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        const isDateField = field === 'createdAt' || field === 'updatedAt';
+        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        }
+        // Fallback to string comparison for non-numeric fields
+        return direction === 'ASC'
+          ? String(aValue).localeCompare(String(bValue))
+          : String(bValue).localeCompare(String(aValue));
       });
 
       // Calculate hasMore based on pagination window
@@ -346,19 +353,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         hasMore: false,
       };
     }
-  }
-
-  /**
-   * @todo When migrating from getThreadsByResourceIdPaginated to this method,
-   * implement orderBy and sortDirection support for full sorting capabilities
-   */
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
   }
 
   public async getMessagesPaginated(
@@ -778,48 +772,35 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
-      const collection = await this.operations.getCollection(TABLE_THREADS);
-      const results = await collection.find<any>({ resourceId }).sort({ updatedAt: -1 }).toArray();
-      if (!results.length) {
-        return [];
-      }
-
-      return results.map((result: any) => ({
-        ...result,
-        metadata: typeof result.metadata === 'string' ? safelyParseJSON(result.metadata) : result.metadata,
-      }));
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'STORAGE_MONGODB_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId },
-        },
-        error,
-      );
-    }
-  }
-
-  public async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    try {
-      const { resourceId, page, perPage } = args;
+      const { resourceId, offset, limit, orderBy } = args;
+      const { field, direction } = this.parseOrderBy(orderBy);
       const collection = await this.operations.getCollection(TABLE_THREADS);
 
       const query = { resourceId };
       const total = await collection.countDocuments(query);
 
+      if (limit === 0) {
+        return {
+          threads: [],
+          total,
+          page: 0,
+          perPage: 0,
+          hasMore: offset < total,
+        };
+      }
+
+      // MongoDB sort: 1 = ASC, -1 = DESC
+      const sortOrder = direction === 'ASC' ? 1 : -1;
+
       const threads = await collection
         .find(query)
-        .sort({ updatedAt: -1 })
-        .skip(page * perPage)
-        .limit(perPage)
+        .sort({ [field]: sortOrder })
+        .skip(offset)
+        .limit(limit)
         .toArray();
 
       return {
@@ -832,14 +813,14 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           metadata: thread.metadata || {},
         })),
         total,
-        page,
-        perPage,
-        hasMore: (page + 1) * perPage < total,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
+        perPage: limit,
+        hasMore: offset + threads.length < total,
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+          id: 'MONGODB_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId: args.resourceId },

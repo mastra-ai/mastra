@@ -15,7 +15,8 @@ A custom output processor in Mastra implements the `Processor` interface with th
 import type { Processor, MastraMessageV2 } from "@mastra/core/processors";
 
 export class ResponseValidator implements Processor {
-  readonly name = "response-validator";
+  readonly id = "response-validator";
+  readonly name = "Response Validator";
 
   constructor(private requiredKeywords: string[] = []) {}
 
@@ -196,7 +197,8 @@ You can create more sophisticated validators with custom logic:
 import type { Processor, MastraMessageV2 } from "@mastra/core/processors";
 
 export class AdvancedResponseValidator implements Processor {
-  readonly name = "advanced-response-validator";
+  readonly id = "advanced-response-validator";
+  readonly name = "Advanced Response Validator";
 
   constructor(
     private config: {
