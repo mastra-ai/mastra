@@ -27,7 +27,8 @@ export interface UnicodeNormalizerOptions {
 }
 
 export class UnicodeNormalizer implements Processor {
-  readonly name = 'unicode-normalizer';
+  readonly id = 'unicode-normalizer';
+  readonly name = 'Unicode Normalizer';
 
   private options: Required<UnicodeNormalizerOptions>;
 

@@ -170,12 +170,14 @@ describe('Agent Handlers', () => {
         name: 'agent-with-core-processors',
         inputProcessors: [
           {
-            name: 'unicode-normalizer',
+            id: 'unicode-normalizer',
+            name: 'Unicode Normalizer',
           },
         ],
         outputProcessors: [
           {
-            name: 'token-limiter',
+            id: 'token-limiter',
+            name: 'Token Limiter',
           },
         ],
       });
