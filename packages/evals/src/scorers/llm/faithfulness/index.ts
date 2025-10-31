@@ -43,11 +43,13 @@ export function createFaithfulnessScorer({
       outputSchema: z.object({ verdicts: z.array(z.object({ verdict: z.string(), reason: z.string() })) }),
       createPrompt: ({ results, run }) => {
         // Use the context provided by the user, or the context from the tool invocations
+        const assistantMessage = run.output.find(({ role }) => role === 'assistant');
+        const toolInvocations = assistantMessage?.content.toolInvocations || [];
         const context =
           options?.context ??
-          run.output
-            .find(({ role }) => role === 'assistant')
-            ?.toolInvocations?.map(toolCall => (toolCall.state === 'result' ? JSON.stringify(toolCall.result) : '')) ??
+          toolInvocations.map((toolCall: any) =>
+            toolCall.state === 'result' ? JSON.stringify(toolCall.result) : '',
+          ) ??
           [];
         const prompt = createFaithfulnessAnalyzePrompt({
           claims: results.preprocessStepResult || [],
@@ -71,13 +73,12 @@ export function createFaithfulnessScorer({
     .generateReason({
       description: 'Reason about the results',
       createPrompt: ({ run, results, score }) => {
+        const assistantMessage = run.output.find(({ role }) => role === 'assistant');
+        const toolInvocations = assistantMessage?.content.toolInvocations || [];
         const prompt = createFaithfulnessReasonPrompt({
           input: getUserMessageFromRunInput(run.input) ?? '',
           output: getAssistantMessageFromRunOutput(run.output) ?? '',
-          context:
-            run.output
-              .find(({ role }) => role === 'assistant')
-              ?.toolInvocations?.map(toolCall => JSON.stringify(toolCall)) || [],
+          context: toolInvocations.map((toolCall: any) => JSON.stringify(toolCall)),
           score,
           scale: options?.scale || 1,
           verdicts: results.analyzeStepResult?.verdicts || [],

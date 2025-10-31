@@ -1,5 +1,7 @@
 import { createScorer } from '@mastra/core/scores';
 import keyword_extractor from 'keyword-extractor';
+import type { MastraMessageV2 } from '@mastra/core/agent';
+import { getMessageContent } from '../../utils';
 
 export function createKeywordCoverageScorer() {
   return createScorer({
@@ -9,8 +11,8 @@ export function createKeywordCoverageScorer() {
     type: 'agent',
   })
     .preprocess(async ({ run }) => {
-      const input = run.input?.inputMessages?.map((i: { content: string }) => i.content).join(', ') || '';
-      const output = run.output?.map((i: { content: string }) => i.content).join(', ') || '';
+      const input = run.input?.inputMessages?.map((i: MastraMessageV2) => getMessageContent(i)).join(', ') || '';
+      const output = run.output?.map((msg: MastraMessageV2) => getMessageContent(msg)).join(', ') || '';
 
       if (!input && !output) {
         return {

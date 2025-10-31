@@ -1,5 +1,7 @@
 import { createScorer } from '@mastra/core/scores';
 import Sentiment from 'sentiment';
+import type { MastraMessageV2 } from '@mastra/core/agent';
+import { getMessageContent } from '../../utils';
 
 interface ToneScorerConfig {
   referenceTone?: string;
@@ -16,7 +18,7 @@ export function createToneScorer(config: ToneScorerConfig = {}) {
   })
     .preprocess(async ({ run }) => {
       const sentiment = new Sentiment();
-      const agentMessage: string = run.output?.map((i: { content: string }) => i.content).join(', ') || '';
+      const agentMessage: string = run.output?.map((msg: MastraMessageV2) => getMessageContent(msg)).join(', ') || '';
       const responseSentiment = sentiment.analyze(agentMessage);
 
       if (referenceTone) {

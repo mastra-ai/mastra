@@ -1,5 +1,7 @@
 import { createScorer } from '@mastra/core/scores';
 import stringSimilarity from 'string-similarity';
+import type { MastraMessageV2 } from '@mastra/core/agent';
+import { getMessageContent } from '../../utils';
 
 interface ContentSimilarityOptions {
   ignoreCase?: boolean;
@@ -15,8 +17,8 @@ export function createContentSimilarityScorer(
     type: 'agent',
   })
     .preprocess(async ({ run }) => {
-      let processedInput = run.input?.inputMessages.map((i: { content: string }) => i.content).join(', ') || '';
-      let processedOutput = run.output.map((i: { content: string }) => i.content).join(', ') || '';
+      let processedInput = run.input?.inputMessages.map((i: MastraMessageV2) => getMessageContent(i)).join(', ') || '';
+      let processedOutput = run.output.map((msg: MastraMessageV2) => getMessageContent(msg)).join(', ') || '';
 
       if (ignoreCase) {
         processedInput = processedInput.toLowerCase();

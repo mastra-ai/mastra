@@ -2555,12 +2555,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           output: ScorerRunOutputForAgent;
         } = {
           input: {
-            inputMessages: messageList.getPersisted.input.ui(),
-            rememberedMessages: messageList.getPersisted.remembered.ui(),
+            inputMessages: messageList.getPersisted.input.v2(),
+            rememberedMessages: messageList.getPersisted.remembered.v2(),
             systemMessages: messageList.getSystemMessages(),
             taggedSystemMessages: messageList.getPersisted.taggedSystemMessages,
           },
-          output: messageList.getPersisted.response.ui(),
+          output: messageList.getPersisted.response.v2(),
         };
 
         agentAISpan?.end({
@@ -2610,13 +2610,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     }
 
     const scorerInput: ScorerRunInputForAgent = {
-      inputMessages: messageList.getPersisted.input.ui(),
-      rememberedMessages: messageList.getPersisted.remembered.ui(),
+      inputMessages: messageList.getPersisted.input.v2(),
+      rememberedMessages: messageList.getPersisted.remembered.v2(),
       systemMessages: messageList.getSystemMessages(),
       taggedSystemMessages: messageList.getPersisted.taggedSystemMessages,
     };
 
-    const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.ui();
+    const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.v2();
 
     if (Object.keys(scorers || {}).length > 0) {
       for (const [_id, scorerObject] of Object.entries(scorers)) {

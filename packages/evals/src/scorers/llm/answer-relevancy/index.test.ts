@@ -1,7 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
 import type { TestCase } from '../../utils';
-import { createAgentTestRun, createUIMessage, isCloserTo } from '../../utils';
+import { createAgentTestRun, createMastraMessageV2, isCloserTo } from '../../utils';
 import { createAnswerRelevancyScorer } from '.';
 
 const testCases: TestCase[] = [
@@ -106,8 +106,8 @@ describe('AnswerRelevancyScorer', () => {
   it(
     'should be able to measure a prompt with perfect relevancy',
     async () => {
-      const inputMessages = [createUIMessage({ role: 'user', content: testCases[0].input })];
-      const output = [createUIMessage({ role: 'assistant', content: testCases[0].output })];
+      const inputMessages = [createMastraMessageV2({ role: 'user', content: testCases[0].input })];
+      const output = [createMastraMessageV2({ role: 'assistant', content: testCases[0].output })];
 
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
       expect(result.score).toBeCloseTo(testCases[0].expectedResult.score, 1);
@@ -118,8 +118,8 @@ describe('AnswerRelevancyScorer', () => {
   it(
     'should be able to measure a prompt with mostly relevant information',
     async () => {
-      const inputMessages = [createUIMessage({ role: 'user', content: testCases[1].input })];
-      const output = [createUIMessage({ role: 'assistant', content: testCases[1].output })];
+      const inputMessages = [createMastraMessageV2({ role: 'user', content: testCases[1].input })];
+      const output = [createMastraMessageV2({ role: 'assistant', content: testCases[1].output })];
 
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
       const expectedScore = testCases[1].expectedResult.score;
@@ -131,8 +131,8 @@ describe('AnswerRelevancyScorer', () => {
   it(
     'should be able to measure a prompt with partial relevance',
     async () => {
-      const inputMessages = [createUIMessage({ role: 'user', content: testCases[2].input })];
-      const output = [createUIMessage({ role: 'assistant', content: testCases[2].output })];
+      const inputMessages = [createMastraMessageV2({ role: 'user', content: testCases[2].input })];
+      const output = [createMastraMessageV2({ role: 'assistant', content: testCases[2].output })];
 
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
       expect(result.score).toBeCloseTo(testCases[2].expectedResult.score, 1);
@@ -143,8 +143,8 @@ describe('AnswerRelevancyScorer', () => {
   it(
     'should be able to measure a prompt with low relevance',
     async () => {
-      const inputMessages = [createUIMessage({ role: 'user', content: testCases[3].input })];
-      const output = [createUIMessage({ role: 'assistant', content: testCases[3].output })];
+      const inputMessages = [createMastraMessageV2({ role: 'user', content: testCases[3].input })];
+      const output = [createMastraMessageV2({ role: 'assistant', content: testCases[3].output })];
 
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
       expect(result.score).toBeCloseTo(testCases[3].expectedResult.score, 1);
@@ -155,8 +155,8 @@ describe('AnswerRelevancyScorer', () => {
   it(
     'should be able to measure a prompt with empty output',
     async () => {
-      const inputMessages = [createUIMessage({ role: 'user', content: testCases[5].input })];
-      const output = [createUIMessage({ role: 'assistant', content: testCases[5].output })];
+      const inputMessages = [createMastraMessageV2({ role: 'user', content: testCases[5].input })];
+      const output = [createMastraMessageV2({ role: 'assistant', content: testCases[5].output })];
 
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
       expect(result.score).toBeCloseTo(testCases[5].expectedResult.score, 1);
@@ -167,8 +167,8 @@ describe('AnswerRelevancyScorer', () => {
   it(
     'should be able to measure a prompt with incorrect but relevant answer',
     async () => {
-      const inputMessages = [createUIMessage({ role: 'user', content: testCases[6].input })];
-      const output = [createUIMessage({ role: 'assistant', content: testCases[6].output })];
+      const inputMessages = [createMastraMessageV2({ role: 'user', content: testCases[6].input })];
+      const output = [createMastraMessageV2({ role: 'assistant', content: testCases[6].output })];
 
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
       expect(result.score).toBeCloseTo(testCases[6].expectedResult.score, 1);
@@ -179,8 +179,8 @@ describe('AnswerRelevancyScorer', () => {
   it(
     'should be able to measure a prompt with a single word correct answer',
     async () => {
-      const inputMessages = [createUIMessage({ role: 'user', content: testCases[7].input })];
-      const output = [createUIMessage({ role: 'assistant', content: testCases[7].output })];
+      const inputMessages = [createMastraMessageV2({ role: 'user', content: testCases[7].input })];
+      const output = [createMastraMessageV2({ role: 'assistant', content: testCases[7].output })];
 
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
       expect(result.score).toBeCloseTo(testCases[7].expectedResult.score, 1);
@@ -191,8 +191,8 @@ describe('AnswerRelevancyScorer', () => {
   it(
     'should be able to measure a prompt with multiple questions',
     async () => {
-      const inputMessages = [createUIMessage({ role: 'user', content: testCases[8].input })];
-      const output = [createUIMessage({ role: 'assistant', content: testCases[8].output })];
+      const inputMessages = [createMastraMessageV2({ role: 'user', content: testCases[8].input })];
+      const output = [createMastraMessageV2({ role: 'assistant', content: testCases[8].output })];
 
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
       expect(result.score).toBeCloseTo(testCases[8].expectedResult.score, 1);
@@ -203,8 +203,8 @@ describe('AnswerRelevancyScorer', () => {
   it(
     'should be able to measure a prompt with technical gibberish',
     async () => {
-      const inputMessages = [createUIMessage({ role: 'user', content: testCases[9].input })];
-      const output = [createUIMessage({ role: 'assistant', content: testCases[9].output })];
+      const inputMessages = [createMastraMessageV2({ role: 'user', content: testCases[9].input })];
+      const output = [createMastraMessageV2({ role: 'assistant', content: testCases[9].output })];
 
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
       expect(result.score).toBeCloseTo(testCases[9].expectedResult.score, 1);
@@ -220,8 +220,8 @@ describe('AnswerRelevancyScorer', () => {
         model: 'openai/gpt-4o-mini',
       });
 
-      const inputMessages = [createUIMessage({ role: 'user', content: testCases[0].input })];
-      const output = [createUIMessage({ role: 'assistant', content: testCases[0].output })];
+      const inputMessages = [createMastraMessageV2({ role: 'user', content: testCases[0].input })];
+      const output = [createMastraMessageV2({ role: 'assistant', content: testCases[0].output })];
 
       const result = await modelRouterScorer.run(createAgentTestRun({ inputMessages, output }));
       expect(result.score).toBeCloseTo(testCases[0].expectedResult.score, 1);
