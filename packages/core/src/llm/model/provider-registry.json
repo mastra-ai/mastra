@@ -1192,7 +1192,7 @@
       "apiKeyEnvVar": "CEREBRAS_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Cerebras",
-      "models": ["gpt-oss-120b", "qwen-3-235b-a22b-instruct-2507", "qwen-3-coder-480b"],
+      "models": ["gpt-oss-120b", "qwen-3-235b-a22b-instruct-2507", "qwen-3-coder-480b", "zai-glm-4.6"],
       "docUrl": "https://inference-docs.cerebras.ai/models/overview",
       "gateway": "models.dev"
     },
@@ -2069,7 +2069,7 @@
       "voxtral-small-24b-2507",
       "whisper-large-v3"
     ],
-    "cerebras": ["gpt-oss-120b", "qwen-3-235b-a22b-instruct-2507", "qwen-3-coder-480b"],
+    "cerebras": ["gpt-oss-120b", "qwen-3-235b-a22b-instruct-2507", "qwen-3-coder-480b", "zai-glm-4.6"],
     "netlify": [
       "anthropic/claude-3-5-haiku-20241022",
       "anthropic/claude-3-5-haiku-latest",
