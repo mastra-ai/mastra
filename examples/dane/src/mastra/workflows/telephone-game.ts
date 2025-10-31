@@ -1,7 +1,7 @@
 import { anthropic } from '@ai-sdk/anthropic';
 import { input } from '@inquirer/prompts';
 import { Agent } from '@mastra/core/agent';
-import { Step, Workflow, getStepResult } from '@mastra/core/workflows';
+import { Step, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 const llm = anthropic('claude-3-5-sonnet-20241022');
@@ -38,7 +38,7 @@ const stepA2 = new Step({
   execute: async () => {
     const content = await input({
       message: 'Give me a message',
-      validate: input => inputData.trim().length > 0 || 'Message cannot be empty',
+      validate: value => value.trim().length > 0 || 'Message cannot be empty',
     });
 
     return {
@@ -73,24 +73,25 @@ const stepC2 = new Step({
     message: z.string(),
   }),
   execute: async (inputData, context) => {
-    const oMsg = getStepResult(context?.workflow?.state?.steps.stepA2);
-    if (context?.workflow?.state?.steps.stepC2?.status === 'success') {
-      const msg = getStepResult(context?.workflow?.state?.steps.stepC2);
-      if (msg.confirm) {
-        const result = await agent.generate(`
-            You are playing a game of telephone.
-            Here is the message the previous person sent ${oMsg.message}.
-            But you want to change the message.
-            Only return the message
-            `);
-        return {
-          message: result.text,
-        };
-      }
-
-      return oMsg;
+    if (!context?.workflow?.state?.steps.stepA2) {
+      throw new Error('Previous step result not found');
     }
-    await context?.workflow?.suspend();
+
+    const oMsg = context.workflow.state.steps.stepA2.output;
+
+    if (context.workflow.resumeData?.confirm) {
+      const result = await agent.generate(`
+          You are playing a game of telephone.
+          Here is the message the previous person sent ${oMsg.message}.
+          But you want to change the message.
+          Only return the message
+          `);
+      return {
+        message: result.text,
+      };
+    }
+
+    await context.workflow.suspend();
     return { message: 'Suspended' };
   },
 });
@@ -102,8 +103,11 @@ const stepD2 = new Step({
     message: z.string(),
   }),
   execute: async (inputData, context) => {
-    const msg = getStepResult(context?.workflow?.state?.steps.stepC2);
-    return msg;
+    if (!context?.workflow?.state?.steps.stepC2) {
+      throw new Error('Previous step result not found');
+    }
+
+    return context.workflow.state.steps.stepC2.output;
   },
 });
 
