@@ -29,7 +29,7 @@ const sidebars = {
         {
           type: "doc",
           id: "getting-started/studio",
-          label: "Playground",
+          label: "Studio",
         },
         {
           type: "doc",
