@@ -18,8 +18,6 @@ export interface AgentMetadataModelSwitcherProps {
   updateModel: (newModel: UpdateModelParams) => Promise<{ message: string }>;
   resetModel?: () => Promise<{ message: string }>;
   closeEditor?: () => void;
-  modelProviders: string[];
-  apiUrl?: string;
   autoSave?: boolean;
   selectProviderPlaceholder?: string;
 }
@@ -339,9 +337,8 @@ export const AgentMetadataModelSwitcher = ({
                         if (provider) {
                           return (
                             <div
-                              className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
-                                provider.connected ? 'bg-green-500' : 'bg-red-500'
-                              }`}
+                              className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${provider.connected ? 'bg-green-500' : 'bg-red-500'
+                                }`}
                               title={provider.connected ? 'Connected' : 'Not connected'}
                             />
                           );
@@ -379,8 +376,8 @@ export const AgentMetadataModelSwitcher = ({
                   isSearchingProvider
                     ? providerSearch
                     : providers.find(p => p.id === cleanProviderId(currentModelProvider))?.name ||
-                      currentModelProvider ||
-                      ''
+                    currentModelProvider ||
+                    ''
                 }
                 onKeyDown={e => {
                   const filteredProviders = providers.filter(
@@ -480,17 +477,15 @@ export const AgentMetadataModelSwitcher = ({
                   <div
                     key={provider.id}
                     data-provider-highlighted={isHighlighted}
-                    className={`flex items-center gap-2 cursor-pointer hover:bg-surface5 px-3 py-4 rounded ${
-                      isHighlighted ? 'outline outline-2 outline-blue-500' : ''
-                    } ${isSelected ? 'bg-surface5' : ''}`}
+                    className={`flex items-center gap-2 cursor-pointer hover:bg-surface5 px-3 py-4 rounded ${isHighlighted ? 'outline outline-2 outline-blue-500' : ''
+                      } ${isSelected ? 'bg-surface5' : ''}`}
                     onClick={() => handleProviderSelect(provider)}
                   >
                     <div className="relative">
                       <ProviderLogo providerId={provider.id} size={20} />
                       <div
-                        className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${
-                          provider.connected ? 'bg-green-500' : 'bg-red-500'
-                        }`}
+                        className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${provider.connected ? 'bg-green-500' : 'bg-red-500'
+                          }`}
                         title={provider.connected ? 'Connected' : 'Not connected'}
                       />
                     </div>
@@ -656,9 +651,8 @@ export const AgentMetadataModelSwitcher = ({
                     <div
                       key={`${model.provider}-${model.model}`}
                       data-model-highlighted={isHighlighted}
-                      className={`flex items-center gap-2 px-4 py-3 cursor-pointer rounded hover:bg-surface5 ${
-                        isHighlighted ? 'outline outline-2 outline-blue-500' : ''
-                      } ${isSelected ? 'bg-surface5' : ''}`}
+                      className={`flex items-center gap-2 px-4 py-3 cursor-pointer rounded hover:bg-surface5 ${isHighlighted ? 'outline outline-2 outline-blue-500' : ''
+                        } ${isSelected ? 'bg-surface5' : ''}`}
                       onMouseDown={e => {
                         e.preventDefault();
                         setModelSearch('');
