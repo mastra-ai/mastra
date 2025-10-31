@@ -418,12 +418,12 @@ export abstract class MastraMemory extends MastraBase {
     _toolCallArgs,
     _toolCallIds,
   }: {
-    threadId: string;
-    resourceId: string;
+    threadId?: string;
+    resourceId?: string;
     config?: MemoryConfig;
-    content: UserContent | AssistantContent;
-    role: 'user' | 'assistant';
-    type: 'text' | 'tool-call' | 'tool-result';
+    content?: UserContent | AssistantContent;
+    role?: 'user' | 'assistant';
+    type?: 'text' | 'tool-call' | 'tool-result';
     toolNames?: string[];
     toolCallArgs?: Record<string, unknown>[];
     toolCallIds?: string[];
