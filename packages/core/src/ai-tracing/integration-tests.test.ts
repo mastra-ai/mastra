@@ -1535,7 +1535,8 @@ describe('AI Tracing Integration Tests', () => {
 
         // Create a custom output processor that uses an agent internally
         class SummarizerProcessor implements Processor {
-          readonly name = 'summarizer';
+          readonly id = 'summarizer';
+          readonly name = 'Summarizer';
           private agent: Agent;
 
           constructor(model: any) {
