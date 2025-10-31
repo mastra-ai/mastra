@@ -177,15 +177,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns(args?: {
-    namespace?: string;
-    resourceId?: string;
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-  }): Promise<WorkflowRuns> {
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
 
@@ -239,14 +231,10 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
           id: 'LANCE_STORE_GET_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { namespace: args?.namespace ?? '', workflowName: args?.workflowName ?? '' },
+          details: { resourceId: args?.resourceId ?? '', workflowName: args?.workflowName ?? '' },
         },
         error,
       );
     }
-  }
-
-  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
-    return this.getWorkflowRuns(args);
   }
 }

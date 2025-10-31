@@ -21,6 +21,7 @@ import type {
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
+  StorageListWorkflowRunsInput,
   StoragePagination,
   StorageResourceType,
   ThreadSortOptions,
@@ -250,16 +251,8 @@ export class InMemoryStore extends MastraStorage {
       .catch(() => []) as unknown as Promise<MastraMessageV1[] | MastraMessageV2[]>;
   }
 
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
-  async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    return this.stores.memory.getMessagesById({ messageIds, format });
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
+    return this.stores.memory.listMessagesById({ messageIds });
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
@@ -355,22 +348,15 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.getWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
+    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
   }
 
   async getWorkflowRunById({
