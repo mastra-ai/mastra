@@ -50,6 +50,7 @@ export type StorageThreadType = {
 export type MemoryRuntimeContext = {
   thread?: Partial<StorageThreadType> & { id: string };
   resourceId?: string;
+  memoryConfig?: MemoryConfig;
 };
 
 /**

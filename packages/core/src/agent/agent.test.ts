@@ -4,7 +4,7 @@ import type { LanguageModelV2, LanguageModelV2TextPart } from '@ai-sdk/provider-
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 import type { CoreMessage, LanguageModelV1, CoreSystemMessage } from 'ai';
 import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1, createMockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from 'ai/test';
 import { APICallError, stepCountIs } from 'ai-v5';
 import type { SystemModelMessage } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
@@ -5992,7 +5992,7 @@ describe('Agent Tests', () => {
   });
 
   it('should deduplicate memory processors when manually configured', async () => {
-    const mockModel = createMockLanguageModelV1({
+    const mockModel = new MockLanguageModelV1({
       doGenerate: async () => ({
         text: 'test response',
         finishReason: 'stop',
@@ -6046,7 +6046,7 @@ describe('Agent Tests', () => {
   });
 
   it('should deduplicate memory processors when manually added to inputProcessors', async () => {
-    const mockModel = createMockLanguageModelV1({
+    const mockModel = new MockLanguageModelV1({
       doGenerate: async () => ({
         text: 'test response',
         finishReason: 'stop',
@@ -6110,7 +6110,7 @@ describe('Agent Tests', () => {
   });
 
   it('should automatically add memory processors when memory is configured', async () => {
-    const mockModel = createMockLanguageModelV1({
+    const mockModel = new MockLanguageModelV1({
       doGenerate: async () => ({
         text: 'test response',
         finishReason: 'stop',
@@ -6156,7 +6156,7 @@ describe('Agent Tests', () => {
   });
 
   it('should always place auto-generated memory processors first for input', async () => {
-    const mockModel = createMockLanguageModelV1({
+    const mockModel = new MockLanguageModelV1({
       doGenerate: async () => ({
         text: 'test response',
         finishReason: 'stop',

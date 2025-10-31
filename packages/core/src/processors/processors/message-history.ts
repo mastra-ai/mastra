@@ -68,8 +68,7 @@ export class MessageHistory implements Processor {
       const uniqueHistoricalMessages = filteredMessages.filter(m => !m.id || !messageIds.has(m.id));
 
       return [...uniqueHistoricalMessages, ...messages];
-    } catch (error) {
-      console.warn('Failed to fetch message history:', error);
+    } catch {
       // Fail open - return original messages if history fetch fails
       return messages;
     }

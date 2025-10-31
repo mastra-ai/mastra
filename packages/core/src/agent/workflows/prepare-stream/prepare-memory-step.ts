@@ -166,6 +166,7 @@ export function createPrepareMemoryStep<
       requestContext.set('MastraMemory', {
         thread: threadObject,
         resourceId,
+        memoryConfig,
       });
 
       // Add user messages - memory processors will handle history/semantic recall/working memory
@@ -178,30 +179,18 @@ export function createPrepareMemoryStep<
         inputProcessorOverrides: options.inputProcessors,
       });
 
-      const systemMessages = messageList.getSystemMessages();
+      // Add instructions as system message(s) to the existing messageList
+      // which already contains processed historical messages from input processors
+      addSystemMessage(messageList, instructions);
 
-      const processedList = new MessageList({
-        threadId: threadObject.id,
-        resourceId,
-        generateMessageId: capabilities.generateMessageId,
-        // @ts-ignore Flag for agent network messages
-        _agentNetworkAppend: capabilities._agentNetworkAppend,
-      });
-
-      // Add instructions as system message(s)
-      addSystemMessage(processedList, instructions);
-
-      processedList.addSystem(systemMessages).add(options.context || [], 'context');
+      messageList.add(options.context || [], 'context');
 
       // Add user-provided system message if present
-      addSystemMessage(processedList, options.system, 'user-provided');
-
-      // Add all messages (including historical messages from MessageHistory processor)
-      processedList.add(messageList.get.all.v2(), 'user');
+      addSystemMessage(messageList, options.system, 'user-provided');
 
       return {
         thread: threadObject,
-        messageList: processedList,
+        messageList: messageList,
         ...(tripwireTriggered && {
           tripwire: true,
           tripwireReason,

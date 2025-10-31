@@ -332,22 +332,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     inputProcessorOverrides?: InputProcessor[];
     outputProcessorOverrides?: OutputProcessor[];
   }): Promise<ProcessorRunner> {
-    // Use overrides if provided, otherwise fall back to agent's default processors
-    const inputProcessors =
-      inputProcessorOverrides ??
-      (this.#inputProcessors
-        ? typeof this.#inputProcessors === 'function'
-          ? await this.#inputProcessors({ requestContext })
-          : this.#inputProcessors
-        : []);
+    // Use overrides if provided, otherwise use resolved processors (which include memory processors)
+    const inputProcessors = inputProcessorOverrides ?? (await this.getResolvedInputProcessors(requestContext));
 
-    const outputProcessors =
-      outputProcessorOverrides ??
-      (this.#outputProcessors
-        ? typeof this.#outputProcessors === 'function'
-          ? await this.#outputProcessors({ requestContext })
-          : this.#outputProcessors
-        : []);
+    const outputProcessors = outputProcessorOverrides ?? (await this.getResolvedOutputProcessors(requestContext));
 
     this.logger.debug('outputProcessors', outputProcessors);
 
@@ -377,7 +365,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         ? await this.#memory({ requestContext: runtimeContext || new RequestContext() })
         : this.#memory;
 
-    const memoryProcessors = memory ? memory.getOutputProcessors(configuredProcessors) : [];
+    const memoryProcessors = memory ? memory.getOutputProcessors(configuredProcessors, runtimeContext) : [];
 
     // Memory processors should run last (to persist messages after other processing)
     return [...configuredProcessors, ...memoryProcessors];
@@ -401,7 +389,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         ? await this.#memory({ requestContext: runtimeContext || new RequestContext() })
         : this.#memory;
 
-    const memoryProcessors = memory ? memory.getInputProcessors(configuredProcessors) : [];
+    const memoryProcessors = memory ? memory.getInputProcessors(configuredProcessors, runtimeContext) : [];
 
     // Memory processors should run first (to fetch history, semantic recall, working memory)
     return [...memoryProcessors, ...configuredProcessors];
@@ -1294,13 +1282,17 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     let tripwireTriggered = false;
     let tripwireReason = '';
 
-    if (inputProcessorOverrides?.length || this.#inputProcessors) {
+    // Get resolved processors (includes memory processors)
+    const resolvedProcessors = await this.getResolvedInputProcessors(requestContext);
+    
+    // Only run if we have processors (either overrides or resolved)
+    if (inputProcessorOverrides?.length || resolvedProcessors.length) {
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
       });
       try {
-        messageList = await runner.runInputProcessors(messageList, tracingContext);
+        messageList = await runner.runInputProcessors(messageList, tracingContext, undefined, requestContext);
       } catch (error) {
         if (error instanceof TripWire) {
           tripwireTriggered = true;
@@ -1348,14 +1340,18 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     let tripwireTriggered = false;
     let tripwireReason = '';
 
-    if (outputProcessorOverrides?.length || this.#outputProcessors) {
+    // Get resolved processors (includes memory processors)
+    const resolvedProcessors = await this.getResolvedOutputProcessors(requestContext);
+    
+    // Only run if we have processors (either overrides or resolved)
+    if (outputProcessorOverrides?.length || resolvedProcessors.length) {
       const runner = await this.getProcessorRunner({
         requestContext,
         outputProcessorOverrides,
       });
 
       try {
-        messageList = await runner.runOutputProcessors(messageList, tracingContext);
+        messageList = await runner.runOutputProcessors(messageList, tracingContext, undefined, requestContext);
       } catch (e) {
         if (e instanceof TripWire) {
           tripwireTriggered = true;

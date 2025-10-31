@@ -14,7 +14,6 @@ import type { StorageThreadType } from '../../memory';
 import { MockMemory } from '../../memory/mock';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
-import { MessageList } from '../message-list/index';
 import { assertNoDuplicateParts } from '../test-utils';
 import { getDummyResponseModel, getEmptyResponseModel, getErrorResponseModel } from './mock-model';
 
@@ -717,17 +716,32 @@ function runStreamTest(version: 'v1' | 'v2') {
       const mockMemory = new MockMemory();
       const threadId = '1';
       const resourceId = '2';
-      // @ts-ignore
-      mockMemory.rememberMessages = async function rememberMessages() {
-        const list = new MessageList({ threadId, resourceId }).add(
-          [
-            { role: `user`, content: `hello!`, threadId, resourceId },
-            { role: 'assistant', content: 'hi, how are you?', threadId, resourceId },
-          ],
-          `memory`,
-        );
-        return { messages: list.get.remembered.aiV4.core(), messagesV2: list.get.remembered.v2() };
-      };
+
+      // Save historical messages to storage (for MessageHistory processor to retrieve)
+      await mockMemory.storage.saveThread({
+        thread: { id: threadId, createdAt: new Date(), resourceId, updatedAt: new Date() },
+      });
+      await mockMemory.storage.saveMessages({
+        messages: [
+          {
+            id: 'hist-msg-1',
+            role: `user`,
+            content: { content: `hello!`, parts: [] },
+            threadId,
+            resourceId,
+            createdAt: new Date(),
+          },
+          {
+            id: 'hist-msg-2',
+            role: 'assistant',
+            content: { content: 'hi, how are you?', parts: [] },
+            threadId,
+            resourceId,
+            createdAt: new Date(),
+          },
+        ],
+        format: 'v2',
+      });
 
       mockMemory.getThreadById = async function getThreadById() {
         return { id: '1', createdAt: new Date(), resourceId: '2', updatedAt: new Date() } satisfies StorageThreadType;
