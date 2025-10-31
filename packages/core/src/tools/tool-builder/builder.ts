@@ -231,6 +231,7 @@ export class CoreToolBuilder extends MastraBase {
               options.writableStream || execOptions.writableStream,
             ),
             tracingContext: { currentSpan: toolSpan },
+            abortSignal: execOptions.abortSignal,
             suspend: execOptions.suspend,
             resumeData: execOptions.resumeData,
           };

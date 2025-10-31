@@ -108,14 +108,7 @@ describe('Zod v3 and v4 Compatibility', () => {
         },
       });
 
-      const result = await tool.execute?.(
-        { x: 5, y: 3 },
-        {
-          runId: 'test',
-          threadId: 'test',
-          requestContext: {} as any,
-        },
-      );
+      const result = await tool.execute?.({ x: 5, y: 3 });
 
       expect(result).toEqual({ sum: 8 });
     });
@@ -137,14 +130,7 @@ describe('Zod v3 and v4 Compatibility', () => {
         },
       });
 
-      const result = await tool.execute?.(
-        { text: 'hello' },
-        {
-          runId: 'test',
-          threadId: 'test',
-          requestContext: {} as any,
-        },
-      );
+      const result = await tool.execute?.({ text: 'hello' });
 
       expect(result).toEqual({ length: 5 });
     });
@@ -252,7 +238,7 @@ describe('Zod v3 and v4 Compatibility', () => {
           // These type checks ensure inference is working
           expectTypeOf(input.str).toBeString();
           expectTypeOf(input.num).toBeNumber();
-          expectTypeOf(context.bool).toBeBoolean();
+          expectTypeOf(input.bool).toBeBoolean();
           return { success: true };
         },
       });
@@ -269,7 +255,7 @@ describe('Zod v3 and v4 Compatibility', () => {
           // These type checks ensure inference is working
           expectTypeOf(input.str).toBeString();
           expectTypeOf(input.num).toBeNumber();
-          expectTypeOf(context.bool).toBeBoolean();
+          expectTypeOf(input.bool).toBeBoolean();
           return { success: true };
         },
       });

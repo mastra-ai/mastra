@@ -151,10 +151,13 @@ export function createStep<
         >;
       }
     | Agent<any, any>
-    | (Tool<TStepInput, TStepOutput, any> & {
+    | (Tool<TStepInput, TStepOutput, TSuspendSchema, TResumeSchema, any> & {
         inputSchema: TStepInput;
         outputSchema: TStepOutput;
-        execute: (input: z.infer<TStepInput>, context?: ToolExecutionContext<TStepInput>) => Promise<any>;
+        execute: (
+          input: z.infer<TStepInput>,
+          context?: ToolExecutionContext<TSuspendSchema, TResumeSchema>,
+        ) => Promise<any>;
       }),
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType> {
   if (isAgent(params)) {
@@ -252,7 +255,7 @@ export function createStep<
         state,
         setState,
       }) => {
-        // BREAKING CHANGE v1.0: Tools receive (input, context) - just call the tool's execute
+        // Tools receive (input, context) - just call the tool's execute
         if (!params.execute) {
           throw new Error(`Tool ${params.id} does not have an execute function`);
         }

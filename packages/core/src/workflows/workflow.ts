@@ -123,7 +123,7 @@ type ToolStep<
 > = Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
   inputSchema: TSchemaIn;
   outputSchema: TSchemaOut;
-  execute: (context: TContext) => Promise<any>;
+  execute: (input: z.infer<TSchemaIn>, context?: TContext) => Promise<any>;
 };
 
 /**
