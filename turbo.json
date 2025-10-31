@@ -6,6 +6,7 @@
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"],
       "env": ["RAPID_API_KEY", "ANTHROPIC_API_KEY"]
     },
+    "typecheck": {},
     "lint": {
       "dependsOn": []
     },
