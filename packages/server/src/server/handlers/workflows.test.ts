@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';

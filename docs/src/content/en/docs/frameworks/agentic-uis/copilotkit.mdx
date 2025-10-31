@@ -116,7 +116,7 @@ pnpm add @copilotkit/runtime @ag-ui/mastra
 Configure your Mastra instance to include CopilotKit's runtime endpoint:
 
 ```typescript title="src/mastra/index.ts" copy {2,5-8,12-28}
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { registerCopilotKit } from "@ag-ui/mastra/copilotkit";
 import { weatherAgent } from "./agents/weather-agent";
 

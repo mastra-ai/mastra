@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
-import { createTool } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 import { Agent } from '@mastra/core/agent';
-import type { CoreMessage } from '@mastra/core';
+import type { CoreMessage } from '@mastra/core/llm';
 import { MemoryProcessor, MemoryProcessorOpts } from '@mastra/core/memory';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter, ToolCallFilter } from '@mastra/memory/processors';

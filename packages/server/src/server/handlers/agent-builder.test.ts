@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
