@@ -583,9 +583,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
         expect(result.messages).toHaveLength(3);
         expect(result.messages).toEqual([
-          expect.objectContaining({ type: 'text' }),
-          expect.objectContaining({ type: 'tool-call' }),
-          expect.objectContaining({ type: 'tool-result' }),
+          expect.objectContaining({ role: 'user' }),
+          expect.objectContaining({ role: 'assistant' }),
+          expect.objectContaining({ role: 'tool' }),
         ]);
       });
 
