@@ -5,7 +5,6 @@ import {
   startAsyncAgentBuilderActionHandler as getOriginalStartAsyncAgentBuilderActionHandler,
   createAgentBuilderActionRunHandler as getOriginalCreateAgentBuilderActionRunHandler,
   startAgentBuilderActionRunHandler as getOriginalStartAgentBuilderActionRunHandler,
-  watchAgentBuilderActionHandler as getOriginalWatchAgentBuilderActionHandler,
   streamAgentBuilderActionHandler as getOriginalStreamAgentBuilderActionHandler,
   streamLegacyAgentBuilderActionHandler as getOriginalStreamLegacyAgentBuilderActionHandler,
   streamVNextAgentBuilderActionHandler as getOriginalStreamVNextAgentBuilderActionHandler,
@@ -122,52 +121,6 @@ export async function startAgentBuilderActionRunHandler(c: Context) {
     return c.json({ message: 'Agent builder action run started' });
   } catch (error) {
     return handleError(error, 'Error starting agent builder action run');
-  }
-}
-
-export async function watchAgentBuilderActionHandler(c: Context) {
-  try {
-    const mastra: Mastra = c.get('mastra');
-    const logger = mastra.getLogger();
-    const actionId = c.req.param('actionId');
-    const runId = c.req.query('runId');
-    const eventType = c.req.query('eventType') as 'watch' | 'watch-v2' | undefined;
-
-    if (!runId) {
-      throw new HTTPException(400, { message: 'runId required to watch action' });
-    }
-
-    c.header('Transfer-Encoding', 'chunked');
-
-    return stream(c, async stream => {
-      try {
-        disableHotReload();
-        const result = await getOriginalWatchAgentBuilderActionHandler({
-          mastra,
-          actionId,
-          runId,
-          eventType,
-        });
-
-        const reader = result.getReader();
-
-        stream.onAbort(() => {
-          void reader.cancel('request aborted');
-        });
-
-        let chunkResult;
-        while ((chunkResult = await reader.read()) && !chunkResult.done) {
-          await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
-        }
-        enableHotReload();
-      } catch (err) {
-        enableHotReload();
-        logger.error('Error in watch stream: ' + ((err as Error)?.message ?? 'Unknown error'));
-      }
-    });
-  } catch (error) {
-    enableHotReload();
-    return handleError(error, 'Error watching agent builder action');
   }
 }
 
