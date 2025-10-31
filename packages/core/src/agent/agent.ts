@@ -1610,13 +1610,14 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           inputSchema: agentInputSchema,
           outputSchema: agentOutputSchema,
           mastra: this.#mastra,
+          // BREAKING CHANGE v1.0: New tool signature - first param is inputData, second is context
           // manually wrap agent tools with ai tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
-          execute: async ({ context, writer, tracingContext: innerTracingContext }) => {
+          execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
             try {
               this.logger.debug(`[Agent:${this.name}] - Executing agent as tool ${agentName}`, {
                 name: agentName,
-                args: context,
+                args: inputData,
                 runId,
                 threadId,
                 resourceId,
@@ -1625,15 +1626,15 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               let result: any;
 
               if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v2') {
-                const generateResult = await agent.generate((context as any).prompt, {
+                const generateResult = await agent.generate(inputData.prompt, {
                   requestContext,
-                  tracingContext: innerTracingContext,
+                  tracingContext: context?.tracingContext,
                 });
                 result = { text: generateResult.text };
               } else if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v1') {
-                const generateResult = await agent.generateLegacy((context as any).prompt, {
+                const generateResult = await agent.generateLegacy(inputData.prompt, {
                   requestContext,
-                  tracingContext: innerTracingContext,
+                  tracingContext: context?.tracingContext,
                 });
                 result = { text: generateResult.text };
               } else if ((methodType === 'stream' || methodType === 'streamLegacy') && modelVersion === 'v2') {
@@ -1644,9 +1645,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 const slugify = await import(`@sindresorhus/slugify`); // this is an esm package, need to dynamic import incase we're running in cjs
                 const subAgentResourceId = `${slugify.default(this.id)}-${agentName}`;
 
-                const streamResult = await agent.stream((context as any).prompt, {
+                const streamResult = await agent.stream(inputData.prompt, {
                   requestContext,
-                  tracingContext: innerTracingContext,
+                  tracingContext: context?.tracingContext,
                   ...(resourceId && threadId
                     ? {
                         memory: {
@@ -1660,8 +1661,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 // Collect full text
                 let fullText = '';
                 for await (const chunk of streamResult.fullStream) {
-                  if (writer) {
-                    await writer.write(chunk);
+                  if (context?.writer) {
+                    await context.writer.write(chunk);
                   }
 
                   if (chunk.type === 'text-delta') {
@@ -1672,15 +1673,15 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 result = { text: fullText, subAgentThreadId, subAgentResourceId };
               } else {
                 // streamLegacy
-                const streamResult = await agent.streamLegacy((context as any).prompt, {
+                const streamResult = await agent.streamLegacy(inputData.prompt, {
                   requestContext,
-                  tracingContext: innerTracingContext,
+                  tracingContext: context?.tracingContext,
                 });
 
                 let fullText = '';
                 for await (const chunk of streamResult.fullStream) {
-                  if (writer) {
-                    await writer.write(chunk);
+                  if (context?.writer) {
+                    await context.writer.write(chunk);
                   }
 
                   if (chunk.type === 'text-delta') {
@@ -1767,14 +1768,15 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           inputSchema: workflow.inputSchema,
           outputSchema: workflow.outputSchema,
           mastra: this.#mastra,
+          // BREAKING CHANGE v1.0: New tool signature - first param is inputData, second is context
           // manually wrap workflow tools with ai tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace
-          execute: async ({ context, writer, tracingContext: innerTracingContext }) => {
+          execute: async (inputData, context) => {
             try {
               this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
                 name: workflowName,
                 description: workflow.description,
-                args: context,
+                args: inputData,
                 runId,
                 threadId,
                 resourceId,
@@ -1785,19 +1787,19 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               let result: any;
               if (methodType === 'generate' || methodType === 'generateLegacy') {
                 result = await run.start({
-                  inputData: context,
+                  inputData: inputData,
                   requestContext,
-                  tracingContext: innerTracingContext,
+                  tracingContext: context?.tracingContext,
                 });
               } else if (methodType === 'streamLegacy') {
                 const streamResult = run.streamLegacy({
-                  inputData: context,
+                  inputData: inputData,
                   requestContext,
-                  tracingContext: innerTracingContext,
+                  tracingContext: context?.tracingContext,
                 });
 
-                if (writer) {
-                  await streamResult.stream.pipeTo(writer);
+                if (context?.writer) {
+                  await streamResult.stream.pipeTo(context.writer);
                 } else {
                   for await (const _chunk of streamResult.stream) {
                     // complete the stream
@@ -1808,13 +1810,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               } else if (methodType === 'stream') {
                 // TODO: add support for format
                 const streamResult = run.stream({
-                  inputData: context,
+                  inputData: inputData,
                   requestContext,
-                  tracingContext: innerTracingContext,
+                  tracingContext: context?.tracingContext,
                 });
 
-                if (writer) {
-                  await streamResult.fullStream.pipeTo(writer);
+                if (context?.writer) {
+                  await streamResult.fullStream.pipeTo(context.writer);
                 }
 
                 result = await streamResult.result;

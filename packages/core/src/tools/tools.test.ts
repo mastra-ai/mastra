@@ -22,18 +22,16 @@ describe('createTool', () => {
     inputSchema: z.object({
       name: z.string(),
     }),
-    execute: ({ context }) => {
-      return mockFindUser(context.name) as Promise<Record<string, any>>;
+    execute: (input, _context) => {
+      return mockFindUser(input.name) as Promise<Record<string, any>>;
     },
   });
 
   it('should call mockFindUser', async () => {
     await testTool.execute?.(
+      { name: 'Dero Israel' },
       {
-        context: { name: 'Dero Israel' },
         requestContext: new RequestContext(),
-      },
-      {
         toolCallId: '123',
         messages: [],
         writableStream: undefined,
@@ -48,11 +46,9 @@ describe('createTool', () => {
 
   it("should return an object containing 'Dero Israel' as name and 'dero@mail.com' as email", async () => {
     const user = await testTool.execute?.(
+      { name: 'Dero Israel' },
       {
-        context: { name: 'Dero Israel' },
         requestContext: new RequestContext(),
-      },
-      {
         toolCallId: '123',
         messages: [],
         writableStream: undefined,
@@ -66,11 +62,9 @@ describe('createTool', () => {
 
   it("should return an object containing 'User not found' message", async () => {
     const user = await testTool.execute?.(
+      { name: 'Taofeeq Oluderu' },
       {
-        context: { name: 'Taofeeq Oluderu' },
         requestContext: new RequestContext(),
-      },
-      {
         toolCallId: '123',
         messages: [],
         writableStream: undefined,

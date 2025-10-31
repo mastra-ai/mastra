@@ -215,7 +215,7 @@ export const server = {
       city: z.string(),
     }),
     handler: async (input) => {
-      const city = input.city;
+      const city = inputData.city;
       const agent = mastra.getAgent("weatherAgent");
 
       const result = await agent.generate(

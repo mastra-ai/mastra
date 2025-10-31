@@ -1,5 +1,6 @@
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { Tool } from '@mastra/core/tools';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type {
   ElicitRequest,
@@ -690,9 +691,9 @@ To fix this you have three different options:
    * });
    * ```
    */
-  public async listTools() {
+  public async listTools(): Promise<Record<string, Tool<any, any, any, any>>> {
     this.addToInstanceCache();
-    const connectedTools: Record<string, any> = {}; // <- any because we don't have proper tool schemas
+    const connectedTools: Record<string, Tool<any, any, any, any>> = {};
 
     try {
       await this.eachClientTools(async ({ serverName, tools }) => {
@@ -736,9 +737,9 @@ To fix this you have three different options:
    * });
    * ```
    */
-  public async listToolsets() {
+  public async listToolsets(): Promise<Record<string, Record<string, Tool<any, any, any, any>>>> {
     this.addToInstanceCache();
-    const connectedToolsets: Record<string, Record<string, any>> = {}; // <- any because we don't have proper tool schemas
+    const connectedToolsets: Record<string, Record<string, Tool<any, any, any, any>>> = {};
 
     try {
       await this.eachClientTools(async ({ serverName, tools }) => {
@@ -860,7 +861,7 @@ To fix this you have three different options:
   private async eachClientTools(
     cb: (args: {
       serverName: string;
-      tools: Record<string, any>; // <- any because we don't have proper tool schemas
+      tools: Record<string, Tool<any, any, any, any>>;
       client: InstanceType<typeof InternalMastraMCPClient>;
     }) => Promise<void>,
   ) {

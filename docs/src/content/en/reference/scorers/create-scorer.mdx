@@ -108,7 +108,7 @@ const agentScorer = createScorer({
 })
   .preprocess(({ run }) => {
     // run.input is automatically typed as ScorerRunInputForAgent
-    const userMessage = run.input.inputMessages[0]?.content;
+    const userMessage = run.inputData.inputMessages[0]?.content;
     return { userMessage };
   })
   .generateScore(({ run, results }) => {
@@ -156,7 +156,7 @@ const agentTraceScorer = createScorer({
   type: "agent",
 }).generateScore(({ run }) => {
   // Trace data is automatically transformed to agent format
-  const userMessages = run.input.inputMessages;
+  const userMessages = run.inputData.inputMessages;
   const agentResponse = run.output[0]?.content;
 
   // Score based on response length

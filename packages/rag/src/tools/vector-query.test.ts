@@ -184,14 +184,16 @@ describe('createVectorQueryTool', () => {
       });
 
       // Execute with no filter
-      await tool.execute?.({
-        context: {
+      await tool.execute?.(
+        {
           queryText: 'test query',
           topK: 5,
         },
-        mastra: mockMastra as any,
-        requestContext,
-      });
+        {
+          mastra: mockMastra as any,
+          requestContext,
+        },
+      );
 
       // Check that vectorQuerySearch was called with undefined queryFilter
       expect(vectorQuerySearch).toHaveBeenCalledWith(
@@ -214,15 +216,17 @@ describe('createVectorQueryTool', () => {
       const filterJson = '{"field": "value"}';
 
       // Execute with filter
-      await tool.execute?.({
-        context: {
+      await tool.execute?.(
+        {
           queryText: 'test query',
           topK: 5,
           filter: filterJson,
         },
-        mastra: mockMastra as any,
-        requestContext,
-      });
+        {
+          mastra: mockMastra as any,
+          requestContext,
+        },
+      );
 
       // Check that vectorQuerySearch was called with the parsed filter
       expect(vectorQuerySearch).toHaveBeenCalledWith(
@@ -245,15 +249,17 @@ describe('createVectorQueryTool', () => {
       const stringFilter = 'string-filter';
 
       // Execute with string filter
-      await tool.execute?.({
-        context: {
+      await tool.execute?.(
+        {
           queryText: 'test query',
           topK: 5,
           filter: stringFilter,
         },
-        mastra: mockMastra as any,
-        requestContext,
-      });
+        {
+          mastra: mockMastra as any,
+          requestContext,
+        },
+      );
 
       // Since this is not a valid filter, it should be ignored
       expect(vectorQuerySearch).toHaveBeenCalledWith(
@@ -272,10 +278,15 @@ describe('createVectorQueryTool', () => {
       });
 
       const requestContext = new RequestContext();
-      const result = await tool.execute({
-        context: { queryText: 'foo', topK: 1 },
-        requestContext,
-      });
+      const result = await tool.execute(
+        {
+          queryText: 'foo',
+          topK: 1,
+        },
+        {
+          requestContext,
+        },
+      );
 
       expect(result).toEqual({ relevantContext: [], sources: [] });
       expect(vectorQuerySearch).not.toHaveBeenCalled();
@@ -294,10 +305,15 @@ describe('createVectorQueryTool', () => {
       });
 
       const requestContext = new RequestContext();
-      const result = await tool.execute({
-        context: { queryText: 'foo', topK: 1 },
-        requestContext,
-      });
+      const result = await tool.execute(
+        {
+          queryText: 'foo',
+          topK: 1,
+        },
+        {
+          requestContext,
+        },
+      );
 
       expect(result.relevantContext[0]).toEqual({ text: 'foo' });
       expect(vectorQuerySearch).toHaveBeenCalledWith(
@@ -328,11 +344,16 @@ describe('createVectorQueryTool', () => {
       });
 
       const requestContext = new RequestContext();
-      const result = await tool.execute({
-        context: { queryText: 'foo', topK: 1 },
-        mastra: mockMastra as any,
-        requestContext,
-      });
+      const result = await tool.execute(
+        {
+          queryText: 'foo',
+          topK: 1,
+        },
+        {
+          mastra: mockMastra as any,
+          requestContext,
+        },
+      );
 
       expect(result.relevantContext[0]).toEqual({ text: 'foo' });
       expect(vectorQuerySearch).toHaveBeenCalledWith(
@@ -366,11 +387,16 @@ describe('createVectorQueryTool', () => {
       requestContext.set('filter', { foo: 'bar' });
       requestContext.set('includeVectors', true);
       requestContext.set('includeSources', false);
-      const result = await tool.execute({
-        context: { queryText: 'foo', topK: 6 },
-        mastra: mockMastra as any,
-        requestContext,
-      });
+      const result = await tool.execute(
+        {
+          queryText: 'foo',
+          topK: 6,
+        },
+        {
+          mastra: mockMastra as any,
+          requestContext,
+        },
+      );
       expect(result.relevantContext.length).toBeGreaterThan(0);
       expect(result.sources).toEqual([]); // includeSources false
       expect(vectorQuerySearch).toHaveBeenCalledWith(
@@ -407,11 +433,16 @@ describe('createVectorQueryTool', () => {
           details: { semantic: 1, vector: 1, position: 1 },
         },
       ]);
-      const result = await tool.execute({
-        context: { queryText: 'foo', topK: 1 },
-        mastra: mockMastra as any,
-        requestContext,
-      });
+      const result = await tool.execute(
+        {
+          queryText: 'foo',
+          topK: 1,
+        },
+        {
+          mastra: mockMastra as any,
+          requestContext,
+        },
+      );
       expect(result.relevantContext[0]).toEqual({ text: 'bar' });
     });
   });
@@ -425,11 +456,16 @@ describe('createVectorQueryTool', () => {
         providerOptions: { google: { outputDimensionality: 1536 } },
       });
 
-      await tool.execute({
-        context: { queryText: 'foo', topK: 10 },
-        mastra: mockMastra as any,
-        requestContext: new RequestContext(),
-      });
+      await tool.execute(
+        {
+          queryText: 'foo',
+          topK: 10,
+        },
+        {
+          mastra: mockMastra as any,
+          requestContext: new RequestContext(),
+        },
+      );
 
       expect(vectorQuerySearch).toHaveBeenCalledWith({
         indexName: 'testIndex',
@@ -455,11 +491,16 @@ describe('createVectorQueryTool', () => {
       const requestContext = new RequestContext();
       requestContext.set('providerOptions', { google: { outputDimensionality: 768 } });
 
-      await tool.execute({
-        context: { queryText: 'foo', topK: 10 },
-        mastra: mockMastra as any,
-        requestContext,
-      });
+      await tool.execute(
+        {
+          queryText: 'foo',
+          topK: 10,
+        },
+        {
+          mastra: mockMastra as any,
+          requestContext,
+        },
+      );
 
       expect(vectorQuerySearch).toHaveBeenCalledWith({
         indexName: 'testIndex',

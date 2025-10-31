@@ -49,11 +49,16 @@ describe('createVectorQueryTool with database-specific configurations', () => {
 
     const requestContext = new RequestContext();
 
-    await tool.execute({
-      context: { queryText: 'test query', topK: 5 },
-      mastra: mockMastra as any,
-      requestContext,
-    });
+    await tool.execute(
+      {
+        queryText: 'test query',
+        topK: 5,
+      },
+      {
+        mastra: mockMastra as any,
+        requestContext,
+      },
+    );
 
     expect(vectorQuerySearch).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -80,11 +85,16 @@ describe('createVectorQueryTool with database-specific configurations', () => {
 
     const requestContext = new RequestContext();
 
-    await tool.execute({
-      context: { queryText: 'test query', topK: 5 },
-      mastra: mockMastra as any,
-      requestContext,
-    });
+    await tool.execute(
+      {
+        queryText: 'test query',
+        topK: 5,
+      },
+      {
+        mastra: mockMastra as any,
+        requestContext,
+      },
+    );
 
     expect(vectorQuerySearch).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -116,11 +126,16 @@ describe('createVectorQueryTool with database-specific configurations', () => {
     const requestContext = new RequestContext();
     requestContext.set('databaseConfig', runtimeConfig);
 
-    await tool.execute({
-      context: { queryText: 'test query', topK: 5 },
-      mastra: mockMastra as any,
-      requestContext,
-    });
+    await tool.execute(
+      {
+        queryText: 'test query',
+        topK: 5,
+      },
+      {
+        mastra: mockMastra as any,
+        requestContext,
+      },
+    );
 
     expect(vectorQuerySearch).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -139,11 +154,16 @@ describe('createVectorQueryTool with database-specific configurations', () => {
 
     const requestContext = new RequestContext();
 
-    await tool.execute({
-      context: { queryText: 'test query', topK: 5 },
-      mastra: mockMastra as any,
-      requestContext,
-    });
+    await tool.execute(
+      {
+        queryText: 'test query',
+        topK: 5,
+      },
+      {
+        mastra: mockMastra as any,
+        requestContext,
+      },
+    );
 
     expect(vectorQuerySearch).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -175,11 +195,16 @@ describe('createVectorQueryTool with database-specific configurations', () => {
 
     const requestContext = new RequestContext();
 
-    await tool.execute({
-      context: { queryText: 'test query', topK: 5 },
-      mastra: mockMastra as any,
-      requestContext,
-    });
+    await tool.execute(
+      {
+        queryText: 'test query',
+        topK: 5,
+      },
+      {
+        mastra: mockMastra as any,
+        requestContext,
+      },
+    );
 
     expect(vectorQuerySearch).toHaveBeenCalledWith(
       expect.objectContaining({

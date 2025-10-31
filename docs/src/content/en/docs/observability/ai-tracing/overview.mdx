@@ -509,17 +509,17 @@ Child spans allow you to track fine-grained operations within your workflow step
 Create child spans inside a tool call or workflow step to track specific operations:
 
 ```ts showLineNumbers copy
-execute: async ({ input, tracingContext }) => {
+execute: async ({ inputData, tracingContext }) => {
   // Create another child span for the main database operation
   const querySpan = tracingContext.currentSpan?.createChildSpan({
     type: "generic",
     name: "database-query",
-    input: { query: input.query },
+    input: { query: inputData.query },
     metadata: { database: "production" },
   });
 
   try {
-    const results = await db.query(input.query);
+    const results = await db.query(inputData.query);
     querySpan?.end({
       output: results.data,
       metadata: {

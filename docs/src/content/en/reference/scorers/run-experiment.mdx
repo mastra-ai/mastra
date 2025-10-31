@@ -206,7 +206,7 @@ const workflowResult = await runExperiment({
     },
   },
   onItemComplete: ({ item, targetResult, scorerResults }) => {
-    console.log(`Workflow completed for: ${item.input.query}`);
+    console.log(`Workflow completed for: ${item.inputData.query}`);
     if (scorerResults.workflow) {
       console.log("Workflow scores:", scorerResults.workflow);
     }

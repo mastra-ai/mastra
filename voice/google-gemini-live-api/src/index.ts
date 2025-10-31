@@ -1540,13 +1540,7 @@ export class GeminiLiveVoice extends MastraVoice<
         this.log('Executing tool', { toolName, toolArgs });
 
         // Execute with proper context
-        result = await tool.execute(
-          { context: toolArgs, requestContext: this.requestContext },
-          {
-            toolCallId: toolId,
-            messages: [],
-          },
-        );
+        result = await tool.execute(toolArgs, { requestContext: this.requestContext });
 
         this.log('Tool executed successfully', { toolName, result });
       } else {
@@ -1915,14 +1909,14 @@ export class GeminiLiveVoice extends MastraVoice<
    *   inputSchema: z.object({
    *     location: z.string().describe("The city and state, e.g. San Francisco, CA"),
    *   }),
-   *   execute: async ({ context }) => {
+   *   execute: async (inputData) => {
    *     // Fetch weather data from an API
    *     const response = await fetch(
-   *       `https://api.weather.com?location=${encodeURIComponent(context.location)}`,
+   *       `https://api.weather.com?location=${encodeURIComponent(inputData.location)}`,
    *     );
    *     const data = await response.json();
    *     return {
-   *       message: `The current temperature in ${context.location} is ${data.temperature}°F with ${data.conditions}.`,
+   *       message: `The current temperature in ${inputData.location} is ${data.temperature}°F with ${data.conditions}.`,
    *     };
    *   },
    * });

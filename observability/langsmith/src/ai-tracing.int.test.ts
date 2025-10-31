@@ -16,7 +16,7 @@ it.skip('should initialize with correct configuration', async () => {
     description: 'Add two numbers',
     inputSchema: z.object({ a: z.number(), b: z.number() }),
     outputSchema: z.object({ result: z.number() }),
-    execute: async ({ context }) => ({ result: context.a + context.b }),
+    execute: async input => ({ result: input.a + input.b }),
   });
 
   const agent = new Agent({

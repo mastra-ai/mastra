@@ -14,8 +14,8 @@ export const myMcpServer = new MCPServer({
         num2: z.number().describe('The second number.'),
         operation: z.enum(['add', 'subtract']).describe('The operation to perform.'),
       }),
-      execute: async ({ context }) => {
-        const { num1, num2, operation } = context;
+      execute: async input => {
+        const { num1, num2, operation } = input;
         if (operation === 'add') {
           return num1 + num2;
         }
@@ -31,8 +31,8 @@ export const myMcpServer = new MCPServer({
       inputSchema: z.object({
         city: z.string().describe('The city to get weather for, e.g., London, Paris.'),
       }),
-      execute: async ({ context }) => {
-        const { city } = context;
+      execute: async input => {
+        const { city } = input;
         const temperatures = {
           london: '15°C',
           paris: '18°C',
@@ -48,10 +48,11 @@ export const myMcpServer = new MCPServer({
       inputSchema: z.object({
         testMessage: z.string().describe('A test message to verify the tool is working.'),
       }),
-      execute: async ({ context, mastra }) => {
+      execute: async (inputData, context) => {
+        const mastra = context?.mastra;
         return {
           success: true,
-          testMessage: context.testMessage,
+          testMessage: inputData.testMessage,
           mastraAvailable: !!mastra,
           mastraType: typeof mastra,
           // Verify that the mastra instance has the expected properties

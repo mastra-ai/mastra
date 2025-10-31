@@ -46,21 +46,21 @@ describe('Writable Stream from Tool', () => {
       inputSchema: z.object({
         year: z.number(),
       }),
-      execute: async props => {
-        props?.writer.write({
+      execute: async (inputData, context) => {
+        context?.writer?.write({
           type: 'election-data',
           args: {
-            year: props.year,
+            year: inputData.year,
           },
           status: 'pending',
         });
 
         await delay(1000);
 
-        props?.writer.write({
+        context?.writer?.write({
           type: 'election-data',
           args: {
-            year: props.year,
+            year: inputData.year,
           },
           result: {
             winner: 'Donald Trump',

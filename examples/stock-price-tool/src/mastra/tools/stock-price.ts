@@ -12,11 +12,11 @@ export const stockPrices = createTool({
     symbol: z.string(),
   }),
   description: `Fetches the last day's closing stock price for a given symbol`,
-  execute: async ({ context }) => {
-    console.log('Using tool to fetch stock price for', context.symbol);
+  execute: async input => {
+    console.log('Using tool to fetch stock price for', inputData.symbol);
     return {
-      symbol: context.symbol,
-      currentPrice: await getStockPrice(context.symbol),
+      symbol: inputData.symbol,
+      currentPrice: await getStockPrice(inputData.symbol),
     };
   },
 });

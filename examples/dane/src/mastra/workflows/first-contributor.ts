@@ -19,14 +19,14 @@ const getPullRequest = new Step({
     body: z.string(),
     diff: z.string(),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData, context) => {
     const client = await github.getApiClient();
 
     const pullRequest = await client.pullsGet({
       path: {
-        owner: context?.triggerData?.owner,
-        repo: context?.triggerData?.repo,
-        pull_number: context?.triggerData?.pr_number,
+        owner: context?.workflow?.state?.triggerData?.owner,
+        repo: context?.workflow?.state?.triggerData?.repo,
+        pull_number: context?.workflow?.state?.triggerData?.pr_number,
       },
     });
 
@@ -52,8 +52,8 @@ const generateMessage = new Step({
     checklist: z.string().array(),
     outro: z.string(),
   }),
-  execute: async ({ context, mastra }) => {
-    const parentStep = context?.steps?.getPullRequest;
+  execute: async (inputData, context) => {
+    const parentStep = context?.workflow?.state?.steps?.getPullRequest;
     if (!parentStep || parentStep.status !== 'success') {
       return { intro: '', checklist: [], outro: '' };
     }
@@ -61,7 +61,7 @@ const generateMessage = new Step({
     const mastraDocsRes = await fetch('https://mastra.ai/llms.txt');
     const mastraDocs = await mastraDocsRes.text();
 
-    const daneNewContributor = mastra?.getAgent('daneNewContributor');
+    const daneNewContributor = context?.mastra?.getAgent('daneNewContributor');
 
     const res = await daneNewContributor?.generate(
       `
@@ -115,8 +115,8 @@ and an outro that just says thank you again and that we will review it shortly. 
 
 const createMessage = new Step({
   id: 'create-message',
-  execute: async ({ context }) => {
-    const parentStep = context?.steps?.['message-generator'];
+  execute: async (inputData, context) => {
+    const parentStep = context?.workflow?.state?.steps?.['message-generator'];
 
     if (!parentStep || parentStep.status !== 'success') {
       return;
@@ -125,9 +125,9 @@ const createMessage = new Step({
     const client = await github.getApiClient();
     const res = await client.issuesCreateComment({
       path: {
-        owner: context?.triggerData?.owner,
-        repo: context?.triggerData?.repo,
-        issue_number: context?.triggerData?.pr_number,
+        owner: context?.workflow?.state?.triggerData?.owner,
+        repo: context?.workflow?.state?.triggerData?.repo,
+        issue_number: context?.workflow?.state?.triggerData?.pr_number,
       },
       body: {
         body: `${parentStep.output.intro}

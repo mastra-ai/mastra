@@ -7,8 +7,8 @@ export const weatherTool = createTool({
   inputSchema: z.object({
     postalCode: z.string().describe('The location to get the weather for'),
   }),
-  execute: async ({ context: { postalCode } }) => {
-    return `The weather in ${postalCode} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
+  execute: async input => {
+    return `The weather in ${input.postalCode} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
   },
 });
 
@@ -18,7 +18,7 @@ export const weatherToolCity = createTool({
   inputSchema: z.object({
     city: z.string().describe('The location to get the weather for'),
   }),
-  execute: async ({ context: { city } }) => {
-    return `The weather in ${city} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
+  execute: async input => {
+    return `The weather in ${input.city} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
   },
 });

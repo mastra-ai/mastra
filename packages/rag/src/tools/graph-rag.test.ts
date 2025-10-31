@@ -78,11 +78,16 @@ describe('createGraphRAGTool', () => {
       requestContext.set('filter', { foo: 'bar' });
       requestContext.set('randomWalkSteps', 99);
       requestContext.set('restartProb', 0.42);
-      const result = await tool.execute({
-        context: { queryText: 'foo', topK: 2 },
-        mastra: mockMastra as any,
-        requestContext,
-      });
+      const result = await tool.execute(
+        {
+          queryText: 'foo',
+          topK: 2,
+        },
+        {
+          mastra: mockMastra as any,
+          requestContext,
+        },
+      );
       expect(result.relevantContext).toEqual(['foo', 'bar']);
       expect(result.sources.length).toBe(2);
       expect(vectorQuerySearch).toHaveBeenCalledWith(

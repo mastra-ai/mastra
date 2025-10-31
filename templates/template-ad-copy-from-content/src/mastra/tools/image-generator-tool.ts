@@ -63,8 +63,8 @@ export const imageGeneratorTool = createTool({
       height: z.number(),
     }),
   }),
-  execute: async ({ context }) => {
-    const { prompt, style, platform, size } = context;
+  execute: async input => {
+    const { prompt, style, platform, size } = input;
 
     console.log(`🎨 Generating image with DALL-E 3 via AI package: "${prompt.substring(0, 50)}..."`);
 

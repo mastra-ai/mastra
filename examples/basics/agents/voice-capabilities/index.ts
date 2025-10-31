@@ -64,8 +64,8 @@ async function convertToText(input: string | NodeJS.ReadableStream): Promise<str
 
   const chunks: Buffer[] = [];
   return new Promise<string>((resolve, reject) => {
-    input.on('data', chunk => chunks.push(Buffer.from(chunk)));
-    input.on('error', err => reject(err));
-    input.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+    inputData.on('data', chunk => chunks.push(Buffer.from(chunk)));
+    inputData.on('error', err => reject(err));
+    inputData.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
   });
 }

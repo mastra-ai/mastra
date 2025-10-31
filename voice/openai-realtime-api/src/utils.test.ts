@@ -17,8 +17,8 @@ describe('transformTools', () => {
           age: z.number().optional(),
         }),
         outputSchema: z.string(),
-        execute: async ({ context }) => {
-          return `Hello, ${context.name}`;
+        execute: async input => {
+          return `Hello, ${input.name}`;
         },
       });
 
@@ -99,8 +99,8 @@ describe('transformTools', () => {
           message: z.string(),
         }),
         outputSchema: z.string(),
-        execute: async ({ context }) => {
-          return `Processed: ${context.message}`;
+        execute: async input => {
+          return `Processed: ${input.message}`;
         },
       });
 

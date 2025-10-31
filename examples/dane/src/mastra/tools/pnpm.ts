@@ -15,12 +15,12 @@ export const pnpmBuild = createTool({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ context: { name, packagePath } }) => {
+  execute: async input => {
     try {
-      console.log(chalk.green(`\n Building: ${name} at ${packagePath}`));
+      console.log(chalk.green(`\n Building: ${inputData.name} at ${inputData.packagePath}`));
       const p = execa(`pnpm`, ['build'], {
         stdio: 'inherit',
-        cwd: packagePath,
+        cwd: inputData.packagePath,
         reject: false,
       });
       console.log(`\n`);
@@ -102,9 +102,9 @@ export const activeDistTag = createTool({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ context }) => {
+  execute: async input => {
     try {
-      const pkgJson = JSON.parse(readFileSync(path.join(context.packagePath, 'package.json'), 'utf-8'));
+      const pkgJson = JSON.parse(readFileSync(path.join(inputData.packagePath, 'package.json'), 'utf-8'));
       const version = pkgJson.version;
       console.log(chalk.green(`Setting active tag to latest for ${pkgJson.name}@${version}`));
       const p = execa(`npm`, ['dist-tag', `add`, `${pkgJson.name}@${version}`, `latest`], {
