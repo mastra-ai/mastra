@@ -177,7 +177,7 @@ export const FeedbackForm = ({
   if (!isOpen) return null;
 
   return (
-    <div className="p-4 pt-2 px-0 border max-h-[400px] border-gray-200 dark:border-borders-1 rounded-[10px] bg-white dark:bg-[var(--primary-bg)]">
+    <div className="p-4 pt-2 px-0 border max-h-[400px] border-gray-200 dark:border-(--border) rounded-[10px] bg-white dark:bg-[var(--primary-bg)]">
       {submitStatus === "success" ? (
         <div className="text-center py-4 px-2">
           <p className="text-sm mb-0! text-black dark:text-white">
