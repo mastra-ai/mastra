@@ -247,8 +247,8 @@ const calculatorTool = createTool({
   outputSchema: z.object({
     result: z.number(),
   }),
-  execute: async input => {
-    const { operation, a, b } = input;
+  execute: async inputData => {
+    const { operation, a, b } = inputData;
     const operations = {
       add: a + b,
       multiply: a * b,
@@ -278,7 +278,7 @@ const apiTool = createTool({
     data: z.any(),
   }),
   execute: async (inputData, context?: ToolExecutionContext<typeof apiToolInputSchema>) => {
-    const { endpoint, method } = input;
+    const { endpoint, method } = inputData;
     // Example of adding custom metadata
     context?.tracingContext?.currentSpan?.update({
       metadata: {
@@ -310,7 +310,7 @@ const workflowExecutorTool = createTool({
     result: z.any(),
   }),
   execute: async (inputData, context?: ToolExecutionContext<typeof workflowToolInputSchema>) => {
-    const { workflowId, input: workflowInput } = input;
+    const { workflowId, input: workflowInput } = inputData;
     expect(context?.mastra, 'Mastra instance should be available in tool execution context').toBeTruthy();
 
     const workflow = context?.mastra?.getWorkflow(workflowId);
