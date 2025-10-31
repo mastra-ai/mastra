@@ -19,8 +19,7 @@ export const memory = new Memory({
     semanticRecall: true,
   },
   storage: new LibSQLStore({
-    url: `file:${dbPath}`,
-    // url: 'file:mastra.db', // relative path from bundled .mastra/output dir
+    url: `file:${dbPath}`, // relative path from bundled .mastra/output dir
   }),
   vector: new LibSQLVector({
     connectionUrl: 'file:mastra.db', // relative path from bundled .mastra/output dir
