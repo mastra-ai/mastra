@@ -2,7 +2,7 @@ import { useDocsSidebar } from "@docusaurus/plugin-content-docs/client";
 import BackToTopButton from "@theme/BackToTopButton";
 import type { Props } from "@theme/DocRoot/Layout";
 import DocRootLayoutSidebar from "@theme/DocRoot/Layout/Sidebar";
-import { lazy, type ReactNode, Suspense, useState } from "react";
+import { lazy, type ReactNode, Suspense, useEffect, useState } from "react";
 import DocRootLayoutMain from "./Main";
 
 import { PulsingDots } from "@site/src/components/loading";
@@ -13,6 +13,15 @@ export default function DocRootLayout({ children }: Props): ReactNode {
   const sidebar = useDocsSidebar();
   const [hiddenSidebarContainer, setHiddenSidebarContainer] = useState(false);
   const [hiddenChatbotSidebar, setHiddenChatbotSidebar] = useState(true);
+
+  const [chatbotEverOpened, setChatbotEverOpened] = useState(false);
+
+  // Track if user has ever opened it
+  useEffect(() => {
+    if (!hiddenChatbotSidebar) {
+      setChatbotEverOpened(true);
+    }
+  }, [hiddenChatbotSidebar]);
 
   return (
     <div className={styles.docsWrapper}>
@@ -31,7 +40,8 @@ export default function DocRootLayout({ children }: Props): ReactNode {
         >
           {children}
         </DocRootLayoutMain>
-        {!hiddenChatbotSidebar && (
+
+        {chatbotEverOpened && (
           <Suspense fallback={<PulsingDots />}>
             <ChatbotSidebar
               hiddenChatbotSidebar={hiddenChatbotSidebar}
