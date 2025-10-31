@@ -20,6 +20,7 @@ import {
 import type { AIV4Type, AIV5Type } from './types';
 import { ensureGeminiCompatibleMessages } from './utils/ai-v5/gemini-compatibility';
 import { getToolName } from './utils/ai-v5/tool';
+import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 
 type AIV5LanguageModelV2Message = LanguageModelV2Prompt[0];
 export type AIV5ResponseMessage = AIV5Type.AssistantModelMessage | AIV5Type.ToolModelMessage;
@@ -2126,7 +2127,6 @@ export class MessageList {
         // Handle tool-invocation parts
         if (part.type === 'tool-invocation' && part.toolInvocation) {
           const inv = part.toolInvocation;
-          const v5State = inv.state === 'result' ? 'output-available' : 'input-available';
 
           if (inv.state === 'result' && inv.result) {
             parts.push({
@@ -2134,17 +2134,17 @@ export class MessageList {
               toolCallId: inv.toolCallId,
               input: inv.args,
               output: inv.result,
-              state: v5State,
+              state: 'output-available',
               callProviderMetadata: part.providerMetadata,
-            });
+            } satisfies AIV5Type.ToolUIPart);
           } else {
             parts.push({
               type: `tool-${inv.toolName}`,
               toolCallId: inv.toolCallId,
               input: inv.args,
-              state: v5State,
+              state: 'input-available',
               callProviderMetadata: part.providerMetadata,
-            } as unknown as AIV5Type.UIMessage['parts'][number]);
+            } satisfies AIV5Type.ToolUIPart);
           }
           continue;
         }
@@ -2181,34 +2181,24 @@ export class MessageList {
 
         // Convert tool-invocation parts to AIV5 tool parts
         if (part.type === 'tool-invocation') {
-          type V2ToolInvocationPart = {
-            type: 'tool-invocation';
-            toolName: string;
-            toolCallId: string;
-            args: unknown;
-            result?: unknown;
-            state: 'call' | 'result';
-            providerMetadata?: AIV5Type.ProviderMetadata;
-          };
-          const toolInvPart = part as unknown as V2ToolInvocationPart;
-          const toolName = toolInvPart.toolName;
-          if (toolInvPart.state === 'result') {
+          const toolName = part.toolInvocation.toolName;
+          if (part.toolInvocation.state === 'result') {
             parts.push({
               type: `tool-${toolName}`,
-              toolCallId: toolInvPart.toolCallId,
-              input: toolInvPart.args,
-              output: toolInvPart.result,
+              toolCallId: part.toolInvocation.toolCallId,
+              input: part.toolInvocation.args,
+              output: part.toolInvocation.result,
               state: 'output-available' as const,
-              callProviderMetadata: toolInvPart.providerMetadata,
-            } as AIV5Type.ToolUIPart);
+              callProviderMetadata: part.providerMetadata,
+            } satisfies AIV5Type.ToolUIPart);
           } else {
             parts.push({
               type: `tool-${toolName}`,
-              toolCallId: toolInvPart.toolCallId,
-              input: toolInvPart.args,
+              toolCallId: part.toolInvocation.toolCallId,
+              input: part.toolInvocation.args,
               state: 'input-available' as const,
-              callProviderMetadata: toolInvPart.providerMetadata,
-            } as unknown as AIV5Type.ToolUIPart);
+              callProviderMetadata: part.providerMetadata,
+            } satisfies AIV5Type.ToolUIPart);
           }
           continue;
         }
@@ -2367,6 +2357,7 @@ export class MessageList {
       toolInvocations = toolInvocationParts.map(p => {
         const toolName = getToolName(p);
         if (p.state === 'output-available') {
+          console.log('p123', p);
           return {
             args: p.input,
             result:
@@ -2418,25 +2409,29 @@ export class MessageList {
           if (p.state === 'output-available') {
             return {
               type: 'tool-invocation' as const,
-              toolCallId: p.toolCallId,
-              toolName,
-              args: p.input,
-              result:
-                typeof p.output === 'object' && p.output && 'value' in p.output
-                  ? (p.output as { value: unknown }).value
-                  : p.output,
-              state: 'result' as const,
+              toolInvocation: {
+                toolCallId: p.toolCallId,
+                toolName,
+                args: p.input,
+                result:
+                  typeof p.output === 'object' && p.output && 'value' in p.output
+                    ? (p.output as { value: unknown }).value
+                    : p.output,
+                state: 'result' as const,
+              },
               providerMetadata: callProviderMetadata,
-            };
+            } satisfies ToolInvocationUIPart & { providerMetadata?: AIV5Type.ProviderMetadata };
           }
           return {
             type: 'tool-invocation' as const,
-            toolCallId: p.toolCallId,
-            toolName,
-            args: p.input,
-            state: 'call' as const,
+            toolInvocation: {
+              toolCallId: p.toolCallId,
+              toolName,
+              args: p.input,
+              state: 'call' as const,
+            },
             providerMetadata: callProviderMetadata,
-          };
+          } satisfies ToolInvocationUIPart & { providerMetadata?: AIV5Type.ProviderMetadata };
         }
 
         if (p.type === 'reasoning') {
@@ -2815,17 +2810,11 @@ export class MessageList {
     const msgs = messages
       .map(m => {
         if (m.parts.length === 0) return false;
-        // Filter out streaming states only
+        // Filter out streaming states and input-available (which isn't supported by convertToModelMessages)
         const safeParts = m.parts.filter(p => {
           if (!AIV5.isToolUIPart(p)) return true;
-          // Keep tool parts with any non-streaming state OR tool-result-${toolName} parts (which don't have state)
-          // tool-result-${toolName} parts are the final format after conversion from V2
-          if ('state' in p) {
-            // Filter out only streaming states, keep input-available, output-available, output-error
-            return p.state !== 'input-streaming';
-          }
-          // If no state property, it's likely a tool-result-${toolName} part, keep it
-          return true;
+          // Only keep tool parts with output states for model messages
+          return p.state === 'output-available' || p.state === 'output-error';
         });
 
         if (!safeParts.length) return false;
@@ -2833,7 +2822,7 @@ export class MessageList {
         const sanitized = {
           ...m,
           parts: safeParts.map(part => {
-            if (AIV5.isToolUIPart(part) && 'state' in part && part.state === 'output-available') {
+            if (AIV5.isToolUIPart(part) && part.state === 'output-available') {
               return {
                 ...part,
                 output:
