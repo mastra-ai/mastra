@@ -429,11 +429,24 @@ export class InMemoryMemory extends MemoryStorage {
 
   protected parseStoredMessage(message: StorageMessageType): MastraMessageV2 {
     const { resourceId, content, role, thread_id, ...rest } = message;
+
+    // Parse content using safelyParseJSON utility
+    let parsedContent = safelyParseJSON(content);
+
+    // If the result is a plain string (V1 format), wrap it in V2 structure
+    if (typeof parsedContent === 'string') {
+      parsedContent = {
+        format: 2,
+        content: parsedContent,
+        parts: [],
+      };
+    }
+
     return {
       ...rest,
       threadId: thread_id,
       ...(message.resourceId && { resourceId: message.resourceId }),
-      content: safelyParseJSON(content),
+      content: parsedContent,
       role: role as MastraMessageV2['role'],
     } satisfies MastraMessageV2;
   }

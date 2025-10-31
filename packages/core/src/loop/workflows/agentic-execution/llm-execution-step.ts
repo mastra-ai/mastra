@@ -703,14 +703,14 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
 
       if (toolCalls.length > 0) {
         const assistantContent = [
-          ...(toolCalls.map(toolCall => {
+          ...toolCalls.map(toolCall => {
             return {
-              type: 'tool-call',
+              type: 'tool-call' as const,
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
               args: toolCall.args,
             };
-          }) as any),
+          }),
         ];
 
         messageList.add(
