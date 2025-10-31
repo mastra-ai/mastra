@@ -1,6 +1,6 @@
 import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai';
-import { MessageList } from '../agent/message-list';
+
 import type { MastraDBMessage } from '../agent/message-list';
 import { MastraBase } from '../base';
 import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
@@ -408,15 +408,15 @@ export abstract class MastraMemory extends MastraBase {
    * @deprecated use saveMessages instead
    */
   async addMessage({
-    threadId,
-    resourceId,
-    config,
-    content,
-    role,
-    type,
-    toolNames,
-    toolCallArgs,
-    toolCallIds,
+    _threadId,
+    _resourceId,
+    _config,
+    _content,
+    _role,
+    _type,
+    _toolNames,
+    _toolCallArgs,
+    _toolCallIds,
   }: {
     threadId: string;
     resourceId: string;
