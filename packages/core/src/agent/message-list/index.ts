@@ -1365,6 +1365,11 @@ export class MessageList {
   }
 
   private hydrateMastraDBMessageFields(message: MastraDBMessage): MastraDBMessage {
+    // Generate ID if missing
+    if (!message.id) {
+      message.id = this.newMessageId();
+    }
+
     if (!(message.createdAt instanceof Date)) message.createdAt = new Date(message.createdAt);
 
     // Fix toolInvocations with empty args by looking in the parts array

@@ -7,6 +7,7 @@ import type {
   StorageListThreadsByResourceIdOutput,
   ThreadSortOptions,
 } from '../storage';
+import { MessageList } from '../agent/message-list';
 
 export class MockMemory extends MastraMemory {
   threads: Record<string, StorageThreadType> = {};
@@ -34,7 +35,14 @@ export class MockMemory extends MastraMemory {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig;
   }): Promise<{ messages: MastraDBMessage[] }> {
-    return this.storage.saveMessages({ messages });
+    // Convert messages to MastraDBMessage format and ensure IDs are generated
+    const dbMessages = new MessageList({
+      generateMessageId: () => this.generateId(),
+    })
+      .add(messages, 'memory')
+      .get.all.db();
+
+    return this.storage.saveMessages({ messages: dbMessages });
   }
 
   async rememberMessages(args: {
