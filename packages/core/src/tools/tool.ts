@@ -89,7 +89,7 @@ export class Tool<
    * Tool execution function
    * @param inputData - The raw, validated input data
    * @param context - Optional execution context with metadata
-   * @returns Promise resolving to tool output
+   * @returns Promise resolving to tool output or a ValidationError if input validation fails
    */
   execute?: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext>['execute'];
 

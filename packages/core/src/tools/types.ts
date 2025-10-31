@@ -15,6 +15,7 @@ import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
 import type { ToolStream } from './stream';
+import type { ValidationError } from './validation';
 
 export type VercelTool = Tool;
 export type VercelToolV5 = ToolV5;
@@ -220,10 +221,11 @@ export interface ToolAction<
   // Execute signature with unified context type
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata
+  // Returns: The expected output OR a validation error if input validation fails
   execute?: (
     inputData: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
     context?: TContext,
-  ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
+  ) => Promise<(TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown) | ValidationError>;
   mastra?: Mastra;
   requireApproval?: boolean;
   onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;

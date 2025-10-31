@@ -101,7 +101,7 @@ describe('Tool Input Validation Integration Tests', () => {
         metadata: {
           priority: 'urgent' as any, // Not in enum - force type error
         },
-      } as any);
+      });
 
       expect(result.error).toBe(true);
       expect(result.message).toContain('At least one tag required');
@@ -199,7 +199,7 @@ describe('Tool Input Validation Integration Tests', () => {
         },
       });
 
-      const result = await tool.execute({ username: 'ab' } as any);
+      const result = await tool.execute({ username: 'ab' });
 
       expect(result.error).toBe(true);
       expect(result.message).toContain('Tool validation failed for user-registration');
@@ -371,9 +371,9 @@ describe('Tool Input Validation Integration Tests', () => {
       });
 
       const result: any = await tool?.execute?.({
-        context: 123, // Wrong type - should be string
+        context: 123 as any, // Wrong type - should be string
         other: 456,
-      } as any);
+      });
 
       expect(result.error).toBe(true);
       expect(result.message).toContain('Tool validation failed');
@@ -396,9 +396,9 @@ describe('Tool Input Validation Integration Tests', () => {
       });
 
       const result: any = await tool?.execute?.({
-        inputData: 'should-be-object', // Wrong type - should be object
+        inputData: 'should-be-object' as any, // Wrong type - should be object
         metadata: 'valid-string',
-      } as any);
+      });
 
       expect(result.error).toBe(true);
       expect(result.message).toContain('Tool validation failed');
@@ -457,7 +457,7 @@ describe('Tool Input Validation Integration Tests', () => {
       const result = await tool.execute({
         required: 'value',
         extra: 'preserved',
-      } as any);
+      });
 
       expect(result.error).toBeUndefined();
       expect(result.data).toEqual({
