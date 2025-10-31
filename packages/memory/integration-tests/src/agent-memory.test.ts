@@ -311,13 +311,7 @@ describe('Agent Memory Tests', () => {
         .filter((m: any) => m.role === 'assistant')
         .map((m: any) => m.content.parts?.find((p: any) => p.type === 'text')?.text || '');
       expect(userMessages).toEqual(expect.arrayContaining(['What is 2+2?', 'Give me JSON']));
-      function flattenAssistantMessages(messages: any[]) {
-        return messages.flatMap(msg =>
-          Array.isArray(msg) ? msg.map(part => (typeof part === 'object' && part.text ? part.text : part)) : msg,
-        );
-      }
-
-      expect(flattenAssistantMessages(assistantMessages)).toEqual(
+      expect(assistantMessages).toEqual(
         expect.arrayContaining([expect.stringContaining('2 + 2'), expect.stringContaining('"result"')]),
       );
     });
