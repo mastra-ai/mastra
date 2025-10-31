@@ -1,3 +1,4 @@
+import type { AIV5Type } from '../agent/message-list/types';
 import { MastraMemory } from '../memory';
 import type { StorageThreadType, MastraDBMessage, MemoryConfig, MessageDeleteInput } from '../memory';
 import { InMemoryStore } from '../storage';
@@ -7,8 +8,6 @@ import type {
   StorageListThreadsByResourceIdOutput,
   ThreadSortOptions,
 } from '../storage';
-import { MessageList } from '../agent/message-list';
-import type { AIV5Type } from '../agent/message-list/types';
 
 export class MockMemory extends MastraMemory {
   threads: Record<string, StorageThreadType> = {};
