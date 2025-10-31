@@ -664,8 +664,6 @@ ${workingMemory}`;
     // Then strip working memory tags from all messages
     const updatedMessages = messages
       .map(m => {
-        // add this to prevent "error saving undefined in the db" if a project is on an earlier storage version but new memory/storage
-        if (!m.type) m.type = `v2`;
         return this.updateMessageToHideWorkingMemoryV2(m);
       })
       .filter((m): m is MastraDBMessage => Boolean(m));
