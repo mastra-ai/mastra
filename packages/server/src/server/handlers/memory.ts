@@ -362,7 +362,7 @@ export async function getMessagesHandler({
     }
 
     if (!threadId) {
-      throw new Error(`No threadId found`);
+      throw new HTTPException(400, { message: 'No threadId found' });
     }
 
     const thread = await memory.getThreadById({ threadId: threadId });
