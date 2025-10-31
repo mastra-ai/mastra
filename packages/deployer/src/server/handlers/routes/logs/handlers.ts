@@ -1,5 +1,5 @@
-import type { Mastra } from '@mastra/core';
 import type { LogLevel } from '@mastra/core/logger';
+import type { Mastra } from '@mastra/core/mastra';
 import {
   listLogsHandler as getOriginalListLogsHandler,
   listLogsByRunIdHandler as getOriginalListLogsByRunIdHandler,

@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai';
-import { createTool } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 import { describe, expect, it, vi } from 'vitest';
 import { createAgentTestRun, createToolInvocation, createUIMessage, extractToolCalls } from '../../utils';
 import { createToolCallAccuracyScorerLLM } from './index';

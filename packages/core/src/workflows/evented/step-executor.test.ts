@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { Mastra } from '../..';
-import type { StepFlowEntry, StepResult } from '../..';
 import { MastraError } from '../../error';
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
+import type { StepFlowEntry, StepResult } from '../types';
 import { createStep } from '../workflow';
 import { StepExecutor } from './step-executor';
 

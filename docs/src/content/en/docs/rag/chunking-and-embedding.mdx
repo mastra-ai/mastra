@@ -80,7 +80,7 @@ Transform chunks into embeddings using your preferred provider. Mastra supports 
 The simplest way is to use Mastra's model router with `provider/model` strings:
 
 ```ts showLineNumbers copy
-import { ModelRouterEmbeddingModel } from "@mastra/core";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { embedMany } from "ai";
 
 const embeddingModel = new ModelRouterEmbeddingModel(

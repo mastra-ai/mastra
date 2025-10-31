@@ -41,7 +41,7 @@ npm install @mastra/auth-workos@latest
 ### Basic usage with environment variables
 
 ```typescript {2,7} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
@@ -55,7 +55,7 @@ export const mastra = new Mastra({
 ### Custom configuration
 
 ```typescript {2,7-10} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
