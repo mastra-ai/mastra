@@ -22,8 +22,8 @@ import { validateToolInput } from './validation';
  *     location: z.string(),
  *     units: z.enum(['celsius', 'fahrenheit']).optional()
  *   }),
- *   execute: async (input) => {
- *     return await fetchWeather(input.location, input.units);
+ *   execute: async (inputData) => {
+ *     return await fetchWeather(inputData.location, inputData.units);
  *   }
  * });
  * ```
@@ -35,8 +35,8 @@ import { validateToolInput } from './validation';
  *   description: 'Delete a file',
  *   requireApproval: true,
  *   inputSchema: z.object({ filepath: z.string() }),
- *   execute: async (input) => {
- *     await fs.unlink(input.filepath);
+ *   execute: async (inputData) => {
+ *     await fs.unlink(inputData.filepath);
  *     return { deleted: true };
  *   }
  * });
@@ -48,9 +48,9 @@ import { validateToolInput } from './validation';
  *   id: 'save-data',
  *   description: 'Save data to storage',
  *   inputSchema: z.object({ key: z.string(), value: z.any() }),
- *   execute: async (input, context) => {
+ *   execute: async (inputData, context) => {
  *     const storage = context?.mastra?.getStorage();
- *     await storage?.set(input.key, input.value);
+ *     await storage?.set(inputData.key, inputData.value);
  *     return { saved: true };
  *   }
  * });
@@ -87,7 +87,7 @@ export class Tool<
 
   /**
    * Tool execution function
-   * @param input - The raw, validated input data
+   * @param inputData - The raw, validated input data
    * @param context - Optional execution context with metadata
    * @returns Promise resolving to tool output
    */
@@ -116,7 +116,7 @@ export class Tool<
    *   id: 'my-tool',
    *   description: 'Does something useful',
    *   inputSchema: z.object({ name: z.string() }),
-   *   execute: async (input) => ({ greeting: `Hello ${input.name}` })
+   *   execute: async (inputData) => ({ greeting: `Hello ${inputData.name}` })
    * });
    * ```
    */

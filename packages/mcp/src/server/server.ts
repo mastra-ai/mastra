@@ -67,7 +67,7 @@ import type { MCPServerPrompts, MCPServerResources, ElicitationActions } from '.
  *   id: 'getWeather',
  *   description: 'Gets the current weather for a location.',
  *   inputSchema: z.object({ location: z.string() }),
- *   execute: async (input) => `Weather in ${input.location} is sunny.`,
+ *   execute: async (inputData) => `Weather in ${inputData.location} is sunny.`,
  * });
  *
  * const server = new MCPServer({
@@ -225,7 +225,7 @@ export class MCPServer extends MCPServerBase {
    *       id: 'getWeather',
    *       description: 'Gets weather',
    *       inputSchema: z.object({ location: z.string() }),
-   *       execute: async (input) => `Sunny in ${input.location}`,
+   *       execute: async (inputData) => `Sunny in ${inputData.location}`,
    *     })
    *   },
    *   agents: { myAgent },
@@ -758,12 +758,12 @@ export class MCPServer extends MCPServerBase {
         inputSchema: z.object({
           message: z.string().describe('The question or input for the agent.'),
         }),
-        execute: async (input, context) => {
+        execute: async (inputData, context) => {
           this.logger.debug(
-            `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${input.message}"`,
+            `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${inputData.message}"`,
           );
           try {
-            const response = await agent.generate(input.message, context);
+            const response = await agent.generate(inputData.message, context);
             return response;
           } catch (error) {
             this.logger.error(`Error executing agent tool '${agentToolName}' for agent '${agent.name}':`, error);

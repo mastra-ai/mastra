@@ -48,11 +48,11 @@ export const myMcpServer = new MCPServer({
       inputSchema: z.object({
         testMessage: z.string().describe('A test message to verify the tool is working.'),
       }),
-      execute: async (input, context) => {
+      execute: async (inputData, context) => {
         const mastra = context?.mastra;
         return {
           success: true,
-          testMessage: input.testMessage,
+          testMessage: inputData.testMessage,
           mastraAvailable: !!mastra,
           mastraType: typeof mastra,
           // Verify that the mastra instance has the expected properties

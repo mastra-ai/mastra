@@ -245,8 +245,8 @@ export const weatherTool = createTool({
     conditions: z.string(),
     location: z.string(),
   }),
-  execute: async (input) => {
-    return await getWeather(input.location);
+  execute: async (inputData) => {
+    return await getWeather(inputData.location);
   },
 });
 \`\`\`
@@ -264,7 +264,7 @@ const fetchWeather = createStep({
     city: z.string().describe('The city to get the weather for'),
   }),
   outputSchema: forecastSchema,
-  execute: async (input) => {
+  execute: async (inputData) => {
     if (!input) {
       throw new Error('Input data not found');
     }
@@ -318,7 +318,8 @@ const planActivities = createStep({
   outputSchema: z.object({
     activities: z.string(),
   }),
-  execute: async ({ inputData, mastra }) => {
+  execute: async (inputData, context) => {
+    const mastra = context?.mastra;
     const forecast = inputData;
 
     if (!forecast) {
@@ -515,7 +516,7 @@ export const mastra = new Mastra({
         execute: async input => {
           return await AgentBuilderDefaults.executeCommand({
             ...input,
-            workingDirectory: input.workingDirectory || projectPath,
+            workingDirectory: inputData.workingDirectory || projectPath,
           });
         },
       }),
