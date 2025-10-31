@@ -13,7 +13,6 @@ import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream'
 import { createStep, createWorkflow } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
-import type { MastraMemory } from '../../memory';
 
 async function getRoutingAgent({ requestContext, agent }: { agent: Agent; requestContext: RequestContext }) {
   const instructionsToUse = await agent.getInstructions({ requestContext: requestContext });
@@ -460,31 +459,9 @@ export async function createNetworkLoop({
         ...routingAgentOptions,
       };
 
-      console.log('\n=== ROUTING AGENT CALL (iteration', iterationCount, ') ===');
-
       const result = await tryGenerateWithJsonFallback(routingAgent, prompt, options);
 
-      console.log('Result:', {
-        hasObject: !!result.object,
-        finishReason: result.finishReason,
-        toolCallsCount: result.steps?.[0]?.toolCalls?.length || 0,
-      });
-
       const object = result.object;
-
-      if (object) {
-        console.log('✓ Routing decision:', {
-          primitiveId: object.primitiveId,
-          primitiveType: object.primitiveType,
-        });
-      } else {
-        console.error('✗ ERROR: result.object is undefined!');
-        console.error('  Finish reason:', result.finishReason);
-        if (result.steps?.[0]?.toolCalls) {
-          const toolNames = result.steps[0].toolCalls.map((tc: any) => tc.payload?.toolName);
-          console.error('  Tool calls made instead:', toolNames);
-        }
-      }
 
       const endPayload = {
         task: inputData.task,
@@ -889,8 +866,6 @@ export async function createNetworkLoop({
         runId,
       });
 
-      console.log('inputDataToUse', inputDataToUse);
-
       const finalResult = await tool.execute(
         {
           requestContext,
@@ -954,8 +929,6 @@ export async function createNetworkLoop({
         from: ChunkFrom.NETWORK,
         runId,
       });
-
-      console.log('finalResult', finalResult);
 
       return endPayload;
     },

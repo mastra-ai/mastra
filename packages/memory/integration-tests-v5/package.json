@@ -2,6 +2,7 @@
   "name": "@mastra/memory-integration-tests-v5",
   "private": true,
   "version": "0.1.10-alpha.1",
+  "type": "module",
   "scripts": {
     "test": "pnpm test:streaming && pnpm test:working-memory && pnpm test:agent-memory && pnpm test:processors && pnpm test:fastembed && pnpm test:agent-network-working-memory",
     "test:agent-memory": "vitest run ./src/agent-memory.test.ts",
