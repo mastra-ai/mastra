@@ -23,7 +23,7 @@ export async function fetchWithRetry(
         if (response.status >= 400 && response.status < 500) {
           throw new Error(`Request failed with status: ${response.status} ${response.statusText}`);
         }
-        
+
         lastError = new Error(`Request failed with status: ${response.status} ${response.statusText}`);
         retryCount++;
 
@@ -39,12 +39,12 @@ export async function fetchWithRetry(
       return response;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      
+
       // If it's a client error (4xx), don't retry
       if (lastError.message.includes('status: 4')) {
         throw lastError;
       }
-      
+
       retryCount++;
 
       if (retryCount >= maxRetries) {

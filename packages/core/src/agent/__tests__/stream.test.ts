@@ -904,17 +904,17 @@ function runStreamTest(version: 'v1' | 'v2') {
         expect(secondResponse.request.body.input).toEqual([
           expect.objectContaining({ role: 'system' }),
           expect.objectContaining({ role: 'user' }),
-          expect.objectContaining({ 
+          expect.objectContaining({
             type: 'function_call',
-            name: 'get_weather'
+            name: 'get_weather',
           }),
-          expect.objectContaining({ 
+          expect.objectContaining({
             type: 'function_call',
-            name: 'get_weather'
+            name: 'get_weather',
           }),
-          expect.objectContaining({ 
+          expect.objectContaining({
             type: 'function_call_output',
-            call_id: expect.any(String)
+            call_id: expect.any(String),
           }),
           expect.objectContaining({ role: 'assistant' }),
           expect.objectContaining({ role: 'user' }),
