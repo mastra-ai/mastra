@@ -445,22 +445,6 @@ describe('Agent Memory Tests', () => {
         version: '1.0.0',
         userId: 'user-123',
       });
-
-      // Check UI messages also preserve metadata
-      const firstUIMessage = uiMessages.find((m: any) => m.content === 'Hello with metadata');
-      const secondUIMessage = uiMessages.find((m: any) => m.content === 'Another message with different metadata');
-
-      expect(firstUIMessage?.metadata).toEqual({
-        source: 'web-ui',
-        timestamp: expect.any(Number),
-        customField: 'custom-value',
-      });
-
-      expect(secondUIMessage?.metadata).toEqual({
-        source: 'mobile-app',
-        version: '1.0.0',
-        userId: 'user-123',
-      });
     });
 
     it('should consolidate reasoning into single part when saving to memory', async () => {

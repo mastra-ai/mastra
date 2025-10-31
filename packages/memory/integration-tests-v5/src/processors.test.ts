@@ -241,7 +241,7 @@ describe('Memory with Processors', () => {
 
     // We should have fewer messages after filtering and token limiting
     expect(result.length).toBeGreaterThan(0);
-    expect(result.length).toBeLessThan(messages.length);
+    expect(result.length).toBeLessThan(messagesV2.length);
     // And they should exclude weather tool messages
     expect(filterToolResultsByName(result, `weather`)).toHaveLength(0);
     expect(filterToolCallsByName(result, `weather`)).toHaveLength(0);
