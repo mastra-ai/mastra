@@ -482,8 +482,8 @@ describe('Structured Output with Tool Execution', () => {
         },
         required: ['a', 'b'] as const,
       },
-      execute: vi.fn(async ({ a, b }: { a: number; b: number }) => {
-        return { sum: a + b };
+      execute: vi.fn(async (input: { a: number; b: number }, context: any) => {
+        return { sum: input.a + input.b };
       }),
     };
 
