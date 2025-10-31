@@ -428,26 +428,7 @@ export abstract class MastraMemory extends MastraBase {
     toolCallArgs?: Record<string, unknown>[];
     toolCallIds?: string[];
   }): Promise<MastraMessageV1> {
-    const message: MastraMessageV1 = {
-      id: this.generateId(),
-      content,
-      role,
-      createdAt: new Date(),
-      threadId,
-      resourceId,
-      type,
-      toolNames,
-      toolCallArgs,
-      toolCallIds,
-    };
-
-    // Convert V1 message to DB format before saving
-    const list = new MessageList({ threadId, resourceId }).add(message, 'memory');
-    const dbMessage = list.get.all.db()[0]!;
-
-    const savedMessages = await this.saveMessages({ messages: [dbMessage], memoryConfig: config });
-    const resultList = new MessageList({ threadId, resourceId }).add(savedMessages.messages[0]!, 'memory');
-    return resultList.get.all.v1()[0]!;
+    throw new Error('addMessage is deprecated. Please use saveMessages instead.');
   }
 
   /**
