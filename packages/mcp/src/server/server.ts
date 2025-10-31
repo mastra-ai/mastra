@@ -831,16 +831,16 @@ export class MCPServer extends MCPServerBase {
         id: workflowToolName,
         description: `Run workflow '${workflowKey}'. Workflow description: ${workflowDescription}`,
         inputSchema: workflow.inputSchema,
-        execute: async (input, context) => {
+        execute: async (inputData, context) => {
           this.logger.debug(
             `Executing workflow tool '${workflowToolName}' for workflow '${workflow.id}' with input:`,
-            input,
+            inputData,
           );
           try {
             const run = await workflow.createRunAsync({ runId: context?.requestContext?.get('runId') });
 
             const response = await run.start({
-              inputData: input,
+              inputData: inputData,
               requestContext: context?.requestContext,
               tracingContext: context?.tracingContext,
             });
