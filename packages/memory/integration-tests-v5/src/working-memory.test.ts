@@ -54,12 +54,15 @@ const createTestThread = (title: string, metadata = {}) => ({
   updatedAt: new Date(),
 });
 
-const createTestMessage = (threadId: string, content: string, role: 'user' | 'assistant' = 'user'): MastraMessageV1 => {
+const createTestMessage = (threadId: string, content: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage => {
   messageCounter++;
   return {
     id: randomUUID(),
     threadId,
-    content,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text: content }],
+    },
     role,
     type: 'text',
     createdAt: new Date(Date.now() + messageCounter * 1000),
@@ -242,7 +245,7 @@ describe('Working Memory Tests', () => {
         ),
       ];
 
-      await disabledMemory.saveMessages({ messages, format: 'v2' });
+      await disabledMemory.saveMessages({ messages });
 
       // Working memory should be null when disabled
       const workingMemory = await disabledMemory.getWorkingMemory({ threadId: thread.id });

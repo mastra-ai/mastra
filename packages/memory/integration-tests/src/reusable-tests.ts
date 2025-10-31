@@ -75,10 +75,12 @@ const getTextContent = (message: any): string => {
     return message.content;
   }
   if (message.content?.parts && Array.isArray(message.content.parts)) {
-    // Find the first text part
-    const textPart = message.content.parts.find((p: any) => p.type === 'text' && p.text);
-    if (textPart) {
-      return textPart.text;
+    // Concatenate all text parts
+    const textParts = message.content.parts
+      .filter((p: any) => p.type === 'text' && p.text)
+      .map((p: any) => p.text);
+    if (textParts.length > 0) {
+      return textParts.join(' ');
     }
   }
   // Fallback: check if content has a direct text property
