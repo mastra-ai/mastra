@@ -187,8 +187,13 @@ describe('Working Memory Tests', () => {
         config: { lastMessages: 10 },
       });
 
+      // Debug: log the structure of retrieved messages
+      console.log('DEBUG: remembered.messages:', JSON.stringify(remembered.messages, null, 2));
+      console.log('DEBUG: remembered.messages[1]:', JSON.stringify(remembered.messages[1], null, 2));
+
       // Working memory tags should be stripped from the messages
       const content = getTextContent(remembered.messages[1]);
+      console.log('DEBUG: extracted content:', content);
       expect(content).not.toContain('<working_memory>');
       expect(content).toContain('Hello John!');
     });
