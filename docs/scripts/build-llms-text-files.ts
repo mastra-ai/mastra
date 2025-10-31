@@ -21,10 +21,11 @@ function extractFrontMatter(content: string) {
 }
 
 function pathToUrl(filePath: string): string {
-  // Remove 'src/pages/' prefix, '.mdx' suffix, and 'index' for index pages
+  // Remove 'src/content/' prefix, language code, '.mdx' suffix, and 'index' for index pages
   const cleanPath = filePath
     .replaceAll("\\", "/") // windows support
     .replace(/^src\/content\//, "")
+    .replace(/^[a-z]{2}\//, "") // remove language code (e.g., 'en/')
     .replace(/\/index\.mdx$|\.mdx$/, "");
   return `https://mastra.ai/${cleanPath}`;
 }
@@ -45,7 +46,7 @@ async function concatenateMDXDocs(sourceDir: string) {
     process.exit(1);
   }
 
-  const outputDir = path.join(sourceDir, "public");
+  const outputDir = path.join(sourceDir, "static");
   // Ensure output directory exists
   try {
     await fs.mkdir(outputDir, { recursive: true });
@@ -238,7 +239,6 @@ async function concatenateMDXDocs(sourceDir: string) {
 }
 
 const docsDir = process.argv[2] || ".";
-console.log(docsDir);
 
 concatenateMDXDocs(docsDir).catch((error) => {
   console.error(

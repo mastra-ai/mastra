@@ -9,7 +9,7 @@
     "docusaurus": "docusaurus",
     "dev": "docusaurus start",
     "build": "npm run build:llms-txt && docusaurus build",
-    "build:llms-txt": "tsx scripts/build-llms-txt.ts",
+    "build:llms-txt": "tsx scripts/build-llms-text-files.ts",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",
