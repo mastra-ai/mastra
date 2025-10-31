@@ -1503,7 +1503,8 @@ describe('AI Tracing Integration Tests', () => {
       it('should trace all processor spans including internal agent spans', async () => {
         // Create a custom input processor that uses an agent internally
         class ValidatorProcessor implements Processor {
-          readonly name = 'validator';
+          readonly id = 'validator';
+          readonly name = 'Validator';
           private agent: Agent;
 
           constructor(model: any) {

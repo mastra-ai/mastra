@@ -3,7 +3,8 @@ import type { TracingContext } from '../ai-tracing';
 import type { ChunkType } from '../stream';
 
 export interface Processor {
-  readonly name: string;
+  readonly id: string;
+  readonly name?: string;
 
   /**
    * Process input messages before they are sent to the LLM
