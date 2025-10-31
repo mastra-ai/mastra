@@ -1169,6 +1169,96 @@
       "source": "/docs/workflows/pausing-execution",
       "destination": "/docs/workflows/suspend-and-resume",
       "permanent": true
+    },
+    {
+      "source": "/docs/agents",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory",
+      "destination": "/docs/memory/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/agents/calling-agents",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/networks-vnext/overview",
+      "destination": "/docs/agents/networks",
+      "permanent": true
+    },
+    {
+      "source": "/docs/quickstart",
+      "destination": "/docs/getting-started/installation",
+      "permanent": true
+    },
+    {
+      "source": "/docs/tools",
+      "destination": "/docs/tools-mcp/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/00-overview",
+      "destination": "/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/nested-workflows",
+      "destination": "/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/running-workflows",
+      "destination": "/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/examples/agents/dynamic-agents",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rocessors/response-length-limiter",
+      "destination": "/examples/processors/message-length-limiter",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/02-stock-agent",
+      "destination": "/guides/guide/stock-agent",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core",
+      "destination": "/reference/core/mastra-class",
+      "permanent": true
+    },
+    {
+      "source": "/templates/CONTRIBUTING.md",
+      "destination": "/docs/community/contributing-templates",
+      "permanent": true
+    },
+    {
+      "source": "/templates/EVALS.md",
+      "destination": "/docs/community/contributing-templates",
+      "permanent": true
+    },
+    {
+      "source": "/templates/LICENSE",
+      "destination": "/docs/community/licensing",
+      "permanent": true
+    },
+    {
+      "source": "/templates/docs",
+      "destination": "/docs/getting-started/templates",
+      "permanent": true
+    },
+    {
+      "source": "/templates/olde-maps-ai-directions-assistant",
+      "destination": "/docs/getting-started/templates",
+      "permanent": true
     }
   ]
 }

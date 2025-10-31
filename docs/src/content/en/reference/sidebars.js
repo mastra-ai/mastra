@@ -17,6 +17,7 @@ const sidebars = {
       label: "Core",
       collapsed: true,
       items: [
+        { type: "doc", id: "core/mastra-class", label: "Mastra Class" },
         { type: "doc", id: "core/getAgent", label: ".getAgent()" },
         { type: "doc", id: "core/getAgents", label: ".getAgents()" },
         { type: "doc", id: "core/getAgentById", label: ".getAgentById()" },
@@ -44,7 +45,6 @@ const sidebars = {
           id: "core/getScorerByName",
           label: ".getScorerByName()",
         },
-        { type: "doc", id: "core/mastra-class", label: "Mastra Class" },
       ],
     },
     {
