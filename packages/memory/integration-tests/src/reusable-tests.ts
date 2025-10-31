@@ -1087,8 +1087,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           // messagesToSave contains the direct output of createTestMessage
           const expectedContent = expectedMessage.content;
 
-          console.log('expectedContent', expectedContent);
-
           expect(resultContentText).toBe(expectedContent);
         });
       });
