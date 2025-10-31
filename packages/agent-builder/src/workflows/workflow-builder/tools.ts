@@ -42,7 +42,7 @@ export const restrictedTaskManager = createTool({
     ),
     message: z.string(),
   }),
-  execute: async (input, context) => {
+  execute: async input => {
     // Convert to the expected format for manageTaskList
     const adaptedContext = {
       ...input,
