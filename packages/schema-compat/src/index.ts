@@ -38,3 +38,6 @@ export { GoogleSchemaCompatLayer } from './provider-compats/google';
 export { MetaSchemaCompatLayer } from './provider-compats/meta';
 export { OpenAISchemaCompatLayer } from './provider-compats/openai';
 export { OpenAIReasoningSchemaCompatLayer } from './provider-compats/openai-reasoning';
+
+export { type Schema } from './types';
+export { type JSONSchema7, jsonSchema } from './json-schema';
