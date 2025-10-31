@@ -76,9 +76,7 @@ const getTextContent = (message: any): string => {
   }
   if (message.content?.parts && Array.isArray(message.content.parts)) {
     // Concatenate all text parts
-    const textParts = message.content.parts
-      .filter((p: any) => p.type === 'text' && p.text)
-      .map((p: any) => p.text);
+    const textParts = message.content.parts.filter((p: any) => p.type === 'text' && p.text).map((p: any) => p.text);
     if (textParts.length > 0) {
       return textParts.join(' ');
     }
