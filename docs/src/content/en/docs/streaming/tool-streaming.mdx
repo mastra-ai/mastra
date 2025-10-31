@@ -9,8 +9,8 @@ Tool streaming in Mastra enables tools to send incremental results while they ru
 
 Streams can be written to in two main ways:
 
-- **From within a tool**: every tool receives a `writer` argument, which is a writable stream you can use to push updates as execution progresses.
-- **From an agent stream**: you can also pipe an agent’s `stream` output directly into a tool’s writer, making it easy to chain agent responses into tool results without extra glue code.
+- **From within a tool**: every tool receives a `context.writer` object, which is a writable stream you can use to push updates as execution progresses.
+- **From an agent stream**: you can also pipe an agent's `stream` output directly into a tool's writer, making it easy to chain agent responses into tool results without extra glue code.
 
 By combining writable tool streams with agent streaming, you gain fine grained control over how intermediate results flow through your system and into the user experience.
 
@@ -32,9 +32,9 @@ export const testAgent = new Agent({
 });
 ```
 
-### Using the `writer` argument
+### Using `context.writer`
 
-The `writer` argument is passed to a tool’s `execute` function and can be used to emit custom events, data, or values into the active stream. This enables tools to provide intermediate results or status updates while execution is still in progress.
+The `context.writer` object is available in a tool's `execute` function and can be used to emit custom events, data, or values into the active stream. This enables tools to provide intermediate results or status updates while execution is still in progress.
 
 :::warning
 
@@ -77,17 +77,17 @@ import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
   // ...
-  execute: async ({ context, writer }) => {
-    const { value } = context;
+  execute: async (inputData, context) => {
+    const { value } = inputData;
 
-   await writer?.custom({
+   await context?.writer?.custom({
       type: "data-tool-progress",
       status: "pending"
     });
 
     const response = await fetch(...);
 
-   await writer?.custom({
+   await context?.writer?.custom({
       type: "data-tool-progress",
       status: "success"
     });
