@@ -605,20 +605,21 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(result.messages).toHaveLength(2);
         expect(result.messages[0]).toMatchObject({
           role: 'user',
-          type: 'text',
         });
-        // Accept both string and object as content, but if object, check shape
-        const content = result.messages[0].content[0];
-        if (typeof content === 'object' && content !== null && 'type' in content && content.type === 'text') {
-          expect(content).toEqual(userPart);
-        } else {
-          expect(content).toEqual('Hello');
-        }
+        // Check content.parts structure for MastraDBMessage
+        expect(result.messages[0].content.parts).toBeDefined();
+        expect(result.messages[0].content.parts[0]).toMatchObject({
+          type: 'text',
+          text: 'Hello',
+        });
         expect(result.messages[1]).toMatchObject({
           role: 'assistant',
-          type: 'text',
         });
-        expect(result.messages[1].content).toEqual(`Goodbye`);
+        expect(result.messages[1].content.parts).toBeDefined();
+        expect(result.messages[1].content.parts[0]).toMatchObject({
+          type: 'text',
+          text: 'Goodbye',
+        });
       });
 
       it('should handle complex message content', async () => {
