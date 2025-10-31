@@ -30,7 +30,7 @@ adding additional server behaviour.
 You can configure server `port` and `timeout` in the Mastra instance.
 
 ```typescript title="src/mastra/index.ts" copy showLineNumbers
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   // ...
@@ -73,7 +73,7 @@ Mastra requires `module` and `moduleResolution` values that support modern Node.
 Mastra allows you to configure CORS (Cross-Origin Resource Sharing) settings for your server.
 
 ```typescript title="src/mastra/index.ts" copy showLineNumbers
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   // ...

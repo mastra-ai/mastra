@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { Agent } from '@mastra/core/agent';
 import { PgVector, PGVECTOR_PROMPT } from '@mastra/pg';
 import { createVectorQueryTool, MDocument } from '@mastra/rag';

@@ -140,7 +140,7 @@ export const publisherAgent = new Agent({
 All three agents are registered in the main Mastra instance so they can be accessed by each other.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 import { publisherAgent } from "./agents/example-publisher-agent";
 import { copywriterAgent } from "./agents/example-copywriter-agent";

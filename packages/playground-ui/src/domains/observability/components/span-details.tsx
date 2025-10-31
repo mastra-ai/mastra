@@ -1,5 +1,5 @@
 import { SideDialog } from '@/components/ui/elements';
-import { AISpanRecord } from '@mastra/core';
+import { AISpanRecord } from '@mastra/core/storage';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 
 interface SpanDetailsProps {
