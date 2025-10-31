@@ -282,7 +282,9 @@ export class MemoryLibSQL extends MemoryStorage {
       });
       const messages: MastraMessageV2[] = (dataResult.rows || []).map((row: any) => this.parseRow(row));
 
-      if (total === 0 && messages.length === 0) {
+      // Only return early if there are no messages AND no include parameter
+      // When limit: 0 with include, we still need to process semantic recall results
+      if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total: 0,

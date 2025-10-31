@@ -446,7 +446,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       let allThreadMessages = results.data
         .map((data: any) => this.parseMessageData(data))
-        .filter((msg: any): msg is MastraMessageV2 => 'content' in msg && typeof msg.content === 'object');
+        .filter((msg: any) => msg && 'content' in msg);
 
       // Apply resourceId filter
       if (resourceId) {
@@ -491,7 +491,9 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const paginatedMessages = allThreadMessages.slice(offset, offset + perPage);
       const paginatedCount = paginatedMessages.length;
 
-      if (total === 0 && paginatedCount === 0) {
+      // Only return early if there are no messages AND no include parameter
+      // When limit: 0 with include, we still need to process semantic recall results
+      if (total === 0 && paginatedCount === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total: 0,

@@ -164,9 +164,11 @@ describe('Working Memory Tests', () => {
         config: { lastMessages: 10 },
       });
 
+      const text = remembered.messages[1].content.parts?.find(p => p.type === 'text')?.text;
+
       // Working memory tags should be stripped from the messages
-      expect(remembered.messages[1].content).not.toContain('<working_memory>');
-      expect(remembered.messages[1].content).toContain('Hello John!');
+      expect(text).not.toContain('<working_memory>');
+      expect(text).toContain('Hello John!');
     });
 
     it('should respect working memory enabled/disabled setting', async () => {
@@ -306,19 +308,17 @@ describe('Working Memory Tests', () => {
       const history = await memory.query({
         threadId: thread.id,
         resourceId,
-        selectBy: {
-          last: 20,
-        },
+        limit: 20,
       });
 
       const memoryArgs: string[] = [];
 
       for (const message of history.messages) {
         if (message.role === `assistant`) {
-          for (const part of message.content) {
+          for (const part of message.content.parts) {
             if (typeof part === `string`) continue;
-            if (part.type === `tool-call` && part.toolName === `updateWorkingMemory`) {
-              memoryArgs.push((part.args as any).memory);
+            if (part.type === `tool-invocation` && part.toolInvocation.toolName === `updateWorkingMemory`) {
+              memoryArgs.push(part.toolInvocation.args.memory);
             }
           }
         }

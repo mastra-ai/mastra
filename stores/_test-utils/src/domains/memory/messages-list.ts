@@ -546,6 +546,136 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         // Should fall back to default behavior
         expect(resultNeg.messages).toHaveLength(5);
       });
+
+      it('should process include parameter when limit is 0 (semantic recall edge case)', async () => {
+        // Test limit: 0 with include - should still process semantic recall results
+        // This is important for semantic recall when lastMessages: 0
+        const result = await storage.listMessages({
+          threadId: thread.id,
+          limit: 0,
+          include: [
+            {
+              id: messages[2]!.id, // Message 3
+              withPreviousMessages: 1,
+              withNextMessages: 1,
+            },
+          ],
+        });
+
+        // Should return included messages with context, even though limit is 0
+        // Include Message 3 with 1 before (Message 2) and 1 after (Message 4) = 3 messages total
+        expect(result.messages.length).toBeGreaterThan(0);
+        expect(result.messages.map((m: any) => m.content.content)).toContain('Message 3');
+        expect(result.total).toBe(5); // Total should still reflect actual count
+        expect(result.perPage).toBe(0);
+      });
+    });
+  });
+
+  describe('InMemoryStore - listMessagesById', () => {
+    const resourceId = 'test-resource-id';
+    const resourceId2 = 'test-resource-id-2';
+    let threads: StorageThreadType[] = [];
+    let thread1Messages: MastraMessageV2[] = [];
+    let thread2Messages: MastraMessageV2[] = [];
+    let resource2Messages: MastraMessageV2[] = [];
+
+    beforeEach(async () => {
+      // Create test threads with different dates
+      threads = [
+        {
+          id: 'thread-1',
+          resourceId,
+          title: 'Thread 1',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          updatedAt: new Date('2024-01-03T10:00:00Z'),
+          metadata: {},
+        },
+        {
+          id: 'thread-2',
+          resourceId,
+          title: 'Thread 2',
+          createdAt: new Date('2024-01-02T10:00:00Z'),
+          updatedAt: new Date('2024-01-02T10:00:00Z'),
+          metadata: {},
+        },
+        {
+          id: 'thread-3',
+          resourceId: resourceId2,
+          title: 'Thread 3',
+          createdAt: new Date('2024-01-03T10:00:00Z'),
+          updatedAt: new Date('2024-01-01T10:00:00Z'),
+          metadata: {},
+        },
+      ];
+
+      // Save threads to store
+      for (const thread of threads) {
+        await storage.saveThread({ thread });
+      }
+
+      thread1Messages = [
+        createSampleMessageV2({ threadId: threads[0]!.id, resourceId }),
+        createSampleMessageV2({ threadId: threads[0]!.id, resourceId }),
+      ];
+      thread2Messages = [
+        createSampleMessageV2({ threadId: threads[1]!.id, resourceId }),
+        createSampleMessageV2({ threadId: threads[1]!.id, resourceId }),
+      ];
+      resource2Messages = [createSampleMessageV2({ threadId: threads[2]!.id, resourceId: resourceId2 })];
+      await storage.saveMessages({ messages: thread1Messages, format: 'v2' });
+      await storage.saveMessages({ messages: thread2Messages, format: 'v2' });
+      await storage.saveMessages({ messages: resource2Messages, format: 'v2' });
+    });
+
+    it('should return an empty array if no message IDs are provided', async () => {
+      const messages = await storage.listMessagesById({ messageIds: [] });
+      expect(messages).toHaveLength(0);
+    });
+
+    it('should return messages sorted by createdAt DESC', async () => {
+      const messageIds = [
+        thread1Messages[1]!.id,
+        thread2Messages[0]!.id,
+        resource2Messages[0]!.id,
+        thread1Messages[0]!.id,
+        thread2Messages[1]!.id,
+      ];
+      const messages = await storage.listMessagesById({
+        messageIds,
+      });
+
+      expect(messages).toHaveLength(thread1Messages.length + thread2Messages.length + resource2Messages.length);
+      expect(messages.every((msg, i, arr) => i === 0 || msg.createdAt >= arr[i - 1]!.createdAt)).toBe(true);
+    });
+
+    it('should return V2 messages', async () => {
+      const messages: MastraMessageV2[] = await storage.listMessagesById({
+        messageIds: thread1Messages.map(msg => msg.id),
+      });
+
+      expect(messages.length).toBeGreaterThan(0);
+      expect(messages.every(MessageList.isMastraMessageV2)).toBe(true);
+    });
+
+    it('should return messages from multiple threads', async () => {
+      const messages = await storage.listMessagesById({
+        messageIds: [...thread1Messages.map(msg => msg.id), ...thread2Messages.map(msg => msg.id)],
+      });
+
+      expect(messages.length).toBeGreaterThan(0);
+      expect(messages.some(msg => msg.threadId === threads[0]?.id)).toBe(true);
+      expect(messages.some(msg => msg.threadId === threads[1]?.id)).toBe(true);
+    });
+
+    it('should return messages from multiple resources', async () => {
+      const messages = await storage.listMessagesById({
+        messageIds: [...thread1Messages.map(msg => msg.id), ...resource2Messages.map(msg => msg.id)],
+      });
+
+      expect(messages).toHaveLength(thread1Messages.length + resource2Messages.length);
+      expect(messages.some(msg => msg.resourceId === threads[0]?.resourceId)).toBe(true);
+      expect(messages.some(msg => msg.resourceId === threads[2]?.resourceId)).toBe(true);
     });
   });
 }

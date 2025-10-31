@@ -168,7 +168,7 @@ export function createPrepareMemoryStep<
         config?.semanticRecall === true;
       let [memoryMessages, memorySystemMessage] = await Promise.all([
         existingThread || hasResourceScopeSemanticRecall
-          ? capabilities.getMemoryMessages({
+          ? capabilities.listMemoryMessages({
               resourceId,
               threadId: threadObject.id,
               vectorMessageSearch: new MessageList().add(options.messages, `user`).getLatestUserContent() || '',

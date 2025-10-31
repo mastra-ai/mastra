@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
-import type { UIMessageWithMetadata } from '@mastra/core/agent';
+import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
@@ -141,7 +141,7 @@ describe('Agent Memory Tests', () => {
     expect(workingMemoryData).toBe('# Resource Memory\n- Shared across threads');
   });
 
-  it('should call getMemoryMessages for first message in new thread when using resource-scoped semantic recall', async () => {
+  it('should call listMemoryMessages for first message in new thread when using resource-scoped semantic recall', async () => {
     const storage = new LibSQLStore({
       url: dbFile,
     });
@@ -195,12 +195,12 @@ describe('Agent Memory Tests', () => {
     // due to resource scope, even on the first message
     const thread2Id = randomUUID();
 
-    // Mock the getMemoryMessages method to track if it's called
-    let getMemoryMessagesCalled = false;
-    let retrievedMemoryMessages: any[] = [];
-    const originalGetMemoryMessages = (agent as any).getMemoryMessages;
-    (agent as any).getMemoryMessages = async (...args: any[]) => {
-      getMemoryMessagesCalled = true;
+    // Mock the listMemoryMessages method to track if it's called
+    let listMemoryMessagesCalled = false;
+    let retrievedMemoryMessages: MastraMessageV2[] = [];
+    const originalGetMemoryMessages = (agent as any).listMemoryMessages;
+    (agent as any).listMemoryMessages = async (...args: any[]) => {
+      listMemoryMessagesCalled = true;
       const result = await originalGetMemoryMessages.call(agent, ...args);
       retrievedMemoryMessages = result || [];
       return result;
@@ -214,18 +214,25 @@ describe('Agent Memory Tests', () => {
     });
 
     // Restore original method
-    (agent as any).getMemoryMessages = originalGetMemoryMessages;
+    (agent as any).listMemoryMessages = originalGetMemoryMessages;
 
-    expect(getMemoryMessagesCalled).toBe(true);
+    expect(listMemoryMessagesCalled).toBe(true);
 
-    // Verify that getMemoryMessages actually returned messages from the first thread
+    // Verify that listMemoryMessages actually returned messages from the first thread
     expect(retrievedMemoryMessages.length).toBeGreaterThan(0);
 
     // Verify that the retrieved messages contain content from the first thread
     const hasMessagesFromFirstThread = retrievedMemoryMessages.some(
       msg =>
-        msg.threadId === thread1Id || (typeof msg.content === 'string' && msg.content.toLowerCase().includes('cat')),
+        msg.threadId === thread1Id ||
+        msg.content.parts
+          .filter(p => p.type === 'text')
+          .map(p => p.text)
+          .join(' ')
+          .toLowerCase()
+          .includes('cat'),
     );
+
     expect(hasMessagesFromFirstThread).toBe(true);
     expect(secondResponse.text.toLowerCase()).toMatch(/(cat|animal|discuss)/);
   });
@@ -272,10 +279,13 @@ describe('Agent Memory Tests', () => {
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
       const { messages, uiMessages } = await agentMemory.query({ threadId });
-      const userMessages = messages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
+
+      const userMessages = messages.filter(m => m.role === 'user').map(m => m.content);
       const userUiMessages = uiMessages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
 
-      expect(userMessages).toEqual(expect.arrayContaining(['First message', 'Second message']));
+      expect(userMessages.flatMap(m => m.parts.filter(p => p.type === 'text').map(p => p.text))).toEqual(
+        expect.arrayContaining(['First message', 'Second message']),
+      );
       expect(userUiMessages).toEqual(expect.arrayContaining(['First message', 'Second message']));
     });
 
@@ -300,11 +310,13 @@ describe('Agent Memory Tests', () => {
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
       const { messages, uiMessages } = await agentMemory.query({ threadId });
-      const userMessages = messages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
-      const userUiMessages = uiMessages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
-      const assistantMessages = messages.filter((m: any) => m.role === 'assistant').map((m: any) => m.content);
-      const assistantUiMessages = uiMessages.filter((m: any) => m.role === 'assistant').map((m: any) => m.content);
-      expect(userMessages).toEqual(expect.arrayContaining(['What is 2+2?', 'Give me JSON']));
+      const userMessages = messages.filter(m => m.role === 'user').map(m => m.content);
+      const userUiMessages = uiMessages.filter(m => m.role === 'user').map(m => m.content);
+      const assistantMessages = messages.filter(m => m.role === 'assistant').map(m => m.content);
+      const assistantUiMessages = uiMessages.filter(m => m.role === 'assistant').map(m => m.content);
+      expect(userMessages.flatMap(m => m.parts.filter(p => p.type === 'text').map(p => p.text))).toEqual(
+        expect.arrayContaining(['What is 2+2?', 'Give me JSON']),
+      );
       expect(userUiMessages).toEqual(expect.arrayContaining(['What is 2+2?', 'Give me JSON']));
       function flattenAssistantMessages(messages: any[]) {
         return messages.flatMap(msg =>
@@ -312,7 +324,7 @@ describe('Agent Memory Tests', () => {
         );
       }
 
-      expect(flattenAssistantMessages(assistantMessages)).toEqual(
+      expect(assistantMessages.flatMap(m => m.parts.filter(p => p.type === 'text').map(p => p.text))).toEqual(
         expect.arrayContaining([expect.stringContaining('2 + 2'), expect.stringContaining('"result"')]),
       );
 
@@ -345,14 +357,29 @@ describe('Agent Memory Tests', () => {
 
       // Assert that the context messages are NOT saved
       const savedContextMessages = messages.filter(
-        (m: any) => m.content === contextMessageContent1 || m.content === contextMessageContent2,
+        m =>
+          m.content.parts
+            .filter(p => p.type === 'text')
+            .map(p => p.text)
+            .join(' ')
+            .toLowerCase() === contextMessageContent1.toLowerCase() ||
+          m.content.parts
+            .filter(p => p.type === 'text')
+            .map(p => p.text)
+            .join(' ')
+            .toLowerCase() === contextMessageContent2.toLowerCase(),
       );
       expect(savedContextMessages.length).toBe(0);
 
       // Assert that the user message IS saved
-      const savedUserMessages = messages.filter((m: any) => m.role === 'user');
+      const savedUserMessages = messages.filter(m => m.role === 'user');
       expect(savedUserMessages.length).toBe(1);
-      expect(savedUserMessages[0].content).toBe(userMessageContent);
+      expect(
+        savedUserMessages[0].content.parts
+          .filter(p => p.type === 'text')
+          .map(p => p.text)
+          .join(' '),
+      ).toBe(userMessageContent);
     });
 
     it('should persist UIMessageWithMetadata through agent generate and memory', async () => {
@@ -558,7 +585,7 @@ describe('Agent Memory Tests', () => {
 describe('Agent with message processors', () => {
   it('should apply processors to filter tool messages from context', async () => {
     const threadId = randomUUID();
-    const resourceId = 'processor-filter-tool-message';
+    const resourceId = `processor-filter-tool-message-${randomUUID()}`;
 
     // First, ask a question that will trigger a tool call
     const firstResponse = await memoryProcessorAgent.generateLegacy('What is the weather in London?', {
@@ -571,10 +598,10 @@ describe('Agent with message processors', () => {
 
     // Check that tool calls were saved to memory
     const agentMemory = (await memoryProcessorAgent.getMemory())!;
+
     const { messages: messagesFromMemory } = await agentMemory.query({ threadId });
-    const toolMessages = messagesFromMemory.filter(
-      m => m.role === 'tool' || (m.role === 'assistant' && typeof m.content !== 'string'),
-    );
+
+    const toolMessages = messagesFromMemory.filter(m => m.role === 'assistant');
 
     expect(toolMessages.length).toBeGreaterThan(0);
 

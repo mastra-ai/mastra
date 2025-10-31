@@ -400,16 +400,20 @@ describe('Memory Handlers', () => {
       expect(spy).toHaveBeenCalled();
     });
 
-    it('should accept, save, and retrieve both v1 and v2 format messages', async () => {
+    it('should accept, save, and retrieve messages', async () => {
       const threadId = 'test-thread-123';
       const resourceId = 'test-resource-123';
       const now = new Date();
 
       // Create v1 message
-      const v1Message: MastraMessageV1 = {
+      const v1Message: MastraMessageV2 = {
         id: 'msg-v1-123',
         role: 'user',
-        content: 'Hello from v1 format!',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Hello from v2 format!' }],
+          content: 'Hello from v2 format!',
+        },
         type: 'text',
         createdAt: now,
         threadId,
@@ -471,16 +475,10 @@ describe('Memory Handlers', () => {
       expect(getResponse.messages).toHaveLength(2);
 
       // Verify v1 message content
-      expect(getResponse.messages[0]).toMatchObject({
-        role: 'user',
-        content: 'Hello from v1 format!',
-      });
+      expect(getResponse.messages[0].content.parts?.find(p => p.type === 'text')?.text).toBe('Hello from v2 format!');
 
       // Verify v2 message content
-      expect(getResponse.messages[1]).toMatchObject({
-        role: 'assistant',
-        content: 'Hello from v2 format!',
-      });
+      expect(getResponse.messages[1].content.parts?.find(p => p.type === 'text')?.text).toBe('Hello from v2 format!');
     });
 
     it('should handle mixed v1 and v2 messages in single request', async () => {
