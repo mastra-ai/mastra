@@ -36,7 +36,6 @@ export class TokenLimiter extends MemoryProcessor {
    */
   constructor(options: number | TokenLimiterOptions) {
     super({
-      id: 'token-limiter',
       name: 'TokenLimiter',
     });
 
