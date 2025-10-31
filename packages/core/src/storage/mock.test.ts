@@ -322,8 +322,8 @@ describe('InMemoryStore - listMessagesById', () => {
   });
 
   it('should return an empty array if no message IDs are provided', async () => {
-    const messages = await store.listMessagesById({ messageIds: [] });
-    expect(messages).toHaveLength(0);
+    const result = await store.listMessagesById({ messageIds: [] });
+    expect(result.messages).toHaveLength(0);
   });
 
   it('should return messages sorted by createdAt DESC', async () => {
@@ -334,12 +334,12 @@ describe('InMemoryStore - listMessagesById', () => {
       thread1Messages[0]!.id,
       thread2Messages[1]!.id,
     ];
-    const messages = await store.listMessagesById({
+    const result = await store.listMessagesById({
       messageIds,
     });
 
-    expect(messages).toHaveLength(thread1Messages.length + thread2Messages.length + resource2Messages.length);
-    expect(messages.every((msg, i, arr) => i === 0 || msg.createdAt >= arr[i - 1]!.createdAt)).toBe(true);
+    expect(result.messages).toHaveLength(thread1Messages.length + thread2Messages.length + resource2Messages.length);
+    expect(result.messages.every((msg, i, arr) => i === 0 || msg.createdAt >= arr[i - 1]!.createdAt)).toBe(true);
   });
 
   it('should return messages by ID', async () => {
@@ -360,12 +360,12 @@ describe('InMemoryStore - listMessagesById', () => {
   });
 
   it('should return messages from multiple resources', async () => {
-    const messages = await store.listMessagesById({
+    const result = await store.listMessagesById({
       messageIds: [...thread1Messages.map(msg => msg.id), ...resource2Messages.map(msg => msg.id)],
     });
 
-    expect(messages).toHaveLength(thread1Messages.length + resource2Messages.length);
-    expect(messages.some(msg => msg.resourceId === threads[0]?.resourceId)).toBe(true);
-    expect(messages.some(msg => msg.resourceId === threads[2]?.resourceId)).toBe(true);
+    expect(result.messages).toHaveLength(thread1Messages.length + resource2Messages.length);
+    expect(result.messages.some(msg => msg.resourceId === threads[0]?.resourceId)).toBe(true);
+    expect(result.messages.some(msg => msg.resourceId === threads[2]?.resourceId)).toBe(true);
   });
 });
