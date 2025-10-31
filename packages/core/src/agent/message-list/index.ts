@@ -1608,7 +1608,22 @@ export class MessageList {
     };
 
     if (toolInvocations.length) content.toolInvocations = toolInvocations;
-    if (typeof coreMessage.content === `string`) content.content = coreMessage.content;
+    if (typeof coreMessage.content === `string`) {
+      content.content = coreMessage.content;
+    } else if (Array.isArray(coreMessage.content)) {
+      // Join text parts and reasoning details for content.content field
+      const textParts: string[] = [];
+      for (const part of coreMessage.content) {
+        if (part.type === 'text') {
+          textParts.push(part.text);
+        } else if (part.type === 'reasoning' && part.text) {
+          textParts.push(part.text);
+        }
+      }
+      if (textParts.length > 0) {
+        content.content = textParts.join('');
+      }
+    }
 
     if (experimentalAttachments.length) content.experimental_attachments = experimentalAttachments;
 

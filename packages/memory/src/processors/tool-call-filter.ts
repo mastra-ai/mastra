@@ -2,6 +2,9 @@ import type { CoreMessage } from '@mastra/core/llm';
 import { MemoryProcessor } from '@mastra/core/memory';
 
 /**
+ * @deprecated Use `ToolCallFilter` from `@mastra/core/processors` instead.
+ * This class will be removed in a future version.
+ *
  * Filters out tool calls and results from messages.
  * By default (with no arguments), excludes all tool calls and their results.
  * Can be configured to exclude only specific tools by name.
@@ -13,6 +16,7 @@ export class ToolCallFilter extends MemoryProcessor {
    * Create a filter for tool calls and results.
    * @param options Configuration options
    * @param options.exclude List of specific tool names to exclude. If not provided, all tool calls are excluded.
+   * @deprecated Use `ToolCallFilter` from `@mastra/core/processors` instead.
    */
   constructor(options: { exclude?: string[] } = {}) {
     super({ name: 'ToolCallFilter' });

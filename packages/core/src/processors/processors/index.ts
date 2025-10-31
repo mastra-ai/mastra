@@ -28,10 +28,18 @@ export {
 } from './language-detector';
 export { StructuredOutputProcessor, type StructuredOutputOptions } from './structured-output';
 export { BatchPartsProcessor, type BatchPartsOptions, type BatchPartsState } from './batch-parts';
-export { TokenLimiterProcessor, type TokenLimiterOptions } from './token-limiter';
+export {
+  TokenLimiterProcessor,
+  TokenLimiterProcessor as TokenLimiter,
+  type TokenLimiterOptions,
+} from './token-limiter';
 export {
   SystemPromptScrubber,
   type SystemPromptScrubberOptions,
   type SystemPromptDetectionResult,
   type SystemPromptDetection,
 } from './system-prompt-scrubber';
+export { MessageHistory, type MessageHistoryOptions } from './message-history';
+export { SemanticRecall, type SemanticRecallOptions } from './semantic-recall';
+export { WorkingMemory, type WorkingMemoryConfig, type WorkingMemoryTemplate } from './working-memory';
+export { ToolCallFilter } from './tool-call-filter';

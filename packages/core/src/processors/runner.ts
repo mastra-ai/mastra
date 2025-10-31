@@ -3,6 +3,7 @@ import { TripWire } from '../agent/trip-wire';
 import { AISpanType } from '../ai-tracing';
 import type { AISpan, TracingContext } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
+import type { RequestContext } from '../request-context';
 import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Processor } from './index';
@@ -80,16 +81,22 @@ export class ProcessorRunner {
     this.agentName = agentName;
   }
 
-  async runOutputProcessors(messageList: MessageList, tracingContext?: TracingContext): Promise<MessageList> {
+  async runOutputProcessors(
+    messageList: MessageList,
+    tracingContext?: TracingContext,
+    telemetry?: any,
+    runtimeContext?: RequestContext,
+  ): Promise<MessageList> {
     const responseMessages = messageList.clear.response.v2();
 
     let processableMessages: MastraMessageV2[] = [...responseMessages];
 
-    const ctx: { messages: MastraMessageV2[]; abort: () => never } = {
+    const ctx: { messages: MastraMessageV2[]; abort: () => never; runtimeContext?: RequestContext } = {
       messages: processableMessages,
       abort: () => {
         throw new TripWire('Tripwire triggered');
       },
+      runtimeContext,
     };
 
     for (const [index, processor] of this.outputProcessors.entries()) {
@@ -120,12 +127,34 @@ export class ProcessorRunner {
         input: processableMessages,
       });
 
-      processableMessages = await processMethod({
-        messages: processableMessages,
-        abort: ctx.abort,
-        tracingContext: { currentSpan: processorSpan },
-      });
-
+      if (!telemetry) {
+        processableMessages = await processMethod({
+          messages: processableMessages,
+          abort: ctx.abort,
+          tracingContext: { currentSpan: processorSpan },
+          runtimeContext: ctx.runtimeContext,
+        });
+      } else {
+        await telemetry.traceMethod(
+          async () => {
+            processableMessages = await processMethod({
+              messages: processableMessages,
+              abort: ctx.abort,
+              tracingContext: { currentSpan: processorSpan },
+              runtimeContext: ctx.runtimeContext,
+            });
+            return processableMessages;
+          },
+          {
+            spanName: `agent.outputProcessor.${processor.name}`,
+            attributes: {
+              'processor.name': processor.name,
+              'processor.index': index.toString(),
+              'processor.total': this.outputProcessors.length.toString(),
+            },
+          },
+        )();
+      }
       processorSpan?.end({ output: processableMessages });
     }
 
@@ -143,6 +172,7 @@ export class ProcessorRunner {
     part: ChunkType<OUTPUT>,
     processorStates: Map<string, ProcessorState<OUTPUT>>,
     tracingContext?: TracingContext,
+    runtimeContext?: RequestContext,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
@@ -181,6 +211,7 @@ export class ProcessorRunner {
                 throw new TripWire(reason || `Stream part blocked by ${processor.name}`);
               },
               tracingContext: { currentSpan: state.span },
+              runtimeContext,
             });
 
             if (state.span && !state.span.isEvent) {
@@ -236,6 +267,7 @@ export class ProcessorRunner {
   async runOutputProcessorsForStream<OUTPUT extends OutputSchema = undefined>(
     streamResult: MastraModelOutput<OUTPUT>,
     tracingContext?: TracingContext,
+    runtimeContext?: RequestContext,
   ): Promise<ReadableStream<any>> {
     return new ReadableStream({
       start: async controller => {
@@ -256,7 +288,7 @@ export class ProcessorRunner {
               part: processedPart,
               blocked,
               reason,
-            } = await this.processPart(value, processorStates, tracingContext);
+            } = await this.processPart(value, processorStates, tracingContext, runtimeContext);
 
             if (blocked) {
               // Log that part was blocked
@@ -285,16 +317,22 @@ export class ProcessorRunner {
     });
   }
 
-  async runInputProcessors(messageList: MessageList, tracingContext?: TracingContext): Promise<MessageList> {
+  async runInputProcessors(
+    messageList: MessageList,
+    tracingContext?: TracingContext,
+    telemetry?: any,
+    runtimeContext?: RequestContext,
+  ): Promise<MessageList> {
     const userMessages = messageList.clear.input.v2();
 
     let processableMessages: MastraMessageV2[] = [...userMessages];
 
-    const ctx: { messages: MastraMessageV2[]; abort: () => never } = {
+    const ctx: { messages: MastraMessageV2[]; abort: () => never; runtimeContext?: RequestContext } = {
       messages: processableMessages,
       abort: () => {
         throw new TripWire('Tripwire triggered');
       },
+      runtimeContext,
     };
 
     for (const [index, processor] of this.inputProcessors.entries()) {
@@ -325,12 +363,34 @@ export class ProcessorRunner {
         input: processableMessages,
       });
 
-      processableMessages = await processMethod({
-        messages: processableMessages,
-        abort: ctx.abort,
-        tracingContext: { currentSpan: processorSpan },
-      });
-
+      if (!telemetry) {
+        processableMessages = await processMethod({
+          messages: processableMessages,
+          abort: ctx.abort,
+          tracingContext: { currentSpan: processorSpan },
+          runtimeContext: ctx.runtimeContext,
+        });
+      } else {
+        await telemetry.traceMethod(
+          async () => {
+            processableMessages = await processMethod({
+              messages: processableMessages,
+              abort: ctx.abort,
+              tracingContext: { currentSpan: processorSpan },
+              runtimeContext: ctx.runtimeContext,
+            });
+            return processableMessages;
+          },
+          {
+            spanName: `agent.inputProcessor.${processor.name}`,
+            attributes: {
+              'processor.name': processor.name,
+              'processor.index': index.toString(),
+              'processor.total': this.inputProcessors.length.toString(),
+            },
+          },
+        )();
+      }
       processorSpan?.end({ output: processableMessages });
     }
 

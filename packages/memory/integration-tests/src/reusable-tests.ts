@@ -581,12 +581,17 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           role: 'user',
           type: 'text',
         });
-        // Accept both string and object as content, but if object, check shape
-        const content = result.messages[0].content[0];
-        if (typeof content === 'object' && content !== null && 'type' in content && content.type === 'text') {
-          expect(content).toEqual(userPart);
-        } else {
-          expect(content).toEqual('Hello');
+        // Content can be a string or an array depending on conversion
+        const userContent = result.messages[0].content;
+        if (typeof userContent === 'string') {
+          expect(userContent).toEqual('Hello');
+        } else if (Array.isArray(userContent)) {
+          const firstPart = userContent[0];
+          if (typeof firstPart === 'object' && firstPart !== null && 'type' in firstPart && firstPart.type === 'text') {
+            expect(firstPart).toEqual(userPart);
+          } else {
+            expect(firstPart).toEqual('Hello');
+          }
         }
         expect(result.messages[1]).toMatchObject({
           role: 'assistant',
@@ -803,6 +808,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
   });
 
   describe('Thread Pagination', () => {
+    beforeEach(async () => {
+      const threads = await memory.getThreadsByResourceId({ resourceId });
+      await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
+    });
+
     it('should return paginated threads with correct metadata', async () => {
       // Create multiple test threads (25 threads)
       await Promise.all(

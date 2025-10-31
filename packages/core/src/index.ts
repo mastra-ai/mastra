@@ -1,6 +1,7 @@
 export * from './agent/index.warning';
 export * from './base.warning';
 export * from './deployer/index.warning';
+export * from './di';
 export * from './storage/index.warning';
 export * from './integration/index.warning';
 export * from './llm';
