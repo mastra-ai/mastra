@@ -370,22 +370,28 @@ describe('Working Memory Tests', () => {
 
     it('should remove tool-call/tool-result messages with toolName "updateWorkingMemory"', async () => {
       const threadId = thread.id;
-      const messages = [
+      const messages: MastraDBMessage[] = [
         createTestMessage(threadId, 'User says something'),
         // Pure tool-call message (should be removed)
         {
           id: randomUUID(),
           threadId,
           role: 'assistant',
-          type: 'tool-call',
-          content: [
-            {
-              type: 'tool-call',
-              toolName: 'updateWorkingMemory',
-              // ...other fields as needed
-            },
-          ],
-          toolNames: ['updateWorkingMemory'],
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolCallId: randomUUID(),
+                  toolName: 'updateWorkingMemory',
+                  args: {},
+                  state: 'result',
+                  result: {},
+                },
+              },
+            ],
+          },
           createdAt: new Date(),
           resourceId,
         },
@@ -394,18 +400,25 @@ describe('Working Memory Tests', () => {
           id: randomUUID(),
           threadId,
           role: 'assistant',
-          type: 'text',
-          content: [
-            {
-              type: 'tool-call',
-              toolName: 'updateWorkingMemory',
-              args: { memory: 'should not persist' },
-            },
-            {
-              type: 'text',
-              text: 'Normal message',
-            },
-          ],
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolCallId: randomUUID(),
+                  toolName: 'updateWorkingMemory',
+                  args: { memory: 'should not persist' },
+                  state: 'result',
+                  result: {},
+                },
+              },
+              {
+                type: 'text',
+                text: 'Normal message',
+              },
+            ],
+          },
           createdAt: new Date(),
           resourceId,
         },
@@ -414,8 +427,15 @@ describe('Working Memory Tests', () => {
           id: randomUUID(),
           threadId,
           role: 'assistant',
-          type: 'text',
-          content: 'Another normal message',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'text',
+                text: 'Another normal message',
+              },
+            ],
+          },
           createdAt: new Date(),
           resourceId,
         },
@@ -429,7 +449,6 @@ describe('Working Memory Tests', () => {
       expect(
         saved.some(
           m =>
-            (m.type === 'tool-call' || m.type === 'tool-result') &&
             Array.isArray(m.content.parts) &&
             m.content.parts.some(
               c => c.type === 'tool-invocation' && c.toolInvocation.toolName === `updateWorkingMemory`,
