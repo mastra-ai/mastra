@@ -407,23 +407,13 @@ export abstract class MastraMemory extends MastraBase {
    * @returns Promise resolving to the saved message
    * @deprecated use saveMessages instead
    */
-  async addMessage({
-    _threadId,
-    _resourceId,
-    _config,
-    _content,
-    _role,
-    _type,
-    _toolNames,
-    _toolCallArgs,
-    _toolCallIds,
-  }: {
-    threadId?: string;
-    resourceId?: string;
+  async addMessage(_params: {
+    threadId: string;
+    resourceId: string;
     config?: MemoryConfig;
-    content?: UserContent | AssistantContent;
-    role?: 'user' | 'assistant';
-    type?: 'text' | 'tool-call' | 'tool-result';
+    content: UserContent | AssistantContent;
+    role: 'user' | 'assistant';
+    type: 'text' | 'tool-call' | 'tool-result';
     toolNames?: string[];
     toolCallArgs?: Record<string, unknown>[];
     toolCallIds?: string[];
