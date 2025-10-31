@@ -32,7 +32,7 @@ const getBrokenLinks = new Step({
   outputSchema: z.object({
     brokenLinks: z.array(linkSchema),
   }),
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const targetUrl = context?.workflow?.state?.triggerData?.targetUrl;
 
     const res = await exec(`npx linkinator ${targetUrl} --format json`, {
@@ -59,7 +59,7 @@ const reportBrokenLinks = new Step({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const brokenLinks = context?.workflow?.state?.getStepResult<{ brokenLinks: z.infer<typeof linkSchema>[] }>(
       'get-broken-links',
     );

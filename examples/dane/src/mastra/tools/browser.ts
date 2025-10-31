@@ -21,7 +21,7 @@ export const browserTool = createTool({
 
       const page = await browser.newPage();
 
-      await page.goto(input.url);
+      await page.goto(inputData.url);
 
       const docs = MDocument.fromHTML(await page.content());
 
@@ -82,7 +82,7 @@ export const googleSearch = createTool({
 
     try {
       const page = await browser.newPage();
-      await page.goto(`https://www.google.com/search?q=${encodeURIComponent(input.query)}`);
+      await page.goto(`https://www.google.com/search?q=${encodeURIComponent(inputData.query)}`);
 
       console.log(`\n`);
       console.log(chalk.blue('Waiting for search results...'));

@@ -19,7 +19,7 @@ const getDiff = new Step({
   outputSchema: z.object({
     diff: z.string(),
   }),
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const repoPath = context?.workflow?.state?.getStepResult<{ repoPath: string }>('trigger')?.repoPath;
 
     // Get the git diff of staged changes
@@ -58,7 +58,7 @@ const generateMessage = new Step({
     generated: z.boolean(),
     guidelines: z.array(z.string()),
   }),
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const diffData = context?.workflow?.state?.getStepResult<{ diff: string }>('getDiff');
     const fileData = context?.workflow?.state?.getStepResult<{ fileData: any }>('readConventionalCommitSpec');
 
@@ -117,7 +117,7 @@ const confirmationStep = new Step({
   outputSchema: z.object({
     confirm: z.boolean(),
   }),
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const parentStep = context?.workflow?.state?.steps?.generateMessage;
     if (!parentStep || parentStep.status !== 'success') {
       return { confirm: false };
@@ -142,7 +142,7 @@ const commitStep = new Step({
   outputSchema: z.object({
     commit: z.boolean(),
   }),
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const parentStep = context?.workflow?.state?.steps?.confirmation;
     if (!parentStep || parentStep.status !== 'success' || !parentStep.output.confirm) {
       throw new Error('Commit message generation cancelled');

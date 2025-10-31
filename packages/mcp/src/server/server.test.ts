@@ -1003,11 +1003,11 @@ describe('MCPServer', () => {
             parameters: z.object({
               message: z.string().describe('Message to show to user'),
             }),
-            execute: async (input, context) => {
+            execute: async (inputData, context) => {
               const extra = context?.mcp?.extra as MCPRequestHandlerExtra;
 
               return {
-                message: input.message,
+                message: inputData.message,
                 sessionId: extra?.sessionId || null,
                 authInfo: extra?.authInfo || null,
                 requestId: extra?.requestId || null,
@@ -1507,12 +1507,12 @@ describe('MCPServer - Elicitation', () => {
           parameters: z.object({
             message: z.string().describe('Message to show to user'),
           }),
-          execute: async (input, context) => {
+          execute: async (inputData, context) => {
             // Use the session-aware elicitation functionality
             try {
               const elicitation = context?.mcp?.elicitation;
               const result = await elicitation.sendRequest({
-                message: input.message,
+                message: inputData.message,
                 requestedSchema: {
                   type: 'object',
                   properties: {

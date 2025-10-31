@@ -38,7 +38,7 @@ const stepA2 = new Step({
   execute: async () => {
     const content = await input({
       message: 'Give me a message',
-      validate: input => input.trim().length > 0 || 'Message cannot be empty',
+      validate: input => inputData.trim().length > 0 || 'Message cannot be empty',
     });
 
     return {
@@ -53,7 +53,7 @@ const stepB2 = new Step({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     if (context?.workflow?.state?.steps.stepA2?.status !== 'success') {
       throw new Error('Message not found');
     }
@@ -72,7 +72,7 @@ const stepC2 = new Step({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const oMsg = getStepResult(context?.workflow?.state?.steps.stepA2);
     if (context?.workflow?.state?.steps.stepC2?.status === 'success') {
       const msg = getStepResult(context?.workflow?.state?.steps.stepC2);
@@ -101,7 +101,7 @@ const stepD2 = new Step({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const msg = getStepResult(context?.workflow?.state?.steps.stepC2);
     return msg;
   },

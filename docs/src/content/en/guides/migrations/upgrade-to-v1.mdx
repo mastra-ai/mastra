@@ -255,8 +255,8 @@ export const weatherTool = createTool({
 // After
 export const weatherTool = createTool({
   id: "weather-tool",
-  execute: async (input) => {
-    return getWeather(input.location);
+  execute: async (inputData) => {
+    return getWeather(inputData.location);
   },
 });
 ```
@@ -279,9 +279,9 @@ export const weatherTool = createTool({
 // After
 export const weatherTool = createTool({
   id: "weather-tool",
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const userTier = context?.requestContext?.get("userTier");
-    return getWeather(input.location, userTier);
+    return getWeather(inputData.location, userTier);
   },
 });
 ```
@@ -300,7 +300,7 @@ export const suspendableTool = createTool({
   resumeSchema: z.object({
     approval: z.boolean(),
   }),
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     if (!context?.agent?.resumeData) {
       return await context?.agent?.suspend({
         message: "Waiting for approval",
@@ -322,7 +322,7 @@ Workflow-specific properties like `workflowId`, `runId`, `state`, and `setState`
 // After
 export const workflowTool = createTool({
   id: "workflow-tool",
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const currentState = context?.workflow?.state;
     context?.workflow?.setState({ step: "completed" });
     return { result: "done" };
@@ -344,12 +344,12 @@ export const accountBalance = createTool({
   outputSchema: z.object({
     balance: z.number(),
   }),
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     if (context?.mcp) {
       await checkAuth(context.mcp.extra.authInfo);
 
       const result = await context.mcp.elicitation.sendRequest({
-        message: `Is it ok to fetch the account balance for account ${input.accountId}?`,
+        message: `Is it ok to fetch the account balance for account ${inputData.accountId}?`,
         requestedSchema: {
           type: "object",
           properties: {
@@ -361,7 +361,7 @@ export const accountBalance = createTool({
 
       if (result.action === "accept") {
         return {
-          balance: getAccountBalance(input.accountId),
+          balance: getAccountBalance(inputData.accountId),
         };
       }
     }

@@ -34,7 +34,7 @@ const weatherTool = createTool({
   id: "getWeather",
   description: "Gets the current weather for a location.",
   inputSchema: z.object({ location: z.string() }),
-  execute: async (input) => `Weather in ${input.location} is sunny.`,
+  execute: async (inputData) => `Weather in ${inputData.location} is sunny.`,
 });
 
 const server = new MCPServer({
@@ -852,8 +852,8 @@ The `MCPServer` class automatically includes elicitation capabilities. Tools rec
 When tools are executed within an MCP server context, they receive an additional `options` parameter:
 
 ```typescript
-execute: async (input, context) => {
-  // input contains the tool's input parameters
+execute: async (inputData, context) => {
+  // input contains the tool's inputData parameters
   // context.mcp contains server capabilities like elicitation and authentication info
 
   // Access authentication information (when available)
@@ -906,8 +906,8 @@ const server = new MCPServer({
           .optional()
           .describe("Reason for collecting contact info"),
       }),
-      execute: async (input, context) => {
-        const { reason } = input;
+      execute: async (inputData, context) => {
+        const { reason } = inputData;
 
         // Log session info if available
         console.log("Request from session:", context.mcp?.extra?.sessionId);
@@ -1022,7 +1022,7 @@ The elicitation functionality is available through the `options` parameter in to
 
 ```typescript
 // Within a tool's execute function
-execute: async (input, context) => {
+execute: async (inputData, context) => {
   // Use elicitation for user input
   const result = await context.mcp.elicitation.sendRequest({
     message: string,           // Message to display to user
@@ -1052,7 +1052,7 @@ type ElicitResult = {
 Tools can access request metadata via `options.extra` when using HTTP-based transports:
 
 ```typescript
-execute: async (input, context) => {
+execute: async (inputData, context) => {
   if (!context.mcp?.extra?.authInfo?.token) {
     return "Authentication required";
   }

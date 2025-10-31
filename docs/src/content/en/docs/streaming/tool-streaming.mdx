@@ -47,8 +47,8 @@ import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
   // ...
-  execute: async (input, context) => {
-    const { value } = input;
+  execute: async (inputData, context) => {
+    const { value } = inputData;
 
    await context?.writer?.write({
       type: "custom-event",
@@ -126,8 +126,8 @@ import { z } from "zod";
 
 export const testTool = createTool({
   // ...
-  execute: async (input, context) => {
-    const { city } = input;
+  execute: async (inputData, context) => {
+    const { city } = inputData;
 
     const testAgent = context?.mastra?.getAgent("testAgent");
     const stream = await testAgent?.stream(`What is the weather in ${city}?`);

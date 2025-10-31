@@ -8,7 +8,7 @@ export const getRandomImageTool = createTool({
   inputSchema: z.object({
     query: z.enum(["wildlife", "feathers", "flying", "birds"]),
   }),
-  execute: async (input) => {
+  execute: async (inputData) => {
     return getRandomImage(input);
   },
 });

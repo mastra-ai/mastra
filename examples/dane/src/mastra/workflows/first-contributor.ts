@@ -19,7 +19,7 @@ const getPullRequest = new Step({
     body: z.string(),
     diff: z.string(),
   }),
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const client = await github.getApiClient();
 
     const pullRequest = await client.pullsGet({
@@ -52,7 +52,7 @@ const generateMessage = new Step({
     checklist: z.string().array(),
     outro: z.string(),
   }),
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const parentStep = context?.workflow?.state?.steps?.getPullRequest;
     if (!parentStep || parentStep.status !== 'success') {
       return { intro: '', checklist: [], outro: '' };
@@ -115,7 +115,7 @@ and an outro that just says thank you again and that we will review it shortly. 
 
 const createMessage = new Step({
   id: 'create-message',
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const parentStep = context?.workflow?.state?.steps?.['message-generator'];
 
     if (!parentStep || parentStep.status !== 'success') {

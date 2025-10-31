@@ -629,7 +629,7 @@ const weatherTool = createTool({
     temperature: z.number(),
     conditions: z.string(),
   }),
-  execute: async (input) => {
+  execute: async (inputData) => {
     return {
       temperature: 72,
       conditions: "sunny",
@@ -668,7 +668,7 @@ const tools = {
     outputSchema: z.object({
       result: z.number(),
     }),
-    execute: async (input) => {
+    execute: async (inputData) => {
       // implementation...
       return { result: 0 };
     },

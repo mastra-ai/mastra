@@ -19,17 +19,17 @@ export const readPDF = createTool({
   execute: async input => {
     try {
       // Check if file exists
-      if (!existsSync(input.pdfPath)) {
+      if (!existsSync(inputData.pdfPath)) {
         throw new Error('PDF file not found');
       }
 
       // Check if file is a PDF
-      if (path.extname(input.pdfPath).toLowerCase() !== '.pdf') {
+      if (path.extname(inputData.pdfPath).toLowerCase() !== '.pdf') {
         throw new Error('File is not a PDF');
       }
 
       // Read the PDF file
-      const dataBuffer = readFileSync(input.pdfPath);
+      const dataBuffer = readFileSync(inputData.pdfPath);
 
       // Parse PDF content
       const data = await pdfParse(dataBuffer);

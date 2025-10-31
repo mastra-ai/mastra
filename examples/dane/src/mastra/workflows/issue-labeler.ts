@@ -19,7 +19,7 @@ const getIssue = new Step({
     body: z.string(),
     labelNames: z.array(z.string()),
   }),
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const client = await github.getApiClient();
 
     const issue = await client.issuesGet({
@@ -51,7 +51,7 @@ const labelIssue = new Step({
   outputSchema: z.object({
     labels: z.array(z.string()),
   }),
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const parentStep = context?.workflow?.state?.steps?.getIssue;
     if (!parentStep || parentStep.status !== 'success') {
       return { labels: [] };
@@ -81,7 +81,7 @@ const labelIssue = new Step({
 
 const applyLabels = new Step({
   id: 'applyLabels',
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const parentStep = context?.workflow?.state?.steps?.labelIssue;
 
     if (!parentStep || parentStep.status !== 'success') {

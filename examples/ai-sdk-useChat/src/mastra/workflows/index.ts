@@ -59,7 +59,7 @@ const fetchWeather = new Step({
   inputSchema: z.object({
     city: z.string().describe('The city to get the weather for'),
   }),
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const triggerData = context?.workflow?.state?.getStepResult<{ city: string }>('trigger');
 
     if (!triggerData) {
@@ -118,7 +118,7 @@ const planActivities = new Step({
   id: 'plan-activities',
   description: 'Suggests activities based on weather conditions',
   inputSchema: forecastSchema,
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     const forecast = context?.workflow?.state?.getStepResult<z.infer<typeof forecastSchema>>('fetch-weather');
 
     if (!forecast || forecast.length === 0) {

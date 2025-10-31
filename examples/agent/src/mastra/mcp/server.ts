@@ -102,7 +102,7 @@ export const myMcpServer = new MCPServer({
         operation: z.enum(['add', 'subtract']).describe('The operation to perform.'),
       }),
       execute: async input => {
-        const { num1, num2, operation } = input;
+        const { num1, num2, operation } = inputData;
         if (operation === 'add') {
           return num1 + num2;
         }
@@ -119,7 +119,7 @@ export const myMcpServer = new MCPServer({
         city: z.string().describe('The city to get weather for, e.g., London, Paris.'),
       }),
       execute: async input => {
-        const { city } = input;
+        const { city } = inputData;
         const temperatures = {
           london: '15°C',
           paris: '18°C',
@@ -147,7 +147,7 @@ export const myMcpServerTwo = new MCPServer({
         action: z.enum(['uppercase', 'reverse']).describe('The string action to perform.'),
       }),
       execute: async input => {
-        const { text, action } = input;
+        const { text, action } = inputData;
         if (action === 'uppercase') {
           return text.toUpperCase();
         }
@@ -164,7 +164,7 @@ export const myMcpServerTwo = new MCPServer({
         name: z.string().describe('The name of the person to greet.'),
       }),
       execute: async input => {
-        return `Hello, ${input.name}! Welcome to the MCP server.`;
+        return `Hello, ${inputData.name}! Welcome to the MCP server.`;
       },
     }),
     collectContactInfo: createTool({
@@ -173,8 +173,8 @@ export const myMcpServerTwo = new MCPServer({
       inputSchema: z.object({
         reason: z.string().optional().describe('Optional reason for collecting contact info'),
       }),
-      execute: async (input, context) => {
-        const { reason } = input;
+      execute: async (inputData, context) => {
+        const { reason } = inputData;
 
         try {
           // Use the session-aware elicitation functionality

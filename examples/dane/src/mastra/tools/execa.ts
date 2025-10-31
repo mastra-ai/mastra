@@ -26,8 +26,8 @@ export const execaTool = createTool({
   }),
   execute: async input => {
     try {
-      console.log(chalk.green(`Running command: ${input.command} ${input.args.join(' ')}`));
-      const p = execa(input.command, input.args);
+      console.log(chalk.green(`Running command: ${inputData.command} ${inputData.args.join(' ')}`));
+      const p = execa(inputData.command, inputData.args);
       console.log(`\n`);
       p.stdout.pipe(colorTransform).pipe(process.stdout);
       p.stderr.pipe(colorTransform).pipe(process.stderr);

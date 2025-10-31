@@ -117,7 +117,7 @@ export interface MCPToolProperties {
  * This matches the AI SDK's Tool interface.
  *
  * CoreToolBuilder converts Mastra tools (ToolAction) to this format and handles the
- * signature transformation from Mastra's (input, context) to AI SDK format (params, options).
+ * signature transformation from Mastra's (inputData, context) to AI SDK format (params, options).
  *
  * Key differences from ToolAction:
  * - Uses 'parameters' instead of 'inputSchema' (AI SDK naming)

@@ -22,8 +22,8 @@ export const tool = createTool({
   outputSchema: z.object({
     output: z.string(),
   }),
-  execute: async (input) => {
-    const reversed = input.input.split("").reverse().join("");
+  execute: async (inputData) => {
+    const reversed = inputData.input.split("").reverse().join("");
 
     return {
       output: reversed,

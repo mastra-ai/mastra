@@ -513,9 +513,9 @@ export const mastra = new Mastra({
           executionTime: z.number().optional(),
           error: z.string().optional(),
         }),
-        execute: async input => {
+        execute: async inputData => {
           return await AgentBuilderDefaults.executeCommand({
-            ...input,
+            ...inputData,
             workingDirectory: inputData.workingDirectory || projectPath,
           });
         },
@@ -558,8 +558,8 @@ export const mastra = new Mastra({
           ),
           message: z.string(),
         }),
-        execute: async input => {
-          return await AgentBuilderDefaults.manageTaskList(input);
+        execute: async inputData => {
+          return await AgentBuilderDefaults.manageTaskList(inputData);
         },
       }),
 

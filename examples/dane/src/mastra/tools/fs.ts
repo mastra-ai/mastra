@@ -15,14 +15,14 @@ export const fsTool = createTool({
   }),
   execute: async input => {
     try {
-      switch (input.action) {
+      switch (inputData.action) {
         case 'write':
-          writeFileSync(input.file, input.data);
+          writeFileSync(inputData.file, inputData.data);
           break;
         case 'read':
-          return { message: readFileSync(input.file, 'utf8') };
+          return { message: readFileSync(inputData.file, 'utf8') };
         case 'append':
-          writeFileSync(input.file, input.data, { flag: 'a' });
+          writeFileSync(inputData.file, inputData.data, { flag: 'a' });
           break;
         default:
           return { message: 'Invalid action' };

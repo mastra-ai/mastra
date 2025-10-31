@@ -37,8 +37,8 @@ const findUserTool = createTool({
   inputSchema: z.object({
     name: z.string(),
   }),
-  execute: async input => {
-    return mockFindUser(input) as Promise<Record<string, any>>;
+  execute: async inputData => {
+    return mockFindUser(inputData) as Promise<Record<string, any>>;
   },
   requireApproval: true,
 });
@@ -63,7 +63,7 @@ const findUserTool = createTool({
   resumeSchema: z.object({
     name: z.string(),
   }),
-  execute: async (input, { workflow }) => {
+  execute: async (inputData, { workflow }) => {
     if (!workflow.resumeData) {
       return await workflow.suspend({ message: 'Please provide the name of the user' });
     }

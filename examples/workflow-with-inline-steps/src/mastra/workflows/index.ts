@@ -18,7 +18,7 @@ myWorkflow
       outputSchema: z.object({
         doubledValue: z.number(),
       }),
-      execute: async (input, context) => {
+      execute: async (inputData, context) => {
         const doubledValue = context?.workflow?.state?.triggerData.inputValue * 2;
         return { doubledValue };
       },
@@ -33,7 +33,7 @@ myWorkflow
       outputSchema: z.object({
         incrementedValue: z.number(),
       }),
-      execute: async (input, context) => {
+      execute: async (inputData, context) => {
         if (context?.workflow?.state?.steps.stepOne.status === 'success') {
           const incrementedValue = context?.workflow?.state?.steps.stepOne.output.doubledValue + 1;
           return { incrementedValue };
@@ -45,7 +45,7 @@ myWorkflow
   .then(
     new Step({
       id: 'stepThree',
-      execute: async (input, context) => {
+      execute: async (inputData, context) => {
         if (context?.workflow?.resumeData?.confirm !== 'true') {
           return context?.workflow?.suspend({
             message: 'Do you accept?',

@@ -137,7 +137,7 @@ export const menuTool = createTool({
       query: z.string(),
     })
     .required(),
-  execute: async (input, context) => {
+  execute: async (inputData, context) => {
     // Implement menu search functionality
   },
 });

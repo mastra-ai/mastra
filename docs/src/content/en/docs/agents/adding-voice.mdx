@@ -206,9 +206,9 @@ export const convertToText = async (
 
   const chunks: Buffer[] = [];
   return new Promise((resolve, reject) => {
-    input.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-    input.on("error", reject);
-    input.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+    inputData.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    inputData.on("error", reject);
+    inputData.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
   });
 };
 

@@ -66,8 +66,8 @@ export const speechToSpeechServer = new Agent({
       description: "Read the result of the tool",
       inputSchema: z.object({ name: z.string() }),
       outputSchema: z.object({ message: z.string() }),
-      execute: async (input) => {
-        return { message: `Hello ${input.name}!` };
+      execute: async (inputData) => {
+        return { message: `Hello ${inputData.name}!` };
       },
     }),
   },

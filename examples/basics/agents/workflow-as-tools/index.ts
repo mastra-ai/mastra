@@ -131,12 +131,12 @@ export const resumeWeatherTool = createTool({
   execute: async input => {
     const workflow = mastra.getWorkflow('weatherWorkflowWithSuspend');
     const run = await workflow.createRunAsync({
-      runId: input.runId,
+      runId: inputData.runId,
     });
     const result = await run.resume({
       step: 'fetch-weather',
       resumeData: {
-        city: input.city,
+        city: inputData.city,
       },
     });
     return result.result;

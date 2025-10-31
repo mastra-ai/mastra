@@ -11,7 +11,7 @@ const stepOne = new Step({
     doubledValue: z.number(),
   }),
   execute: async input => {
-    const doubledValue = input.inputValue * 2;
+    const doubledValue = inputData.inputValue * 2;
     return { doubledValue };
   },
 });
@@ -26,7 +26,7 @@ const stepTwo = new Step({
     incrementedValue: z.number(),
   }),
   execute: async input => {
-    const incrementedValue = input.valueToIncrement + 1;
+    const incrementedValue = inputData.valueToIncrement + 1;
     return { incrementedValue };
   },
 });
@@ -41,7 +41,7 @@ const stepThree = new Step({
     squaredValue: z.number(),
   }),
   execute: async input => {
-    const squaredValue = input.valueToSquare * input.valueToSquare;
+    const squaredValue = inputData.valueToSquare * inputData.valueToSquare;
     return { squaredValue };
   },
 });
@@ -56,7 +56,7 @@ const stepFour = new Step({
     rootValue: z.number(),
   }),
   execute: async input => {
-    return { rootValue: Math.sqrt(input.valueToRoot) };
+    return { rootValue: Math.sqrt(inputData.valueToRoot) };
   },
 });
 
@@ -70,7 +70,7 @@ const stepFive = new Step({
     tripledValue: z.number(),
   }),
   execute: async input => {
-    const tripledValue = input.inputValue * 3;
+    const tripledValue = inputData.inputValue * 3;
     return { tripledValue };
   },
 });
@@ -85,8 +85,8 @@ const stepSix = new Step({
     rawText: z.string(),
   }),
   execute: async input => {
-    console.log(input.inputValue);
-    return { rawText: input.inputValue.toString() };
+    console.log(inputData.inputValue);
+    return { rawText: inputData.inputValue.toString() };
   },
 });
 

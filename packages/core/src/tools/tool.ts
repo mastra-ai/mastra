@@ -240,10 +240,10 @@ export class Tool<
  *     a: z.number(),
  *     b: z.number()
  *   }),
- *   execute: async (input) => {
- *     const result = input.operation === 'add'
- *       ? input.a + input.b
- *       : input.a - input.b;
+ *   execute: async (inputData) => {
+ *     const result = inputData.operation === 'add'
+ *       ? inputData.a + inputData.b
+ *       : inputData.a - inputData.b;
  *     return { result };
  *   }
  * });
@@ -260,8 +260,8 @@ export class Tool<
  *     name: z.string(),
  *     email: z.string()
  *   }),
- *   execute: async (input) => {
- *     return await fetchUser(input.userId);
+ *   execute: async (inputData) => {
+ *     return await fetchUser(inputData.userId);
  *   }
  * });
  * ```
@@ -275,9 +275,9 @@ export class Tool<
  *     city: z.string(),
  *     units: z.enum(['metric', 'imperial']).default('metric')
  *   }),
- *   execute: async (input) => {
+ *   execute: async (inputData) => {
  *     const response = await fetch(
- *       `https://api.weather.com/v1/weather?q=${input.city}&units=${input.units}`
+ *       `https://api.weather.com/v1/weather?q=${inputData.city}&units=${inputData.units}`
  *     );
  *     return response.json();
  *   }
@@ -297,7 +297,7 @@ export function createTool<
   opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext>,
 ): Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
   execute: (
-    input: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
+    inputData: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
     context?: TContext,
   ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
 } {
