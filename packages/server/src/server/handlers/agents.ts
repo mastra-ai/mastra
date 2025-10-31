@@ -137,6 +137,7 @@ export function getSerializedProcessors(processors: (InputProcessor | OutputProc
     // Processors are class instances or objects with a name property
     // Use the name property if available, otherwise fall back to constructor name
     return {
+      id: processor.id,
       name: processor.name || processor.constructor.name,
     };
   });
