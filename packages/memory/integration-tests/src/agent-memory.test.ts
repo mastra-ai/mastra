@@ -219,10 +219,10 @@ describe('Agent Memory Tests', () => {
     expect(getMemoryMessagesCalled).toBe(true);
 
     // Verify that getMemoryMessages actually returned messages from the first thread
-    expect(retrievedMemoryMessages.length).toBeGreaterThan(0);
+    expect(retrievedMemoryMessages.messages.length).toBeGreaterThan(0);
 
     // Verify that the retrieved messages contain content from the first thread
-    const hasMessagesFromFirstThread = retrievedMemoryMessages.some(
+    const hasMessagesFromFirstThread = retrievedMemoryMessages.messages.some(
       msg =>
         msg.threadId === thread1Id || (typeof msg.content === 'string' && msg.content.toLowerCase().includes('cat')),
     );
