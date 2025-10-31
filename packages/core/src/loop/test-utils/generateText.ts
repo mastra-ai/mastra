@@ -741,7 +741,6 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               {
                 "id": "1234",
                 "metadata": {
-                  "__originalContent": "Hello, world!",
                   "createdAt": 2024-01-01T00:00:00.001Z,
                 },
                 "parts": [
@@ -786,7 +785,6 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               {
                 "id": "1234",
                 "metadata": {
-                  "__originalContent": "Hello, world!",
                   "createdAt": 2024-01-01T00:00:00.001Z,
                 },
                 "parts": [

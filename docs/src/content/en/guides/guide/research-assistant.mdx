@@ -123,7 +123,7 @@ In the root of your project, grab the absolute path with the `pwd` command. The 
 In your `src/mastra/index.ts` file, add the following to your existing file and configuration:
 
 ```ts copy title="src/mastra/index.ts" {2, 4-6, 9}
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { LibSQLVector } from "@mastra/libsql";
 
 const libSqlVector = new LibSQLVector({
@@ -152,7 +152,7 @@ use a remote persistent database then.
 In the `src/mastra/index.ts` file, add the agent to Mastra:
 
 ```ts copy title="src/mastra/index.ts" {3, 10}
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { LibSQLVector } from "@mastra/libsql";
 import { researchAgent } from "./agents/researchAgent";
 

@@ -64,8 +64,9 @@ export interface SerializedAgent {
     }
   >;
   // We can't use the true types here because they are not serializable
-  defaultGenerateOptions?: Record<string, unknown>;
-  defaultStreamOptions?: Record<string, unknown>;
+  defaultOptions?: Record<string, unknown>;
+  defaultGenerateOptionsLegacy?: Record<string, unknown>;
+  defaultStreamOptionsLegacy?: Record<string, unknown>;
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
@@ -184,8 +185,9 @@ async function formatAgentList({
   const instructions = await agent.getInstructions({ requestContext });
   const tools = await agent.listTools({ requestContext });
   const llm = await agent.getLLM({ requestContext });
-  const defaultGenerateOptions = await agent.getDefaultGenerateOptionsLegacy({ requestContext });
-  const defaultStreamOptions = await agent.getDefaultStreamOptionsLegacy({ requestContext });
+  const defaultGenerateOptionsLegacy = await agent.getDefaultGenerateOptionsLegacy({ requestContext });
+  const defaultStreamOptionsLegacy = await agent.getDefaultStreamOptionsLegacy({ requestContext });
+  const defaultOptions = await agent.getDefaultOptions({ requestContext });
   const serializedAgentTools = await getSerializedAgentTools(tools);
 
   let serializedAgentWorkflows: Record<
@@ -243,9 +245,10 @@ async function formatAgentList({
     provider: llm?.getProvider(),
     modelId: llm?.getModelId(),
     modelVersion: model?.specificationVersion,
-    defaultGenerateOptions,
-    defaultStreamOptions,
+    defaultOptions,
     modelList,
+    defaultGenerateOptionsLegacy,
+    defaultStreamOptionsLegacy,
   };
 }
 
@@ -386,8 +389,11 @@ async function formatAgent({
 
   const instructions = await agent.getInstructions({ requestContext: proxyRequestContext });
   const llm = await agent.getLLM({ requestContext });
-  const defaultGenerateOptions = await agent.getDefaultGenerateOptionsLegacy({ requestContext: proxyRequestContext });
-  const defaultStreamOptions = await agent.getDefaultStreamOptionsLegacy({ requestContext: proxyRequestContext });
+  const defaultGenerateOptionsLegacy = await agent.getDefaultGenerateOptionsLegacy({
+    requestContext: proxyRequestContext,
+  });
+  const defaultStreamOptionsLegacy = await agent.getDefaultStreamOptionsLegacy({ requestContext: proxyRequestContext });
+  const defaultOptions = await agent.getDefaultOptions({ requestContext: proxyRequestContext });
 
   const model = llm?.getModel();
   const models = await agent.getModelList(requestContext);
@@ -420,8 +426,9 @@ async function formatAgent({
     modelId: llm?.getModelId(),
     modelVersion: model?.specificationVersion,
     modelList,
-    defaultGenerateOptions,
-    defaultStreamOptions,
+    defaultOptions,
+    defaultGenerateOptionsLegacy,
+    defaultStreamOptionsLegacy,
   };
 }
 

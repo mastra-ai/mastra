@@ -93,13 +93,18 @@ const sidebars = {
         { type: "doc", id: "agents/getLLM", label: ".getLLM()" },
         {
           type: "doc",
+          id: "agents/getDefaultOptions",
+          label: ".getDefaultOptions()",
+        },
+        {
+          type: "doc",
           id: "agents/getDefaultGenerateOptions",
-          label: ".getDefaultGenerateOptions()",
+          label: ".getDefaultGenerateOptionsLegacy()",
         },
         {
           type: "doc",
           id: "agents/getDefaultStreamOptions",
-          label: ".getDefaultStreamOptions()",
+          label: ".getDefaultStreamOptionsLegacy()",
         },
       ],
     },
@@ -195,11 +200,6 @@ const sidebars = {
               type: "doc",
               id: "workflows/run-methods/resume",
               label: ".resume()",
-            },
-            {
-              type: "doc",
-              id: "workflows/run-methods/watch",
-              label: ".watch()",
             },
             {
               type: "doc",
