@@ -82,5 +82,12 @@
     "@mastra/voice-speechify": "0.11.11",
     "@mastra/inngest": "0.18.3"
   },
-  "changesets": []
+  "changesets": [
+    "bold-cooks-grow",
+    "fix-workflow-input-property",
+    "khaki-garlics-poke",
+    "lemon-nails-wait",
+    "ripe-coats-sip",
+    "sixty-areas-grab"
+  ]
 }

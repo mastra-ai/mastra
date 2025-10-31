@@ -1,5 +1,25 @@
 # @mastra/deployer
 
+## 0.24.0-alpha.0
+
+### Minor Changes
+
+- Update peer dependencies to match core package version bump (0.23.4) ([#9487](https://github.com/mastra-ai/mastra/pull/9487))
+
+### Patch Changes
+
+- Improve analyze recursion in bundler when using monorepos ([#9520](https://github.com/mastra-ai/mastra/pull/9520))
+
+- Fixes issue where clicking the reset button in the model picker would fail to restore the original LanguageModelV2 (or any other types) object that was passed during agent construction. ([#9487](https://github.com/mastra-ai/mastra/pull/9487))
+
+- Remove unused /model-providers API ([#9554](https://github.com/mastra-ai/mastra/pull/9554))
+
+- Fix undefined runtimeContext using memory from playground ([#9548](https://github.com/mastra-ai/mastra/pull/9548))
+
+- Updated dependencies [[`6d7e90d`](https://github.com/mastra-ai/mastra/commit/6d7e90db09713e6250f4d6c3d3cff1b4740e50f9), [`23c2614`](https://github.com/mastra-ai/mastra/commit/23c26140fdbf04b8c59e8d7d52106d67dad962ec), [`23c2614`](https://github.com/mastra-ai/mastra/commit/23c26140fdbf04b8c59e8d7d52106d67dad962ec), [`186b29b`](https://github.com/mastra-ai/mastra/commit/186b29bd51ac1dcc24ad3825fdb7207a6d6391a6)]:
+  - @mastra/core@0.24.0-alpha.0
+  - @mastra/server@0.24.0-alpha.0
+
 ## 0.23.3
 
 ### Patch Changes

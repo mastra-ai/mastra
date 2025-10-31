@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloud",
-  "version": "0.23.3",
+  "version": "0.24.0-alpha.0",
   "description": "",
   "type": "module",
   "files": [

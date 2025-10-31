@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 0.24.0-alpha.0
+
+### Patch Changes
+
+- Fix workflow input property preservation after resume from snapshot ([#9527](https://github.com/mastra-ai/mastra/pull/9527))
+
+  Ensure that when resuming a workflow from a snapshot, the input property is correctly set from the snapshot's context input rather than from resume data. This prevents the loss of original workflow input data during suspend/resume cycles.
+
+- Fixes issue where clicking the reset button in the model picker would fail to restore the original LanguageModelV2 (or any other types) object that was passed during agent construction. ([#9487](https://github.com/mastra-ai/mastra/pull/9487))
+
 ## 0.23.3
 
 ### Patch Changes
