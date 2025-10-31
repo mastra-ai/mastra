@@ -27,7 +27,7 @@
     top: 0;
     overflow-y: auto;
     position: sticky;
-    padding-top: calc(var(--ifm-navbar-height) - 6px);
+    padding-top: calc(var(--ifm-navbar-height) - 11px);
     min-height: 100vh;
     max-height: 100vh;
     display: flex;
