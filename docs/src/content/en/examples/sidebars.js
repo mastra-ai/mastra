@@ -264,10 +264,10 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Scorers",
+      label: "Evals",
       collapsed: true,
       items: [
-        { type: "doc", id: "scorers/running-in-ci", label: "Running in CI" },
+        { type: "doc", id: "evals/running-in-ci", label: "Running in CI" },
       ],
     },
     {
