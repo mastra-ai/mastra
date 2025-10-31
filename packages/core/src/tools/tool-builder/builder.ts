@@ -236,10 +236,13 @@ export class CoreToolBuilder extends MastraBase {
             resumeData: execOptions.resumeData,
           };
 
-          // Check if this is agent execution (has toolCallId and messages)
+          // Check if this is agent execution
           // Agent execution takes precedence over workflow execution because agents may
           // use workflows internally for their agentic loop
-          const isAgentExecution = execOptions.toolCallId && execOptions.messages;
+          // Note: AI SDK v4 doesn't pass toolCallId/messages, so we also check for agentName and threadId
+          const isAgentExecution =
+            (execOptions.toolCallId && execOptions.messages) ||
+            (options.agentName && options.threadId && !options.workflowId);
 
           // Check if this is workflow execution (has workflow properties in options)
           // Only consider it workflow execution if it's NOT agent execution
@@ -254,8 +257,8 @@ export class CoreToolBuilder extends MastraBase {
             toolContext = {
               ...restBaseContext,
               agent: {
-                toolCallId: execOptions.toolCallId,
-                messages: execOptions.messages,
+                toolCallId: execOptions.toolCallId || '',
+                messages: execOptions.messages || [],
                 suspend,
                 resumeData,
                 threadId,
