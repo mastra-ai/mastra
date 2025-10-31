@@ -22,7 +22,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
     description: toolDescription,
     inputSchema,
     outputSchema,
-    execute: async (input, context) => {
+    execute: async (inputData, context) => {
       const { requestContext, mastra } = context || {};
       const indexName: string = requestContext?.get('indexName') ?? options.indexName;
       const vectorStoreName: string =
@@ -38,9 +38,9 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
       if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`); // won't fire
 
-      const topK: number = requestContext?.get('topK') ?? input.topK ?? 10;
-      const filter: Record<string, any> = requestContext?.get('filter') ?? (input.filter as Record<string, any>);
-      const queryText = input.queryText;
+      const topK: number = requestContext?.get('topK') ?? inputData.topK ?? 10;
+      const filter: Record<string, any> = requestContext?.get('filter') ?? (inputData.filter as Record<string, any>);
+      const queryText = inputData.queryText;
       const enableFilter = !!requestContext?.get('filter') || (options.enableFilter ?? false);
 
       const logger = mastra?.getLogger();

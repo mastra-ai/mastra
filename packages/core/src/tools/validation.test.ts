@@ -13,7 +13,7 @@ describe('Tool Input Validation Integration Tests', () => {
           name: z.string(),
           age: z.number().min(0),
         }),
-        execute: async (input, _context) => {
+        execute: async (inputData, _context) => {
           return { success: true, data: input };
         },
       });
@@ -217,7 +217,7 @@ describe('Tool Input Validation Integration Tests', () => {
         }),
         execute: async input => {
           // In v1.0, input is already the raw data
-          return { result: input.name };
+          return { result: inputData.name };
         },
       });
 

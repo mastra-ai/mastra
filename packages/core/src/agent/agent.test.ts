@@ -566,7 +566,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resumeSchema: z.object({
               name: z.string(),
             }),
-            execute: async (input, context) => {
+            execute: async (inputData, context) => {
               console.log('context', context);
               if (!context?.agent?.resumeData) {
                 return await context?.agent?.suspend({ message: 'Please provide the name of the user' });

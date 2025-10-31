@@ -29,7 +29,7 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
     id: 'update-working-memory',
     description: `Update the working memory with new information. Any data not included will be overwritten.${schema ? ' Always pass data as string to the memory field. Never pass an object.' : ''}`,
     inputSchema,
-    execute: async (input, context) => {
+    execute: async (inputData, context) => {
       const threadId = context?.agent?.threadId;
       const resourceId = context?.agent?.resourceId;
 
@@ -45,7 +45,7 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
         throw new Error(`Thread with id ${threadId} resourceId does not match the current resourceId ${resourceId}`);
       }
 
-      const workingMemory = typeof input.memory === 'string' ? input.memory : JSON.stringify(input.memory);
+      const workingMemory = typeof inputData.memory === 'string' ? inputData.memory : JSON.stringify(inputData.memory);
 
       // Use the new updateWorkingMemory method which handles both thread and resource scope
       await memory.updateWorkingMemory({
@@ -84,13 +84,13 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
           "The reason you're updating working memory. Passing any value other than 'append-new-memory' requires a searchString to be provided. Defaults to append-new-memory",
         ),
     }),
-    execute: async (input, context) => {
+    execute: async (inputData, context) => {
       const threadId = context?.agent?.threadId;
       const resourceId = context?.agent?.resourceId;
 
       // Memory can be accessed via context.mastra.memory (when agent is part of Mastra instance)
       // or context.memory (when agent is standalone with memory passed directly)
-      const memory = context?.mastra?.memory || (context as any)?.memory;
+      const memory = context?.mastra?.memory;
 
       if (!threadId || !memory || !resourceId) {
         throw new Error('Thread ID, Memory instance, and resourceId are required for working memory updates');
@@ -110,30 +110,30 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
         throw new Error(`Thread with id ${threadId} resourceId does not match the current resourceId ${resourceId}`);
       }
 
-      const workingMemory = input.newMemory || '';
-      if (!input.updateReason) input.updateReason = `append-new-memory`;
+      const workingMemory = inputData.newMemory || '';
+      if (!inputData.updateReason) inputData.updateReason = `append-new-memory`;
 
       if (
-        input.searchString &&
+        inputData.searchString &&
         config.workingMemory?.scope === `resource` &&
-        input.updateReason === `replace-irrelevant-memory`
+        inputData.updateReason === `replace-irrelevant-memory`
       ) {
         // don't allow replacements due to something not being relevant to the current conversation
         // if there's no searchString, then we will append.
-        input.searchString = undefined;
+        inputData.searchString = undefined;
       }
 
-      if (input.updateReason === `append-new-memory` && input.searchString) {
+      if (inputData.updateReason === `append-new-memory` && inputData.searchString) {
         // do not find/replace when append-new-memory is selected
         // some models get confused and pass a search string even when they don't want to replace it.
         // TODO: maybe they're trying to add new info after the search string?
-        input.searchString = undefined;
+        inputData.searchString = undefined;
       }
 
-      if (input.updateReason !== `append-new-memory` && !input.searchString) {
+      if (inputData.updateReason !== `append-new-memory` && !inputData.searchString) {
         return {
           success: false,
-          reason: `updateReason was ${input.updateReason} but no searchString was provided. Unable to replace undefined with "${input.newMemory}"`,
+          reason: `updateReason was ${inputData.updateReason} but no searchString was provided. Unable to replace undefined with "${inputData.newMemory}"`,
         };
       }
 
@@ -142,7 +142,7 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
         threadId,
         resourceId,
         workingMemory: workingMemory,
-        searchString: input.searchString,
+        searchString: inputData.searchString,
         memoryConfig: config,
       });
 

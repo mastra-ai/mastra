@@ -135,9 +135,9 @@ export class Tool<
     // 2. context - Execution metadata (mastra, suspend, etc.)
     if (opts.execute) {
       const originalExecute = opts.execute;
-      this.execute = async (input: unknown, context?: any) => {
+      this.execute = async (inputData: unknown, context?: any) => {
         // Validate input if schema exists
-        const { data, error } = validateToolInput(this.inputSchema, input, this.id);
+        const { data, error } = validateToolInput(this.inputSchema, inputData, this.id);
         if (error) {
           return error as any;
         }

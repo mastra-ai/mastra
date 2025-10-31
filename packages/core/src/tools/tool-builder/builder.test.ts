@@ -455,7 +455,7 @@ describe('CoreToolBuilder ID Preservation', () => {
       id: 'test-tool-id',
       description: 'A test tool',
       inputSchema: z.object({ value: z.string() }),
-      execute: async input => ({ result: input.value }),
+      execute: async inputData => ({ result: inputData.value }),
     });
 
     const builder = new CoreToolBuilder({
@@ -529,7 +529,7 @@ describe('CoreToolBuilder ID Preservation', () => {
       id: 'verify-id-exists',
       description: 'A test tool',
       inputSchema: z.object({ value: z.string() }),
-      execute: async input => ({ result: input.value }),
+      execute: async inputData => ({ result: inputData.value }),
     });
 
     // Verify that the tool created with createTool() has an ID
@@ -545,9 +545,9 @@ describe('Tool Tracing Context Injection', () => {
       id: 'tracing-test-tool',
       description: 'Test tool that captures tracing context',
       inputSchema: z.object({ message: z.string() }),
-      execute: async (input, context) => {
+      execute: async (inputData, context) => {
         receivedTracingContext = context?.tracingContext;
-        return { result: `processed: ${input.message}` };
+        return { result: `processed: ${inputData.message}` };
       },
     });
 
@@ -610,9 +610,9 @@ describe('Tool Tracing Context Injection', () => {
       id: 'no-tracing-tool',
       description: 'Test tool without agent span',
       inputSchema: z.object({ message: z.string() }),
-      execute: async (input, context) => {
+      execute: async (inputData, context) => {
         receivedTracingContext = context?.tracingContext;
-        return { result: `processed: ${input.message}` };
+        return { result: `processed: ${inputData.message}` };
       },
     });
 
@@ -763,7 +763,7 @@ describe('Tool Tracing Context Injection', () => {
       id: 'toolset-tool',
       description: 'Tool from a toolset',
       inputSchema: z.object({ message: z.string() }),
-      execute: async input => ({ result: input.message }),
+      execute: async inputData => ({ result: inputData.message }),
     });
 
     // Mock agent span
@@ -821,11 +821,11 @@ describe('Tool Input Validation', () => {
       email: z.string().email('Invalid email format').optional(),
       tags: z.array(z.string()).min(1, 'At least one tag required').optional(),
     }),
-    execute: async input => {
+    execute: async inputData => {
       return {
-        message: `Hello ${input.name}, you are ${input.age} years old`,
-        email: input.email,
-        tags: input.tags,
+        message: `Hello ${inputData.name}, you are ${inputData.age} years old`,
+        email: inputData.email,
+        tags: inputData.tags,
       };
     },
   });

@@ -99,10 +99,14 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
         requestContext,
         // TODO: Pass proper tracing context when server API supports tracing
         tracingContext: { currentSpan: undefined },
-        workflow: {
-          runId,
-          suspend: async () => {},
-        },
+        ...(runId
+          ? {
+              workflow: {
+                runId,
+                suspend: async () => {},
+              },
+            }
+          : {}),
       });
       return result;
     } catch (error) {

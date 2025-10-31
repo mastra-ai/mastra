@@ -29,13 +29,13 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
         workflowId: z.string().optional(),
         toolCallId: z.string().optional(),
       }),
-      execute: async (input: any, context?: any) => {
-        toolInputCapture = input;
+      execute: async (inputData: any, context?: any) => {
+        toolInputCapture = inputData;
         toolContextCapture = context;
 
         // Return a result based on input
         return {
-          message: `Processed ${input.text}`,
+          message: `Processed ${inputData.text}`,
           hasWorkflowContext: !!context?.workflow,
           hasAgentContext: !!context?.agent,
           workflowId: context?.workflow?.workflowId,
@@ -336,11 +336,11 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
         outputSchema: z.object({
           greeting: z.string(),
         }),
-        execute: async (input, _context) => {
+        execute: async (inputData, _context) => {
           // TypeScript should know the exact shape here
-          const name: string = input.name;
-          const age: number = input.age;
-          const email: string = input.email;
+          const name: string = inputData.name;
+          const age: number = inputData.age;
+          const email: string = inputData.email;
 
           return {
             greeting: `Hello ${name}, age ${age}, email ${email}`,
@@ -375,7 +375,7 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
         id: 'context-typed-tool',
         description: 'Tool that uses context',
         inputSchema: z.object({ key: z.string() }),
-        execute: async (input, context) => {
+        execute: async (inputData, context) => {
           // All context properties should be properly typed - test type safety
           context?.mastra; // Mastra | undefined
           context?.workflow?.workflowId; // string | undefined
@@ -422,8 +422,8 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
         id: 'error-tool',
         description: 'Tool that throws',
         inputSchema: z.object({ shouldFail: z.boolean() }),
-        execute: async (input, _context) => {
-          if (input.shouldFail) {
+        execute: async (inputData, _context) => {
+          if (inputData.shouldFail) {
             throw new Error('Tool execution failed');
           }
           return { success: true };
@@ -451,9 +451,9 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
         inputSchema: z.object({
           data: z.string(),
         }),
-        execute: async (input, context) => {
+        execute: async (inputData, context) => {
           // Simple, direct access to input
-          const data = input.data; // No unwrapping needed!
+          const data = inputData.data; // No unwrapping needed!
 
           // Clean, organized context
           if (context?.workflow) {

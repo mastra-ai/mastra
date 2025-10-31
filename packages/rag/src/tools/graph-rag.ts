@@ -28,7 +28,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
     inputSchema,
     outputSchema,
     description: toolDescription,
-    execute: async (input, context) => {
+    execute: async (inputData, context) => {
       const { requestContext, mastra } = context || {};
       const indexName: string = requestContext?.get('indexName') ?? options.indexName;
       const vectorStoreName: string = requestContext?.get('vectorStoreName') ?? options.vectorStoreName;
@@ -38,9 +38,9 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
       const randomWalkSteps: number | undefined =
         requestContext?.get('randomWalkSteps') ?? graphOptions.randomWalkSteps;
       const restartProb: number | undefined = requestContext?.get('restartProb') ?? graphOptions.restartProb;
-      const topK: number = requestContext?.get('topK') ?? input.topK ?? 10;
-      const filter: Record<string, any> = requestContext?.get('filter') ?? (input.filter as Record<string, any>);
-      const queryText = input.queryText;
+      const topK: number = requestContext?.get('topK') ?? inputData.topK ?? 10;
+      const filter: Record<string, any> = requestContext?.get('filter') ?? (inputData.filter as Record<string, any>);
+      const queryText = inputData.queryText;
       const providerOptions: Record<string, Record<string, any>> | undefined =
         requestContext?.get('providerOptions') ?? options.providerOptions;
 

@@ -221,7 +221,7 @@ export interface ToolAction<
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata
   execute?: (
-    input: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
+    inputData: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
     context?: TContext,
   ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
   mastra?: Mastra;
