@@ -1,6 +1,6 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import type { AIV5Type } from '@mastra/core/agent/message-list/types';
+import type * as AIV5Type from 'ai-v5';
 import { MastraMemory } from '@mastra/core/memory';
 import type {
   MastraMessageV1,
