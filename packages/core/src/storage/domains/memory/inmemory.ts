@@ -7,7 +7,6 @@ import type {
   StorageResourceType,
   ThreadOrderBy,
   ThreadSortDirection,
-  ThreadSortOptions,
   StorageListMessagesInput,
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
@@ -48,25 +47,6 @@ export class InMemoryMemory extends MemoryStorage {
     this.logger.debug(`MockStore: getThreadById called for ${threadId}`);
     const thread = this.collection.threads.get(threadId);
     return thread ? { ...thread, metadata: thread.metadata ? { ...thread.metadata } : thread.metadata } : null;
-  }
-
-  async getThreadsByResourceId({
-    resourceId,
-    orderBy,
-    sortDirection,
-  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
-    this.logger.debug(`MockStore: getThreadsByResourceId called for ${resourceId}`);
-    // Mock implementation - find threads by resourceId
-    const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
-    const sortedThreads = this.sortThreads(
-      threads,
-      this.castThreadOrderBy(orderBy),
-      this.castThreadSortDirection(sortDirection),
-    );
-    return sortedThreads.map(thread => ({
-      ...thread,
-      metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
-    })) as StorageThreadType[];
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
@@ -124,9 +104,7 @@ export class InMemoryMemory extends MemoryStorage {
 
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
-    // Determine sort field and direction, default to DESC (newest first)
-    const sortField = orderBy?.field || 'createdAt';
-    const sortDirection = orderBy?.direction || 'DESC';
+    const { field, direction } = this.parseOrderBy(orderBy);
 
     // Determine how many results to return
     // Default pagination is always 40 unless explicitly specified
@@ -169,9 +147,16 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Sort thread messages before pagination
     threadMessages.sort((a: any, b: any) => {
-      const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : a[sortField];
-      const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : b[sortField];
-      return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+      const isDateField = field === 'createdAt' || field === 'updatedAt';
+      const aValue = isDateField ? new Date(a[field]).getTime() : a[field];
+      const bValue = isDateField ? new Date(b[field]).getTime() : b[field];
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
     });
 
     // Get total count of thread messages (for pagination metadata)
@@ -278,9 +263,16 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Sort all messages (paginated + included) for final output
     messages.sort((a: any, b: any) => {
-      const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : a[sortField];
-      const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : b[sortField];
-      return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+      const isDateField = field === 'createdAt' || field === 'updatedAt';
+      const aValue = isDateField ? new Date(a[field]).getTime() : a[field];
+      const bValue = isDateField ? new Date(b[field]).getTime() : b[field];
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
     });
 
     // Calculate hasMore
@@ -451,24 +443,6 @@ export class InMemoryMemory extends MemoryStorage {
     } satisfies MastraMessageV2;
   }
 
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
-  async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    this.logger.debug(`MockStore: getMessagesById called`);
-
-    const rawMessages = messageIds.map(id => this.collection.messages.get(id)).filter(message => !!message);
-
-    const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
-    if (format === 'v1') return list.get.all.v1();
-    return list.get.all.v2();
-  }
-
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
     this.logger.debug(`MockStore: listMessagesById called`);
 
@@ -627,42 +601,26 @@ export class InMemoryMemory extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page, perPage, orderBy, sortDirection } = args;
-    this.logger.debug(`MockStore: getThreadsByResourceIdPaginated called for ${resourceId}`);
+  async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, offset, limit, orderBy } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
+    this.logger.debug(`MockStore: listThreadsByResourceId called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
     const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
-    const sortedThreads = this.sortThreads(
-      threads,
-      this.castThreadOrderBy(orderBy),
-      this.castThreadSortDirection(sortDirection),
-    );
+    const sortedThreads = this.sortThreads(threads, field, direction);
     const clonedThreads = sortedThreads.map(thread => ({
       ...thread,
       metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
     })) as StorageThreadType[];
     return {
-      threads: clonedThreads.slice(page * perPage, (page + 1) * perPage),
+      threads: clonedThreads.slice(offset, offset + limit),
       total: clonedThreads.length,
-      page: page,
-      perPage: perPage,
-      hasMore: clonedThreads.length > (page + 1) * perPage,
+      page: limit > 0 ? Math.floor(offset / limit) : 0,
+      perPage: limit,
+      hasMore: offset + limit < clonedThreads.length,
     };
-  }
-
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset, orderBy, sortDirection } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage, orderBy, sortDirection });
   }
 
   async getMessagesPaginated({
@@ -880,16 +838,22 @@ export class InMemoryMemory extends MemoryStorage {
     return resource;
   }
 
-  private sortThreads(threads: any[], orderBy: ThreadOrderBy, sortDirection: ThreadSortDirection): any[] {
+  private sortThreads(threads: any[], field: ThreadOrderBy, direction: ThreadSortDirection): any[] {
     return threads.sort((a, b) => {
-      const aValue = new Date(a[orderBy]).getTime();
-      const bValue = new Date(b[orderBy]).getTime();
+      const isDateField = field === 'createdAt' || field === 'updatedAt';
+      const aValue = isDateField ? new Date(a[field]).getTime() : a[field];
+      const bValue = isDateField ? new Date(b[field]).getTime() : b[field];
 
-      if (sortDirection === 'ASC') {
-        return aValue - bValue;
-      } else {
-        return bValue - aValue;
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        if (direction === 'ASC') {
+          return aValue - bValue;
+        } else {
+          return bValue - aValue;
+        }
       }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
     });
   }
 }
