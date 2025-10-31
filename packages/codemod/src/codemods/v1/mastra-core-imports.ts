@@ -7,10 +7,55 @@ import { createTransformer } from '../lib/create-transformer';
  * This codemod updates all imports from "@mastra/core" to use the new subpath imports. It leaves imports to `Mastra` and `Config` unchanged.
  */
 
-// Mapping of exports to their new subpath imports
+// TODO: Do not hardcode this mapping, generate it from the package's exports in the future
 const EXPORT_TO_SUBPATH: Record<string, string> = {
+  // Agent
   Agent: '@mastra/core/agent',
+
+  // Tools
   createTool: '@mastra/core/tools',
+  Tool: '@mastra/core/tools',
+
+  // Workflows
+  createWorkflow: '@mastra/core/workflows',
+  createStep: '@mastra/core/workflows',
+  Workflow: '@mastra/core/workflows',
+  Step: '@mastra/core/workflows',
+
+  // Request Context
+  RequestContext: '@mastra/core/request-context',
+
+  // Processors
+  BatchPartsProcessor: '@mastra/core/processors',
+  PIIDetector: '@mastra/core/processors',
+  ModerationProcessor: '@mastra/core/processors',
+  TokenLimiterProcessor: '@mastra/core/processors',
+  Processor: '@mastra/core/processors',
+  UnicodeNormalizer: '@mastra/core/processors',
+  SystemPromptScrubber: '@mastra/core/processors',
+  PromptInjectionDetector: '@mastra/core/processors',
+  LanguageDetector: '@mastra/core/processors',
+
+  // Voice
+  CompositeVoice: '@mastra/core/voice',
+
+  // Scorers/Evals
+  runExperiment: '@mastra/core/scores',
+  createScorer: '@mastra/core/scores',
+
+  // Server
+  registerApiRoute: '@mastra/core/server',
+
+  // AI Tracing
+  DefaultExporter: '@mastra/core/ai-tracing',
+  CloudExporter: '@mastra/core/ai-tracing',
+
+  // Streaming
+  ChunkType: '@mastra/core/stream',
+  MastraMessageV2: '@mastra/core/stream',
+
+  // LLM/Models
+  ModelRouterEmbeddingModel: '@mastra/core/llm',
 };
 
 export default createTransformer((fileInfo, api, options, context) => {
