@@ -1,9 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import { createTool, Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
+import { Mastra } from '@mastra/core/mastra';
 import { TABLE_WORKFLOW_SNAPSHOT, MockStore } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
 import type { StreamEvent, WatchEvent } from '@mastra/core/workflows';
 import { mapVariable } from '@mastra/core/workflows';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '@mastra/core/workflows/evented';
@@ -5614,7 +5615,7 @@ describe.sequential(
 
       it('should return empty result when mastra is not initialized', async () => {
         const workflow = createWorkflow({ id: 'test', inputSchema: z.object({}), outputSchema: z.object({}) });
-        const result = await workflow.getWorkflowRuns();
+        const result = await workflow.listWorkflowRuns();
         expect(result).toEqual({ runs: [], total: 0 });
       });
 
@@ -5657,7 +5658,7 @@ describe.sequential(
         const run2 = await workflow.createRunAsync();
         await run2.start({ inputData: {} });
 
-        const { runs, total } = await workflow.getWorkflowRuns();
+        const { runs, total } = await workflow.listWorkflowRuns();
         expect(total).toBe(2);
         expect(runs).toHaveLength(2);
         expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId, run2.runId]));
@@ -5703,7 +5704,7 @@ describe.sequential(
         const run1 = await workflow.createRunAsync();
         await run1.start({ inputData: {} });
 
-        const { runs, total } = await workflow.getWorkflowRuns();
+        const { runs, total } = await workflow.listWorkflowRuns();
         expect(total).toBe(1);
         expect(runs).toHaveLength(1);
         expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId]));

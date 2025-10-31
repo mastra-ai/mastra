@@ -840,7 +840,7 @@ export type ProviderModelsMap = {
     'voxtral-small-24b-2507',
     'whisper-large-v3',
   ];
-  readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'qwen-3-coder-480b'];
+  readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'qwen-3-coder-480b', 'zai-glm-4.6'];
   readonly netlify: readonly [
     'anthropic/claude-3-5-haiku-20241022',
     'anthropic/claude-3-5-haiku-latest',

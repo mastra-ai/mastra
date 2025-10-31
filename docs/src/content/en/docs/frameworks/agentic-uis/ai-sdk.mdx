@@ -32,16 +32,24 @@ The recommended way of using Mastra and AI SDK together is by installing the `@m
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy npm install @mastra/ai-sdk ```
+    ```bash copy
+    npm install @mastra/ai-sdk
+    ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm add @mastra/ai-sdk ```
+    ```bash copy
+    pnpm add @mastra/ai-sdk
+    ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
-    ```bash copy yarn add @mastra/ai-sdk ```
+    ```bash copy
+    yarn add @mastra/ai-sdk
+    ```
   </TabItem>
   <TabItem value="bun" label="bun">
-    ```bash copy bun add @mastra/ai-sdk ```
+    ```bash copy
+    bun add @mastra/ai-sdk
+    ```
   </TabItem>
 </Tabs>
 
@@ -50,7 +58,7 @@ The recommended way of using Mastra and AI SDK together is by installing the `@m
 When setting up a [custom API route](/docs/server-db/custom-api-routes), use the `chatRoute()` utility to create a route handler that automatically formats the agent stream into an AI SDK-compatible format.
 
 ```typescript title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { chatRoute } from "@mastra/ai-sdk";
 
 export const mastra = new Mastra({
@@ -102,7 +110,7 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
 Use the `workflowRoute()` utility to create a route handler that automatically formats the workflow stream into an AI SDK-compatible format.
 
 ```typescript title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { workflowRoute } from "@mastra/ai-sdk";
 
 export const mastra = new Mastra({
@@ -141,7 +149,7 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
 Use the `networkRoute()` utility to create a route handler that automatically formats the agent network stream into an AI SDK-compatible format.
 
 ```typescript title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { networkRoute } from "@mastra/ai-sdk";
 
 export const mastra = new Mastra({
@@ -350,16 +358,24 @@ Install the required AI SDK React package:
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy npm install @ai-sdk/react ```
+    ```bash copy
+    npm install @ai-sdk/react
+    ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm add @ai-sdk/react ```
+    ```bash copy
+    pnpm add @ai-sdk/react
+    ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
-    ```bash copy yarn add @ai-sdk/react ```
+    ```bash copy
+    yarn add @ai-sdk/react
+    ```
   </TabItem>
   <TabItem value="bun" label="bun">
-    ```bash copy bun add @ai-sdk/react ```
+    ```bash copy
+    bun add @ai-sdk/react
+    ```
   </TabItem>
 </Tabs>
 
@@ -529,7 +545,7 @@ export async function POST(req: Request) {
 You can also populate the `RequestContext` by reading custom data in a server middleware:
 
 ```typescript {8,17} title="mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   agents: { weatherAgent },

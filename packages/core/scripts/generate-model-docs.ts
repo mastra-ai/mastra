@@ -267,7 +267,7 @@ ${provider.apiKeyEnvVar}=your-api-key
 \`\`\`
 
 \`\`\`typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -494,7 +494,7 @@ ${introText}
 ## Usage
 
 \`\`\`typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -567,7 +567,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
 <Tabs>
   <TabItem value="OpenAI" label="OpenAI">
     \`\`\`typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
       name: "my-agent",
@@ -578,7 +578,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
   </TabItem>
   <TabItem value="Anthropic" label="Anthropic">
     \`\`\`typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
       name: "my-agent",
@@ -589,7 +589,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
   </TabItem>
   <TabItem value="Google Gemini" label="Google Gemini">
     \`\`\`typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
       name: "my-agent",
@@ -600,7 +600,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
   </TabItem>
   <TabItem value="xAI" label="xAI">
     \`\`\`typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
       name: "my-agent",
@@ -611,7 +611,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
   </TabItem>
   <TabItem value="OpenRouter" label="OpenRouter">
     \`\`\`typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
       name: "my-agent",
@@ -708,7 +708,7 @@ In development, we auto-refresh your local model list every hour, ensuring your 
 Some models are faster but less capable, while others offer larger context windows or stronger reasoning skills. Use different models from the same provider, or mix and match across providers to fit each task.
 
 \`\`\`typescript showLineNumbers
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 // Use a cost-effective model for document processing
 const documentProcessor = new Agent({
@@ -807,7 +807,7 @@ Relying on a single model creates a single point of failure for your application
 
 
 \`\`\`typescript showLineNumbers
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 
 const agent = new Agent({
   name: 'resilient-assistant',
@@ -839,7 +839,7 @@ Mastra supports AI SDK provider modules, should you need to use them directly.
 
 \`\`\`typescript showLineNumbers
 import { groq } from '@ai-sdk/groq';
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",

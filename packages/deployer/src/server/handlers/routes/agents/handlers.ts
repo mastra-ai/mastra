@@ -1,6 +1,7 @@
-import type { Mastra, ProviderConfig } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import { getProviderConfig, PROVIDER_REGISTRY } from '@mastra/core/llm';
+import type { ProviderConfig } from '@mastra/core/llm';
+import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType } from '@mastra/core/stream';
 import { ChunkFrom } from '@mastra/core/stream';
@@ -25,7 +26,6 @@ import type { Context } from 'hono';
 
 import { stream } from 'hono/streaming';
 import { handleError } from '../../error';
-import { AllowedProviderKeys } from '../../utils';
 
 export const sharedBodyOptions: any = {
   messages: {
@@ -595,31 +595,6 @@ export async function deprecatedStreamVNextHandler(c: Context) {
     },
     410, // 410 Gone status code for deprecated endpoints
   );
-}
-
-export async function getModelProvidersHandler(c: Context) {
-  const isPlayground = c.get('playground') === true;
-  if (!isPlayground) {
-    return c.json({ error: 'This API is only available in the playground environment' }, 403);
-  }
-  const envVars = process.env;
-  const providers = Object.entries(AllowedProviderKeys);
-  const envKeys = Object.keys(envVars);
-  const availableProviders = providers.filter(([_, value]) => envKeys.includes(value) && !!envVars[value]);
-
-  const providerInfo = availableProviders.map(([key, envVar]) => {
-    const providerConfig = getProviderConfig(key);
-    return {
-      id: key,
-      name: key.charAt(0).toUpperCase() + key.slice(1).replace(/-/g, ' '),
-      envVar,
-      hasApiKey: !!envVars[envVar],
-      docUrl: providerConfig?.docUrl || null,
-      models: providerConfig?.models || [],
-    };
-  });
-
-  return c.json(providerInfo);
 }
 
 export async function updateAgentModelInModelListHandler(c: Context) {

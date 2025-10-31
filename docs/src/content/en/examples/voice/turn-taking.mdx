@@ -45,7 +45,7 @@ Next, register both agents with your Mastra instance:
 
 ```typescript title="src/mastra/index.ts"
 import { PinoLogger } from "@mastra/loggers";
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { optimistAgent, skepticAgent } from "./agents";
 
 export const mastra = new Mastra({

@@ -2,7 +2,6 @@ import EventEmitter from 'events';
 import { randomUUID } from 'node:crypto';
 import { WritableStream, ReadableStream, TransformStream } from 'node:stream/web';
 import { z } from 'zod';
-import type { Mastra, WorkflowRun } from '..';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions, AgentStreamOptions } from '../agent';
@@ -11,7 +10,9 @@ import type { TracingContext, TracingOptions, TracingPolicy } from '../ai-tracin
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
 import { RegisteredLogger } from '../logger';
+import type { Mastra } from '../mastra';
 import type { MastraScorers } from '../scores';
+import type { WorkflowRun } from '../storage';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
@@ -1248,22 +1249,6 @@ export class Workflow<
     return res.status === 'success' ? res.result : undefined;
   }
 
-  async getWorkflowRuns(args?: {
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }) {
-    const storage = this.#mastra?.getStorage();
-    if (!storage) {
-      this.logger.debug('Cannot get workflow runs. Mastra storage is not initialized');
-      return { runs: [], total: 0 };
-    }
-
-    return storage.getWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
-  }
-
   async listWorkflowRuns(args?: {
     fromDate?: Date;
     toDate?: Date;
@@ -1276,6 +1261,7 @@ export class Workflow<
       this.logger.debug('Cannot get workflow runs. Mastra storage is not initialized');
       return { runs: [], total: 0 };
     }
+
     return storage.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
   }
 

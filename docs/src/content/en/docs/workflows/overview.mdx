@@ -133,7 +133,7 @@ export const testWorkflow = createWorkflow({
 Register your workflow in the Mastra instance to make it available throughout your application. Once registered, it can be called from agents or tools and has access to shared resources such as logging and observability features:
 
 ```typescript {6} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { testWorkflow } from "./workflows/test-workflow";
 
 export const mastra = new Mastra({
