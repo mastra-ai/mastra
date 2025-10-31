@@ -42,7 +42,11 @@ const getIssue = new Step({
       ?.map((label: any) => label.name)
       .filter((name: string) => !name.includes('priority:'));
 
-    return { title: issue?.data?.title!, body: issue?.data?.body!, labelNames: labelNames! };
+    if (!issue?.data?.title || !issue?.data?.body) {
+      throw new Error('Issue title or body not found');
+    }
+
+    return { title: issue.data.title, body: issue.data.body, labelNames: labelNames || [] };
   },
 });
 
@@ -75,7 +79,11 @@ const labelIssue = new Step({
       },
     );
 
-    return { labels: res?.object?.labels as string[] };
+    if (!res?.object?.labels || !Array.isArray(res.object.labels)) {
+      throw new Error('Failed to generate labels from agent');
+    }
+
+    return { labels: res.object.labels };
   },
 });
 
