@@ -22,7 +22,7 @@ describe('createTool', () => {
     inputSchema: z.object({
       name: z.string(),
     }),
-    execute: (input, context) => {
+    execute: (input, _context) => {
       return mockFindUser(input.name) as Promise<Record<string, any>>;
     },
   });

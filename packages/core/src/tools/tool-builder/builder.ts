@@ -1,4 +1,4 @@
-import type { ToolCallOptions, ProviderDefinedTool } from '@internal/external-types';
+import type { ProviderDefinedTool } from '@internal/external-types';
 import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,

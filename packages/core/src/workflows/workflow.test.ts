@@ -9356,7 +9356,7 @@ describe('Workflow', () => {
       });
 
       // @ts-ignore
-      const toolAction = vi.fn<any>().mockImplementation(async (input, context) => {
+      const toolAction = vi.fn<any>().mockImplementation(async (input, _context) => {
         return { name: input.name };
       });
 

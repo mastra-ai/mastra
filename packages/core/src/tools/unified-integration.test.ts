@@ -1,9 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
-import { createTool } from './tool';
-import { Agent } from '../agent';
-import { createWorkflow, createStep } from '../workflows/workflow';
 import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
+
+import { Agent } from '../agent';
+import { createStep, createWorkflow } from '../workflows/workflow';
+
+import { createTool } from './tool';
 import type { MastraToolInvocationOptions } from './types';
 
 describe('Tool Unified Arguments - Real Integration Tests', () => {
@@ -252,7 +254,7 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
         runId: 'parallel-run-456',
       });
 
-      const result = await run.start({
+      await run.start({
         inputData: { text: 'Parallel input' },
       });
 
@@ -288,7 +290,7 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
       const { tool, executeSpy } = createTestTool();
 
       // Call tool directly
-      const result = await tool.execute({
+      await tool.execute({
         text: 'Direct call',
         count: 5,
       });
@@ -309,7 +311,7 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
         resumeData: { previousRun: 'data' },
       };
 
-      const result = await tool.execute({ text: 'With context' }, customContext);
+      await tool.execute({ text: 'With context' }, customContext);
 
       expect(executeSpy).toHaveBeenCalledWith(
         { text: 'With context' },
@@ -334,7 +336,7 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
         outputSchema: z.object({
           greeting: z.string(),
         }),
-        execute: async (input, context) => {
+        execute: async (input, _context) => {
           // TypeScript should know the exact shape here
           const name: string = input.name;
           const age: number = input.age;
@@ -374,20 +376,20 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
         description: 'Tool that uses context',
         inputSchema: z.object({ key: z.string() }),
         execute: async (input, context) => {
-          // All context properties should be properly typed
-          const mastra = context?.mastra; // Mastra | undefined
-          const workflowId = context?.workflow?.workflowId; // string | undefined
-          const toolCallId = context?.agent?.toolCallId; // string | undefined
-          const suspendFn = context?.suspend; // ((payload: any) => Promise<any>) | undefined
+          // All context properties should be properly typed - test type safety
+          context?.mastra; // Mastra | undefined
+          context?.workflow?.workflowId; // string | undefined
+          context?.agent?.toolCallId; // string | undefined
+          context?.suspend; // ((payload: any) => Promise<any>) | undefined
 
           // Test type guards work
           if (context?.workflow) {
-            const runId: string | undefined = context.workflow.runId;
-            const state: Record<string, any> | undefined = context.workflow.state;
+            context.workflow.runId; // string | undefined
+            context.workflow.state; // Record<string, any> | undefined
           }
 
           if (context?.agent) {
-            const messages: any[] | undefined = context.agent.messages;
+            context.agent.messages; // any[] | undefined
           }
 
           return { success: true };
@@ -420,7 +422,7 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
         id: 'error-tool',
         description: 'Tool that throws',
         inputSchema: z.object({ shouldFail: z.boolean() }),
-        execute: async (input, context) => {
+        execute: async (input, _context) => {
           if (input.shouldFail) {
             throw new Error('Tool execution failed');
           }
