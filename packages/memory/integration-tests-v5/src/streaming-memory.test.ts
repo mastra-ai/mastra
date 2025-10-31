@@ -253,7 +253,7 @@ describe('Memory Streaming Tests', () => {
       });
     });
 
-    it('should stream useChat with client side tool calling', { timeout: Infinity }, async () => {
+    it('should stream useChat with client side tool calling', async () => {
       let error: Error | null = null;
       const threadId = randomUUID();
 
