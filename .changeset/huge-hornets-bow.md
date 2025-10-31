@@ -13,6 +13,7 @@
 '@mastra/lance': major
 '@mastra/mssql': major
 '@mastra/pg': major
+'@mastra/deployer': major
 ---
 
 Remove `getThreadsByResourceId` and `getThreadsByResourceIdPaginated` methods from storage interfaces in favor of `listThreadsByResourceId`. The new method uses `offset`/`limit` pagination and a nested `orderBy` object structure (`{ field, direction }`).
