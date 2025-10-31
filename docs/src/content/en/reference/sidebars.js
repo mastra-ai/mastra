@@ -189,7 +189,7 @@ const sidebars = {
         { type: "doc", id: "workflows/run", label: "Run Class" },
         {
           type: "category",
-          label: "Methods",
+          label: "Run Methods",
           items: [
             {
               type: "doc",
