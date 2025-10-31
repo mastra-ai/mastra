@@ -591,15 +591,12 @@ export async function createNetworkLoop({
         format: 'v2',
       });
 
-      const resultText = await result.text;
-
       const endPayload = {
         task: inputData.task,
-        result: resultText,
+        agentId: inputData.primitiveId,
+        result: await result.text,
         isComplete: false,
         iteration: inputData.iteration,
-        primitiveId: inputData.primitiveId,
-        primitiveType: inputData.primitiveType,
       };
 
       await writer.write({
@@ -613,7 +610,14 @@ export async function createNetworkLoop({
         runId,
       });
 
-      return endPayload;
+      return {
+        task: inputData.task,
+        primitiveId: inputData.primitiveId,
+        primitiveType: inputData.primitiveType,
+        result: await result.text,
+        isComplete: false,
+        iteration: inputData.iteration,
+      };
     },
   });
 
