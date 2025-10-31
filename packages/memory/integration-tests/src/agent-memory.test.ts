@@ -339,15 +339,17 @@ describe('Agent Memory Tests', () => {
       const { messages } = await agentMemory.query({ threadId });
 
       // Assert that the context messages are NOT saved
-      const savedContextMessages = messages.filter(
-        (m: any) => m.content === contextMessageContent1 || m.content === contextMessageContent2,
-      );
+      const savedContextMessages = messages.filter((m: any) => {
+        const text = m.content.parts?.find((p: any) => p.type === 'text')?.text || '';
+        return text === contextMessageContent1 || text === contextMessageContent2;
+      });
       expect(savedContextMessages.length).toBe(0);
 
       // Assert that the user message IS saved
       const savedUserMessages = messages.filter((m: any) => m.role === 'user');
       expect(savedUserMessages.length).toBe(1);
-      expect(savedUserMessages[0].content).toBe(userMessageContent);
+      const savedUserText = savedUserMessages[0].content.parts?.find((p: any) => p.type === 'text')?.text || '';
+      expect(savedUserText).toBe(userMessageContent);
     });
 
     it('should persist UIMessageWithMetadata through agent generate and memory', async () => {
