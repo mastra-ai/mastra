@@ -17,13 +17,7 @@ All Mastra packages have a peer dependency on `@mastra/core` so your package man
 
 :::
 
-## Migrate to v0.23 (unreleased)
-
-:::note
-
-This version isn't released yet but we're adding changes as we make them.
-
-:::
+## Migrate to v1.0.0-beta
 
 ### Changed: Thread Title Generation Location and Default
 
@@ -311,6 +305,26 @@ export const weatherTool = createTool({
 ```
 
 This change also affects workflow steps, dynamic configuration functions (memory, model, etc.), and anywhere else you pass or receive `runtimeContext` as a parameter.
+
+### Changed: `@mastra/core` subpath imports
+
+The `@mastra/core` package no longer allows top-level imports. You must use subpath imports for all imports.
+
+Here are some examples of how to migrate your imports:
+
+```typescript
+// Before
+import { Mastra } from "@mastra/core"; // ❌
+import { Agent } from "@mastra/core"; // ❌
+import { createTool } from "@mastra/core"; // ❌
+
+// After
+import { Mastra } from "@mastra/core/mastra"; // ✅
+import { Agent } from "@mastra/core/agent"; // ✅
+import { createTool } from "@mastra/core/tools"; // ✅
+```
+
+Read the [package README](https://github.com/mastra-ai/mastra/blob/main/packages/core/README.md) or the [package.json](https://github.com/mastra-ai/mastra/blob/main/packages/core/package.json) for a full list of available subpath imports.
 
 ## Migrate to v0.22
 
