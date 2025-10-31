@@ -93,7 +93,6 @@ export const createSampleMessageV2 = ({
       content: content?.content || `Sample content ${randomUUID()}`,
       ...content,
     },
-    type: 'v2',
   };
 };
 
