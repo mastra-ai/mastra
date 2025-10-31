@@ -126,7 +126,7 @@ A toxicity score between 0 and 1:
 In this example, the response contains explicit personal attacks and harmful language, resulting in a high toxicity score.
 
 ```typescript title="src/example-high-toxicity.ts" showLineNumbers copy
-import { createToxicityScorer } from "@mastra/evals/scorers/llm";
+import { createToxicityScorer } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createToxicityScorer({ model: "openai/gpt-4o-mini" });
 

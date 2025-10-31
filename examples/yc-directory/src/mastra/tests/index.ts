@@ -1,4 +1,4 @@
-import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
 import { runExperiment } from '@mastra/core/scores';
 import { ycAgent } from '../agents';
 

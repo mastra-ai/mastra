@@ -157,7 +157,7 @@ This scorer is designed for use with `runExperiment` for CI/CD testing:
 
 ```typescript
 import { runExperiment } from "@mastra/core/scores";
-import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
+import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createAnswerSimilarityScorer({ model });
 
@@ -185,7 +185,7 @@ In this example, the agent's output semantically matches the ground truth perfec
 
 ```typescript title="src/example-perfect-similarity.ts" showLineNumbers copy
 import { runExperiment } from "@mastra/core/scores";
-import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
+import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
 const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
@@ -223,7 +223,7 @@ In this example, the agent provides the same information as the ground truth but
 
 ```typescript title="src/example-semantic-similarity.ts" showLineNumbers copy
 import { runExperiment } from "@mastra/core/scores";
-import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
+import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
 const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
@@ -261,7 +261,7 @@ In this example, the agent's response is partially correct but missing key infor
 
 ```typescript title="src/example-partial-similarity.ts" showLineNumbers copy
 import { runExperiment } from "@mastra/core/scores";
-import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
+import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
 const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
@@ -299,7 +299,7 @@ In this example, the agent provides factually incorrect information that contrad
 
 ```typescript title="src/example-contradiction.ts" showLineNumbers copy
 import { runExperiment } from "@mastra/core/scores";
-import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
+import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
 const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o-mini" });
@@ -338,7 +338,7 @@ Use the scorer in your test suites to ensure agent consistency over time:
 ```typescript title="src/ci-integration.test.ts" showLineNumbers copy
 import { describe, it, expect } from "vitest";
 import { runExperiment } from "@mastra/core/scores";
-import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
+import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
 describe("Agent Consistency Tests", () => {
@@ -397,7 +397,7 @@ Customize the scorer behavior for specific use cases:
 
 ```typescript title="src/custom-config.ts" showLineNumbers copy
 import { runExperiment } from "@mastra/core/scores";
-import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
+import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
 // Configure for strict exact matching with high scale
