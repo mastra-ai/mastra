@@ -40,7 +40,6 @@ import { BaseResource } from './base';
 async function executeToolCallAndRespond({
   response,
   params,
-  runId,
   resourceId,
   threadId,
   requestContext,
@@ -48,7 +47,6 @@ async function executeToolCallAndRespond({
 }: {
   params: StreamParams<any>;
   response: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
-  runId?: string;
   resourceId?: string;
   threadId?: string;
   requestContext?: RequestContext<any>;
@@ -231,7 +229,7 @@ export class Agent extends BaseResource {
       clientTools: processClientTools(params.clientTools),
     };
 
-    const { runId, resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
+    const { resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
 
     const response: GenerateReturn<any, Output, StructuredOutput> = await this.request(
       `/api/agents/${this.agentId}/generate-legacy`,
@@ -333,7 +331,7 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    const { runId, resourceId, threadId, requestContext } = processedParams as StreamParams;
+    const { resourceId, threadId, requestContext } = processedParams as StreamParams;
 
     const response = await this.request<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>(
       `/api/agents/${this.agentId}/generate`,
@@ -347,7 +345,6 @@ export class Agent extends BaseResource {
       return executeToolCallAndRespond({
         response,
         params,
-        runId,
         resourceId,
         threadId,
         requestContext: requestContext as RequestContext<any>,
