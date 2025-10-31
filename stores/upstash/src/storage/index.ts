@@ -7,18 +7,16 @@ import type {
   StorageColumn,
   StorageGetMessagesArg,
   StorageResourceType,
-  EvalRow,
   WorkflowRuns,
   WorkflowRun,
   PaginationInfo,
-  PaginationArgs,
   StoragePagination,
   StorageDomains,
+  StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
-import { StoreLegacyEvalsUpstash } from './domains/legacy-evals';
 import { StoreMemoryUpstash } from './domains/memory';
 import { StoreOperationsUpstash } from './domains/operations';
 import { ScoresUpstash } from './domains/scores';
@@ -44,14 +42,11 @@ export class UpstashStore extends MastraStorage {
     const scores = new ScoresUpstash({ client: this.redis, operations });
     const workflows = new WorkflowsUpstash({ client: this.redis, operations });
     const memory = new StoreMemoryUpstash({ client: this.redis, operations });
-    const legacyEvals = new StoreLegacyEvalsUpstash({ client: this.redis, operations });
-
     this.stores = {
       operations,
       scores,
       workflows,
       memory,
-      legacyEvals,
     };
   }
 
@@ -64,27 +59,6 @@ export class UpstashStore extends MastraStorage {
       deleteMessages: true,
       getScoresBySpan: true,
     };
-  }
-
-  /**
-   * @deprecated Use getEvals instead
-   */
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
-  }
-
-  /**
-   * Get all evaluations with pagination and total count
-   * @param options Pagination and filtering options
-   * @returns Object with evals array and total count
-   */
-  async getEvals(
-    options: {
-      agentName?: string;
-      type?: 'test' | 'live';
-    } & PaginationArgs,
-  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
   }
 
   async createTable({
@@ -191,18 +165,6 @@ export class UpstashStore extends MastraStorage {
     return this.stores.memory.getMessages({ threadId, selectBy, format });
   }
 
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
-  async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    return this.stores.memory.getMessagesById({ messageIds, format });
-  }
-
   public async getMessagesPaginated(
     args: StorageGetMessagesArg & {
       format?: 'v1' | 'v2';
@@ -216,15 +178,15 @@ export class UpstashStore extends MastraStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
+    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
   }
 
   async updateWorkflowState({
@@ -263,22 +225,15 @@ export class UpstashStore extends MastraStorage {
     return this.stores.workflows.loadWorkflowSnapshot(params);
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.getWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
+    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
   }
 
   async getWorkflowRunById({

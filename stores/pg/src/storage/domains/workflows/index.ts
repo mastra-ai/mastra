@@ -1,6 +1,7 @@
-import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
 import { getTableName } from '../utils';
@@ -51,13 +52,13 @@ export class WorkflowsPG extends WorkflowsStorage {
       // runId,
       // stepId,
       // result,
-      // runtimeContext,
+      // requestContext,
     }: {
       workflowName: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
+      requestContext: Record<string, any>;
     },
   ): Promise<Record<string, StepResult<any, any, any, any>>> {
     throw new Error('Method not implemented.');
@@ -198,21 +199,14 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
       const values: any[] = [];

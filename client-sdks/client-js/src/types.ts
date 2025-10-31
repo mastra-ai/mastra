@@ -19,7 +19,7 @@ import type {
   MemoryConfig,
   StorageThreadType,
 } from '@mastra/core/memory';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 
 import type {
@@ -32,7 +32,7 @@ import type {
 } from '@mastra/core/storage';
 import type { OutputSchema } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
-import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
+import type { Workflow, WorkflowResult, WorkflowState } from '@mastra/core/workflows';
 
 import type { UIMessage } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
@@ -77,6 +77,7 @@ type WithoutMethods<T> = {
 export type NetworkStreamParams = {
   messages: MessageListInput;
 } & MultiPrimitiveExecutionOptions;
+
 export interface GetAgentResponse {
   name: string;
   instructions: AgentInstructions;
@@ -86,8 +87,6 @@ export interface GetAgentResponse {
   provider: string;
   modelId: string;
   modelVersion: string;
-  defaultGenerateOptions: WithoutMethods<AgentGenerateOptions>;
-  defaultStreamOptions: WithoutMethods<AgentStreamOptions>;
   modelList:
     | Array<{
         id: string;
@@ -100,35 +99,38 @@ export interface GetAgentResponse {
         };
       }>
     | undefined;
+  defaultOptions: WithoutMethods<AgentExecutionOptions>;
+  defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
+  defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   output?: T;
   experimental_output?: T;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
+  Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
 >;
 
 export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   output?: T;
   experimental_output?: T;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
+  Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
 >;
 
 export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
   messages: MessageListInput;
   structuredOutput?: SerializableStructuredOutputOptions<OUTPUT>;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<AgentExecutionOptions<OUTPUT>, 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
+  Omit<AgentExecutionOptions<OUTPUT>, 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
 >;
 
 export type UpdateModelParams = {
@@ -150,13 +152,6 @@ export type ReorderModelListParams = {
   reorderedModelIds: string[];
 };
 
-export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
-  evals: any[];
-  instructions: string;
-  name: string;
-  id: string;
-}
-
 export interface GetToolResponse {
   id: string;
   description: string;
@@ -164,7 +159,7 @@ export interface GetToolResponse {
   outputSchema: string;
 }
 
-export interface GetWorkflowRunsParams {
+export interface ListWorkflowRunsParams {
   fromDate?: Date;
   toDate?: Date;
   limit?: number;
@@ -172,11 +167,11 @@ export interface GetWorkflowRunsParams {
   resourceId?: string;
 }
 
-export type GetWorkflowRunsResponse = WorkflowRuns;
+export type ListWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowRun;
 
-export type GetWorkflowRunExecutionResultResponse = WatchEvent['payload']['workflowState'];
+export type GetWorkflowRunExecutionResultResponse = WorkflowState;
 
 export interface GetWorkflowResponse {
   name: string;
@@ -206,8 +201,6 @@ export interface GetWorkflowResponse {
   inputSchema: string;
   outputSchema: string;
 }
-
-export type WorkflowWatchResult = WatchEvent & { runId: string };
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
 export interface UpsertVectorParams {
@@ -243,7 +236,7 @@ export interface GetVectorIndexResponse {
 export interface SaveMessageToMemoryParams {
   messages: (MastraMessageV1 | MastraMessageV2)[];
   agentId: string;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
 }
 
 export type SaveMessageToMemoryResponse = (MastraMessageV1 | MastraMessageV2)[];
@@ -254,31 +247,37 @@ export interface CreateMemoryThreadParams {
   resourceId: string;
   threadId?: string;
   agentId: string;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
 }
 
 export type CreateMemoryThreadResponse = StorageThreadType;
 
-export interface GetMemoryThreadParams {
+export interface ListMemoryThreadsParams {
   resourceId: string;
   agentId: string;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  offset?: number;
+  limit?: number;
+  orderBy?: 'createdAt' | 'updatedAt';
+  sortDirection?: 'ASC' | 'DESC';
+  requestContext?: RequestContext | Record<string, any>;
 }
+
+export type ListMemoryThreadsResponse = PaginationInfo & {
+  threads: StorageThreadType[];
+};
 
 export interface GetMemoryConfigParams {
   agentId: string;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
 }
 
 export type GetMemoryConfigResponse = { config: MemoryConfig };
-
-export type GetMemoryThreadResponse = StorageThreadType[];
 
 export interface UpdateMemoryThreadParams {
   title: string;
   metadata: Record<string, any>;
   resourceId: string;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
 }
 
 export interface GetMemoryThreadMessagesParams {
@@ -367,7 +366,7 @@ export interface GenerateOrStreamVNextNetworkParams {
   message: string;
   threadId?: string;
   resourceId?: string;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
 }
 
 export interface LoopStreamVNextNetworkParams {
@@ -375,7 +374,7 @@ export interface LoopStreamVNextNetworkParams {
   threadId?: string;
   resourceId?: string;
   maxIterations?: number;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
 }
 
 export interface LoopVNextNetworkResponse {
@@ -537,7 +536,7 @@ export interface MemorySearchResult {
   };
 }
 
-export interface GetAgentsModelProvidersResponse {
+export interface ListAgentsModelProvidersResponse {
   providers: Provider[];
 }
 

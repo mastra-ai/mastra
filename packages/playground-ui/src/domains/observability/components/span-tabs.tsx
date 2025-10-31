@@ -12,7 +12,7 @@ import { TraceSpanUsage } from './trace-span-usage';
 import { SpanDetails } from './span-details';
 import { CircleGaugeIcon } from 'lucide-react';
 import { GetScoresResponse } from '@mastra/client-js';
-import { AISpanRecord } from '@mastra/core';
+import { AISpanRecord } from '@mastra/core/storage';
 
 type SpanTabsProps = {
   trace?: AISpanRecord;

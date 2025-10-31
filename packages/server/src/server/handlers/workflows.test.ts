@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { getWorkflowInfo } from '../utils';
 import {
-  getWorkflowsHandler,
+  listWorkflowsHandler,
   getWorkflowByIdHandler,
   startAsyncWorkflowHandler,
   getWorkflowRunByIdHandler,
@@ -15,11 +15,10 @@ import {
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
   resumeStreamWorkflowHandler,
-  watchWorkflowHandler,
   observeStreamWorkflowHandler,
   cancelWorkflowRunHandler,
   sendWorkflowRunEventHandler,
-  getWorkflowRunsHandler,
+  listWorkflowRunsHandler,
   getWorkflowRunExecutionResultHandler,
 } from './workflows';
 
@@ -58,7 +57,6 @@ function createMockWorkflow(name: string) {
     .then(stepA)
     .commit();
 
-  // workflow.getWorkflowRuns = vi.fn();
   return workflow;
 }
 function createReusableMockWorkflow(name: string) {
@@ -111,9 +109,9 @@ describe('vNext Workflow Handlers', () => {
     });
   });
 
-  describe('getWorkflowsHandler', () => {
+  describe('listWorkflowsHandler', () => {
     it('should get all workflows successfully', async () => {
-      const result = await getWorkflowsHandler({ mastra: mockMastra });
+      const result = await listWorkflowsHandler({ mastra: mockMastra });
       expect(result).toEqual({
         'test-workflow': serializeWorkflow(mockWorkflow),
         'reusable-workflow': serializeWorkflow(reusableWorkflow),
@@ -612,15 +610,15 @@ describe('vNext Workflow Handlers', () => {
     });
   });
 
-  describe('getWorkflowRunsHandler', () => {
+  describe('listWorkflowRunsHandler', () => {
     it('should throw error when workflowId is not provided', async () => {
-      await expect(getWorkflowRunsHandler({ mastra: mockMastra })).rejects.toThrow(
+      await expect(listWorkflowRunsHandler({ mastra: mockMastra })).rejects.toThrow(
         new HTTPException(400, { message: 'Workflow ID is required' }),
       );
     });
 
     it('should get workflow runs successfully (empty)', async () => {
-      const result = await getWorkflowRunsHandler({
+      const result = await listWorkflowRunsHandler({
         mastra: mockMastra,
         workflowId: 'test-workflow',
       });
@@ -636,47 +634,12 @@ describe('vNext Workflow Handlers', () => {
         runId: 'test-run',
       });
       await run.start({ inputData: {} });
-      const result = await getWorkflowRunsHandler({
+      const result = await listWorkflowRunsHandler({
         mastra: mockMastra,
         workflowId: 'test-workflow',
       });
 
       expect(result.total).toEqual(1);
-    });
-  });
-
-  describe('watchWorkflowHandler', () => {
-    it('should preserve resourceId when watching workflow run after server restart', async () => {
-      const resourceId = 'user-watch-test';
-
-      // Create run with resourceId
-      const run = await mockWorkflow.createRunAsync({
-        runId: 'test-run-watch-resource',
-        resourceId,
-      });
-      await run.start({ inputData: {} });
-
-      const runBefore = await mockWorkflow.getWorkflowRunById('test-run-watch-resource');
-      expect(runBefore?.resourceId).toBe(resourceId);
-
-      // Simulate server restart
-      const freshWorkflow = createMockWorkflow('test-workflow');
-      const freshMastra = new Mastra({
-        logger: false,
-        workflows: { 'test-workflow': freshWorkflow },
-        storage: mockMastra.getStorage(),
-      });
-
-      const stream = await watchWorkflowHandler({
-        mastra: freshMastra,
-        workflowId: 'test-workflow',
-        runId: 'test-run-watch-resource',
-      });
-      expect(stream).toBeDefined();
-
-      // Verify resourceId is preserved in storage
-      const runAfter = await freshWorkflow.getWorkflowRunById('test-run-watch-resource');
-      expect(runAfter?.resourceId).toBe(resourceId);
     });
   });
 

@@ -1,4 +1,4 @@
-import type { Mastra } from '@mastra/core';
+import type { Mastra } from '@mastra/core/mastra';
 import type { MastraVector, QueryResult } from '@mastra/core/vector';
 import {
   upsertVectors as getOriginalUpsertVectorsHandler,

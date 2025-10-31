@@ -1,6 +1,7 @@
-import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Redis } from '@upstash/redis';
 import type { StoreOperationsUpstash } from '../operations';
 import { ensureDate, getKey } from '../utils';
@@ -41,13 +42,13 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       // runId,
       // stepId,
       // result,
-      // runtimeContext,
+      // requestContext,
     }: {
       workflowName: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
+      requestContext: Record<string, any>;
     },
   ): Promise<Record<string, StepResult<any, any, any, any>>> {
     throw new Error('Method not implemented.');
@@ -191,21 +192,14 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     try {
       // Get all workflow keys
       let pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' }) + ':*';

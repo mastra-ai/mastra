@@ -16,15 +16,14 @@ import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
 import type { MastraMessageV2, StorageThreadType } from '../memory';
-import { RuntimeContext } from '../runtime-context';
-import { createScorer } from '../scores';
-import { runScorer } from '../scores/hooks';
+import { MockMemory } from '../memory/mock';
+import { RequestContext } from '../request-context';
 import { MockStore } from '../storage';
 import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import { delay } from '../utils';
 import { MessageList } from './message-list/index';
-import { assertNoDuplicateParts, MockMemory } from './test-utils';
+import { assertNoDuplicateParts } from './test-utils';
 import { Agent } from './index';
 
 config();
@@ -43,10 +42,6 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
   if (!userInfo) return { message: 'User not found' };
   return userInfo;
 });
-
-vi.mock('../scores/hooks', () => ({
-  runScorer: vi.fn(),
-}));
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
@@ -385,6 +380,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('tool approval and suspension', () => {
       describe.skipIf(version === 'v1')('requireToolApproval', () => {
         it('should call findUserTool with requireToolApproval on tool and be able to reject the tool call', async () => {
+          mockFindUser.mockClear(); // Reset mock call count before this test
+
           const findUserTool = createTool({
             id: 'Find user tool',
             description: 'This is a test tool that returns the name and email',
@@ -883,10 +880,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         instructions: 'Test agent',
         model: openaiModel,
         tools: integration.getStaticTools(),
-        defaultGenerateOptions: {
+        defaultGenerateOptionsLegacy: {
           maxSteps: 7,
         },
-        defaultVNextStreamOptions: {
+        defaultOptions: {
           maxSteps: 7,
         },
       });
@@ -1324,8 +1321,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       mockMemory.getMergedThreadConfig = () => {
         return {
           generateTitle: {
-            model: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
-              const userTier = runtimeContext.get('userTier');
+            model: ({ requestContext }: { requestContext: RequestContext }) => {
+              const userTier = requestContext.get('userTier');
               return userTier === 'premium' ? premiumModel : standardModel;
             },
           },
@@ -1340,8 +1337,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       // Generate with premium context
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('userTier', 'premium');
+      const requestContext = new RequestContext();
+      requestContext.set('userTier', 'premium');
 
       if (version === 'v1') {
         await agent.generateLegacy('Test message', {
@@ -1352,7 +1349,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               title: 'New Thread 2024-01-01T00:00:00.000Z',
             },
           },
-          runtimeContext,
+          requestContext,
         });
       } else {
         await agent.generate('Test message', {
@@ -1363,7 +1360,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               title: 'New Thread 2024-01-01T00:00:00.000Z',
             },
           },
-          runtimeContext,
+          requestContext,
         });
       }
 
@@ -1372,7 +1369,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // Reset and test with standard tier
       usedModelName = '';
-      const standardContext = new RuntimeContext();
+      const standardContext = new RequestContext();
       standardContext.set('userTier', 'standard');
 
       if (version === 'v1') {
@@ -1384,7 +1381,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               title: 'New Thread 2024-01-01T00:00:00.000Z',
             },
           },
-          runtimeContext: standardContext,
+          requestContext: standardContext,
         });
       } else {
         await agent.generate('Test message', {
@@ -1395,7 +1392,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               title: 'New Thread 2024-01-01T00:00:00.000Z',
             },
           },
-          runtimeContext: standardContext,
+          requestContext: standardContext,
         });
       }
 
@@ -2176,8 +2173,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         return {
           generateTitle: {
             model: titleModel,
-            instructions: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
-              const language = runtimeContext.get('language');
+            instructions: ({ requestContext }: { requestContext: RequestContext }) => {
+              const language = requestContext.get('language');
               return language === 'ja'
                 ? '会話内容に基づいて簡潔なタイトルを生成してください'
                 : 'Generate a concise title based on the conversation';
@@ -2194,7 +2191,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       // Test with Japanese context
-      const japaneseContext = new RuntimeContext();
+      const japaneseContext = new RequestContext();
       japaneseContext.set('language', 'ja');
 
       if (version === 'v1') {
@@ -2206,7 +2203,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               title: 'New Thread 2024-01-01T00:00:00.000Z',
             },
           },
-          runtimeContext: japaneseContext,
+          requestContext: japaneseContext,
         });
       } else {
         await agent.generate('Test message', {
@@ -2217,7 +2214,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               title: 'New Thread 2024-01-01T00:00:00.000Z',
             },
           },
-          runtimeContext: japaneseContext,
+          requestContext: japaneseContext,
         });
       }
 
@@ -2228,7 +2225,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Reset and test with English context
       capturedPrompt = '';
       usedLanguage = '';
-      const englishContext = new RuntimeContext();
+      const englishContext = new RequestContext();
       englishContext.set('language', 'en');
 
       if (version === 'v1') {
@@ -2240,7 +2237,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               title: 'New Thread 2024-01-01T00:00:00.000Z',
             },
           },
-          runtimeContext: englishContext,
+          requestContext: englishContext,
         });
       } else {
         await agent.generate('Test message', {
@@ -2251,7 +2248,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               title: 'New Thread 2024-01-01T00:00:00.000Z',
             },
           },
-          runtimeContext: englishContext,
+          requestContext: englishContext,
         });
       }
 
@@ -2920,311 +2917,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
   });
 
-  describe(`${version} - agent tool handling`, () => {
-    it('should handle tool name collisions caused by formatting', async () => {
-      // Create two tool names that will collide after truncation to 63 chars
-      const base = 'a'.repeat(63);
-      const toolName1 = base + 'X'; // 64 chars
-      const toolName2 = base + 'Y'; // 64 chars, but will be truncated to same as toolName1
-
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 1, completionTokens: 1 },
-            text: 'ok',
-          }),
-        });
-      } else {
-        testModel = new MockLanguageModelV2({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-            text: 'ok',
-            content: [
-              {
-                type: 'text',
-                text: 'ok',
-              },
-            ],
-            warnings: [],
-          }),
-          doStream: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-            stream: convertArrayToReadableStream([
-              {
-                type: 'stream-start',
-                warnings: [],
-              },
-              {
-                type: 'response-metadata',
-                id: 'id-0',
-                modelId: 'mock-model-id',
-                timestamp: new Date(0),
-              },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'ok' },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-              },
-            ]),
-          }),
-        });
-      }
-
-      const userAgent = new Agent({
-        name: 'User agent',
-        instructions: 'Test tool name collision.',
-        model: testModel,
-        tools: {
-          [toolName1]: {
-            id: toolName1,
-            description: 'Tool 1',
-            inputSchema: z.object({}),
-            execute: async () => {},
-          },
-          [toolName2]: {
-            id: toolName2,
-            description: 'Tool 2',
-            inputSchema: z.object({}),
-            execute: async () => {},
-          },
-        },
-      });
-      await expect(userAgent['convertTools']({ runtimeContext: new RuntimeContext() })).rejects.toThrow(/same name/i);
-    });
-
-    it('should sanitize tool names with invalid characters', async () => {
-      const badName = 'bad!@#tool$name';
-
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 1, completionTokens: 1 },
-            text: 'ok',
-          }),
-        });
-      } else {
-        testModel = new MockLanguageModelV2({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-            text: 'ok',
-            content: [
-              {
-                type: 'text',
-                text: 'ok',
-              },
-            ],
-            warnings: [],
-          }),
-          doStream: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-            stream: convertArrayToReadableStream([
-              {
-                type: 'stream-start',
-                warnings: [],
-              },
-              {
-                type: 'response-metadata',
-                id: 'id-0',
-                modelId: 'mock-model-id',
-                timestamp: new Date(0),
-              },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'ok' },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-              },
-            ]),
-          }),
-        });
-      }
-
-      const userAgent = new Agent({
-        name: 'User agent',
-        instructions: 'Test tool name sanitization.',
-        model: testModel,
-        tools: {
-          [badName]: {
-            id: badName,
-            description: 'Tool with bad chars',
-            inputSchema: z.object({}),
-            execute: async () => {},
-          },
-        },
-      });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
-      expect(Object.keys(tools)).toContain('bad___tool_name');
-      expect(Object.keys(tools)).not.toContain(badName);
-    });
-
-    it('should prefix tool names that do not start with a letter or underscore', async () => {
-      const badStart = '1tool';
-
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 1, completionTokens: 1 },
-            text: 'ok',
-          }),
-        });
-      } else {
-        testModel = new MockLanguageModelV2({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-            text: 'ok',
-            content: [
-              {
-                type: 'text',
-                text: 'ok',
-              },
-            ],
-            warnings: [],
-          }),
-          doStream: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-            stream: convertArrayToReadableStream([
-              {
-                type: 'stream-start',
-                warnings: [],
-              },
-              {
-                type: 'response-metadata',
-                id: 'id-0',
-                modelId: 'mock-model-id',
-                timestamp: new Date(0),
-              },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'ok' },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-              },
-            ]),
-          }),
-        });
-      }
-
-      const userAgent = new Agent({
-        name: 'User agent',
-        instructions: 'Test tool name prefix.',
-        model: testModel,
-        tools: {
-          [badStart]: {
-            id: badStart,
-            description: 'Tool with bad start',
-            inputSchema: z.object({}),
-            execute: async () => {},
-          },
-        },
-      });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
-      expect(Object.keys(tools)).toContain('_1tool');
-      expect(Object.keys(tools)).not.toContain(badStart);
-    });
-
-    it('should truncate tool names longer than 63 characters', async () => {
-      const longName = 'a'.repeat(70);
-
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 1, completionTokens: 1 },
-            text: 'ok',
-          }),
-        });
-      } else {
-        testModel = new MockLanguageModelV2({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-            text: 'ok',
-            content: [
-              {
-                type: 'text',
-                text: 'ok',
-              },
-            ],
-            warnings: [],
-          }),
-          doStream: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-            stream: convertArrayToReadableStream([
-              {
-                type: 'stream-start',
-                warnings: [],
-              },
-              {
-                type: 'response-metadata',
-                id: 'id-0',
-                modelId: 'mock-model-id',
-                timestamp: new Date(0),
-              },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'ok' },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-              },
-            ]),
-          }),
-        });
-      }
-
-      const userAgent = new Agent({
-        name: 'User agent',
-        instructions: 'Test tool name truncation.',
-        model: testModel,
-        tools: {
-          [longName]: {
-            id: longName,
-            description: 'Tool with long name',
-            inputSchema: z.object({}),
-            execute: async () => {},
-          },
-        },
-      });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
-      expect(Object.keys(tools).some(k => k.length === 63)).toBe(true);
-      expect(Object.keys(tools)).not.toContain(longName);
-    });
-  });
-
   describe(`${version} - context parameter handling`, () => {
     const formatArray: ('mastra' | 'aisdk')[] = version === 'v1' ? ['mastra'] : ['mastra', 'aisdk'];
     formatArray.forEach(format => {
@@ -3739,16 +3431,16 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should expose mastra instance in dynamic instructions', async () => {
       let capturedMastra: Mastra | undefined;
-      let capturedRuntimeContext: RuntimeContext | undefined;
+      let capturedRequestContext: RequestContext | undefined;
 
       const agent = new Agent({
         name: 'test-agent',
-        instructions: ({ runtimeContext, mastra }) => {
-          capturedRuntimeContext = runtimeContext;
+        instructions: ({ requestContext, mastra }) => {
+          capturedRequestContext = requestContext;
           capturedMastra = mastra;
 
           const logger = mastra?.getLogger();
-          logger?.debug('Running with context', { info: runtimeContext.get('info') });
+          logger?.debug('Running with context', { info: requestContext.get('info') });
 
           return 'You are a helpful assistant.';
         },
@@ -3756,20 +3448,20 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         mastra,
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('info', 'test-info');
+      const requestContext = new RequestContext();
+      requestContext.set('info', 'test-info');
 
       let response;
       if (version === 'v1') {
-        response = await agent.generateLegacy('hello', { runtimeContext });
+        response = await agent.generateLegacy('hello', { requestContext });
       } else {
-        response = await agent.generate('hello', { runtimeContext });
+        response = await agent.generate('hello', { requestContext });
       }
 
       expect(response.text).toBe('Logger test response');
       expect(capturedMastra).toBe(mastra);
-      expect(capturedRuntimeContext).toBe(runtimeContext);
-      expect(capturedRuntimeContext?.get('info')).toBe('test-info');
+      expect(capturedRequestContext).toBe(requestContext);
+      expect(capturedRequestContext?.get('info')).toBe('test-info');
     });
 
     it('should work with static instructions (backward compatibility)', async () => {
@@ -3916,25 +3608,25 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should support dynamic instructions returning string', async () => {
       const agent = new Agent({
         name: 'test-agent',
-        instructions: ({ runtimeContext }) => {
-          const role = runtimeContext?.get('role') || 'assistant';
+        instructions: ({ requestContext }) => {
+          const role = requestContext?.get('role') || 'assistant';
           return `You are a helpful ${role}.`;
         },
         model: dummyModel,
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('role', 'teacher');
+      const requestContext = new RequestContext();
+      requestContext.set('role', 'teacher');
 
-      const instructions = await agent.getInstructions({ runtimeContext });
+      const instructions = await agent.getInstructions({ requestContext });
       expect(instructions).toBe('You are a helpful teacher.');
     });
 
     it('should support dynamic instructions returning CoreSystemMessage', async () => {
       const agent = new Agent({
         name: 'test-agent',
-        instructions: ({ runtimeContext }) => {
-          const role = runtimeContext?.get('role') || 'assistant';
+        instructions: ({ requestContext }) => {
+          const role = requestContext?.get('role') || 'assistant';
           return {
             role: 'system',
             content: `You are a helpful ${role}.`,
@@ -3943,10 +3635,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         model: dummyModel,
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('role', 'doctor');
+      const requestContext = new RequestContext();
+      requestContext.set('role', 'doctor');
 
-      const instructions = await agent.getInstructions({ runtimeContext });
+      const instructions = await agent.getInstructions({ requestContext });
       expect(instructions).toEqual({
         role: 'system',
         content: 'You are a helpful doctor.',
@@ -3956,8 +3648,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should support dynamic instructions returning array', async () => {
       const agent = new Agent({
         name: 'test-agent',
-        instructions: ({ runtimeContext }) => {
-          const expertise = (runtimeContext?.get('expertise') as string[]) || [];
+        instructions: ({ requestContext }) => {
+          const expertise = (requestContext?.get('expertise') as string[]) || [];
           const expertiseMessages: CoreSystemMessage[] = expertise.map((exp: string) => ({
             role: 'system',
             content: `You have expertise in ${exp}.`,
@@ -3971,10 +3663,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         model: dummyModel,
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('expertise', ['Python', 'JavaScript']);
+      const requestContext = new RequestContext();
+      requestContext.set('expertise', ['Python', 'JavaScript']);
 
-      const instructions = await agent.getInstructions({ runtimeContext });
+      const instructions = await agent.getInstructions({ requestContext });
       expect(instructions).toEqual([
         { role: 'system', content: 'You are a helpful assistant.' },
         { role: 'system', content: 'You have expertise in Python.' },
@@ -3985,10 +3677,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should support async dynamic instructions', async () => {
       const agent = new Agent({
         name: 'test-agent',
-        instructions: async ({ runtimeContext }) => {
+        instructions: async ({ requestContext }) => {
           // Simulate async operation
           await delay(10);
-          const role = runtimeContext?.get('role') || 'assistant';
+          const role = requestContext?.get('role') || 'assistant';
           return {
             role: 'system',
             content: `You are an async ${role}.`,
@@ -3997,10 +3689,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         model: dummyModel,
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('role', 'consultant');
+      const requestContext = new RequestContext();
+      requestContext.set('role', 'consultant');
 
-      const instructions = await agent.getInstructions({ runtimeContext });
+      const instructions = await agent.getInstructions({ requestContext });
       expect(instructions).toEqual({
         role: 'system',
         content: 'You are an async consultant.',
@@ -4238,8 +3930,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should support dynamic instructions returning SystemModelMessage', async () => {
       const agent = new Agent({
         name: 'test-agent',
-        instructions: ({ runtimeContext }) => {
-          const mode = runtimeContext?.get('mode') || 'default';
+        instructions: ({ requestContext }) => {
+          const mode = requestContext?.get('mode') || 'default';
           return {
             role: 'system' as const,
             content: `You are in ${mode} mode.`,
@@ -4251,10 +3943,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         model: dummyModel,
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('mode', 'creative');
+      const requestContext = new RequestContext();
+      requestContext.set('mode', 'creative');
 
-      const instructions = await agent.getInstructions({ runtimeContext });
+      const instructions = await agent.getInstructions({ requestContext });
       expect(instructions).toEqual({
         role: 'system',
         content: 'You are in creative mode.',
@@ -5279,1260 +4971,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
   }
 
-  describe(`${version} - dynamic memory configuration`, () => {
-    let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
-    if (version === 'v1') {
-      dummyModel = new MockLanguageModelV1({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: `Dummy response`,
-        }),
-      });
-    } else {
-      dummyModel = new MockLanguageModelV2({
-        doStream: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          stream: convertArrayToReadableStream([
-            { type: 'text-delta', id: '1', delta: 'Dummy response' },
-            {
-              type: 'finish',
-              id: '2',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-          warnings: [],
-        }),
-      });
-    }
-
-    it('should support static memory configuration', async () => {
-      const mockMemory = new MockMemory();
-      const agent = new Agent({
-        name: 'static-memory-agent',
-        instructions: 'test agent',
-        model: dummyModel,
-        memory: mockMemory,
-      });
-
-      const memory = await agent.getMemory();
-      expect(memory).toBe(mockMemory);
-    });
-
-    it('should support dynamic memory configuration with runtimeContext', async () => {
-      const premiumMemory = new MockMemory();
-      const standardMemory = new MockMemory();
-
-      const agent = new Agent({
-        name: 'dynamic-memory-agent',
-        instructions: 'test agent',
-        model: dummyModel,
-        memory: ({ runtimeContext }) => {
-          const userTier = runtimeContext.get('userTier');
-          return userTier === 'premium' ? premiumMemory : standardMemory;
-        },
-      });
-
-      // Test with premium context
-      const premiumContext = new RuntimeContext();
-      premiumContext.set('userTier', 'premium');
-      const premiumResult = await agent.getMemory({ runtimeContext: premiumContext });
-      expect(premiumResult).toBe(premiumMemory);
-
-      // Test with standard context
-      const standardContext = new RuntimeContext();
-      standardContext.set('userTier', 'standard');
-      const standardResult = await agent.getMemory({ runtimeContext: standardContext });
-      expect(standardResult).toBe(standardMemory);
-    });
-
-    it('should support async dynamic memory configuration', async () => {
-      const mockMemory = new MockMemory();
-
-      const agent = new Agent({
-        name: 'async-memory-agent',
-        instructions: 'test agent',
-        model: dummyModel,
-        memory: async ({ runtimeContext }) => {
-          const userId = runtimeContext.get('userId') as string;
-          // Simulate async memory creation/retrieval
-          await new Promise(resolve => setTimeout(resolve, 10));
-          (mockMemory as any).threads[`user-${userId}`] = {
-            id: `user-${userId}`,
-            resourceId: userId,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          };
-          return mockMemory;
-        },
-      });
-
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('userId', 'user123');
-
-      const memory = await agent.getMemory({ runtimeContext });
-      expect(memory).toBe(mockMemory);
-      expect((memory as any)?.threads['user-user123']).toBeDefined();
-    });
-
-    it('should throw error when dynamic memory function returns empty value', async () => {
-      const agent = new Agent({
-        name: 'invalid-memory-agent',
-        instructions: 'test agent',
-        model: dummyModel,
-        memory: () => null as any,
-      });
-
-      await expect(agent.getMemory()).rejects.toThrow('Function-based memory returned empty value');
-    });
-
-    it('should work with memory in generate method with dynamic configuration', async () => {
-      const mockMemory = new MockMemory();
-
-      const agent = new Agent({
-        name: 'generate-memory-agent',
-        instructions: 'test agent',
-        model: dummyModel,
-        memory: ({ runtimeContext }) => {
-          const environment = runtimeContext.get('environment');
-          if (environment === 'test') {
-            return mockMemory;
-          }
-          // Return a default mock memory instead of undefined
-          return new MockMemory();
-        },
-      });
-
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('environment', 'test');
-
-      let response;
-      if (version === 'v1') {
-        response = await agent.generateLegacy('test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-1',
-            },
-          },
-          runtimeContext,
-        });
-      } else {
-        response = await agent.generate('test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-1',
-            },
-          },
-          runtimeContext,
-        });
-      }
-
-      expect(response.text).toBe('Dummy response');
-
-      // Verify that thread was created in memory
-      const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
-      expect(thread).toBeDefined();
-      expect(thread?.resourceId).toBe('user-1');
-    });
-
-    it('should work with memory in stream method with dynamic configuration', async () => {
-      const mockMemory = new MockMemory();
-
-      let model;
-      if (version === 'v1') {
-        model = new MockLanguageModelV1({
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [
-                { type: 'text-delta', textDelta: 'Dynamic' },
-                { type: 'text-delta', textDelta: ' memory' },
-                { type: 'text-delta', textDelta: ' response' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        });
-      } else {
-        model = new MockLanguageModelV2({
-          doStream: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-            stream: convertArrayToReadableStream([
-              {
-                type: 'stream-start',
-                warnings: [],
-              },
-              {
-                type: 'response-metadata',
-                id: 'id-0',
-                modelId: 'mock-model-id',
-                timestamp: new Date(0),
-              },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Dynamic' },
-              { type: 'text-delta', id: '1', delta: ' memory' },
-              { type: 'text-delta', id: '1', delta: ' response' },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-              },
-            ]),
-          }),
-        });
-      }
-
-      const agent = new Agent({
-        name: 'stream-memory-agent',
-        instructions: 'test agent',
-        model,
-        memory: ({ runtimeContext }) => {
-          const enableMemory = runtimeContext.get('enableMemory');
-          return enableMemory ? mockMemory : new MockMemory();
-        },
-      });
-
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('enableMemory', true);
-
-      let stream;
-
-      if (version === 'v1') {
-        stream = await agent.streamLegacy('test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-stream',
-            },
-          },
-          runtimeContext,
-        });
-      } else {
-        stream = await agent.stream('test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-stream',
-            },
-          },
-          runtimeContext,
-        });
-      }
-
-      let finalText = '';
-      for await (const textPart of stream.textStream) {
-        finalText += textPart;
-      }
-
-      expect(finalText).toBe('Dynamic memory response');
-
-      // Verify that thread was created in memory
-      const thread = await mockMemory.getThreadById({ threadId: 'thread-stream' });
-      expect(thread).toBeDefined();
-      expect(thread?.resourceId).toBe('user-1');
-    });
-
-    it('should preserve system messages from user input when memory is enabled', async () => {
-      const mockMemory = new MockMemory();
-
-      // Mock the LLM to capture what messages it receives
-      let capturedMessages: any[] = [];
-      let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              text: 'Test response with jokes! Super!!!!',
-              usage: { promptTokens: 10, completionTokens: 5 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-        });
-      } else {
-        dummyModel = new MockLanguageModelV2({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              content: [{ type: 'text', text: 'Test response with jokes! Super!!!!' }],
-              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-            };
-          },
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'stream-start',
-                  warnings: [],
-                },
-                {
-                  type: 'response-metadata',
-                  id: 'mock-response-id',
-                  modelId: 'mock-model-v2',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response with jokes! Super!!!!' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      }
-
-      const agent = new Agent({
-        name: 'system-message-test-agent',
-        instructions: 'You are a test agent',
-        model: dummyModel,
-        memory: mockMemory,
-      });
-
-      const testMessages = [
-        {
-          role: 'user' as const,
-          content: 'Hello, my name is John',
-        },
-        {
-          role: 'system' as const,
-          content: 'You always put jokes in your conversation and also always say Super!!!!',
-        },
-      ];
-
-      if (version === 'v1') {
-        await agent.generateLegacy(testMessages, {
-          threadId: 'test-thread',
-          resourceId: 'test-resource',
-          runId: 'test-run',
-        });
-      } else {
-        await agent.generate(testMessages, {
-          threadId: 'test-thread',
-          resourceId: 'test-resource',
-          runId: 'test-run',
-        });
-      }
-
-      // Check if system message from user input is preserved in the final prompt
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const userSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('You always put jokes in your conversation'),
-      );
-
-      expect(userSystemMessage).toBeDefined();
-      expect(userSystemMessage?.content).toContain(
-        'You always put jokes in your conversation and also always say Super!!!!',
-      );
-    });
-
-    it('should preserve system messages from user input when memory is enabled (stream)', async () => {
-      const mockMemory = new MockMemory();
-      let capturedMessages: any[] = [];
-      let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: prompt, rawSettings: {} },
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-delta', textDelta: 'Test response with jokes! Super!!!!' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      } else {
-        dummyModel = new MockLanguageModelV2({
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'stream-start',
-                  warnings: [],
-                },
-                {
-                  type: 'response-metadata',
-                  id: 'mock-response-id',
-                  modelId: 'mock-model-v2',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response with jokes! Super!!!!' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      }
-
-      const agent = new Agent({
-        name: 'system-message-test-agent-stream',
-        instructions: 'You are a test agent',
-        model: dummyModel,
-        memory: mockMemory,
-      });
-
-      const testMessages = [
-        {
-          role: 'user' as const,
-          content: 'Hello, my name is John',
-        },
-        {
-          role: 'system' as const,
-          content: 'You always put jokes in your conversation and also always say Super!!!!',
-        },
-      ];
-
-      if (version === 'v1') {
-        const stream = await agent.streamLegacy(testMessages, {
-          threadId: 'test-thread',
-          resourceId: 'test-resource',
-          runId: 'test-run',
-        });
-        // Consume the stream to trigger the model call
-        for await (const _chunk of stream.textStream) {
-          // Just consume the stream
-        }
-      } else {
-        const stream = await agent.stream(testMessages, {
-          threadId: 'test-thread',
-          resourceId: 'test-resource',
-          runId: 'test-run',
-        });
-        // Consume the stream to trigger the model call
-        for await (const _chunk of stream.fullStream) {
-          // Just consume the stream
-        }
-      }
-
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const userSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('You always put jokes in your conversation'),
-      );
-
-      expect(userSystemMessage).toBeDefined();
-      expect(userSystemMessage?.content).toContain(
-        'You always put jokes in your conversation and also always say Super!!!!',
-      );
-    });
-
-    it('should preserve system messages from user input without memory (stream)', async () => {
-      let capturedMessages: any[] = [];
-      let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: prompt, rawSettings: {} },
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-delta', textDelta: 'Test response with jokes! Super!!!!' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      } else {
-        dummyModel = new MockLanguageModelV2({
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'stream-start',
-                  warnings: [],
-                },
-                {
-                  type: 'response-metadata',
-                  id: 'mock-response-id-3',
-                  modelId: 'mock-model-v2',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response with jokes! Super!!!!' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      }
-
-      const agent = new Agent({
-        name: 'system-message-test-agent-stream-no-memory',
-        instructions: 'You are a test agent',
-        model: dummyModel,
-      });
-
-      const testMessages = [
-        {
-          role: 'user' as const,
-          content: 'Hello, my name is John',
-        },
-        {
-          role: 'system' as const,
-          content: 'You always put jokes in your conversation and also always say Super!!!!',
-        },
-      ];
-
-      if (version === 'v1') {
-        const stream = await agent.streamLegacy(testMessages);
-        // Consume the stream to trigger the model call
-        for await (const _chunk of stream.textStream) {
-          // Just consume the stream
-        }
-      } else {
-        const stream = await agent.stream(testMessages);
-        // Consume the stream to trigger the model call
-        for await (const _chunk of stream.fullStream) {
-          // Just consume the stream
-        }
-      }
-
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const userSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('You always put jokes in your conversation'),
-      );
-
-      expect(userSystemMessage).toBeDefined();
-      expect(userSystemMessage?.content).toContain(
-        'You always put jokes in your conversation and also always say Super!!!!',
-      );
-    });
-
-    it('should preserve system messages from user input without memory', async () => {
-      // Mock the LLM to capture what messages it receives
-      let capturedMessages: any[] = [];
-      let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              text: 'Test response with jokes! Super!!!!',
-              usage: { promptTokens: 10, completionTokens: 5 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-        });
-      } else {
-        dummyModel = new MockLanguageModelV2({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              content: [{ type: 'text', text: 'Test response with jokes! Super!!!!' }],
-              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-            };
-          },
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'stream-start',
-                  warnings: [],
-                },
-                {
-                  type: 'response-metadata',
-                  id: 'mock-response-id-2',
-                  modelId: 'mock-model-v2',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response with jokes! Super!!!!' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      }
-
-      const agent = new Agent({
-        name: 'system-message-test-agent-no-memory',
-        instructions: 'You are a test agent',
-        model: dummyModel,
-      });
-
-      const testMessages = [
-        {
-          role: 'user' as const,
-          content: 'Hello, my name is John',
-        },
-        {
-          role: 'system' as const,
-          content: 'You always put jokes in your conversation and also always say Super!!!!',
-        },
-      ];
-
-      if (version === 'v1') {
-        await agent.generateLegacy(testMessages);
-      } else {
-        await agent.generate(testMessages);
-      }
-
-      // Check if system message from user input is preserved in the final prompt
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const userSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('You always put jokes in your conversation'),
-      );
-
-      expect(userSystemMessage).toBeDefined();
-      expect(userSystemMessage?.content).toContain(
-        'You always put jokes in your conversation and also always say Super!!!!',
-      );
-    });
-
-    it('should support system option in generate method', async () => {
-      // Mock the LLM to capture what messages it receives
-      let capturedMessages: any[] = [];
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              text: 'Test response',
-              usage: { promptTokens: 10, completionTokens: 5 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-        });
-      } else {
-        testModel = new MockLanguageModelV2({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              content: [{ type: 'text', text: 'Test response' }],
-              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-            };
-          },
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                { type: 'stream-start', warnings: [] },
-                {
-                  type: 'response-metadata',
-                  id: 'mock-response-id',
-                  modelId: 'mock-model-v2',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      }
-
-      const agent = new Agent({
-        name: 'system-option-generate-test',
-        instructions: 'Default instructions',
-        model: testModel,
-      });
-
-      // Test generate with system option
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello', {
-          system: 'You must respond in JSON format',
-        });
-      } else {
-        await agent.generate('Hello', {
-          system: 'You must respond in JSON format',
-        });
-      }
-
-      // Check if system message from option was added
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const customSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('You must respond in JSON format'),
-      );
-
-      expect(customSystemMessage).toBeDefined();
-      expect(customSystemMessage?.content).toContain('You must respond in JSON format');
-    });
-
-    it('should support system option in stream method', async () => {
-      // Mock the LLM to capture what messages it receives
-      let capturedMessages: any[] = [];
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              text: 'Test response',
-              usage: { promptTokens: 10, completionTokens: 5 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              stream: simulateReadableStream({
-                chunks: [
-                  { type: 'text-delta', textDelta: 'Test response' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: { promptTokens: 10, completionTokens: 5 },
-                  },
-                ],
-              }),
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-        });
-      } else {
-        testModel = new MockLanguageModelV2({
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                { type: 'stream-start', warnings: [] },
-                {
-                  type: 'response-metadata',
-                  id: 'mock-response-id',
-                  modelId: 'mock-model-v2',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      }
-
-      const agent = new Agent({
-        name: 'system-option-stream-test',
-        instructions: 'Default instructions',
-        model: testModel,
-      });
-
-      // Test stream with system option
-      if (version === 'v1') {
-        const streamResult = await agent.streamLegacy('Hello', {
-          system: 'Always be concise',
-        });
-        // Properly consume the v1 stream
-        for await (const _chunk of streamResult.textStream) {
-          // Just consume the stream
-        }
-      } else {
-        const streamResult = await agent.stream('Hello', {
-          system: 'Always be concise',
-        });
-        await streamResult.getFullOutput(); // Consume the stream
-      }
-
-      // Check if system message from option was added
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const customSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('Always be concise'),
-      );
-
-      expect(customSystemMessage).toBeDefined();
-      expect(customSystemMessage?.content).toContain('Always be concise');
-    });
-
-    it('should work with both instructions override and system option', async () => {
-      let capturedMessages: any[] = [];
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              text: 'Response',
-              usage: { promptTokens: 10, completionTokens: 5 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-        });
-      } else {
-        testModel = new MockLanguageModelV2({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              content: [{ type: 'text', text: 'Response' }],
-              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-            };
-          },
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                { type: 'stream-start', warnings: [] },
-                {
-                  type: 'response-metadata',
-                  id: 'mock-response-id',
-                  modelId: 'mock-model-v2',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Response' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      }
-
-      const agent = new Agent({
-        name: 'combined-test-agent',
-        instructions: 'Default instructions',
-        model: testModel,
-      });
-
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello', {
-          instructions: 'Override instructions',
-          system: 'Additional system context',
-        });
-      } else {
-        await agent.generate('Hello', {
-          instructions: 'Override instructions',
-          system: 'Additional system context',
-        });
-      }
-
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const allSystemContent = systemMessages.map(m => m.content).join(' ');
-
-      expect(allSystemContent).toContain('Override instructions');
-      expect(allSystemContent).toContain('Additional system context');
-    });
-
-    it('should support CoreSystemMessage object in generate method', async () => {
-      // Skip this test for v1 as it only applies to VNext methods
-      if (version === 'v1') {
-        return;
-      }
-
-      let capturedMessages: any[] = [];
-      const testModel = new MockLanguageModelV2({
-        doGenerate: async ({ prompt }) => {
-          capturedMessages = prompt;
-          return {
-            content: [{ type: 'text', text: 'Test response' }],
-            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-            finishReason: 'stop',
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-          };
-        },
-        doStream: async ({ prompt }) => {
-          capturedMessages = prompt;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              {
-                type: 'response-metadata',
-                id: 'mock-response-id',
-                modelId: 'mock-model-v2',
-                timestamp: new Date(0),
-              },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Test response' },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              },
-            ]),
-          };
-        },
-      });
-
-      const agent = new Agent({
-        name: 'core-system-message-test',
-        instructions: 'Default instructions',
-        model: testModel,
-      });
-
-      // Test with CoreSystemMessage object
-      await agent.generate('Hello', {
-        system: {
-          role: 'system',
-          content: 'You are a helpful assistant that responds in JSON format',
-        },
-      });
-
-      // Check if system message was properly added
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const jsonSystemMessage = systemMessages.find(
-        m =>
-          typeof m.content === 'string' &&
-          m.content.includes('You are a helpful assistant that responds in JSON format'),
-      );
-
-      expect(jsonSystemMessage).toBeDefined();
-      expect(jsonSystemMessage?.content).toBe('You are a helpful assistant that responds in JSON format');
-    });
-
-    it('should support SystemModelMessage object in stream method', async () => {
-      // Skip this test for v1 as it only applies to VNext methods
-      if (version === 'v1') {
-        return;
-      }
-
-      let capturedMessages: any[] = [];
-      const testModel = new MockLanguageModelV2({
-        doStream: async ({ prompt }) => {
-          capturedMessages = prompt;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              {
-                type: 'response-metadata',
-                id: 'mock-response-id',
-                modelId: 'mock-model-v2',
-                timestamp: new Date(0),
-              },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Test' },
-              { type: 'text-delta', id: '1', delta: ' response' },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              },
-            ]),
-          };
-        },
-      });
-
-      const agent = new Agent({
-        name: 'system-model-message-stream-test',
-        instructions: 'Default instructions',
-        model: testModel,
-      });
-
-      // Test with SystemModelMessage object (AI SDK v5 format)
-      const result = await agent.stream('Hello', {
-        system: {
-          role: 'system',
-          content: 'You are an expert programmer who provides detailed explanations',
-        },
-      });
-
-      // Consume the stream
-      const fullContent = await result.textStream;
-      for await (const _chunk of fullContent) {
-        // Just consume the stream
-      }
-
-      // Check if system message was properly handled
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const expertSystemMessage = systemMessages.find(
-        m =>
-          typeof m.content === 'string' &&
-          m.content.includes('You are an expert programmer who provides detailed explanations'),
-      );
-
-      expect(expertSystemMessage).toBeDefined();
-    });
-
-    it('should handle mixed system message types correctly', async () => {
-      // Skip this test for v1 as it only applies to VNext methods
-      if (version === 'v1') {
-        return;
-      }
-
-      let capturedMessages: any[] = [];
-      const testModel = new MockLanguageModelV2({
-        doGenerate: async ({ prompt }) => {
-          capturedMessages = prompt;
-          return {
-            content: [{ type: 'text', text: 'Test response' }],
-            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-            finishReason: 'stop',
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-          };
-        },
-        doStream: async ({ prompt }) => {
-          capturedMessages = prompt;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              {
-                type: 'response-metadata',
-                id: 'mock-response-id',
-                modelId: 'mock-model-v2',
-                timestamp: new Date(0),
-              },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Test response' },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              },
-            ]),
-          };
-        },
-      });
-
-      const agent = new Agent({
-        name: 'mixed-system-test',
-        instructions: 'Default instructions',
-        model: testModel,
-      });
-
-      // Test 1: String system message
-      capturedMessages = [];
-      await agent.generate('Test 1', {
-        system: 'String system message',
-      });
-      let systemMessages = capturedMessages.filter(m => m.role === 'system');
-      let customSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('String system message'),
-      );
-      expect(customSystemMessage).toBeDefined();
-
-      // Test 2: CoreSystemMessage object
-      capturedMessages = [];
-      await agent.generate('Test 2', {
-        system: {
-          role: 'system',
-          content: 'CoreSystemMessage content',
-        },
-      });
-      systemMessages = capturedMessages.filter(m => m.role === 'system');
-      customSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('CoreSystemMessage content'),
-      );
-      expect(customSystemMessage).toBeDefined();
-
-      // Test 3: SystemModelMessage with string content
-      capturedMessages = [];
-      await agent.generate('Test 3', {
-        system: {
-          role: 'system',
-          content: 'SystemModelMessage with full string content',
-        },
-      });
-      systemMessages = capturedMessages.filter(m => m.role === 'system');
-      customSystemMessage = systemMessages.find(
-        m => typeof m.content === 'string' && m.content.includes('SystemModelMessage with full string content'),
-      );
-      expect(customSystemMessage).toBeDefined();
-    });
-
-    it('should support arrays of system messages', async () => {
-      // Skip this test for v1 as it only applies to VNext methods
-      if (version === 'v1') {
-        return;
-      }
-
-      let capturedMessages: any[] = [];
-      const testModel = new MockLanguageModelV2({
-        doGenerate: async ({ prompt }) => {
-          capturedMessages = prompt;
-          return {
-            content: [{ type: 'text', text: 'Test response' }],
-            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-            finishReason: 'stop',
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-          };
-        },
-        doStream: async ({ prompt }) => {
-          capturedMessages = prompt;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              {
-                type: 'response-metadata',
-                id: 'mock-response-id',
-                modelId: 'mock-model-v2',
-                timestamp: new Date(0),
-              },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Test response' },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              },
-            ]),
-          };
-        },
-      });
-
-      const agent = new Agent({
-        name: 'array-system-test',
-        instructions: 'Default instructions',
-        model: testModel,
-      });
-
-      // Test 1: Array of strings
-      capturedMessages = [];
-      await agent.generate('Test string array', {
-        system: ['First string message', 'Second string message', 'Third string message'],
-      });
-
-      let systemMessages = capturedMessages.filter(m => m.role === 'system');
-      let hasFirst = systemMessages.some(
-        m => typeof m.content === 'string' && m.content.includes('First string message'),
-      );
-      let hasSecond = systemMessages.some(
-        m => typeof m.content === 'string' && m.content.includes('Second string message'),
-      );
-      let hasThird = systemMessages.some(
-        m => typeof m.content === 'string' && m.content.includes('Third string message'),
-      );
-
-      expect(hasFirst).toBe(true);
-      expect(hasSecond).toBe(true);
-      expect(hasThird).toBe(true);
-
-      // Test 2: Array of CoreSystemMessage objects
-      capturedMessages = [];
-      await agent.generate('Test object array', {
-        system: [
-          { role: 'system', content: 'First system message' },
-          { role: 'system', content: 'Second system message' },
-          { role: 'system', content: 'Third system message' },
-        ],
-      });
-
-      systemMessages = capturedMessages.filter(m => m.role === 'system');
-      hasFirst = systemMessages.some(m => typeof m.content === 'string' && m.content.includes('First system message'));
-      hasSecond = systemMessages.some(
-        m => typeof m.content === 'string' && m.content.includes('Second system message'),
-      );
-      hasThird = systemMessages.some(m => typeof m.content === 'string' && m.content.includes('Third system message'));
-
-      expect(hasFirst).toBe(true);
-      expect(hasSecond).toBe(true);
-      expect(hasThird).toBe(true);
-    });
-  });
-
   describe(`${version} - Input Processors`, () => {
     let mockModel: MockLanguageModelV1 | MockLanguageModelV2;
 
@@ -6971,15 +5409,15 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     describe('dynamic input processors', () => {
       it('should support function-based input processors', async () => {
-        const runtimeContext = new RuntimeContext<{ processorMessage: string }>();
-        runtimeContext.set('processorMessage', 'Dynamic message');
+        const requestContext = new RequestContext<{ processorMessage: string }>();
+        requestContext.set('processorMessage', 'Dynamic message');
 
         const agentWithDynamicProcessors = new Agent({
           name: 'test-agent',
           instructions: 'You are a helpful assistant',
           model: mockModel,
-          inputProcessors: ({ runtimeContext }) => {
-            const message: string = runtimeContext.get('processorMessage') || 'Default message';
+          inputProcessors: ({ requestContext }) => {
+            const message: string = requestContext.get('processorMessage') || 'Default message';
             return [
               {
                 name: 'dynamic-processor',
@@ -6995,11 +5433,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let result;
         if (version === 'v1') {
           result = await agentWithDynamicProcessors.generateLegacy('Test dynamic', {
-            runtimeContext,
+            requestContext,
           });
         } else {
           result = await agentWithDynamicProcessors.generate('Test dynamic', {
-            runtimeContext,
+            requestContext,
           });
         }
 
@@ -7114,294 +5552,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
   });
 
-  describe(`${version} - UIMessageWithMetadata support`, () => {
-    let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
-    const mockMemory = new MockMemory();
-
-    beforeEach(() => {
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doGenerate: async () => ({
-            finishReason: 'stop',
-            usage: { completionTokens: 10, promptTokens: 3 },
-            text: 'Response acknowledging metadata',
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [
-                { type: 'text-delta', textDelta: 'Response' },
-                { type: 'text-delta', textDelta: ' acknowledging' },
-                { type: 'text-delta', textDelta: ' metadata' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        });
-      } else {
-        dummyModel = new MockLanguageModelV2({
-          doStream: async () => ({
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Response' },
-              { type: 'text-delta', id: '1', delta: ' acknowledging' },
-              { type: 'text-delta', id: '1', delta: ' metadata' },
-              { type: 'text-end', id: '1' },
-              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
-            ]),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-          }),
-        });
-      }
-    });
-
-    it('should preserve metadata in generate method', async () => {
-      const agent = new Agent({
-        name: 'metadata-test-agent',
-        instructions: 'You are a helpful assistant',
-        model: dummyModel,
-        memory: mockMemory,
-      });
-
-      const messagesWithMetadata = [
-        {
-          role: 'user' as const,
-          content: 'Hello with metadata',
-          parts: [{ type: 'text' as const, text: 'Hello with metadata' }],
-          metadata: {
-            source: 'web-ui',
-            customerId: '12345',
-            context: { orderId: 'ORDER-789', status: 'pending' },
-          },
-        },
-      ];
-
-      if (version === 'v1') {
-        await agent.generateLegacy(messagesWithMetadata, {
-          memory: {
-            resource: 'customer-12345',
-            thread: {
-              id: 'support-thread',
-            },
-          },
-        });
-      } else {
-        await agent.generate(messagesWithMetadata, {
-          memory: {
-            resource: 'customer-12345',
-            thread: {
-              id: 'support-thread',
-            },
-          },
-        });
-      }
-      // Verify messages were saved with metadata
-      const savedMessages = await mockMemory.getMessages({
-        threadId: 'support-thread',
-        resourceId: 'customer-12345',
-        format: 'v2',
-        selectBy: {
-          last: 10,
-        },
-      });
-
-      expect(savedMessages.length).toBeGreaterThan(0);
-
-      // Find the user message
-      const userMessage = savedMessages.find(m => m.role === 'user');
-      expect(userMessage).toBeDefined();
-
-      // Check that metadata was preserved in v2 format
-      if (
-        userMessage &&
-        'content' in userMessage &&
-        typeof userMessage.content === 'object' &&
-        'metadata' in userMessage.content
-      ) {
-        expect(userMessage.content.metadata).toEqual({
-          source: 'web-ui',
-          customerId: '12345',
-          context: { orderId: 'ORDER-789', status: 'pending' },
-        });
-      }
-    });
-
-    it('should preserve metadata in stream method', async () => {
-      const agent = new Agent({
-        name: 'metadata-stream-agent',
-        instructions: 'You are a helpful assistant',
-        model: dummyModel,
-        memory: mockMemory,
-      });
-
-      const messagesWithMetadata = [
-        {
-          role: 'user' as const,
-          content: 'Stream with metadata',
-          parts: [{ type: 'text' as const, text: 'Stream with metadata' }],
-          metadata: {
-            source: 'mobile-app',
-            sessionId: 'session-123',
-            deviceInfo: { platform: 'iOS', version: '17.0' },
-          },
-        },
-      ];
-
-      let stream;
-      if (version === 'v1') {
-        stream = await agent.streamLegacy(messagesWithMetadata, {
-          memory: {
-            resource: 'user-mobile',
-            thread: {
-              id: 'mobile-thread',
-            },
-          },
-        });
-      } else {
-        stream = await agent.stream(messagesWithMetadata, {
-          memory: {
-            resource: 'user-mobile',
-            thread: {
-              id: 'mobile-thread',
-            },
-          },
-        });
-      }
-
-      // Consume the stream
-      let finalText = '';
-      for await (const textPart of stream.textStream) {
-        finalText += textPart;
-      }
-
-      expect(finalText).toBe('Response acknowledging metadata');
-
-      // Verify messages were saved with metadata
-      const savedMessages = await mockMemory.getMessages({
-        threadId: 'mobile-thread',
-        resourceId: 'user-mobile',
-        format: 'v2',
-        selectBy: {
-          last: 10,
-        },
-      });
-
-      expect(savedMessages.length).toBeGreaterThan(0);
-
-      // Find the user message
-      const userMessage = savedMessages.find(m => m.role === 'user');
-      expect(userMessage).toBeDefined();
-
-      // Check that metadata was preserved
-      if (
-        userMessage &&
-        'content' in userMessage &&
-        typeof userMessage.content === 'object' &&
-        'metadata' in userMessage.content
-      ) {
-        expect(userMessage.content.metadata).toEqual({
-          source: 'mobile-app',
-          sessionId: 'session-123',
-          deviceInfo: { platform: 'iOS', version: '17.0' },
-        });
-      }
-    });
-
-    it('should handle mixed messages with and without metadata', async () => {
-      const agent = new Agent({
-        name: 'mixed-metadata-agent',
-        instructions: 'You are a helpful assistant',
-        model: dummyModel,
-        memory: mockMemory,
-      });
-
-      const mixedMessages = [
-        {
-          role: 'user' as const,
-          content: 'First message with metadata',
-          parts: [{ type: 'text' as const, text: 'First message with metadata' }],
-          metadata: {
-            messageType: 'initial',
-            priority: 'high',
-          },
-        },
-        {
-          role: 'assistant' as const,
-          content: 'Response without metadata',
-          parts: [{ type: 'text' as const, text: 'Response without metadata' }],
-        },
-        {
-          role: 'user' as const,
-          content: 'Second user message',
-          parts: [{ type: 'text' as const, text: 'Second user message' }],
-          // No metadata on this message
-        },
-      ];
-
-      if (version === 'v1') {
-        await agent.generateLegacy(mixedMessages, {
-          memory: {
-            resource: 'mixed-user',
-            thread: {
-              id: 'mixed-thread',
-            },
-          },
-        });
-      } else {
-        await agent.generate(mixedMessages, {
-          memory: {
-            resource: 'mixed-user',
-            thread: {
-              id: 'mixed-thread',
-            },
-          },
-        });
-      }
-      // Verify messages were saved correctly
-      const savedMessages = await mockMemory.getMessages({
-        threadId: 'mixed-thread',
-        resourceId: 'mixed-user',
-        format: 'v2',
-        selectBy: {
-          last: 10,
-        },
-      });
-
-      expect(savedMessages.length).toBeGreaterThan(0);
-
-      // Find messages and check metadata
-      const messagesAsV2 = savedMessages as MastraMessageV2[];
-      const firstUserMessage = messagesAsV2.find(
-        m =>
-          m.role === 'user' &&
-          m.content.parts?.[0]?.type === 'text' &&
-          m.content.parts[0].text.includes('First message'),
-      );
-      const secondUserMessage = messagesAsV2.find(
-        m =>
-          m.role === 'user' && m.content.parts?.[0]?.type === 'text' && m.content.parts[0].text.includes('Second user'),
-      );
-
-      // First message should have metadata
-      expect(firstUserMessage?.content.metadata).toEqual({
-        messageType: 'initial',
-        priority: 'high',
-      });
-
-      // Second message should not have metadata
-      expect(secondUserMessage?.content.metadata).toBeUndefined();
-    });
-  });
-
   it(`${version} - stream - should pass and call client side tools with experimental output`, async () => {
     const userAgent = new Agent({
       name: 'User agent',
@@ -7506,304 +5656,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     30000,
   );
 
-  describe('agents as tools', () => {
-    it('should expose sub-agents as tools when using generate/stream', async () => {
-      // Create a research agent that will be used as a tool
-      const researchAgent = new Agent({
-        name: 'research-agent',
-        instructions: 'You are a research agent. Provide concise, factual information.',
-        model: dummyModel,
-      });
-
-      // Create an orchestrator agent that has access to the research agent
-      const orchestratorAgent = new Agent({
-        name: 'orchestrator-agent',
-        instructions: 'You can delegate research tasks to specialized agents.',
-        model: openaiModel,
-        agents: {
-          researchAgent,
-        },
-      });
-
-      let result;
-      let toolCalls;
-
-      if (version === 'v1') {
-        result = await orchestratorAgent.generateLegacy('Use the research agent to find information about TypeScript', {
-          maxSteps: 2,
-          toolChoice: 'required',
-        });
-        toolCalls = result.toolResults;
-      } else {
-        result = await orchestratorAgent.generate('Use the research agent to find information about TypeScript');
-        toolCalls = result.toolResults;
-      }
-
-      // Verify that the research agent was called as a tool
-      expect(toolCalls.length).toBeGreaterThan(0);
-
-      const agentToolCall =
-        version === 'v1'
-          ? toolCalls.find((tc: any) => tc.toolName === 'agent-researchAgent')
-          : toolCalls.find((tc: any) => tc.payload?.toolName === 'agent-researchAgent');
-
-      expect(version === 'v1' ? toolCalls[0]?.result : toolCalls[0]?.payload?.result).toStrictEqual({
-        ...(version === 'v1' ? {} : { subAgentResourceId: expect.any(String), subAgentThreadId: expect.any(String) }),
-        text: 'Dummy response',
-      });
-
-      expect(agentToolCall).toBeDefined();
-    }, 50000);
-  });
-
-  describe('scorer output data', () => {
-    it(`${version} - should return scoring data from generate when returnScorerData is true`, async () => {
-      const agent = new Agent({
-        name: 'Scorer Agent',
-        instructions: 'You are an agent that can score things',
-        model: dummyModel,
-      });
-
-      let result;
-      if (version === 'v1') {
-        result = await agent.generateLegacy('Make it green', {
-          returnScorerData: true,
-        });
-      } else {
-        result = await agent.generate('Make it green', {
-          returnScorerData: true,
-        });
-      }
-
-      expect(result.scoringData).toBeDefined();
-      expect(result.scoringData.input).toMatchObject({
-        inputMessages: expect.any(Array),
-        rememberedMessages: expect.any(Array),
-        systemMessages: expect.any(Array),
-        taggedSystemMessages: expect.any(Object),
-      });
-      expect(result.scoringData.output).toBeInstanceOf(Array);
-    });
-
-    it(`${version} - should not return scoring data from generate when returnScorerData is false`, async () => {
-      const agent = new Agent({
-        name: 'Scorer Agent',
-        instructions: 'You are an agent that can score things',
-        model: dummyModel,
-      });
-
-      let result;
-      if (version === 'v1') {
-        result = await agent.generateLegacy('Make it green', {
-          returnScorerData: false,
-        });
-      } else {
-        result = await agent.generate('Make it green', {
-          returnScorerData: false,
-        });
-      }
-
-      expect(result.scoringData).toBeUndefined();
-    });
-
-    it(`${version} - should not return scoring data from generate when returnScorerData is not specified`, async () => {
-      const agent = new Agent({
-        name: 'Scorer Agent',
-        instructions: 'You are an agent that can score things',
-        model: dummyModel,
-      });
-
-      let result;
-      if (version === 'v1') {
-        result = await agent.generateLegacy('Make it green');
-      } else {
-        result = await agent.generate('Make it green');
-      }
-
-      expect(result.scoringData).toBeUndefined();
-    });
-  });
-
-  describe('scorer override functionality', () => {
-    let agent: Agent;
-    let mastra: Mastra;
-    let scorerTest: any;
-    let scorer1: any;
-
-    beforeEach(() => {
-      vi.clearAllMocks();
-      scorerTest = createScorer({
-        name: 'scorerTest',
-        description: 'Test Scorer',
-      }).generateScore(() => 0.95);
-
-      scorer1 = createScorer({
-        name: 'scorer1',
-        description: 'Test Scorer 1',
-      }).generateScore(() => 0.95);
-
-      agent = new Agent({
-        name: 'Test Agent',
-        instructions: 'You are a test agent.',
-        model: dummyModel,
-        scorers: {
-          scorerTest: {
-            scorer: scorerTest,
-          },
-        },
-      });
-
-      mastra = new Mastra({
-        agents: { agent },
-        logger: false,
-        scorers: { scorer1 },
-      });
-    });
-
-    it(`${version} - should call scorerTest when no override is provided`, async () => {
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello world');
-      } else {
-        await agent.generate('Hello world');
-      }
-
-      expect(runScorer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          scorerId: 'scorerTest',
-          scorerObject: expect.objectContaining({
-            scorer: scorerTest,
-          }),
-        }),
-      );
-    });
-
-    it(`${version} - should use override scorers when provided in generate options`, async () => {
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello world', {
-          scorers: {
-            scorer1: { scorer: mastra.getScorer('scorer1') },
-          },
-        });
-      } else {
-        await agent.generate('Hello world', {
-          scorers: {
-            scorer1: { scorer: mastra.getScorer('scorer1') },
-          },
-        });
-      }
-
-      expect(runScorer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          scorerId: 'scorer1',
-          scorerObject: expect.objectContaining({
-            scorer: expect.any(Object),
-          }),
-        }),
-      );
-
-      expect(runScorer).not.toHaveBeenCalledWith(
-        expect.objectContaining({
-          scorerId: 'scorerTest',
-          scorerObject: expect.objectContaining({
-            scorer: scorerTest,
-          }),
-        }),
-      );
-
-      expect(runScorer).toHaveBeenCalledTimes(1);
-    });
-
-    it(`${version} - should call scorers when provided in stream options`, async () => {
-      let result: any;
-      if (version === 'v1') {
-        result = await agent.streamLegacy('Hello world', {
-          scorers: {
-            scorer1: { scorer: mastra.getScorer('scorer1') },
-          },
-        });
-      } else {
-        result = await agent.stream('Hello world', {
-          scorers: {
-            scorer1: { scorer: mastra.getScorer('scorer1') },
-          },
-        });
-      }
-      await result.consumeStream();
-
-      expect(runScorer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          scorerId: 'scorer1',
-          scorerObject: expect.objectContaining({
-            scorer: expect.any(Object),
-          }),
-        }),
-      );
-    });
-
-    it(`${version} - can use scorer name for scorer config for generate`, async () => {
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello world', {
-          scorers: {
-            scorer1: { scorer: scorer1.name },
-          },
-        });
-      } else {
-        await agent.generate('Hello world', {
-          scorers: {
-            scorer1: { scorer: scorer1.name },
-          },
-        });
-      }
-
-      expect(runScorer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          scorerId: 'scorer1',
-          scorerObject: expect.objectContaining({
-            scorer: scorer1,
-          }),
-        }),
-      );
-    });
-
-    it(`${version} - should call runScorer with correct parameters`, async () => {
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello world', {
-          scorers: {
-            scorer1: { scorer: scorer1.name },
-          },
-        });
-      } else {
-        await agent.generate('Hello world', {
-          scorers: {
-            scorer1: { scorer: scorer1.name },
-          },
-        });
-      }
-
-      // Verify the exact call parameters
-      expect(runScorer).toHaveBeenCalledWith({
-        scorerId: 'scorer1',
-        scorerObject: { scorer: scorer1 },
-        runId: expect.any(String),
-        input: expect.any(Object),
-        output: expect.any(Object),
-        runtimeContext: expect.any(Object),
-        entity: expect.objectContaining({
-          id: 'Test Agent',
-          name: 'Test Agent',
-        }),
-        source: 'LIVE',
-        entityType: 'AGENT',
-        structuredOutput: false,
-        threadId: undefined,
-        resourceId: undefined,
-        tracingContext: expect.any(Object),
-      });
-    });
-  });
-
-  describe('defaultStreamOptions onFinish callback bug', () => {
-    it(`${version} - should call onFinish from defaultStreamOptions when no options are passed to stream`, async () => {
+  describe('defaultOptions onFinish callback bug', () => {
+    it(`${version} - should call onFinish from defaultOptions when no options are passed to stream`, async () => {
       let onFinishCalled = false;
       let finishData: any = null;
 
@@ -7814,7 +5668,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         instructions: 'You are a helpful assistant.',
         ...(version === 'v1'
           ? {
-              defaultStreamOptions: {
+              defaultStreamOptionsLegacy: {
                 onFinish: data => {
                   onFinishCalled = true;
                   finishData = data;
@@ -7822,7 +5676,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               },
             }
           : {
-              defaultVNextStreamOptions: {
+              defaultOptions: {
                 onFinish: data => {
                   onFinishCalled = true;
                   finishData = data;
@@ -7831,7 +5685,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             }),
       });
 
-      // Call stream without passing any options - should use defaultStreamOptions
+      // Call stream without passing any options - should use defaultOptions
       const result = version === 'v1' ? await agent.streamLegacy('How are you?') : await agent.stream('How are you?');
 
       // Consume the stream to trigger onFinish
@@ -7849,7 +5703,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(finishData).toBeDefined();
     });
 
-    it(`${version} - should call onFinish from defaultStreamOptions when empty options are passed to stream`, async () => {
+    it(`${version} - should call onFinish from defaultOptions when empty options are passed to stream`, async () => {
       let onFinishCalled = false;
       let finishData: any = null;
 
@@ -7860,7 +5714,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         instructions: 'You are a helpful assistant.',
         ...(version === 'v1'
           ? {
-              defaultStreamOptions: {
+              defaultStreamOptionsLegacy: {
                 onFinish: data => {
                   onFinishCalled = true;
                   finishData = data;
@@ -7868,7 +5722,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               },
             }
           : {
-              defaultVNextStreamOptions: {
+              defaultOptions: {
                 onFinish: data => {
                   onFinishCalled = true;
                   finishData = data;
@@ -7877,7 +5731,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             }),
       });
 
-      // Call stream with empty options - should still use defaultStreamOptions
+      // Call stream with empty options - should still use defaultOptions
       const result =
         version === 'v1' ? await agent.streamLegacy('How are you?', {}) : await agent.stream('How are you?', {});
 
@@ -7896,7 +5750,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(finishData).toBeDefined();
     });
 
-    it(`${version} - should prioritize passed onFinish over defaultStreamOptions onFinish`, async () => {
+    it(`${version} - should prioritize passed onFinish over defaultOptions onFinish`, async () => {
       let defaultOnFinishCalled = false;
       let passedOnFinishCalled = false;
       let finishData: any = null;
@@ -7908,14 +5762,14 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         instructions: 'You are a helpful assistant.',
         ...(version === 'v1'
           ? {
-              defaultStreamOptions: {
+              defaultStreamOptionsLegacy: {
                 onFinish: () => {
                   defaultOnFinishCalled = true;
                 },
               },
             }
           : {
-              defaultVNextStreamOptions: {
+              defaultOptions: {
                 onFinish: () => {
                   defaultOnFinishCalled = true;
                 },
@@ -7923,7 +5777,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             }),
       });
 
-      // Call stream with explicit onFinish - should override defaultStreamOptions
+      // Call stream with explicit onFinish - should override defaultOptions
       const result =
         version === 'v1'
           ? await agent.streamLegacy('How are you?', {
@@ -8169,14 +6023,14 @@ describe('Agent Tests', () => {
 //       });
 
 //       // Verify tools exist
-//       expect((agent.getTools() as Agent['tools']).mastraTool).toBeDefined();
-//       expect((agent.getTools() as Agent['tools']).vercelTool).toBeDefined();
+//       expect((agent.listTools() as Agent['tools']).mastraTool).toBeDefined();
+//       expect((agent.listTools() as Agent['tools']).vercelTool).toBeDefined();
 
 //       // Verify both tools can be executed
 //       // @ts-ignore
-//       await (agent.getTools() as Agent['tools']).mastraTool.execute!({ name: 'test' });
+//       await (agent.listTools() as Agent['tools']).mastraTool.execute!({ name: 'test' });
 //       // @ts-ignore
-//       await (agent.getTools() as Agent['tools']).vercelTool.execute!({ name: 'test' });
+//       await (agent.listTools() as Agent['tools']).vercelTool.execute!({ name: 'test' });
 
 //       expect(mastraExecute).toHaveBeenCalled();
 //       expect(vercelExecute).toHaveBeenCalled();

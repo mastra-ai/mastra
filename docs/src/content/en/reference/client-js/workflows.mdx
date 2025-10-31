@@ -12,7 +12,7 @@ The Workflows API provides methods to interact with and execute automated workfl
 Retrieve a list of all available workflows:
 
 ```typescript
-const workflows = await mastraClient.getWorkflows();
+const workflows = await mastraClient.listWorkflows();
 ```
 
 ## Working with a Specific Workflow
@@ -66,43 +66,15 @@ const result = await run.resumeAsync({
 });
 ```
 
-### Watch Workflow
-
-Watch workflow transitions:
-
-```typescript
-try {
-  const workflow = mastraClient.getWorkflow("testWorkflow");
-
-  const run = await workflow.createRunAsync();
-
-  run.watch((record) => {
-    console.log(record);
-  });
-
-  const result = await run.start({
-    inputData: {
-      city: "New York",
-    },
-  });
-} catch (e) {
-  console.error(e);
-}
-```
-
 ### Resume Workflow
 
-Resume workflow run and watch workflow step transitions:
+Resume workflow run:
 
 ```typescript
 try {
   const workflow = mastraClient.getWorkflow("testWorkflow");
 
   const run = await workflow.createRunAsync({ runId: prevRunId });
-
-  run.watch((record) => {
-    console.log(record);
-  });
 
   run.resume({
     step: "step-id",

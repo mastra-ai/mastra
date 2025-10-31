@@ -1,11 +1,10 @@
-import type { Mastra } from '@mastra/core';
+import type { Mastra } from '@mastra/core/mastra';
 import {
   getAgentBuilderActionsHandler as getOriginalAgentBuilderActionsHandler,
   getAgentBuilderActionByIdHandler as getOriginalAgentBuilderActionByIdHandler,
   startAsyncAgentBuilderActionHandler as getOriginalStartAsyncAgentBuilderActionHandler,
   createAgentBuilderActionRunHandler as getOriginalCreateAgentBuilderActionRunHandler,
   startAgentBuilderActionRunHandler as getOriginalStartAgentBuilderActionRunHandler,
-  watchAgentBuilderActionHandler as getOriginalWatchAgentBuilderActionHandler,
   streamAgentBuilderActionHandler as getOriginalStreamAgentBuilderActionHandler,
   streamLegacyAgentBuilderActionHandler as getOriginalStreamLegacyAgentBuilderActionHandler,
   streamVNextAgentBuilderActionHandler as getOriginalStreamVNextAgentBuilderActionHandler,
@@ -79,7 +78,7 @@ export async function createAgentBuilderActionRunHandler(c: Context) {
 export async function startAsyncAgentBuilderActionHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const actionId = c.req.param('actionId');
     const { inputData, tracingOptions } = await c.req.json();
     const runId = c.req.query('runId');
@@ -87,7 +86,7 @@ export async function startAsyncAgentBuilderActionHandler(c: Context) {
     disableHotReload();
     const result = await getOriginalStartAsyncAgentBuilderActionHandler({
       mastra,
-      runtimeContext,
+      requestContext,
       actionId,
       runId,
       inputData,
@@ -105,14 +104,14 @@ export async function startAsyncAgentBuilderActionHandler(c: Context) {
 export async function startAgentBuilderActionRunHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const actionId = c.req.param('actionId');
     const { inputData, tracingOptions } = await c.req.json();
     const runId = c.req.query('runId');
 
     await getOriginalStartAgentBuilderActionRunHandler({
       mastra,
-      runtimeContext,
+      requestContext,
       actionId,
       runId,
       inputData,
@@ -125,56 +124,10 @@ export async function startAgentBuilderActionRunHandler(c: Context) {
   }
 }
 
-export async function watchAgentBuilderActionHandler(c: Context) {
-  try {
-    const mastra: Mastra = c.get('mastra');
-    const logger = mastra.getLogger();
-    const actionId = c.req.param('actionId');
-    const runId = c.req.query('runId');
-    const eventType = c.req.query('eventType') as 'watch' | 'watch-v2' | undefined;
-
-    if (!runId) {
-      throw new HTTPException(400, { message: 'runId required to watch action' });
-    }
-
-    c.header('Transfer-Encoding', 'chunked');
-
-    return stream(c, async stream => {
-      try {
-        disableHotReload();
-        const result = await getOriginalWatchAgentBuilderActionHandler({
-          mastra,
-          actionId,
-          runId,
-          eventType,
-        });
-
-        const reader = result.getReader();
-
-        stream.onAbort(() => {
-          void reader.cancel('request aborted');
-        });
-
-        let chunkResult;
-        while ((chunkResult = await reader.read()) && !chunkResult.done) {
-          await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
-        }
-        enableHotReload();
-      } catch (err) {
-        enableHotReload();
-        logger.error('Error in watch stream: ' + ((err as Error)?.message ?? 'Unknown error'));
-      }
-    });
-  } catch (error) {
-    enableHotReload();
-    return handleError(error, 'Error watching agent builder action');
-  }
-}
-
 export async function streamAgentBuilderActionHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const logger = mastra.getLogger();
     const actionId = c.req.param('actionId');
     const { inputData, tracingOptions } = await c.req.json();
@@ -191,7 +144,7 @@ export async function streamAgentBuilderActionHandler(c: Context) {
             actionId,
             runId,
             inputData,
-            runtimeContext,
+            requestContext,
             tracingOptions,
           });
 
@@ -224,7 +177,7 @@ export async function streamAgentBuilderActionHandler(c: Context) {
 export async function streamVNextAgentBuilderActionHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const logger = mastra.getLogger();
     const actionId = c.req.param('actionId');
     const { inputData, closeOnSuspend, tracingOptions } = await c.req.json();
@@ -242,7 +195,7 @@ export async function streamVNextAgentBuilderActionHandler(c: Context) {
             actionId,
             runId,
             inputData,
-            runtimeContext,
+            requestContext,
             closeOnSuspend,
             tracingOptions,
           });
@@ -275,7 +228,7 @@ export async function streamVNextAgentBuilderActionHandler(c: Context) {
 export async function resumeAsyncAgentBuilderActionHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const actionId = c.req.param('actionId');
     const runId = c.req.query('runId');
     const { step, resumeData, tracingOptions } = await c.req.json();
@@ -287,7 +240,7 @@ export async function resumeAsyncAgentBuilderActionHandler(c: Context) {
     disableHotReload();
     const result = await getOriginalResumeAsyncAgentBuilderActionHandler({
       mastra,
-      runtimeContext,
+      requestContext,
       actionId,
       runId,
       body: { step, resumeData },
@@ -305,7 +258,7 @@ export async function resumeAsyncAgentBuilderActionHandler(c: Context) {
 export async function resumeAgentBuilderActionHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const actionId = c.req.param('actionId');
     const runId = c.req.query('runId');
     const { step, resumeData, tracingOptions } = await c.req.json();
@@ -317,7 +270,7 @@ export async function resumeAgentBuilderActionHandler(c: Context) {
     disableHotReload();
     await getOriginalResumeAgentBuilderActionHandler({
       mastra,
-      runtimeContext,
+      requestContext,
       actionId,
       runId,
       body: { step, resumeData },
@@ -432,7 +385,7 @@ export async function sendAgentBuilderActionRunEventHandler(c: Context) {
 export async function streamLegacyAgentBuilderActionHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const logger = mastra.getLogger();
     const actionId = c.req.param('actionId');
     const { inputData, tracingOptions } = await c.req.json();
@@ -449,7 +402,7 @@ export async function streamLegacyAgentBuilderActionHandler(c: Context) {
             actionId,
             runId,
             inputData,
-            runtimeContext,
+            requestContext,
             tracingOptions,
           });
 
@@ -630,7 +583,7 @@ export async function observeStreamVNextAgentBuilderActionHandler(c: Context) {
 export async function resumeStreamAgentBuilderActionHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const logger = mastra.getLogger();
     const actionId = c.req.param('actionId');
     const runId = c.req.query('runId');
@@ -651,7 +604,7 @@ export async function resumeStreamAgentBuilderActionHandler(c: Context) {
             mastra,
             actionId,
             runId,
-            runtimeContext,
+            requestContext,
             body: { step, resumeData },
             tracingOptions,
           });

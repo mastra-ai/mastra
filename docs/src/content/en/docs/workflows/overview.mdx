@@ -133,7 +133,7 @@ export const testWorkflow = createWorkflow({
 Register your workflow in the Mastra instance to make it available throughout your application. Once registered, it can be called from agents or tools and has access to shared resources such as logging and observability features:
 
 ```typescript {6} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { testWorkflow } from "./workflows/test-workflow";
 
 export const mastra = new Mastra({
@@ -156,7 +156,7 @@ const testWorkflow = mastra.getWorkflow("testWorkflow");
 
 :::
 
-> See [Running Workflows](/examples/workflows_legacy/creating-a-workflow) for more information.
+> See [Running Workflows](/docs/workflows/overview) for more information.
 
 ## Running workflows
 
@@ -238,9 +238,9 @@ The workflow output includes the full execution lifecycle, showing the input and
 }
 ```
 
-## Using `RuntimeContext`
+## Using `RequestContext`
 
-Use [RuntimeContext](/docs/server-db/runtime-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RequestContext](/docs/server-db/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers
 export type UserTier = {
@@ -249,8 +249,8 @@ export type UserTier = {
 
 const step1 = createStep({
   // ...
-  execute: async ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+  execute: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     const maxResults = userTier === "enterprise" ? 1000 : 50;
 
@@ -259,7 +259,7 @@ const step1 = createStep({
 });
 ```
 
-> See [Runtime Context](/docs/server-db/runtime-context) for more information.
+> See [Request Context](/docs/server-db/request-context) for more information.
 
 ## Testing with Mastra Playground
 
@@ -269,11 +269,6 @@ Use the Mastra [Playground](/docs/getting-started/studio) to easily run workflow
 
 For a closer look at workflows, see our [Workflow Guide](/guides/guide/ai-recruiter), which walks through the core concepts with a practical example.
 
-- [Parallel Steps workflow example](/examples/workflows_legacy/parallel-steps)
-- [Conditional Branching workflow example](/examples/workflows_legacy/conditional-branching)
 - [Inngest workflow example](/examples/workflows/inngest-workflow)
-- [Suspend and Resume workflow example](/examples/workflows_legacy/human-in-the-loop)
-
-## Workflows (Legacy)
-
-For legacy workflow documentation, see [Workflows (Legacy)](../workflows-legacy/overview).
+- [Control Flow](/docs/workflows/control-flow)
+- [Suspend and Resume](/docs/workflows/suspend-and-resume)

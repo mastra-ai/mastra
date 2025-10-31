@@ -1,6 +1,6 @@
 import pMap from 'p-map';
-import type { Mastra } from '..';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
+import type { Mastra } from '../mastra';
 import { saveScorePayloadSchema } from '../scores';
 import type { ScoringHookInput } from '../scores/types';
 import type { MastraStorage } from '../storage';
@@ -110,7 +110,7 @@ export async function validateAndSaveScore(storage: MastraStorage, payload: unkn
 async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerName: string) {
   let scorerToUse;
   if (entityType === 'AGENT') {
-    const scorers = await mastra.getAgentById(entityId).getScorers();
+    const scorers = await mastra.getAgentById(entityId).listScorers();
     for (const [_, scorer] of Object.entries(scorers)) {
       if (scorer.scorer.name === scorerName) {
         scorerToUse = scorer;
@@ -118,7 +118,7 @@ async function findScorer(mastra: Mastra, entityId: string, entityType: string, 
       }
     }
   } else if (entityType === 'WORKFLOW') {
-    const scorers = await mastra.getWorkflowById(entityId).getScorers();
+    const scorers = await mastra.getWorkflowById(entityId).listScorers();
     for (const [_, scorer] of Object.entries(scorers)) {
       if (scorer.scorer.name === scorerName) {
         scorerToUse = scorer;

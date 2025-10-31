@@ -1,11 +1,11 @@
 import type { WritableStream } from 'node:stream/web';
-import type { Mastra, SerializedStepFlowEntry } from '..';
 import type { AISpan, AISpanType, TracingPolicy } from '../ai-tracing';
 import { MastraBase } from '../base';
-import type { RuntimeContext } from '../di';
+import type { RequestContext } from '../di';
 import { RegisteredLogger } from '../logger';
+import type { Mastra } from '../mastra';
 import type { ChunkType } from '../stream/types';
-import type { Emitter, StepResult, WorkflowRunStatus } from './types';
+import type { Emitter, SerializedStepFlowEntry, StepResult, WorkflowRunStatus } from './types';
 import type { StepFlowEntry } from '.';
 
 /**
@@ -66,7 +66,7 @@ export abstract class ExecutionEngine extends MastraBase {
       label?: string;
     };
     emitter: Emitter;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     workflowAISpan?: AISpan<AISpanType.WORKFLOW_RUN>;
     retryConfig?: {
       attempts?: number;

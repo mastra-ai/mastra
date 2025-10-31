@@ -116,11 +116,11 @@ pnpm add @copilotkit/runtime @ag-ui/mastra
 Configure your Mastra instance to include CopilotKit's runtime endpoint:
 
 ```typescript title="src/mastra/index.ts" copy {2,5-8,12-28}
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { registerCopilotKit } from "@ag-ui/mastra/copilotkit";
 import { weatherAgent } from "./agents/weather-agent";
 
-type WeatherRuntimeContext = {
+type WeatherRequestContext = {
   "user-id": string;
   "temperature-scale": "celsius" | "fahrenheit";
 };
@@ -134,15 +134,15 @@ export const mastra = new Mastra({
       allowHeaders: ["*"],
     },
     apiRoutes: [
-      registerCopilotKit<WeatherRuntimeContext>({
+      registerCopilotKit<WeatherRequestContext>({
         path: "/copilotkit",
         resourceId: "weatherAgent",
-        setContext: (c, runtimeContext) => {
-          runtimeContext.set(
+        setContext: (c, requestContext) => {
+          requestContext.set(
             "user-id",
             c.req.header("X-User-ID") || "anonymous",
           );
-          runtimeContext.set("temperature-scale", "celsius");
+          requestContext.set("temperature-scale", "celsius");
         },
       }),
     ],

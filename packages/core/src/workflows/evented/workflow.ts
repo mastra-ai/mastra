@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import z from 'zod';
 import type { Agent } from '../../agent';
-import { RuntimeContext } from '../../di';
+import { RequestContext } from '../../di';
 import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
 import { Tool } from '../../tools';
@@ -13,7 +13,6 @@ import type {
   SerializedStepFlowEntry,
   WorkflowConfig,
   WorkflowResult,
-  WatchEvent,
   StepWithComponent,
   WorkflowStreamEvent,
 } from '../../workflows/types';
@@ -69,7 +68,7 @@ export function cloneStep<TStepId extends string>(
   };
 }
 
-function isAgent(params: any): params is Agent<any, any, any> {
+function isAgent(params: any): params is Agent<any, any> {
   return params?.component === 'AGENT';
 }
 
@@ -109,7 +108,7 @@ export function createStep<
   TResumeSchema extends z.ZodType<any>,
   TSuspendSchema extends z.ZodType<any>,
 >(
-  agent: Agent<TStepId, any, any>,
+  agent: Agent<TStepId, any>,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType>;
 
 export function createStep<
@@ -151,7 +150,7 @@ export function createStep<
           EventedEngineType
         >;
       }
-    | Agent<any, any, any>
+    | Agent<any, any>
     | (Tool<TStepInput, TStepOutput, any> & {
         inputSchema: TStepInput;
         outputSchema: TStepOutput;
@@ -172,7 +171,7 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort }) => {
+      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, requestContext, abortSignal, abort }) => {
         // TODO: support stream
         let streamPromise = {} as {
           promise: Promise<string>;
@@ -188,7 +187,7 @@ export function createStep<
         const { fullStream } = await params.streamLegacy(inputData.prompt, {
           // resourceId: inputData.resourceId,
           // threadId: inputData.threadId,
-          runtimeContext,
+          requestContext,
           onFinish: result => {
             streamPromise.resolve(result.text);
           },
@@ -204,20 +203,20 @@ export function createStep<
           args: inputData,
         };
 
-        await emitter.emit('watch-v2', {
+        await emitter.emit('watch', {
           type: 'tool-call-streaming-start',
           ...(toolData ?? {}),
         });
         for await (const chunk of fullStream) {
           if (chunk.type === 'text-delta') {
-            await emitter.emit('watch-v2', {
+            await emitter.emit('watch', {
               type: 'tool-call-delta',
               ...(toolData ?? {}),
               argsTextDelta: chunk.textDelta,
             });
           }
         }
-        await emitter.emit('watch-v2', {
+        await emitter.emit('watch', {
           type: 'tool-call-streaming-finish',
           ...(toolData ?? {}),
         });
@@ -244,11 +243,11 @@ export function createStep<
       outputSchema: params.outputSchema,
       suspendSchema: params.suspendSchema,
       resumeSchema: params.resumeSchema,
-      execute: async ({ inputData, mastra, runtimeContext, suspend, resumeData }) => {
+      execute: async ({ inputData, mastra, requestContext, suspend, resumeData }) => {
         return params.execute({
           context: inputData,
           mastra,
-          runtimeContext,
+          requestContext,
           // TODO: Pass proper tracing context when evented workflows support tracing
           tracingContext: { currentSpan: undefined },
           suspend,
@@ -401,10 +400,10 @@ export class EventedRun<
   async start({
     inputData,
     initialState,
-    runtimeContext,
+    requestContext,
   }: {
     inputData?: z.infer<TInput>;
-    runtimeContext?: RuntimeContext;
+    requestContext?: RequestContext;
     initialState?: z.infer<TState>;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // Add validation checks
@@ -417,7 +416,7 @@ export class EventedRun<
       throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
     }
 
-    runtimeContext = runtimeContext ?? new RuntimeContext();
+    requestContext = requestContext ?? new RequestContext();
 
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -427,7 +426,7 @@ export class EventedRun<
         serializedStepGraph: this.serializedStepGraph,
         value: {},
         context: {} as any,
-        runtimeContext: Object.fromEntries(runtimeContext.entries()),
+        requestContext: Object.fromEntries(requestContext.entries()),
         activePaths: [],
         suspendedPaths: {},
         resumeLabels: {},
@@ -466,7 +465,7 @@ export class EventedRun<
         },
       },
       retryConfig: this.retryConfig,
-      runtimeContext,
+      requestContext,
       abortController: this.abortController,
     });
 
@@ -491,7 +490,7 @@ export class EventedRun<
         ]
       | string
       | string[];
-    runtimeContext?: RuntimeContext;
+    requestContext?: RequestContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
@@ -514,22 +513,22 @@ export class EventedRun<
     }
 
     console.dir(
-      { resume: { runtimeContextObj: snapshot?.runtimeContext, runtimeContext: params.runtimeContext } },
+      { resume: { requestContextObj: snapshot?.requestContext, requestContext: params.requestContext } },
       { depth: null },
     );
-    // Start with the snapshot's runtime context (old values)
-    const runtimeContextObj = snapshot?.runtimeContext ?? {};
-    const runtimeContext = new RuntimeContext();
+    // Start with the snapshot's request context (old values)
+    const requestContextObj = snapshot?.requestContext ?? {};
+    const requestContext = new RequestContext();
 
     // First, set values from the snapshot
-    for (const [key, value] of Object.entries(runtimeContextObj)) {
-      runtimeContext.set(key, value);
+    for (const [key, value] of Object.entries(requestContextObj)) {
+      requestContext.set(key, value);
     }
 
-    // Then, override with any values from the passed runtime context (new values take precedence)
-    if (params.runtimeContext) {
-      for (const [key, value] of params.runtimeContext.entries()) {
-        runtimeContext.set(key, value);
+    // Then, override with any values from the passed request context (new values take precedence)
+    if (params.requestContext) {
+      for (const [key, value] of params.requestContext.entries()) {
+        requestContext.set(key, value);
       }
     }
 
@@ -565,7 +564,7 @@ export class EventedRun<
             this.emitter.once(event, callback);
           },
         },
-        runtimeContext,
+        requestContext,
         abortController: this.abortController,
       })
       .then(result => {
@@ -581,12 +580,7 @@ export class EventedRun<
     return executionResultPromise;
   }
 
-  watch(cb: (event: WatchEvent) => void, type: 'watch'): () => void;
-  watch(cb: (event: WorkflowStreamEvent) => void, type: 'watch-v2'): () => void;
-  watch(
-    cb: ((event: WatchEvent) => void) | ((event: WorkflowStreamEvent) => void),
-    type: 'watch' | 'watch-v2' = 'watch',
-  ): () => void {
+  watch(cb: (event: WorkflowStreamEvent) => void): () => void {
     const watchCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId !== this.runId) {
         return;
@@ -596,27 +590,14 @@ export class EventedRun<
       await ack?.();
     };
 
-    if (type === 'watch-v2') {
-      this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
-    } else {
-      this.mastra?.pubsub.subscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
-    }
+    this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
 
     return () => {
-      if (type === 'watch-v2') {
-        this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
-      } else {
-        this.mastra?.pubsub.unsubscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
-      }
+      this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
     };
   }
 
-  async watchAsync(cb: (event: WatchEvent) => void, type: 'watch'): Promise<() => void>;
-  async watchAsync(cb: (event: WorkflowStreamEvent) => void, type: 'watch-v2'): Promise<() => void>;
-  async watchAsync(
-    cb: ((event: WatchEvent) => void) | ((event: WorkflowStreamEvent) => void),
-    type: 'watch' | 'watch-v2' = 'watch',
-  ): Promise<() => void> {
+  async watchAsync(cb: (event: WorkflowStreamEvent) => void): Promise<() => void> {
     const watchCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId !== this.runId) {
         return;
@@ -626,18 +607,10 @@ export class EventedRun<
       await ack?.();
     };
 
-    if (type === 'watch-v2') {
-      await this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
-    } else {
-      await this.mastra?.pubsub.subscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
-    }
+    await this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
 
     return async () => {
-      if (type === 'watch-v2') {
-        await this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
-      } else {
-        await this.mastra?.pubsub.unsubscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
-      }
+      await this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
     };
   }
 

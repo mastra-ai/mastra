@@ -14,7 +14,7 @@ import Workflows from './pages/workflows';
 import { Workflow } from './pages/workflows/workflow';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
-import RuntimeContext from './pages/runtime-context';
+import RequestContext from './pages/request-context';
 import MCPs from './pages/mcps';
 import MCPServerToolExecutor from './pages/mcps/tool';
 
@@ -144,7 +144,7 @@ function App() {
                   </Route>
 
                   <Route path="/" element={<NavigateTo to="/agents" />} />
-                  <Route path="/runtime-context" element={<RuntimeContext />} />
+                  <Route path="/request-context" element={<RequestContext />} />
                 </Route>
               </Routes>
             </LinkComponentWrapper>

@@ -20,9 +20,9 @@ export interface AgentMetadataProps {
   agentId: string;
   agent: GetAgentResponse;
   hasMemoryEnabled: boolean;
-  modelProviders: string[];
   modelVersion: string;
   updateModel: AgentMetadataModelSwitcherProps['updateModel'];
+  resetModel: AgentMetadataModelSwitcherProps['resetModel'];
   updateModelInModelList: AgentMetadataModelListProps['updateModelInModelList'];
   reorderModelList: AgentMetadataModelListProps['reorderModelList'];
 }
@@ -58,7 +58,7 @@ export const AgentMetadata = ({
   agent,
   hasMemoryEnabled,
   updateModel,
-  modelProviders,
+  resetModel,
   updateModelInModelList,
   reorderModelList,
   modelVersion,
@@ -78,7 +78,6 @@ export const AgentMetadata = ({
         <AgentMetadataSection title="Models">
           <AgentMetadataModelList
             modelList={agent.modelList}
-            modelProviders={modelProviders}
             updateModelInModelList={updateModelInModelList}
             reorderModelList={reorderModelList}
           />
@@ -100,7 +99,7 @@ export const AgentMetadata = ({
             defaultProvider={agent.provider}
             defaultModel={agent.modelId}
             updateModel={updateModel}
-            modelProviders={modelProviders}
+            resetModel={resetModel}
           />
         </AgentMetadataSection>
       )}

@@ -3,7 +3,6 @@ import type { GenerateTextOnStepFinishCallback, ToolSet } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
-import type { Metric } from '../eval';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -26,7 +25,7 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
-import type { RuntimeContext } from '../runtime-context';
+import type { RequestContext } from '../request-context';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
 import type { OutputSchema } from '../stream';
 import type { InferSchemaOutput } from '../stream/base/schema';
@@ -93,10 +92,10 @@ export interface AgentCreateOptions {
 // This is used in place of DynamicArgument so that model router IDE autocomplete works.
 // Without this TS doesn't understand the function/string union type from DynamicArgument
 type DynamicModel = ({
-  runtimeContext,
+  requestContext,
   mastra,
 }: {
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   mastra?: Mastra;
 }) => Promise<MastraModelConfig> | MastraModelConfig;
 
@@ -107,11 +106,7 @@ type ModelWithRetries = {
   enabled?: boolean; //defaults to true
 };
 
-export interface AgentConfig<
-  TAgentId extends string = string,
-  TTools extends ToolsInput = ToolsInput,
-  TMetrics extends Record<string, Metric> = Record<string, Metric>,
-> {
+export interface AgentConfig<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> {
   /**
    * Identifier for the agent.
    * @defaultValue Uses `name` if not provided.
@@ -150,15 +145,15 @@ export interface AgentConfig<
   /**
    * Default options used when calling `generate()`.
    */
-  defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
+  defaultGenerateOptionsLegacy?: DynamicArgument<AgentGenerateOptions>;
   /**
    * Default options used when calling `stream()`.
    */
-  defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
+  defaultStreamOptionsLegacy?: DynamicArgument<AgentStreamOptions>;
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
-  defaultVNextStreamOptions?: DynamicArgument<AgentExecutionOptions>;
+  defaultOptions?: DynamicArgument<AgentExecutionOptions>;
   /**
    * Reference to the Mastra runtime instance (injected automatically).
    */
@@ -171,10 +166,7 @@ export interface AgentConfig<
    * Scoring configuration for runtime evaluation and observability. Can be static or dynamically provided.
    */
   scorers?: DynamicArgument<MastraScorers>;
-  /**
-   * Evaluation metrics for scoring agent responses.
-   */
-  evals?: TMetrics;
+
   /**
    * Memory module used for storing and retrieving stateful context.
    */
@@ -238,8 +230,8 @@ export type AgentGenerateOptions<
   experimental_output?: EXPERIMENTAL_OUTPUT;
   /** Controls how tools are selected during generation */
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
-  /** RuntimeContext for dependency injection */
-  runtimeContext?: RuntimeContext;
+  /** RequestContext for dependency injection */
+  requestContext?: RequestContext;
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   /** Whether to return the input required to run scorers for agents, defaults to false */
@@ -321,8 +313,8 @@ export type AgentStreamOptions<
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Experimental schema for structured output */
   experimental_output?: EXPERIMENTAL_OUTPUT;
-  /** RuntimeContext for dependency injection */
-  runtimeContext?: RuntimeContext;
+  /** RequestContext for dependency injection */
+  requestContext?: RequestContext;
   /**
    * Whether to save messages incrementally on step finish
    * @default false
@@ -365,14 +357,13 @@ export type AgentStreamOptions<
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
 
 export type AgentExecuteOnFinishOptions = {
-  instructions: SystemMessage;
   runId: string;
   result: Parameters<StreamTextOnFinishCallback<ToolSet>>[0] & { object?: unknown };
   thread: StorageThreadType | null | undefined;
   readOnlyMemory?: boolean;
   threadId?: string;
   resourceId?: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
   memoryConfig: MemoryConfig | undefined;
   outputText: string;

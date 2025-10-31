@@ -18,7 +18,7 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
   const [workingMemoryFormat, setWorkingMemoryFormat] = useState<'json' | 'markdown'>('markdown');
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
-  const { runtimeContext } = usePlaygroundStore();
+  const { requestContext } = usePlaygroundStore();
 
   const refetch = useCallback(async () => {
     setIsLoading(true);
@@ -28,7 +28,7 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
         setIsLoading(false);
         return;
       }
-      const res = await client.getWorkingMemory({ agentId, threadId, resourceId, runtimeContext });
+      const res = await client.getWorkingMemory({ agentId, threadId, resourceId, requestContext });
       const { workingMemory, source, workingMemoryTemplate, threadExists } = res as {
         workingMemory: string | null;
         source: 'thread' | 'resource';
@@ -74,7 +74,7 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
           throw new Error('Invalid JSON working memory');
         }
       }
-      await client.updateWorkingMemory({ agentId, threadId, workingMemory: newMemory, resourceId, runtimeContext });
+      await client.updateWorkingMemory({ agentId, threadId, workingMemory: newMemory, resourceId, requestContext });
       refetch();
     } catch (error) {
       console.error('Error updating working memory', error);

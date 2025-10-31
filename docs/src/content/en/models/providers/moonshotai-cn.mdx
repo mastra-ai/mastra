@@ -21,7 +21,7 @@ MOONSHOT_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   name: "my-agent",
@@ -111,8 +111,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "moonshotai-cn/kimi-k2-turbo-preview"
       : "moonshotai-cn/kimi-k2-0711-preview";
