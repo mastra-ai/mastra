@@ -203,11 +203,6 @@ const sidebars = {
             },
             {
               type: "doc",
-              id: "workflows/run-methods/watch",
-              label: ".watch()",
-            },
-            {
-              type: "doc",
               id: "workflows/run-methods/cancel",
               label: ".cancel()",
             },
