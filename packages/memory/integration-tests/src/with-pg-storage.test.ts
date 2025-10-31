@@ -204,8 +204,8 @@ describe('Memory with PostgresStore Integration', () => {
           .join(' '),
       ).toBe('Message 10');
 
-      // Test 6: Query without pagination should still work
-      console.log('Testing query without pagination (backward compatibility)');
+      // Test 6: Query with limit/offset pagination
+      console.log('Testing query with limit/offset pagination');
       const result6 = await memory.query({
         threadId,
         resourceId,
@@ -213,7 +213,7 @@ describe('Memory with PostgresStore Integration', () => {
         offset: 5,
       });
 
-      expect(result6.messages, 'Query with last: 5 should return exactly 5 messages').toHaveLength(5);
+      expect(result6.messages, 'Query with limit: 5 and offset: 5 should return exactly 5 messages').toHaveLength(5);
       // Should return the 5 most recent messages
       expect(
         result6.messages[0].content.parts

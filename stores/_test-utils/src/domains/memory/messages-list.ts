@@ -546,6 +546,29 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         // Should fall back to default behavior
         expect(resultNeg.messages).toHaveLength(5);
       });
+
+      it('should process include parameter when limit is 0 (semantic recall edge case)', async () => {
+        // Test limit: 0 with include - should still process semantic recall results
+        // This is important for semantic recall when lastMessages: 0
+        const result = await storage.listMessages({
+          threadId: thread.id,
+          limit: 0,
+          include: [
+            {
+              id: messages[2]!.id, // Message 3
+              withPreviousMessages: 1,
+              withNextMessages: 1,
+            },
+          ],
+        });
+
+        // Should return included messages with context, even though limit is 0
+        // Include Message 3 with 1 before (Message 2) and 1 after (Message 4) = 3 messages total
+        expect(result.messages.length).toBeGreaterThan(0);
+        expect(result.messages.map((m: any) => m.content.content)).toContain('Message 3');
+        expect(result.total).toBe(5); // Total should still reflect actual count
+        expect(result.perPage).toBe(0);
+      });
     });
   });
 

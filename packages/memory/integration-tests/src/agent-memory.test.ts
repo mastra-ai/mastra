@@ -221,8 +221,6 @@ describe('Agent Memory Tests', () => {
     // Verify that listMemoryMessages actually returned messages from the first thread
     expect(retrievedMemoryMessages.length).toBeGreaterThan(0);
 
-    console.log('retrievedMemoryMessages', retrievedMemoryMessages);
-
     // Verify that the retrieved messages contain content from the first thread
     const hasMessagesFromFirstThread = retrievedMemoryMessages.some(
       msg =>
