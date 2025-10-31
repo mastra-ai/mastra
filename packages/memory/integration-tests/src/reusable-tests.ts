@@ -58,9 +58,7 @@ const createTestMessage = (
 };
 
 export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
-  beforeEach(async () => {
-    messageCounter = 0;
-    // Fetch all threads for complete cleanup
+  const cleanupAllThreads = async () => {
     let allThreads: any[] = [];
     let offset = 0;
     const limit = 100;
@@ -69,32 +67,21 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         resourceId,
         offset,
         limit,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
       allThreads.push(...threads);
-      if (!hasMore) break;
+      if (!hasMore || threads.length === 0) break;
       offset += limit;
     }
     await Promise.all(allThreads.map(thread => memory.deleteThread(thread.id)));
+  };
+
+  beforeEach(async () => {
+    messageCounter = 0;
+    await cleanupAllThreads();
   });
 
   afterAll(async () => {
-    // Fetch all threads for complete cleanup
-    let allThreads: any[] = [];
-    let offset = 0;
-    const limit = 100;
-    while (true) {
-      const { threads, hasMore } = await memory.listThreadsByResourceId({
-        resourceId,
-        offset,
-        limit,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
-      });
-      allThreads.push(...threads);
-      if (!hasMore) break;
-      offset += limit;
-    }
-    await Promise.all(allThreads.map(thread => memory.deleteThread(thread.id)));
+    await cleanupAllThreads();
   });
 
   describe('Memory Features', () => {
