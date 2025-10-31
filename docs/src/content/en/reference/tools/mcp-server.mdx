@@ -438,17 +438,17 @@ serve(async (req) => {
 **When to use `serverless: true`**
 
 Use `serverless: true` when deploying to environments where each request runs in a fresh, stateless execution context:
-- ✅ Supabase Edge Functions
-- ✅ Cloudflare Workers
-- ✅ Vercel Edge Functions
-- ✅ Netlify Edge Functions
-- ✅ AWS Lambda
-- ✅ Deno Deploy
+- Supabase Edge Functions
+- Cloudflare Workers
+- Vercel Edge Functions
+- Netlify Edge Functions
+- AWS Lambda
+- Deno Deploy
 
 Use the default session-based mode (without `serverless: true`) for:
-- ✅ Long-lived Node.js servers
-- ✅ Docker containers
-- ✅ Traditional hosting (VPS, dedicated servers)
+- Long-lived Node.js servers
+- Docker containers
+- Traditional hosting (VPS, dedicated servers)
 
 The serverless mode disables session management and creates fresh server instances per request, which is necessary for stateless environments where memory doesn't persist between invocations.
 </Callout>

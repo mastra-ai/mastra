@@ -1413,7 +1413,7 @@ export class MCPServer extends MCPServerBase {
    * Handles a stateless, serverless HTTP request without session management.
    *
    * This method bypasses all session/transport state and handles each request independently.
-   * Perfect for serverless environments (Cloudflare Workers, Vercel Edge, etc.) where
+   * For serverless environments (Cloudflare Workers, Vercel Edge, etc.) where
    * persistent connections and session state cannot be maintained across requests.
    *
    * Each request gets a fresh transport and server instance that are discarded after the response.
@@ -1455,8 +1455,8 @@ export class MCPServer extends MCPServerBase {
       // sessionIdGenerator: undefined disables session management entirely
       // enableJsonResponse: true forces JSON-RPC responses instead of SSE streaming
       const tempTransport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: undefined, // Disable sessions - each request is independent
-        enableJsonResponse: true, // Return JSON immediately, no streaming
+        sessionIdGenerator: undefined,
+        enableJsonResponse: true,
       });
 
       // Connect the transient server to the temporary transport
