@@ -1613,7 +1613,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           // BREAKING CHANGE v1.0: New tool signature - first param is inputData, second is context
           // manually wrap agent tools with ai tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
-          execute: async (inputData, context) => {
+          execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
             try {
               this.logger.debug(`[Agent:${this.name}] - Executing agent as tool ${agentName}`, {
                 name: agentName,
@@ -1626,13 +1626,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               let result: any;
 
               if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v2') {
-                const generateResult = await agent.generate((inputData as any).prompt, {
+                const generateResult = await agent.generate(inputData.prompt, {
                   requestContext,
                   tracingContext: context?.tracingContext,
                 });
                 result = { text: generateResult.text };
               } else if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v1') {
-                const generateResult = await agent.generateLegacy((inputData as any).prompt, {
+                const generateResult = await agent.generateLegacy(inputData.prompt, {
                   requestContext,
                   tracingContext: context?.tracingContext,
                 });
@@ -1645,7 +1645,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 const slugify = await import(`@sindresorhus/slugify`); // this is an esm package, need to dynamic import incase we're running in cjs
                 const subAgentResourceId = `${slugify.default(this.id)}-${agentName}`;
 
-                const streamResult = await agent.stream((inputData as any).prompt, {
+                const streamResult = await agent.stream(inputData.prompt, {
                   requestContext,
                   tracingContext: context?.tracingContext,
                   ...(resourceId && threadId
@@ -1673,7 +1673,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 result = { text: fullText, subAgentThreadId, subAgentResourceId };
               } else {
                 // streamLegacy
-                const streamResult = await agent.streamLegacy((inputData as any).prompt, {
+                const streamResult = await agent.streamLegacy(inputData.prompt, {
                   requestContext,
                   tracingContext: context?.tracingContext,
                 });
