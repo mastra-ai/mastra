@@ -14,7 +14,7 @@ describe('Tool Input Validation Integration Tests', () => {
           age: z.number().min(0),
         }),
         execute: async (inputData, _context) => {
-          return { success: true, data: input };
+          return { success: true, data: inputData };
         },
       });
 
@@ -34,8 +34,8 @@ describe('Tool Input Validation Integration Tests', () => {
           count: z.number(),
           active: z.boolean(),
         }),
-        execute: async input => {
-          return { success: true, data: input };
+        execute: async inputData => {
+          return { success: true, data: inputData };
         },
       });
 
@@ -63,8 +63,8 @@ describe('Tool Input Validation Integration Tests', () => {
               'Password must be at least 8 characters with letters and numbers',
             ),
         }),
-        execute: async input => {
-          return { success: true, data: input };
+        execute: async inputData => {
+          return { success: true, data: inputData };
         },
       });
 
@@ -91,8 +91,8 @@ describe('Tool Input Validation Integration Tests', () => {
             deadline: z.string().datetime().optional(),
           }),
         }),
-        execute: async input => {
-          return { success: true, data: input };
+        execute: async inputData => {
+          return { success: true, data: inputData };
         },
       });
 
@@ -117,8 +117,8 @@ describe('Tool Input Validation Integration Tests', () => {
           age: z.number().min(0),
           email: z.string().email(),
         }),
-        execute: async input => {
-          return { success: true, data: input };
+        execute: async inputData => {
+          return { success: true, data: inputData };
         },
       });
 
@@ -145,15 +145,15 @@ describe('Tool Input Validation Integration Tests', () => {
           name: z.string().trim().toLowerCase(),
           age: z.string().transform(val => parseInt(val, 10)),
         }),
-        execute: async input => {
-          return { transformed: input };
+        execute: async inputData => {
+          return { transformed: inputData };
         },
       });
 
       const result = await tool.execute({
         name: '  JOHN DOE  ',
         age: '25' as any, // Will be transformed to number
-      } as any);
+      });
 
       expect(result.error).toBeUndefined();
       expect(result.transformed).toEqual({
@@ -172,16 +172,15 @@ describe('Tool Input Validation Integration Tests', () => {
           email: z.string().email(),
           age: z.number().min(18, 'Must be 18 or older'),
         }),
-        execute: async input => {
-          return { validated: true, user: input };
+        execute: async inputData => {
+          return { validated: true, user: inputData };
         },
       });
 
-      // Simulate tool execution with invalid data - v1.0 passes raw data
       const result = await validateUser.execute({
         email: 'invalid-email',
         age: 16,
-      } as any);
+      });
 
       expect(result.error).toBe(true);
       expect(result.message).toContain('Invalid email');
@@ -215,13 +214,12 @@ describe('Tool Input Validation Integration Tests', () => {
         inputSchema: z.object({
           name: z.string(),
         }),
-        execute: async input => {
-          // In v1.0, input is already the raw data
+        execute: async inputData => {
           return { result: inputData.name };
         },
       });
 
-      const result = await tool.execute({ name: 'test' }, { runId: 'test-run' });
+      const result = await tool.execute({ name: 'test' });
 
       expect(result).toEqual({ result: 'test' });
     });
@@ -236,8 +234,8 @@ describe('Tool Input Validation Integration Tests', () => {
           context: z.string(),
           otherField: z.number(),
         }),
-        execute: async input => {
-          return { received: input };
+        execute: async inputData => {
+          return { received: inputData };
         },
       });
 
@@ -263,8 +261,8 @@ describe('Tool Input Validation Integration Tests', () => {
             timestamp: z.number(),
           }),
         }),
-        execute: async input => {
-          return { received: input };
+        execute: async inputData => {
+          return { received: inputData };
         },
       });
 
@@ -289,8 +287,8 @@ describe('Tool Input Validation Integration Tests', () => {
           context: z.string(), // Schema expects a 'context' field
           otherValue: z.number(),
         }),
-        execute: async input => {
-          return { received: input };
+        execute: async inputData => {
+          return { received: inputData };
         },
       });
 
@@ -315,8 +313,8 @@ describe('Tool Input Validation Integration Tests', () => {
           inputData: z.number(),
           regularField: z.boolean(),
         }),
-        execute: async input => {
-          return { received: input };
+        execute: async inputData => {
+          return { received: inputData };
         },
       });
 
@@ -342,8 +340,8 @@ describe('Tool Input Validation Integration Tests', () => {
           name: z.string(),
           value: z.number(),
         }),
-        execute: async input => {
-          return { received: input };
+        execute: async inputData => {
+          return { received: inputData };
         },
       });
 
@@ -367,8 +365,8 @@ describe('Tool Input Validation Integration Tests', () => {
           context: z.string(),
           other: z.number(),
         }),
-        execute: async input => {
-          return { received: input };
+        execute: async inputData => {
+          return { received: inputData };
         },
       });
 
@@ -392,8 +390,8 @@ describe('Tool Input Validation Integration Tests', () => {
           }),
           metadata: z.string(),
         }),
-        execute: async input => {
-          return { received: input };
+        execute: async inputData => {
+          return { received: inputData };
         },
       });
 
@@ -413,8 +411,8 @@ describe('Tool Input Validation Integration Tests', () => {
       const tool = createTool({
         id: 'no-schema',
         description: 'Tool without schema',
-        execute: async input => {
-          return { received: input };
+        execute: async inputData => {
+          return { received: inputData };
         },
       });
 
@@ -431,8 +429,8 @@ describe('Tool Input Validation Integration Tests', () => {
         inputSchema: z.object({
           required: z.string(),
         }),
-        execute: async input => {
-          return { data: input };
+        execute: async inputData => {
+          return { data: inputData };
         },
       });
 
@@ -451,8 +449,8 @@ describe('Tool Input Validation Integration Tests', () => {
             required: z.string(),
           })
           .passthrough(),
-        execute: async input => {
-          return { data: input };
+        execute: async inputData => {
+          return { data: inputData };
         },
       });
 
@@ -482,8 +480,8 @@ describe('Tool Input Validation Integration Tests', () => {
           }),
           action: z.enum(['create', 'update', 'delete']),
         }),
-        execute: async input => {
-          return { processed: input };
+        execute: async inputData => {
+          return { processed: inputData };
         },
       });
 
