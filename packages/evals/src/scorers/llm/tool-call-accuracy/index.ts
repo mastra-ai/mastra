@@ -1,6 +1,6 @@
-import type { Tool } from '@mastra/core';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { createScorer } from '@mastra/core/scores';
+import type { Tool } from '@mastra/core/tools';
 import { z } from 'zod';
 import {
   extractToolCalls,

@@ -299,7 +299,7 @@ chatWorkflow.commit();
 Configure your Mastra instance with the agents, workflow, and WhatsApp webhook endpoints.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { registerApiRoute } from "@mastra/core/server";
 import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";

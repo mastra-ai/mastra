@@ -26,7 +26,7 @@ export default function Page() {
         <CodeBlock
           fileName="src/mastra/agents/index.ts"
           language="typescript"
-          code={`import { Agent } from '@mastra/core';
+          code={`import { Agent } from '@mastra/core/agent';
 import { anthropic } from '@ai-sdk/anthropic';
 
 export const travelAnalyzer = new Agent({

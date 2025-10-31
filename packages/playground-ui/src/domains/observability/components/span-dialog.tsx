@@ -15,7 +15,7 @@ import {
   GaugeIcon,
 } from 'lucide-react';
 import { SpanDetails } from './span-details';
-import { AISpanRecord } from '@mastra/core';
+import { AISpanRecord } from '@mastra/core/storage';
 import { useLinkComponent } from '@/lib/framework';
 import { Tabs } from '@/components/ui/elements/tabs/tabs';
 import { Sections } from '@/components/ui/containers';

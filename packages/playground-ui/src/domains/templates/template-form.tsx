@@ -109,7 +109,6 @@ export function TemplateForm({
                 defaultModel={defaultModelId || ''}
                 updateModel={onModelUpdate || (() => Promise.resolve({ message: 'Updated' }))}
                 closeEditor={() => {}} // No need to close in template context
-                modelProviders={['openai', 'anthropic', 'google', 'xai', 'groq']}
                 autoSave={true}
                 selectProviderPlaceholder="Provider"
               />
