@@ -436,7 +436,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
 
-    const list = new MessageList({ threadId }).add(queryResult.messagesV2, 'memory');
+    const list = new MessageList({ threadId }).add(queryResult.messages, 'memory');
 
     const baselineResult = await memory.processMessages({
       messages: list.get.remembered.core(),
@@ -458,7 +458,7 @@ describe('Memory with Processors', () => {
       threadId,
       selectBy: { last: 20 },
     });
-    const list2 = new MessageList({ threadId }).add(weatherQueryResult.messagesV2, 'memory');
+    const list2 = new MessageList({ threadId }).add(weatherQueryResult.messages, 'memory');
     const weatherFilteredResult = await memory.processMessages({
       messages: list2.get.all.core(),
       processors: [new ToolCallFilter({ exclude: ['get_weather'] })],
