@@ -495,7 +495,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
     });
   });
 
-  describe('getMessagesById', () => {
+  describe('listMessagesById', () => {
     const resourceId = 'test-resource-id';
     const resourceId2 = 'test-resource-id-2';
     let threads: StorageThreadType[] = [];
@@ -587,7 +587,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
     });
 
     it('should return an empty array if no message IDs are provided', async () => {
-      const messages = await storage.getMessagesById({ messageIds: [] });
+      const messages = await storage.listMessagesById({ messageIds: [] });
       expect(messages).toHaveLength(0);
     });
 
@@ -599,7 +599,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
         thread1Messages[0]!.id,
         thread2Messages[1]!.id,
       ];
-      const messages = await storage.getMessagesById({
+      const messages = await storage.listMessagesById({
         messageIds,
       });
 
@@ -607,8 +607,8 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       expect(messages.every((msg, i, arr) => i === 0 || msg.createdAt >= arr[i - 1]!.createdAt)).toBe(true);
     });
 
-    it('should return V2 messages by default', async () => {
-      const messages: MastraMessageV2[] = await storage.getMessagesById({
+    it('should return V2 messages', async () => {
+      const messages: MastraMessageV2[] = await storage.listMessagesById({
         messageIds: thread1Messages.map(msg => msg.id),
       });
 
@@ -616,26 +616,8 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       expect(messages.every(MessageList.isMastraMessageV2)).toBe(true);
     });
 
-    it('should return messages in the specified format', async () => {
-      const v1messages: MastraMessageV1[] = await storage.getMessagesById({
-        messageIds: thread1Messages.map(msg => msg.id),
-        format: 'v1',
-      });
-
-      expect(v1messages.length).toBeGreaterThan(0);
-      expect(v1messages.every(MessageList.isMastraMessageV1)).toBe(true);
-
-      const v2messages: MastraMessageV2[] = await storage.getMessagesById({
-        messageIds: thread1Messages.map(msg => msg.id),
-        format: 'v2',
-      });
-
-      expect(v2messages.length).toBeGreaterThan(0);
-      expect(v2messages.every(MessageList.isMastraMessageV2)).toBe(true);
-    });
-
     it('should return messages from multiple threads', async () => {
-      const messages = await storage.getMessagesById({
+      const messages = await storage.listMessagesById({
         messageIds: [...thread1Messages.map(msg => msg.id), ...thread2Messages.map(msg => msg.id)],
       });
 
@@ -645,7 +627,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
     });
 
     it('should return messages from multiple resources', async () => {
-      const messages = await storage.getMessagesById({
+      const messages = await storage.listMessagesById({
         messageIds: [...thread1Messages.map(msg => msg.id), ...resource2Messages.map(msg => msg.id)],
       });
 

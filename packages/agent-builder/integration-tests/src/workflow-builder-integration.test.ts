@@ -1,7 +1,8 @@
 import { execSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, cpSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Mastra, Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore } from '@mastra/libsql';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';

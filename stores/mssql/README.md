@@ -249,7 +249,7 @@ MSSQLStore supports multiple connection methods:
 - `loadWorkflowSnapshot({ workflowName, runId })`: Load workflow execution state
 - `updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext })`: Update step results (transaction + row locking)
 - `updateWorkflowState({ workflowName, runId, opts })`: Update workflow run status (transaction + row locking)
-- `getWorkflowRuns({ workflowName?, fromDate?, toDate?, limit?, offset?, resourceId? })`: Query workflow runs
+- `listWorkflowRuns({ workflowName?, fromDate?, toDate?, limit?, offset?, resourceId? })`: Query workflow runs
 - `getWorkflowRunById({ runId, workflowName? })`: Get specific workflow run
 
 ### Scores & Evaluation

@@ -2,14 +2,7 @@ import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { TracingOptions } from '@mastra/core/ai-tracing';
 import type { RequestContext } from '@mastra/core/di';
 import type { WorkflowRuns } from '@mastra/core/storage';
-import type {
-  Workflow,
-  WatchEvent,
-  WorkflowInfo,
-  ChunkType,
-  WorkflowStreamEvent,
-  StreamEvent,
-} from '@mastra/core/workflows';
+import type { Workflow, WorkflowInfo, ChunkType, StreamEvent, WorkflowState } from '@mastra/core/workflows';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
@@ -135,7 +128,7 @@ export async function getWorkflowRunExecutionResultHandler({
   mastra,
   workflowId,
   runId,
-}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'>): Promise<WatchEvent['payload']['workflowState']> {
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'>): Promise<WorkflowState> {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -265,95 +258,6 @@ export async function startWorkflowRunHandler({
     return { message: 'Workflow run started' };
   } catch (e) {
     return handleError(e, 'Error starting workflow run');
-  }
-}
-
-export async function watchWorkflowHandler({
-  mastra,
-  workflowId,
-  runId,
-  eventType = 'watch',
-}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
-  eventType?: 'watch' | 'watch-v2';
-}): Promise<ReadableStream<string>> {
-  try {
-    if (!workflowId) {
-      throw new HTTPException(400, { message: 'Workflow ID is required' });
-    }
-
-    if (!runId) {
-      throw new HTTPException(400, { message: 'runId required to watch workflow' });
-    }
-
-    const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
-
-    if (!workflow) {
-      throw new HTTPException(404, { message: 'Workflow not found' });
-    }
-
-    const run = await workflow.getWorkflowRunById(runId);
-
-    if (!run) {
-      throw new HTTPException(404, { message: 'Workflow run not found' });
-    }
-
-    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
-    let unwatch: () => void;
-    let asyncRef: NodeJS.Immediate | null = null;
-    const stream = new ReadableStream<string>({
-      start(controller) {
-        if (eventType === 'watch') {
-          unwatch = _run.watch((event: WatchEvent) => {
-            const { type, payload, eventTimestamp } = event;
-            controller.enqueue(JSON.stringify({ type, payload, eventTimestamp, runId }));
-
-            if (asyncRef) {
-              clearImmediate(asyncRef);
-              asyncRef = null;
-            }
-
-            // a run is finished if the status is not running
-            asyncRef = setImmediate(async () => {
-              const runDone = (payload as WatchEvent['payload']).workflowState?.status !== 'running';
-              if (runDone) {
-                controller.close();
-                unwatch?.();
-              }
-            });
-          }, eventType);
-        } else {
-          unwatch = _run.watch((event: WorkflowStreamEvent) => {
-            const { type, payload } = event;
-            controller.enqueue(JSON.stringify({ type, payload, runId }));
-
-            if (asyncRef) {
-              clearImmediate(asyncRef);
-              asyncRef = null;
-            }
-
-            // a run is finished if the status is not running
-            asyncRef = setImmediate(async () => {
-              const runDone = type === 'workflow-finish';
-              if (runDone) {
-                controller.close();
-                unwatch?.();
-              }
-            });
-          }, eventType);
-        }
-      },
-      cancel() {
-        if (asyncRef) {
-          clearImmediate(asyncRef);
-          asyncRef = null;
-        }
-        unwatch?.();
-      },
-    });
-
-    return stream;
-  } catch (error) {
-    return handleError(error, 'Error watching workflow');
   }
 }
 
