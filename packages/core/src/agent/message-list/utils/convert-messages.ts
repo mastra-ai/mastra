@@ -14,7 +14,6 @@ import { MessageList } from '../index';
  * - `AIV4.Core` - AI SDK v4 CoreMessage format (for LLM API calls)
  * - `AIV5.UI` - AI SDK v5 UIMessage format (for frontend components)
  * - `AIV5.Model` - AI SDK v5 ModelMessage format (for LLM API calls)
- *
  */
 export type OutputFormat = 'Mastra.V2' | 'AIV4.UI' | 'AIV4.Core' | 'AIV5.UI' | 'AIV5.Model';
 
