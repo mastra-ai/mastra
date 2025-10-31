@@ -49,12 +49,8 @@ export async function bundleTypes(file: string) {
   });
 
   if (extractorResult.succeeded) {
-    console.log('✅ API Extractor completed successfully');
     return 0;
   } else {
-    console.error(
-      `❌ API Extractor completed with ${extractorResult.errorCount} errors and ${extractorResult.warningCount} warnings`,
-    );
     return 1;
   }
 }
