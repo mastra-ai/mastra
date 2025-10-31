@@ -772,9 +772,9 @@ export class MCPServer extends MCPServerBase {
               }
             }
 
-            // Store MCP context in the isolated RequestContext
-            if (mcp) {
-              isolatedContext.set('__mcp', mcp);
+            // Store only mcp.extra in RequestContext (elicitation is not serializable)
+            if (mcp?.extra) {
+              isolatedContext.set('mcp.extra', mcp.extra);
             }
 
             const response = await agent.generate(context.message, {

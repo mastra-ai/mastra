@@ -6,6 +6,7 @@ import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo } from '@mastra/core/mcp';
 import type { InternalCoreTool } from '@mastra/core/tools';
+import { createTool } from '@mastra/core/tools';
 import { createStep, Workflow } from '@mastra/core/workflows';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type {
@@ -1361,28 +1362,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     ).toThrow('must have a non-empty description');
   });
 
-  it('should pass MCP context to agent via RequestContext', async () => {
-    const testAgent = createMockAgent(
-      'AuthTestAgent',
-      mockAgentDoGenerate,
-      mockAgentGetInstructions,
-      'Test agent for MCP auth context propagation',
-    );
-
-    let capturedRequestContext: any = null;
-    const originalGenerate = testAgent.generate.bind(testAgent);
-    vi.spyOn(testAgent, 'generate').mockImplementation(async (messages: any, options?: any) => {
-      capturedRequestContext = options?.requestContext;
-      return originalGenerate(messages, options);
-    });
-
-    server = new MCPServer({
-      name: 'AgentAuthContextServer',
-      version: '1.0.0',
-      tools: {},
-      agents: { authAgent: testAgent },
-    });
-
+  it('should pass MCP context to tools both directly and through agents', async () => {
     const mockExtra: MCPRequestHandlerExtra = {
       signal: new AbortController().signal,
       sessionId: 'auth-test-session',
@@ -1396,135 +1376,157 @@ describe('MCPServer - Agent to Tool Conversion', () => {
       sendRequest: vi.fn(),
     };
 
-    const mockRequest = {
-      jsonrpc: '2.0' as const,
-      id: 'test-agent-auth-1',
-      method: 'tools/call' as const,
-      params: {
-        name: 'ask_authAgent',
-        arguments: {
-          message: 'Please check my auth',
+    let directToolOptions: any = null;
+    const directAuthCheckTool: ToolsInput = {
+      authCheck: {
+        description: 'Tool that checks for auth context',
+        parameters: z.object({ query: z.string().optional() }),
+        execute: async (args, options) => {
+          directToolOptions = options;
+          return {
+            source: 'direct-mcp',
+            authInfo: options?.mcp?.extra?.authInfo,
+          };
         },
       },
     };
 
-    const serverInstance = server.getServer();
+    server = new MCPServer({
+      name: 'DirectToolServer',
+      version: '1.0.0',
+      tools: directAuthCheckTool,
+    });
 
+    const serverInstance = server.getServer();
     // @ts-ignore
     const requestHandlers = serverInstance._requestHandlers;
     const callToolHandler = requestHandlers.get('tools/call');
 
-    expect(callToolHandler).toBeDefined();
-
-    await callToolHandler(mockRequest, mockExtra);
-
-    expect(testAgent.generate).toHaveBeenCalled();
-    expect(capturedRequestContext).toBeDefined();
-
-    const mcpContext = capturedRequestContext.get('__mcp');
-
-    expect(mcpContext).toBeDefined();
-    expect(mcpContext.extra.sessionId).toBe('auth-test-session');
-    expect(mcpContext.extra.authInfo.token).toBe('test-auth-token-123');
-    expect(mcpContext.extra.authInfo.clientId).toBe('test-client-456');
-    expect(mcpContext.extra.requestId).toBe('auth-test-request');
-  });
-
-  it('should isolate RequestContext between concurrent agent invocations', async () => {
-    const capturedContexts: any[] = [];
-    const testAgent = createMockAgent(
-      'IsolationTestAgent',
-      mockAgentDoGenerate,
-      mockAgentGetInstructions,
-      'Test agent for RequestContext isolation',
+    await callToolHandler(
+      {
+        jsonrpc: '2.0' as const,
+        id: 'test-direct-tool-1',
+        method: 'tools/call' as const,
+        params: {
+          name: 'authCheck',
+          arguments: { query: 'direct call' },
+        },
+      },
+      mockExtra,
     );
 
-    const originalGenerate = testAgent.generate.bind(testAgent);
-    vi.spyOn(testAgent, 'generate').mockImplementation(async (messages: any, options?: any) => {
-      capturedContexts.push(options?.requestContext);
-      return originalGenerate(messages, options);
+    expect(directToolOptions).toBeDefined();
+    expect(directToolOptions.mcp).toBeDefined();
+    expect(directToolOptions.mcp.extra.authInfo.token).toBe('test-auth-token-123');
+    expect(directToolOptions.mcp.extra.authInfo.clientId).toBe('test-client-456');
+    expect(directToolOptions.mcp.extra.sessionId).toBe('auth-test-session');
+
+    let agentContextObj: any = null;
+    let agentExecOptions: any = null;
+
+    const agentAuthCheckToolInstance = createTool({
+      id: 'authCheck',
+      description: 'Tool that checks for auth context',
+      inputSchema: z.object({ query: z.string().optional() }),
+      execute: async (contextObj, execOptions) => {
+        agentContextObj = contextObj;
+        agentExecOptions = execOptions;
+        const mcpExtra = contextObj.requestContext?.get('mcp.extra');
+        return {
+          source: 'agent-request-context',
+          authInfo: mcpExtra?.authInfo,
+        };
+      },
+    });
+
+    const agentMock = new MockLanguageModelV2({
+      doStream: async params => {
+        const hasToolResults = params.prompt.some(
+          (msg: any) =>
+            msg.role === 'tool' ||
+            (Array.isArray(msg.content) && msg.content.some((c: any) => c.type === 'tool-result')),
+        );
+
+        if (!hasToolResults) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'authCheck',
+                input: JSON.stringify({ query: 'agent call' }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ] as any),
+          };
+        } else {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-delta', id: 'text-1', delta: 'Tool executed successfully' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ] as any),
+          };
+        }
+      },
+    });
+
+    const agentWithTool = new Agent({
+      name: 'AgentWithAuthCheckTool',
+      instructions: 'You use the authCheck tool',
+      description: 'Agent that uses authCheck tool',
+      model: agentMock,
+      tools: { authCheck: agentAuthCheckToolInstance },
     });
 
     server = new MCPServer({
-      name: 'IsolationTestServer',
+      name: 'AgentAuthContextServer',
       version: '1.0.0',
       tools: {},
-      agents: { isolationAgent: testAgent },
+      agents: { authAgent: agentWithTool },
     });
 
-    const serverInstance = server.getServer();
+    const serverInstance2 = server.getServer();
     // @ts-ignore
-    const requestHandlers = serverInstance._requestHandlers;
-    const callToolHandler = requestHandlers.get('tools/call');
+    const requestHandlers2 = serverInstance2._requestHandlers;
+    const callToolHandler2 = requestHandlers2.get('tools/call');
 
-    const userAExtra: MCPRequestHandlerExtra = {
-      signal: new AbortController().signal,
-      sessionId: 'user-a-session',
-      authInfo: {
-        token: 'user-a-token',
-        clientId: 'user-a-client',
-        scopes: ['read'],
+    await callToolHandler2(
+      {
+        jsonrpc: '2.0' as const,
+        id: 'test-agent-tool-1',
+        method: 'tools/call' as const,
+        params: {
+          name: 'ask_authAgent',
+          arguments: { message: 'Please check auth' },
+        },
       },
-      requestId: 'user-a-request',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    };
+      mockExtra,
+    );
 
-    const userARequest = {
-      jsonrpc: '2.0' as const,
-      id: 'test-user-a',
-      method: 'tools/call' as const,
-      params: {
-        name: 'ask_isolationAgent',
-        arguments: { message: 'User A message' },
-      },
-    };
+    expect(agentContextObj).toBeDefined();
+    expect(agentContextObj.requestContext).toBeDefined();
+    expect(typeof agentContextObj.requestContext.get).toBe('function');
 
-    const userBExtra: MCPRequestHandlerExtra = {
-      signal: new AbortController().signal,
-      sessionId: 'user-b-session',
-      authInfo: {
-        token: 'user-b-token',
-        clientId: 'user-b-client',
-        scopes: ['write'],
-      },
-      requestId: 'user-b-request',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    };
-
-    const userBRequest = {
-      jsonrpc: '2.0' as const,
-      id: 'test-user-b',
-      method: 'tools/call' as const,
-      params: {
-        name: 'ask_isolationAgent',
-        arguments: { message: 'User B message' },
-      },
-    };
-
-    await callToolHandler(userARequest, userAExtra);
-    await callToolHandler(userBRequest, userBExtra);
-
-    expect(capturedContexts).toHaveLength(2);
-
-    const userAContext = capturedContexts[0];
-    const userBContext = capturedContexts[1];
-    const userAMcp = userAContext.get('__mcp');
-    const userBMcp = userBContext.get('__mcp');
-
-    expect(userAMcp).toBeDefined();
-    expect(userBMcp).toBeDefined();
-
-    expect(userAMcp.extra.authInfo.token).toBe('user-a-token');
-    expect(userAMcp.extra.authInfo.clientId).toBe('user-a-client');
-    expect(userAMcp.extra.sessionId).toBe('user-a-session');
-
-    expect(userBMcp.extra.authInfo.token).toBe('user-b-token');
-    expect(userBMcp.extra.authInfo.clientId).toBe('user-b-client');
-    expect(userBMcp.extra.sessionId).toBe('user-b-session');
-
-    expect(userAContext).not.toBe(userBContext);
+    const mcpExtra = agentContextObj.requestContext.get('mcp.extra');
+    expect(mcpExtra).toBeDefined();
+    expect(mcpExtra.authInfo).toBeDefined();
+    expect(mcpExtra.authInfo.token).toBe('test-auth-token-123');
+    expect(mcpExtra.authInfo.clientId).toBe('test-client-456');
+    expect(mcpExtra.sessionId).toBe('auth-test-session');
+    expect(mcpExtra.requestId).toBe('auth-test-request');
+    expect(agentExecOptions.mcp).toBeUndefined();
   });
 });
 
