@@ -999,22 +999,19 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
         // Sort based on numeric part of content for consistent comparison
         const sortedResultMessages = [...result.messages].sort((a, b) => {
-          const numA = parseInt(((a.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
-          const numB = parseInt(((b.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
+          const numA = parseInt(getTextContent(a).match(/Message (\d+)/)?.[1] || '0');
+          const numB = parseInt(getTextContent(b).match(/Message (\d+)/)?.[1] || '0');
           return numA - numB;
         });
 
         const sortedExpectedMessages = [...messagesToSave].sort((a, b) => {
-          const numA = parseInt(((a.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
-          const numB = parseInt(((b.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
+          const numA = parseInt(getTextContent(a).match(/Message (\d+)/)?.[1] || '0');
+          const numB = parseInt(getTextContent(b).match(/Message (\d+)/)?.[1] || '0');
           return numA - numB;
         });
 
         sortedExpectedMessages.forEach((expectedMessage, index) => {
-          const resultContent = sortedResultMessages[index].content;
-          // messagesToSave contains the direct output of createTestMessage
-          const expectedContent = expectedMessage.content;
-          expect(resultContent).toBe(expectedContent);
+          expect(getTextContent(sortedResultMessages[index])).toBe(getTextContent(expectedMessage));
         });
       });
     });

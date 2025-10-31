@@ -705,10 +705,11 @@ describe('Mastra ID Generator', () => {
 
       // Add workflow steps
       const steps = ['Initialize', 'Process', 'Validate', 'Complete'];
+      const savedMessageIds: string[] = [];
       for (const step of steps) {
-        await agentMemory.saveMessages({
+        const result = await agentMemory.saveMessages({
           messages: [{
-            id: `msg-${Date.now()}-${Math.random()}`,
+            // Omit id to let saveMessages/memory generate it using the custom generator
             threadId: thread.id,
             resourceId: 'workflow-resource',
             content: {
@@ -719,9 +720,16 @@ describe('Mastra ID Generator', () => {
             createdAt: new Date(),
           }],
         });
+        savedMessageIds.push(...result.messages.map(m => m.id));
       }
 
+      // Verify custom ID generator was called
       expect(customIdGenerator).toHaveBeenCalled();
+      
+      // Verify all saved message IDs start with the custom prefix
+      savedMessageIds.forEach(id => {
+        expect(id).toMatch(/^custom-id-/);
+      });
     });
 
     it('should handle streaming operations with memory persistence', async () => {
