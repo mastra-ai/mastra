@@ -74,6 +74,20 @@ export async function listThreadsHandler(c: Context) {
     const direction = c.req.query('sortDirection') as ThreadSortDirection | undefined;
     const requestContext = c.get('requestContext');
 
+    // Validate query parameters
+    const validFields: ThreadOrderBy[] = ['createdAt', 'updatedAt'];
+    const validDirections: ThreadSortDirection[] = ['ASC', 'DESC'];
+
+    if (field && !validFields.includes(field)) {
+      return c.json({ error: `Invalid orderBy field: ${field}. Must be one of: ${validFields.join(', ')}` }, 400);
+    }
+    if (direction && !validDirections.includes(direction)) {
+      return c.json(
+        { error: `Invalid sortDirection: ${direction}. Must be one of: ${validDirections.join(', ')}` },
+        400,
+      );
+    }
+
     // Transform to nested structure
     const orderBy = field || direction ? { field: field || 'createdAt', direction: direction || 'DESC' } : undefined;
 
