@@ -23,8 +23,8 @@ interface HTTPSOptions {
 }
 
 interface StartOptions {
-  inspect?: boolean;
-  inspectBrk?: boolean;
+  inspect?: string | boolean;
+  inspectBrk?: string | boolean;
   customArgs?: string[];
   https?: HTTPSOptions;
 }
@@ -50,12 +50,17 @@ const startServer = async (
 
     const commands = [];
 
-    if (startOptions.inspect) {
-      commands.push('--inspect');
+    const inspect = startOptions.inspect === '' ? true : startOptions.inspect;
+    const inspectBrk = startOptions.inspectBrk === '' ? true : startOptions.inspectBrk;
+
+    if (inspect) {
+      const inspectFlag = typeof inspect === 'string' ? `--inspect=${inspect}` : '--inspect';
+      commands.push(inspectFlag);
     }
 
-    if (startOptions.inspectBrk) {
-      commands.push('--inspect-brk'); //stops at beginning of script
+    if (inspectBrk) {
+      const inspectBrkFlag = typeof inspectBrk === 'string' ? `--inspect-brk=${inspectBrk}` : '--inspect-brk';
+      commands.push(inspectBrkFlag);
     }
 
     if (startOptions.customArgs) {
@@ -292,8 +297,8 @@ export async function dev({
   root?: string;
   tools?: string[];
   env?: string;
-  inspect?: boolean;
-  inspectBrk?: boolean;
+  inspect?: string | boolean;
+  inspectBrk?: string | boolean;
   customArgs?: string[];
   https?: boolean;
   debug: boolean;

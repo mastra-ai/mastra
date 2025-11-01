@@ -103,8 +103,8 @@ program
   .option('-r, --root <root>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .option('-e, --env <env>', 'Custom env file to include in the dev server')
-  .option('-i, --inspect', 'Start the dev server in inspect mode')
-  .option('-b, --inspect-brk', 'Start the dev server in inspect mode and break at the beginning of the script')
+  .option('-i, --inspect [host:port]', 'Start the dev server in inspect mode (optional: [host:]port, e.g., 0.0.0.0:9229)')
+  .option('-b, --inspect-brk [host:port]', 'Start the dev server in inspect mode and break at the beginning of the script (optional: [host:]port)')
   .option(
     '-c, --custom-args <args>',
     'Comma-separated list of custom arguments to pass to the dev server. IE: --experimental-transform-types',
