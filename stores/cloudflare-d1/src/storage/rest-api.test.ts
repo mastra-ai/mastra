@@ -472,7 +472,7 @@ describe.skip('D1Store REST API', () => {
     });
 
     // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
-    //   const messages: MastraMessageV2[] = [
+    //   const messages: MastraDBMessage[] = [
     //     createSampleMessage({
     //       threadId: 'thread-one',
     //       content: 'First',

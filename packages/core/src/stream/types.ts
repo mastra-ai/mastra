@@ -1,4 +1,3 @@
-import type { LanguageModelV1LogProbs } from '@ai-sdk/provider';
 import type {
   LanguageModelV2FinishReason,
   LanguageModelV2Usage,
@@ -8,7 +7,7 @@ import type {
   LanguageModelV2,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
-import type { FinishReason, LanguageModelRequestMetadata } from 'ai';
+import type { FinishReason, LanguageModelRequestMetadata, LanguageModelV1LogProbs } from '@internal/ai-sdk-v4/model';
 import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from 'ai-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';

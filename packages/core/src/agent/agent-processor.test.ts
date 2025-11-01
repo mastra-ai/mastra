@@ -1,16 +1,16 @@
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { Processor } from '../processors/index';
 import { RequestContext } from '../request-context';
-import type { MastraMessageV2 } from './types';
+import type { MastraDBMessage } from './types';
 import { Agent } from './index';
 
-// Helper function to create a MastraMessageV2
-const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): MastraMessageV2 => ({
+// Helper function to create a MastraDBMessage
+const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage => ({
   id: crypto.randomUUID(),
   role,
   content: {
@@ -98,6 +98,7 @@ describe('Input and Output Processors', () => {
   describe('Input Processors with generate', () => {
     it('should run input processors before generation', async () => {
       const processor = {
+        id: 'test-processor',
         name: 'test-processor',
         processInput: async ({ messages }) => {
           messages.push(createMessage('Processor was here!'));
@@ -121,7 +122,8 @@ describe('Input and Output Processors', () => {
 
     it('should run multiple processors in order', async () => {
       const processor1 = {
-        name: 'processor-1',
+        id: 'processor-1',
+        name: 'Processor 1',
         processInput: async ({ messages }) => {
           messages.push(createMessage('First processor'));
           return messages;
@@ -129,7 +131,8 @@ describe('Input and Output Processors', () => {
       };
 
       const processor2 = {
-        name: 'processor-2',
+        id: 'processor-2',
+        name: 'Processor 2',
         processInput: async ({ messages }) => {
           messages.push(createMessage('Second processor'));
           return messages;
@@ -151,7 +154,8 @@ describe('Input and Output Processors', () => {
 
     it('should support async processors running in sequence', async () => {
       const processor1 = {
-        name: 'async-processor-1',
+        id: 'async-processor-1',
+        name: 'Async Processor 1',
         processInput: async ({ messages }) => {
           messages.push(createMessage('First processor'));
           return messages;
@@ -159,7 +163,8 @@ describe('Input and Output Processors', () => {
       };
 
       const processor2 = {
-        name: 'async-processor-2',
+        id: 'async-processor-2',
+        name: 'Async Processor 2',
         processInput: async ({ messages }) => {
           await new Promise(resolve => setTimeout(resolve, 10));
           messages.push(createMessage('Second processor'));
@@ -168,7 +173,8 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithAsyncProcessors = new Agent({
-        name: 'test-agent',
+        id: 'async-processors-test-agent',
+        name: 'Test Agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         inputProcessors: [processor1, processor2],
@@ -183,7 +189,8 @@ describe('Input and Output Processors', () => {
 
     it('should handle processor abort with default message', async () => {
       const abortProcessor = {
-        name: 'abort-processor',
+        id: 'abort-processor',
+        name: 'Abort Processor',
         processInput: async ({ abort, messages }) => {
           abort();
           return messages;
@@ -191,7 +198,8 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithAbortProcessor = new Agent({
-        name: 'test-agent',
+        id: 'abort-processor-test-agent',
+        name: 'Abort Processor Test Agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         inputProcessors: [abortProcessor],
@@ -215,7 +223,8 @@ describe('Input and Output Processors', () => {
 
     it('should handle processor abort with custom message', async () => {
       const customAbortProcessor = {
-        name: 'custom-abort',
+        id: 'custom-abort',
+        name: 'Custom Abort',
         processInput: async ({ abort, messages }) => {
           abort('Custom abort reason');
           return messages;
@@ -223,7 +232,8 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithCustomAbort = new Agent({
-        name: 'test-agent',
+        id: 'custom-abort-test-agent',
+        name: 'Custom Abort Test Agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         inputProcessors: [customAbortProcessor],
@@ -246,7 +256,8 @@ describe('Input and Output Processors', () => {
       let secondProcessorExecuted = false;
 
       const abortProcessor = {
-        name: 'abort-first',
+        id: 'abort-first',
+        name: 'Abort First',
         processInput: async ({ abort, messages }) => {
           abort('Stop here');
           return messages;
@@ -254,7 +265,8 @@ describe('Input and Output Processors', () => {
       };
 
       const shouldNotRunProcessor = {
-        name: 'should-not-run',
+        id: 'should-not-run',
+        name: 'Should Not Run',
         processInput: async ({ messages }) => {
           secondProcessorExecuted = true;
           messages.push(createMessage('This should not be added'));
@@ -263,7 +275,8 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithAbortSequence = new Agent({
-        name: 'test-agent',
+        id: 'abort-sequence-test-agent',
+        name: 'Abort Sequence Test Agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         inputProcessors: [abortProcessor, shouldNotRunProcessor],
@@ -279,10 +292,11 @@ describe('Input and Output Processors', () => {
   describe('Input Processors with non-user role messages', () => {
     it('should handle input processors that add system messages', async () => {
       const systemMessageProcessor = {
-        name: 'system-message-processor',
+        id: 'system-message-processor',
+        name: 'System Message Processor',
         processInput: async ({ messages }) => {
           // Add a system message to provide additional context
-          const systemMessage: MastraMessageV2 = {
+          const systemMessage: MastraDBMessage = {
             id: crypto.randomUUID(),
             role: 'system',
             content: { content: 'You are a helpful assistant.', format: 2, parts: [] },
@@ -295,7 +309,8 @@ describe('Input and Output Processors', () => {
       };
 
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'system-message-processor-test-agent',
+        name: 'System Message Processor Test Agent',
         instructions: 'You are a test agent',
         model: mockModel,
         inputProcessors: [systemMessageProcessor],
@@ -310,10 +325,11 @@ describe('Input and Output Processors', () => {
 
     it('should handle input processors that add assistant messages for context', async () => {
       const assistantMessageProcessor = {
-        name: 'assistant-message-processor',
+        id: 'assistant-message-processor',
+        name: 'Assistant Message Processor',
         processInput: async ({ messages }) => {
           // Add an assistant message (e.g., from previous conversation)
-          const assistantMessage: MastraMessageV2 = {
+          const assistantMessage: MastraDBMessage = {
             id: crypto.randomUUID(),
             role: 'assistant',
             content: {
@@ -329,7 +345,8 @@ describe('Input and Output Processors', () => {
       };
 
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'assistant-message-processor-test-agent',
+        name: 'Assistant Message Processor Test Agent',
         instructions: 'You are a test agent',
         model: mockModel,
         inputProcessors: [assistantMessageProcessor],
@@ -345,7 +362,8 @@ describe('Input and Output Processors', () => {
   describe('Input Processors with stream', () => {
     it('should handle input processors with streaming', async () => {
       const streamProcessor = {
-        name: 'stream-processor',
+        id: 'stream-processor',
+        name: 'Stream Processor',
         processInput: async ({ messages }) => {
           messages.push(createMessage('Stream processor active'));
           return messages;
@@ -353,7 +371,8 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithStreamProcessor = new Agent({
-        name: 'test-agent',
+        id: 'stream-processor-test-agent',
+        name: 'Stream Processor Test Agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         inputProcessors: [streamProcessor],
@@ -373,7 +392,8 @@ describe('Input and Output Processors', () => {
 
     it('should handle abort in streaming with tripwire response', async () => {
       const streamAbortProcessor = {
-        name: 'stream-abort',
+        id: 'stream-abort',
+        name: 'Stream Abort',
         processInput: async ({ abort, messages }) => {
           abort('Stream aborted');
           return messages;
@@ -381,7 +401,8 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithStreamAbort = new Agent({
-        name: 'test-agent',
+        id: 'stream-abort-test-agent',
+        name: 'Stream Abort Test Agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         inputProcessors: [streamAbortProcessor],
@@ -408,14 +429,16 @@ describe('Input and Output Processors', () => {
       requestContext.set('processorMessage', 'Dynamic message');
 
       const agentWithDynamicProcessors = new Agent({
-        name: 'test-agent',
+        id: 'dynamic-processors-test-agent',
+        name: 'Dynamic Processors Test Agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         inputProcessors: ({ requestContext }) => {
           const message: string = requestContext.get('processorMessage') || 'Default message';
           return [
             {
-              name: 'dynamic-processor',
+              id: 'dynamic-processor',
+              name: 'Dynamic Processor',
               processInput: async ({ messages }) => {
                 messages.push(createMessage(message));
                 return messages;
@@ -434,7 +457,8 @@ describe('Input and Output Processors', () => {
 
     it('should allow processors to modify message content', async () => {
       const messageModifierProcessor = {
-        name: 'message-modifier',
+        id: 'message-modifier',
+        name: 'Message Modifier',
         processInput: async ({ messages }) => {
           // Access existing messages and modify them
           const lastMessage = messages[messages.length - 1];
@@ -448,7 +472,8 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithModifier = new Agent({
-        name: 'test-agent',
+        id: 'message-modifier-test-agent',
+        name: 'Message Modifier Test Agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         inputProcessors: [messageModifierProcessor],
@@ -462,7 +487,8 @@ describe('Input and Output Processors', () => {
 
     it('should allow processors to filter or validate messages', async () => {
       const validationProcessor = {
-        name: 'validator',
+        id: 'validator',
+        name: 'Validator',
         processInput: async ({ messages, abort }) => {
           // Extract text content from all messages
           const textContent = messages
@@ -486,7 +512,8 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithValidator = new Agent({
-        name: 'test-agent',
+        id: 'validator-test-agent',
+        name: 'Validator Test Agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         inputProcessors: [validationProcessor],
@@ -504,7 +531,8 @@ describe('Input and Output Processors', () => {
 
     it('should handle empty processors array', async () => {
       const agentWithEmptyProcessors = new Agent({
-        name: 'test-agent',
+        id: 'empty-processors-test-agent',
+        name: 'Empty Processors Test Agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         inputProcessors: [],
@@ -545,7 +573,8 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
-        name: 'generate-output-processor-test-agent',
+        id: 'generate-output-processor-test-agent',
+        name: 'Generate Output Processor Test Agent',
         instructions: 'You are a helpful assistant.',
         model: new MockLanguageModelV2({
           doGenerate: async () => ({
@@ -633,7 +662,8 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
-        name: 'multi-processor-generate-test-agent',
+        id: 'multi-processor-generate-test-agent',
+        name: 'Multi Processor Generate Test Agent',
         instructions: 'Respond with: "hello world"',
         model: new MockLanguageModelV2({
           doGenerate: async () => ({
@@ -698,7 +728,8 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
-        name: 'aborting-generate-test-agent',
+        id: 'aborting-generate-test-agent',
+        name: 'Aborting Generate Test Agent',
         instructions: 'You are a helpful assistant.',
         model: new MockLanguageModelV2({
           doGenerate: async () => ({
@@ -1186,7 +1217,8 @@ describe('Input and Output Processors', () => {
     describe('generate method', () => {
       it('should handle processor abort with default message', async () => {
         const abortProcessor = {
-          name: 'abort-output-processor',
+          id: 'abort-output-processor',
+          name: 'Abort Output Processor',
           async processOutputResult({ abort, messages }) {
             abort();
             return messages;
@@ -1242,7 +1274,8 @@ describe('Input and Output Processors', () => {
     describe('stream method', () => {
       it('should handle processor abort with default message', async () => {
         const abortProcessor = {
-          name: 'abort-stream-output-processor',
+          id: 'abort-stream-output-processor',
+          name: 'Abort Stream Output Processor',
           async processOutputStream({ part, abort }) {
             // Abort immediately on any text part
             if (part.type === 'text-delta') {
@@ -1285,7 +1318,8 @@ describe('Input and Output Processors', () => {
 
       it('should handle processor abort with custom message', async () => {
         const customAbortProcessor = {
-          name: 'custom-abort-stream-output',
+          id: 'custom-abort-stream-output',
+          name: 'Custom Abort Stream Output',
           async processOutputStream({ part, abort }) {
             if (part.type === 'text-delta') {
               abort('Custom stream output abort reason');
@@ -1855,7 +1889,8 @@ describe('v1 model - output processors', () => {
 
       // Only include the complete processor - the incomplete one would cause TypeScript errors
       const agent = new Agent({
-        name: 'skipping-generate-test-agent',
+        id: 'skipping-generate-test-agent',
+        name: 'Skipping Generate Test Agent',
         instructions: 'You are a helpful assistant.',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../message-list';
-import type { MastraMessageV2 } from '../types';
+import type { MastraDBMessage } from '../types';
 import { SaveQueueManager } from './index';
 
-function makeTestMessage(id: string, threadId: string, role: 'user' | 'assistant', content: string): MastraMessageV2 {
+function makeTestMessage(id: string, threadId: string, role: 'user' | 'assistant', content: string): MastraDBMessage {
   return {
     id,
     role,

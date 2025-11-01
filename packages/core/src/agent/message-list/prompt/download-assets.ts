@@ -1,6 +1,6 @@
 import { isUrlSupported } from '@ai-sdk/provider-utils-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import { fetchWithRetry } from '../../../utils';
+import { fetchWithRetry } from '../../../utils/fetchWithRetry';
 import type { AIV5Type } from '../types';
 
 export const downloadFromUrl = async ({ url, downloadRetries }: { url: URL; downloadRetries: number }) => {

@@ -19,6 +19,7 @@ import {
 import { fastembed } from '@mastra/fastembed';
 
 export const codingAgent = new Agent({
+  id: 'coding-agent',
   name: 'Coding Agent',
   instructions: `
 # Mastra Coding Agent for E2B Sandboxes

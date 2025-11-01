@@ -1,5 +1,6 @@
+import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4/model';
+import type { ToolSet } from '@internal/ai-sdk-v4/tool';
 import type { ProviderDefinedTool } from '@internal/external-types';
-import type { GenerateTextOnStepFinishCallback, ToolSet } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
@@ -39,8 +40,8 @@ import type { AgentExecutionOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
 import type { SaveQueueManager } from './save-queue';
 
-export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
-export type { Message as AiMessageType } from 'ai';
+export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
+export type { Message as AiMessageType } from '@internal/ai-sdk-v4/message';
 export type { LLMStepResult } from '../stream/types';
 
 /**

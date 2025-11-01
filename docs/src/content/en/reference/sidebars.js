@@ -22,7 +22,6 @@ const sidebars = {
         { type: "doc", id: "core/getAgentById", label: ".getAgentById()" },
         { type: "doc", id: "core/getWorkflow", label: ".getWorkflow()" },
         { type: "doc", id: "core/listWorkflows", label: ".listWorkflows()" },
-        { type: "doc", id: "core/getMemory", label: ".getMemory()" },
         { type: "doc", id: "core/setStorage", label: ".setStorage()" },
         { type: "doc", id: "core/getServer", label: ".getServer()" },
         { type: "doc", id: "core/getMCPServer", label: ".getMCPServer()" },

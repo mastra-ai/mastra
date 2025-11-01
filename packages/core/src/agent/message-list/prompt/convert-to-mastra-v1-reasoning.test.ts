@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import type { MastraMessageV2 } from '../../message-list';
+import type { MastraDBMessage } from '../../message-list';
 import { convertToV1Messages } from './convert-to-mastra-v1';
 
 describe('convertToV1Messages - reasoning and file support', () => {
   it('should handle file parts in messages', () => {
-    const messages: MastraMessageV2[] = [
+    const messages: MastraDBMessage[] = [
       {
         id: 'msg-with-file',
         role: 'assistant',
@@ -56,7 +56,7 @@ describe('convertToV1Messages - reasoning and file support', () => {
   });
 
   it('should handle reasoning parts in messages', () => {
-    const messages: MastraMessageV2[] = [
+    const messages: MastraDBMessage[] = [
       {
         id: 'msg-with-reasoning',
         role: 'assistant',
@@ -127,7 +127,7 @@ describe('convertToV1Messages - reasoning and file support', () => {
   });
 
   it('should handle redacted reasoning parts', () => {
-    const messages: MastraMessageV2[] = [
+    const messages: MastraDBMessage[] = [
       {
         id: 'msg-with-redacted',
         role: 'assistant',
@@ -179,7 +179,7 @@ describe('convertToV1Messages - reasoning and file support', () => {
   });
 
   it('should handle mixed content with files, reasoning, and tool invocations', () => {
-    const messages: MastraMessageV2[] = [
+    const messages: MastraDBMessage[] = [
       {
         id: 'msg-mixed',
         role: 'assistant',
@@ -265,7 +265,7 @@ describe('convertToV1Messages - reasoning and file support', () => {
   });
 
   it('should handle file attachments in experimental_attachments', () => {
-    const messages: MastraMessageV2[] = [
+    const messages: MastraDBMessage[] = [
       {
         id: 'msg-attachments',
         role: 'user',
