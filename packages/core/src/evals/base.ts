@@ -546,6 +546,7 @@ class MastraScorer<
     const resolvedModel = await resolveModelConfig(modelConfig);
 
     const judge = new Agent({
+      id: 'judge',
       name: 'judge',
       model: resolvedModel,
       instructions,

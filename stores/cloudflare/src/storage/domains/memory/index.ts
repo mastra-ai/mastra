@@ -1,7 +1,7 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   PaginationInfo,
   StorageGetMessagesArg,
@@ -280,7 +280,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
    */
   private updateQueue = new Map<string, Promise<void>>();
 
-  private async updateSorting(threadMessages: (MastraMessageV1 & { _index?: number })[]) {
+  private async updateSorting(threadMessages: (MastraDBMessage & { _index?: number })[]) {
     // Sort messages by index or timestamp
     return threadMessages
       .map(msg => ({
@@ -398,13 +398,9 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
-    const { messages, format = 'v1' } = args;
-    if (!Array.isArray(messages) || messages.length === 0) return [];
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+    const { messages } = args;
+    if (!Array.isArray(messages) || messages.length === 0) return { messages: [] };
 
     try {
       // Validate message structure and ensure dates
@@ -454,10 +450,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           acc.set(message.threadId, []);
         }
         if (message.threadId) {
-          acc.get(message.threadId)!.push(message as MastraMessageV1 & { _index?: number });
+          acc.get(message.threadId)!.push(message as MastraDBMessage & { _index?: number });
         }
         return acc;
-      }, new Map<string, (MastraMessageV1 & { _index?: number })[]>());
+      }, new Map<string, (MastraDBMessage & { _index?: number })[]>());
 
       // Process each thread's messages
       await Promise.all(
@@ -522,11 +518,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       // Remove _index from returned messages
       const prepared = validatedMessages.map(
         ({ _index, ...message }) =>
-          ({ ...message, type: message.type !== 'v2' ? message.type : undefined }) as MastraMessageV1,
+          ({ ...message, type: message.type !== 'v2' ? message.type : undefined }) as MastraMessageV1 | MastraDBMessage,
       );
       const list = new MessageList().add(prepared, 'memory');
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
+      return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
         {
@@ -670,23 +665,16 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     return messages.filter((msg): msg is MastraMessageV1 & { _index?: number } => msg !== null);
   }
 
-  async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
   async getMessages({
     threadId,
     resourceId,
     selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    console.info(`getMessages called with format: ${format}, threadId: ${threadId}`);
-
-    // Default to v1 format if not specified
-    const actualFormat = format || 'v1';
-    console.info(`Using format: ${actualFormat}`);
+  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
+    console.info(`getMessages called with threadId: ${threadId}`);
 
     const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
     const messageIds = new Set<string>();
-    if (limit === 0 && !selectBy?.include?.length) return [];
+    if (limit === 0 && !selectBy?.include?.length) return { messages: [] };
 
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
@@ -707,7 +695,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         selectBy?.include,
         targetThreadId,
       );
-      if (!messages.length) return [];
+      if (!messages.length) return { messages: [] };
 
       // Sort messages
       try {
@@ -746,19 +734,12 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         type: message.type === (`v2` as `text`) ? undefined : message.type,
         createdAt: ensureDate(message.createdAt)!,
       }));
-      // For v1 format, return messages directly without using MessageList (like Upstash)
-      if (actualFormat === `v1`) {
-        console.info(`Processing ${prepared.length} messages for v1 format - returning directly without MessageList`);
-        // Return messages exactly as stored, without MessageList transformation
-        return (prepared as MastraMessageV1[]).map(msg => ({
-          ...msg,
-          createdAt: new Date(msg.createdAt),
-        }));
-      }
 
-      // For v2 format, use MessageList for proper conversion
-      const list = new MessageList({ threadId, resourceId }).add(prepared as MastraMessageV1[], 'memory');
-      return list.get.all.v2();
+      const list = new MessageList({ threadId, resourceId }).add(
+        prepared as MastraMessageV1[] | MastraDBMessage[],
+        'memory',
+      );
+      return { messages: list.get.all.db() };
     } catch (error) {
       const mastraError = new MastraError(
         {
@@ -775,12 +756,12 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       );
       this.logger?.trackException(mastraError);
       this.logger?.error(mastraError.toString());
-      return [];
+      return { messages: [] };
     }
   }
 
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
-    if (messageIds.length === 0) return [];
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    if (messageIds.length === 0) return { messages: [] };
 
     try {
       // Fetch and parse all messages from their respective threads
@@ -789,14 +770,13 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       ) as (MastraMessageV1 & { _index: string })[];
 
       // Remove _index and ensure dates before returning, just like Upstash
-      const prepared: MastraMessageV1[] = messages.map(({ _index, ...message }) => ({
+      const prepared = messages.map(({ _index, ...message }) => ({
         ...message,
         ...(message.type !== (`v2` as string) && { type: message.type }),
         createdAt: ensureDate(message.createdAt)!,
       }));
-      // For v2 format, use MessageList for proper conversion
-      const list = new MessageList().add(prepared, 'memory');
-      return list.get.all.v2();
+      const list = new MessageList().add(prepared as MastraMessageV1[] | MastraDBMessage[], 'memory');
+      return { messages: list.get.all.db() };
     } catch (error) {
       const mastraError = new MastraError(
         {
@@ -812,7 +792,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       );
       this.logger?.trackException(mastraError);
       this.logger?.error(mastraError.toString());
-      return [];
+      return { messages: [] };
     }
   }
 
@@ -1031,7 +1011,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList({ threadId, resourceId }).add(prepared as MastraMessageV1[], 'memory');
-      let finalMessages = list.get.all.v2();
+      let finalMessages = list.get.all.db();
 
       // Sort final messages again to ensure correct order
       finalMessages = finalMessages.sort((a, b) => {
@@ -1100,20 +1080,16 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, resourceId, selectBy, format = 'v1' } = args;
+  async getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
+    const { threadId, resourceId, selectBy } = args;
     const { page = 0, perPage = 100 } = selectBy?.pagination || {};
 
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
       // Get all messages for the thread
-      const messages =
-        format === 'v2'
-          ? await this.getMessages({ threadId, selectBy, format: 'v2' })
-          : await this.getMessages({ threadId, selectBy, format: 'v1' });
+      const result = await this.getMessages({ threadId, selectBy });
+      const messages = result.messages;
 
       // Apply date filtering if specified
       let filteredMessages = messages;
@@ -1124,7 +1100,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           if (dateStart && messageDate < dateStart) return false;
           if (dateEnd && messageDate > dateEnd) return false;
           return true;
-        }) as MastraMessageV1[] | MastraMessageV2[];
+        });
       }
 
       // Apply pagination
@@ -1137,7 +1113,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         perPage,
         total: filteredMessages.length,
         hasMore: start + perPage < filteredMessages.length,
-        messages: paginatedMessages as MastraMessageV1[] | MastraMessageV2[],
+        messages: paginatedMessages,
       };
     } catch (error) {
       const mastraError = new MastraError(
@@ -1160,7 +1136,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   }
 
   async updateMessages(args: {
-    messages: (Partial<Omit<MastraMessageV2, 'createdAt'>> & {
+    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
       threadId?: string;
       content?: {
@@ -1168,10 +1144,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         content?: MastraMessageContentV2['content'];
       };
     })[];
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     try {
       const { messages } = args;
-      const updatedMessages: MastraMessageV2[] = [];
+      const updatedMessages: MastraDBMessage[] = [];
 
       for (const messageUpdate of messages) {
         const { id, content, ...otherFields } = messageUpdate;
@@ -1181,13 +1157,13 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         const prefix = this.operations.namespacePrefix ? `${this.operations.namespacePrefix}:` : '';
         const keyObjs = await this.operations.listKV(TABLE_MESSAGES, { prefix: `${prefix}${TABLE_MESSAGES}` });
 
-        let existingMessage: MastraMessageV2 | null = null;
+        let existingMessage: MastraDBMessage | null = null;
         let messageKey = '';
 
         for (const { name: key } of keyObjs) {
           const data = await this.operations.getKV(TABLE_MESSAGES, key);
           if (data && data.id === id) {
-            existingMessage = data as MastraMessageV2;
+            existingMessage = data as MastraDBMessage;
             messageKey = key;
             break;
           }
@@ -1199,7 +1175,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         }
 
         // Merge the updates
-        const updatedMessage: MastraMessageV2 = {
+        const updatedMessage: MastraDBMessage = {
           ...existingMessage,
           ...otherFields,
           id,

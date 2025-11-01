@@ -1,7 +1,7 @@
 import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
-import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai';
-import { MessageList } from '../agent/message-list';
-import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-list';
+import type { EmbeddingModel } from '@internal/ai-sdk-v4/embed';
+import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4/message';
+import type { MastraDBMessage } from '../agent/message-list';
 import { MastraBase } from '../base';
 import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
@@ -274,17 +274,12 @@ export abstract class MastraMemory extends MastraBase {
     return this.applyProcessors(messages, { processors: processors || this.processors, ...opts });
   }
 
-  abstract rememberMessages({
-    threadId,
-    resourceId,
-    vectorMessageSearch,
-    config,
-  }: {
+  abstract rememberMessages(args: {
     threadId: string;
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }): Promise<{ messages: MastraMessageV1[]; messagesV2: MastraMessageV2[] }>;
+  }): Promise<{ messages: MastraDBMessage[] }>;
 
   estimateTokens(text: string): number {
     return Math.ceil(text.split(' ').length * 1.3);
@@ -331,31 +326,20 @@ export abstract class MastraMemory extends MastraBase {
    * @returns Promise resolving to the saved messages
    */
   abstract saveMessages(args: {
-    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
-    format?: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  abstract saveMessages(args: {
-    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
-    memoryConfig?: MemoryConfig | undefined;
-    format: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  abstract saveMessages(args: {
-    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
-    memoryConfig?: MemoryConfig | undefined;
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV2[] | MastraMessageV1[]>;
+  }): Promise<{ messages: MastraDBMessage[] }>;
 
   /**
    * Retrieves all messages for a specific thread
    * @param threadId - The unique identifier of the thread
-   * @returns Promise resolving to array of messages, uiMessages, and messagesV2
+   * @returns Promise resolving to array of messages in mastra-db format
    */
-  abstract query({ threadId, resourceId, selectBy }: StorageGetMessagesArg): Promise<{
-    messages: CoreMessage[];
-    uiMessages: UIMessageWithMetadata[];
-    messagesV2: MastraMessageV2[];
-  }>;
+  abstract query(
+    args: StorageGetMessagesArg & {
+      threadConfig?: MemoryConfig;
+    },
+  ): Promise<{ messages: MastraDBMessage[] }>;
 
   /**
    * Helper method to create a new thread
@@ -408,17 +392,7 @@ export abstract class MastraMemory extends MastraBase {
    * @returns Promise resolving to the saved message
    * @deprecated use saveMessages instead
    */
-  async addMessage({
-    threadId,
-    resourceId,
-    config,
-    content,
-    role,
-    type,
-    toolNames,
-    toolCallArgs,
-    toolCallIds,
-  }: {
+  async addMessage(_params: {
     threadId: string;
     resourceId: string;
     config?: MemoryConfig;
@@ -429,22 +403,7 @@ export abstract class MastraMemory extends MastraBase {
     toolCallArgs?: Record<string, unknown>[];
     toolCallIds?: string[];
   }): Promise<MastraMessageV1> {
-    const message: MastraMessageV1 = {
-      id: this.generateId(),
-      content,
-      role,
-      createdAt: new Date(),
-      threadId,
-      resourceId,
-      type,
-      toolNames,
-      toolCallArgs,
-      toolCallIds,
-    };
-
-    const savedMessages = await this.saveMessages({ messages: [message], memoryConfig: config });
-    const list = new MessageList({ threadId, resourceId }).add(savedMessages[0]!, 'memory');
-    return list.get.all.v1()[0]!;
+    throw new Error('addMessage is deprecated. Please use saveMessages instead.');
   }
 
   /**

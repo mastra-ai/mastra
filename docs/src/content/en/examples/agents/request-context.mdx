@@ -41,7 +41,8 @@ export type SupportRequestContext = {
 };
 
 export const supportAgent = new Agent({
-  name: "dynamic-support-agent",
+  id: "support-agent",
+  name: "Support Agent",
   description: "AI support agent that adapts to user subscription tiers",
 
   instructions: async ({

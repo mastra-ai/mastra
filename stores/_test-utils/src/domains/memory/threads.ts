@@ -1,7 +1,7 @@
 import { TABLE_THREADS, type MastraStorage } from '@mastra/core/storage';
 import { createSampleMessageV1, createSampleMessageV2, createSampleThread, createSampleThreadWithParams } from './data';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { randomUUID } from 'crypto';
 
 export function createThreadsTest({ storage }: { storage: MastraStorage }) {
@@ -109,7 +109,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
       // Add some messages
       const messages = [createSampleMessageV2({ threadId: thread.id }), createSampleMessageV2({ threadId: thread.id })];
-      await storage.saveMessages({ messages, format: 'v2' });
+      await storage.saveMessages({ messages });
 
       await storage.deleteThread({ threadId: thread.id });
 
@@ -117,7 +117,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       expect(retrievedThread).toBeNull();
 
       // Verify messages were also deleted
-      const retrievedMessages = await storage.getMessages({ threadId: thread.id });
+      const { messages: retrievedMessages } = await storage.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(0);
     });
 
@@ -134,7 +134,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       // Create and save a message to the thread
-      const message = createSampleMessageV1({ threadId: thread.id });
+      const message = createSampleMessageV2({ threadId: thread.id, content: { content: 'Test message' } });
       await storage.saveMessages({ messages: [message] });
 
       // Retrieve the thread again and check that updatedAt was updated
@@ -162,7 +162,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
       // Simulate user passing stringified JSON as message content (like the original bug report)
       const stringifiedContent = JSON.stringify({ userInput: 'test data', metadata: { key: 'value' } });
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: `msg-${randomUUID()}`,
         role: 'user',
         threadId: thread.id,
@@ -176,13 +176,13 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       };
 
       // Save the message - this should stringify the whole content object for storage
-      await storage.saveMessages({ messages: [message], format: 'v2' });
+      await storage.saveMessages({ messages: [message] });
 
       // Retrieve the message - this is where double-nesting could occur
-      const retrievedMessages = await storage.getMessages({ threadId: thread.id, format: 'v2' });
+      const { messages: retrievedMessages } = await storage.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(1);
 
-      const retrievedMessage = retrievedMessages[0] as MastraMessageV2;
+      const retrievedMessage = retrievedMessages[0] as MastraDBMessage;
 
       // Check that content is properly structured as a V2 message
       expect(typeof retrievedMessage.content).toBe('object');

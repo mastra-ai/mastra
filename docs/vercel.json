@@ -1449,6 +1449,11 @@
       "source": "/reference/scorers/run-experiment",
       "destination": "/reference/scorers/run-evals",
       "permanent": true
+    },
+    {
+      "source": "/reference/core/getMemory",
+      "destination": "/docs/memory/overview",
+      "permanent": true
     }
   ]
 }

@@ -16,7 +16,7 @@ import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type {
   AiMessageType,
   MastraMessageV1,
-  MastraMessageV2,
+  MastraDBMessage,
   MemoryConfig,
   StorageThreadType,
 } from '@mastra/core/memory';
@@ -31,10 +31,10 @@ import type {
   WorkflowRuns,
 } from '@mastra/core/storage';
 import type { OutputSchema } from '@mastra/core/stream';
+
 import type { QueryResult } from '@mastra/core/vector';
 import type { Workflow, WorkflowResult, WorkflowState } from '@mastra/core/workflows';
 
-import type { UIMessage } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -234,12 +234,17 @@ export interface GetVectorIndexResponse {
 }
 
 export interface SaveMessageToMemoryParams {
-  messages: (MastraMessageV1 | MastraMessageV2)[];
+  messages: (MastraMessageV1 | MastraDBMessage)[];
   agentId: string;
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type SaveMessageToMemoryResponse = (MastraMessageV1 | MastraMessageV2)[];
+export interface SaveNetworkMessageToMemoryParams {
+  messages: (MastraMessageV1 | MastraDBMessage)[];
+  networkId: string;
+}
+
+export type SaveMessageToMemoryResponse = (MastraMessageV1 | MastraDBMessage)[];
 
 export interface CreateMemoryThreadParams {
   title?: string;
@@ -290,13 +295,11 @@ export interface GetMemoryThreadMessagesParams {
 export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg, 'threadConfig' | 'threadId'>;
 
 export interface GetMemoryThreadMessagesResponse {
-  messages: CoreMessage[];
-  legacyMessages: AiMessageType[];
-  uiMessages: UIMessage[];
+  messages: MastraDBMessage[];
 }
 
 export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
-  messages: MastraMessageV1[] | MastraMessageV2[];
+  messages: MastraDBMessage[];
 };
 
 export interface GetLogsParams {

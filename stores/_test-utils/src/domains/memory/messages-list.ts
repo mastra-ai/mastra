@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createSampleMessageV2, createSampleThread } from './data';
 import type { MastraStorage } from '@mastra/core/storage';
-import type { MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { MessageList } from '@mastra/core/agent';
 
 export function createMessagesListTest({ storage }: { storage: MastraStorage }) {
   describe('listMessages', () => {
     let thread: StorageThreadType;
     let thread2: StorageThreadType;
-    let messages: MastraMessageV2[];
+    let messages: MastraDBMessage[];
 
     beforeEach(async () => {
       // Create test threads
@@ -58,7 +58,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         }),
       ];
 
-      await storage.saveMessages({ messages, format: 'v2' });
+      await storage.saveMessages({ messages });
     });
 
     it('should list all messages for a thread without pagination', async () => {
@@ -68,7 +68,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
       expect(result.messages).toHaveLength(5);
       expect(result.total).toBe(5);
-      expect(result.messages.every(MessageList.isMastraMessageV2)).toBe(true);
+      expect(result.messages.every(MessageList.isMastraDBMessage)).toBe(true);
     });
 
     it('should list messages with pagination', async () => {
@@ -114,7 +114,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         content: { content: 'Different Resource' },
         createdAt: new Date(),
       });
-      await storage.saveMessages({ messages: [differentResourceMessage], format: 'v2' });
+      await storage.saveMessages({ messages: [differentResourceMessage] });
 
       const result = await storage.listMessages({
         threadId: thread.id,
@@ -151,7 +151,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         }),
       ];
 
-      await storage.saveMessages({ messages: dateMessages, format: 'v2' });
+      await storage.saveMessages({ messages: dateMessages });
 
       const result = await storage.listMessages({
         threadId: dateThread.id,
@@ -340,7 +340,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         threadId: thread.id,
       });
 
-      expect(result.messages.every(MessageList.isMastraMessageV2)).toBe(true);
+      expect(result.messages.every(MessageList.isMastraDBMessage)).toBe(true);
     });
 
     it('should handle include with threadId parameter', async () => {
@@ -374,7 +374,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         }),
       );
 
-      await storage.saveMessages({ messages: dateMessages, format: 'v2' });
+      await storage.saveMessages({ messages: dateMessages });
 
       // Get messages from the last 5 seconds, paginated
       const cutoffDate = new Date(now.getTime() + 5000);
@@ -416,7 +416,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
             createdAt: new Date(Date.now() + 10000 + i * 1000),
           }),
         );
-        await storage.saveMessages({ messages: manyMessages, format: 'v2' });
+        await storage.saveMessages({ messages: manyMessages });
 
         const result = await storage.listMessages({
           threadId: thread.id,
@@ -488,7 +488,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
             createdAt: new Date(now.getTime() + i * 1000),
           }),
         );
-        await storage.saveMessages({ messages: dateMessages, format: 'v2' });
+        await storage.saveMessages({ messages: dateMessages });
 
         const cutoffDate = new Date(now.getTime() + 4000);
         const result = await storage.listMessages({
@@ -516,7 +516,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           }),
         );
 
-        await storage.saveMessages({ messages: otherMessages, format: 'v2' });
+        await storage.saveMessages({ messages: otherMessages });
 
         const result = await storage.listMessages({
           threadId: thread.id,

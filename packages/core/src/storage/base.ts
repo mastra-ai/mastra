@@ -1,9 +1,9 @@
-import type { MastraMessageContentV2, MastraMessageV2 } from '../agent';
+import type { MastraMessageContentV2, MastraDBMessage } from '../agent';
 import type { TracingStrategy } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../evals';
-import type { MastraMessageV1, StorageThreadType } from '../memory/types';
+import type { StorageThreadType } from '../memory/types';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 
 import {
@@ -237,14 +237,9 @@ export abstract class MastraStorage extends MastraBase {
     );
   }
 
-  abstract getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  abstract getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  abstract getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]>;
+  abstract getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }>;
+
+  abstract saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }>;
 
   async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     if (this.stores?.memory) {
@@ -284,9 +279,10 @@ export abstract class MastraStorage extends MastraBase {
     });
   }
 
-  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (this.stores?.memory) {
-      return this.stores.memory.listMessagesById({ messageIds });
+      const result = await this.stores.memory.listMessagesById({ messageIds });
+      return result;
     }
     throw new MastraError({
       id: 'MASTRA_STORAGE_LIST_MESSAGES_BY_ID_NOT_SUPPORTED',
@@ -296,19 +292,12 @@ export abstract class MastraStorage extends MastraBase {
     });
   }
 
-  abstract saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  abstract saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  abstract saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]>;
-
   abstract updateMessages(args: {
-    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
-      {
-        id: string;
-        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-      }[];
-  }): Promise<MastraMessageV2[]>;
+    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
+      id: string;
+      content?: Partial<MastraMessageContentV2>;
+    })[];
+  }): Promise<MastraDBMessage[]>;
 
   async deleteMessages(_messageIds: string[]): Promise<void> {
     throw new Error(
@@ -525,9 +514,7 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
 
-  abstract getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }>;
+  abstract getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }>;
 
   /**
    * OBSERVABILITY

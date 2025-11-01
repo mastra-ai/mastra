@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
-import type { CoreMessage, StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
+import type { CoreMessage, TextPart, UIMessage } from '@internal/ai-sdk-v4/message';
+import type { StreamObjectResult } from '@internal/ai-sdk-v4/model';
+import type { Tool } from '@internal/ai-sdk-v4/tool';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
@@ -63,7 +65,7 @@ import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
-import type { MessageInput, MessageListInput, UIMessageWithMetadata } from './message-list';
+import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
 import { TripWire } from './trip-wire';
 import type {
@@ -121,7 +123,8 @@ function resolveThreadIdFromArgs(args: {
  * import { Memory } from '@mastra/memory';
  *
  * const agent = new Agent({
- *   name: 'my-agent',
+ *   id: 'my-agent',
+ *   name: 'My Agent',
  *   instructions: 'You are a helpful assistant',
  *   model: 'openai/gpt-5',
  *   tools: {
@@ -165,7 +168,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * import { Memory } from '@mastra/memory';
    *
    * const agent = new Agent({
-   *   name: 'weatherAgent',
+   *   id: 'weatherAgent',
+   *   name: 'Weather Agent',
    *   instructions: 'You help users with weather information',
    *   model: 'openai/gpt-5',
    *   tools: { getWeather },
@@ -1373,20 +1377,18 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     vectorMessageSearch: string;
     memoryConfig?: MemoryConfig;
     requestContext: RequestContext;
-  }) {
+  }): Promise<{ messages: MastraDBMessage[] }> {
     const memory = await this.getMemory({ requestContext });
     if (!memory) {
-      return [];
+      return { messages: [] };
     }
-    return memory
-      .rememberMessages({
-        threadId,
-        resourceId,
-        config: memoryConfig,
-        // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
-        vectorMessageSearch,
-      })
-      .then(r => r.messagesV2);
+    return memory.rememberMessages({
+      threadId,
+      resourceId,
+      config: memoryConfig,
+      // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
+      vectorMessageSearch,
+    });
   }
 
   /**
@@ -1731,7 +1733,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingPolicy: this.#options?.tracingPolicy,
         };
 
-        convertedAgentTools[`agent-${agentName}`] = makeCoreTool(toolObj, options);
+        // TODO; fix recursion type
+        convertedAgentTools[`agent-${agentName}`] = makeCoreTool(toolObj as any, options);
       }
     }
 
@@ -2237,7 +2240,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         const hasResourceScopeSemanticRecall =
           (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== 'thread') ||
           config?.semanticRecall === true;
-        let [memoryMessages, memorySystemMessage] = await Promise.all([
+        let [memoryResult, memorySystemMessage] = await Promise.all([
           existingThread || hasResourceScopeSemanticRecall
             ? this.getMemoryMessages({
                 resourceId,
@@ -2246,9 +2249,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 memoryConfig,
                 requestContext,
               })
-            : [],
+            : { messages: [] },
           memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
         ]);
+
+        const memoryMessages = memoryResult.messages;
 
         this.logger.debug('Fetched messages from memory', {
           threadId: threadObject.id,
@@ -2299,7 +2304,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
         messageList
           .add(
-            memoryMessages.filter(m => m.threadId === threadObject.id), // filter out messages from other threads. those are added to system message above
+            memoryMessages.filter((m: MastraDBMessage) => m.threadId === threadObject.id), // filter out messages from other threads. those are added to system message above
             'memory',
           )
           // add new user messages to the list AFTER remembered messages to make ordering more reliable
@@ -2338,7 +2343,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           .addSystem(systemMessages)
           .add(context || [], 'context')
           .add(processedMemoryMessages, 'memory')
-          .add(messageList.get.input.v2(), 'user')
+          .add(messageList.get.input.db(), 'user')
           .get.all.prompt();
 
         return {
@@ -3813,7 +3818,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       }
 
       const newText = outputProcessorResult.messageList.get.response
-        .v2()
+        .db()
         .map(msg => msg.content.parts.map(part => (part.type === 'text' ? part.text : '')).join(''))
         .join('');
 
@@ -3823,7 +3828,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       // If there are output processors, check for structured data in message metadata
       if (finalOutputProcessors && finalOutputProcessors.length > 0) {
         // First check if any output processor provided structured data via metadata
-        const messages = outputProcessorResult.messageList.get.response.v2();
+        const messages = outputProcessorResult.messageList.get.response.db();
         this.logger.debug(
           'Checking messages for experimentalOutput metadata:',
           messages.map(m => ({
@@ -3933,7 +3938,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     }
 
     const newText = outputProcessorResult.messageList.get.response
-      .v2()
+      .db()
       .map(msg => msg.content.parts.map(part => (part.type === 'text' ? part.text : '')).join(''))
       .join('');
 

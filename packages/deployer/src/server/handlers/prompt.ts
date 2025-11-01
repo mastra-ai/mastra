@@ -76,6 +76,7 @@ export async function generateSystemPromptHandler(c: Context) {
         `;
 
     const systemPromptAgent = new Agent({
+      id: 'system-prompt-enhancer',
       name: 'system-prompt-enhancer',
       instructions: ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS,
       model: await agent.getModel(),

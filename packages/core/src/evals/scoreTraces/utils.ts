@@ -1,4 +1,4 @@
-import type { ToolInvocation } from 'ai';
+import type { ToolInvocation } from '@internal/ai-sdk-v4/tool';
 import type { UIMessageWithMetadata } from '../../agent';
 import { convertMessages } from '../../agent/message-list/utils/convert-messages';
 import { AISpanType } from '../../ai-tracing';
