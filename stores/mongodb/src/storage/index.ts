@@ -186,8 +186,8 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.memory.deleteThread({ threadId });
   }
 
-  public async getMessages({ threadId, selectBy }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages({ threadId, selectBy });
+  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
+    return this.stores.memory.getMessages(args);
   }
 
   async getMessagesPaginated(_args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {

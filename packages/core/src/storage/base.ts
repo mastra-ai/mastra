@@ -2,8 +2,8 @@ import type { MastraMessageContentV2, MastraDBMessage } from '../agent';
 import type { TracingStrategy } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
-import type { StorageThreadType } from '../memory/types';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../evals';
+import type { StorageThreadType } from '../memory/types';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 
 import {
@@ -293,11 +293,10 @@ export abstract class MastraStorage extends MastraBase {
   }
 
   abstract updateMessages(args: {
-    messages: Partial<Omit<MastraDBMessage, 'createdAt'>> &
-      {
-        id: string;
-        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-      }[];
+    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
+      id: string;
+      content?: Partial<MastraMessageContentV2>;
+    })[];
   }): Promise<MastraDBMessage[]>;
 
   async deleteMessages(_messageIds: string[]): Promise<void> {

@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '../agent';
-import type { StorageThreadType } from '../memory/types';
 import type { ScoreRowData, ScoringSource } from '../evals/types';
+import type { StorageThreadType } from '../memory/types';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 import { MastraStorage } from './base';
 import type { StorageDomains } from './base';

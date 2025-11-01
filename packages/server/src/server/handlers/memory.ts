@@ -1,4 +1,5 @@
-import { convertMessages, type MastraDBMessage } from '@mastra/core/agent';
+import { convertMessages } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, StorageOrderBy } from '@mastra/core/storage';

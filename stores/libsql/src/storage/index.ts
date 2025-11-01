@@ -1,8 +1,8 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
 import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
-import type { StorageThreadType } from '@mastra/core/memory';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
   PaginationInfo,
@@ -195,8 +195,8 @@ export class LibSQLStore extends MastraStorage {
   /**
    * @deprecated use getMessagesPaginated instead for paginated results.
    */
-  public async getMessages({ threadId, selectBy }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages({ threadId, selectBy });
+  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
+    return this.stores.memory.getMessages(args);
   }
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {

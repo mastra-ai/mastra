@@ -1,12 +1,13 @@
+import { MessageList } from '../agent/message-list';
 import { MastraMemory } from '../memory';
 import type { StorageThreadType, MastraDBMessage, MemoryConfig, MessageDeleteInput } from '../memory';
 import { InMemoryStore } from '../storage';
 import type {
   StorageGetMessagesArg,
+  StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
 } from '../storage';
-import { MessageList } from '../agent/message-list';
 
 export class MockMemory extends MastraMemory {
   threads: Record<string, StorageThreadType> = {};
@@ -51,10 +52,11 @@ export class MockMemory extends MastraMemory {
     config?: MemoryConfig;
   }): Promise<{ messages: MastraDBMessage[] }> {
     // Query all messages from storage and return them
-    const result = await this.storage.getMessages({
-      threadId: args.threadId,
-      resourceId: args.resourceId || '',
-    });
+    const getMessagesArgs: StorageListMessagesInput = { threadId: args.threadId };
+    if (args.resourceId !== undefined) {
+      getMessagesArgs.resourceId = args.resourceId;
+    }
+    const result = await this.storage.getMessages(getMessagesArgs);
     return { messages: result.messages };
   }
 
