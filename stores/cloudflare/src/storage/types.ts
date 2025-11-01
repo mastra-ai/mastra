@@ -1,6 +1,6 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
 import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData } from '@mastra/core/evals';
 import type {
   TABLE_MESSAGES,
   TABLE_THREADS,

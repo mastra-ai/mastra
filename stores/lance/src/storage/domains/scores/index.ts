@@ -1,7 +1,7 @@
 import type { Connection } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
-import { saveScorePayloadSchema } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
 import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import { getTableSchema, processResultWithTypeConversion } from '../utils';
@@ -94,7 +94,7 @@ export class StoreScoresLance extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     pagination,
     entityId,
@@ -162,7 +162,7 @@ export class StoreScoresLance extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -205,7 +205,7 @@ export class StoreScoresLance extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -256,7 +256,7 @@ export class StoreScoresLance extends ScoresStorage {
     }
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,

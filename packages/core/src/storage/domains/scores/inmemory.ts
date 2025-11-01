@@ -1,4 +1,4 @@
-import type { ScoreRowData, ScoringSource } from '../../../scores/types';
+import type { ScoreRowData, ScoringSource } from '../../../evals/types';
 import type { PaginationInfo, StoragePagination } from '../../types';
 import { ScoresStorage } from './base';
 
@@ -22,7 +22,7 @@ export class ScoresInMemory extends ScoresStorage {
     return { score: newScore };
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     pagination,
     entityId,
@@ -64,7 +64,7 @@ export class ScoresInMemory extends ScoresStorage {
     };
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -83,7 +83,7 @@ export class ScoresInMemory extends ScoresStorage {
     };
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -109,7 +109,7 @@ export class ScoresInMemory extends ScoresStorage {
     };
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,

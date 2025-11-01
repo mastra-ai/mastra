@@ -71,7 +71,7 @@ import { MultiLogger } from '@mastra/core/logger';
 import { PinoLogger } from '@mastra/loggers';
 import { HttpTransport } from '@mastra/loggers/http';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces';
+import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
 const startTime = process.env.RUNNER_START_TIME ? new Date(process.env.RUNNER_START_TIME).getTime() : Date.now();
 const createNodeServerStartTime = Date.now();
 
