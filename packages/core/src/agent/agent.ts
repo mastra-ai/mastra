@@ -123,7 +123,8 @@ function resolveThreadIdFromArgs(args: {
  * import { Memory } from '@mastra/memory';
  *
  * const agent = new Agent({
- *   name: 'my-agent',
+ *   id: 'my-agent',
+ *   name: 'My Agent',
  *   instructions: 'You are a helpful assistant',
  *   model: 'openai/gpt-5',
  *   tools: {
@@ -167,7 +168,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * import { Memory } from '@mastra/memory';
    *
    * const agent = new Agent({
-   *   name: 'weatherAgent',
+   *   id: 'weatherAgent',
+   *   name: 'Weather Agent',
    *   instructions: 'You help users with weather information',
    *   model: 'openai/gpt-5',
    *   tools: { getWeather },

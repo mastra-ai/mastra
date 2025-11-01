@@ -17,14 +17,16 @@ import { Agent } from "@mastra/core/agent";
 
 // String instructions
 export const agent = new Agent({
-  name: "test-agent",
+  id: "test-agent",
+  name: "Test Agent",
   instructions: "You are a helpful assistant that provides concise answers.",
   model: openai("gpt-4o"),
 });
 
 // System message object
 export const agent2 = new Agent({
-  name: "test-agent-2",
+  id: "test-agent-2",
+  name: "Test Agent 2",
   instructions: {
     role: "system",
     content: "You are an expert programmer",
@@ -34,7 +36,8 @@ export const agent2 = new Agent({
 
 // Array of system messages
 export const agent3 = new Agent({
-  name: "test-agent-3",
+  id: "test-agent-3",
+  name: "Test Agent 3",
   instructions: [
     { role: "system", content: "You are a helpful assistant" },
     { role: "system", content: "You have expertise in TypeScript" },
@@ -52,7 +55,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const agent = new Agent({
-  name: "core-message-agent",
+  id: "core-message-agent",
+  name: "Core Message Agent",
   instructions: {
     role: "system",
     content:
@@ -80,7 +84,8 @@ const preferredTone = {
 };
 
 export const agent = new Agent({
-  name: "multi-message-agent",
+  id: "multi-message-agent",
+  name: "Multi Message Agent",
   instructions: [
     { role: "system", content: "You are a customer service representative." },
     preferredTone,

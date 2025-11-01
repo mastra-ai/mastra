@@ -297,6 +297,7 @@ describe('Memory with Processors', () => {
     });
     const instructions = 'You are a helpful assistant';
     const agent = new Agent({
+      id: 'processor-test-agent',
       name: 'processor-test-agent',
       instructions,
       model: openai('gpt-4o'),
@@ -404,6 +405,7 @@ describe('Memory with Processors', () => {
       'You are a helpful assistant with access to weather and calculator tools. Use them when appropriate.';
     // Create agent with memory and tools
     const agent = new Agent({
+      id: 'processor-test-agent',
       name: 'processor-test-agent',
       instructions,
       model: openai('gpt-4o'),

@@ -36,7 +36,8 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "openai/gpt-5"
     })
@@ -47,7 +48,8 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "anthropic/claude-4-5-sonnet"
     })
@@ -58,7 +60,8 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "google/gemini-2.5-flash"
     })
@@ -69,7 +72,8 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "xai/grok-4"
     })
@@ -80,7 +84,8 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "openrouter/anthropic/claude-haiku-4-5"
     })
@@ -160,14 +165,16 @@ import { Agent } from "@mastra/core/agent";
 
 // Use a cost-effective model for document processing
 const documentProcessor = new Agent({
-  name: "document-processor",
+  id: "document-processor",
+  name: "Document Processor",
   instructions: "Extract and summarize key information from documents",
   model: "openai/gpt-4o-mini"
 })
 
 // Use a powerful reasoning model for complex analysis
 const reasoningAgent = new Agent({
-  name: "reasoning-agent",
+  id: "reasoning-agent",
+  name: "Reasoning Agent",
   instructions: "Analyze data and provide strategic recommendations",
   model: "anthropic/claude-opus-4-1"
 })
@@ -178,7 +185,8 @@ Since models are just strings, you can select them dynamically based on [request
 
 ```typescript showLineNumbers
 const agent = new Agent({
-  name: "dynamic-assistant",
+  id: "dynamic-assistant",
+  name: "Dynamic Assistant",
   model: ({ requestContext }) => {
     const provider = requestContext.get("provider-id");
     const model = requestContext.get("model-id");
@@ -200,6 +208,8 @@ Different model providers expose their own configuration options. With OpenAI, y
 ```typescript showLineNumbers
 // Agent level (apply to all future messages)
 const planner = new Agent({
+  id: "planner",
+  name: "Planner",
   instructions: {
     role: "system",
     content: "You are a helpful assistant.",
@@ -232,7 +242,8 @@ If you need to specify custom headers, such as an organization ID or other provi
 
 ```typescript showLineNumbers
 const agent = new Agent({
-  name: "custom-agent",
+  id: "custom-agent",
+  name: "Custom Agent",
   model: {
     id: "openai/gpt-4-turbo",
     apiKey: process.env.OPENAI_API_KEY,
@@ -258,7 +269,8 @@ Relying on a single model creates a single point of failure for your application
 import { Agent } from '@mastra/core/agent';
 
 const agent = new Agent({
-  name: 'resilient-assistant',
+  id: 'resilient-assistant',
+  name: 'Resilient Assistant',
   instructions: 'You are a helpful assistant.',
   model: [
     {
@@ -290,7 +302,8 @@ import { groq } from '@ai-sdk/groq';
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   model: groq('gemma2-9b-it')
 })
 ```

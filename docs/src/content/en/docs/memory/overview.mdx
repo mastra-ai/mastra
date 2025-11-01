@@ -40,6 +40,7 @@ import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
+  id: "test-agent",
   // ...
   memory: new Memory(),
 });
@@ -85,6 +86,7 @@ import { Agent } from "@mastra/core/agent";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const testAgent = new Agent({
+  id: "test-agent",
   // ...
   memory: new Memory({
     // ...

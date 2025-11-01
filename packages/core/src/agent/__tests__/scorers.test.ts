@@ -15,6 +15,7 @@ function scorersTests(version: 'v1' | 'v2') {
   describe('scorer output data', () => {
     it(`${version} - should return scoring data from generate when returnScorerData is true`, async () => {
       const agent = new Agent({
+        id: 'scorer-test',
         name: 'Scorer Agent',
         instructions: 'You are an agent that can score things',
         model: dummyModel,
@@ -43,6 +44,7 @@ function scorersTests(version: 'v1' | 'v2') {
 
     it(`${version} - should not return scoring data from generate when returnScorerData is false`, async () => {
       const agent = new Agent({
+        id: 'scorer-test',
         name: 'Scorer Agent',
         instructions: 'You are an agent that can score things',
         model: dummyModel,
@@ -64,6 +66,7 @@ function scorersTests(version: 'v1' | 'v2') {
 
     it(`${version} - should not return scoring data from generate when returnScorerData is not specified`, async () => {
       const agent = new Agent({
+        id: 'scorer-test',
         name: 'Scorer Agent',
         instructions: 'You are an agent that can score things',
         model: dummyModel,
@@ -101,6 +104,7 @@ function scorersTests(version: 'v1' | 'v2') {
       }).generateScore(() => 0.95);
 
       agent = new Agent({
+        id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test agent.',
         model: dummyModel,

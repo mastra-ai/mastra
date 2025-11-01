@@ -85,7 +85,7 @@ describe('ModerationProcessor', () => {
         model,
       });
 
-      expect(moderator.name).toBe('moderation');
+      expect(moderator.id).toBe('moderation');
     });
 
     it('should use default categories when none specified', () => {
@@ -94,7 +94,7 @@ describe('ModerationProcessor', () => {
         model,
       });
 
-      expect(moderator.name).toBe('moderation');
+      expect(moderator.id).toBe('moderation');
     });
 
     it('should accept custom categories', () => {
@@ -104,7 +104,7 @@ describe('ModerationProcessor', () => {
         categories: ['custom-category', 'another-category'],
       });
 
-      expect(moderator.name).toBe('moderation');
+      expect(moderator.id).toBe('moderation');
     });
 
     it('should accept custom threshold and strategy', () => {
@@ -115,7 +115,7 @@ describe('ModerationProcessor', () => {
         strategy: 'warn',
       });
 
-      expect(moderator.name).toBe('moderation');
+      expect(moderator.id).toBe('moderation');
     });
   });
 
@@ -495,7 +495,7 @@ describe('ModerationProcessor', () => {
         instructions: customInstructions,
       });
 
-      expect(moderator.name).toBe('moderation');
+      expect(moderator.id).toBe('moderation');
       // The custom instructions are used in the Agent constructor
       // which is mocked, but we can verify the processor was created successfully
     });

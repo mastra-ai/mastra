@@ -45,7 +45,8 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
-      name: 'test-agent',
+      id: 'test-agent',
+      name: 'Test Agent',
       instructions: 'You are a helpful assistant.',
       model,
       memory,
@@ -119,7 +120,8 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
-      name: 'test-agent',
+      id: 'test-agent',
+      name: 'Test Agent Custom ID',
       instructions: 'You are a helpful assistant.',
       model,
       memory,
@@ -175,7 +177,8 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
-      name: 'test-agent',
+      id: 'test-agent',
+      name: 'Test Agent V2',
       instructions: 'You are a helpful assistant.',
       model,
       memory,
@@ -257,7 +260,8 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
-      name: 'test-agent',
+      id: 'test-agent',
+      name: 'Test Agent V2 Custom ID',
       instructions: 'You are a helpful assistant.',
       model,
       memory,
@@ -301,7 +305,8 @@ describe('Stream ID Consistency', () => {
       });
 
       const agent = new Agent({
-        name: 'test-structured-output-onfinish',
+        id: 'test-structured-output-onfinish',
+        name: 'Test Structured Output OnFinish',
         instructions: 'You are a helpful assistant.',
         model: mockModel,
       });
@@ -387,7 +392,8 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
-      name: 'test-structured-output-processor-onfinish',
+      id: 'test-structured-output-processor-onfinish',
+      name: 'Test Structured Output Processor OnFinish',
       instructions: 'You are a helpful assistant.',
       model: mockModel,
     });
@@ -470,7 +476,8 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
-      name: 'test-agent',
+      id: 'test-agent',
+      name: 'Test Agent UIMessage',
       instructions: 'You are a helpful assistant.',
       model: mockModel,
       memory: mockMemory,

@@ -20,6 +20,7 @@ it.skip('should initialize with correct configuration', async () => {
   });
 
   const agent = new Agent({
+    id: 'agent',
     name: 'Agent',
     instructions: 'Use tools when helpful.',
     model: openai('gpt-5-nano'),

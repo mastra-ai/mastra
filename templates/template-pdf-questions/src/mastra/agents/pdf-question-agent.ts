@@ -13,6 +13,7 @@ const memory = new Memory({
 });
 
 export const pdfQuestionAgent = new Agent({
+  id: 'pdf-question-agent',
   name: 'Generate questions from PDF agent',
   description: 'An agent that can download PDFs, generate summaries, and create questions from PDF content',
   instructions: `

@@ -111,7 +111,8 @@ export class PromptInjectionDetector implements Processor {
     this.structuredOutputOptions = options.structuredOutputOptions;
 
     this.detectionAgent = new Agent({
-      name: 'prompt-injection-detector',
+      id: 'prompt-injection-detector',
+      name: 'Prompt Injection Detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
     });

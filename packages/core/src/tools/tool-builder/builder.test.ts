@@ -151,6 +151,7 @@ async function runStructuredOutputSchemaTest(
         : 'I am testing that I can generate structured outputs from your response. Your sole purpose is to give me any type of response but make sure that you have the requested input somewhere in there.';
 
     const agent = new Agent({
+      id: `test-agent-${model.modelId}`,
       name: `test-agent-${model.modelId}`,
       instructions,
       model: model,
@@ -232,6 +233,7 @@ async function runSingleToolSchemaTest(
 ): Promise<Result> {
   try {
     const agent = new Agent({
+      id: `test-agent-${model.modelId}`,
       name: `test-agent-${model.modelId}`,
       instructions: `You are a test agent. Your task is to call the tool named '${toolName}' with any valid arguments. This is very important as it's your primary purpose`,
       model: model,

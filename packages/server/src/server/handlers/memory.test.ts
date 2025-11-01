@@ -49,6 +49,7 @@ describe('Memory Handlers', () => {
     mockMemory = new MockMemory();
 
     mockAgent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions: 'test-instructions',
       model: {} as any,
@@ -105,6 +106,7 @@ describe('Memory Handlers', () => {
         logger: false,
         agents: {
           'test-agent': new Agent({
+            id: 'test-agent',
             name: 'test-agent',
             instructions: 'test-instructions',
             model: {} as any,
@@ -272,6 +274,7 @@ describe('Memory Handlers', () => {
         logger: false,
         agents: {
           'test-agent': new Agent({
+            id: 'test-agent',
             name: 'test-agent',
             instructions: 'test-instructions',
             model: {} as any,
@@ -322,6 +325,7 @@ describe('Memory Handlers', () => {
         logger: false,
         agents: {
           'test-agent': new Agent({
+            id: 'test-agent',
             name: 'test-agent',
             instructions: 'test-instructions',
             model: {} as any,
@@ -593,6 +597,7 @@ describe('Memory Handlers', () => {
         logger: false,
         agents: {
           'test-agent': new Agent({
+            id: 'test-agent',
             name: 'test-agent',
             instructions: 'test-instructions',
             model: {} as any,
@@ -667,6 +672,7 @@ describe('Memory Handlers', () => {
         logger: false,
         agents: {
           testAgent: new Agent({
+            id: 'test-agent',
             name: 'test-agent',
             instructions: 'test-instructions',
             model: {} as any,

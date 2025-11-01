@@ -39,6 +39,7 @@ describe('Scores Handlers', () => {
       },
       agents: {
         'test-agent': new Agent({
+          id: 'test-agent',
           name: 'test-agent',
           instructions: 'test-agent',
           model: {} as any,

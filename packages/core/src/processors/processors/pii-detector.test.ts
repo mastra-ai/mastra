@@ -723,7 +723,7 @@ describe('PIIDetector', () => {
         instructions: customInstructions,
       });
 
-      expect(detector.name).toBe('pii-detector');
+      expect(detector.id).toBe('pii-detector');
     });
   });
 
