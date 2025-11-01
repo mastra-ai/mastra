@@ -1,4 +1,4 @@
-import { MockLanguageModelV1, simulateReadableStream } from 'ai/test';
+import { MockLanguageModelV1, simulateReadableStream } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';

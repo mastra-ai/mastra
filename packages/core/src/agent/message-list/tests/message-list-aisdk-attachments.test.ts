@@ -1,4 +1,4 @@
-import * as AIV4 from 'ai';
+import * as AIV4 from '@internal/ai-sdk-v4/message';
 import { describe, it, expect } from 'vitest';
 import type { MastraDBMessage } from '../../types';
 import { MessageList } from '../index';

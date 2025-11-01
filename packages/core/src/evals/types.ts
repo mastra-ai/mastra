@@ -1,4 +1,4 @@
-import type { CoreMessage, CoreSystemMessage } from 'ai';
+import type { CoreMessage, CoreSystemMessage } from '@internal/ai-sdk-v4/message';
 import { z } from 'zod';
 import type { UIMessageWithMetadata } from '../agent';
 import { AISpanType } from '../ai-tracing';

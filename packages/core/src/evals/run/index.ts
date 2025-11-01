@@ -1,4 +1,4 @@
-import type { CoreMessage } from 'ai';
+import type { CoreMessage } from '@internal/ai-sdk-v4/message';
 import type { Agent, AiMessageType, UIMessageWithMetadata } from '../../agent';
 import type { TracingContext } from '../../ai-tracing';
 import { MastraError } from '../../error';
