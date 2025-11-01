@@ -104,7 +104,8 @@ export interface LanguageDetectorOptions {
  * making it ideal for multilingual AI applications and global deployment.
  */
 export class LanguageDetector implements Processor {
-  readonly name = 'language-detector';
+  readonly id = 'language-detector';
+  readonly name = 'Language Detector';
 
   private detectionAgent: Agent;
   private targetLanguages: string[];

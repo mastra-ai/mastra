@@ -299,9 +299,9 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveThread({ thread: thread1 });
       await store.saveThread({ thread: thread2 });
 
-      const threads = await retryUntil(
-        async () => await store.getThreadsByResourceId({ resourceId: thread1.resourceId }),
-        threads => threads?.length === 2,
+      const { threads } = await retryUntil(
+        async () => await store.listThreadsByResourceId({ resourceId: thread1.resourceId, limit: 10, offset: 0 }),
+        result => result?.threads?.length === 2,
       );
       expect(threads).toHaveLength(2);
       expect(threads.map(t => t.id)).toEqual(expect.arrayContaining([thread1.id, thread2.id]));
@@ -1339,13 +1339,13 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveThread({ thread });
 
       // Should be able to retrieve thread
-      const threads = await retryUntil(
-        async () => await store.getThreadsByResourceId({ resourceId: thread.resourceId }),
-        threads => threads.length > 0,
+      const { threads } = await retryUntil(
+        async () => await store.listThreadsByResourceId({ resourceId: thread.resourceId, limit: 10, offset: 0 }),
+        result => result?.threads?.length === 1,
       );
       expect(threads).toHaveLength(1);
-      expect(threads[0].id).toBe(thread.id);
-      expect(threads[0].metadata).toStrictEqual({});
+      expect(threads[0]?.id).toBe(thread.id);
+      expect(threads[0]?.metadata).toStrictEqual({});
     });
 
     it('should sanitize and handle special characters', async () => {
@@ -1541,8 +1541,8 @@ describe.skip('CloudflareStore REST API', () => {
       expect(finalOrder).toHaveLength(0);
 
       // Verify thread is gone
-      const threads = await store.getThreadsByResourceId({ resourceId: thread.resourceId });
-      expect(threads).toHaveLength(0);
+      const { threads } = await store.listThreadsByResourceId({ resourceId: thread.resourceId, limit: 10, offset: 0 });
+      expect(threads?.length).toBe(0);
     });
 
     it('should handle namespace cleanup edge cases', async () => {
@@ -1586,11 +1586,11 @@ describe.skip('CloudflareStore REST API', () => {
       expect(remainingMessages).toHaveLength(0);
 
       // Verify thread is gone
-      const threads = await retryUntil(
-        async () => await store.getThreadsByResourceId({ resourceId: thread.resourceId }),
-        threads => threads.length === 0,
+      const { threads } = await retryUntil(
+        async () => await store.listThreadsByResourceId({ resourceId: thread.resourceId, limit: 10, offset: 0 }),
+        result => result?.threads?.length === 0,
       );
-      expect(threads).toHaveLength(0);
+      expect(threads?.length).toBe(0);
 
       // Verify message order is cleaned up
       const orderKey = store['getThreadMessagesKey'](thread.id);

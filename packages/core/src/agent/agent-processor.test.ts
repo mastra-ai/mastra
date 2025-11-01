@@ -522,6 +522,7 @@ describe('Input and Output Processors', () => {
       let processedText = '';
 
       class TestOutputProcessor implements Processor {
+        readonly id = 'test-output-processor';
         readonly name = 'test-output-processor';
 
         async processOutputResult({ messages }) {
@@ -593,7 +594,8 @@ describe('Input and Output Processors', () => {
       let finalProcessedText = '';
 
       class ReplaceProcessor implements Processor {
-        readonly name = 'replace-processor';
+        readonly id = 'replace-processor';
+        readonly name = 'Replace Processor';
 
         async processOutputResult({ messages }) {
           return messages.map(msg => ({
@@ -609,7 +611,8 @@ describe('Input and Output Processors', () => {
       }
 
       class AddPrefixProcessor implements Processor {
-        readonly name = 'prefix-processor';
+        readonly id = 'prefix-processor';
+        readonly name = 'Add Prefix Processor';
 
         async processOutputResult({ messages }) {
           const processedMessages = messages.map(msg => ({
@@ -677,7 +680,8 @@ describe('Input and Output Processors', () => {
 
     it('should handle abort in output processors', async () => {
       class AbortingOutputProcessor implements Processor {
-        readonly name = 'aborting-output-processor';
+        readonly id = 'aborting-output-processor';
+        readonly name = 'Aborting Output Processor';
 
         async processOutputResult({ messages, abort }) {
           // Check if the response contains inappropriate content
@@ -740,7 +744,8 @@ describe('Input and Output Processors', () => {
 
     it('should skip processors that do not implement processOutputResult', async () => {
       class CompleteProcessor implements Processor {
-        readonly name = 'complete-processor';
+        readonly id = 'complete-processor';
+        readonly name = 'Complete Processor';
 
         async processOutputResult({ messages }) {
           return messages.map(msg => ({
@@ -756,7 +761,8 @@ describe('Input and Output Processors', () => {
       }
 
       class IncompleteProcessor {
-        readonly name = 'incomplete-processor';
+        readonly id = 'incomplete-processor';
+        readonly name = 'Incomplete Processor';
         // Note: This processor doesn't implement processOutputResult or extend Processor
       }
 
@@ -807,7 +813,8 @@ describe('Input and Output Processors', () => {
   describe('Output Processors with stream', () => {
     it('should process text chunks through output processors in real-time', async () => {
       class TestOutputProcessor implements Processor {
-        readonly name = 'test-output-processor';
+        readonly id = 'test-output-processor';
+        readonly name = 'Test Output Processor';
 
         async processOutputStream(args: {
           part: any;
@@ -864,7 +871,8 @@ describe('Input and Output Processors', () => {
 
     it('should filter blocked content chunks', async () => {
       class BlockingOutputProcessor implements Processor {
-        readonly name = 'filtering-output-processor';
+        readonly id = 'filtering-output-processor';
+        readonly name = 'Filtering Output Processor';
 
         async processOutputStream({ part }) {
           // Filter out chunks containing "blocked"
@@ -908,7 +916,8 @@ describe('Input and Output Processors', () => {
 
     it('should emit tripwire when output processor calls abort', async () => {
       class AbortingOutputProcessor implements Processor {
-        readonly name = 'aborting-output-processor';
+        readonly id = 'aborting-output-processor';
+        readonly name = 'Aborting Output Processor';
 
         async processOutputStream({ part, abort }) {
           if (part.type === 'text-delta' && part.payload.text?.includes('processed')) {
@@ -968,7 +977,8 @@ describe('Input and Output Processors', () => {
 
     it('should process chunks through multiple output processors in sequence', async () => {
       class ReplaceProcessor implements Processor {
-        readonly name = 'replace-processor';
+        readonly id = 'replace-processor';
+        readonly name = 'Replace Processor';
 
         async processOutputStream({ part }) {
           if (part.type === 'text-delta' && part.payload.text) {
@@ -985,7 +995,8 @@ describe('Input and Output Processors', () => {
       }
 
       class AddPrefixProcessor implements Processor {
-        readonly name = 'prefix-processor';
+        readonly id = 'prefix-processor';
+        readonly name = 'Add Prefix Processor';
 
         async processOutputStream({ part }) {
           // Add prefix to any chunk that contains "TEST"
@@ -1040,7 +1051,8 @@ describe('Input and Output Processors', () => {
       let finalProcessedObject: any = null;
 
       class StreamStructuredProcessor implements Processor {
-        readonly name = 'stream-structured-processor';
+        readonly id = 'stream-structured-processor';
+        readonly name = 'Stream Structured Processor';
 
         async processOutputStream({ part }) {
           // Handle text-delta chunks
@@ -1655,7 +1667,8 @@ describe('v1 model - output processors', () => {
       let processedText = '';
 
       class TestOutputProcessor implements Processor {
-        readonly name = 'test-output-processor';
+        readonly id = 'test-output-processor';
+        readonly name = 'Test Output Processor';
 
         async processOutputResult({ messages }) {
           // Process the final generated text
@@ -1706,7 +1719,8 @@ describe('v1 model - output processors', () => {
       let finalProcessedText = '';
 
       class ReplaceProcessor implements Processor {
-        readonly name = 'replace-processor';
+        readonly id = 'replace-processor';
+        readonly name = 'Replace Processor';
 
         async processOutputResult({ messages }) {
           return messages.map(msg => ({
@@ -1722,7 +1736,8 @@ describe('v1 model - output processors', () => {
       }
 
       class AddPrefixProcessor implements Processor {
-        readonly name = 'prefix-processor';
+        readonly id = 'prefix-processor';
+        readonly name = 'Add Prefix Processor';
 
         async processOutputResult({ messages }) {
           const processedMessages = messages.map(msg => ({
@@ -1770,7 +1785,8 @@ describe('v1 model - output processors', () => {
 
     it('should handle abort in output processors', async () => {
       class AbortingOutputProcessor implements Processor {
-        readonly name = 'aborting-output-processor';
+        readonly id = 'aborting-output-processor';
+        readonly name = 'Aborting Output Processor';
 
         async processOutputResult({ messages, abort }) {
           // Check if the response contains inappropriate content
@@ -1813,7 +1829,8 @@ describe('v1 model - output processors', () => {
       let processedText = '';
 
       class CompleteProcessor implements Processor {
-        readonly name = 'complete-processor';
+        readonly id = 'complete-processor';
+        readonly name = 'Complete Processor';
 
         async processOutputResult({ messages }) {
           const processedMessages = messages.map(msg => ({
@@ -1866,7 +1883,8 @@ describe('v1 model - output processors', () => {
       let processedObject: any = null;
 
       class TestStructuredOutputProcessor implements Processor {
-        readonly name = 'test-structured-output-processor';
+        readonly id = 'test-structured-output-processor';
+        readonly name = 'Test Structured Output Processor';
 
         async processOutputResult({ messages }) {
           // Process the final generated text and extract the structured data
@@ -1940,7 +1958,8 @@ describe('v1 model - output processors', () => {
       let finalResult: any = null;
 
       class FirstProcessor implements Processor {
-        readonly name = 'first-processor';
+        readonly id = 'first-processor';
+        readonly name = 'First Processor';
 
         async processOutputResult({ messages }) {
           firstProcessorCalled = true;
@@ -1966,7 +1985,8 @@ describe('v1 model - output processors', () => {
       }
 
       class SecondProcessor implements Processor {
-        readonly name = 'second-processor';
+        readonly id = 'second-processor';
+        readonly name = 'Second Processor';
 
         async processOutputResult({ messages }) {
           secondProcessorCalled = true;
@@ -2035,7 +2055,8 @@ describe('v1 model - output processors', () => {
     describe('generate method', () => {
       it('should handle processor abort with default message', async () => {
         const abortProcessor = {
-          name: 'abort-output-processor',
+          id: 'abort-output-processor',
+          name: 'Abort Output Processor',
           async processOutputResult({ abort, messages }) {
             abort();
             return messages;
@@ -2066,7 +2087,8 @@ describe('v1 model - output processors', () => {
 
       it('should handle processor abort with custom message', async () => {
         const customAbortProcessor = {
-          name: 'custom-abort-output',
+          id: 'custom-abort-output',
+          name: 'Custom Abort Output',
           async processOutputResult({ abort, messages }) {
             abort('Custom output abort reason');
             return messages;
@@ -2098,7 +2120,8 @@ describe('v1 model - output processors', () => {
         let secondProcessorExecuted = false;
 
         const abortProcessor = {
-          name: 'abort-first-output',
+          id: 'abort-first-output',
+          name: 'Abort First Output',
           async processOutputResult({ abort, messages }) {
             abort('Stop here');
             return messages;
@@ -2106,7 +2129,8 @@ describe('v1 model - output processors', () => {
         } satisfies Processor;
 
         const shouldNotRunProcessor = {
-          name: 'should-not-run-output',
+          id: 'should-not-run-output',
+          name: 'Should Not Run Output',
           async processOutputResult({ messages }) {
             secondProcessorExecuted = true;
             return messages.map(msg => ({
@@ -2122,7 +2146,8 @@ describe('v1 model - output processors', () => {
         } satisfies Processor;
 
         const agent = new Agent({
-          name: 'output-abort-sequence-test-agent',
+          id: 'output-abort-sequence-test-agent',
+          name: 'Output Abort Sequence Test Agent',
           instructions: 'You are a helpful assistant.',
           model: new MockLanguageModelV1({
             doGenerate: async () => ({

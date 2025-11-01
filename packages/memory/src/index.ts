@@ -11,8 +11,6 @@ import type {
 } from '@mastra/core/memory';
 import type {
   StorageGetMessagesArg,
-  ThreadSortOptions,
-  PaginationInfo,
   StorageListThreadsByResourceIdOutput,
   StorageListThreadsByResourceIdInput,
 } from '@mastra/core/storage';
@@ -279,38 +277,6 @@ export class Memory extends MastraMemory {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     return this.storage.getThreadById({ threadId });
-  }
-
-  async getThreadsByResourceId({
-    resourceId,
-    orderBy,
-    sortDirection,
-  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
-    return this.storage.getThreadsByResourceId({ resourceId, orderBy, sortDirection });
-  }
-
-  async getThreadsByResourceIdPaginated({
-    resourceId,
-    page,
-    perPage,
-    orderBy,
-    sortDirection,
-  }: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  } & ThreadSortOptions): Promise<
-    PaginationInfo & {
-      threads: StorageThreadType[];
-    }
-  > {
-    return this.storage.getThreadsByResourceIdPaginated({
-      resourceId,
-      page,
-      perPage,
-      orderBy,
-      sortDirection,
-    });
   }
 
   async listThreadsByResourceId(

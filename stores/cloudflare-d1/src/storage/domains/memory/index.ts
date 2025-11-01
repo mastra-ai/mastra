@@ -209,52 +209,11 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
   }
 
-  /**
-   * @deprecated use getThreadsByResourceIdPaginated instead
-   */
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    const fullTableName = this.operations.getTableName(TABLE_THREADS);
-
-    try {
-      const query = createSqlBuilder().select('*').from(fullTableName).where('resourceId = ?', resourceId);
-
-      const { sql, params } = query.build();
-      const results = await this.operations.executeQuery({ sql, params });
-
-      return (isArrayOfRecords(results) ? results : []).map((thread: any) => ({
-        ...thread,
-        createdAt: ensureDate(thread.createdAt) as Date,
-        updatedAt: ensureDate(thread.updatedAt) as Date,
-        metadata:
-          typeof thread.metadata === 'string'
-            ? (JSON.parse(thread.metadata || '{}') as Record<string, any>)
-            : thread.metadata || {},
-      }));
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_THREADS_BY_RESOURCE_ID_ERROR',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          text: `Error getting threads by resourceId ${resourceId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-          details: { resourceId },
-        },
-        error,
-      );
-      this.logger?.error(mastraError.toString());
-      this.logger?.trackException(mastraError);
-      return [];
-    }
-  }
-
-  public async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page, perPage } = args;
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, offset, limit, orderBy } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
     const fullTableName = this.operations.getTableName(TABLE_THREADS);
 
     const mapRowToStorageThreadType = (row: Record<string, any>): StorageThreadType => ({
@@ -278,9 +237,9 @@ export class MemoryStorageD1 extends MemoryStorage {
         .select('*')
         .from(fullTableName)
         .where('resourceId = ?', resourceId)
-        .orderBy('createdAt', 'DESC')
-        .limit(perPage)
-        .offset(page * perPage);
+        .orderBy(field, direction)
+        .limit(limit)
+        .offset(offset);
 
       const results = (await this.operations.executeQuery(selectQuery.build())) as Record<string, any>[];
       const threads = results.map(mapRowToStorageThreadType);
@@ -288,14 +247,14 @@ export class MemoryStorageD1 extends MemoryStorage {
       return {
         threads,
         total,
-        page,
-        perPage,
-        hasMore: page * perPage + threads.length < total,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
+        perPage: limit,
+        hasMore: offset + threads.length < total,
       };
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_ERROR',
+          id: 'CLOUDFLARE_D1_STORAGE_LIST_THREADS_BY_RESOURCE_ID_ERROR',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Error getting threads by resourceId ${resourceId}: ${
@@ -310,8 +269,8 @@ export class MemoryStorageD1 extends MemoryStorage {
       return {
         threads: [],
         total: 0,
-        page,
-        perPage,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
+        perPage: limit,
         hasMore: false,
       };
     }
@@ -719,7 +678,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_MESSAGES_BY_ID_ERROR',
+          id: 'CLOUDFLARE_D1_STORAGE_LIST_MESSAGES_BY_ID_ERROR',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to retrieve messages by ID: ${error instanceof Error ? error.message : String(error)}`,
@@ -767,10 +726,6 @@ export class MemoryStorageD1 extends MemoryStorage {
       // Convert offset to page for pagination metadata
       const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
-      // Determine sort field and direction
-      const sortField = orderBy?.field || 'createdAt';
-      const sortDirection = orderBy?.direction || 'DESC';
-
       const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
@@ -802,9 +757,8 @@ export class MemoryStorageD1 extends MemoryStorage {
       }
 
       // Build ORDER BY clause
-      const orderByField = sortField === 'createdAt' ? 'createdAt' : `"${sortField}"`;
-      const orderByDirection = sortDirection === 'ASC' ? 'ASC' : 'DESC';
-      query += ` ORDER BY ${orderByField} ${orderByDirection}`;
+      const { field, direction } = this.parseOrderBy(orderBy);
+      query += ` ORDER BY "${field}" ${direction}`;
 
       // Apply pagination
       if (perPage !== Number.MAX_SAFE_INTEGER) {
@@ -891,15 +845,22 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {
-        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+        const isDateField = field === 'createdAt' || field === 'updatedAt';
+        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
 
         // Handle tiebreaker for stable sorting
         if (aValue === bValue) {
           return a.id.localeCompare(b.id);
         }
 
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        }
+        // Fallback to string comparison for non-numeric fields
+        return direction === 'ASC'
+          ? String(aValue).localeCompare(String(bValue))
+          : String(bValue).localeCompare(String(aValue));
       });
 
       // Calculate hasMore based on pagination window
@@ -942,19 +903,6 @@ export class MemoryStorageD1 extends MemoryStorage {
         hasMore: false,
       };
     }
-  }
-
-  /**
-   * @todo When migrating from getThreadsByResourceIdPaginated to this method,
-   * implement orderBy and sortDirection support for full sorting capabilities
-   */
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
   }
 
   public async getMessagesPaginated({

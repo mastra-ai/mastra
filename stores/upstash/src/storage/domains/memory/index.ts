@@ -17,6 +17,8 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  ThreadOrderBy,
+  ThreadSortDirection,
 } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
 import type { StoreOperationsUpstash } from '../operations';
@@ -70,19 +72,17 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  /**
-   * @deprecated use getThreadsByResourceIdPaginated instead
-   */
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, offset = 0, limit = 100, orderBy } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
+
     try {
+      let allThreads: StorageThreadType[] = [];
       const pattern = `${TABLE_THREADS}:*`;
       const keys = await this.operations.scanKeys(pattern);
 
-      if (keys.length === 0) {
-        return [];
-      }
-
-      const allThreads: StorageThreadType[] = [];
       const pipeline = this.client.pipeline();
       keys.forEach(key => pipeline.get(key));
       const results = await pipeline.exec();
@@ -99,59 +99,31 @@ export class StoreMemoryUpstash extends MemoryStorage {
         }
       }
 
-      allThreads.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-      return allThreads;
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            resourceId,
-          },
-        },
-        error,
-      );
-      this.logger?.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      return [];
-    }
-  }
+      // Apply sorting with parameters
+      const sortedThreads = this.sortThreads(allThreads, field, direction);
 
-  public async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page = 0, perPage = 100 } = args;
-
-    try {
-      const allThreads = await this.getThreadsByResourceId({ resourceId });
-
-      const total = allThreads.length;
-      const start = page * perPage;
-      const end = start + perPage;
-      const paginatedThreads = allThreads.slice(start, end);
-      const hasMore = end < total;
+      const total = sortedThreads.length;
+      const end = offset + limit;
+      const paginatedThreads = sortedThreads.slice(offset, end);
+      const hasMore = offset + limit < total;
 
       return {
         threads: paginatedThreads,
         total,
-        page,
-        perPage,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
+        perPage: limit,
         hasMore,
       };
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+          id: 'STORAGE_UPSTASH_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
             resourceId,
-            page,
-            perPage,
+            page: limit > 0 ? Math.floor(offset / limit) : 0,
+            perPage: limit,
           },
         },
         error,
@@ -161,24 +133,11 @@ export class StoreMemoryUpstash extends MemoryStorage {
       return {
         threads: [],
         total: 0,
-        page,
-        perPage,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
+        perPage: limit,
         hasMore: false,
       };
     }
-  }
-
-  /**
-   * @todo When migrating from getThreadsByResourceIdPaginated to this method,
-   * implement orderBy and sortDirection support for full sorting capabilities
-   */
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
@@ -594,7 +553,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_MESSAGES_BY_ID_FAILED',
+          id: 'STORAGE_UPSTASH_STORAGE_LIST_MESSAGES_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -690,16 +649,15 @@ export class StoreMemoryUpstash extends MemoryStorage {
       }
 
       // Determine sort field and direction, default to DESC (newest first)
-      const sortField = orderBy?.field || 'createdAt';
-      const sortDirection = orderBy?.direction || 'DESC';
+      const { field, direction } = this.parseOrderBy(orderBy);
 
       // Type-safe field accessor helper
       const getFieldValue = (msg: MastraDBMessage): number => {
-        if (sortField === 'createdAt') {
+        if (field === 'createdAt') {
           return new Date(msg.createdAt).getTime();
         }
         // Access other fields with type-safe casting
-        const value = (msg as Record<string, unknown>)[sortField];
+        const value = (msg as Record<string, unknown>)[field];
         if (typeof value === 'number') {
           return value;
         }
@@ -715,7 +673,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         messagesData.sort((a, b) => {
           const aValue = getFieldValue(a);
           const bValue = getFieldValue(b);
-          return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
         });
       } else {
         // Default: sort by position in sorted set
@@ -764,7 +722,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         allMessages.sort((a, b) => {
           const aValue = getFieldValue(a);
           const bValue = getFieldValue(b);
-          return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
         });
       } else {
         // Build Map for O(1) lookups instead of O(n) indexOf
@@ -1234,5 +1192,22 @@ export class StoreMemoryUpstash extends MemoryStorage {
         error,
       );
     }
+  }
+
+  private sortThreads(
+    threads: StorageThreadType[],
+    field: ThreadOrderBy,
+    direction: ThreadSortDirection,
+  ): StorageThreadType[] {
+    return threads.sort((a, b) => {
+      const aValue = new Date(a[field]).getTime();
+      const bValue = new Date(b[field]).getTime();
+
+      if (direction === 'ASC') {
+        return aValue - bValue;
+      } else {
+        return bValue - aValue;
+      }
+    });
   }
 }

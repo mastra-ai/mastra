@@ -11,6 +11,8 @@ import type {
   WorkflowRuns,
   PaginationInfo,
   StorageListWorkflowRunsInput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import { writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -75,16 +77,6 @@ export class BenchmarkStore extends MastraStorage {
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     const thread = this.data.mastra_threads.get(threadId);
     return thread || null;
-  }
-
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    const threads: StorageThreadType[] = [];
-    for (const thread of this.data.mastra_threads.values()) {
-      if (thread.resourceId === resourceId) {
-        threads.push(thread);
-      }
-    }
-    return threads;
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
@@ -394,21 +386,24 @@ export class BenchmarkStore extends MastraStorage {
     return parsedRun as WorkflowRun;
   }
 
-  async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const allThreads = await this.getThreadsByResourceId({ resourceId: args.resourceId });
-    const start = args.page * args.perPage;
-    const threads = allThreads.slice(start, start + args.perPage);
+  async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const allThreads: StorageThreadType[] = [];
+    for (const thread of this.data.mastra_threads.values()) {
+      if (thread.resourceId === args.resourceId) {
+        allThreads.push(thread);
+      }
+    }
+    const start = args.offset * args.limit;
+    const threads = allThreads.slice(start, start + args.limit);
 
     return {
       threads,
       total: allThreads.length,
-      page: args.page,
-      perPage: args.perPage,
-      hasMore: allThreads.length > (args.page + 1) * args.perPage,
+      page: args.offset,
+      perPage: args.limit,
+      hasMore: allThreads.length > (args.offset + 1) * args.limit,
     };
   }
 

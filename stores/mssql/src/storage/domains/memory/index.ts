@@ -12,9 +12,7 @@ import {
 import type {
   StorageGetMessagesArg,
   PaginationInfo,
-  PaginationArgs,
   StorageResourceType,
-  ThreadSortOptions,
   StorageListMessagesInput,
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
@@ -105,16 +103,13 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
-  public async getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-    } & PaginationArgs &
-      ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy = 'createdAt', sortDirection = 'DESC' } = args;
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, offset = 0, limit: limitInput, orderBy } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
     try {
-      const perPage = perPageInput !== undefined ? perPageInput : 100;
-      const currentOffset = page * perPage;
+      const limit = limitInput !== undefined ? limitInput : 100;
       const baseQuery = `FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} WHERE [resourceId] = @resourceId`;
 
       const countQuery = `SELECT COUNT(*) as count ${baseQuery}`;
@@ -127,19 +122,19 @@ export class MemoryMSSQL extends MemoryStorage {
         return {
           threads: [],
           total: 0,
-          page,
-          perPage,
+          page: 0,
+          perPage: limit,
           hasMore: false,
         };
       }
 
-      const orderByField = orderBy === 'createdAt' ? '[createdAt]' : '[updatedAt]';
-      const dir = (sortDirection || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      const orderByField = field === 'createdAt' ? '[createdAt]' : '[updatedAt]';
+      const dir = (direction || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
       const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
       const dataRequest = this.pool.request();
       dataRequest.input('resourceId', resourceId);
-      dataRequest.input('perPage', perPage);
-      dataRequest.input('offset', currentOffset);
+      dataRequest.input('perPage', limit);
+      dataRequest.input('offset', offset);
       const rowsResult = await dataRequest.query(dataQuery);
       const rows = rowsResult.recordset || [];
       const threads = rows.map(thread => ({
@@ -152,26 +147,32 @@ export class MemoryMSSQL extends MemoryStorage {
       return {
         threads,
         total,
-        page,
-        perPage,
-        hasMore: currentOffset + threads.length < total,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
+        perPage: limit,
+        hasMore: offset + threads.length < total,
       };
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+          id: 'MASTRA_STORAGE_MSSQL_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
             resourceId,
-            page,
+            page: limitInput && limitInput > 0 ? Math.floor(offset / limitInput) : 0,
           },
         },
         error,
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return { threads: [], total: 0, page, perPage: perPageInput || 100, hasMore: false };
+      return {
+        threads: [],
+        total: 0,
+        page: limitInput && limitInput > 0 ? Math.floor(offset / limitInput) : 0,
+        perPage: limitInput || 100,
+        hasMore: false,
+      };
     }
   }
 
@@ -217,32 +218,6 @@ export class MemoryMSSQL extends MemoryStorage {
         },
         error,
       );
-    }
-  }
-
-  /**
-   * @deprecated use getThreadsByResourceIdPaginated instead
-   */
-  public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
-    const { resourceId, orderBy = 'createdAt', sortDirection = 'DESC' } = args;
-    try {
-      const baseQuery = `FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} WHERE [resourceId] = @resourceId`;
-      const orderByField = orderBy === 'createdAt' ? '[createdAt]' : '[updatedAt]';
-      const dir = (sortDirection || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-      const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir}`;
-      const request = this.pool.request();
-      request.input('resourceId', resourceId);
-      const resultSet = await request.query(dataQuery);
-      const rows = resultSet.recordset || [];
-      return rows.map(thread => ({
-        ...thread,
-        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-        createdAt: thread.createdAt,
-        updatedAt: thread.updatedAt,
-      }));
-    } catch (error) {
-      this.logger?.error?.(`Error getting threads for resource ${resourceId}:`, error);
-      return [];
     }
   }
 
@@ -561,7 +536,7 @@ export class MemoryMSSQL extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_MESSAGES_BY_ID_FAILED',
+          id: 'MASTRA_STORAGE_MSSQL_STORE_LIST_MESSAGES_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -611,9 +586,8 @@ export class MemoryMSSQL extends MemoryStorage {
       const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
       // Determine sort field and direction
-      const sortField = orderBy?.field || 'createdAt';
-      const sortDirection = orderBy?.direction || 'DESC';
-      const orderByStatement = `ORDER BY [${sortField}] ${sortDirection}`;
+      const { field, direction } = this.parseOrderBy(orderBy);
+      const orderByStatement = `ORDER BY [${field}] ${direction}`;
 
       const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
@@ -691,9 +665,9 @@ export class MemoryMSSQL extends MemoryStorage {
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {
-        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
       // Calculate hasMore based on pagination window
@@ -734,15 +708,6 @@ export class MemoryMSSQL extends MemoryStorage {
         hasMore: false,
       };
     }
-  }
-
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset, orderBy, sortDirection } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage, orderBy, sortDirection });
   }
 
   public async getMessagesPaginated(

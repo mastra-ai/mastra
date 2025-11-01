@@ -93,7 +93,8 @@ export interface ModerationOptions {
  * while maintaining compatibility with OpenAI's moderation API structure.
  */
 export class ModerationProcessor implements Processor {
-  readonly name = 'moderation';
+  readonly id = 'moderation';
+  readonly name = 'Moderation';
 
   private moderationAgent: Agent;
   private categories: string[];

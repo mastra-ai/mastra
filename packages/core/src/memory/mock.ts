@@ -5,7 +5,6 @@ import type {
   StorageGetMessagesArg,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
-  ThreadSortOptions,
 } from '../storage';
 import { MessageList } from '../agent/message-list';
 
@@ -57,20 +56,6 @@ export class MockMemory extends MastraMemory {
       resourceId: args.resourceId || '',
     });
     return { messages: result.messages };
-  }
-
-  async getThreadsByResourceId(props: { resourceId: string } & ThreadSortOptions) {
-    return this.storage.getThreadsByResourceId(props);
-  }
-
-  async getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & any, // ThreadSortOptions
-  ): Promise<any & { threads: StorageThreadType[] }> {
-    return this.storage.getThreadsByResourceIdPaginated(args);
   }
 
   async listThreadsByResourceId(

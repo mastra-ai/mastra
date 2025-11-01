@@ -7,7 +7,6 @@ import type {
   PaginationInfo,
   StorageGetMessagesArg,
   StorageResourceType,
-  ThreadSortOptions,
   StorageListMessagesInput,
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
@@ -37,7 +36,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   }
 
   // Helper function to transform and sort threads
-  private transformAndSortThreads(rawThreads: any[], orderBy: string, sortDirection: string): StorageThreadType[] {
+  private transformAndSortThreads(rawThreads: any[], field: string, direction: string): StorageThreadType[] {
     return rawThreads
       .map((data: any) => ({
         ...data,
@@ -46,11 +45,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         updatedAt: typeof data.updatedAt === 'string' ? new Date(data.updatedAt) : data.updatedAt,
       }))
       .sort((a: StorageThreadType, b: StorageThreadType) => {
-        const fieldA = orderBy === 'createdAt' ? a.createdAt : a.updatedAt;
-        const fieldB = orderBy === 'createdAt' ? b.createdAt : b.updatedAt;
+        const fieldA = field === 'createdAt' ? a.createdAt : a.updatedAt;
+        const fieldB = field === 'createdAt' ? b.createdAt : b.updatedAt;
 
         const comparison = fieldA.getTime() - fieldB.getTime();
-        return sortDirection === 'DESC' ? -comparison : comparison;
+        return direction === 'DESC' ? -comparison : comparison;
       }) as StorageThreadType[];
   }
 
@@ -80,38 +79,6 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
-        },
-        error,
-      );
-    }
-  }
-
-  /**
-   * @deprecated use getThreadsByResourceIdPaginated instead for paginated results.
-   */
-  public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
-    const resourceId = args.resourceId;
-    const orderBy = this.castThreadOrderBy(args.orderBy);
-    const sortDirection = this.castThreadSortDirection(args.sortDirection);
-
-    this.logger.debug('Getting threads by resource ID', { resourceId, orderBy, sortDirection });
-
-    try {
-      const result = await this.service.entities.thread.query.byResource({ entity: 'thread', resourceId }).go();
-
-      if (!result.data.length) {
-        return [];
-      }
-
-      // Use shared helper method for transformation and sorting
-      return this.transformAndSortThreads(result.data, orderBy, sortDirection);
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'STORAGE_DYNAMODB_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId },
         },
         error,
       );
@@ -380,7 +347,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_MESSAGES_BY_ID_FAILED',
+          id: 'STORAGE_DYNAMODB_STORE_LIST_MESSAGES_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: JSON.stringify(messageIds) },
@@ -425,8 +392,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
       // Determine sort field and direction
-      const sortField = orderBy?.field || 'createdAt';
-      const sortDirection = orderBy?.direction || 'DESC';
+      const { field, direction } = this.parseOrderBy(orderBy);
 
       this.logger.debug('Getting messages with listMessages', {
         threadId,
@@ -435,8 +401,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         offset,
         perPage,
         page,
-        sortField,
-        sortDirection,
+        field,
+        direction,
       });
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
@@ -472,15 +438,15 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       // Sort messages by the specified field and direction
       allThreadMessages.sort((a: MastraDBMessage, b: MastraDBMessage) => {
-        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
 
         // Handle tiebreaker for stable sorting
         if (aValue === bValue) {
           return a.id.localeCompare(b.id);
         }
 
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
       // Save total before pagination
@@ -524,15 +490,15 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {
-        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
 
         // Handle tiebreaker for stable sorting
         if (aValue === bValue) {
           return a.id.localeCompare(b.id);
         }
 
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
       // Calculate hasMore based on pagination window
@@ -574,18 +540,6 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
-  /**
-   * @todo When migrating from getThreadsByResourceIdPaginated to this method,
-   * implement orderBy and sortDirection support for full sorting capabilities
-   */
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
-  }
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     const { messages } = args;
     this.logger.debug('Saving messages', { count: messages.length });
@@ -672,23 +626,18 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page?: number;
-      perPage?: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page = 0, perPage = 100 } = args;
-    const orderBy = this.castThreadOrderBy(args.orderBy);
-    const sortDirection = this.castThreadSortDirection(args.sortDirection);
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, offset = 0, limit = 100, orderBy } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
 
     this.logger.debug('Getting threads by resource ID with pagination', {
       resourceId,
-      page,
-      perPage,
-      orderBy,
-      sortDirection,
+      page: limit > 0 ? Math.floor(offset / limit) : 0,
+      perPage: limit,
+      field,
+      direction,
     });
 
     try {
@@ -699,31 +648,30 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const results = await query.go();
 
       // Use shared helper method for transformation and sorting
-      const allThreads = this.transformAndSortThreads(results.data, orderBy, sortDirection);
+      const allThreads = this.transformAndSortThreads(results.data, field, direction);
 
       // Apply pagination in memory
-      const startIndex = page * perPage;
-      const endIndex = startIndex + perPage;
-      const paginatedThreads = allThreads.slice(startIndex, endIndex);
+      const endIndex = offset + limit;
+      const paginatedThreads = allThreads.slice(offset, endIndex);
 
       // Calculate pagination info
       const total = allThreads.length;
-      const hasMore = endIndex < total;
+      const hasMore = offset + limit < total;
 
       return {
         threads: paginatedThreads,
         total,
-        page,
-        perPage,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
+        perPage: limit,
         hasMore,
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+          id: 'DYNAMODB_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId, page, perPage },
+          details: { resourceId, page: limit > 0 ? Math.floor(offset / limit) : 0, perPage: limit },
         },
         error,
       );

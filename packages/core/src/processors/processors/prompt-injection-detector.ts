@@ -83,7 +83,8 @@ export interface PromptInjectionOptions {
  * attacks while preserving legitimate user intent.
  */
 export class PromptInjectionDetector implements Processor {
-  readonly name = 'prompt-injection-detector';
+  readonly id = 'prompt-injection-detector';
+  readonly name = 'Prompt Injection Detector';
 
   private detectionAgent: Agent;
   private detectionTypes: string[];

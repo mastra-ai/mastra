@@ -31,6 +31,11 @@ export class StoreMemoryLance extends MemoryStorage {
     this.operations = operations;
   }
 
+  // Utility to escape single quotes in SQL strings
+  private escapeSql(str: string): string {
+    return str.replace(/'/g, "''");
+  }
+
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
       const thread = await this.operations.load({ tableName: TABLE_THREADS, keys: { id: threadId } });
@@ -48,29 +53,6 @@ export class StoreMemoryLance extends MemoryStorage {
       throw new MastraError(
         {
           id: 'LANCE_STORE_GET_THREAD_BY_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
-    }
-  }
-
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    try {
-      const table = await this.client.openTable(TABLE_THREADS);
-      // fetches all threads with the given resourceId
-      const query = table.query().where(`\`resourceId\` = '${resourceId}'`);
-
-      const records = await query.toArray();
-      return processResultWithTypeConversion(
-        records,
-        await getTableSchema({ tableName: TABLE_THREADS, client: this.client }),
-      ) as StorageThreadType[];
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: 'LANCE_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -309,7 +291,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_GET_MESSAGES_BY_ID_FAILED',
+          id: 'LANCE_STORE_LIST_MESSAGES_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -356,17 +338,15 @@ export class StoreMemoryLance extends MemoryStorage {
       const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
       // Determine sort field and direction
-      const sortField = orderBy?.field || 'createdAt';
-      const sortDirection = orderBy?.direction || 'DESC';
+      const { field, direction } = this.parseOrderBy(orderBy);
 
       const table = await this.client.openTable(TABLE_MESSAGES);
 
       // Build query conditions
-      const escapeSql = (str: string) => str.replace(/'/g, "''");
-      const conditions: string[] = [`thread_id = '${escapeSql(threadId)}'`];
+      const conditions: string[] = [`thread_id = '${this.escapeSql(threadId)}'`];
 
       if (resourceId) {
-        conditions.push(`\`resourceId\` = '${escapeSql(resourceId)}'`);
+        conditions.push(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
       }
 
       if (filter?.dateRange?.start) {
@@ -396,9 +376,18 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // Sort records
       allRecords.sort((a, b) => {
-        const aValue = sortField === 'createdAt' ? a.createdAt : a[sortField];
-        const bValue = sortField === 'createdAt' ? b.createdAt : b[sortField];
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        const aValue = field === 'createdAt' ? a.createdAt : a[field];
+        const bValue = field === 'createdAt' ? b.createdAt : b[field];
+
+        // Handle null/undefined - treat as "smallest" values
+        if (aValue == null && bValue == null) return 0;
+        if (aValue == null) return direction === 'ASC' ? -1 : 1;
+        if (bValue == null) return direction === 'ASC' ? 1 : -1;
+
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+        }
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
       // Apply pagination
@@ -451,9 +440,18 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {
-        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+
+        // Handle null/undefined - treat as "smallest" values
+        if (aValue == null && bValue == null) return 0;
+        if (aValue == null) return direction === 'ASC' ? -1 : 1;
+        if (bValue == null) return direction === 'ASC' ? 1 : -1;
+
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+        }
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
       // Calculate hasMore based on pagination window
@@ -497,19 +495,6 @@ export class StoreMemoryLance extends MemoryStorage {
         hasMore: false,
       };
     }
-  }
-
-  /**
-   * @todo When migrating from getThreadsByResourceIdPaginated to this method,
-   * implement orderBy and sortDirection support for full sorting capabilities
-   */
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
   }
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
@@ -574,45 +559,56 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page?: number;
-    perPage?: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
-      const { resourceId, page = 0, perPage = 10 } = args;
+      const { resourceId, offset = 0, limit = 10, orderBy } = args;
+      const { field, direction } = this.parseOrderBy(orderBy);
       const table = await this.client.openTable(TABLE_THREADS);
 
       // Get total count
-      const total = await table.countRows(`\`resourceId\` = '${resourceId}'`);
+      const total = await table.countRows(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
 
-      // Get paginated results
-      const query = table.query().where(`\`resourceId\` = '${resourceId}'`);
-      const offset = page * perPage;
-      query.limit(perPage);
-      if (offset > 0) {
-        query.offset(offset);
-      }
-
+      // Get ALL matching records (no limit/offset yet - need to sort first)
+      const query = table.query().where(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
       const records = await query.toArray();
 
-      // Sort by updatedAt descending (most recent first)
-      records.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      // Apply dynamic sorting BEFORE pagination
+      records.sort((a, b) => {
+        const aValue = ['createdAt', 'updatedAt'].includes(field) ? new Date(a[field]).getTime() : a[field];
+        const bValue = ['createdAt', 'updatedAt'].includes(field) ? new Date(b[field]).getTime() : b[field];
+
+        // Handle null/undefined - treat as "smallest" values
+        if (aValue == null && bValue == null) return 0;
+        if (aValue == null) return direction === 'ASC' ? -1 : 1;
+        if (bValue == null) return direction === 'ASC' ? 1 : -1;
+
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+        }
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
+
+      // Apply pagination AFTER sorting
+      const paginatedRecords = records.slice(offset, offset + limit);
 
       const schema = await getTableSchema({ tableName: TABLE_THREADS, client: this.client });
-      const threads = records.map(record => processResultWithTypeConversion(record, schema)) as StorageThreadType[];
+      const threads = paginatedRecords.map(record =>
+        processResultWithTypeConversion(record, schema),
+      ) as StorageThreadType[];
 
       return {
         threads,
         total,
-        page,
-        perPage,
-        hasMore: total > (page + 1) * perPage,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
+        perPage: limit,
+        hasMore: offset + threads.length < total,
       };
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+          id: 'LANCE_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

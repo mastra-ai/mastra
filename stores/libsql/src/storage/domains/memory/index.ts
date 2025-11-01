@@ -7,7 +7,6 @@ import type {
   PaginationInfo,
   StorageGetMessagesArg,
   StorageResourceType,
-  ThreadSortOptions,
   StorageListMessagesInput,
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
@@ -194,7 +193,7 @@ export class MemoryLibSQL extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_MESSAGES_BY_ID_FAILED',
+          id: 'LIBSQL_STORE_LIST_MESSAGES_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: JSON.stringify(messageIds) },
@@ -239,9 +238,8 @@ export class MemoryLibSQL extends MemoryStorage {
       const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
       // Determine sort field and direction
-      const sortField = orderBy?.field || 'createdAt';
-      const sortDirection = orderBy?.direction || 'DESC';
-      const orderByStatement = `ORDER BY "${sortField}" ${sortDirection}`;
+      const { field, direction } = this.parseOrderBy(orderBy);
+      const orderByStatement = `ORDER BY "${field}" ${direction}`;
 
       // Build WHERE conditions
       const conditions: string[] = [`thread_id = ?`];
@@ -314,9 +312,16 @@ export class MemoryLibSQL extends MemoryStorage {
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {
-        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        const isDateField = field === 'createdAt' || field === 'updatedAt';
+        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        }
+        return direction === 'ASC'
+          ? String(aValue).localeCompare(String(bValue))
+          : String(bValue).localeCompare(String(aValue));
       });
 
       // Calculate hasMore based on pagination window
@@ -357,15 +362,6 @@ export class MemoryLibSQL extends MemoryStorage {
         hasMore: false,
       };
     }
-  }
-
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset, orderBy, sortDirection } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage, orderBy, sortDirection });
   }
 
   public async getMessagesPaginated(
@@ -852,13 +848,11 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  /**
-   * @deprecated use getThreadsByResourceIdPaginated instead for paginated results.
-   */
-  public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
-    const resourceId = args.resourceId;
-    const orderBy = this.castThreadOrderBy(args.orderBy);
-    const sortDirection = this.castThreadSortDirection(args.sortDirection);
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, offset = 0, limit = 100, orderBy } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
       const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
@@ -872,58 +866,6 @@ export class MemoryLibSQL extends MemoryStorage {
         updatedAt: new Date(row.updatedAt as string), // Convert string to Date
         metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
       });
-
-      // Non-paginated path
-      const result = await this.client.execute({
-        sql: `SELECT * ${baseQuery} ORDER BY ${orderBy} ${sortDirection}`,
-        args: queryParams,
-      });
-
-      if (!result.rows) {
-        return [];
-      }
-      return result.rows.map(mapRowToStorageThreadType);
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'LIBSQL_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId },
-        },
-        error,
-      );
-      this.logger?.trackException?.(mastraError);
-      this.logger?.error?.(mastraError.toString());
-      return [];
-    }
-  }
-
-  public async getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page = 0, perPage = 100 } = args;
-    const orderBy = this.castThreadOrderBy(args.orderBy);
-    const sortDirection = this.castThreadSortDirection(args.sortDirection);
-
-    try {
-      const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
-      const queryParams: InValue[] = [resourceId];
-
-      const mapRowToStorageThreadType = (row: any): StorageThreadType => ({
-        id: row.id as string,
-        resourceId: row.resourceId as string,
-        title: row.title as string,
-        createdAt: new Date(row.createdAt as string), // Convert string to Date
-        updatedAt: new Date(row.updatedAt as string), // Convert string to Date
-        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
-      });
-
-      const currentOffset = page * perPage;
 
       const countResult = await this.client.execute({
         sql: `SELECT COUNT(*) as count ${baseQuery}`,
@@ -935,15 +877,15 @@ export class MemoryLibSQL extends MemoryStorage {
         return {
           threads: [],
           total: 0,
-          page,
-          perPage,
+          page: 0,
+          perPage: limit,
           hasMore: false,
         };
       }
 
       const dataResult = await this.client.execute({
-        sql: `SELECT * ${baseQuery} ORDER BY ${orderBy} ${sortDirection} LIMIT ? OFFSET ?`,
-        args: [...queryParams, perPage, currentOffset],
+        sql: `SELECT * ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
+        args: [...queryParams, limit, offset],
       });
 
       const threads = (dataResult.rows || []).map(mapRowToStorageThreadType);
@@ -951,14 +893,14 @@ export class MemoryLibSQL extends MemoryStorage {
       return {
         threads,
         total,
-        page,
-        perPage,
-        hasMore: currentOffset + threads.length < total,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
+        perPage: limit,
+        hasMore: offset + threads.length < total,
       };
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
+          id: 'LIBSQL_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -967,7 +909,13 @@ export class MemoryLibSQL extends MemoryStorage {
       );
       this.logger?.trackException?.(mastraError);
       this.logger?.error?.(mastraError.toString());
-      return { threads: [], total: 0, page, perPage, hasMore: false };
+      return {
+        threads: [],
+        total: 0,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
+        perPage: limit,
+        hasMore: false,
+      };
     }
   }
 

@@ -63,68 +63,12 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
-      const keyList = await this.operations.listKV(TABLE_THREADS);
-      const threads = await Promise.all(
-        keyList.map(async keyObj => {
-          try {
-            const data = await this.operations.getKV(TABLE_THREADS, keyObj.name);
-            if (!data) return null;
-
-            const thread = typeof data === 'string' ? JSON.parse(data) : data;
-            if (!thread || !thread.resourceId || thread.resourceId !== resourceId) return null;
-
-            return {
-              ...thread,
-              createdAt: ensureDate(thread.createdAt)!,
-              updatedAt: ensureDate(thread.updatedAt)!,
-              metadata: this.ensureMetadata(thread.metadata),
-            };
-          } catch (error: any) {
-            const mastraError = new MastraError(
-              {
-                id: 'CLOUDFLARE_STORAGE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-                domain: ErrorDomain.STORAGE,
-                category: ErrorCategory.THIRD_PARTY,
-                details: {
-                  resourceId,
-                },
-              },
-              error,
-            );
-            this.logger?.trackException(mastraError);
-            this.logger?.error(mastraError.toString());
-            return null;
-          }
-        }),
-      );
-      return threads.filter((thread): thread is StorageThreadType => thread !== null);
-    } catch (error: any) {
-      const mastraError = new MastraError(
-        {
-          id: 'CLOUDFLARE_STORAGE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            resourceId,
-          },
-        },
-        error,
-      );
-      this.logger?.trackException(mastraError);
-      this.logger?.error(mastraError.toString());
-      return [];
-    }
-  }
-
-  async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page?: number;
-    perPage?: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    try {
-      const { resourceId, page = 0, perPage = 100 } = args;
+      const { resourceId, offset = 0, limit = 100, orderBy } = args;
+      const { field, direction } = this.parseOrderBy(orderBy);
 
       // List all keys in the threads table
       const prefix = this.operations.namespacePrefix ? `${this.operations.namespacePrefix}:` : '';
@@ -142,29 +86,28 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         threads.push(data);
       }
 
-      // Sort by createdAt descending
+      // Apply dynamic sorting
       threads.sort((a, b) => {
-        const aTime = new Date(a.createdAt || 0).getTime();
-        const bTime = new Date(b.createdAt || 0).getTime();
-        return bTime - aTime;
+        const aTime = new Date(a[field] || 0).getTime();
+        const bTime = new Date(b[field] || 0).getTime();
+        return direction === 'ASC' ? aTime - bTime : bTime - aTime;
       });
 
       // Apply pagination
-      const start = page * perPage;
-      const end = start + perPage;
-      const paginatedThreads = threads.slice(start, end);
+      const end = offset + limit;
+      const paginatedThreads = threads.slice(offset, end);
 
       return {
-        page,
-        perPage,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
+        perPage: limit,
         total: threads.length,
-        hasMore: start + perPage < threads.length,
+        hasMore: offset + limit < threads.length,
         threads: paginatedThreads,
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+          id: 'CLOUDFLARE_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: 'Failed to get threads by resource ID with pagination',
@@ -822,7 +765,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_GET_MESSAGES_BY_ID_FAILED',
+          id: 'CLOUDFLARE_STORAGE_LIST_MESSAGES_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Error retrieving messages by ID`,
@@ -873,8 +816,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
       // Determine sort field and direction
-      const sortField = orderBy?.field || 'createdAt';
-      const sortDirection = orderBy?.direction || 'DESC';
+      const { field, direction } = this.parseOrderBy(orderBy);
 
       const messageIds = new Set<string>();
 
@@ -905,7 +847,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
             // For DESC: select from end (newest first)
             let start: number;
             let end: number;
-            if (sortDirection === 'ASC') {
+            if (direction === 'ASC') {
               start = offset;
               end = Math.min(offset + perPage - 1, totalMessages - 1);
             } else {
@@ -981,7 +923,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       // Apply pagination if filters were applied (we fetched all messages above)
       // Direction-aware slicing: for DESC, slice from the end (newest messages)
       if (hasFilters && perPage !== Number.MAX_SAFE_INTEGER && perPage > 0) {
-        if (sortDirection === 'ASC') {
+        if (direction === 'ASC') {
           filteredMessages = filteredMessages.slice(offset, offset + perPage);
         } else {
           // DESC: slice from the end (newest messages first)
@@ -1008,13 +950,13 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           const indexB = orderMap.get(b.id);
 
           if (indexA !== undefined && indexB !== undefined) {
-            return sortDirection === 'ASC' ? indexA - indexB : indexB - indexA;
+            return direction === 'ASC' ? indexA - indexB : indexB - indexA;
           }
 
           // Fallback to createdAt sorting
           const timeA = new Date(a.createdAt).getTime();
           const timeB = new Date(b.createdAt).getTime();
-          const timeDiff = sortDirection === 'ASC' ? timeA - timeB : timeB - timeA;
+          const timeDiff = direction === 'ASC' ? timeA - timeB : timeB - timeA;
 
           // Handle tiebreaker for stable sorting
           if (timeDiff === 0) {
@@ -1027,7 +969,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         filteredMessages.sort((a, b) => {
           const timeA = new Date(a.createdAt).getTime();
           const timeB = new Date(b.createdAt).getTime();
-          const timeDiff = sortDirection === 'ASC' ? timeA - timeB : timeB - timeA;
+          const timeDiff = direction === 'ASC' ? timeA - timeB : timeB - timeA;
 
           // Handle tiebreaker for stable sorting
           if (timeDiff === 0) {
@@ -1060,15 +1002,15 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       // Sort final messages again to ensure correct order
       finalMessages = finalMessages.sort((a, b) => {
-        const aValue = sortField === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[sortField];
-        const bValue = sortField === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[sortField];
+        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
 
         // Handle tiebreaker for stable sorting
         if (aValue === bValue) {
           return a.id.localeCompare(b.id);
         }
 
-        return sortDirection === 'ASC' ? aValue - bValue : bValue - aValue;
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
       // Calculate hasMore based on pagination window
@@ -1080,7 +1022,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       let hasMore: boolean;
       if (limit === false || allThreadMessagesReturned) {
         hasMore = false;
-      } else if (sortDirection === 'ASC') {
+      } else if (direction === 'ASC') {
         // ASC: check if there are more messages after the current window
         hasMore = offset + paginatedCount < total;
       } else {
@@ -1122,19 +1064,6 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         hasMore: false,
       };
     }
-  }
-
-  /**
-   * @todo When migrating from getThreadsByResourceIdPaginated to this method,
-   * implement orderBy and sortDirection support for full sorting capabilities
-   */
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
   }
 
   async getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {

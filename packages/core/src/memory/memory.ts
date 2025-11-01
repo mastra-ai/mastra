@@ -7,11 +7,9 @@ import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
 import type {
   MastraStorage,
-  PaginationInfo,
   StorageGetMessagesArg,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
-  ThreadSortOptions,
 } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
@@ -295,29 +293,16 @@ export abstract class MastraMemory extends MastraBase {
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
   /**
-   * Retrieves all threads that belong to the specified resource.
-   * @param resourceId - The unique identifier of the resource
-   * @param orderBy - Which timestamp field to sort by (`'createdAt'` or `'updatedAt'`);
-   *                  defaults to `'createdAt'`
-   * @param sortDirection - Sort order for the results (`'ASC'` or `'DESC'`);
-   *                        defaults to `'DESC'`
-   * @returns Promise resolving to an array of matching threads; resolves to an empty array
-   *          if the resource has no threads
+   * Lists all threads that belong to the specified resource.
+   * @param args.resourceId - The unique identifier of the resource
+   * @param args.offset - The number of threads to skip (for pagination)
+   * @param args.limit - The maximum number of threads to return
+   * @param args.orderBy - Optional sorting configuration with `field` (`'createdAt'` or `'updatedAt'`)
+   *                       and `direction` (`'ASC'` or `'DESC'`);
+   *                       defaults to `{ field: 'createdAt', direction: 'DESC' }`
+   * @returns Promise resolving to paginated thread results with metadata;
+   *          resolves to an empty array if the resource has no threads
    */
-  abstract getThreadsByResourceId({
-    resourceId,
-    orderBy,
-    sortDirection,
-  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]>;
-
-  abstract getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
-
   abstract listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput>;

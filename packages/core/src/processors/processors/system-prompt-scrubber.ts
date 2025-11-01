@@ -57,7 +57,8 @@ export interface SystemPromptDetection {
 }
 
 export class SystemPromptScrubber implements Processor {
-  public readonly name = 'system-prompt-scrubber';
+  public readonly id = 'system-prompt-scrubber';
+  public readonly name = 'System Prompt Scrubber';
 
   private strategy: 'block' | 'warn' | 'filter' | 'redact';
   private customPatterns: string[];
