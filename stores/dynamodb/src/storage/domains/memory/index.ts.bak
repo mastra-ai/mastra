@@ -643,7 +643,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-    const perPage = this.normalizePerPage(perPageInput, 100);
+    const perPage = perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput !== undefined ? perPageInput : 100;
     const offset = page * perPage;
     const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -677,7 +677,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         threads: paginatedThreads,
         total,
         page,
-        perPage: this.preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageInput === false ? false : perPage,
         hasMore,
       };
     } catch (error) {

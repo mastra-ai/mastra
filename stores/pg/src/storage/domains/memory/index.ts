@@ -110,7 +110,7 @@ export class MemoryPG extends MemoryStorage {
   ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
-    const perPage = perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput !== undefined ? perPageInput : 100;
+    const perPage = this.normalizePerPage(perPageInput, 100);
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
       const baseQuery = `FROM ${tableName} WHERE "resourceId" = $1`;
@@ -126,7 +126,7 @@ export class MemoryPG extends MemoryStorage {
           threads: [],
           total: 0,
           page,
-          perPage,
+          perPage: this.preservePerPageForResponse(perPageInput, perPage),
           hasMore: false,
         };
       }
@@ -145,7 +145,7 @@ export class MemoryPG extends MemoryStorage {
         threads,
         total,
         page,
-        perPage: perPageInput === false ? false : perPage,
+        perPage: this.preservePerPageForResponse(perPageInput, perPage),
         hasMore: offset + threads.length < total,
       };
     } catch (error) {
@@ -167,7 +167,7 @@ export class MemoryPG extends MemoryStorage {
         threads: [],
         total: 0,
         page,
-        perPage,
+        perPage: this.preservePerPageForResponse(perPageInput, perPage),
         hasMore: false,
       };
     }

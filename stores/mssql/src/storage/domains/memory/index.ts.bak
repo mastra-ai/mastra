@@ -107,7 +107,14 @@ export class MemoryMSSQL extends MemoryStorage {
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-    const perPage = this.normalizePerPage(perPageInput, 100);
+    let perPage = 100;
+    if (perPageInput === false) {
+      perPage = Number.MAX_SAFE_INTEGER;
+    } else if (perPageInput === 0) {
+      perPage = 0;
+    } else if (perPageInput !== undefined) {
+      perPage = perPageInput;
+    }
     const offset = page * perPage;
     const { field, direction } = this.parseOrderBy(orderBy);
     try {
@@ -124,7 +131,7 @@ export class MemoryMSSQL extends MemoryStorage {
           threads: [],
           total: 0,
           page,
-          perPage: this.preservePerPageForResponse(perPageInput, perPage),
+          perPage: perPageInput === false ? false : perPage,
           hasMore: false,
         };
       }
@@ -149,7 +156,7 @@ export class MemoryMSSQL extends MemoryStorage {
         threads,
         total,
         page,
-        perPage: this.preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageInput === false ? false : perPage,
         hasMore: offset + perPage < total,
       };
     } catch (error) {

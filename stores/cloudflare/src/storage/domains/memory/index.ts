@@ -68,8 +68,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
       const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-      const perPage =
-        perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput !== undefined ? perPageInput : 100;
+      const perPage = this.normalizePerPage(perPageInput, 100);
       const offset = page * perPage;
       const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -102,7 +101,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       return {
         page,
-        perPage: perPageInput === false ? false : perPage,
+        perPage: this.preservePerPageForResponse(perPageInput, perPage),
         total: threads.length,
         hasMore: offset + perPage < threads.length,
         threads: paginatedThreads,

@@ -106,20 +106,8 @@ export class InMemoryMemory extends MemoryStorage {
 
     const { field, direction } = this.parseOrderBy(orderBy);
 
-    // Determine how many results to return
-    // Default pagination is always 40 unless explicitly specified
-    let perPage = 40;
-
-    if (perPageInput !== undefined) {
-      // Explicit perPage provided
-      if (perPageInput === false) {
-        // perPage: false means get ALL messages
-        perPage = Number.MAX_SAFE_INTEGER;
-      } else if (typeof perPageInput === 'number' && perPageInput > 0) {
-        // perPage: number means get that many messages
-        perPage = perPageInput;
-      }
-    }
+    // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 40)
+    const perPage = this.normalizePerPage(perPageInput, 40);
 
     // Calculate offset from page
     const offset = page * perPage;
@@ -291,7 +279,7 @@ export class InMemoryMemory extends MemoryStorage {
       messages,
       total: totalThreadMessages,
       page,
-      perPage: perPageInput === false ? false : perPage,
+      perPage: this.preservePerPageForResponse(perPageInput, perPage),
       hasMore,
     };
   }
@@ -606,7 +594,7 @@ export class InMemoryMemory extends MemoryStorage {
   ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
-    const perPage = perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput !== undefined ? perPageInput : 100;
+    const perPage = this.normalizePerPage(perPageInput, 100);
     this.logger.debug(`MockStore: listThreadsByResourceId called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
     const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
@@ -620,7 +608,7 @@ export class InMemoryMemory extends MemoryStorage {
       threads: clonedThreads.slice(offset, offset + perPage),
       total: clonedThreads.length,
       page,
-      perPage: perPageInput === false ? false : perPage,
+      perPage: this.preservePerPageForResponse(perPageInput, perPage),
       hasMore: offset + perPage < clonedThreads.length,
     };
   }

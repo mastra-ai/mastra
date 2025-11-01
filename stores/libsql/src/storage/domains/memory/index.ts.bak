@@ -892,7 +892,7 @@ export class MemoryLibSQL extends MemoryStorage {
           threads: [],
           total: 0,
           page,
-          perPage: this.preservePerPageForResponse(perPageInput, perPage),
+          perPage: perPageInput === false ? false : perPage,
           hasMore: false,
         };
       }
@@ -908,7 +908,7 @@ export class MemoryLibSQL extends MemoryStorage {
         threads,
         total,
         page,
-        perPage: this.preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageInput === false ? false : perPage,
         hasMore: offset + perPage < total,
       };
     } catch (error) {
