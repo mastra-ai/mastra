@@ -45,8 +45,8 @@ const sidebars = {
         { type: "doc", id: "core/getScorer", label: ".getScorer()" },
         {
           type: "doc",
-          id: "core/getScorerByName",
-          label: ".getScorerByName()",
+          id: "core/getScorerById",
+          label: ".getScorerById()",
         },
         { type: "doc", id: "core/mastra-class", label: "Mastra Class" },
       ],
@@ -656,7 +656,7 @@ const sidebars = {
           id: "scorers/content-similarity",
           label: "Content Similarity Scorer",
         },
-        { type: "doc", id: "scorers/run-experiment", label: "runExperiment" },
+        { type: "doc", id: "scorers/run-evals", label: "runEvals" },
         {
           type: "doc",
           id: "scorers/answer-relevancy",
