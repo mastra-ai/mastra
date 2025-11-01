@@ -375,7 +375,7 @@ describe('Memory Streaming Tests', () => {
 
       const messagesResult = await agentMemory.query({ threadId, resourceId });
 
-      const clipboardToolInvocation = messagesResult.messagesV2.filter(
+      const clipboardToolInvocation = messagesResult.messages.filter(
         m =>
           m.role === 'assistant' &&
           m.content.parts.some(p => p.type === 'tool-invocation' && p.toolInvocation.toolName === 'clipboard'),
