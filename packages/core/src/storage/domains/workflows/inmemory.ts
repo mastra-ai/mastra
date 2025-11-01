@@ -182,6 +182,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     page,
     resourceId,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
+    if (page !== undefined && page < 0) {
+      throw new Error('page must be >= 0');
+    }
+
     let runs = Array.from(this.collection.values());
 
     if (workflowName) runs = runs.filter((run: any) => run.workflow_name === workflowName);

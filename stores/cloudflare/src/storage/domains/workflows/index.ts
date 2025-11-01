@@ -175,6 +175,18 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     toDate,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
+      if (page < 0 || !Number.isInteger(page)) {
+        throw new MastraError(
+          {
+            id: 'CLOUDFLARE_STORE_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be a non-negative integer'),
+        );
+      }
+
       const normalizedPerPage = this.normalizePerPage(perPage, 20);
       const offset = page * normalizedPerPage;
       // List all keys in the workflow snapshot table

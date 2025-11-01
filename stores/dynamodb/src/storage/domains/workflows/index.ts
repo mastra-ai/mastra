@@ -158,6 +158,19 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
       // Default values
       const perPage = args?.perPage !== undefined ? args.perPage : 10;
       const page = args?.page !== undefined ? args.page : 0;
+
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: 'DYNAMODB_STORE_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
       const normalizedPerPage = this.normalizePerPage(perPage, 10);
       const offset = page * normalizedPerPage;
 

@@ -145,10 +145,11 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       }
 
       const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
-      const total = await collection.countDocuments(query);
+      let total = 0;
 
       let cursor = collection.find(query).sort({ createdAt: -1 });
       if (options.page !== undefined && options.perPage !== undefined) {
+        total = await collection.countDocuments(query);
         const normalizedPerPage = this.normalizePerPage(options.perPage, Number.MAX_SAFE_INTEGER);
         const offset = options.page * normalizedPerPage;
         cursor = cursor.skip(offset);
@@ -161,7 +162,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
 
       return {
         runs,
-        total,
+        total: total || runs.length,
       };
     } catch (error) {
       throw new MastraError(

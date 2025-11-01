@@ -41,6 +41,34 @@ await memory.listThreadsByResourceId({
   page: 2,      // page = Math.floor(offset / limit)
   perPage: 10,
 });
+
+// Before
+await memory.listMessages({
+  threadId: "thread-456",
+  offset: 20,
+  limit: 10,
+});
+
+// After
+await memory.listMessages({
+  threadId: "thread-456",
+  page: 2,
+  perPage: 10,
+});
+
+// Before
+await storage.listWorkflowRuns({
+  workflowName: "my-workflow",
+  offset: 20,
+  limit: 10,
+});
+
+// After
+await storage.listWorkflowRuns({
+  workflowName: "my-workflow",
+  page: 2,
+  perPage: 10,
+});
 ```
 
 **Additional improvements:**

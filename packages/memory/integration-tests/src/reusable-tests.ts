@@ -97,17 +97,17 @@ const getTextContent = (message: any): string => {
 export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
   const cleanupAllThreads = async () => {
     let allThreads: any[] = [];
-    let offset = 0;
-    const limit = 100;
+    let page = 0;
+    const perPage = 100;
     while (true) {
       const { threads, hasMore } = await memory.listThreadsByResourceId({
         resourceId,
-        offset,
-        limit,
+        page,
+        perPage,
       });
       allThreads.push(...threads);
       if (!hasMore || threads.length === 0) break;
-      offset += limit;
+      page++;
     }
     await Promise.all(allThreads.map(thread => memory.deleteThread(thread.id)));
   };

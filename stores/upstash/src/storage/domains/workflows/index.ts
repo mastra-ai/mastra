@@ -201,6 +201,18 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     resourceId,
   }: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     try {
+      if (page !== undefined && page < 0) {
+        throw new MastraError(
+          {
+            id: 'UPSTASH_STORE_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
       // Get all workflow keys
       let pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' }) + ':*';
       if (workflowName && resourceId) {
