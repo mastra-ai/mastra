@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
 import { describe, it, expect, vi } from 'vitest';
 import { createAgentTestRun, createUIMessage } from '../../utils';
 import { createContextRelevanceScorerLLM } from '.';

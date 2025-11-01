@@ -7,10 +7,11 @@ import { RequestContext } from '../../request-context';
 import { createWorkflow, createStep } from '../../workflows';
 import { createScorer } from '../base';
 import type { MastraScorer } from '../base';
-import { runExperiment } from '.';
+import { runEvals } from '.';
 
 const createMockScorer = (name: string, score: number = 0.8): MastraScorer => {
   const scorer = createScorer({
+    id: name,
     description: 'Mock scorer',
     name,
   }).generateScore(() => {
@@ -85,7 +86,7 @@ const createMockAgentV2 = (response: string = 'Dummy response'): Agent => {
   return agent;
 };
 
-describe('runExperiment', () => {
+describe('runEvals', () => {
   let mockAgent: Agent;
   let mockScorers: MastraScorer[];
   let testData: any[];
@@ -102,7 +103,7 @@ describe('runExperiment', () => {
 
   describe('Basic functionality', () => {
     it('should run experiment with single scorer', async () => {
-      const result = await runExperiment({
+      const result = await runEvals({
         data: testData,
         scorers: [createMockScorer('toxicity', 0.9)],
         target: mockAgent,
@@ -113,7 +114,7 @@ describe('runExperiment', () => {
     });
 
     it('should run experiment with multiple scorers', async () => {
-      const result = await runExperiment({
+      const result = await runEvals({
         data: testData,
         scorers: mockScorers,
         target: mockAgent,
@@ -132,7 +133,7 @@ describe('runExperiment', () => {
         .mockResolvedValueOnce({ score: 0.6, reason: 'test' })
         .mockResolvedValueOnce({ score: 1.0, reason: 'test' });
 
-      const result = await runExperiment({
+      const result = await runEvals({
         data: testData,
         scorers,
         target: mockAgent,
@@ -145,7 +146,7 @@ describe('runExperiment', () => {
   describe('V2 Agent integration', () => {
     it('should call agent.generateLegacy with correct parameters', async () => {
       const mockAgent = createMockAgentV2();
-      await runExperiment({
+      await runEvals({
         data: [{ input: 'test input', groundTruth: 'truth' }],
         scorers: mockScorers,
         target: mockAgent,
@@ -165,7 +166,7 @@ describe('runExperiment', () => {
 
   describe('Agent integration', () => {
     it('should call agent.generateLegacy with correct parameters', async () => {
-      await runExperiment({
+      await runEvals({
         data: [{ input: 'test input', groundTruth: 'truth' }],
         scorers: mockScorers,
         target: mockAgent,
@@ -182,7 +183,7 @@ describe('runExperiment', () => {
     it('should pass requestContext when provided', async () => {
       const requestContext = new RequestContext([['userId', 'test-user']]);
 
-      await runExperiment({
+      await runEvals({
         data: [
           {
             input: 'test input',
@@ -215,7 +216,7 @@ describe('runExperiment', () => {
       // Mock the agent's generate method to return the expected response
       mockAgent.generateLegacy = vi.fn().mockResolvedValue(mockResponse);
 
-      await runExperiment({
+      await runEvals({
         data: [{ input: 'test', groundTruth: 'truth' }],
         scorers: mockScorers,
         target: mockAgent,
@@ -231,7 +232,7 @@ describe('runExperiment', () => {
     it('should handle missing scoringData gracefully', async () => {
       mockAgent.generateLegacy = vi.fn().mockResolvedValue({ response: 'test' });
 
-      await runExperiment({
+      await runEvals({
         data: [{ input: 'test', groundTruth: 'truth' }],
         scorers: [mockScorers[0]],
         target: mockAgent,
@@ -249,7 +250,7 @@ describe('runExperiment', () => {
     it('should call onItemComplete for each item', async () => {
       const onItemComplete = vi.fn();
 
-      await runExperiment({
+      await runEvals({
         data: testData,
         scorers: mockScorers,
         target: mockAgent,
@@ -273,7 +274,7 @@ describe('runExperiment', () => {
       mockAgent.generateLegacy = vi.fn().mockRejectedValue(new Error('Agent error'));
 
       await expect(
-        runExperiment({
+        runEvals({
           data: testData,
           scorers: mockScorers,
           target: mockAgent,
@@ -285,7 +286,7 @@ describe('runExperiment', () => {
       mockScorers[0].run = vi.fn().mockRejectedValue(new Error('Scorer error'));
 
       await expect(
-        runExperiment({
+        runEvals({
           data: testData,
           scorers: mockScorers,
           target: mockAgent,
@@ -295,7 +296,7 @@ describe('runExperiment', () => {
 
     it('should handle empty data array', async () => {
       await expect(
-        runExperiment({
+        runEvals({
           data: [],
           scorers: mockScorers,
           target: mockAgent,
@@ -305,7 +306,7 @@ describe('runExperiment', () => {
 
     it('should handle empty scorers array', async () => {
       await expect(
-        runExperiment({
+        runEvals({
           data: testData,
           scorers: [],
           target: mockAgent,
@@ -334,7 +335,7 @@ describe('runExperiment', () => {
         .then(mockStep)
         .commit();
 
-      const result = await runExperiment({
+      const result = await runEvals({
         data: [
           { input: { input: 'Test input 1' }, groundTruth: 'Expected 1' },
           { input: { input: 'Test input 2' }, groundTruth: 'Expected 2' },
@@ -367,7 +368,7 @@ describe('runExperiment', () => {
         .then(mockStep)
         .commit();
 
-      await runExperiment({
+      await runEvals({
         data: [{ input: { input: 'Test input' }, groundTruth: 'Expected' }],
         scorers: {
           steps: {
@@ -403,7 +404,7 @@ describe('runExperiment', () => {
       const mockScorer = createMockScorer('step-scorer', 0.8);
       const scorerSpy = vi.spyOn(mockScorer, 'run');
 
-      await runExperiment({
+      await runEvals({
         data: [{ input: { input: 'Test input' }, groundTruth: 'Expected' }],
         scorers: {
           steps: {
@@ -442,7 +443,7 @@ describe('runExperiment', () => {
 
       const mockScorer = createMockScorer('step-scorer', 0.8);
 
-      const result = await runExperiment({
+      const result = await runEvals({
         data: [{ input: { input: 'Test input' }, groundTruth: 'Expected' }],
         scorers: {
           workflow: [mockScorers[0]],

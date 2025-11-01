@@ -21,9 +21,9 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MessageList } from '../../agent/types';
 import type { TracingContext, TracingProperties } from '../../ai-tracing';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
 import type { OutputProcessor } from '../../processors';
 import type { RequestContext } from '../../request-context';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
 import type { inferOutput, ScoringProperties, TripwireProperties } from './shared.types';
 
 export type { ToolSet } from 'ai';
