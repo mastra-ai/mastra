@@ -1,14 +1,13 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
-import type { CoreMessage, TextPart, UIMessage } from '@internal/ai-sdk-v4/message';
+import type { TextPart, UIMessage } from '@internal/ai-sdk-v4/message';
 import type { StreamObjectResult } from '@internal/ai-sdk-v4/model';
-import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { AISpanType, getOrCreateSpan } from '../ai-tracing';
-import type { AISpan, TracingContext, TracingOptions, TracingProperties } from '../ai-tracing';
+import type { TracingContext, TracingProperties } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
@@ -28,7 +27,7 @@ import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../memory/types';
+import type { MemoryConfig } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext } from '../request-context';
