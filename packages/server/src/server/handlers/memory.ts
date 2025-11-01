@@ -54,14 +54,10 @@ async function getMemoryFromContext({
   }
 
   if (agent) {
-    return (
-      (await agent?.getMemory({
-        requestContext: requestContext ?? new RequestContext(),
-      })) || mastra.getMemory()
-    );
+    return await agent?.getMemory({
+      requestContext: requestContext ?? new RequestContext(),
+    });
   }
-
-  return mastra.getMemory();
 }
 
 // Memory handlers
