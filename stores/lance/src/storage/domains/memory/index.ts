@@ -468,7 +468,8 @@ export class StoreMemoryLance extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput === false ? false : allThreadMessagesReturned ? false : offset + perPage < total;
+      const fetchedAll = perPageInput === false || allThreadMessagesReturned;
+      const hasMore = !fetchedAll && offset + perPage < total;
 
       return {
         messages: finalMessages,
