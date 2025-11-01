@@ -211,12 +211,23 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
         total = await table.countRows();
       }
 
-      if (args?.limit) {
-        query.limit(args.limit);
-      }
+      if (args?.perPage !== undefined && args?.page !== undefined) {
+        const normalizedPerPage = this.normalizePerPage(args.perPage, Number.MAX_SAFE_INTEGER);
 
-      if (args?.offset) {
-        query.offset(args.offset);
+        if (args.page < 0 || !Number.isInteger(args.page)) {
+          throw new MastraError(
+            {
+              id: 'LANCE_STORE_INVALID_PAGINATION_PARAMS',
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              details: { page: args.page, perPage: args.perPage },
+            },
+            new Error(`Invalid pagination parameters: page=${args.page}, perPage=${args.perPage}`),
+          );
+        }
+        const offset = args.page * normalizedPerPage;
+        query.limit(normalizedPerPage);
+        query.offset(offset);
       }
 
       const records = await query.toArray();

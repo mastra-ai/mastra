@@ -136,13 +136,13 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       await storage.persistWorkflowSnapshot({ workflowName: workflowName3, runId: runId3, snapshot: workflow3 });
 
       // Get first page
-      const page1 = await storage.listWorkflowRuns({ limit: 2, offset: 0 });
+      const page1 = await storage.listWorkflowRuns({ perPage: 2, page: 0 });
 
       expect(page1.runs).toHaveLength(2);
       expect(page1.total).toBe(3); // Total count of all records
 
       // Get second page
-      const page2 = await storage.listWorkflowRuns({ limit: 2, offset: 2 });
+      const page2 = await storage.listWorkflowRuns({ perPage: 2, page: 1 });
       expect(page2.runs).toHaveLength(1);
       expect(page2.total).toBe(3);
     });

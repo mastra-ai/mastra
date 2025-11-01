@@ -1,12 +1,12 @@
 export type PaginationParams = {
-  limit?: number;
-  offset?: number;
+  perPage?: number;
+  page?: number;
   duration?: number;
 };
 
 export type PaginationResult = {
   total: number;
-  offset: number;
-  limit: number;
+  page: number;
+  perPage: number;
   hasMore: boolean;
 };

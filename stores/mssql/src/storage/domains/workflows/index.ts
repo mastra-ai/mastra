@@ -367,8 +367,8 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    page,
+    perPage,
     resourceId,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
@@ -412,16 +412,18 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         }
       });
 
-      if (limit !== undefined && offset !== undefined) {
+      if (perPage !== undefined && page !== undefined) {
         const countQuery = `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`;
         const countResult = await request.query(countQuery);
         total = Number(countResult.recordset[0]?.count || 0);
       }
 
       let query = `SELECT * FROM ${tableName} ${whereClause} ORDER BY [seq_id] DESC`;
-      if (limit !== undefined && offset !== undefined) {
-        query += ` OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
-        request.input('limit', limit);
+      if (perPage !== undefined && page !== undefined) {
+        const normalizedPerPage = this.normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
+        const offset = page * normalizedPerPage;
+        query += ` OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
+        request.input('perPage', normalizedPerPage);
         request.input('offset', offset);
       }
       const result = await request.query(query);

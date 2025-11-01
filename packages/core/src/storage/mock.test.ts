@@ -50,8 +50,8 @@ describe('InMemoryStore - Thread Sorting', () => {
     it('should sort by createdAt DESC by default with pagination', async () => {
       const result = await store.listThreadsByResourceId({
         resourceId,
-        offset: 0,
-        limit: 2,
+        page: 0,
+        perPage: 2,
       });
 
       expect(result.threads).toHaveLength(2);
@@ -66,8 +66,8 @@ describe('InMemoryStore - Thread Sorting', () => {
     it('should sort by createdAt ASC when specified', async () => {
       const result = await store.listThreadsByResourceId({
         resourceId,
-        offset: 0,
-        limit: 2,
+        page: 0,
+        perPage: 2,
         orderBy: { field: 'createdAt', direction: 'ASC' },
       });
 
@@ -83,8 +83,8 @@ describe('InMemoryStore - Thread Sorting', () => {
     it('should sort by updatedAt ASC with pagination', async () => {
       const result = await store.listThreadsByResourceId({
         resourceId,
-        offset: 0,
-        limit: 2,
+        page: 0,
+        perPage: 2,
         orderBy: { field: 'updatedAt', direction: 'ASC' },
       });
 
@@ -98,8 +98,8 @@ describe('InMemoryStore - Thread Sorting', () => {
     it('should sort by updatedAt DESC when specified', async () => {
       const result = await store.listThreadsByResourceId({
         resourceId,
-        offset: 0,
-        limit: 2,
+        page: 0,
+        perPage: 2,
         orderBy: { field: 'updatedAt', direction: 'DESC' },
       });
 
@@ -114,16 +114,16 @@ describe('InMemoryStore - Thread Sorting', () => {
       // First page
       const page1 = await store.listThreadsByResourceId({
         resourceId,
-        offset: 0,
-        limit: 2,
+        page: 0,
+        perPage: 2,
         orderBy: { field: 'createdAt', direction: 'ASC' },
       });
 
       // Second page
       const page2 = await store.listThreadsByResourceId({
         resourceId,
-        offset: 2,
-        limit: 2,
+        page: 1,
+        perPage: 2,
         orderBy: { field: 'createdAt', direction: 'ASC' },
       });
 
@@ -138,8 +138,8 @@ describe('InMemoryStore - Thread Sorting', () => {
     it('should calculate pagination info correctly after sorting', async () => {
       const result = await store.listThreadsByResourceId({
         resourceId,
-        offset: 2,
-        limit: 2,
+        page: 1,
+        perPage: 2,
         orderBy: { field: 'updatedAt', direction: 'DESC' },
       });
 
@@ -154,8 +154,8 @@ describe('InMemoryStore - Thread Sorting', () => {
     it('should handle empty results with pagination', async () => {
       const result = await store.listThreadsByResourceId({
         resourceId: 'non-existent-resource',
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
       });
 
       expect(result.threads).toHaveLength(0);
@@ -175,7 +175,7 @@ describe('InMemoryStore - Thread Sorting', () => {
         },
       });
 
-      const result = await store.listThreadsByResourceId({ resourceId, offset: 0, limit: 2 });
+      const result = await store.listThreadsByResourceId({ resourceId, page: 0, perPage: 2 });
 
       expect(result.threads).toHaveLength(2);
       expect(result.threads.every(t => t.resourceId === resourceId)).toBe(true);

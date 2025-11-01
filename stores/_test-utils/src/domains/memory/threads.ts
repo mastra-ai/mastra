@@ -63,8 +63,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
       const { threads } = await storage.listThreadsByResourceId({
         resourceId: thread1.resourceId,
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
       });
       expect(threads).toHaveLength(2);
       expect(threads.map(t => t.id)).toEqual(expect.arrayContaining([thread1.id, thread2.id]));
@@ -208,15 +208,15 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       );
       await Promise.all(threadPromises);
 
-      const page1 = await storage.listThreadsByResourceId({ resourceId, offset: 0, limit: 7 });
+      const page1 = await storage.listThreadsByResourceId({ resourceId, page: 0, perPage: 7 });
       expect(page1.threads).toHaveLength(7);
       expect(page1.total).toBe(17);
       expect(page1.page).toBe(0);
       expect(page1.perPage).toBe(7);
       expect(page1.hasMore).toBe(true);
 
-      const page3 = await storage.listThreadsByResourceId({ resourceId, offset: 14, limit: 7 });
-      expect(page3.threads).toHaveLength(3); // 17 total, skip 14, get 3 remaining
+      const page3 = await storage.listThreadsByResourceId({ resourceId, page: 2, perPage: 7 });
+      expect(page3.threads).toHaveLength(3); // 17 total, page 2 (skip 14), get 3 remaining
       expect(page3.total).toBe(17);
       expect(page3.hasMore).toBe(false);
     });
@@ -225,7 +225,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       const resourceId = `pg-non-paginated-resource-${randomUUID()}`;
       await storage.saveThread({ thread: { ...createSampleThread(), resourceId } });
 
-      const results = await storage.listThreadsByResourceId({ resourceId, offset: 0, limit: 100 });
+      const results = await storage.listThreadsByResourceId({ resourceId, page: 0, perPage: 100 });
       expect(Array.isArray(results.threads)).toBe(true);
       expect(results.threads.length).toBe(1);
       expect(results.total).toBe(1);
@@ -442,8 +442,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       it('should sort paginated threads by createdAt DESC by default', async () => {
         const result = await storage.listThreadsByResourceId({
           resourceId,
-          offset: 0,
-          limit: 3,
+          page: 0,
+          perPage: 3,
         });
 
         expect(result.threads).toHaveLength(3);
@@ -454,8 +454,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       it('should sort paginated threads by createdAt ASC', async () => {
         const result = await storage.listThreadsByResourceId({
           resourceId,
-          offset: 0,
-          limit: 3,
+          page: 0,
+          perPage: 3,
           orderBy: { field: 'createdAt', direction: 'ASC' },
         });
 
@@ -468,8 +468,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         const result = await storage.listThreadsByResourceId({
           resourceId,
           orderBy: { field: 'createdAt', direction: 'DESC' },
-          offset: 0,
-          limit: 3,
+          page: 0,
+          perPage: 3,
         });
 
         expect(result.threads).toHaveLength(3);
@@ -480,8 +480,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       it('should sort paginated threads by updatedAt ASC', async () => {
         const result = await storage.listThreadsByResourceId({
           resourceId,
-          offset: 0,
-          limit: 3,
+          page: 0,
+          perPage: 3,
           orderBy: { field: 'updatedAt', direction: 'ASC' },
         });
 
@@ -493,8 +493,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       it('should sort paginated threads by updatedAt DESC', async () => {
         const result = await storage.listThreadsByResourceId({
           resourceId,
-          offset: 0,
-          limit: 3,
+          page: 0,
+          perPage: 3,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
 
@@ -507,8 +507,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         const result = await storage.listThreadsByResourceId({
           resourceId,
           orderBy: { field: 'createdAt' },
-          offset: 0,
-          limit: 3,
+          page: 0,
+          perPage: 3,
         });
 
         expect(result.threads).toHaveLength(3);
@@ -520,8 +520,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         const result = await storage.listThreadsByResourceId({
           resourceId,
           orderBy: { field: 'updatedAt' },
-          offset: 0,
-          limit: 3,
+          page: 0,
+          perPage: 3,
         });
 
         expect(result.threads).toHaveLength(3);
@@ -533,8 +533,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         const result = await storage.listThreadsByResourceId({
           resourceId,
           orderBy: { direction: 'ASC' },
-          offset: 0,
-          limit: 3,
+          page: 0,
+          perPage: 3,
         });
 
         expect(result.threads).toHaveLength(3);
@@ -546,8 +546,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         const result = await storage.listThreadsByResourceId({
           resourceId,
           orderBy: { direction: 'DESC' },
-          offset: 0,
-          limit: 3,
+          page: 0,
+          perPage: 3,
         });
 
         expect(result.threads).toHaveLength(3);
@@ -560,29 +560,29 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         const { threads: allThreads } = await storage.listThreadsByResourceId({
           resourceId,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
-          offset: 0,
-          limit: 10,
+          page: 0,
+          perPage: 10,
         });
 
         // Get paginated results
         const page1 = await storage.listThreadsByResourceId({
           resourceId,
-          offset: 0,
-          limit: 2,
+          page: 0,
+          perPage: 2,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
 
         const page2 = await storage.listThreadsByResourceId({
           resourceId,
-          offset: 2,
-          limit: 2,
+          page: 1,
+          perPage: 2,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
 
         const page3 = await storage.listThreadsByResourceId({
           resourceId,
-          offset: 4,
-          limit: 2,
+          page: 2,
+          perPage: 2,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
 
@@ -599,8 +599,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
         const result = await storage.listThreadsByResourceId({
           resourceId: emptyResourceId,
-          offset: 0,
-          limit: 10,
+          page: 0,
+          perPage: 10,
           orderBy: { field: 'createdAt', direction: 'ASC' },
         });
 
@@ -619,8 +619,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
         const result = await storage.listThreadsByResourceId({
           resourceId: singleResourceId,
-          offset: 0,
-          limit: 10,
+          page: 0,
+          perPage: 10,
           orderBy: { field: 'updatedAt', direction: 'ASC' },
         });
 
@@ -671,8 +671,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
         const { threads: result } = await storage.listThreadsByResourceId({
           resourceId: identicalResourceId,
-          offset: 0,
-          limit: 3,
+          page: 0,
+          perPage: 3,
           orderBy: { field: 'createdAt', direction: 'ASC' },
         });
 

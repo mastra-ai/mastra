@@ -682,19 +682,27 @@ export async function listWorkflowRunsHandler({
   workflowId,
   fromDate,
   toDate,
-  limit,
-  offset,
+  perPage,
+  page,
   resourceId,
 }: WorkflowContext & {
   fromDate?: Date;
   toDate?: Date;
-  limit?: number;
-  offset?: number;
+  perPage?: number;
+  page?: number;
   resourceId?: string;
 }): Promise<WorkflowRuns> {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    // Validate pagination parameters
+    if (perPage !== undefined && (!Number.isInteger(perPage) || perPage <= 0)) {
+      throw new HTTPException(400, { message: 'perPage must be a positive integer' });
+    }
+    if (page !== undefined && (!Number.isInteger(page) || page < 0)) {
+      throw new HTTPException(400, { message: 'page must be a non-negative integer' });
     }
 
     const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -703,7 +711,7 @@ export async function listWorkflowRunsHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
-    const workflowRuns = (await workflow.listWorkflowRuns({ fromDate, toDate, limit, offset, resourceId })) || {
+    const workflowRuns = (await workflow.listWorkflowRuns({ fromDate, toDate, perPage, page, resourceId })) || {
       runs: [],
       total: 0,
     };

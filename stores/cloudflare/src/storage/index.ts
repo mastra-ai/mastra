@@ -269,16 +269,16 @@ export class CloudflareStore extends MastraStorage {
 
   async listWorkflowRuns({
     workflowName,
-    limit = 20,
-    offset = 0,
+    perPage = 20,
+    page = 0,
     resourceId,
     fromDate,
     toDate,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     return this.stores.workflows.listWorkflowRuns({
       workflowName,
-      limit,
-      offset,
+      perPage,
+      page,
       resourceId,
       fromDate,
       toDate,

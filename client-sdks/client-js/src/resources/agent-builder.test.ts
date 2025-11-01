@@ -46,22 +46,22 @@ describe('AgentBuilder.runs', () => {
     expect(lastRequest.url).toBe('/api/agent-builder/test-action-id/runs');
   });
 
-  it('should include zero value for limit in query parameters', async () => {
-    // Act: Call runs() with limit=0
-    await agentBuilder.runs({ limit: 0 });
+  it('should include zero value for perPage in query parameters', async () => {
+    // Act: Call runs() with perPage=0
+    await agentBuilder.runs({ perPage: 0 });
 
     // Assert: Verify request details
     expect(lastRequest.method).toBe('GET');
-    expect(lastRequest.url).toBe('/api/agent-builder/test-action-id/runs?limit=0');
+    expect(lastRequest.url).toBe('/api/agent-builder/test-action-id/runs?perPage=0');
   });
 
-  it('should include zero value for offset in query parameters', async () => {
-    // Act: Call runs() with offset=0
-    await agentBuilder.runs({ offset: 0 });
+  it('should include zero value for page in query parameters', async () => {
+    // Act: Call runs() with page=0
+    await agentBuilder.runs({ page: 0 });
 
     // Assert: Verify request details
     expect(lastRequest.method).toBe('GET');
-    expect(lastRequest.url).toBe('/api/agent-builder/test-action-id/runs?offset=0');
+    expect(lastRequest.url).toBe('/api/agent-builder/test-action-id/runs?page=0');
   });
 
   it('should correctly handle fromDate parameter', async () => {
@@ -104,16 +104,16 @@ describe('AgentBuilder.runs', () => {
     // Arrange: Set up test parameters with fixed values
     const fromDate = new Date('2024-01-15T10:00:00.000Z');
     const toDate = new Date('2024-01-15T14:00:00.000Z');
-    const limit = 50;
-    const offset = 10;
+    const perPage = 50;
+    const page = 10;
     const resourceId = 'test-resource-456';
 
     // Act: Call runs with all parameters
     await agentBuilder.runs({
       fromDate,
       toDate,
-      limit,
-      offset,
+      perPage,
+      page,
       resourceId,
     });
 
@@ -127,8 +127,8 @@ describe('AgentBuilder.runs', () => {
     const params = url.searchParams;
     expect(params.get('fromDate')).toBe('2024-01-15T10:00:00.000Z');
     expect(params.get('toDate')).toBe('2024-01-15T14:00:00.000Z');
-    expect(params.get('limit')).toBe('50');
-    expect(params.get('offset')).toBe('10');
+    expect(params.get('perPage')).toBe('50');
+    expect(params.get('page')).toBe('10');
     expect(params.get('resourceId')).toBe('test-resource-456');
   });
 });

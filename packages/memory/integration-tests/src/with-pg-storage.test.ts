@@ -68,7 +68,7 @@ describe('Memory with PostgresStore Integration', () => {
 
     beforeEach(async () => {
       // Clean up any existing threads
-      const { threads } = await memory.listThreadsByResourceId({ resourceId, offset: 0, limit: 10 });
+      const { threads } = await memory.listThreadsByResourceId({ resourceId, page: 0, perPage: 10 });
       await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
 
       // Create a fresh thread for testing
