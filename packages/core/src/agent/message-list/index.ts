@@ -2188,8 +2188,8 @@ export class MessageList {
           continue;
         }
 
-        // Skip other tool- parts that we don't recognize
-        if (part.type.startsWith('tool-')) {
+        // Skip tool-invocation parts without toolInvocation object and other tool- parts
+        if (part.type === 'tool-invocation' || part.type.startsWith('tool-')) {
           continue;
         }
 
