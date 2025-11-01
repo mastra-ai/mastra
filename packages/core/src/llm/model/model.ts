@@ -744,8 +744,7 @@ export class MastraLLMV1 extends MastraBase {
         messages,
         // @ts-expect-error - output in our implementation can only be object or array
         output,
-        // TOOD convert to local schema
-        schema: processedSchema as unknown as Schema<inferOutput<T>>,
+        schema: processedSchema as Schema<inferOutput<T>>,
       };
 
       try {
