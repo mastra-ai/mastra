@@ -63,9 +63,9 @@ export class MemoryThread extends BaseResource {
   }
 
   /**
-   * Retrieves messages associated with the thread
+   * Retrieves messages associated with the thread (always returns mastra-db format)
    * @param params - Optional parameters including limit for number of messages to retrieve and request context
-   * @returns Promise containing thread messages and UI messages
+   * @returns Promise containing thread messages in mastra-db format
    */
   getMessages(
     params?: GetMemoryThreadMessagesParams & { requestContext?: RequestContext | Record<string, any> },

@@ -76,9 +76,9 @@ describe('Stream ID Consistency', () => {
     console.log('DEBUG streamResponseId', streamResponseId);
     expect(streamResponseId).toBeDefined();
 
-    const savedMessages = await memory.getMessages({ threadId });
+    const result = await memory.getMessages({ threadId });
 
-    const messageById = savedMessages.find(m => m.id === streamResponseId);
+    const messageById = result.messages.find(m => m.id === streamResponseId);
 
     expect(messageById).toBeDefined();
     expect(messageById!.id).toBe(streamResponseId);
@@ -137,7 +137,8 @@ describe('Stream ID Consistency', () => {
     const res = await stream.response;
     const messageId = res.messages[0].id;
 
-    const savedMessages = await memory.getMessages({ threadId, selectBy: { include: [{ id: messageId }] } });
+    const result = await memory.getMessages({ threadId, selectBy: { include: [{ id: messageId }] } });
+    const savedMessages = result.messages;
 
     expect(savedMessages).toHaveLength(1);
     expect(savedMessages[0].id).toBe(messageId);
@@ -199,8 +200,8 @@ describe('Stream ID Consistency', () => {
 
     expect(streamResponseId).toBeDefined();
 
-    const savedMessages = await memory.getMessages({ threadId, selectBy: { include: [{ id: streamResponseId! }] } });
-    const messageById = savedMessages.find(m => m.id === streamResponseId);
+    const result = await memory.getMessages({ threadId, selectBy: { include: [{ id: streamResponseId! }] } });
+    const messageById = result.messages.find(m => m.id === streamResponseId);
 
     expect(messageById).toBeDefined();
     expect(messageById!.id).toBe(streamResponseId);
@@ -273,7 +274,8 @@ describe('Stream ID Consistency', () => {
     await stream.consumeStream();
     const res = await stream.response;
     const messageId = res?.uiMessages?.[0]?.id;
-    const savedMessages = await memory.getMessages({ threadId, selectBy: { include: [{ id: messageId! }] } });
+    const result = await memory.getMessages({ threadId, selectBy: { include: [{ id: messageId! }] } });
+    const savedMessages = result.messages;
     expect(savedMessages).toHaveLength(1);
     expect(savedMessages[0].id).toBe(messageId!);
     expect(customIdGenerator).toHaveBeenCalled();
@@ -497,10 +499,10 @@ describe('Stream ID Consistency', () => {
       reader.releaseLock();
     }
 
-    const messages = await mockMemory.getMessages({ threadId });
-    console.log('messages', messages);
+    const result = await mockMemory.getMessages({ threadId });
+    console.log('messages', result);
 
-    const assistantMessage = messages.find((m: MastraMessageV1) => m.role === 'assistant');
+    const assistantMessage = result.messages.find((m: MastraMessageV1) => m.role === 'assistant');
     console.log('assistantMessage', assistantMessage);
     const startEvent = chunks.find(chunk => chunk.type === 'start');
     console.log('startEvent', startEvent);

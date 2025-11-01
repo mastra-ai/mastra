@@ -6,7 +6,7 @@ import { z } from 'zod';
 // Core Mastra imports
 import { Agent } from '../agent';
 import type { StructuredOutputOptions } from '../agent';
-import type { MastraMessageV2 } from '../agent/message-list';
+import type { MastraDBMessage } from '../agent/message-list';
 import { Mastra } from '../mastra';
 import type { Processor } from '../processors';
 import { MockStore } from '../storage/mock';
@@ -1516,10 +1516,10 @@ describe('AI Tracing Integration Tests', () => {
           }
 
           async processInput(args: {
-            messages: MastraMessageV2[];
+            messages: MastraDBMessage[];
             abort: (reason?: string) => never;
             tracingContext?: TracingContext;
-          }): Promise<MastraMessageV2[]> {
+          }): Promise<MastraDBMessage[]> {
             // Call the internal agent to validate
             const lastMessage = args.messages[args.messages.length - 1];
             const text = lastMessage?.content?.content || '';
@@ -1548,10 +1548,10 @@ describe('AI Tracing Integration Tests', () => {
           }
 
           async processOutputResult(args: {
-            messages: MastraMessageV2[];
+            messages: MastraDBMessage[];
             abort: (reason?: string) => never;
             tracingContext?: TracingContext;
-          }): Promise<MastraMessageV2[]> {
+          }): Promise<MastraDBMessage[]> {
             // Call the internal agent to summarize
             const lastMessage = args.messages[args.messages.length - 1];
             const text = lastMessage?.content?.content || '';

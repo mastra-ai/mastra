@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { AISdkNetworkTransformer } from './AISdkNetworkTransformer';
 import { MastraUIMessage, MastraUIMessageMetadata } from '../types';
-import { NetworkChunkType } from '@mastra/core/stream';
+import { NetworkChunkType, ChunkFrom } from '@mastra/core/stream';
 
 describe('AISdkNetworkTransformer', () => {
   let transformer: AISdkNetworkTransformer;
@@ -19,7 +19,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'routing-agent-text-delta',
         payload: { text: 'Hello' },
         runId: 'run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -47,7 +47,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'routing-agent-text-delta',
         payload: { text: ' world' },
         runId: 'run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -80,7 +80,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'routing-agent-text-delta',
         payload: { text: 'Hello' },
         runId: 'run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -101,7 +101,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'routing-agent-text-delta',
         payload: { text: 'Hello' },
         runId: 'run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -116,7 +116,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'routing-agent-text-delta',
         payload: { text: 'New text' },
         runId: 'run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -151,7 +151,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'network-execution-event-step-finish',
         payload: { result: 'Task completed' } as any,
         runId: 'run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -178,7 +178,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'network-execution-event-step-finish',
         payload: { result: 'Final result' } as any,
         runId: 'run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -211,7 +211,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'network-execution-event-step-finish',
         payload: { result: 'Result' } as any,
         runId: 'run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -226,7 +226,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'network-execution-event-step-finish',
         payload: { result: 'Result' } as any,
         runId: 'run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -261,7 +261,7 @@ describe('AISdkNetworkTransformer', () => {
           },
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -277,12 +277,12 @@ describe('AISdkNetworkTransformer', () => {
             toolName: 'weather-agent',
             toolCallId: 'run-123',
             state: 'input-available',
-            input: chunk.payload.args,
+            input: (chunk.payload as any).args,
           },
         ],
         metadata: {
           mode: 'network',
-          from: 'AGENT',
+          from: ChunkFrom.AGENT,
           selectionReason: 'Best match',
           agentInput: 'Search for weather',
         },
@@ -303,7 +303,7 @@ describe('AISdkNetworkTransformer', () => {
           } as any,
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -326,7 +326,7 @@ describe('AISdkNetworkTransformer', () => {
           } as any,
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -349,7 +349,7 @@ describe('AISdkNetworkTransformer', () => {
           } as any,
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -374,7 +374,7 @@ describe('AISdkNetworkTransformer', () => {
           iteration: 0,
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -417,7 +417,7 @@ describe('AISdkNetworkTransformer', () => {
           iteration: 0,
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -459,7 +459,7 @@ describe('AISdkNetworkTransformer', () => {
           iteration: 0,
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -480,7 +480,7 @@ describe('AISdkNetworkTransformer', () => {
           iteration: 0,
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -517,7 +517,7 @@ describe('AISdkNetworkTransformer', () => {
           payload: { text: ' world' },
         } as any,
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -553,7 +553,7 @@ describe('AISdkNetworkTransformer', () => {
           payload: { text: 'New text' },
         } as any,
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -590,7 +590,7 @@ describe('AISdkNetworkTransformer', () => {
           payload: { text: 'First text' },
         } as any,
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -629,7 +629,7 @@ describe('AISdkNetworkTransformer', () => {
           },
         } as any,
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -676,7 +676,7 @@ describe('AISdkNetworkTransformer', () => {
           },
         } as any,
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -722,7 +722,7 @@ describe('AISdkNetworkTransformer', () => {
           },
         } as any,
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -777,7 +777,7 @@ describe('AISdkNetworkTransformer', () => {
           },
         } as any,
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -829,7 +829,7 @@ describe('AISdkNetworkTransformer', () => {
           },
         } as any,
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -871,7 +871,7 @@ describe('AISdkNetworkTransformer', () => {
           },
         } as any,
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -921,7 +921,7 @@ describe('AISdkNetworkTransformer', () => {
           },
         } as any,
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -967,7 +967,7 @@ describe('AISdkNetworkTransformer', () => {
           },
         } as any,
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1005,7 +1005,7 @@ describe('AISdkNetworkTransformer', () => {
           payload: { text: 'text' },
         } as any,
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1034,7 +1034,7 @@ describe('AISdkNetworkTransformer', () => {
           payload: { text: 'text' },
         } as any,
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -1063,7 +1063,7 @@ describe('AISdkNetworkTransformer', () => {
           },
         },
         runId: 'wf-run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -1106,7 +1106,7 @@ describe('AISdkNetworkTransformer', () => {
           } as any,
         },
         runId: 'wf-run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -1130,7 +1130,7 @@ describe('AISdkNetworkTransformer', () => {
           } as any,
         },
         runId: 'wf-run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -1153,7 +1153,7 @@ describe('AISdkNetworkTransformer', () => {
           } as any,
         },
         runId: 'wf-run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -1175,7 +1175,7 @@ describe('AISdkNetworkTransformer', () => {
           from: 'WORKFLOW',
         } as any,
         runId: 'wf-run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1217,7 +1217,7 @@ describe('AISdkNetworkTransformer', () => {
           from: 'WORKFLOW',
         } as any,
         runId: 'wf-run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1253,7 +1253,7 @@ describe('AISdkNetworkTransformer', () => {
           type: 'workflow-start',
         } as any,
         runId: 'wf-run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -1270,7 +1270,7 @@ describe('AISdkNetworkTransformer', () => {
           type: 'workflow-start',
         } as any,
         runId: 'wf-run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1298,7 +1298,7 @@ describe('AISdkNetworkTransformer', () => {
           type: 'workflow-start',
         } as any,
         runId: 'wf-run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1336,7 +1336,7 @@ describe('AISdkNetworkTransformer', () => {
           runId: 'run-123',
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -1376,7 +1376,7 @@ describe('AISdkNetworkTransformer', () => {
           runId: 'run-123',
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1415,7 +1415,7 @@ describe('AISdkNetworkTransformer', () => {
           runId: 'run-123',
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -1438,7 +1438,7 @@ describe('AISdkNetworkTransformer', () => {
           runId: 'run-123',
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -1463,7 +1463,7 @@ describe('AISdkNetworkTransformer', () => {
           runId: 'run-123',
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const metadata: MastraUIMessageMetadata = {
@@ -1492,7 +1492,7 @@ describe('AISdkNetworkTransformer', () => {
           runId: 'run-123',
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -1520,7 +1520,7 @@ describe('AISdkNetworkTransformer', () => {
           toolName: 'calculator',
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1564,7 +1564,7 @@ describe('AISdkNetworkTransformer', () => {
           toolName: 'tool',
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1605,7 +1605,7 @@ describe('AISdkNetworkTransformer', () => {
           toolName: 'tool',
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -1629,7 +1629,7 @@ describe('AISdkNetworkTransformer', () => {
           toolName: 'tool',
         },
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1664,7 +1664,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'unknown-type',
         payload: {},
         runId: 'run-123',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1692,7 +1692,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'routing-agent-text-delta',
         payload: { text: 'New text' },
         runId: 'run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1717,7 +1717,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'routing-agent-text-delta',
         payload: { text: 'Text' },
         runId: 'run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1738,7 +1738,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'routing-agent-text-delta',
         payload: { text: ' added' },
         runId: 'run-1',
-        from: 'NETWORK',
+        from: ChunkFrom.NETWORK,
       };
 
       const originalMessage: MastraUIMessage = {

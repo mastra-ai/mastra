@@ -151,6 +151,16 @@
         "default": "./dist/zod-to-json.cjs"
       }
     },
+    "./agent/message-list": {
+      "import": {
+        "types": "./dist/agent/message-list/index.d.ts",
+        "default": "./dist/agent/message-list/index.js"
+      },
+      "require": {
+        "types": "./dist/agent/message-list/index.d.ts",
+        "default": "./dist/agent/message-list/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,
@@ -181,6 +191,7 @@
     "@ai-sdk/ui-utils": "^1.2.11",
     "@ai-sdk/xai-v5": "npm:@ai-sdk/xai@2.0.26",
     "@isaacs/ttlcache": "^1.4.1",
+    "@lukeed/uuid": "^2.0.1",
     "@mastra/schema-compat": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.17.5",
     "@openrouter/ai-sdk-provider-v5": "npm:@openrouter/ai-sdk-provider@1.2.0",
@@ -212,6 +223,7 @@
     "@internal/external-types": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/ai-sdk-v4": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@openrouter/ai-sdk-provider": "^0.4.6",
     "@types/babel__core": "^7.20.5",

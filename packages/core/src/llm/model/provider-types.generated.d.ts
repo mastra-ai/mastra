@@ -324,6 +324,7 @@ export type ProviderModelsMap = {
     'venice-uncensored',
   ];
   readonly chutes: readonly [
+    'MiniMaxAI/MiniMax-M2',
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
     'Qwen/Qwen3-30B-A3B',
@@ -342,7 +343,6 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V3.1:THINKING',
     'deepseek-ai/DeepSeek-V3.2-Exp',
     'meituan-longcat/LongCat-Flash-Chat-FP8',
-    'minimaxai/MiniMax-M2',
     'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Instruct-75k',
     'moonshotai/Kimi-VL-A3B-Thinking',
