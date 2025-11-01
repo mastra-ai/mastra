@@ -8,7 +8,7 @@ import { useChat } from '@ai-sdk/react';
 import { Agent, MessageList } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { DefaultChatTransport, isToolUIPart } from 'ai';
+import { DefaultChatTransport, isToolUIPart, lastAssistantMessageIsCompleteWithToolCalls } from 'ai';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { memory, weatherAgent } from './mastra/agents/weather';
@@ -55,7 +55,7 @@ describe('Memory Streaming Tests', () => {
     });
 
     const threadId = randomUUID();
-    const resourceId = 'test-resource';
+    const resourceId = randomUUID();
 
     // First weather check
     const stream1 = await agent.stream('what is the weather in LA?', {
@@ -262,7 +262,6 @@ describe('Memory Streaming Tests', () => {
         threadId,
         resourceId,
       });
-      await weatherAgent.generate(`LA weather`, { threadId, resourceId });
 
       const agentMemory = (await weatherAgent.getMemory())!;
       const dbMessages = (await agentMemory.query({ threadId })).messages;
@@ -290,11 +289,18 @@ describe('Memory Streaming Tests', () => {
             error = e;
             console.error('useChat error:', error);
           },
-          onToolCall: async ({ toolCall }) => {
-            console.log(toolCall);
+          sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+          onToolCall: ({ toolCall }) => {
+            if (toolCall.dynamic) {
+              return;
+            }
             if (toolCall.toolName === `clipboard`) {
-              await new Promise(res => setTimeout(res, 10));
-              return state.clipboard as any as void;
+              chat.addToolResult({
+                state: 'output-available',
+                toolCallId: toolCall.toolCallId,
+                tool: toolCall.toolName,
+                output: state.clipboard,
+              });
             }
           },
         });
@@ -366,6 +372,15 @@ describe('Memory Streaming Tests', () => {
         message: 'whats in my clipboard now?',
         responseContains: [state.clipboard],
       });
+
+      const messagesResult = await agentMemory.query({ threadId, resourceId });
+
+      const clipboardToolInvocation = messagesResult.messages.filter(
+        m =>
+          m.role === 'assistant' &&
+          m.content.parts.some(p => p.type === 'tool-invocation' && p.toolInvocation.toolName === 'clipboard'),
+      );
+      expect(clipboardToolInvocation.length).toBeGreaterThan(0);
     });
   });
 });

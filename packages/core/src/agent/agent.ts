@@ -2302,9 +2302,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           messageList.addSystem(memorySystemMessage, 'memory');
         }
 
+        const sameThreadMessages = memoryMessages.filter((m: MastraDBMessage) => m.threadId === threadObject.id);
+
         messageList
           .add(
-            memoryMessages.filter((m: MastraDBMessage) => m.threadId === threadObject.id), // filter out messages from other threads. those are added to system message above
+            sameThreadMessages, // filter out messages from other threads. those are added to system message above
             'memory',
           )
           // add new user messages to the list AFTER remembered messages to make ordering more reliable

@@ -7,6 +7,9 @@ import { ToolCallFilter } from '@mastra/memory/processors';
 import { z } from 'zod';
 import { weatherTool } from '../tools/weather';
 
+const cwd = process.cwd();
+let dbPath = cwd.endsWith('.mastra/output') ? '../../mastra.db' : './mastra.db';
+
 export const memory = new Memory({
   options: {
     workingMemory: {
@@ -16,7 +19,7 @@ export const memory = new Memory({
     semanticRecall: true,
   },
   storage: new LibSQLStore({
-    url: 'file:mastra.db', // relative path from bundled .mastra/output dir
+    url: `file:${dbPath}`, // relative path from bundled .mastra/output dir
   }),
   vector: new LibSQLVector({
     connectionUrl: 'file:mastra.db', // relative path from bundled .mastra/output dir
