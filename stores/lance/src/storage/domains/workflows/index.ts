@@ -212,7 +212,9 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       }
 
       if (args?.perPage !== undefined && args?.page !== undefined) {
-        if (args.perPage <= 0 || args.page < 0 || !Number.isInteger(args.perPage) || !Number.isInteger(args.page)) {
+        const normalizedPerPage = this.normalizePerPage(args.perPage, Number.MAX_SAFE_INTEGER);
+
+        if (args.page < 0 || !Number.isInteger(args.page)) {
           throw new MastraError(
             {
               id: 'LANCE_STORE_INVALID_PAGINATION_PARAMS',
@@ -223,8 +225,8 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
             new Error(`Invalid pagination parameters: page=${args.page}, perPage=${args.perPage}`),
           );
         }
-        const offset = args.page * args.perPage;
-        query.limit(args.perPage);
+        const offset = args.page * normalizedPerPage;
+        query.limit(normalizedPerPage);
         query.offset(offset);
       }
 

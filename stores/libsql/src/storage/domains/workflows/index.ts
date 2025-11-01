@@ -396,10 +396,11 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
       // Get results
       const usePagination = perPage !== undefined && page !== undefined;
-      const offset = usePagination ? page * perPage : 0;
+      const normalizedPerPage = usePagination ? this.normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
+      const offset = usePagination ? page * normalizedPerPage : 0;
       const result = await this.client.execute({
         sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC${usePagination ? ` LIMIT ? OFFSET ?` : ''}`,
-        args: usePagination ? [...args, perPage!, offset] : args,
+        args: usePagination ? [...args, normalizedPerPage, offset] : args,
       });
 
       const runs = (result.rows || []).map(row => parseWorkflowRun(row));

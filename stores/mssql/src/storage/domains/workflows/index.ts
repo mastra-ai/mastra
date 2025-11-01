@@ -420,9 +420,10 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
 
       let query = `SELECT * FROM ${tableName} ${whereClause} ORDER BY [seq_id] DESC`;
       if (perPage !== undefined && page !== undefined) {
-        const offset = page * perPage;
+        const normalizedPerPage = this.normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
+        const offset = page * normalizedPerPage;
         query += ` OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
-        request.input('perPage', perPage);
+        request.input('perPage', normalizedPerPage);
         request.input('offset', offset);
       }
       const result = await request.query(query);

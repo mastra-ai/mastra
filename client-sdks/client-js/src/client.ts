@@ -94,8 +94,8 @@ export class MastraClient extends BaseResource {
     const queryParams = new URLSearchParams({
       resourceId: params.resourceId,
       agentId: params.agentId,
-      ...(params.offset !== undefined && { offset: params.offset.toString() }),
-      ...(params.limit !== undefined && { limit: params.limit.toString() }),
+      ...(params.page !== undefined && { page: params.page.toString() }),
+      ...(params.perPage !== undefined && { perPage: params.perPage.toString() }),
       ...(params.orderBy && { orderBy: params.orderBy }),
       ...(params.sortDirection && { sortDirection: params.sortDirection }),
     });

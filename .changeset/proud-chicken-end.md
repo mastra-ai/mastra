@@ -42,3 +42,8 @@ await memory.listThreadsByResourceId({
   perPage: 10,
 });
 ```
+
+**Additional improvements:**
+- Added validation for negative `page` values in all storage implementations
+- Improved `perPage` validation to handle edge cases (negative values, `0`, `false`)
+- Added reusable query parser utilities for consistent validation in handlers

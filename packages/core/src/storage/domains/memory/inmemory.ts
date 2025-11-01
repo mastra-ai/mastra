@@ -113,6 +113,12 @@ export class InMemoryMemory extends MemoryStorage {
       throw new Error('page must be >= 0');
     }
 
+    // Prevent unreasonably large page values that could cause performance issues
+    const maxOffset = Number.MAX_SAFE_INTEGER / 2;
+    if (page * perPage > maxOffset) {
+      throw new Error('page value too large');
+    }
+
     // Calculate offset from page
     const offset = page * perPage;
 
@@ -601,6 +607,12 @@ export class InMemoryMemory extends MemoryStorage {
 
     if (page < 0) {
       throw new Error('page must be >= 0');
+    }
+
+    // Prevent unreasonably large page values that could cause performance issues
+    const maxOffset = Number.MAX_SAFE_INTEGER / 2;
+    if (page * perPage > maxOffset) {
+      throw new Error('page value too large');
     }
 
     this.logger.debug(`MockStore: listThreadsByResourceId called for ${resourceId}`);

@@ -253,7 +253,8 @@ export class WorkflowsPG extends WorkflowsStorage {
         total = Number(countResult.count);
       }
 
-      const offset = usePagination ? page * perPage : undefined;
+      const normalizedPerPage = usePagination ? this.normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
+      const offset = usePagination ? page * normalizedPerPage : undefined;
 
       // Get results
       const query = `
@@ -263,7 +264,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           ${usePagination ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
         `;
 
-      const queryValues = usePagination ? [...values, perPage, offset] : values;
+      const queryValues = usePagination ? [...values, normalizedPerPage, offset] : values;
 
       const result = await this.client.manyOrNone(query, queryValues);
 

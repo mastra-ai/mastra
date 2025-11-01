@@ -204,8 +204,9 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
       const usePagination = perPage !== undefined && page !== undefined;
-      const offset = usePagination ? page * perPage : 0;
-      const limitClause = usePagination ? `LIMIT ${perPage}` : '';
+      const normalizedPerPage = usePagination ? this.normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
+      const offset = usePagination ? page * normalizedPerPage : 0;
+      const limitClause = usePagination ? `LIMIT ${normalizedPerPage}` : '';
       const offsetClause = usePagination ? `OFFSET ${offset}` : '';
 
       let total = 0;

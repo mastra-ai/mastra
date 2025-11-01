@@ -205,9 +205,11 @@ export class WorkflowsInMemory extends WorkflowsStorage {
 
     // Apply pagination
     if (perPage !== undefined && page !== undefined) {
-      const offset = page * perPage;
+      // Use MAX_SAFE_INTEGER as default to maintain "no pagination" behavior when undefined
+      const normalizedPerPage = this.normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
+      const offset = page * normalizedPerPage;
       const start = offset;
-      const end = start + perPage;
+      const end = start + normalizedPerPage;
       runs = runs.slice(start, end);
     }
 

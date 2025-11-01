@@ -175,7 +175,8 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     toDate,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
-      const offset = page * perPage;
+      const normalizedPerPage = this.normalizePerPage(perPage, 20);
+      const offset = page * normalizedPerPage;
       // List all keys in the workflow snapshot table
       const prefix = this.buildWorkflowSnapshotPrefix({ workflowName });
       const keyObjs = await this.operations.listKV(TABLE_WORKFLOW_SNAPSHOT, { prefix });
@@ -224,7 +225,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
         return bDate - aDate;
       });
       // Apply pagination
-      const pagedRuns = runs.slice(offset, offset + perPage);
+      const pagedRuns = runs.slice(offset, offset + normalizedPerPage);
       return {
         runs: pagedRuns,
         total: runs.length,

@@ -149,9 +149,10 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
 
       let cursor = collection.find(query).sort({ createdAt: -1 });
       if (options.page !== undefined && options.perPage !== undefined) {
-        const offset = options.page * options.perPage;
+        const normalizedPerPage = this.normalizePerPage(options.perPage, Number.MAX_SAFE_INTEGER);
+        const offset = options.page * normalizedPerPage;
         cursor = cursor.skip(offset);
-        cursor = cursor.limit(options.perPage);
+        cursor = cursor.limit(normalizedPerPage);
       }
 
       const results = await cursor.toArray();

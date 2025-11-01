@@ -860,8 +860,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       // Get first page
       const result = await memory.listThreadsByResourceId({
         resourceId,
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
@@ -880,8 +880,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       // Empty result set
       const emptyResult = await memory.listThreadsByResourceId({
         resourceId: 'non-existent-resource',
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
@@ -900,8 +900,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
       const lastPageResult = await memory.listThreadsByResourceId({
         resourceId,
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
@@ -923,8 +923,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       // Test second page
       const page2Result = await memory.listThreadsByResourceId({
         resourceId,
-        offset: 7,
-        limit: 7,
+        page: 1,
+        perPage: 7,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
@@ -935,8 +935,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       // Test third page (final page)
       const page3Result = await memory.listThreadsByResourceId({
         resourceId,
-        offset: 14,
-        limit: 7,
+        page: 2,
+        perPage: 7,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 

@@ -50,6 +50,10 @@ export type PaginationArgs = {
 export type PaginationInfo = {
   total: number;
   page: number;
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * When `false`, all matching records are returned in a single response.
+   */
   perPage: number | false;
   hasMore: boolean;
 };
@@ -65,7 +69,15 @@ export type StorageListMessagesInput = {
     withPreviousMessages?: number;
     withNextMessages?: number;
   }[];
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 40 if not specified.
+   */
   perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
   page?: number;
   filter?: {
     dateRange?: {
@@ -84,15 +96,31 @@ export type StorageListWorkflowRunsInput = {
   workflowName?: string;
   fromDate?: Date;
   toDate?: Date;
-  perPage?: number;
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 10 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
   page?: number;
   resourceId?: string;
 };
 
 export type StorageListThreadsByResourceIdInput = {
   resourceId: string;
-  perPage: number | false;
-  page: number;
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
   orderBy?: StorageOrderBy;
 };
 
