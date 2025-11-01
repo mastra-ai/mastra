@@ -1,12 +1,19 @@
 import { FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 
+import { shouldSkipDotenvLoading } from '../utils.js';
+
 export class BuildBundler extends Bundler {
   constructor() {
     super('Build');
   }
 
   getEnvFiles(): Promise<string[]> {
+    // Skip loading .env files if MASTRA_SKIP_DOTENV is set
+    if (shouldSkipDotenvLoading()) {
+      return Promise.resolve([]);
+    }
+
     const possibleFiles = ['.env.production', '.env.local', '.env'];
 
     try {
