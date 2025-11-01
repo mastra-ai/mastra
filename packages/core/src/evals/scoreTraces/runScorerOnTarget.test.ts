@@ -70,6 +70,7 @@ class TestContext {
     } as unknown as IMastraLogger;
 
     this.mockScorer = {
+      id: 'test-scorer',
       name: 'test-scorer',
       description: 'Test scorer for unit tests',
       type: 'llm', // Changed from 'agent' to avoid utils functions

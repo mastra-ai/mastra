@@ -166,7 +166,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'STORAGE_MONGODB_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName: options.workflowName || 'unknown' },

@@ -28,7 +28,7 @@ import { handle } from 'hono/vercel'
 import { mastra } from '#mastra';
 import { createHonoServer, getToolExports } from '#server';
 import { tools } from '#tools';
-import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces';
+import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
 
 if (mastra.getStorage()) {
   mastra.__registerInternalWorkflow(scoreTracesWorkflow);

@@ -131,14 +131,14 @@
         "default": "./dist/processors/index.cjs"
       }
     },
-    "./scores/scoreTraces": {
+    "./evals/scoreTraces": {
       "import": {
-        "types": "./dist/scores/scoreTraces/index.d.ts",
-        "default": "./dist/scores/scoreTraces/index.js"
+        "types": "./dist/evals/scoreTraces/index.d.ts",
+        "default": "./dist/evals/scoreTraces/index.js"
       },
       "require": {
-        "types": "./dist/scores/scoreTraces/index.d.ts",
-        "default": "./dist/scores/scoreTraces/index.cjs"
+        "types": "./dist/evals/scoreTraces/index.d.ts",
+        "default": "./dist/evals/scoreTraces/index.cjs"
       }
     },
     "./utils/zod-to-json": {
@@ -222,6 +222,7 @@
     "@internal/external-types": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/ai-sdk-v4": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@openrouter/ai-sdk-provider": "^0.4.6",
     "@types/babel__core": "^7.20.5",

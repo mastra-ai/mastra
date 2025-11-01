@@ -1,11 +1,11 @@
 ---
 title: "Example: Running Scorers in CI | Scorers | Mastra Docs"
-description: Example of using runExperiment to test agents in a CI/CD pipeline with Vitest.
+description: Example of using runEvals to test agents in a CI/CD pipeline with Vitest.
 ---
 
 # Running Scorers in CI
 
-This example shows how to use `runExperiment` to run scorer tests in your CI/CD pipeline. The function processes multiple test cases through your agent and returns aggregate scores that you can assert against.
+This example shows how to use `runEvals` to run scorer tests in your CI/CD pipeline. The function processes multiple test cases through your agent and returns aggregate scores that you can assert against.
 
 ## Installation
 
@@ -193,7 +193,7 @@ export const weatherAgent = new Agent({
 Define a scorer that validates the agent's tool calls:
 
 ```typescript title="src/mastra/scorers/location-scorer.ts" showLineNumbers copy
-import { createScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
 
 export const locationScorer = createScorer({
   name: 'location-accuracy',
@@ -231,17 +231,17 @@ export const locationScorer = createScorer({
 
 ## Create Test Suite
 
-Use `runExperiment` to test your agent against multiple cases:
+Use `runEvals` to test your agent against multiple cases:
 
 ```typescript title="src/mastra/agents/weather-agent.test.ts" showLineNumbers copy
 import { describe, it, expect } from 'vitest';
-import { runExperiment } from '@mastra/core/scores';
+import { runEvals } from '@mastra/core/evals';
 import { weatherAgent } from './weather-agent';
 import { locationScorer } from '../scorers/location-scorer';
 
 describe('Weather Agent Tests', () => {
   it('should correctly extract locations from queries', async () => {
-    const result = await runExperiment({
+    const result = await runEvals({
       data: [
         {
           input: 'weather in Berlin',
@@ -268,7 +268,7 @@ describe('Weather Agent Tests', () => {
   });
 
   it('should handle typos and misspellings', async () => {
-    const result = await runExperiment({
+    const result = await runEvals({
       data: [
         {
           input: 'weather in Berln',
@@ -296,7 +296,7 @@ describe('Weather Agent Tests', () => {
 
 ## Perfect Score Example
 
-When all test cases pass the scorer criteria, `runExperiment` returns a perfect aggregate score:
+When all test cases pass the scorer criteria, `runEvals` returns a perfect aggregate score:
 
 ```typescript
 {
@@ -331,7 +331,7 @@ OPENAI_API_KEY=your_key_here
 
 ## Understanding the Results
 
-`runExperiment` returns a result in the following shape:
+`runEvals` returns a result in the following shape:
 
 ```typescript
 {

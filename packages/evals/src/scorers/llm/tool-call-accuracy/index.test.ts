@@ -21,6 +21,7 @@ describe('createToolCallAccuracyScorerLLM', () => {
         availableTools,
       });
 
+      expect(scorer.id).toBe('tool-call-accuracy-scorer');
       expect(scorer.name).toBe('Tool Call Accuracy (LLM)');
       expect(scorer.description).toContain('Evaluates whether an agent selected appropriate tools');
     });

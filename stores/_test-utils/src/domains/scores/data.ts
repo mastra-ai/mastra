@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
 
 export function createSampleScore({
   scorerId,
