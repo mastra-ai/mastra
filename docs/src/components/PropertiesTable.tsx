@@ -25,9 +25,9 @@ interface PropertiesTableProps {
   content?: ContentItem[];
 }
 
-export default function PropertiesTable({
+export const PropertiesTable: React.FC<PropertiesTableProps> = ({
   content = [],
-}: PropertiesTableProps): React.JSX.Element {
+}) => {
   const renderType = ({
     properties = [],
   }: {
@@ -35,93 +35,32 @@ export default function PropertiesTable({
   }) => {
     if (properties && properties.length > 0) {
       return (
-        <div style={{ display: "flex", flexDirection: "column" }}>
+        <div className="flex flex-col">
           {properties.map((prop, idx) => (
             <div
               key={idx}
-              style={{
-                margin: "0.5rem",
-                borderRadius: "0.5rem",
-                display: "flex",
-                flexDirection: "column",
-                position: "relative",
-                marginTop: "1rem",
-                marginBottom: "1rem",
-                border: "1px solid var(--ifm-color-emphasis-300)",
-              }}
+              className="m-2 rounded-lg flex flex-col relative my-4 border border-neutral-300 dark:border-neutral-900"
             >
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                <div
-                  style={{
-                    cursor: "pointer",
-                    fontFamily: "var(--ifm-font-family-monospace)",
-                    fontSize: "0.75rem",
-                    position: "absolute",
-                    top: "-0.75rem",
-                    right: "0.5rem",
-                    backgroundColor: "var(--ifm-color-emphasis-200)",
-                    padding: "0.25rem 0.5rem",
-                    borderRadius: "0.375rem",
-                    color: "var(--ifm-color-emphasis-700)",
-                    zIndex: 20,
-                  }}
-                >
+              <div className="flex flex-col">
+                <div className="cursor-pointer font-mono text-xs absolute -top-3 right-2 bg-zinc-200 dark:bg-neutral-700 dark:text-zinc-400 px-2 py-1 rounded-md text-zinc-600 z-20">
                   {prop.type}
                 </div>
                 {prop.parameters &&
                   prop.parameters.map((param, paramIdx) => (
                     <div
                       key={paramIdx}
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        borderBottom:
-                          paramIdx === prop.parameters.length - 1
-                            ? "none"
-                            : "1px solid var(--ifm-color-emphasis-300)",
-                        padding: "0.75rem",
-                        gap: "0.25rem",
-                      }}
+                      className="flex flex-col border-b p-3 gap-1 last:border-none dark:border-neutral-700"
                     >
-                      <div
-                        style={{
-                          position: "relative",
-                          display: "flex",
-                          flexDirection: "row",
-                          alignItems: "flex-start",
-                          gap: "0.5rem",
-                        }}
-                      >
-                        <h3
-                          style={{
-                            fontFamily: "var(--ifm-font-family-monospace)",
-                            fontSize: "0.875rem",
-                            fontWeight: 500,
-                            cursor: "pointer",
-                            margin: 0,
-                          }}
-                        >
+                      <div className="relative flex flex-row items-start gap-2 group">
+                        <h3 className="font-mono text-sm font-medium cursor-pointer">
                           {param.name}
                           <span>{param.isOptional ? "?:" : ":"}</span>
                         </h3>
-                        <div
-                          style={{
-                            fontFamily: "var(--ifm-font-family-monospace)",
-                            color: "var(--ifm-color-emphasis-700)",
-                            fontSize: "0.875rem",
-                            width: "100%",
-                          }}
-                        >
+                        <div className="font-mono text-zinc-500 text-sm w-full">
                           {param.type}
                         </div>
                       </div>
-                      <div
-                        style={{
-                          fontSize: "0.875rem",
-                          lineHeight: "1.25rem",
-                          color: "var(--ifm-color-emphasis-700)",
-                        }}
-                      >
+                      <div className="text-sm leading-5 text-zinc-500">
                         {param.description}
                       </div>
                     </div>
@@ -135,69 +74,27 @@ export default function PropertiesTable({
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column" }}>
+    <div className="flex flex-col">
       {content.map((item, index) => {
         return (
           <div
             key={index}
             id={item.name}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "0.25rem",
-              paddingTop: "0.75rem",
-              paddingBottom: "0.75rem",
-              borderBottom: "1px solid var(--ifm-color-emphasis-300)",
-            }}
+            className="flex flex-col gap-1 py-3 border-b first:pt-2 first:pb-3 border-neutral-300 dark:border-neutral-900"
           >
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "row",
-                gap: "0.5rem",
-                alignItems: "flex-start",
-              }}
-            >
-              <h3
-                style={{
-                  fontFamily: "var(--ifm-font-family-monospace)",
-                  fontSize: "0.875rem",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  margin: 0,
-                }}
-              >
+            <div className="flex flex-row gap-2 group items-start">
+              <h3 className="font-mono text-sm font-medium cursor-pointer">
                 {item.name}
                 <span>{item.isOptional ? "?:" : ":"}</span>
               </h3>
-              <div
-                style={{
-                  fontSize: "0.875rem",
-                  lineHeight: "1.25rem",
-                  color: "var(--ifm-color-emphasis-700)",
-                }}
-              >
-                {item.type}
-              </div>
+              <div className="text-sm leading-5 text-zinc-500">{item.type}</div>
               {item.defaultValue && (
-                <div
-                  style={{
-                    fontSize: "0.875rem",
-                    lineHeight: "1.25rem",
-                    color: "var(--ifm-color-emphasis-700)",
-                  }}
-                >
+                <div className="text-sm leading-5 text-zinc-500">
                   = {item.defaultValue}
                 </div>
               )}
             </div>
-            <div
-              style={{
-                fontSize: "0.875rem",
-                lineHeight: "1.25rem",
-                color: "var(--ifm-color-emphasis-700)",
-              }}
-            >
+            <div className="text-sm leading-5 text-zinc-500">
               {item.description}
             </div>
             {renderType({ properties: item.properties })}
@@ -206,4 +103,4 @@ export default function PropertiesTable({
       })}
     </div>
   );
-}
+};
