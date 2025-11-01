@@ -3084,7 +3084,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   async #execute<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-  >({ methodType, format = 'mastra', resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
+  >({ methodType, resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
     const existingSnapshot = resumeContext?.snapshot;
     let snapshotMemoryInfo;
     if (existingSnapshot) {
@@ -3178,7 +3178,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext,
       agentAISpan: agentAISpan!,
       methodType,
-      format: format as FORMAT,
       instructions,
       memoryConfig,
       memory,
@@ -3512,11 +3511,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       });
     }
 
-    if (streamOptions?.format === 'aisdk') {
-      this.logger.warn(
-        'The `format: "aisdk"` is deprecated in stream/generate options. Use the @mastra/ai-sdk package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming',
-      );
-    }
     return result.result as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 
