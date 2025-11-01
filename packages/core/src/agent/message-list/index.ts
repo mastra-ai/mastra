@@ -2144,7 +2144,7 @@ export class MessageList {
               input: inv.args,
               output: inv.result,
               state: 'output-available',
-              providerMetadata: part.providerMetadata,
+              callProviderMetadata: part.providerMetadata,
             } satisfies AIV5Type.ToolUIPart);
           } else {
             parts.push({
@@ -2152,7 +2152,7 @@ export class MessageList {
               toolCallId: inv.toolCallId,
               input: inv.args,
               state: 'input-available',
-              providerMetadata: part.providerMetadata,
+              callProviderMetadata: part.providerMetadata,
             } satisfies AIV5Type.ToolUIPart);
           }
           continue;
