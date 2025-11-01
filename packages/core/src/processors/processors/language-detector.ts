@@ -1,6 +1,6 @@
 import z from 'zod';
 import { Agent } from '../../agent';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { TracingContext } from '../../ai-tracing';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
@@ -178,10 +178,10 @@ export class LanguageDetector implements Processor {
   }
 
   async processInput(args: {
-    messages: MastraMessageV2[];
+    messages: MastraDBMessage[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     try {
       const { messages, abort, tracingContext } = args;
 
@@ -189,7 +189,7 @@ export class LanguageDetector implements Processor {
         return messages;
       }
 
-      const processedMessages: MastraMessageV2[] = [];
+      const processedMessages: MastraDBMessage[] = [];
 
       // Process each message
       for (const message of messages) {
@@ -325,11 +325,11 @@ export class LanguageDetector implements Processor {
    * Handle detected language based on strategy
    */
   private async handleDetectedLanguage(
-    message: MastraMessageV2,
+    message: MastraDBMessage,
     result: LanguageDetectionResult,
     strategy: 'detect' | 'translate' | 'block' | 'warn',
     abort: (reason?: string) => never,
-  ): Promise<MastraMessageV2 | null> {
+  ): Promise<MastraDBMessage | null> {
     const detectedLanguage = result.iso_code ? this.getLanguageName(result.iso_code) : 'Unknown';
     const alertMessage = `Language detected: ${detectedLanguage} (${result.iso_code}) with confidence ${result.confidence?.toFixed(2)}`;
 
@@ -365,12 +365,12 @@ export class LanguageDetector implements Processor {
   /**
    * Create a translated message with original preserved in metadata
    */
-  private createTranslatedMessage(originalMessage: MastraMessageV2, result: LanguageDetectionResult): MastraMessageV2 {
+  private createTranslatedMessage(originalMessage: MastraDBMessage, result: LanguageDetectionResult): MastraDBMessage {
     if (!result.translated_text) {
       return this.addLanguageMetadata(originalMessage, result);
     }
 
-    const translatedMessage: MastraMessageV2 = {
+    const translatedMessage: MastraDBMessage = {
       ...originalMessage,
       content: {
         ...originalMessage.content,
@@ -386,10 +386,10 @@ export class LanguageDetector implements Processor {
    * Add language detection metadata to message
    */
   private addLanguageMetadata(
-    message: MastraMessageV2,
+    message: MastraDBMessage,
     result: LanguageDetectionResult,
-    originalMessage?: MastraMessageV2,
-  ): MastraMessageV2 {
+    originalMessage?: MastraDBMessage,
+  ): MastraDBMessage {
     const isTargetLanguage = this.isTargetLanguage(result.iso_code ?? undefined);
 
     const metadata = {
@@ -442,7 +442,7 @@ export class LanguageDetector implements Processor {
   /**
    * Extract text content from message for analysis
    */
-  private extractTextContent(message: MastraMessageV2): string {
+  private extractTextContent(message: MastraDBMessage): string {
     let text = '';
 
     if (message.content.parts) {

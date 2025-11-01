@@ -1,4 +1,4 @@
-import type { MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MastraClient } from './client';
 
@@ -47,7 +47,7 @@ describe('V2 Message Format Support', () => {
   });
 
   it('should send v2 messages successfully', async () => {
-    const v2Messages: MastraMessageV2[] = [
+    const v2Messages: MastraDBMessage[] = [
       {
         id: 'msg-v2-1',
         role: 'assistant',
@@ -83,7 +83,7 @@ describe('V2 Message Format Support', () => {
   });
 
   it('should send mixed v1 and v2 messages successfully', async () => {
-    const mixedMessages: (MastraMessageV1 | MastraMessageV2)[] = [
+    const mixedMessages: (MastraMessageV1 | MastraDBMessage)[] = [
       {
         id: 'msg-v1-1',
         role: 'user',
@@ -148,7 +148,7 @@ describe('V2 Message Format Support', () => {
   });
 
   it('should handle v2 messages with attachments', async () => {
-    const v2MessageWithAttachments: MastraMessageV2 = {
+    const v2MessageWithAttachments: MastraDBMessage = {
       id: 'msg-v2-att',
       role: 'user',
       createdAt: new Date(),

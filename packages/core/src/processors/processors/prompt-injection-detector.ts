@@ -1,6 +1,6 @@
 import z from 'zod';
 import { Agent } from '../../agent';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { TracingContext } from '../../ai-tracing';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
@@ -118,10 +118,10 @@ export class PromptInjectionDetector implements Processor {
   }
 
   async processInput(args: {
-    messages: MastraMessageV2[];
+    messages: MastraDBMessage[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     try {
       const { messages, abort, tracingContext } = args;
 
@@ -130,7 +130,7 @@ export class PromptInjectionDetector implements Processor {
       }
 
       const results: PromptInjectionResult[] = [];
-      const processedMessages: MastraMessageV2[] = [];
+      const processedMessages: MastraDBMessage[] = [];
 
       // Evaluate each message
       for (const message of messages) {
@@ -261,11 +261,11 @@ export class PromptInjectionDetector implements Processor {
    * Handle detected prompt injection based on strategy
    */
   private handleDetectedInjection(
-    message: MastraMessageV2,
+    message: MastraDBMessage,
     result: PromptInjectionResult,
     strategy: 'block' | 'warn' | 'filter' | 'rewrite',
     abort: (reason?: string) => never,
-  ): MastraMessageV2 | null {
+  ): MastraDBMessage | null {
     const flaggedTypes = (result.categories || []).filter(cat => cat.score >= this.threshold).map(cat => cat.type);
 
     const alertMessage = `Prompt injection detected. Types: ${flaggedTypes.join(', ')}${
@@ -300,7 +300,7 @@ export class PromptInjectionDetector implements Processor {
   /**
    * Create a rewritten message with neutralized content
    */
-  private createRewrittenMessage(originalMessage: MastraMessageV2, rewrittenContent: string): MastraMessageV2 {
+  private createRewrittenMessage(originalMessage: MastraDBMessage, rewrittenContent: string): MastraDBMessage {
     return {
       ...originalMessage,
       content: {
@@ -314,7 +314,7 @@ export class PromptInjectionDetector implements Processor {
   /**
    * Extract text content from message for analysis
    */
-  private extractTextContent(message: MastraMessageV2): string {
+  private extractTextContent(message: MastraDBMessage): string {
     let text = '';
 
     if (message.content.parts) {

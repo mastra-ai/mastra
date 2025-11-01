@@ -673,6 +673,7 @@ describe('Mastra ID Generator', () => {
 
     it('should handle complex workflow with memory operations', async () => {
       const memory = new MockMemory();
+
       const agent = new Agent({
         name: 'workflowAgent',
         instructions: 'You are a workflow assistant',
@@ -687,11 +688,14 @@ describe('Mastra ID Generator', () => {
         memory,
       });
 
-      const _mastra = new Mastra({
+      const mastra = new Mastra({
         idGenerator: customIdGenerator,
         logger: false,
         agents: { workflowAgent: agent },
       });
+
+      // Register mastra with memory so it can use the custom ID generator
+      memory.__registerMastra(mastra);
 
       const agentMemory = await agent.getMemory();
       if (!agentMemory) throw new Error('Memory not found');
@@ -705,17 +709,33 @@ describe('Mastra ID Generator', () => {
 
       // Add workflow steps
       const steps = ['Initialize', 'Process', 'Validate', 'Complete'];
+      const savedMessageIds: string[] = [];
       for (const step of steps) {
-        await agentMemory.addMessage({
-          threadId: thread.id,
-          resourceId: 'workflow-resource',
-          content: `${step} workflow step`,
-          role: 'user',
-          type: 'text',
+        const result = await agentMemory.saveMessages({
+          messages: [
+            {
+              // Omit id to let saveMessages/memory generate it using the custom generator
+              threadId: thread.id,
+              resourceId: 'workflow-resource',
+              content: {
+                format: 2,
+                parts: [{ type: 'text', text: `${step} workflow step` }],
+              },
+              role: 'user',
+              createdAt: new Date(),
+            },
+          ],
         });
+        savedMessageIds.push(...result.messages.map(m => m.id));
       }
 
+      // Verify custom ID generator was called
       expect(customIdGenerator).toHaveBeenCalled();
+
+      // Verify all saved message IDs start with the custom prefix
+      savedMessageIds.forEach(id => {
+        expect(id).toMatch(/^custom-id-/);
+      });
     });
 
     it('should handle streaming operations with memory persistence', async () => {

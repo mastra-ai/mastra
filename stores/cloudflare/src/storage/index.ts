@@ -2,7 +2,7 @@ import type { KVNamespace } from '@cloudflare/workers-types';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
-import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
+import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -200,23 +200,16 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.memory.deleteThread({ threadId });
   }
 
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.saveMessages(args);
   }
 
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
   public async getMessages({
     threadId,
     resourceId,
     selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    return this.stores.memory.getMessages({ threadId, resourceId, selectBy, format });
+  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
+    return this.stores.memory.getMessages({ threadId, resourceId, selectBy });
   }
 
   async updateWorkflowResults({
@@ -251,6 +244,10 @@ export class CloudflareStore extends MastraStorage {
     };
   }): Promise<WorkflowRunState | undefined> {
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
+  }
+
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    return this.stores.memory.listMessagesById({ messageIds });
   }
 
   async persistWorkflowSnapshot(params: {
@@ -298,19 +295,16 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+  async getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessagesPaginated(args);
   }
 
   async updateMessages(args: {
-    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
-      {
-        id: string;
-        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-      }[];
-  }): Promise<MastraMessageV2[]> {
+    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
+      id: string;
+      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+    })[];
+  }): Promise<MastraDBMessage[]> {
     return this.stores.memory.updateMessages(args);
   }
 

@@ -2,7 +2,7 @@ import type { Connection } from '@lancedb/lancedb';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
   MemoryStorage,
   resolveMessageLimit,
@@ -175,7 +175,7 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
-  private normalizeMessage(message: any): MastraMessageV1 | MastraMessageV2 {
+  private normalizeMessage(message: any): MastraMessageV1 | MastraDBMessage {
     const { thread_id, ...rest } = message;
     return {
       ...rest,
@@ -193,15 +193,12 @@ export class StoreMemoryLance extends MemoryStorage {
     };
   }
 
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
   public async getMessages({
     threadId,
     resourceId,
     selectBy,
-    format,
     threadConfig,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
@@ -252,9 +249,11 @@ export class StoreMemoryLance extends MemoryStorage {
         await getTableSchema({ tableName: TABLE_MESSAGES, client: this.client }),
       );
 
-      const list = new MessageList({ threadId, resourceId }).add(messages.map(this.normalizeMessage), 'memory');
-      if (format === 'v2') return list.get.all.v2();
-      return list.get.all.v1();
+      const list = new MessageList({ threadId, resourceId }).add(
+        messages.map(this.normalizeMessage) as (MastraMessageV1 | MastraDBMessage)[],
+        'memory',
+      );
+      return { messages: list.get.all.db() };
     } catch (error: any) {
       throw new MastraError(
         {
@@ -271,8 +270,8 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
-    if (messageIds.length === 0) return [];
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    if (messageIds.length === 0) return { messages: [] };
     try {
       const table = await this.client.openTable(TABLE_MESSAGES);
 
@@ -284,8 +283,11 @@ export class StoreMemoryLance extends MemoryStorage {
         await getTableSchema({ tableName: TABLE_MESSAGES, client: this.client }),
       );
 
-      const list = new MessageList().add(messages.map(this.normalizeMessage), 'memory');
-      return list.get.all.v2();
+      const list = new MessageList().add(
+        messages.map(this.normalizeMessage) as (MastraMessageV1 | MastraDBMessage)[],
+        'memory',
+      );
+      return { messages: list.get.all.db() };
     } catch (error: any) {
       throw new MastraError(
         {
@@ -434,7 +436,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList().add(messages, 'memory');
-      let finalMessages = list.get.all.v2();
+      let finalMessages = list.get.all.db();
 
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {
@@ -495,15 +497,11 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     try {
-      const { messages, format = 'v1' } = args;
+      const { messages } = args;
       if (messages.length === 0) {
-        return [];
+        return { messages: [] };
       }
 
       const threadId = messages[0]?.threadId;
@@ -528,7 +526,7 @@ export class StoreMemoryLance extends MemoryStorage {
         }
       }
 
-      const transformedMessages = messages.map((message: MastraMessageV2 | MastraMessageV1) => {
+      const transformedMessages = messages.map((message: MastraDBMessage | MastraMessageV1) => {
         const { threadId, type, ...rest } = message;
         return {
           ...rest,
@@ -547,9 +545,8 @@ export class StoreMemoryLance extends MemoryStorage {
       const updateRecord = { id: threadId, updatedAt: currentTime };
       await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([updateRecord]);
 
-      const list = new MessageList().add(messages, 'memory');
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
+      const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
+      return { messages: list.get.all.db() };
     } catch (error: any) {
       throw new MastraError(
         {
@@ -697,10 +694,8 @@ export class StoreMemoryLance extends MemoryStorage {
       .map(index => records[index]);
   }
 
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, resourceId, selectBy, format = 'v1' } = args;
+  async getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
+    const { threadId, resourceId, selectBy } = args;
     const page = selectBy?.pagination?.page ?? 0;
     const perPage = selectBy?.pagination?.perPage ?? 10;
 
@@ -837,9 +832,9 @@ export class StoreMemoryLance extends MemoryStorage {
         };
       });
 
-      const list = new MessageList().add(formattedMessages, 'memory');
+      const list = new MessageList().add(formattedMessages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
       return {
-        messages: format === 'v2' ? list.get.all.v2() : list.get.all.v1(),
+        messages: list.get.all.db(),
         total: total, // Total should be the count of messages matching the filters
         page,
         perPage,
@@ -865,9 +860,9 @@ export class StoreMemoryLance extends MemoryStorage {
   }
 
   /**
-   * Parse message data from LanceDB record format to MastraMessageV2 format
+   * Parse message data from LanceDB record format to MastraDBMessage format
    */
-  private parseMessageData(data: any): MastraMessageV2 {
+  private parseMessageData(data: any): MastraDBMessage {
     const { thread_id, ...rest } = data;
     return {
       ...rest,
@@ -884,16 +879,16 @@ export class StoreMemoryLance extends MemoryStorage {
           : data.content,
       createdAt: new Date(data.createdAt),
       updatedAt: new Date(data.updatedAt),
-    } as MastraMessageV2;
+    } as MastraDBMessage;
   }
 
   async updateMessages(args: {
-    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+    messages: Partial<Omit<MastraDBMessage, 'createdAt'>> &
       {
         id: string;
         content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
       }[];
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     const { messages } = args;
     this.logger.debug('Updating messages', { count: messages.length });
 
@@ -901,7 +896,7 @@ export class StoreMemoryLance extends MemoryStorage {
       return [];
     }
 
-    const updatedMessages: MastraMessageV2[] = [];
+    const updatedMessages: MastraDBMessage[] = [];
     const affectedThreadIds = new Set<string>();
 
     try {
