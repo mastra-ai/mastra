@@ -2,18 +2,19 @@ import { MastraError } from '../../error';
 import type { Mastra } from '../../mastra';
 
 export async function scoreTraces({
-  scorerName,
+  scorerId,
   targets,
   mastra,
 }: {
-  scorerName: string;
+  scorerId: string;
   targets: { traceId: string; spanId?: string }[];
   mastra: Mastra;
 }) {
   const workflow = mastra.__getInternalWorkflow('__batch-scoring-traces');
   try {
     const run = await workflow.createRunAsync();
-    await run.start({ inputData: { targets, scorerName } });
+
+    await run.start({ inputData: { targets, scorerId } });
   } catch (error) {
     const mastraError = new MastraError(
       {
@@ -21,7 +22,7 @@ export async function scoreTraces({
         domain: 'SCORER',
         id: 'MASTRA_SCORER_FAILED_TO_RUN_TRACE_SCORING',
         details: {
-          scorerName,
+          scorerId,
           targets: JSON.stringify(targets),
         },
       },

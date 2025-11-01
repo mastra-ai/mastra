@@ -1,8 +1,8 @@
 import type { z } from 'zod';
 import type { TracingContext } from '../ai-tracing';
+import type { MastraScorers } from '../evals';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
-import type { MastraScorers } from '../scores';
 import type { ChunkType } from '../stream/types';
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';

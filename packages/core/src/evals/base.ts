@@ -27,8 +27,9 @@ type ScorerTypeShortcuts = {
 // Pipeline scorer
 // TInput and TRunOutput establish the type contract for the entire scorer pipeline,
 // ensuring type safety flows through all steps and contexts
-interface ScorerConfig<TName extends string = string, TInput = any, TRunOutput = any> {
-  name: TName;
+interface ScorerConfig<TID extends string, TInput = any, TRunOutput = any> {
+  id: TID;
+  name?: string;
   description: string;
   judge?: {
     model: MastraModelConfig;
@@ -180,13 +181,13 @@ type GenerateReasonStepDef<TAccumulated extends Record<string, any>, TInput, TRu
   | GenerateReasonPromptObject<TAccumulated, TInput, TRunOutput>;
 
 class MastraScorer<
-  TName extends string = string,
+  TID extends string = string,
   TInput = any,
   TRunOutput = any,
   TAccumulatedResults extends Record<string, any> = {},
 > {
   constructor(
-    public config: ScorerConfig<TName, TInput, TRunOutput>,
+    public config: ScorerConfig<TID, TInput, TRunOutput>,
     private steps: Array<ScorerStepDefinition> = [],
     private originalPromptObjects: Map<
       string,
@@ -194,14 +195,27 @@ class MastraScorer<
       | GenerateReasonPromptObject<any, TInput, TRunOutput>
       | GenerateScorePromptObject<any, TInput, TRunOutput>
     > = new Map(),
-  ) {}
+  ) {
+    if (!this.config.id) {
+      throw new MastraError({
+        id: 'MASTR_SCORER_FAILED_TO_CREATE_MISSING_ID',
+        domain: ErrorDomain.SCORER,
+        category: ErrorCategory.USER,
+        text: `Scorers must have an ID field. Please provide an ID in the scorer config.`,
+      });
+    }
+  }
 
   get type() {
     return this.config.type;
   }
 
-  get name(): TName {
-    return this.config.name;
+  get id(): TID {
+    return this.config.id;
+  }
+
+  get name(): string {
+    return this.config.name ?? this.config.id;
   }
 
   get description(): string {
@@ -215,7 +229,7 @@ class MastraScorer<
   preprocess<TPreprocessOutput>(
     stepDef: PreprocessStepDef<TAccumulatedResults, TPreprocessOutput, TInput, TRunOutput>,
   ): MastraScorer<
-    TName,
+    TID,
     TInput,
     TRunOutput,
     AccumulatedResults<TAccumulatedResults, 'preprocess', Awaited<TPreprocessOutput>>
@@ -250,7 +264,7 @@ class MastraScorer<
   analyze<TAnalyzeOutput>(
     stepDef: AnalyzeStepDef<TAccumulatedResults, TAnalyzeOutput, TInput, TRunOutput>,
   ): MastraScorer<
-    TName,
+    TID,
     TInput,
     TRunOutput,
     AccumulatedResults<TAccumulatedResults, 'analyze', Awaited<TAnalyzeOutput>>
@@ -279,7 +293,7 @@ class MastraScorer<
   generateScore<TScoreOutput extends number = number>(
     stepDef: GenerateScoreStepDef<TAccumulatedResults, TInput, TRunOutput>,
   ): MastraScorer<
-    TName,
+    TID,
     TInput,
     TRunOutput,
     AccumulatedResults<TAccumulatedResults, 'generateScore', Awaited<TScoreOutput>>
@@ -308,7 +322,7 @@ class MastraScorer<
   generateReason<TReasonOutput = string>(
     stepDef: GenerateReasonStepDef<TAccumulatedResults, TInput, TRunOutput>,
   ): MastraScorer<
-    TName,
+    TID,
     TInput,
     TRunOutput,
     AccumulatedResults<TAccumulatedResults, 'generateReason', Awaited<TReasonOutput>>
@@ -347,7 +361,7 @@ class MastraScorer<
         category: ErrorCategory.USER,
         text: `Cannot execute pipeline without generateScore() step`,
         details: {
-          scorerId: this.config.name,
+          scorerId: this.config.id ?? this.config.name,
           steps: this.steps.map(s => s.name).join(', '),
         },
       });
@@ -378,7 +392,7 @@ class MastraScorer<
         category: ErrorCategory.USER,
         text: `Scorer Run Failed: ${workflowResult.error}`,
         details: {
-          scorerId: this.config.name,
+          scorerId: this.config.id ?? this.config.name,
           steps: this.steps.map(s => s.name).join(', '),
         },
       });
@@ -455,7 +469,7 @@ class MastraScorer<
     });
 
     const workflow = createWorkflow({
-      id: `scorer-${this.config.name}`,
+      id: `scorer-${this.config.id ?? this.config.name}`,
       description: this.config.description,
       inputSchema: z.object({
         run: z.any(), // ScorerRun
@@ -522,7 +536,7 @@ class MastraScorer<
         category: ErrorCategory.USER,
         text: `Step "${scorerStep.name}" requires a model and instructions`,
         details: {
-          scorerId: this.config.name,
+          scorerId: this.config.id ?? this.config.name,
           step: scorerStep.name,
         },
       });
@@ -613,32 +627,29 @@ class MastraScorer<
 }
 
 // Overload: enum type shortcuts (e.g., type: 'agent')
-export function createScorer<TName extends string, TType extends keyof ScorerTypeShortcuts>(
-  config: Omit<ScorerConfig<TName, any, any>, 'type'> & {
+export function createScorer<TID extends string, TType extends keyof ScorerTypeShortcuts>(
+  config: Omit<ScorerConfig<TID, any, any>, 'type'> & {
     type: TType;
   },
-): MastraScorer<TName, ScorerTypeShortcuts[TType]['input'], ScorerTypeShortcuts[TType]['output'], {}>;
+): MastraScorer<TID, ScorerTypeShortcuts[TType]['input'], ScorerTypeShortcuts[TType]['output'], {}>;
 
 // Overload: infer TInput/TRunOutput from provided Zod schemas in config.type
-export function createScorer<
-  TName extends string,
-  TInputSchema extends z.ZodTypeAny,
-  TOutputSchema extends z.ZodTypeAny,
->(
-  config: Omit<ScorerConfig<TName, z.infer<TInputSchema>, z.infer<TOutputSchema>>, 'type'> & {
+export function createScorer<TID extends string, TInputSchema extends z.ZodTypeAny, TOutputSchema extends z.ZodTypeAny>(
+  config: Omit<ScorerConfig<TID, z.infer<TInputSchema>, z.infer<TOutputSchema>>, 'type'> & {
     type: { input: TInputSchema; output: TOutputSchema };
   },
-): MastraScorer<TName, z.infer<TInputSchema>, z.infer<TOutputSchema>, {}>;
+): MastraScorer<TID, z.infer<TInputSchema>, z.infer<TOutputSchema>, {}>;
 
 // Overload: explicit generics (backwards compatible)
-export function createScorer<TInput = any, TRunOutput = any, TName extends string = string>(
-  config: ScorerConfig<TName, TInput, TRunOutput>,
-): MastraScorer<TName, TInput, TRunOutput, {}>;
+export function createScorer<TInput = any, TRunOutput = any>(
+  config: ScorerConfig<string, TInput, TRunOutput>,
+): MastraScorer<string, TInput, TRunOutput, {}>;
 
 // Implementation
 export function createScorer(config: any): any {
   return new MastraScorer({
-    name: config.name,
+    id: config.id,
+    name: config.name ?? config.id,
     description: config.description,
     judge: config.judge,
     type: config.type,
@@ -646,7 +657,7 @@ export function createScorer(config: any): any {
 }
 
 export type MastraScorerEntry = {
-  scorer: MastraScorer<any, any, any>;
+  scorer: MastraScorer<any, any, any, any>;
   sampling?: ScoringSamplingConfig;
 };
 

@@ -58,15 +58,30 @@ const createTestMessage = (
 };
 
 export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
+  const cleanupAllThreads = async () => {
+    let allThreads: any[] = [];
+    let offset = 0;
+    const limit = 100;
+    while (true) {
+      const { threads, hasMore } = await memory.listThreadsByResourceId({
+        resourceId,
+        offset,
+        limit,
+      });
+      allThreads.push(...threads);
+      if (!hasMore || threads.length === 0) break;
+      offset += limit;
+    }
+    await Promise.all(allThreads.map(thread => memory.deleteThread(thread.id)));
+  };
+
   beforeEach(async () => {
     messageCounter = 0;
-    const threads = await memory.getThreadsByResourceId({ resourceId });
-    await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
+    await cleanupAllThreads();
   });
 
   afterAll(async () => {
-    const threads = await memory.getThreadsByResourceId({ resourceId });
-    await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
+    await cleanupAllThreads();
   });
 
   describe('Memory Features', () => {
@@ -814,12 +829,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       );
 
       // Get first page
-      const result = await memory.getThreadsByResourceIdPaginated({
+      const result = await memory.listThreadsByResourceId({
         resourceId,
-        page: 0,
-        perPage: 10,
-        orderBy: 'createdAt',
-        sortDirection: 'DESC',
+        offset: 0,
+        limit: 10,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(result.threads).toHaveLength(10);
@@ -835,12 +849,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
     it('should handle edge cases (empty results, last page)', async () => {
       // Empty result set
-      const emptyResult = await memory.getThreadsByResourceIdPaginated({
+      const emptyResult = await memory.listThreadsByResourceId({
         resourceId: 'non-existent-resource',
-        page: 0,
-        perPage: 10,
-        orderBy: 'createdAt',
-        sortDirection: 'DESC',
+        offset: 0,
+        limit: 10,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(emptyResult.threads).toHaveLength(0);
@@ -856,12 +869,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         ),
       );
 
-      const lastPageResult = await memory.getThreadsByResourceIdPaginated({
+      const lastPageResult = await memory.listThreadsByResourceId({
         resourceId,
-        page: 0,
-        perPage: 10,
-        orderBy: 'createdAt',
-        sortDirection: 'DESC',
+        offset: 0,
+        limit: 10,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(lastPageResult.threads).toHaveLength(5);
@@ -880,12 +892,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       );
 
       // Test second page
-      const page2Result = await memory.getThreadsByResourceIdPaginated({
+      const page2Result = await memory.listThreadsByResourceId({
         resourceId,
-        page: 1,
-        perPage: 7,
-        orderBy: 'createdAt',
-        sortDirection: 'DESC',
+        offset: 7,
+        limit: 7,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(page2Result.threads).toHaveLength(7);
@@ -893,12 +904,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       expect(page2Result.hasMore).toBe(true);
 
       // Test third page (final page)
-      const page3Result = await memory.getThreadsByResourceIdPaginated({
+      const page3Result = await memory.listThreadsByResourceId({
         resourceId,
-        page: 2,
-        perPage: 7,
-        orderBy: 'createdAt',
-        sortDirection: 'DESC',
+        offset: 14,
+        limit: 7,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(page3Result.threads).toHaveLength(1);

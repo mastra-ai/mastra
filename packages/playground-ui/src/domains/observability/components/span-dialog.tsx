@@ -22,14 +22,14 @@ import { Sections } from '@/components/ui/containers';
 import { SpanScoreList } from './span-score-list';
 import { SpanScoring } from './span-scoring';
 import { TraceSpanUsage } from './trace-span-usage';
-import { GetScoresResponse } from '@mastra/client-js';
+import { ListScoresResponse } from '@mastra/client-js';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SpanTabs } from './span-tabs';
 
 type SpanDialogProps = {
   trace: AISpanRecord;
   span?: AISpanRecord;
-  spanScoresData?: GetScoresResponse | null;
+  spanScoresData?: ListScoresResponse | null;
   onSpanScoresPageChange?: (page: number) => void;
   isLoadingSpanScoresData?: boolean;
   spanInfo?: KeyValueListItemData[];

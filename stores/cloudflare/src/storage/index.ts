@@ -1,8 +1,8 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -74,7 +74,7 @@ export class CloudflareStore extends MastraStorage {
 
   public get supports() {
     const supports = super.supports;
-    supports.getScoresBySpan = true;
+    supports.listScoresBySpan = true;
     supports.resourceWorkingMemory = true;
     supports.selectByIncludeResourceScope = true;
     return supports;
@@ -178,10 +178,6 @@ export class CloudflareStore extends MastraStorage {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     return this.stores.memory.getThreadById({ threadId });
-  }
-
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    return this.stores.memory.getThreadsByResourceId({ resourceId });
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
@@ -302,14 +298,6 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
-  async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    return this.stores.memory.getThreadsByResourceIdPaginated(args);
-  }
-
   async getMessagesPaginated(
     args: StorageGetMessagesArg,
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
@@ -334,17 +322,17 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.scores.saveScore(score);
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
     runId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByRunId({ runId, pagination });
+    return this.stores.scores.listScoresByRunId({ runId, pagination });
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -353,10 +341,10 @@ export class CloudflareStore extends MastraStorage {
     entityId: string;
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByEntityId({ entityId, entityType, pagination });
+    return this.stores.scores.listScoresByEntityId({ entityId, entityType, pagination });
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     entityId,
     entityType,
@@ -369,10 +357,10 @@ export class CloudflareStore extends MastraStorage {
     source?: ScoringSource;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByScorerId({ scorerId, entityId, entityType, source, pagination });
+    return this.stores.scores.listScoresByScorerId({ scorerId, entityId, entityType, source, pagination });
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,
@@ -381,7 +369,7 @@ export class CloudflareStore extends MastraStorage {
     spanId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
+    return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {

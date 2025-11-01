@@ -4,10 +4,10 @@ import { openai } from '@ai-sdk/openai';
 import { serve } from '@hono/node-server';
 import { realtimeMiddleware } from '@inngest/realtime/middleware';
 import { Agent } from '@mastra/core/agent';
+import type { MastraScorer } from '@mastra/core/evals';
+import { createScorer, runEvals } from '@mastra/core/evals';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import type { MastraScorer } from '@mastra/core/scores';
-import { createScorer, runExperiment } from '@mastra/core/scores';
 import { createTool } from '@mastra/core/tools';
 import type { StreamEvent } from '@mastra/core/workflows';
 import { createHonoServer } from '@mastra/deployer/server';
@@ -7894,6 +7894,7 @@ describe('MastraInngestWorkflow', () => {
       beforeEach(() => {
         const createMockScorer = (name: string, score: number = 0.8): MastraScorer => {
           const scorer = createScorer({
+            id: `mock-scorer-${name}`,
             description: 'Mock scorer',
             name,
           }).generateScore(() => {
@@ -7963,7 +7964,7 @@ describe('MastraInngestWorkflow', () => {
 
         await resetInngest();
 
-        const result = await runExperiment({
+        const result = await runEvals({
           data: [
             { input: { input: 'Test input 1' }, groundTruth: 'Expected 1' },
             { input: { input: 'Test input 2' }, groundTruth: 'Expected 2' },
@@ -9076,6 +9077,7 @@ describe('MastraInngestWorkflow', () => {
       beforeEach(() => {
         const createMockScorer = (name: string, score: number = 0.8): MastraScorer => {
           const scorer = createScorer({
+            id: `mock-scorer-${name}`,
             description: 'Mock scorer',
             name,
           }).generateScore(() => {
@@ -9145,7 +9147,7 @@ describe('MastraInngestWorkflow', () => {
 
         await resetInngest();
 
-        const result = await runExperiment({
+        const result = await runEvals({
           data: [
             { input: { input: 'Test input 1' }, groundTruth: 'Expected 1' },
             { input: { input: 'Test input 2' }, groundTruth: 'Expected 2' },

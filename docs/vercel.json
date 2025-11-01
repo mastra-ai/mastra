@@ -1426,8 +1426,28 @@
       "permanent": true
     },
     {
+      "source": "/reference/memory/getThreadsByResourceId",
+      "destination": "/reference/memory/listThreadsByResourceId",
+      "permanent": true
+    },
+    {
+      "source": "/reference/memory/getThreadsByResourceIdPaginated",
+      "destination": "/reference/memory/listThreadsByResourceId",
+      "permanent": true
+    },
+    {
       "source": "/reference/workflows/run-methods/watch",
       "destination": "/reference/workflows/run",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getScorerByName",
+      "destination": "/reference/core/getScorerById",
+      "permanent": true
+    },
+    {
+      "source": "/reference/scorers/run-experiment",
+      "destination": "/reference/scorers/run-evals",
       "permanent": true
     }
   ]
