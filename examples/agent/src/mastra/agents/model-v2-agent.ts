@@ -78,7 +78,7 @@ export const chefModelV2Agent = new Agent({
     if (!mastra) {
       throw new Error('Mastra not found');
     }
-    const scorer1 = mastra.getScorer('testScorer');
+    const scorer1 = mastra.getScorerById('scorer1');
 
     return {
       scorer1: { scorer: scorer1, sampling: { rate: 1, type: 'ratio' } },
