@@ -97,6 +97,7 @@ const createToolResultMessage = (
   toolName: string,
   toolCallId: string,
   result: any,
+  extraParts: (TextPart | ToolCallPart | ToolResultPart)[] = [],
 ): MastraDBMessage => {
   messageCounter++;
   return {
@@ -114,6 +115,7 @@ const createToolResultMessage = (
             args: {},
             result,
           },
+          ...extraParts,
         },
       ],
     },
@@ -433,32 +435,11 @@ describe('Working Memory Tests', () => {
         // Pure tool-call message (should be removed)
         createToolCallMessage(threadId, 'updateWorkingMemory', { key: 'value', data: 'test' }),
         // Mixed content: tool-invocation + text (tool-invocation part should be filtered, text kept)
-        {
-          id: randomUUID(),
-          threadId,
-          role: 'assistant' as const,
-          content: {
-            format: 2 as const,
-            parts: [
-              {
-                type: 'tool-invocation' as const,
-                toolInvocation: {
-                  state: 'result' as const,
-                  toolCallId: randomUUID(),
-                  toolName: 'updateWorkingMemory',
-                  args: { memory: 'should not persist' },
-                  result: {},
-                },
-              },
-              {
-                type: 'text' as const,
-                text: 'Normal message',
-              },
-            ],
-          },
-          createdAt: new Date(),
-          resourceId,
-        },
+
+        createToolResultMessage(threadId, 'updateWorkingMemory', randomUUID(), { memory: 'should not persist' }, [
+          { type: 'text', text: 'Normal message' },
+        ]),
+
         // Pure text message (should be kept)
         createTestMessage(threadId, 'Another normal message', 'assistant'),
       ];
