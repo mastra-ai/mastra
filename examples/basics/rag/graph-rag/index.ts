@@ -76,7 +76,7 @@ The Nakamura Group recently announced plans to fund a "Heritage Innovation Hub" 
 
 const chunks = await doc.chunk({
   strategy: 'recursive',
-  size: 512,
+  maxSize: 512,
   overlap: 50,
   separator: '\n',
 });
