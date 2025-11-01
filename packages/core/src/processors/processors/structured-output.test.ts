@@ -452,7 +452,7 @@ describe('StructuredOutputProcessor', () => {
 });
 
 describe('Structured Output with Tool Execution', () => {
-  it('should generate structured output when tools are involved', async () => {
+  it.only('should generate structured output when tools are involved', async () => {
     // Test processor to track streamParts state
     const streamPartsLog: { type: string; streamPartsLength: number }[] = [];
     class StateTrackingProcessor implements Processor {

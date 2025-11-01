@@ -31,7 +31,7 @@ describe('UnicodeNormalizer', () => {
   describe('constructor and default options', () => {
     it('should use default options when none provided', () => {
       const normalizer = new UnicodeNormalizer();
-      expect(normalizer.name).toBe('unicode-normalizer');
+      expect(normalizer.id).toBe('unicode-normalizer');
     });
 
     it('should accept custom options', () => {
@@ -41,7 +41,7 @@ describe('UnicodeNormalizer', () => {
         collapseWhitespace: false,
         trim: false,
       });
-      expect(normalizer.name).toBe('unicode-normalizer');
+      expect(normalizer.id).toBe('unicode-normalizer');
     });
   });
 

@@ -83,7 +83,7 @@ describe('LanguageDetector', () => {
         targetLanguages: ['English'],
       });
 
-      expect(detector.name).toBe('language-detector');
+      expect(detector.id).toBe('language-detector');
     });
 
     it('should use default target languages when none specified', () => {
@@ -93,7 +93,7 @@ describe('LanguageDetector', () => {
         targetLanguages: ['English'],
       });
 
-      expect(detector.name).toBe('language-detector');
+      expect(detector.id).toBe('language-detector');
     });
 
     it('should accept custom target languages', () => {
@@ -103,7 +103,7 @@ describe('LanguageDetector', () => {
         targetLanguages: ['Spanish', 'French', 'German'],
       });
 
-      expect(detector.name).toBe('language-detector');
+      expect(detector.id).toBe('language-detector');
     });
 
     it('should accept custom configuration options', () => {
@@ -119,7 +119,7 @@ describe('LanguageDetector', () => {
         translationQuality: 'speed',
       });
 
-      expect(detector.name).toBe('language-detector');
+      expect(detector.id).toBe('language-detector');
     });
   });
 
@@ -652,7 +652,7 @@ describe('LanguageDetector', () => {
         targetLanguages: ['English'],
       });
 
-      expect(detector.name).toBe('language-detector');
+      expect(detector.id).toBe('language-detector');
     });
   });
 

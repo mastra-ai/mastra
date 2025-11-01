@@ -70,7 +70,7 @@ describe('PromptInjectionDetector', () => {
         model,
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
 
     it('should use default detection types when none specified', () => {
@@ -79,7 +79,7 @@ describe('PromptInjectionDetector', () => {
         model,
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
 
     it('should accept custom detection types', () => {
@@ -89,7 +89,7 @@ describe('PromptInjectionDetector', () => {
         detectionTypes: ['custom-injection', 'custom-jailbreak'],
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
 
     it('should accept custom threshold and strategy', () => {
@@ -100,7 +100,7 @@ describe('PromptInjectionDetector', () => {
         strategy: 'rewrite',
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
   });
 
@@ -593,7 +593,7 @@ describe('PromptInjectionDetector', () => {
         instructions: customInstructions,
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
   });
 

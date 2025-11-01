@@ -157,7 +157,8 @@ describe('ProcessorRunner', () => {
     it('should abort with default message when no reason provided', async () => {
       const inputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processInput: async ({ messages: _messages, abort }) => {
             abort();
             return _messages;
