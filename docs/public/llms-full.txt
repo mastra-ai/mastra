@@ -23,7 +23,8 @@ const voice = new OpenAIVoice();
 
 // Create an agent with voice capabilities
 export const agent = new Agent({
-  name: "Agent",
+  id: "voice-agent",
+  name: "Voice Agent",
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
   model: openai("gpt-4o"),
   voice,
@@ -111,7 +112,8 @@ const voice = new OpenAIRealtimeVoice({
 
 // Create an agent with speech-to-speech voice capabilities
 export const agent = new Agent({
-  name: "Agent",
+  id: "speech-to-speech-agent",
+  name: "Speech-to-Speech Agent",
   instructions: `You are a helpful assistant with speech-to-speech capabilities.`,
   model: openai("gpt-4o"),
   tools: {
@@ -214,7 +216,8 @@ export const convertToText = async (
 };
 
 export const hybridVoiceAgent = new Agent({
-  name: "hybrid-voice-agent",
+  id: "hybrid-voice-agent",
+  name: "Hybrid Voice Agent",
   model: openai("gpt-4o"),
   instructions: "You can speak and listen using different providers.",
   voice: new CompositeVoice({
@@ -224,7 +227,8 @@ export const hybridVoiceAgent = new Agent({
 });
 
 export const unifiedVoiceAgent = new Agent({
-  name: "unified-voice-agent",
+  id: "unified-voice-agent",
+  name: "Unified Voice Agent",
   instructions: "You are an agent with both STT and TTS capabilities.",
   model: openai("gpt-4o"),
   voice: new OpenAIVoice(),
@@ -269,7 +273,8 @@ import { PlayAIVoice } from "@mastra/voice-playai";
 import { openai } from "@ai-sdk/openai";
 
 export const agent = new Agent({
-  name: "Agent",
+  id: "voice-agent",
+  name: "Voice Agent",
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
   model: openai("gpt-4o"),
 
@@ -345,6 +350,8 @@ import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 
 export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
   // ...
   memory: new Memory({
     options: {
@@ -395,6 +402,8 @@ import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
   // ...
   memory: new Memory({
     storage: new LibSQLStore({
@@ -456,6 +465,8 @@ const standardMemory = new Memory({
 });
 
 export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
   // ...
   memory: ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
@@ -510,7 +521,8 @@ import { Agent } from "@mastra/core/agent";
 import { ModerationProcessor } from "@mastra/core/processors";
 
 export const moderatedAgent = new Agent({
-  name: "moderated-agent",
+  id: "moderated-agent",
+  name: "Moderated Agent",
   instructions: "You are a helpful assistant",
   model: openai("gpt-4o-mini"),
   inputProcessors: [
@@ -537,6 +549,8 @@ The `UnicodeNormalizer` is an input processor that cleans and normalizes user in
 import { UnicodeNormalizer } from "@mastra/core/processors";
 
 export const normalizedAgent = new Agent({
+  id: "normalized-agent",
+  name: "Normalized Agent",
   // ...
   inputProcessors: [
     new UnicodeNormalizer({
@@ -557,6 +571,8 @@ The `PromptInjectionDetector` is an input processor that scans user messages for
 import { PromptInjectionDetector } from "@mastra/core/processors";
 
 export const secureAgent = new Agent({
+  id: "secure-agent",
+  name: "Secure Agent",
   // ...
   inputProcessors: [
     new PromptInjectionDetector({
@@ -579,6 +595,8 @@ The `LanguageDetector` is an input processor that detects and translates user me
 import { LanguageDetector } from "@mastra/core/processors";
 
 export const multilingualAgent = new Agent({
+  id: "multilingual-agent",
+  name: "Multilingual Agent",
   // ...
   inputProcessors: [
     new LanguageDetector({
@@ -605,6 +623,8 @@ The `BatchPartsProcessor` is an output processor that combines multiple stream p
 import { BatchPartsProcessor } from "@mastra/core/processors";
 
 export const batchedAgent = new Agent({
+  id: "batched-agent",
+  name: "Batched Agent",
   // ...
   outputProcessors: [
     new BatchPartsProcessor({
@@ -626,6 +646,8 @@ The `TokenLimiterProcessor` is an output processor that limits the number of tok
 import { TokenLimiterProcessor } from "@mastra/core/processors";
 
 export const limitedAgent = new Agent({
+  id: "limited-agent",
+  name: "Limited Agent",
   // ...
   outputProcessors: [
     new TokenLimiterProcessor({
@@ -647,6 +669,8 @@ The `SystemPromptScrubber` is an output processor that detects and redacts syste
 import { SystemPromptScrubber } from "@mastra/core/processors";
 
 const scrubbedAgent = new Agent({
+  id: "scrubbed-agent",
+  name: "Scrubbed Agent",
   outputProcessors: [
     new SystemPromptScrubber({
       model: openai("gpt-4.1-nano"),
@@ -676,6 +700,8 @@ The `ModerationProcessor` is a hybrid processor that detects inappropriate or ha
 import { ModerationProcessor } from "@mastra/core/processors";
 
 export const moderatedAgent = new Agent({
+  id: "moderated-agent",
+  name: "Moderated Agent",
   // ...
   inputProcessors: [
     new ModerationProcessor({
@@ -703,6 +729,8 @@ The `PIIDetector` is a hybrid processor that detects and removes personally iden
 import { PIIDetector } from "@mastra/core/processors";
 
 export const privateAgent = new Agent({
+  id: "private-agent",
+  name: "Private Agent",
   // ...
   inputProcessors: [
     new PIIDetector({
@@ -745,6 +773,8 @@ import {
 } from "@mastra/core/processors";
 
 export const testAgent = new Agent({
+  id: "test-agent",
+  name: "Test Agent",
   // ...
   inputProcessors: [
     new UnicodeNormalizer({
@@ -773,6 +803,8 @@ Most strategies allow the request to continue without interruption. When `block`
 import { PIIDetector } from "@mastra/core/processors";
 
 export const privateAgent = new Agent({
+  id: "private-agent",
+  name: "Private Agent",
   // ...
   inputProcessors: [
     new PIIDetector({
@@ -870,7 +902,8 @@ import { cityWorkflow } from "../workflows/city-workflow";
 import { weatherTool } from "../tools/weather-tool";
 
 export const routingAgent = new Agent({
-  name: "routing-agent",
+  id: "routing-agent",
+  name: "Routing Agent",
   instructions: `
       You are a network of writers and researchers.
       The user will ask you to research a topic.
@@ -906,7 +939,8 @@ Each agent in a network should include a clear `description` that explains what 
 
 ```typescript title="src/mastra/agents/research-agent.ts" showLineNumbers
 export const researchAgent = new Agent({
-  name: "research-agent",
+  id: "research-agent",
+  name: "Research Agent",
   description: `This agent gathers concise research insights in bullet-point form.
     It's designed to extract key facts without generating full
     responses or narrative content.`,
@@ -916,7 +950,8 @@ export const researchAgent = new Agent({
 
 ```typescript title="src/mastra/agents/writing-agent.ts" showLineNumbers
 export const writingAgent = new Agent({
-  name: "writing-agent",
+  id: "writing-agent",
+  name: "Writing Agent",
   description: `This agent turns researched material into well-structured
     written content. It produces full-paragraph reports with no bullet points,
     suitable for use in articles, summaries, or blog posts.`,
@@ -1136,7 +1171,8 @@ Create an agent by instantiating the `Agent` class with system `instructions` an
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
-  name: "test-agent",
+  id: "test-agent",
+  name: "Test Agent",
   instructions: "You are a helpful assistant.",
   model: "openai/gpt-4o-mini",
 });
@@ -1184,7 +1220,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
-  name: "test-agent",
+  id: "test-agent",
+  name: "Test Agent",
   instructions: "You are a helpful assistant.",
   model: openai("gpt-4o-mini"),
 });
@@ -1496,6 +1533,8 @@ Agents can use tools to go beyond language generation, enabling structured inter
 
 ```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
 export const testAgent = new Agent({
+  id: "test-agent",
+  name: "Test Agent",
   // ...
   tools: { testTool },
 });
@@ -1513,6 +1552,8 @@ export type UserTier = {
 };
 
 export const testAgent = new Agent({
+  id: "test-agent",
+  name: "Test Agent",
   // ...
   model: ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
@@ -1590,7 +1631,8 @@ import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
 
 export const weatherAgent = new Agent({
-  name: "weather-agent",
+  id: "weather-agent",
+  name: "Weather Agent",
   instructions: `
       You are a helpful weather assistant.
       Use the weatherTool to fetch current weather data.`,
@@ -1622,6 +1664,8 @@ import { weatherTool } from "../tools/weather-tool";
 import { activitiesTool } from "../tools/activities-tool";
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
+  name: "Weather Agent",
   // ..
   tools: { weatherTool, activitiesTool },
 });
@@ -3951,6 +3995,7 @@ export const mastra = new Mastra({
 
 ```typescript title="src/mastra/agents/weather-agent.ts" showLineNumbers
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   // ..
   memory: new Memory({
     // [!code --]
@@ -4367,6 +4412,7 @@ export const mastra = new Mastra({
 
 ```typescript title="src/mastra/agents/weather-agent.ts" showLineNumbers
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   // ..
   memory: new Memory({
     // [!code --]
@@ -4659,6 +4705,7 @@ When creating agents in Mastra, you can specify any AI SDK-supported model.
 import { Agent } from "@mastra/core/agent";
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   name: "Weather Agent",
   instructions: "Instructions for the agent...",
   model: "openai/gpt-4-turbo",
@@ -6046,6 +6093,7 @@ const openrouter = createOpenRouter({
 });
 
 export const assistant = new Agent({
+  id: "assistant",
   name: "assistant",
   instructions: "You are a helpful assistant.",
   model: openrouter("anthropic/claude-sonnet-4"),
@@ -6100,6 +6148,7 @@ const openrouter = createOpenRouter({
 });
 
 export const assistant = new Agent({
+  id: "assistant",
   name: "assistant",
   instructions: "You are a helpful assistant.",
   model: openrouter("anthropic/claude-sonnet-4"),
@@ -6119,6 +6168,7 @@ const openrouter = createOpenRouter({
 });
 
 export const assistant = new Agent({
+  id: "assistant",
   name: "assistant",
   instructions: "You are a helpful assistant.",
   model: openrouter("anthropic/claude-sonnet-4", {
@@ -6240,6 +6290,7 @@ import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   name: "Weather Agent",
   instructions: `
       You are a helpful weather assistant that provides accurate weather information.
@@ -8388,6 +8439,7 @@ import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   name: "Weather Agent",
   instructions: `
       You are a helpful weather assistant that provides accurate weather information.
@@ -9361,6 +9413,7 @@ You can increase this limit by passing the `lastMessages` parameter to the `Memo
 
 ```typescript {3-7} showLineNumbers
 export const testAgent = new Agent({
+  id: "test-agent",
   // ...
   memory: new Memory({
     options: {
@@ -9398,6 +9451,8 @@ import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
+  id: "test-agent",
+  name: "Test Agent",
   model: openai("gpt-4o"),
   memory: new Memory({
     processors: [
@@ -9552,6 +9607,7 @@ import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
+  id: "test-agent",
   // ...
   memory: new Memory(),
 });
@@ -9597,6 +9653,7 @@ import { Agent } from "@mastra/core/agent";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const testAgent = new Agent({
+  id: "test-agent",
   // ...
   memory: new Memory({
     // ...
@@ -9668,6 +9725,7 @@ import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
+  id: "support-agent",
   name: "SupportAgent",
   instructions: "You are a helpful support agent.",
   model: openai("gpt-4o"),
@@ -9893,7 +9951,8 @@ import { openai } from "@ai-sdk/openai";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const libsqlAgent = new Agent({
-  name: "libsql-agent",
+  id: "libsql-agent", 
+  name: "LibSQL Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
@@ -9928,7 +9987,8 @@ import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 import { fastembed } from "@mastra/fastembed";
 
 export const libsqlAgent = new Agent({
-  name: "libsql-agent",
+  id: "libsql-agent",
+  name: "LibSQL Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
@@ -10037,7 +10097,8 @@ import { openai } from "@ai-sdk/openai";
 import { PostgresStore } from "@mastra/pg";
 
 export const pgAgent = new Agent({
-  name: "pg-agent",
+  id: "pg-agent",
+  name: "PG Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
@@ -10072,7 +10133,8 @@ import { PostgresStore, PgVector } from "@mastra/pg";
 import { fastembed } from "@mastra/fastembed";
 
 export const pgAgent = new Agent({
-  name: "pg-agent",
+  id: "pg-agent",
+  name: "PG Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
@@ -10183,7 +10245,8 @@ import { openai } from "@ai-sdk/openai";
 import { UpstashStore } from "@mastra/upstash";
 
 export const upstashAgent = new Agent({
-  name: "upstash-agent",
+  id: "upstash-agent",
+  name: "Upstash Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
@@ -10219,7 +10282,8 @@ import { UpstashStore, UpstashVector } from "@mastra/upstash";
 import { fastembed } from "@mastra/fastembed";
 
 export const upstashAgent = new Agent({
-  name: "upstash-agent",
+  id: "upstash-agent",
+  name: "Upstash Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
@@ -10423,6 +10487,7 @@ import { openai } from "@ai-sdk/openai";
 
 // Create agent with working memory enabled
 const agent = new Agent({
+  id: "personal-assistant",
   name: "PersonalAssistant",
   instructions: "You are a helpful personal assistant.",
   model: openai("gpt-4o"),
@@ -14022,6 +14087,7 @@ import { openai } from "@ai-sdk/openai";
 import { PGVECTOR_PROMPT } from "@mastra/pg";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14041,6 +14107,7 @@ import { openai } from "@ai-sdk/openai";
 import { PINECONE_PROMPT } from "@mastra/pinecone";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14060,6 +14127,7 @@ import { openai } from "@ai-sdk/openai";
 import { QDRANT_PROMPT } from "@mastra/qdrant";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14079,6 +14147,7 @@ import { openai } from "@ai-sdk/openai";
 import { CHROMA_PROMPT } from "@mastra/chroma";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14098,6 +14167,7 @@ import { openai } from "@ai-sdk/openai";
 import { ASTRA_PROMPT } from "@mastra/astra";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14117,6 +14187,7 @@ import { openai } from "@ai-sdk/openai";
 import { LIBSQL_PROMPT } from "@mastra/libsql";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14136,6 +14207,7 @@ import { openai } from "@ai-sdk/openai";
 import { UPSTASH_PROMPT } from "@mastra/upstash";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14155,6 +14227,7 @@ import { openai } from "@ai-sdk/openai";
 import { VECTORIZE_PROMPT } from "@mastra/vectorize";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14174,6 +14247,7 @@ import { openai } from "@ai-sdk/openai";
 import { MONGODB_PROMPT } from "@mastra/mongodb";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14193,6 +14267,7 @@ import { openai } from "@ai-sdk/openai";
 import { OPENSEARCH_PROMPT } from "@mastra/opensearch";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14212,6 +14287,7 @@ import { openai } from "@ai-sdk/openai";
 import { S3VECTORS_PROMPT } from "@mastra/s3vectors";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -15963,7 +16039,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const colorAgent = new Agent({
-  name: "test-agent",
+  id: "color-agent",
+  name: "Color Agent",
   instructions: `You are a helpful CSS assistant.
   You can change the background color of web pages.
   Respond with a hex reference for the color requested by the user`,
@@ -16381,7 +16458,8 @@ export type UserTier = {
 };
 
 export const weatherAgent = new Agent({
-  name: "weather-agent",
+  id: "weather-agent",
+  name: "Weather Agent",
   instructions: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
@@ -16938,26 +17016,31 @@ Captures OpenTelemetry traces for monitoring and debugging.
 
 ### Querying Messages
 
-Messages are stored in a V2 format internally, which is roughly equivalent to the AI SDK's `UIMessage` format. When querying messages using `getMessages`, you can specify the desired output format, defaulting to `v1` for backwards compatibility:
+Messages are stored in the `MastraDBMessage` format, which provides a consistent structure across the entire Mastra system:
 
 ```typescript copy
-// Get messages in the default V1 format (roughly equivalent to AI SDK's CoreMessage format)
-const messagesV1 = await mastra
+// Get messages for a thread
+const messages = await mastra
   .getStorage()
   .getMessages({ threadId: "your-thread-id" });
 
-// Get messages in the V2 format (roughly equivalent to AI SDK's UIMessage format)
-const messagesV2 = await mastra
-  .getStorage()
-  .getMessages({ threadId: "your-thread-id", format: "v2" });
-```
-
-You can also retrieve messages using an array of message IDs:
-
-```typescript copy
+// Get messages by their IDs
 const messages = await mastra
   .getStorage()
   .listMessagesById({ messageIds: messageIdArr });
+```
+
+All message queries return `MastraDBMessage[]` format. If you need to convert messages to AI SDK formats for UI rendering, use the conversion utilities from `@mastra/ai-sdk/ui`:
+
+```typescript copy
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+
+const messages = await mastra
+  .getStorage()
+  .getMessages({ threadId: "your-thread-id" });
+
+// Convert to AI SDK v5 UIMessage format for UI rendering
+const uiMessages = toAISdkV5Messages(messages);
 ```
 
 ## Storage Providers
@@ -17411,7 +17494,8 @@ import { Agent } from "@mastra/core/agent";
 import { testTool } from "../tools/test-tool";
 
 export const testAgent = new Agent({
-  name: "test-agent",
+  id: "test-agent",
+  name: "Test Agent",
   instructions: "You are a weather agent.",
   model: openai("gpt-4o-mini"),
   tools: { testTool },
@@ -17775,6 +17859,7 @@ import { vercelWeatherTool } from "../tools/vercelWeatherTool"; // Vercel AI SDK
 import { mastraTool } from "../tools/mastraTool"; // Mastra createTool tool
 
 export const mixedToolsAgent = new Agent({
+  id: "mixed-tools-agent",
   name: "Mixed Tools Agent",
   instructions: "You can use tools defined in different formats.",
   model: openai("gpt-4o-mini"),
@@ -17852,6 +17937,7 @@ import { Agent } from "@mastra/core/agent";
 import { testMcpClient } from "../mcp/test-mcp-client";
 
 export const testAgent = new Agent({
+  id: "test-agent",
   name: "Test Agent",
   description: "You are a helpful AI assistant",
   instructions: `
@@ -17880,7 +17966,7 @@ import { testTool } from "../tools/test-tool";
 
 export const testMcpServer = new MCPServer({
   id: "test-mcp-server",
-  name: "Test Server",
+  name: "Test MCP Server",
   version: "1.0.0",
   agents: { testAgent },
   tools: { testTool },
@@ -18268,6 +18354,7 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 // Initialize OpenAI voice for TTS
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18295,6 +18382,7 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18325,6 +18413,7 @@ import { AzureVoice } from "@mastra/voice-azure";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18354,6 +18443,7 @@ import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18383,6 +18473,7 @@ import { PlayAIVoice } from "@mastra/voice-playai";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18412,6 +18503,7 @@ import { GoogleVoice } from "@mastra/voice-google";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18441,6 +18533,7 @@ import { CloudflareVoice } from "@mastra/voice-cloudflare";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18470,6 +18563,7 @@ import { DeepgramVoice } from "@mastra/voice-deepgram";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18499,6 +18593,7 @@ import { SpeechifyVoice } from "@mastra/voice-speechify";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18528,6 +18623,7 @@ import { SarvamVoice } from "@mastra/voice-sarvam";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18557,6 +18653,7 @@ import { MurfVoice } from "@mastra/voice-murf";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18598,6 +18695,7 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18629,6 +18727,7 @@ import { AzureVoice } from "@mastra/voice-azure";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18659,6 +18758,7 @@ import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18689,6 +18789,7 @@ import { GoogleVoice } from "@mastra/voice-google";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18719,6 +18820,7 @@ import { CloudflareVoice } from "@mastra/voice-cloudflare";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18749,6 +18851,7 @@ import { DeepgramVoice } from "@mastra/voice-deepgram";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18779,6 +18882,7 @@ import { SarvamVoice } from "@mastra/voice-sarvam";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18817,6 +18921,7 @@ import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18849,6 +18954,7 @@ import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -19250,7 +19356,8 @@ import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 
 const agent = new Agent({
-  name: "Agent",
+  id: "agent",
+  name: "OpenAI Realtime Agent",
   instructions: `You are a helpful assistant with real-time voice capabilities.`,
   model: openai("gpt-4o"),
   voice: new OpenAIRealtimeVoice(),
@@ -19282,7 +19389,8 @@ import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
 import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 
 const agent = new Agent({
-  name: "Agent",
+  id: "agent",
+  name: "Gemini Live Agent",
   instructions:
     "You are a helpful assistant with real-time voice capabilities.",
   // Model used for text generation; voice provider handles realtime audio
@@ -19386,6 +19494,7 @@ import { getMicrophoneStream } from "@mastra/node-audio";
 const voice = new OpenAIVoice();
 
 const agent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that provides recommendations based on user input.",
@@ -19482,6 +19591,7 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 const voice = new OpenAIVoice();
 
 const agent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -20155,6 +20265,7 @@ import { Memory } from "@mastra/memory";
 import { LibSQLVector } from "@mastra/libsql";
 
 export const famousPersonAgent = new Agent({
+  id: "famous-person-generator",
   name: "Famous Person Generator",
   instructions: `You are a famous person generator for a "Heads Up" guessing game.
 
@@ -20197,6 +20308,7 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const gameAgent = new Agent({
+  id: "game-agent",
   name: "Game Agent",
   instructions: `You are a helpful game assistant for a "Heads Up" guessing game.
 
@@ -21763,6 +21875,7 @@ export const memory = new Memory({
 });
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   name: "Weather Agent",
   instructions: `
     You are a helpful weather assistant that provides accurate weather information.
@@ -22284,7 +22397,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const imageAnalysisAgent = new Agent({
-  name: "image-analysis",
+  id: "image-analysis-agent",
+  name: "Image Analysis Agent",
   description: "Analyzes images to identify objects and describe scenes",
   instructions: `
     You can view an image and identify objects, describe scenes, and answer questions about the content.
@@ -22426,7 +22540,8 @@ export type SupportRequestContext = {
 };
 
 export const supportAgent = new Agent({
-  name: "dynamic-support-agent",
+  id: "support-agent",
+  name: "Support Agent",
   description: "AI support agent that adapts to user subscription tiers",
 
   instructions: async ({
@@ -22711,7 +22826,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const copywriterAgent = new Agent({
-  name: "copywriter-agent",
+  id: "copywriter-agent",
+  name: "Copywriter Agent",
   instructions: "You are a copywriter agent that writes blog post copy.",
   model: openai("gpt-4o"),
 });
@@ -22756,7 +22872,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const editorAgent = new Agent({
-  name: "Editor",
+  id: "editor-agent",
+  name: "Editor Agent",
   instructions: "You are an editor agent that edits blog post copy.",
   model: openai("gpt-4o-mini"),
 });
@@ -22806,7 +22923,8 @@ import { copywriterTool } from "../tools/example-copywriter-tool";
 import { editorTool } from "../tools/example-editor-tool";
 
 export const publisherAgent = new Agent({
-  name: "publisherAgent",
+  id: "publisher-agent",
+  name: "Publisher Agent",
   instructions:
     "You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.",
   model: openai("gpt-4o-mini"),
@@ -22890,7 +23008,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const harryPotterAgent = new Agent({
-  name: "harry-potter-agent",
+  id: "harry-potter-agent",
+  name: "Harry Potter Agent",
   description:
     "Provides character-style responses from the Harry Potter universe.",
   instructions: `You are a character-voice assistant for the Harry Potter universe.
@@ -23068,6 +23187,7 @@ import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const chatAgent = new Agent({
+  id: "chat-agent",
   name: "Chat Agent",
   instructions: `
     You are a helpful, friendly, and knowledgeable AI assistant that loves to chat with users via WhatsApp.
@@ -23116,6 +23236,7 @@ import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const textMessageAgent = new Agent({
+  id: "text-message-agent",
   name: "Text Message Agent",
   instructions: `
     You are a text message converter that takes formal or lengthy text and breaks it down into natural, casual text messages.
@@ -23621,6 +23742,7 @@ import { openai } from "@ai-sdk/openai";
 import { MongoDBStore } from "@mastra/mongodb";
 
 export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
   name: "mongodb-agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
@@ -23662,6 +23784,7 @@ import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
 import { fastembed } from "@mastra/fastembed";
 
 export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
   name: "mongodb-agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
@@ -23785,6 +23908,7 @@ import { LibSQLStore } from "@mastra/libsql";
 import { z } from "zod";
 
 export const workingMemorySchemaAgent = new Agent({
+  id: "working-memory-schema-agent",
   name: "working-memory-schema-agent",
   instructions: `
     You are a todo list AI agent.
@@ -23981,7 +24105,8 @@ import { openai } from "@ai-sdk/openai";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const workingMemoryTemplateAgent = new Agent({
-  name: "working-memory-template-agent",
+  id: "working-memory-template-agent",
+  name: "Working Memory Template Agent",
   instructions: `
     You are a todo list AI agent.
     Always show the current list when starting a conversation.
@@ -24197,7 +24322,8 @@ const getCurrentTime = createTool({
 });
 
 export const exampleAgent = new Agent({
-  name: "example-agent",
+  id: "example-agent",
+  name: "Example Agent",
   instructions: "You are a helpful AI assistant.",
   model: openai("gpt-4"),
   tools: {
@@ -24429,7 +24555,8 @@ import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "../processors/message-length-limiter";
 
 export const blockingAgent = new Agent({
-  name: "blocking-agent",
+  id: "blocking-agent",
+  name: "Blocking Agent",
   instructions: "You are a helpful assistant with input length limits",
   model: "openai/gpt-4o",
   inputProcessors: [
@@ -24445,7 +24572,8 @@ import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "../processors/message-length-limiter";
 
 export const simpleAgent = new Agent({
-  name: "simple-agent",
+  id: "simple-agent",
+  name: "Simple Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   inputProcessors: [new MessageLengthLimiter(500)],
@@ -24462,7 +24590,8 @@ import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter
 
 // Create agent with generous character limit
 export const agent = new Agent({
-  name: "length-limited-agent",
+  id: "length-limited-agent",
+  name: "Length Limited Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   inputProcessors: [
@@ -24494,7 +24623,8 @@ import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter
 
 // Reuse same agent but with tighter character limit
 export const agent = new Agent({
-  name: "length-limited-agent",
+  id: "length-limited-agent",
+  name: "Length Limited Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   inputProcessors: [
@@ -24527,7 +24657,8 @@ import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter
 
 // Reuse same agent but with very strict character limit
 export const agent = new Agent({
-  name: "length-limited-agent",
+  id: "length-limited-agent",
+  name: "Length Limited Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   inputProcessors: [
@@ -24708,7 +24839,8 @@ import { Agent } from "@mastra/core/agent";
 import { ResponseLengthLimiter } from "../processors/response-length-limiter";
 
 export const blockingAgent = new Agent({
-  name: "blocking-agent",
+  id: "blocking-agent",
+  name: "Blocking Agent",
   instructions: "You are a helpful assistant with response length limits",
   model: "openai/gpt-4o",
   outputProcessors: [
@@ -24724,7 +24856,8 @@ import { Agent } from "@mastra/core/agent";
 import { ResponseLengthLimiter } from "../processors/response-length-limiter";
 
 export const simpleAgent = new Agent({
-  name: "simple-agent",
+  id: "simple-agent",
+  name: "Simple Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   outputProcessors: [new ResponseLengthLimiter(300)],
@@ -24741,7 +24874,8 @@ import { ResponseLengthLimiter } from "./mastra/processors/response-length-limit
 
 // Create agent with generous response limit
 export const agent = new Agent({
-  name: "response-limited-agent",
+  id: "response-limited-agent",
+  name: "Response Limited Agent",
   instructions: "You are a helpful assistant. Keep responses concise.",
   model: "openai/gpt-4o",
   outputProcessors: [
@@ -24774,7 +24908,8 @@ import { ResponseLengthLimiter } from "./mastra/processors/response-length-limit
 
 // Reuse same agent but with stricter response limit
 export const agent = new Agent({
-  name: "response-limited-agent",
+  id: "response-limited-agent",
+  name: "Response Limited Agent",
   instructions: "You are a helpful assistant.",
   model: "openai/gpt-4o",
   outputProcessors: [
@@ -24813,7 +24948,8 @@ import { ResponseLengthLimiter } from "./mastra/processors/response-length-limit
 
 // Reuse same agent but with very strict response limit
 export const agent = new Agent({
-  name: "response-limited-agent",
+  id: "response-limited-agent",
+  name: "Response Limited Agent",
   instructions:
     "You are a verbose assistant who provides detailed explanations.",
   model: "openai/gpt-4o",
@@ -24974,7 +25110,8 @@ import { openai } from "@ai-sdk/openai";
 import { ResponseValidator } from "../processors/response-validator";
 
 export const validatedAgent = new Agent({
-  name: "validated-agent",
+  id: "validated-agent",
+  name: "Validated Agent",
   instructions:
     "You are a helpful assistant. Always mention the key concepts in your responses.",
   model: openai("gpt-4o"),
@@ -24995,7 +25132,8 @@ import { ResponseValidator } from "./mastra/processors/response-validator";
 
 // Create agent that requires AI-related keywords
 export const agent = new Agent({
-  name: "validated-agent",
+  id: "validated-agent",
+  name: "Validated Agent",
   instructions:
     "You are an AI expert. Always mention artificial intelligence and machine learning when discussing AI topics.",
   model: openai("gpt-4o"),
@@ -25029,7 +25167,8 @@ import { ResponseValidator } from "./mastra/processors/response-validator";
 
 // Reuse same agent but require security-related keywords
 export const agent = new Agent({
-  name: "validated-agent",
+  id: "validated-agent",
+  name: "Validated Agent",
   instructions: "You are a helpful assistant.",
   model: openai("gpt-4o"),
   outputProcessors: [
@@ -25070,7 +25209,8 @@ import { ResponseValidator } from "./mastra/processors/response-validator";
 
 // Reuse same agent but require financial keywords
 export const agent = new Agent({
-  name: "validated-agent",
+  id: "validated-agent",
+  name: "Validated Agent",
   instructions: "You are a general assistant.",
   model: openai("gpt-4o"),
   outputProcessors: [
@@ -25189,7 +25329,8 @@ export class AdvancedResponseValidator implements Processor {
 
 // Usage example
 export const advancedAgent = new Agent({
-  name: "advanced-validated-agent",
+  id: "advanced-validated-agent",
+  name: "Advanced Validated Agent",
   instructions: "You are a technical writer.",
   model: openai("gpt-4o"),
   outputProcessors: [
@@ -25956,6 +26097,7 @@ Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{17} title="index.ts"
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
     Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
@@ -26909,6 +27051,7 @@ Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{13} title="src/index.ts"
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   instructions:
     "You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.",
@@ -27057,6 +27200,7 @@ Set up a single Mastra agent that can handle both querying and cleaning:
 
 ```typescript copy showLineNumbers{26} title="index.ts"
 const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   instructions: `You are a helpful assistant that handles both querying and cleaning documents.
     When cleaning: Process, clean, and label data, remove irrelevant information and deduplicate content while preserving key facts.
@@ -27255,6 +27399,7 @@ Set up the Mastra agent with chain-of-thought prompting instructions:
 
 ```typescript copy showLineNumbers{14} title="index.ts"
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context.
 Follow these steps for each response:
@@ -27457,6 +27602,7 @@ Set up the Mastra agent:
 
 ```typescript copy showLineNumbers{23} title="index.ts"
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context.`,
   model: openai("gpt-4o-mini"),
@@ -28321,6 +28467,7 @@ The agent requires both the vector query tool and a system prompt containing:
 
 ```typescript copy showLineNumbers{43} title="index.ts"
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -28506,6 +28653,7 @@ Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{19} title="index.ts"
 const ragAgent = new Agent({
+  id: "rag-agent",
   name: "GraphRAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context. Format your answers as follows:
 
@@ -28804,6 +28952,7 @@ import { openai } from '@ai-sdk/openai';
 import { weatherTool } from '../tools/weather-tool';
 
 export const weatherAgent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   instructions: 'You are a helpful weather assistant that provides accurate weather information.',
   model: openai('gpt-4o-mini'),
@@ -29045,6 +29194,7 @@ import { z } from "zod";
 
 // Have the agent do something
 export const speechToSpeechServer = new Agent({
+  id: "speech-to-speech-agent",
   name: "mastra",
   instructions: "You are a helpful assistant.",
   voice: new OpenAIRealtimeVoice(),
@@ -29247,6 +29397,7 @@ You are an AI note assistant tasked with providing concise, structured summaries
 `;
 
 export const noteTakerAgent = new Agent({
+  id: "note-taker-agent",
   name: "Note Taker Agent",
   instructions: instructions,
   model: openai("gpt-4o"),
@@ -29343,6 +29494,7 @@ const instructions = `
 `;
 
 export const storyTellerAgent = new Agent({
+  id: "story-teller-agent",
   name: "Story Teller Agent",
   instructions: instructions,
   model: openai("gpt-4o"),
@@ -29499,6 +29651,7 @@ import { Agent } from "@mastra/core/agent";
 import { OpenAIVoice } from "@mastra/voice-openai";
 
 export const optimistAgent = new Agent({
+  id: "optimist-agent",
   name: "Optimist",
   instructions:
     "You are an optimistic debater who sees the positive side of every topic. Keep your responses concise and engaging, about 2-3 sentences.",
@@ -29509,6 +29662,7 @@ export const optimistAgent = new Agent({
 });
 
 export const skepticAgent = new Agent({
+  id: "skeptic-agent",
   name: "Skeptic",
   instructions:
     "You are a RUDE skeptical debater who questions assumptions and points out potential issues. Keep your responses concise and engaging, about 2-3 sentences.",
@@ -29984,6 +30138,7 @@ import { openai } from "@ai-sdk/openai";
 
 // Create a new planning agent that uses the OpenAI model
 const planningAgent = new Agent({
+  id: "planning-agent",
   name: "planningAgent",
   model: openai("gpt-4o"),
   instructions: `
@@ -30548,6 +30703,7 @@ import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
 const recruiter = new Agent({
+  id: "recruiter-agent",
   name: "Recruiter Agent",
   instructions: `You are a recruiter.`,
   model: openai("gpt-4o-mini"),
@@ -30789,6 +30945,7 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const chefAgent = new Agent({
+  id: "chef-agent",
   name: "chef-agent",
   instructions:
     "You are Michel, a practical and experienced home chef" +
@@ -31569,6 +31726,7 @@ const vectorQueryTool = createVectorQueryTool({
 });
 
 export const researchAgent = new Agent({
+  id: "research-agent",
   name: "Research Assistant",
   instructions: `You are a helpful research assistant that analyzes academic papers and technical documents.
     Use the provided vector query tool to find relevant information from your knowledge base,
@@ -31896,6 +32054,7 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const stockAgent = new Agent({
+  id: "stock-agent",
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
@@ -31971,6 +32130,7 @@ import { Agent } from "@mastra/core/agent";
 import { stockPrices } from "../tools/stockPrices";
 
 export const stockAgent = new Agent({
+  id: "stock-agent",
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
@@ -32105,6 +32265,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
+        id: "search-agent",
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
@@ -32119,6 +32280,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
+        id: "search-agent",
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
@@ -32144,6 +32306,7 @@ Setup the tool:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
+        id: "search-agent",
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
@@ -32162,6 +32325,7 @@ Setup the tool:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
+        id: "search-agent",
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
@@ -32231,6 +32395,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
 import { Agent } from "@mastra/core/agent";
 
 export const searchAgent = new Agent({
+  id: "search-agent",
   name: "Search Agent",
   instructions:
     "You are a search agent that can search the web for information.",
@@ -32291,6 +32456,7 @@ Add to your Agent
 import { webSearch } from "./tools/searchTool";
 
 export const searchAgent = new Agent({
+  id: "search-agent",
   name: "Search Agent",
   instructions:
     "You are a search agent that can search the web for information.",
@@ -32439,6 +32605,7 @@ import { Memory } from "@mastra/memory";
 const memory = new Memory();
 
 const agent = new Agent({
+  id: "agent-network",
   name: "agent-network",
   agents: { agent1, agent2 },
   tools: { tool1, tool2 },
@@ -32459,6 +32626,7 @@ Before:
 import { NewAgentNetwork } from "@mastra/core/network/vnext";
 
 const agent = new NewAgentNetwork({
+  id: "agent-network",
   name: "agent-network",
   agents: { agent1, agent2 },
   workflows: { workflow1 },
@@ -32919,6 +33087,86 @@ const memory = new Memory({
 ```
 
 If you want to adopt the new default behavior, you can optionally remove explicit `scope: 'resource'` declarations as they're now redundant.
+
+### Changed: Message Format Unification
+
+**Breaking Changes:**
+
+1. `MastraMessageV2` type renamed to `MastraDBMessage`
+2. `format` parameter removed from all get methods, `MastraDBMessage` is always the returned format, which can then be converted as needed via helper utils in `@mastra/ai-sdk`
+3. MessageList `.v2()` methods renamed to `.db()`
+4. AI SDK format conversion moved to `@mastra/ai-sdk/ui`
+
+**Why these changes?**
+
+- Provide a consistent and predictable API across all memory methods
+- Clarify the purpose of message types with better naming
+- Simplify the API by removing unnecessary format parameters
+- Enable better tree-shaking by separating UI conversion utilities
+
+**Migration:**
+
+#### 1. Update Type Imports
+
+Replace all instances of `MastraMessageV2` with `MastraDBMessage`:
+
+```typescript
+// Before
+import { MastraMessageV2 } from "@mastra/core";
+function yourCustomFunction(input: MastraMessageV2) {}
+// After
+import { MastraDBMessage } from "@mastra/core";
+function yourCustomFunction(input: MastraDBMessage) {}
+```
+
+#### 2. Update Memory Method Return Types
+
+The `rememberMessages` method now returns an object wrapper for consistency between all methods:
+
+```typescript
+// Before
+const messages = await memory.rememberMessages({ threadId, resourceId });
+
+// After
+const { messages } = await memory.rememberMessages({ threadId, resourceId });
+```
+
+#### 4. Update AI SDK Format Conversion
+
+Message format conversion for AI SDK compatibility has moved to dedicated utility functions:
+
+```typescript
+// Before
+import { convertMessages } from '@mastra/core';
+const uiMessages = convertMessages(messages).to('AI.V5');
+
+// After
+import { toAISdkV5Messages, toAISdkV4Messages } from '@mastra/ai-sdk/ui';
+
+// For AI SDK v5
+const v5Messages = toAISdkV5Messages(messages);
+
+// For AI SDK v4
+const v4Messages = toAISdkV4Messages(messages);
+```
+
+#### 5. Remove Format Parameters
+
+The `format` parameter has been removed from all get methods. `MastraDBMessage` is now the default return format everywhere:
+
+```typescript
+// Before
+const messages = await memory.getMessages({ threadId, format: "v2" });
+const uiMessages = await memory.getMessages({ threadId, format: "ui" });
+
+// After
+const result = await memory.query({ threadId });
+const messages = result.messages; // Always MastraDBMessage[]
+
+// Use conversion functions for AI SDK formats
+import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
+const uiMessages = toAISdkV5Messages(messages);
+```
 
 ### Deprecated: `format: "aisdk"`
 
@@ -33406,6 +33654,7 @@ import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
+  id: "my-agent",
   name: "my-agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
@@ -33557,7 +33806,8 @@ Learn more in the [Netlify documentation](https://docs.netlify.com/build/ai-gate
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "netlify/anthropic/claude-3-5-haiku-20241022"
 });
@@ -33644,7 +33894,8 @@ Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "openrouter/anthropic/claude-3.5-haiku"
 });
@@ -33815,7 +34066,8 @@ Learn more in the [Vercel documentation](https://ai-sdk.dev/providers/ai-sdk-pro
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "vercel/alibaba/qwen3-coder-plus"
 });
@@ -33969,7 +34221,8 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "openai/gpt-5"
     })
@@ -33980,7 +34233,8 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "anthropic/claude-4-5-sonnet"
     })
@@ -33991,7 +34245,8 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "google/gemini-2.5-flash"
     })
@@ -34002,7 +34257,8 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "xai/grok-4"
     })
@@ -34013,7 +34269,8 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "openrouter/anthropic/claude-haiku-4-5"
     })
@@ -34093,14 +34350,16 @@ import { Agent } from "@mastra/core/agent";
 
 // Use a cost-effective model for document processing
 const documentProcessor = new Agent({
-  name: "document-processor",
+  id: "document-processor",
+  name: "Document Processor",
   instructions: "Extract and summarize key information from documents",
   model: "openai/gpt-4o-mini"
 })
 
 // Use a powerful reasoning model for complex analysis
 const reasoningAgent = new Agent({
-  name: "reasoning-agent",
+  id: "reasoning-agent",
+  name: "Reasoning Agent",
   instructions: "Analyze data and provide strategic recommendations",
   model: "anthropic/claude-opus-4-1"
 })
@@ -34111,7 +34370,8 @@ Since models are just strings, you can select them dynamically based on [request
 
 ```typescript showLineNumbers
 const agent = new Agent({
-  name: "dynamic-assistant",
+  id: "dynamic-assistant",
+  name: "Dynamic Assistant",
   model: ({ requestContext }) => {
     const provider = requestContext.get("provider-id");
     const model = requestContext.get("model-id");
@@ -34133,6 +34393,8 @@ Different model providers expose their own configuration options. With OpenAI, y
 ```typescript showLineNumbers
 // Agent level (apply to all future messages)
 const planner = new Agent({
+  id: "planner",
+  name: "Planner",
   instructions: {
     role: "system",
     content: "You are a helpful assistant.",
@@ -34165,7 +34427,8 @@ If you need to specify custom headers, such as an organization ID or other provi
 
 ```typescript showLineNumbers
 const agent = new Agent({
-  name: "custom-agent",
+  id: "custom-agent",
+  name: "Custom Agent",
   model: {
     id: "openai/gpt-4-turbo",
     apiKey: process.env.OPENAI_API_KEY,
@@ -34191,7 +34454,8 @@ Relying on a single model creates a single point of failure for your application
 import { Agent } from '@mastra/core/agent';
 
 const agent = new Agent({
-  name: 'resilient-assistant',
+  id: 'resilient-assistant',
+  name: 'Resilient Assistant',
   instructions: 'You are a helpful assistant.',
   model: [
     {
@@ -34223,7 +34487,8 @@ import { groq } from '@ai-sdk/groq';
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   model: groq('gemma2-9b-it')
 })
 ```
@@ -34279,7 +34544,8 @@ DASHSCOPE_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "alibaba-cn/deepseek-r1"
 });
@@ -35045,6 +35311,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -35061,7 +35328,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -35101,7 +35369,8 @@ DASHSCOPE_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "alibaba/qvq-max"
 });
@@ -35603,6 +35872,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
@@ -35619,7 +35889,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -35683,7 +35954,8 @@ ANTHROPIC_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "anthropic/claude-3-5-haiku-20241022"
 });
@@ -35939,6 +36211,7 @@ for await (const chunk of stream) {
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     id: "anthropic/claude-3-5-haiku-20241022",
@@ -35954,7 +36227,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -36078,7 +36352,8 @@ BASETEN_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct"
 });
@@ -36148,6 +36423,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://inference.baseten.co/v1",
@@ -36164,7 +36440,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -36205,7 +36482,8 @@ CEREBRAS_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "cerebras/gpt-oss-120b"
 });
@@ -36287,6 +36565,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.cerebras.ai/v1",
@@ -36303,7 +36582,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -36353,7 +36633,8 @@ CHUTES_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "chutes/MiniMaxAI/MiniMax-M2"
 });
@@ -36759,6 +37040,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://llm.chutes.ai/v1",
@@ -36775,7 +37057,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -36838,7 +37121,8 @@ CORTECS_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "cortecs/claude-4-5-sonnet"
 });
@@ -37004,6 +37288,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.cortecs.ai/v1",
@@ -37020,7 +37305,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -37061,7 +37347,8 @@ DEEPINFRA_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct"
 });
@@ -37143,6 +37430,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.deepinfra.com/v1/openai",
@@ -37159,7 +37447,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -37209,7 +37498,8 @@ DEEPSEEK_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "deepseek/deepseek-chat"
 });
@@ -37267,6 +37557,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.deepseek.com",
@@ -37283,7 +37574,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -37323,7 +37615,8 @@ FASTROUTER_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "fastrouter/anthropic/claude-opus-4.1"
 });
@@ -37525,6 +37818,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://go.fastrouter.ai/api/v1",
@@ -37541,7 +37835,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -37581,7 +37876,8 @@ FIREWORKS_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "fireworks-ai/accounts/fireworks/models/deepseek-r1-0528"
 });
@@ -37735,6 +38031,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.fireworks.ai/inference/v1/",
@@ -37751,7 +38048,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -37791,7 +38089,8 @@ GITHUB_TOKEN=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "github-models/ai21-labs/ai21-jamba-1.5-large"
 });
@@ -38485,6 +38784,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://models.github.ai/inference",
@@ -38501,7 +38801,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -38565,7 +38866,8 @@ GOOGLE_GENERATIVE_AI_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "google/gemini-1.5-flash"
 });
@@ -38881,6 +39183,7 @@ for await (const chunk of stream) {
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     id: "google/gemini-1.5-flash",
@@ -38896,7 +39199,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -39028,7 +39332,8 @@ GROQ_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "groq/deepseek-r1-distill-llama-70b"
 });
@@ -39266,6 +39571,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.groq.com/openai/v1",
@@ -39282,7 +39588,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -39332,7 +39639,8 @@ HF_TOKEN=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "huggingface/MiniMaxAI/MiniMax-M2"
 });
@@ -39534,6 +39842,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://router.huggingface.co/v1",
@@ -39550,7 +39859,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -39590,7 +39900,8 @@ INCEPTION_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "inception/mercury"
 });
@@ -39648,6 +39959,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.inceptionlabs.ai/v1/",
@@ -39664,7 +39976,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -39947,7 +40260,8 @@ INFERENCE_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "inference/google/gemma-3"
 });
@@ -40089,6 +40403,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://inference.net/v1",
@@ -40105,7 +40420,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -40145,7 +40461,8 @@ LLAMA_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "llama/cerebras-llama-4-maverick-17b-128e-instruct"
 });
@@ -40263,6 +40580,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.llama.com/compat/v1/",
@@ -40279,7 +40597,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -40319,7 +40638,8 @@ LMSTUDIO_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "lmstudio/openai/gpt-oss-20b"
 });
@@ -40389,6 +40709,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "http://127.0.0.1:1234/v1",
@@ -40405,7 +40726,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -40445,7 +40767,8 @@ LUCIDQUERY_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "lucidquery/lucidnova-rf1-100b"
 });
@@ -40503,6 +40826,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://lucidquery.com/api/v1",
@@ -40519,7 +40843,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -40560,7 +40885,8 @@ MISTRAL_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "mistral/codestral-latest"
 });
@@ -40822,6 +41148,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.mistral.ai/v1",
@@ -40838,7 +41165,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -40888,7 +41216,8 @@ MODELSCOPE_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "modelscope/Qwen/Qwen3-235B-A22B-Instruct-2507"
 });
@@ -41006,6 +41335,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api-inference.modelscope.cn/v1",
@@ -41022,7 +41352,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -41062,7 +41393,8 @@ MOONSHOT_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "moonshotai-cn/kimi-k2-0711-preview"
 });
@@ -41132,6 +41464,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.moonshot.cn/v1",
@@ -41148,7 +41481,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -41188,7 +41522,8 @@ MOONSHOT_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "moonshotai/kimi-k2-0711-preview"
 });
@@ -41258,6 +41593,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.moonshot.ai/v1",
@@ -41274,7 +41610,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -41314,7 +41651,8 @@ MORPH_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "morph/auto"
 });
@@ -41384,6 +41722,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.morphllm.com/v1",
@@ -41400,7 +41739,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -41440,7 +41780,8 @@ NEBIUS_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "nebius/NousResearch/hermes-4-405b"
 });
@@ -41654,6 +41995,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.studio.nebius.com/v1/",
@@ -41670,7 +42012,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -41710,7 +42053,8 @@ NVIDIA_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "nvidia/black-forest-labs/flux.1-dev"
 });
@@ -41936,6 +42280,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://integrate.api.nvidia.com/v1",
@@ -41952,7 +42297,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -42016,7 +42362,8 @@ OPENAI_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "openai/codex-mini-latest"
 });
@@ -42416,6 +42763,7 @@ for await (const chunk of stream) {
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     id: "openai/codex-mini-latest",
@@ -42431,7 +42779,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -42604,7 +42953,8 @@ OPENCODE_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "opencode/an-gbt"
 });
@@ -42806,6 +43156,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://opencode.ai/zen/v1",
@@ -42822,7 +43173,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -42863,7 +43215,8 @@ PERPLEXITY_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "perplexity/sonar"
 });
@@ -42945,6 +43298,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.perplexity.ai",
@@ -42961,7 +43315,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -43011,7 +43366,8 @@ REQUESTY_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "requesty/anthropic/claude-3-7-sonnet"
 });
@@ -43201,6 +43557,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://router.requesty.ai/v1",
@@ -43217,7 +43574,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -43257,7 +43615,8 @@ SCALEWAY_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "scaleway/bge-multilingual-gemma2"
 });
@@ -43447,6 +43806,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.scaleway.ai/v1",
@@ -43463,7 +43823,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -43503,7 +43864,8 @@ SUBMODEL_INSTAGEN_ACCESS_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "submodel/Qwen/Qwen3-235B-A22B-Instruct-2507"
 });
@@ -43645,6 +44007,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://llm.submodel.ai/v1",
@@ -43661,7 +44024,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -43701,7 +44065,8 @@ SYNTHETIC_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "synthetic/hf:MiniMaxAI/MiniMax-M2"
 });
@@ -43999,6 +44364,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.synthetic.new/v1",
@@ -44015,7 +44381,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -44056,7 +44423,8 @@ TOGETHER_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "togetherai/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8"
 });
@@ -44162,6 +44530,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.together.xyz/v1",
@@ -44178,7 +44547,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -44228,7 +44598,8 @@ UPSTAGE_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "upstage/solar-mini"
 });
@@ -44286,6 +44657,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.upstage.ai",
@@ -44302,7 +44674,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -44342,7 +44715,8 @@ VENICE_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "venice/deepseek-coder-v2-lite"
 });
@@ -44532,6 +44906,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.venice.ai/api/v1",
@@ -44548,7 +44923,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -44588,7 +44964,8 @@ VULTR_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "vultr/deepseek-r1-distill-llama-70b"
 });
@@ -44682,6 +45059,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.vultrinference.com/v1",
@@ -44698,7 +45076,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -44738,7 +45117,8 @@ WANDB_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "wandb/Qwen/Qwen3-235B-A22B-Instruct-2507"
 });
@@ -44892,6 +45272,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.inference.wandb.ai/v1",
@@ -44908,7 +45289,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -44949,7 +45331,8 @@ XAI_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "xai/grok-2"
 });
@@ -45217,6 +45600,7 @@ for await (const chunk of stream) {
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     id: "xai/grok-2",
@@ -45232,7 +45616,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -45315,7 +45700,8 @@ ZHIPU_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "zai-coding-plan/glm-4.5"
 });
@@ -45409,6 +45795,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.z.ai/api/coding/paas/v4",
@@ -45425,7 +45812,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -45465,7 +45853,8 @@ ZHIPU_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "zai/glm-4.5"
 });
@@ -45559,6 +45948,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.z.ai/api/paas/v4",
@@ -45575,7 +45965,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -45615,7 +46006,8 @@ ZENMUX_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "zenmux/anthropic/claude-haiku-4.5"
 });
@@ -45865,6 +46257,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://zenmux.ai/api/v1",
@@ -45881,7 +46274,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -45921,7 +46315,8 @@ ZHIPU_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "zhipuai-coding-plan/glm-4.5"
 });
@@ -46015,6 +46410,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://open.bigmodel.cn/api/coding/paas/v4",
@@ -46031,7 +46427,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -46071,7 +46468,8 @@ ZHIPU_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "zhipuai/glm-4.5"
 });
@@ -46165,6 +46563,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://open.bigmodel.cn/api/paas/v4",
@@ -46181,7 +46580,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -46214,14 +46614,16 @@ import { Agent } from "@mastra/core/agent";
 
 // String instructions
 export const agent = new Agent({
-  name: "test-agent",
+  id: "test-agent",
+  name: "Test Agent",
   instructions: "You are a helpful assistant that provides concise answers.",
   model: openai("gpt-4o"),
 });
 
 // System message object
 export const agent2 = new Agent({
-  name: "test-agent-2",
+  id: "test-agent-2",
+  name: "Test Agent 2",
   instructions: {
     role: "system",
     content: "You are an expert programmer",
@@ -46231,7 +46633,8 @@ export const agent2 = new Agent({
 
 // Array of system messages
 export const agent3 = new Agent({
-  name: "test-agent-3",
+  id: "test-agent-3",
+  name: "Test Agent 3",
   instructions: [
     { role: "system", content: "You are a helpful assistant" },
     { role: "system", content: "You have expertise in TypeScript" },
@@ -46249,7 +46652,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const agent = new Agent({
-  name: "core-message-agent",
+  id: "core-message-agent",
+  name: "Core Message Agent",
   instructions: {
     role: "system",
     content:
@@ -46277,7 +46681,8 @@ const preferredTone = {
 };
 
 export const agent = new Agent({
-  name: "multi-message-agent",
+  id: "multi-message-agent",
+  name: "Multi Message Agent",
   instructions: [
     { role: "system", content: "You are a customer service representative." },
     preferredTone,
@@ -48687,7 +49092,8 @@ import { workflow1 } from "./workflows";
 import { tool1, tool2 } from "./tools";
 
 const agent = new Agent({
-  name: "network-agent",
+  id: "network-agent",
+  name: "Network Agent",
   instructions:
     "You are a network agent that can help users with a variety of tasks.",
   model: openai("gpt-4o"),
@@ -50588,8 +50994,9 @@ const savedMessages = await mastraClient.saveMessageToMemory({
       content: "Hello!",
       id: "1",
       threadId: "thread-1",
+      resourceId: "resource-1",
       createdAt: new Date(),
-      type: "text",
+      format: 2,
     },
   ],
   agentId: "agent-1",
@@ -51300,45 +51707,6 @@ This method does not accept any parameters.
 
 - [MCP overview](/docs/tools-mcp/mcp-overview)
 - [MCP server reference](/reference/tools/mcp-server)
-
-
----
-title: "Reference: Mastra.getMemory() | Core | Mastra Docs"
-description: "Documentation for the `Mastra.getMemory()` method in Mastra, which retrieves the configured memory instance."
----
-
-# Mastra.getMemory()
-[EN] Source: https://mastra.ai/en/reference/core/getMemory
-
-The `.getMemory()` method is used to retrieve the memory instance that has been configured in the Mastra instance.
-
-## Usage example
-
-```typescript copy
-mastra.getMemory();
-```
-
-## Parameters
-
-This method does not accept any parameters.
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "memory",
-      type: "MastraMemory | undefined",
-      description:
-        "The configured memory instance, or undefined if no memory has been configured.",
-    },
-  ]}
-/>
-
-## Related
-
-- [Memory overview](/docs/memory/overview)
-- [Memory reference](/reference/memory/memory-class)
 
 
 ---
@@ -52883,15 +53251,15 @@ await memory?.deleteMessages(["671ae63f-3a91-4082-a907-fe7de78e10ec"]);
 
 ```typescript title="src/test-memory.ts" showLineNumbers copy
 import { mastra } from "./mastra";
-import { UIMessageWithMetadata } from "@mastra/core/agent";
+import { MastraDBMessage } from "@mastra/core";
 
 const agent = mastra.getAgent("agent");
 const memory = await agent.getMemory();
 
-const { uiMessages } = await memory!.query({ threadId: "thread-123" });
+const { messages } = await memory!.query({ threadId: "thread-123" });
 
-const messageIds = uiMessages.map(
-  (message: UIMessageWithMetadata) => message.id,
+const messageIds = messages.map(
+  (message: MastraDBMessage) => message.id,
 );
 await memory?.deleteMessages([...messageIds]);
 ```
@@ -53330,13 +53698,7 @@ await memory?.query({ threadId: "user-123" });
         "Configuration options for message retrieval and semantic search",
       isOptional: true,
     },
-    {
-      name: "format",
-      type: "'v1' | 'v2'",
-      description:
-        "Message format to return. Defaults to 'v2' for current format, 'v1' for backwards compatibility",
-      isOptional: true,
-    },
+
   ]}
 />
 
@@ -53421,14 +53783,8 @@ await memory?.query({ threadId: "user-123" });
   content={[
     {
       name: "messages",
-      type: "CoreMessage[]",
-      description: "Array of retrieved messages in their core format",
-    },
-    {
-      name: "uiMessages",
-      type: "UIMessageWithMetadata[]",
-      description:
-        "Array of messages formatted for UI display, including proper threading of tool calls and results",
+      type: "MastraDBMessage[]",
+      description: "Array of retrieved messages in the database format",
     },
   ]}
 />
@@ -53441,7 +53797,7 @@ import { mastra } from "./mastra";
 const agent = mastra.getAgent("agent");
 const memory = await agent.getMemory();
 
-const { messages, uiMessages } = await memory!.query({
+const { messages } = await memory!.query({
   threadId: "thread-123",
   selectBy: {
     last: 50,
@@ -53462,8 +53818,11 @@ const { messages, uiMessages } = await memory!.query({
   },
 });
 
-console.log(messages);
-console.log(uiMessages);
+console.log(messages); // MastraDBMessage[]
+
+// Convert to AI SDK format if needed
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+const uiMessages = toAISdkV5Messages(messages);
 ```
 
 ### Related
@@ -58832,13 +59191,6 @@ The following parameters are available for all chunking strategies.
       defaultValue: "4000",
       description:
         "Maximum size of each chunk. **Note:** Some strategy configurations (markdown with headers, HTML with headers) ignore this parameter.",
-    },
-    {
-      name: "size",
-      type: "number",
-      isOptional: true,
-      description:
-        "**Deprecated:** Use `maxSize` instead. This parameter will be removed in the next major version.",
     },
     {
       name: "overlap",
