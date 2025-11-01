@@ -1,7 +1,7 @@
 import type { MemoryConfig } from '@mastra/core/memory';
 import { createTool } from '@mastra/core/tools';
 import { convertSchemaToZod } from '@mastra/schema-compat';
-import type { Schema } from 'ai';
+import type { Schema } from '@mastra/schema-compat';
 import { z, ZodObject } from 'zod';
 import type { ZodType } from 'zod';
 

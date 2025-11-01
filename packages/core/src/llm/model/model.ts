@@ -1,3 +1,5 @@
+import type { Schema } from '@internal/ai-sdk-v4/schema';
+import type { JSONSchema7 } from '@mastra/schema-compat';
 import {
   AnthropicSchemaCompatLayer,
   applyCompatLayer,
@@ -6,11 +8,17 @@ import {
   MetaSchemaCompatLayer,
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
+  jsonSchema,
 } from '@mastra/schema-compat';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import type { CoreMessage, LanguageModel, Schema, StreamObjectOnFinishCallback, StreamTextOnFinishCallback } from 'ai';
-import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
-import type { JSONSchema7 } from 'json-schema';
+import type {
+  CoreMessage,
+  LanguageModel,
+  StreamObjectOnFinishCallback,
+  StreamTextOnFinishCallback,
+  Schema as AISchema,
+} from 'ai';
+import { generateObject, generateText, Output, streamObject, streamText } from 'ai';
 import type { ZodSchema } from 'zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from '../../action';
@@ -238,7 +246,7 @@ export class MastraLLMV1 extends MastraBase {
       },
       experimental_output: schema
         ? Output.object({
-            schema,
+            schema: schema as unknown as AISchema<inferOutput<Z>>,
           })
         : undefined,
     };
@@ -592,7 +600,7 @@ export class MastraLLMV1 extends MastraBase {
       messages,
       experimental_output: schema
         ? (Output.object({
-            schema,
+            schema: schema as unknown as AISchema<inferOutput<Z>>,
           }) as any)
         : undefined,
     };
@@ -737,7 +745,8 @@ export class MastraLLMV1 extends MastraBase {
         messages,
         // @ts-expect-error - output in our implementation can only be object or array
         output,
-        schema: processedSchema as Schema<inferOutput<T>>,
+        // TOOD convert to local schema
+        schema: processedSchema as unknown as AISchema<inferOutput<T>>,
       };
 
       try {
