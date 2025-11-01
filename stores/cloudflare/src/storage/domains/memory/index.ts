@@ -69,6 +69,19 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     try {
       const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
       const perPage = this.normalizePerPage(perPageInput, 100);
+
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_CLOUDFLARE_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
       const offset = page * perPage;
       const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -819,19 +832,18 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
 
     try {
-      // Determine how many results to return
-      // Default pagination is always 40 unless explicitly specified
-      let perPage = 40;
-      if (perPageInput !== undefined) {
-        if (perPageInput === false) {
-          // perPageInput: false means get ALL messages
-          perPage = Number.MAX_SAFE_INTEGER;
-        } else if (perPageInput === 0) {
-          // perPageInput: 0 means return zero results
-          perPage = 0;
-        } else if (typeof perPageInput === 'number' && perPageInput > 0) {
-          perPage = perPageInput;
-        }
+      const perPage = this.normalizePerPage(perPageInput, 40);
+
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_CLOUDFLARE_LIST_MESSAGES_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
       }
 
       const offset = page * perPage;
@@ -936,7 +948,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           messages: [],
           total,
           page,
-          perPage: 0,
+          perPage: this.preservePerPageForResponse(perPageInput, perPage),
           hasMore: false,
         };
       }
@@ -1056,7 +1068,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         messages: finalMessages,
         total,
         page,
-        perPage,
+        perPage: this.preservePerPageForResponse(perPageInput, perPage),
         hasMore,
       };
     } catch (error: any) {
@@ -1077,11 +1089,12 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
+      const perPage = this.normalizePerPage(perPageInput, 40);
       return {
         messages: [],
         total: 0,
         page,
-        perPage: perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput || 40,
+        perPage: this.preservePerPageForResponse(perPageInput, perPage),
         hasMore: false,
       };
     }

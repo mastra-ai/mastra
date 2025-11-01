@@ -392,7 +392,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       expect(result.messages.every(m => new Date(m.createdAt) >= cutoffDate)).toBe(true);
     });
 
-    describe('limit parameter', () => {
+    describe('perPage and page parameters', () => {
       it('should use perPage to restrict number of messages returned', async () => {
         const result = await storage.listMessages({
           threadId: thread.id,
@@ -538,13 +538,14 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result0.total).toBe(5); // Total should still reflect actual count
         expect(result0.perPage).toBe(0);
 
-        // Test negative perPage - should fall back to default behavior
+        // Test negative perPage - should fall back to default behavior (40)
         const resultNeg = await storage.listMessages({
           threadId: thread.id,
           perPage: -5,
         });
-        // Should fall back to default behavior
+        // Should fall back to default perPage (40) and return all 5 available messages
         expect(resultNeg.messages).toHaveLength(5);
+        expect(resultNeg.perPage).toBe(40); // Verify fallback to default value
       });
     });
   });

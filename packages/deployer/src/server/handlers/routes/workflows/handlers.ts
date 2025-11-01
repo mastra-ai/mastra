@@ -23,6 +23,7 @@ import { HTTPException } from 'hono/http-exception';
 import { stream } from 'hono/streaming';
 
 import { handleError } from '../../error';
+import { parsePage, parsePerPage } from '../../utils/query-parsers';
 
 export async function listWorkflowsHandler(c: Context) {
   try {
@@ -416,14 +417,14 @@ export async function listWorkflowRunsHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
-    const { fromDate, toDate, perPage, page, resourceId } = c.req.query();
+    const { fromDate, toDate, perPage: perPageRaw, page: pageRaw, resourceId } = c.req.query();
     const workflowRuns = await getOriginalListWorkflowRunsHandler({
       mastra,
       workflowId,
       fromDate: fromDate ? new Date(fromDate) : undefined,
       toDate: toDate ? new Date(toDate) : undefined,
-      perPage: perPage ? Number(perPage) : undefined,
-      page: page ? Number(page) : undefined,
+      perPage: perPageRaw !== undefined ? parsePerPage(perPageRaw) : undefined,
+      page: pageRaw !== undefined ? parsePage(pageRaw) : undefined,
       resourceId,
     });
 

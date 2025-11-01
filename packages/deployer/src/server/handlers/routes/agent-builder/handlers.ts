@@ -297,8 +297,8 @@ export async function getAgentBuilderActionRunsHandler(c: Context) {
       actionId,
       fromDate: fromDate ? new Date(fromDate) : undefined,
       toDate: toDate ? new Date(toDate) : undefined,
-      perPage: perPage && !isNaN(Number(perPage)) ? Number(perPage) : undefined,
-      page: page && !isNaN(Number(page)) ? Number(page) : undefined,
+      perPage: perPage !== null && perPage !== undefined && !isNaN(Number(perPage)) ? Number(perPage) : undefined,
+      page: page !== null && page !== undefined && !isNaN(Number(page)) ? Number(page) : undefined,
       resourceId,
     });
 

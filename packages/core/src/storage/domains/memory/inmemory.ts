@@ -109,6 +109,10 @@ export class InMemoryMemory extends MemoryStorage {
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 40)
     const perPage = this.normalizePerPage(perPageInput, 40);
 
+    if (page < 0) {
+      throw new Error('page must be >= 0');
+    }
+
     // Calculate offset from page
     const offset = page * perPage;
 
@@ -595,6 +599,11 @@ export class InMemoryMemory extends MemoryStorage {
     const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
     const perPage = this.normalizePerPage(perPageInput, 100);
+
+    if (page < 0) {
+      throw new Error('page must be >= 0');
+    }
+
     this.logger.debug(`MockStore: listThreadsByResourceId called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
     const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);

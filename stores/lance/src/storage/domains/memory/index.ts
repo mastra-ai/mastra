@@ -332,6 +332,18 @@ export class StoreMemoryLance extends MemoryStorage {
         }
       }
 
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_LANCE_LIST_MESSAGES_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
       const offset = page * perPage;
 
       // Determine sort field and direction
@@ -567,6 +579,19 @@ export class StoreMemoryLance extends MemoryStorage {
     try {
       const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
       const perPage = this.normalizePerPage(perPageInput, 100);
+
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_LANCE_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
       const offset = page * perPage;
       const { field, direction } = this.parseOrderBy(orderBy);
       const table = await this.client.openTable(TABLE_THREADS);
