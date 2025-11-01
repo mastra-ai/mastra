@@ -10,22 +10,15 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
-    "./schema": {
+    "./*": {
       "import": {
-        "types": "./dist/schema.d.ts",
-        "default": "./dist/schema.js"
-      }
-    },
-    "./test": {
-      "import": {
-        "types": "./dist/test.d.ts",
-        "default": "./dist/test.js"
+        "types": "./dist/*.d.ts",
+        "default": "./dist/*.js"
       }
     }
   },
   "scripts": {
-    "build:lib": "tsup --silent --config tsup.config.ts",
-    "build": "echo build",
+    "build": "tsup --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint ."
   },
@@ -34,6 +27,7 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "ai": "^4.3.19",
+    "@ai-sdk/provider": "^1.0.0",
     "@internal/lint": "workspace:*",
     "eslint": "^9.36.0",
     "tsup": "^8.5.0",

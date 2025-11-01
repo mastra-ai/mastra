@@ -1,8 +1,7 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2 } from 'ai-v5/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';

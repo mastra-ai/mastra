@@ -1,3 +1,10 @@
+import type { CoreMessage } from '@internal/ai-sdk-v4/message';
+import type {
+  LanguageModelV1 as LanguageModel,
+  StreamObjectOnFinishCallback,
+  StreamTextOnFinishCallback,
+} from '@internal/ai-sdk-v4/model';
+import { generateObject, generateText, Output, streamObject, streamText } from '@internal/ai-sdk-v4/model';
 import type { Schema } from '@internal/ai-sdk-v4/schema';
 import type { JSONSchema7 } from '@mastra/schema-compat';
 import {
@@ -11,14 +18,6 @@ import {
   jsonSchema,
 } from '@mastra/schema-compat';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import type {
-  CoreMessage,
-  LanguageModel,
-  StreamObjectOnFinishCallback,
-  StreamTextOnFinishCallback,
-  Schema as AISchema,
-} from 'ai';
-import { generateObject, generateText, Output, streamObject, streamText } from 'ai';
 import type { ZodSchema } from 'zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from '../../action';
@@ -110,7 +109,7 @@ export class MastraLLMV1 extends MastraBase {
     }
 
     return applyCompatLayer({
-      schema: schema as any,
+      schema: schema as Schema | ZodSchema,
       compatLayers: schemaCompatLayers,
       mode: 'aiSdkSchema',
     });
@@ -246,7 +245,7 @@ export class MastraLLMV1 extends MastraBase {
       },
       experimental_output: schema
         ? Output.object({
-            schema: schema as unknown as AISchema<inferOutput<Z>>,
+            schema,
           })
         : undefined,
     };
@@ -600,7 +599,7 @@ export class MastraLLMV1 extends MastraBase {
       messages,
       experimental_output: schema
         ? (Output.object({
-            schema: schema as unknown as AISchema<inferOutput<Z>>,
+            schema,
           }) as any)
         : undefined,
     };
@@ -746,7 +745,7 @@ export class MastraLLMV1 extends MastraBase {
         // @ts-expect-error - output in our implementation can only be object or array
         output,
         // TOOD convert to local schema
-        schema: processedSchema as unknown as AISchema<inferOutput<T>>,
+        schema: processedSchema as unknown as Schema<inferOutput<T>>,
       };
 
       try {
