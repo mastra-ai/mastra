@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
-import type { UIMessageWithMetadata } from '@mastra/core/agent';
+import type { MastraDBMessage, UIMessageWithMetadata } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
@@ -201,8 +201,10 @@ describe('Agent Memory Tests', () => {
 
     // Mock the getMemoryMessages method to track if it's called
     let getMemoryMessagesCalled = false;
-    let retrievedMemoryMessages: any[] = [];
+    let retrievedMemoryMessages: { messages: MastraDBMessage[] } = { messages: [] };
+
     const originalGetMemoryMessages = (agent as any).getMemoryMessages;
+
     (agent as any).getMemoryMessages = async (...args: any[]) => {
       getMemoryMessagesCalled = true;
       const result = await originalGetMemoryMessages.call(agent, ...args);
@@ -226,10 +228,11 @@ describe('Agent Memory Tests', () => {
     expect(retrievedMemoryMessages.messages.length).toBeGreaterThan(0);
 
     // Verify that the retrieved messages contain content from the first thread
-    const hasMessagesFromFirstThread = retrievedMemoryMessages.messages.some(
-      msg =>
-        msg.threadId === thread1Id || (typeof msg.content === 'string' && msg.content.toLowerCase().includes('cat')),
-    );
+    const hasMessagesFromFirstThread = retrievedMemoryMessages.messages.some(msg => {
+      const text = (msg.content.parts?.[0]?.type === 'text' && msg.content.parts[0]?.text?.toLowerCase()) || '';
+      return msg.threadId === thread1Id || text?.includes('cat');
+    });
+
     expect(hasMessagesFromFirstThread).toBe(true);
     expect(secondResponse.text.toLowerCase()).toMatch(/(cat|animal|discuss)/);
   });
