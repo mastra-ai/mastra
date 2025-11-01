@@ -438,14 +438,14 @@ describe('Agent Memory Tests', () => {
       );
 
       expect(firstMessage).toBeDefined();
-      expect(firstMessage!.metadata).toEqual({
+      expect(firstMessage!.content.metadata).toEqual({
         source: 'web-ui',
         timestamp: expect.any(Number),
         customField: 'custom-value',
       });
 
       expect(secondMessage).toBeDefined();
-      expect(secondMessage!.metadata).toEqual({
+      expect(secondMessage!.content.metadata).toEqual({
         source: 'mobile-app',
         version: '1.0.0',
         userId: 'user-123',
