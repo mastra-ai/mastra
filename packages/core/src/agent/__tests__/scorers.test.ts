@@ -251,7 +251,7 @@ function scorersTests(version: 'v1' | 'v2') {
         output: expect.any(Object),
         requestContext: expect.any(Object),
         entity: expect.objectContaining({
-          id: 'Test Agent',
+          id: 'test-agent',
           name: 'Test Agent',
         }),
         source: 'LIVE',
