@@ -253,24 +253,19 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       );
     }
 
+    // Determine the perPage value for the response (preserve false)
+    const resolvePerPage = (): number | false => {
+      if (perPageInput === false) return false;
+      if (perPageInput === 0) return 0;
+      if (typeof perPageInput === 'number' && perPageInput > 0) return perPageInput;
+      return 40;
+    };
+
+    const perPageForResponse = resolvePerPage();
+    const perPageForQuery: number = perPageForResponse === false ? Number.MAX_SAFE_INTEGER : perPageForResponse;
+    const offset: number = perPageForResponse === false ? 0 : page * perPageForQuery;
+
     try {
-      // Determine how many results to return
-      // Default pagination is always 40 unless explicitly specified
-      let perPage = 40;
-      if (perPageInput !== undefined) {
-        if (perPageInput === false) {
-          // perPage: false means get ALL messages
-          perPage = Number.MAX_SAFE_INTEGER;
-        } else if (perPageInput === 0) {
-          // perPage: 0 means return zero results
-          perPage = 0;
-        } else if (typeof perPageInput === 'number' && perPageInput > 0) {
-          perPage = perPageInput;
-        }
-      }
-
-      const offset = page * perPage;
-
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
       let dataQuery = `
         SELECT 
@@ -314,11 +309,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       dataQuery += ` ORDER BY "${field}" ${direction}`;
 
       // Apply pagination
-      if (perPage === Number.MAX_SAFE_INTEGER) {
+      if (perPageForResponse === false) {
         // Get all messages
       } else {
         dataQuery += ` LIMIT {limit:Int64} OFFSET {offset:Int64}`;
-        dataParams.limit = perPage;
+        dataParams.limit = perPageForQuery;
         dataParams.offset = offset;
       }
 
@@ -382,7 +377,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           messages: [],
           total: 0,
           page,
-          perPage,
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
@@ -486,18 +481,16 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
       const hasMore =
-        perPageInput === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
+        perPageForResponse === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
 
       return {
         messages: finalMessages,
         total,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error: any) {
-      const errorPerPage =
-        perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput === 0 ? 0 : perPageInput || 40;
       const mastraError = new MastraError(
         {
           id: 'STORAGE_CLICKHOUSE_STORE_LIST_MESSAGES_FAILED',
@@ -516,7 +509,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         messages: [],
         total: 0,
         page,
-        perPage: errorPerPage,
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }

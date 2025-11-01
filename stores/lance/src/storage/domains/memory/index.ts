@@ -456,8 +456,7 @@ export class StoreMemoryLance extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore =
-        perPageInput === false ? false : allThreadMessagesReturned ? false : offset + paginatedRecords.length < total;
+      const hasMore = perPageInput === false ? false : allThreadMessagesReturned ? false : offset + perPage < total;
 
       return {
         messages: finalMessages,
@@ -566,7 +565,7 @@ export class StoreMemoryLance extends MemoryStorage {
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
-      const { resourceId, page = 0, perPage = 10, orderBy } = args;
+      const { resourceId, page = 0, perPage = 100, orderBy } = args;
       const offset = page * perPage;
       const { field, direction } = this.parseOrderBy(orderBy);
       const table = await this.client.openTable(TABLE_THREADS);

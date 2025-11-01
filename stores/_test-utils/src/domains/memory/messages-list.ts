@@ -194,7 +194,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         ],
       });
 
-      // Default pagination applies (limit: 40), so we get all 5 messages from thread
+      // Default pagination applies (perPage: 40), so we get all 5 messages from thread
       // No duplicates since Message 2, 3, 4 are already in the paginated set
       expect(result.messages).toHaveLength(5);
       expect(result.messages.map((m: any) => m.content.content)).toContain('Message 2');
@@ -214,7 +214,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         ],
       });
 
-      // Default pagination applies (limit: 40), so we get all 5 messages from thread
+      // Default pagination applies (perPage: 40), so we get all 5 messages from thread
       // No duplicates since Message 2, 3, 4 are already in the paginated set
       expect(result.messages).toHaveLength(5);
       expect(result.messages.map((m: any) => m.content.content)).toContain('Message 2');

@@ -156,8 +156,8 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
     try {
       // Default values
-      const perPage = args?.perPage || 10;
-      const page = args?.page || 0;
+      const perPage = args?.perPage !== undefined ? args.perPage : 10;
+      const page = args?.page !== undefined ? args.page : 0;
       const offset = page * perPage;
 
       let query;

@@ -547,7 +547,7 @@ export class MemoryPG extends MemoryStorage {
       let perPage = 40;
       if (perPageInput !== undefined) {
         if (perPageInput === false) {
-          // perPage: false means get ALL messages
+          // perPage: false means fetch all messages without pagination
           perPage = Number.MAX_SAFE_INTEGER;
         } else if (perPageInput === 0) {
           // perPage: 0 means return zero results

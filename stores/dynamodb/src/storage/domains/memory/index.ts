@@ -374,8 +374,13 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
 
     try {
-      // Determine how many results to return
-      // Default pagination is always 40 unless explicitly specified
+      /**
+       * Determine pagination size:
+       * - perPageInput === false: return ALL messages (MAX_SAFE_INTEGER)
+       * - perPageInput === 0: return zero results
+       * - perPageInput > 0: return that many results
+       * - undefined: default to 40
+       */
       let perPage = 40;
       if (perPageInput !== undefined) {
         if (perPageInput === false) {
@@ -506,8 +511,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore =
-        perPageInput === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
+      let hasMore = false;
+      if (perPageInput !== false && !allThreadMessagesReturned) {
+        hasMore = offset + paginatedCount < total;
+      }
 
       return {
         messages: finalMessages,

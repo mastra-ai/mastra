@@ -697,6 +697,14 @@ export async function listWorkflowRunsHandler({
       throw new HTTPException(400, { message: 'Workflow ID is required' });
     }
 
+    // Validate pagination parameters
+    if (perPage !== undefined && (!Number.isInteger(perPage) || perPage <= 0)) {
+      throw new HTTPException(400, { message: 'perPage must be a positive integer' });
+    }
+    if (page !== undefined && (!Number.isInteger(page) || page < 0)) {
+      throw new HTTPException(400, { message: 'page must be a non-negative integer' });
+    }
+
     const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
     if (!workflow) {

@@ -50,7 +50,7 @@ export type PaginationArgs = {
 export type PaginationInfo = {
   total: number;
   page: number;
-  perPage: number;
+  perPage: number | false;
   hasMore: boolean;
 };
 

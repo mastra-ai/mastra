@@ -289,15 +289,16 @@ export async function getAgentBuilderActionRunsHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const actionId = c.req.param('actionId');
-    const { fromDate, toDate, perPage, page, resourceId } = c.req.query();
+    const queryParams = c.req.query();
+    const { fromDate, toDate, perPage, page, resourceId } = queryParams;
 
     const runs = await getOriginalGetAgentBuilderActionRunsHandler({
       mastra,
       actionId,
       fromDate: fromDate ? new Date(fromDate) : undefined,
       toDate: toDate ? new Date(toDate) : undefined,
-      perPage: perPage ? Number(perPage) : undefined,
-      page: page ? Number(page) : undefined,
+      perPage: perPage && !isNaN(Number(perPage)) ? Number(perPage) : undefined,
+      page: page && !isNaN(Number(page)) ? Number(page) : undefined,
       resourceId,
     });
 

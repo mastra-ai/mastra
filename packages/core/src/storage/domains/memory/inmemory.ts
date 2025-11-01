@@ -604,7 +604,7 @@ export class InMemoryMemory extends MemoryStorage {
   async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page, perPage, orderBy } = args;
+    const { resourceId, page = 0, perPage = 100, orderBy } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
     this.logger.debug(`MockStore: listThreadsByResourceId called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
