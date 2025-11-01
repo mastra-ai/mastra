@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { RelevanceScoreProvider } from '@mastra/core/relevance';
-import { CohereRelevanceScorer } from '@mastra/rag';
+import { CohereRelevanceScorer } from './';
 
 describe('CohereRelevanceScorer', () => {
   const TEST_API_KEY = 'test-api-key';
