@@ -1447,7 +1447,7 @@ describe('AI Tracing Integration Tests', () => {
         expect(hasObjectChunks).toBe(true);
 
         // Identify the Test Agent spans vs processor agent spans
-        const testAgentSpan = agentRunSpans.find(span => span.name?.includes('Test Agent'));
+        const testAgentSpan = agentRunSpans.find(span => span.name?.includes('test-agent'));
         const processorAgentSpan = agentRunSpans.find(span => span !== testAgentSpan);
         const processorRunSpan = processorRunSpans[0];
 
@@ -1613,8 +1613,10 @@ describe('AI Tracing Integration Tests', () => {
         expect(llmGenerationSpans.length).toBe(3); // Test Agent LLM + validator LLM + summarizer LLM
         expect(processorRunSpans.length).toBe(2); // validator + summarizer
 
+        console.log(agentRunSpans);
+
         // Find specific spans
-        const testAgentSpan = agentRunSpans.find(s => s.name === "agent run: 'Test Agent'");
+        const testAgentSpan = agentRunSpans.find(s => s.name === "agent run: 'test-agent'");
         const inputProcessorSpan = processorRunSpans.find(s => s.name === 'input processor: validator');
         const summarizerProcessorSpan = processorRunSpans.find(s => s.name === 'output processor: summarizer');
         const validatorAgentSpan = agentRunSpans.find(s => s.name?.includes('validator-agent'));
