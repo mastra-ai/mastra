@@ -2,9 +2,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { z } from 'zod';
-import type { ProviderConfig } from '../src/index.js';
-import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants.js';
-import { generateProviderOptionsSection } from './generate-provider-options-docs.js';
+import type { ProviderConfig } from '../src/llm';
+import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants';
+import { generateProviderOptionsSection } from './generate-provider-options-docs';
 
 /**
  * Generate a comment indicating the file was auto-generated
@@ -254,7 +254,6 @@ description: "Use ${provider.name} models with Mastra. ${modelCount} model${mode
 ${getGeneratedComment()}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 ${provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible' ? 'import Tabs from "@theme/Tabs";\nimport TabItem from "@theme/TabItem";' : ''}
 
