@@ -2128,7 +2128,7 @@ export class MessageList {
         if (part.type === 'tool-invocation' && part.toolInvocation) {
           const inv = part.toolInvocation;
 
-          if (inv.state === 'result' && inv.result) {
+          if (inv.state === 'result') {
             parts.push({
               type: `tool-${inv.toolName}`,
               toolCallId: inv.toolCallId,
