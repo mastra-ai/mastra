@@ -96,11 +96,6 @@ function ProviderModelsTable({ models, totalCount }: ProviderModelsTableProps) {
 
   return (
     <Table>
-      <TableCaption className="mb-4">
-        {totalCount && models.length < totalCount
-          ? `Showing ${models.length} of ${totalCount} available models`
-          : `${models.length} available model${models.length !== 1 ? "s" : ""}`}
-      </TableCaption>
       <TableHeader>
         <TableRow>
           <TableHead>Model</TableHead>
@@ -171,6 +166,11 @@ function ProviderModelsTable({ models, totalCount }: ProviderModelsTableProps) {
           </TableRow>
         ))}
       </TableBody>
+      <TableCaption className="my-4 caption-bottom">
+        {totalCount && models.length < totalCount
+          ? `Showing ${models.length} of ${totalCount} available models`
+          : `${models.length} available model${models.length !== 1 ? "s" : ""}`}
+      </TableCaption>
     </Table>
   );
 }
