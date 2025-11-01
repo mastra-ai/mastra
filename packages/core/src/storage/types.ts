@@ -91,7 +91,7 @@ export type StorageListWorkflowRunsInput = {
 
 export type StorageListThreadsByResourceIdInput = {
   resourceId: string;
-  perPage: number;
+  perPage: number | false;
   page: number;
   orderBy?: StorageOrderBy;
 };

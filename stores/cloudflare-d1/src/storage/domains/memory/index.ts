@@ -212,7 +212,8 @@ export class MemoryStorageD1 extends MemoryStorage {
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage = 100, orderBy } = args;
+    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+    const perPage = perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput !== undefined ? perPageInput : 100;
     const offset = page * perPage;
     const { field, direction } = this.parseOrderBy(orderBy);
     const fullTableName = this.operations.getTableName(TABLE_THREADS);
@@ -249,7 +250,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         threads,
         total,
         page,
-        perPage,
+        perPage: perPageInput === false ? false : perPage,
         hasMore: offset + perPage < total,
       };
     } catch (error) {

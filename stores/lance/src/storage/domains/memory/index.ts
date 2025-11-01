@@ -565,7 +565,9 @@ export class StoreMemoryLance extends MemoryStorage {
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
-      const { resourceId, page = 0, perPage = 100, orderBy } = args;
+      const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+      const perPage =
+        perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput !== undefined ? perPageInput : 100;
       const offset = page * perPage;
       const { field, direction } = this.parseOrderBy(orderBy);
       const table = await this.client.openTable(TABLE_THREADS);
@@ -605,7 +607,7 @@ export class StoreMemoryLance extends MemoryStorage {
         threads,
         total,
         page,
-        perPage,
+        perPage: perPageInput === false ? false : perPage,
         hasMore: offset + perPage < total,
       };
     } catch (error: any) {

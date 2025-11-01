@@ -75,8 +75,9 @@ export class StoreMemoryUpstash extends MemoryStorage {
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage = 100, orderBy } = args;
+    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
+    const perPage = perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput !== undefined ? perPageInput : 100;
 
     try {
       let allThreads: StorageThreadType[] = [];
@@ -112,7 +113,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         threads: paginatedThreads,
         total,
         page,
-        perPage,
+        perPage: perPageInput === false ? false : perPage,
         hasMore,
       };
     } catch (error) {

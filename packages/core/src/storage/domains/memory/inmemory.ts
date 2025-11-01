@@ -291,7 +291,7 @@ export class InMemoryMemory extends MemoryStorage {
       messages,
       total: totalThreadMessages,
       page,
-      perPage,
+      perPage: perPageInput === false ? false : perPage,
       hasMore,
     };
   }
@@ -604,8 +604,9 @@ export class InMemoryMemory extends MemoryStorage {
   async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage = 100, orderBy } = args;
+    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
+    const perPage = perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput !== undefined ? perPageInput : 100;
     this.logger.debug(`MockStore: listThreadsByResourceId called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
     const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
@@ -619,7 +620,7 @@ export class InMemoryMemory extends MemoryStorage {
       threads: clonedThreads.slice(offset, offset + perPage),
       total: clonedThreads.length,
       page,
-      perPage,
+      perPage: perPageInput === false ? false : perPage,
       hasMore: offset + perPage < clonedThreads.length,
     };
   }
