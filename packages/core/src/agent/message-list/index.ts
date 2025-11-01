@@ -2188,30 +2188,6 @@ export class MessageList {
           continue;
         }
 
-        // Convert tool-invocation parts to AIV5 tool parts
-        if (part.type === 'tool-invocation') {
-          const toolName = part.toolInvocation.toolName;
-          if (part.toolInvocation.state === 'result') {
-            parts.push({
-              type: `tool-${toolName}`,
-              toolCallId: part.toolInvocation.toolCallId,
-              input: part.toolInvocation.args,
-              output: part.toolInvocation.result,
-              state: 'output-available' as const,
-              callProviderMetadata: part.providerMetadata,
-            } satisfies AIV5Type.ToolUIPart);
-          } else {
-            parts.push({
-              type: `tool-${toolName}`,
-              toolCallId: part.toolInvocation.toolCallId,
-              input: part.toolInvocation.args,
-              state: 'input-available' as const,
-              callProviderMetadata: part.providerMetadata,
-            } satisfies AIV5Type.ToolUIPart);
-          }
-          continue;
-        }
-
         // Skip other tool- parts that we don't recognize
         if (part.type.startsWith('tool-')) {
           continue;
