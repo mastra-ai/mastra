@@ -759,12 +759,29 @@ export class MCPServer extends MCPServerBase {
         inputSchema: z.object({
           message: z.string().describe('The question or input for the agent.'),
         }),
-        execute: async ({ context, requestContext, tracingContext }) => {
+        execute: async ({ context, requestContext, tracingContext, mcp }) => {
           this.logger.debug(
             `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${context.message}"`,
           );
           try {
-            const response = await agent.generate(context.message, { requestContext, tracingContext });
+            // Clone RequestContext to prevent auth context leakage between concurrent invocations
+            // Create a new isolated context by copying entries from the base context
+            const isolatedContext = new RequestContext();
+            if (requestContext) {
+              for (const [key, value] of requestContext.entries()) {
+                isolatedContext.set(key, value);
+              }
+            }
+
+            // Store mcp.extra in RequestContext
+            if (mcp?.extra) {
+              isolatedContext.set('mcp.extra', mcp.extra);
+            }
+
+            const response = await agent.generate(context.message, {
+              requestContext: isolatedContext,
+              tracingContext,
+            });
             return response;
           } catch (error) {
             this.logger.error(`Error executing agent tool '${agentToolName}' for agent '${agent.name}':`, error);
