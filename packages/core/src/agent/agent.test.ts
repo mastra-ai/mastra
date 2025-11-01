@@ -5093,7 +5093,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('basic functionality', () => {
       it('should run input processors before generation', async () => {
         const processor = {
-          name: 'test-processor',
+          id: 'test-processor',
+          name: 'Test Processor',
           processInput: async ({ messages }) => {
             messages.push(createMessage('Processor was here!'));
             return messages;
@@ -5121,7 +5122,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should run multiple processors in order', async () => {
         const processor1 = {
-          name: 'processor-1',
+          id: 'processor-1',
+          name: 'Processor 1',
           processInput: async ({ messages }) => {
             messages.push(createMessage('First processor'));
             return messages;
@@ -5129,7 +5131,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const processor2 = {
-          name: 'processor-2',
+          id: 'processor-2',
+          name: 'Processor 2',
           processInput: async ({ messages }) => {
             messages.push(createMessage('Second processor'));
             return messages;
@@ -5156,7 +5159,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should support async processors running in sequence', async () => {
         const processor1 = {
-          name: 'async-processor-1',
+          id: 'async-processor-1',
+          name: 'Async Processor 1',
           processInput: async ({ messages }) => {
             messages.push(createMessage('First processor'));
             return messages;
@@ -5164,7 +5168,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const processor2 = {
-          name: 'async-processor-2',
+          id: 'async-processor-2',
+          name: 'Async Processor 2',
           processInput: async ({ messages }) => {
             await new Promise(resolve => setTimeout(resolve, 10));
             messages.push(createMessage('Second processor'));
@@ -5195,7 +5200,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('tripwire functionality', () => {
       it('should handle processor abort with default message', async () => {
         const abortProcessor = {
-          name: 'abort-processor',
+          id: 'abort-processor',
+          name: 'Abort Processor',
           processInput: async ({ abort, messages }) => {
             abort();
             return messages;
@@ -5224,7 +5230,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should handle processor abort with custom message', async () => {
         const customAbortProcessor = {
-          name: 'custom-abort',
+          id: 'custom-abort',
+          name: 'Custom Abort',
           processInput: async ({ abort, messages }) => {
             abort('Custom abort reason');
             return messages;
@@ -5254,7 +5261,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let secondProcessorExecuted = false;
 
         const abortProcessor = {
-          name: 'abort-first',
+          id: 'abort-first',
+          name: 'Abort First',
           processInput: async ({ abort, messages }) => {
             abort('Stop here');
             return messages;
@@ -5262,7 +5270,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const shouldNotRunProcessor = {
-          name: 'should-not-run',
+          id: 'should-not-run',
+          name: 'Should Not Run',
           processInput: async ({ messages }) => {
             secondProcessorExecuted = true;
             messages.push(createMessage('This should not be added'));
@@ -5292,7 +5301,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('streaming with input processors', () => {
       it('should handle input processors with streaming', async () => {
         const streamProcessor = {
-          name: 'stream-processor',
+          id: 'stream-processor',
+          name: 'Stream Processor',
           processInput: async ({ messages }) => {
             messages.push(createMessage('Stream processor active'));
             return messages;
@@ -5323,7 +5333,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should handle abort in streaming with tripwire response', async () => {
         const streamAbortProcessor = {
-          name: 'stream-abort',
+          id: 'stream-abort',
+          name: 'Stream Abort',
           processInput: async ({ abort, messages }) => {
             abort('Stream aborted');
             return messages;
@@ -5364,7 +5375,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should include deployer methods when tripwire is triggered in streaming', async () => {
         const deployerAbortProcessor = {
-          name: 'deployer-abort',
+          id: 'deployer-abort',
+          name: 'Deployer Abort',
           processInput: async ({ abort, messages }) => {
             abort('Deployer test abort');
             return messages;
@@ -5426,7 +5438,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             const message: string = requestContext.get('processorMessage') || 'Default message';
             return [
               {
-                name: 'dynamic-processor',
+                id: 'dynamic-processor',
+                name: 'Dynamic Processor',
                 processInput: async ({ messages }) => {
                   messages.push(createMessage(message));
                   return messages;
@@ -5473,7 +5486,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('message manipulation', () => {
       it('should allow processors to modify message content', async () => {
         const messageModifierProcessor = {
-          name: 'message-modifier',
+          id: 'message-modifier',
+          name: 'Message Modifier',
           processInput: async ({ messages }) => {
             // Access existing messages and modify them
             const lastMessage = messages[messages.length - 1];
@@ -5506,7 +5520,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should allow processors to filter or validate messages', async () => {
         const validationProcessor = {
-          name: 'validator',
+          id: 'validator',
+          name: 'Validator',
           processInput: async ({ messages, abort }) => {
             // Extract text content from all messages
             const textContent = messages
