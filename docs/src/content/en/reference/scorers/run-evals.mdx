@@ -1,20 +1,20 @@
 ---
-title: "Reference: runExperiment | Scorers | Mastra Docs"
-description: "Documentation for the runExperiment function in Mastra, which enables batch evaluation of agents and workflows using multiple scorers."
+title: "Reference: runEvals | Scorers | Mastra Docs"
+description: "Documentation for the runEvals function in Mastra, which enables batch evaluation of agents and workflows using multiple scorers."
 ---
 
-# runExperiment
+# runEvals
 
-The `runExperiment` function enables batch evaluation of agents and workflows by running multiple test cases against scorers concurrently. This is essential for systematic testing, performance analysis, and validation of AI systems.
+The `runEvals` function enables batch evaluation of agents and workflows by running multiple test cases against scorers concurrently. This is essential for systematic testing, performance analysis, and validation of AI systems.
 
 ## Usage Example
 
 ```typescript
-import { runExperiment } from "@mastra/core/scores";
+import { runEvals } from "@mastra/core/evals";
 import { myAgent } from "./agents/my-agent";
 import { myScorer1, myScorer2 } from "./scorers";
 
-const result = await runExperiment({
+const result = await runEvals({
   target: myAgent,
   data: [
     { input: "What is machine learning?" },
@@ -45,7 +45,7 @@ console.log(`Processed ${result.summary.totalItems} items`);
     },
     {
       name: "data",
-      type: "RunExperimentDataItem[]",
+      type: "RunEvalsDataItem[]",
       description:
         "Array of test cases with input data and optional ground truth.",
       isOptional: false,
@@ -157,8 +157,7 @@ For workflows, you can specify scorers at different levels using `WorkflowScorer
 ### Agent Evaluation
 
 ```typescript
-import { runExperiment } from "@mastra/core/scores";
-import { createScorer } from "@mastra/core/scores";
+import { createScorer, runEvals } from "@mastra/core/evals";
 
 const myScorer = createScorer({
   name: "My Scorer",
@@ -170,7 +169,7 @@ const myScorer = createScorer({
   return response.includes(expectedResponse) ? 1 : 0;
 });
 
-const result = await runExperiment({
+const result = await runEvals({
   target: chatAgent,
   data: [
     {
@@ -192,7 +191,7 @@ const result = await runExperiment({
 ### Workflow Evaluation
 
 ```typescript
-const workflowResult = await runExperiment({
+const workflowResult = await runEvals({
   target: myWorkflow,
   data: [
     { input: { query: "Process this data", priority: "high" } },
@@ -223,3 +222,4 @@ const workflowResult = await runExperiment({
 - [MastraScorer](../../reference/scorers/mastra-scorer) - Learn about scorer structure and methods
 - [Custom Scorers](../../docs/scorers/custom-scorers) - Guide to building evaluation logic
 - [Scorers Overview](../../docs/scorers/overview) - Understanding scorer concepts
+

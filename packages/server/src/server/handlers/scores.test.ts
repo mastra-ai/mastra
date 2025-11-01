@@ -8,7 +8,7 @@ import { createWorkflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
-import { listScorersHandler, getScoresByRunIdHandler, getScoresByEntityIdHandler, saveScoreHandler } from './scores';
+import { listScorersHandler, listScoresByRunIdHandler, listScoresByEntityIdHandler, saveScoreHandler } from './scores';
 
 function createPagination(args: Partial<StoragePagination>): StoragePagination {
   return {
@@ -57,7 +57,7 @@ describe('Scores Handlers', () => {
     });
   });
 
-  describe('getScoresByRunIdHandler', () => {
+  describe('listScoresByRunIdHandler', () => {
     it('should get scores by run ID successfully', async () => {
       const mockScores = [createSampleScore({ scorerId: 'test-1-scorer' })];
 
@@ -65,7 +65,7 @@ describe('Scores Handlers', () => {
 
       const pagination = createPagination({ page: 0, perPage: 10 });
 
-      const result = await getScoresByRunIdHandler({
+      const result = await listScoresByRunIdHandler({
         mastra,
         runId: mockScores?.[0]?.runId,
         pagination,
@@ -89,7 +89,7 @@ describe('Scores Handlers', () => {
         logger: false,
       });
 
-      const result = await getScoresByRunIdHandler({
+      const result = await listScoresByRunIdHandler({
         mastra: mastraWithoutStorage,
         runId: 'test-run-1',
         pagination,
@@ -110,10 +110,10 @@ describe('Scores Handlers', () => {
       const pagination = createPagination({ page: 0, perPage: 10 });
       const error = new Error('Storage error');
 
-      mockStorage.getScoresByRunId = vi.fn().mockRejectedValue(error);
+      mockStorage.listScoresByRunId = vi.fn().mockRejectedValue(error);
 
       await expect(
-        getScoresByRunIdHandler({
+        listScoresByRunIdHandler({
           mastra,
           runId: 'test-run-1',
           pagination,
@@ -128,10 +128,10 @@ describe('Scores Handlers', () => {
         status: 404,
       };
 
-      mockStorage.getScoresByRunId = vi.fn().mockRejectedValue(apiError);
+      mockStorage.listScoresByRunId = vi.fn().mockRejectedValue(apiError);
 
       await expect(
-        getScoresByRunIdHandler({
+        listScoresByRunIdHandler({
           mastra,
           runId: 'test-run-1',
           pagination,
@@ -140,14 +140,14 @@ describe('Scores Handlers', () => {
     });
   });
 
-  describe('getScoresByEntityIdHandler', () => {
+  describe('listScoresByEntityIdHandler', () => {
     it('should get scores by entity ID successfully', async () => {
       const mockScores = [createSampleScore({ entityType: 'AGENT', entityId: 'test-agent', scorerId: 'foo-scorer' })];
       const pagination = createPagination({ page: 0, perPage: 10 });
 
       await mockStorage.saveScore(mockScores[0]);
 
-      const result = await getScoresByEntityIdHandler({
+      const result = await listScoresByEntityIdHandler({
         mastra,
         entityId: 'test-agent',
         entityType: 'AGENT',
@@ -172,7 +172,7 @@ describe('Scores Handlers', () => {
         logger: false,
       });
 
-      const result = await getScoresByEntityIdHandler({
+      const result = await listScoresByEntityIdHandler({
         mastra: mastraWithoutStorage,
         entityId: 'test-agent',
         entityType: 'agent',
@@ -194,10 +194,10 @@ describe('Scores Handlers', () => {
       const pagination = createPagination({ page: 0, perPage: 10 });
       const error = new Error('Storage error');
 
-      mockStorage.getScoresByEntityId = vi.fn().mockRejectedValue(error);
+      mockStorage.listScoresByEntityId = vi.fn().mockRejectedValue(error);
 
       await expect(
-        getScoresByEntityIdHandler({
+        listScoresByEntityIdHandler({
           mastra,
           entityId: 'test-agent',
           entityType: 'agent',
@@ -213,10 +213,10 @@ describe('Scores Handlers', () => {
         status: 404,
       };
 
-      mockStorage.getScoresByEntityId = vi.fn().mockRejectedValue(apiError);
+      mockStorage.listScoresByEntityId = vi.fn().mockRejectedValue(apiError);
 
       await expect(
-        getScoresByEntityIdHandler({
+        listScoresByEntityIdHandler({
           mastra,
           entityId: 'test-agent',
           entityType: 'agent',
@@ -233,7 +233,7 @@ describe('Scores Handlers', () => {
 
       await mockStorage.saveScore(mockScores[0]);
 
-      const result = await getScoresByEntityIdHandler({
+      const result = await listScoresByEntityIdHandler({
         mastra,
         entityId: 'test-workflow',
         entityType: 'WORKFLOW',

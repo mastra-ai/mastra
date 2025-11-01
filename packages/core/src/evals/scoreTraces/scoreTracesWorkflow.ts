@@ -19,7 +19,7 @@ const getTraceStep = createStep({
         spanId: z.string().optional(),
       }),
     ),
-    scorerName: z.string(),
+    scorerId: z.string(),
   }),
   outputSchema: z.any(),
   execute: async ({ inputData, tracingContext, mastra }) => {
@@ -38,7 +38,7 @@ const getTraceStep = createStep({
         category: ErrorCategory.SYSTEM,
         text: 'Storage not found for trace scoring',
         details: {
-          scorerName: inputData.scorerName,
+          scorerId: inputData.scorerId,
         },
       });
       logger?.error(mastraError.toString());
@@ -48,7 +48,7 @@ const getTraceStep = createStep({
 
     let scorer: MastraScorer | undefined;
     try {
-      scorer = mastra.getScorerByName(inputData.scorerName);
+      scorer = mastra.getScorerById(inputData.scorerId);
     } catch (error) {
       const mastraError = new MastraError(
         {
@@ -57,7 +57,7 @@ const getTraceStep = createStep({
           category: ErrorCategory.SYSTEM,
           text: `Scorer not found for trace scoring`,
           details: {
-            scorerName: inputData.scorerName,
+            scorerId: inputData.scorerId,
           },
         },
         error,
@@ -79,7 +79,7 @@ const getTraceStep = createStep({
               domain: ErrorDomain.SCORER,
               category: ErrorCategory.SYSTEM,
               details: {
-                scorerName: scorer.name,
+                scorerId: scorer.id,
                 spanId: target.spanId || '',
                 traceId: target.traceId,
               },
@@ -137,8 +137,8 @@ export async function runScorerOnTarget({
   const scorerResult = {
     ...result,
     scorer: {
-      id: scorer.name,
-      name: scorer.name,
+      id: scorer.id,
+      name: scorer.name || scorer.id,
       description: scorer.description,
     },
     traceId: target.traceId,
@@ -147,7 +147,7 @@ export async function runScorerOnTarget({
     entityType: span.spanType,
     entity: { traceId: span.traceId, spanId: span.spanId },
     source: 'TEST',
-    scorerId: scorer.name,
+    scorerId: scorer.id,
   };
 
   const savedScoreRecord = await validateAndSaveScore({ storage, scorerResult });
@@ -199,7 +199,7 @@ async function attachScoreToSpan({
   const link = {
     type: 'score',
     scoreId: scoreRecord.id,
-    scorerName: scoreRecord.scorer.name,
+    scorerName: scoreRecord.scorer.id,
     score: scoreRecord.score,
     createdAt: scoreRecord.createdAt,
   };
@@ -219,7 +219,7 @@ export const scoreTracesWorkflow = createWorkflow({
         spanId: z.string().optional(),
       }),
     ),
-    scorerName: z.string(),
+    scorerId: z.string(),
   }),
   outputSchema: z.any(),
   steps: [getTraceStep],
