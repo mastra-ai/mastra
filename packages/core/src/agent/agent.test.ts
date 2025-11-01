@@ -2,9 +2,9 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
-import type { CoreMessage, LanguageModelV1, CoreSystemMessage } from 'ai';
-import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import type { CoreMessage, CoreSystemMessage } from '@internal/ai-sdk-v4/message';
+import type { LanguageModelV1 } from '@internal/ai-sdk-v4/model';
+import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { APICallError, stepCountIs } from 'ai-v5';
 import type { SystemModelMessage } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
@@ -1330,7 +1330,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
-        name: 'dynamic-title-agent',
+        id: 'dynamic-title-agent',
+        name: 'Dynamic Title Agent',
         instructions: 'test agent',
         model: dummyModel,
         memory: mockMemory,
@@ -1526,7 +1527,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const agent = new Agent({
-        name: 'update-model-agent',
+        id: 'update-model-agent',
+        name: 'Update Model Agent',
         instructions: 'test agent',
         model: standardModel,
       });
@@ -1696,7 +1698,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const agent = new Agent({
-        name: 'boolean-title-agent',
+        id: 'boolean-title-agent',
+        name: 'Boolean Title Agent',
         instructions: 'test agent',
         model: testModel,
         memory: mockMemory,
@@ -1806,7 +1809,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
-        name: 'error-title-agent',
+        id: 'error-title-agent',
+        name: 'Error Title Agent',
         instructions: 'test agent',
         model: dummyModel,
         memory: mockMemory,
@@ -3158,7 +3162,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should create a new thread with metadata using generate', async () => {
       const mockMemory = new MockMemory();
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'test',
         model: dummyModel,
         memory: mockMemory,
@@ -3327,7 +3332,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('generate - should still work with deprecated threadId and resourceId', async () => {
       const mockMemory = new MockMemory();
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'test',
         model: dummyModel,
         memory: mockMemory,
@@ -5087,7 +5093,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('basic functionality', () => {
       it('should run input processors before generation', async () => {
         const processor = {
-          name: 'test-processor',
+          id: 'test-processor',
+          name: 'Test Processor',
           processInput: async ({ messages }) => {
             messages.push(createMessage('Processor was here!'));
             return messages;
@@ -5115,7 +5122,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should run multiple processors in order', async () => {
         const processor1 = {
-          name: 'processor-1',
+          id: 'processor-1',
+          name: 'Processor 1',
           processInput: async ({ messages }) => {
             messages.push(createMessage('First processor'));
             return messages;
@@ -5123,7 +5131,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const processor2 = {
-          name: 'processor-2',
+          id: 'processor-2',
+          name: 'Processor 2',
           processInput: async ({ messages }) => {
             messages.push(createMessage('Second processor'));
             return messages;
@@ -5150,7 +5159,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should support async processors running in sequence', async () => {
         const processor1 = {
-          name: 'async-processor-1',
+          id: 'async-processor-1',
+          name: 'Async Processor 1',
           processInput: async ({ messages }) => {
             messages.push(createMessage('First processor'));
             return messages;
@@ -5158,7 +5168,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const processor2 = {
-          name: 'async-processor-2',
+          id: 'async-processor-2',
+          name: 'Async Processor 2',
           processInput: async ({ messages }) => {
             await new Promise(resolve => setTimeout(resolve, 10));
             messages.push(createMessage('Second processor'));
@@ -5189,7 +5200,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('tripwire functionality', () => {
       it('should handle processor abort with default message', async () => {
         const abortProcessor = {
-          name: 'abort-processor',
+          id: 'abort-processor',
+          name: 'Abort Processor',
           processInput: async ({ abort, messages }) => {
             abort();
             return messages;
@@ -5218,7 +5230,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should handle processor abort with custom message', async () => {
         const customAbortProcessor = {
-          name: 'custom-abort',
+          id: 'custom-abort',
+          name: 'Custom Abort',
           processInput: async ({ abort, messages }) => {
             abort('Custom abort reason');
             return messages;
@@ -5248,7 +5261,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let secondProcessorExecuted = false;
 
         const abortProcessor = {
-          name: 'abort-first',
+          id: 'abort-first',
+          name: 'Abort First',
           processInput: async ({ abort, messages }) => {
             abort('Stop here');
             return messages;
@@ -5256,7 +5270,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const shouldNotRunProcessor = {
-          name: 'should-not-run',
+          id: 'should-not-run',
+          name: 'Should Not Run',
           processInput: async ({ messages }) => {
             secondProcessorExecuted = true;
             messages.push(createMessage('This should not be added'));
@@ -5286,7 +5301,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('streaming with input processors', () => {
       it('should handle input processors with streaming', async () => {
         const streamProcessor = {
-          name: 'stream-processor',
+          id: 'stream-processor',
+          name: 'Stream Processor',
           processInput: async ({ messages }) => {
             messages.push(createMessage('Stream processor active'));
             return messages;
@@ -5317,7 +5333,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should handle abort in streaming with tripwire response', async () => {
         const streamAbortProcessor = {
-          name: 'stream-abort',
+          id: 'stream-abort',
+          name: 'Stream Abort',
           processInput: async ({ abort, messages }) => {
             abort('Stream aborted');
             return messages;
@@ -5358,7 +5375,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should include deployer methods when tripwire is triggered in streaming', async () => {
         const deployerAbortProcessor = {
-          name: 'deployer-abort',
+          id: 'deployer-abort',
+          name: 'Deployer Abort',
           processInput: async ({ abort, messages }) => {
             abort('Deployer test abort');
             return messages;
@@ -5420,7 +5438,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             const message: string = requestContext.get('processorMessage') || 'Default message';
             return [
               {
-                name: 'dynamic-processor',
+                id: 'dynamic-processor',
+                name: 'Dynamic Processor',
                 processInput: async ({ messages }) => {
                   messages.push(createMessage(message));
                   return messages;
@@ -5467,7 +5486,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('message manipulation', () => {
       it('should allow processors to modify message content', async () => {
         const messageModifierProcessor = {
-          name: 'message-modifier',
+          id: 'message-modifier',
+          name: 'Message Modifier',
           processInput: async ({ messages }) => {
             // Access existing messages and modify them
             const lastMessage = messages[messages.length - 1];
@@ -5500,7 +5520,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should allow processors to filter or validate messages', async () => {
         const validationProcessor = {
-          name: 'validator',
+          id: 'validator',
+          name: 'Validator',
           processInput: async ({ messages, abort }) => {
             // Extract text content from all messages
             const textContent = messages

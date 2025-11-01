@@ -124,6 +124,7 @@ describe('Output Processor Memory Persistence Integration', () => {
 
     // Create an agent with the PII redaction processor
     const agent = new Agent({
+      id: 'test-agent-pii',
       name: 'test-agent-pii',
       model: mockModel,
       instructions: 'You are a helpful assistant',
@@ -207,6 +208,7 @@ describe('Output Processor Memory Persistence Integration', () => {
 
     // Create an agent with the PII redaction processor
     const agent = new Agent({
+      id: 'test-agent-pii',
       name: 'test-agent-pii',
       model: mockModel,
       instructions: 'You are a helpful assistant',
@@ -392,6 +394,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     });
 
     const agent = new Agent({
+      id: 'test-agent-chain',
       name: 'test-agent-chain',
       model: mockModel,
       instructions: 'You are a helpful assistant',
@@ -516,6 +519,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     });
 
     const agent = new Agent({
+      id: 'test-agent-refresh',
       name: 'test-agent-refresh',
       model: mockModel,
       instructions: 'You are a helpful assistant',

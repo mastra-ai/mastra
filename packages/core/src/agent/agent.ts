@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
-import type { CoreMessage, StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
+import type { CoreMessage, TextPart, UIMessage } from '@internal/ai-sdk-v4/message';
+import type { StreamObjectResult } from '@internal/ai-sdk-v4/model';
+import type { Tool } from '@internal/ai-sdk-v4/tool';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
@@ -121,7 +123,8 @@ function resolveThreadIdFromArgs(args: {
  * import { Memory } from '@mastra/memory';
  *
  * const agent = new Agent({
- *   name: 'my-agent',
+ *   id: 'my-agent',
+ *   name: 'My Agent',
  *   instructions: 'You are a helpful assistant',
  *   model: 'openai/gpt-5',
  *   tools: {
@@ -165,7 +168,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * import { Memory } from '@mastra/memory';
    *
    * const agent = new Agent({
-   *   name: 'weatherAgent',
+   *   id: 'weatherAgent',
+   *   name: 'Weather Agent',
    *   instructions: 'You help users with weather information',
    *   model: 'openai/gpt-5',
    *   tools: { getWeather },
@@ -2299,12 +2303,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         }
 
         const sameThreadMessages = memoryMessages.filter((m: MastraDBMessage) => m.threadId === threadObject.id);
-        console.log('DEBUG agent.ts:', {
-          threadObjectId: threadObject.id,
-          memoryMessagesCount: memoryMessages.length,
-          memoryMessagesThreadIds: memoryMessages.map(m => m.threadId),
-          sameThreadMessagesCount: sameThreadMessages.length,
-        });
 
         messageList
           .add(

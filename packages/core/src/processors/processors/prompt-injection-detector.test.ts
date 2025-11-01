@@ -1,4 +1,4 @@
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
@@ -70,7 +70,7 @@ describe('PromptInjectionDetector', () => {
         model,
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
 
     it('should use default detection types when none specified', () => {
@@ -79,7 +79,7 @@ describe('PromptInjectionDetector', () => {
         model,
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
 
     it('should accept custom detection types', () => {
@@ -89,7 +89,7 @@ describe('PromptInjectionDetector', () => {
         detectionTypes: ['custom-injection', 'custom-jailbreak'],
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
 
     it('should accept custom threshold and strategy', () => {
@@ -100,7 +100,7 @@ describe('PromptInjectionDetector', () => {
         strategy: 'rewrite',
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
   });
 
@@ -593,7 +593,7 @@ describe('PromptInjectionDetector', () => {
         instructions: customInstructions,
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
   });
 

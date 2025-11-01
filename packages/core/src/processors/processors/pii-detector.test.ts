@@ -1,5 +1,5 @@
-import type { TextPart } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import type { TextPart } from '@internal/ai-sdk-v4/message';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
@@ -723,7 +723,7 @@ describe('PIIDetector', () => {
         instructions: customInstructions,
       });
 
-      expect(detector.name).toBe('pii-detector');
+      expect(detector.id).toBe('pii-detector');
     });
   });
 

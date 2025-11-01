@@ -1,4 +1,4 @@
-import type { TextPart } from 'ai';
+import type { TextPart } from '@internal/ai-sdk-v4/message';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { ChunkType } from '../../stream';

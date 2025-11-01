@@ -1,4 +1,4 @@
-import type { TextPart } from 'ai';
+import type { TextPart } from '@internal/ai-sdk-v4/message';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
@@ -157,7 +157,8 @@ describe('ProcessorRunner', () => {
     it('should abort with default message when no reason provided', async () => {
       const inputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processInput: async ({ messages: _messages, abort }) => {
             abort();
             return _messages;

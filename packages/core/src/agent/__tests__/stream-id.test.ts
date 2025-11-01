@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
-import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import type { UIMessageChunk } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -46,7 +45,8 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
-      name: 'test-agent',
+      id: 'test-agent',
+      name: 'Test Agent',
       instructions: 'You are a helpful assistant.',
       model,
       memory,
@@ -120,7 +120,8 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
-      name: 'test-agent',
+      id: 'test-agent',
+      name: 'Test Agent Custom ID',
       instructions: 'You are a helpful assistant.',
       model,
       memory,
@@ -176,7 +177,8 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
-      name: 'test-agent',
+      id: 'test-agent',
+      name: 'Test Agent V2',
       instructions: 'You are a helpful assistant.',
       model,
       memory,
@@ -258,7 +260,8 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
-      name: 'test-agent',
+      id: 'test-agent',
+      name: 'Test Agent V2 Custom ID',
       instructions: 'You are a helpful assistant.',
       model,
       memory,
@@ -302,7 +305,8 @@ describe('Stream ID Consistency', () => {
       });
 
       const agent = new Agent({
-        name: 'test-structured-output-onfinish',
+        id: 'test-structured-output-onfinish',
+        name: 'Test Structured Output OnFinish',
         instructions: 'You are a helpful assistant.',
         model: mockModel,
       });
@@ -388,7 +392,8 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
-      name: 'test-structured-output-processor-onfinish',
+      id: 'test-structured-output-processor-onfinish',
+      name: 'Test Structured Output Processor OnFinish',
       instructions: 'You are a helpful assistant.',
       model: mockModel,
     });
@@ -471,7 +476,8 @@ describe('Stream ID Consistency', () => {
     });
 
     const agent = new Agent({
-      name: 'test-agent',
+      id: 'test-agent',
+      name: 'Test Agent UIMessage',
       instructions: 'You are a helpful assistant.',
       model: mockModel,
       memory: mockMemory,

@@ -111,7 +111,8 @@ export type UserTier = {
 };
 
 export const weatherAgent = new Agent({
-  name: "weather-agent",
+  id: "weather-agent",
+  name: "Weather Agent",
   instructions: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 

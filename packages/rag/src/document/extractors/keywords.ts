@@ -66,6 +66,7 @@ export class KeywordExtractor extends BaseExtractor {
     let keywords = '';
     try {
       const miniAgent = new Agent({
+        id: 'keyword-extractor',
         model: this.llm,
         name: 'keyword-extractor',
         instructions:

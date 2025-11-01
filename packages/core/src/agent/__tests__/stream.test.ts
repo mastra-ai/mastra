@@ -3,8 +3,8 @@ import { openai } from '@ai-sdk/openai';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
-import type { LanguageModelV1 } from 'ai';
-import { convertArrayToReadableStream, MockLanguageModelV1 } from 'ai/test';
+import type { LanguageModelV1 } from '@internal/ai-sdk-v4/model';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2 } from 'ai-v5/test';
 import { config } from 'dotenv';
 import { describe, expect, it, vi } from 'vitest';
@@ -64,7 +64,8 @@ function runStreamTest(version: 'v1' | 'v2') {
       });
 
       const agent = new Agent({
-        name: 'partial-rescue-agent',
+        id: 'partial-rescue-agent',
+        name: 'Partial Rescue Agent',
         instructions:
           'Call each tool in a separate step. Do not use parallel tool calls. Always wait for the result of one tool before calling the next.',
         model: openaiModel,
@@ -173,7 +174,8 @@ function runStreamTest(version: 'v1' | 'v2') {
       });
 
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'If the user prompt contains "Echo:", always call the echoTool. Be verbose in your response.',
         model: openaiModel,
         memory: mockMemory,
@@ -242,7 +244,8 @@ function runStreamTest(version: 'v1' | 'v2') {
       });
 
       const agent = new Agent({
-        name: 'test-agent-multi',
+        id: 'test-agent-multi',
+        name: 'Test Agent Multi',
         instructions: [
           'If the user prompt contains "Echo:", call the echoTool.',
           'If the user prompt contains "Uppercase:", call the uppercaseTool.',
@@ -299,7 +302,8 @@ function runStreamTest(version: 'v1' | 'v2') {
     it('should persist the full message after a successful run', async () => {
       const mockMemory = new MockMemory();
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'test',
         model: dummyResponseModel,
         memory: mockMemory,
@@ -380,7 +384,8 @@ function runStreamTest(version: 'v1' | 'v2') {
             });
 
       const agent = new Agent({
-        name: 'test-agent-7050',
+        id: 'test-agent-7050',
+        name: 'Test Agent 7050',
         instructions: 'test',
         model: mockModel,
       });
@@ -454,7 +459,8 @@ function runStreamTest(version: 'v1' | 'v2') {
       };
 
       const agent = new Agent({
-        name: 'no-progress-agent',
+        id: 'no-progress-agent',
+        name: 'No Progress Agent',
         instructions: 'test',
         model: emptyResponseModel,
         memory: mockMemory,
@@ -494,7 +500,8 @@ function runStreamTest(version: 'v1' | 'v2') {
       };
 
       const agent = new Agent({
-        name: 'immediate-interrupt-agent',
+        id: 'immediate-interrupt-agent',
+        name: 'Immediate Interrupt Agent',
         instructions: 'test',
         model: errorResponseModel,
         memory: mockMemory,
@@ -555,7 +562,8 @@ function runStreamTest(version: 'v1' | 'v2') {
       }
 
       const agent = new Agent({
-        name: 'error-agent-stream',
+        id: 'error-agent-stream',
+        name: 'Error Agent Stream',
         instructions: 'test',
         model: errorModel,
         memory: mockMemory,
@@ -609,8 +617,8 @@ function runStreamTest(version: 'v1' | 'v2') {
   describe(`stream`, () => {
     it(`should stream from LLM`, async () => {
       const agent = new Agent({
-        id: 'test',
-        name: 'test',
+        id: 'test-agent',
+        name: 'Test Agent',
         model: openaiModel,
         instructions: `test!`,
       });
@@ -658,8 +666,8 @@ function runStreamTest(version: 'v1' | 'v2') {
 
     it(`should show correct request input for multi-turn inputs`, { timeout: 30000 }, async () => {
       const agent = new Agent({
-        id: 'test',
-        name: 'test',
+        id: 'test-agent',
+        name: 'Test Agent',
         model: openaiModel,
         instructions: `test!`,
       });
@@ -738,7 +746,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       };
 
       const agent = new Agent({
-        id: 'test',
+        id: 'test-agent',
         name: 'test',
         model: openaiModel,
         instructions: `test!`,
