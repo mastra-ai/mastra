@@ -1729,7 +1729,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingPolicy: this.#options?.tracingPolicy,
         };
 
-        convertedAgentTools[`agent-${agentName}`] = makeCoreTool(toolObj, options);
+        // TODO; fix recursion type
+        convertedAgentTools[`agent-${agentName}`] = makeCoreTool(toolObj as any, options);
       }
     }
 
