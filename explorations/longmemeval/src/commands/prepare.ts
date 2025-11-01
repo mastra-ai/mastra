@@ -475,7 +475,8 @@ export class PrepareCommand {
 
     // Create agent with appropriate model
     const agent = new Agent({
-      name: 'prep-agent',
+      id: 'prep-agent',
+      name: 'Prep Agent',
       instructions:
         "You are a helpful assistant. Process and store conversation history. Only store working memory information if it's in the template. Other information is not relevant",
       model: model,

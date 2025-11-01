@@ -42,6 +42,7 @@ describe('Memory Streaming Tests', () => {
   it('should handle multiple tool calls in memory thread history', async () => {
     // Create agent with memory and tools
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test',
       instructions:
         'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code.',
@@ -91,6 +92,7 @@ describe('Memory Streaming Tests', () => {
 
   it('should use custom mastra ID generator for messages in memory', async () => {
     const agent = new Agent({
+      id: 'test-msg-id',
       name: 'test-msg-id',
       instructions: 'you are a helpful assistant.',
       model: openai('gpt-4o'),

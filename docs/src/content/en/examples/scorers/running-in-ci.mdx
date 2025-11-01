@@ -179,6 +179,7 @@ import { openai } from '@ai-sdk/openai';
 import { weatherTool } from '../tools/weather-tool';
 
 export const weatherAgent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   instructions: 'You are a helpful weather assistant that provides accurate weather information.',
   model: openai('gpt-4o-mini'),

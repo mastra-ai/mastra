@@ -43,7 +43,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       const storage = new InMemoryStore();
       const mockMemory = new MockMemory({ storage });
       const agent = new Agent({
-        name: 'static-memory-agent',
+        id: 'static-memory-agent',
+        name: 'Static Memory Agent',
         instructions: 'test agent',
         model: dummyModel,
         memory: mockMemory,
@@ -58,7 +59,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       const standardMemory = new MockMemory({ storage: new InMemoryStore() });
 
       const agent = new Agent({
-        name: 'dynamic-memory-agent',
+        id: 'dynamic-memory-agent',
+        name: 'Dynamic Memory Agent',
         instructions: 'test agent',
         model: dummyModel,
         memory: ({ requestContext }) => {
@@ -84,7 +86,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       const mockMemory = new MockMemory({ storage: new InMemoryStore() });
 
       const agent = new Agent({
-        name: 'async-memory-agent',
+        id: 'async-memory-agent',
+        name: 'Async Memory Agent',
         instructions: 'test agent',
         model: dummyModel,
         memory: async ({ requestContext }) => {
@@ -113,7 +116,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
 
     it('should throw error when dynamic memory function returns empty value', async () => {
       const agent = new Agent({
-        name: 'invalid-memory-agent',
+        id: 'invalid-memory-agent',
+        name: 'Invalid Memory Agent',
         instructions: 'test agent',
         model: dummyModel,
         memory: () => null as any,
@@ -126,7 +130,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       const mockMemory = new MockMemory({ storage: new InMemoryStore() });
 
       const agent = new Agent({
-        name: 'generate-memory-agent',
+        id: 'generate-memory-agent',
+        name: 'Generate Memory Agent',
         instructions: 'test agent',
         model: dummyModel,
         memory: ({ requestContext }) => {
@@ -229,7 +234,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       }
 
       const agent = new Agent({
-        name: 'stream-memory-agent',
+        id: 'stream-memory-agent',
+        name: 'Stream Memory Agent',
         instructions: 'test agent',
         model,
         memory: ({ requestContext }) => {
@@ -341,7 +347,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       }
 
       const agent = new Agent({
-        name: 'system-message-test-agent',
+        id: 'system-message-test-agent',
+        name: 'System Message Test Agent',
         instructions: 'You are a test agent',
         model: dummyModel,
         memory: mockMemory,
@@ -446,7 +453,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       }
 
       const agent = new Agent({
-        name: 'system-message-test-agent-stream',
+        id: 'system-message-test-agent-stream',
+        name: 'System Message Test Agent Stream',
         instructions: 'You are a test agent',
         model: dummyModel,
         memory: mockMemory,
@@ -556,7 +564,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       }
 
       const agent = new Agent({
-        name: 'system-message-test-agent-stream-no-memory',
+        id: 'system-message-test-agent-stream-no-memory',
+        name: 'System Message Test Agent Stream No Memory',
         instructions: 'You are a test agent',
         model: dummyModel,
       });
@@ -657,7 +666,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       }
 
       const agent = new Agent({
-        name: 'system-message-test-agent-no-memory',
+        id: 'system-message-test-agent-no-memory',
+        name: 'System Message Test Agent No Memory',
         instructions: 'You are a test agent',
         model: dummyModel,
       });
@@ -748,7 +758,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       }
 
       const agent = new Agent({
-        name: 'system-option-generate-test',
+        id: 'system-option-generate-test',
+        name: 'System Option Generate Test',
         instructions: 'Default instructions',
         model: testModel,
       });
@@ -837,7 +848,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       }
 
       const agent = new Agent({
-        name: 'system-option-stream-test',
+        id: 'system-option-stream-test',
+        name: 'System Option Stream Test',
         instructions: 'Default instructions',
         model: testModel,
       });
@@ -924,7 +936,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       }
 
       const agent = new Agent({
-        name: 'combined-test-agent',
+        id: 'combined-test-agent',
+        name: 'Combined Test Agent',
         instructions: 'Default instructions',
         model: testModel,
       });
@@ -993,7 +1006,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       });
 
       const agent = new Agent({
-        name: 'core-system-message-test',
+        id: 'core-system-message-test',
+        name: 'Core System Message Test',
         instructions: 'Default instructions',
         model: testModel,
       });
@@ -1054,7 +1068,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       });
 
       const agent = new Agent({
-        name: 'system-model-message-stream-test',
+        id: 'system-model-message-stream-test',
+        name: 'System Model Message Stream Test',
         instructions: 'Default instructions',
         model: testModel,
       });
@@ -1129,7 +1144,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       });
 
       const agent = new Agent({
-        name: 'mixed-system-test',
+        id: 'mixed-system-test',
+        name: 'Mixed System Test',
         instructions: 'Default instructions',
         model: testModel,
       });
@@ -1219,7 +1235,8 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       });
 
       const agent = new Agent({
-        name: 'array-system-test',
+        id: 'array-system-test',
+        name: 'Array System Test',
         instructions: 'Default instructions',
         model: testModel,
       });

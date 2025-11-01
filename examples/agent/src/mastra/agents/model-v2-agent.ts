@@ -41,6 +41,7 @@ const testAPICallError = new APICallError({
 });
 
 export const errorAgent = new Agent({
+  id: 'error-agent',
   name: 'Error Agent',
   instructions: 'You are an error agent that always errors',
   model: new MockLanguageModelV2({
@@ -51,6 +52,7 @@ export const errorAgent = new Agent({
 });
 
 export const chefModelV2Agent = new Agent({
+  id: 'chef-model-v2-agent',
   name: 'Chef Agent V2 Model',
   description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
   instructions: {
@@ -97,6 +99,7 @@ export const chefModelV2Agent = new Agent({
 });
 
 const weatherAgent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   instructions: `Your goal is to execute the recipe-maker workflow with the given ingredient`,
   description: `An agent that can help you get a recipe for a given ingredient`,
@@ -110,6 +113,7 @@ const weatherAgent = new Agent({
 });
 
 export const networkAgent = new Agent({
+  id: 'network-agent',
   name: 'Chef Network',
   description:
     'A chef agent that can help you cook great meals with whatever ingredients you have available based on your location and current weather.',

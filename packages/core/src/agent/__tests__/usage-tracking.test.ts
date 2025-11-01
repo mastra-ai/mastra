@@ -36,7 +36,8 @@ describe('Agent usage tracking', () => {
         });
 
         const agent = new Agent({
-          name: 'test-agent',
+          id: 'test-agent',
+          name: 'Test Agent',
           model,
           instructions: 'You are a helpful assistant',
         });
@@ -79,7 +80,8 @@ describe('Agent usage tracking', () => {
         });
 
         const agent = new Agent({
-          name: 'test-agent',
+          id: 'test-agent',
+          name: 'Test Agent',
           model,
           instructions: 'You are a helpful assistant',
         });
@@ -116,7 +118,8 @@ describe('Agent usage tracking', () => {
         });
 
         const agent = new Agent({
-          name: 'test-agent',
+          id: 'test-agent',
+          name: 'Test Agent',
           model,
           instructions: 'You are a helpful assistant',
         });
@@ -141,7 +144,8 @@ describe('Agent usage tracking', () => {
         });
 
         const agent = new Agent({
-          name: 'test-agent',
+          id: 'test-agent',
+          name: 'Test Agent',
           model,
           instructions: 'You are a helpful assistant',
         });
@@ -174,7 +178,8 @@ describe('Agent usage tracking', () => {
         });
 
         const agent = new Agent({
-          name: 'test-agent',
+          id: 'test-agent',
+          name: 'Test Agent',
           model,
           instructions: 'You are a helpful assistant',
         });
@@ -193,7 +198,8 @@ describe('Agent usage tracking', () => {
         });
 
         const agent = new Agent({
-          name: 'test-agent',
+          id: 'test-agent',
+          name: 'Test Agent',
           model,
           instructions: 'You are a helpful assistant',
         });

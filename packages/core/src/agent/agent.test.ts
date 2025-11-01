@@ -1330,7 +1330,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
-        name: 'dynamic-title-agent',
+        id: 'dynamic-title-agent',
+        name: 'Dynamic Title Agent',
         instructions: 'test agent',
         model: dummyModel,
         memory: mockMemory,
@@ -1526,7 +1527,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const agent = new Agent({
-        name: 'update-model-agent',
+        id: 'update-model-agent',
+        name: 'Update Model Agent',
         instructions: 'test agent',
         model: standardModel,
       });
@@ -1696,7 +1698,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const agent = new Agent({
-        name: 'boolean-title-agent',
+        id: 'boolean-title-agent',
+        name: 'Boolean Title Agent',
         instructions: 'test agent',
         model: testModel,
         memory: mockMemory,
@@ -1806,7 +1809,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
-        name: 'error-title-agent',
+        id: 'error-title-agent',
+        name: 'Error Title Agent',
         instructions: 'test agent',
         model: dummyModel,
         memory: mockMemory,
@@ -3158,7 +3162,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should create a new thread with metadata using generate', async () => {
       const mockMemory = new MockMemory();
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'test',
         model: dummyModel,
         memory: mockMemory,
@@ -3327,7 +3332,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('generate - should still work with deprecated threadId and resourceId', async () => {
       const mockMemory = new MockMemory();
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'test',
         model: dummyModel,
         memory: mockMemory,

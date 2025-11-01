@@ -39,6 +39,7 @@ export const weatherInfo = tool({
 });
 
 export const chefAgent = new Agent({
+  id: 'chef-agent',
   name: 'Chef Agent',
   description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
   instructions: `
@@ -60,6 +61,7 @@ export const chefAgent = new Agent({
 });
 
 export const dynamicAgent = new Agent({
+  id: 'dynamic-agent',
   name: 'Dynamic Agent',
   instructions: ({ requestContext }) => {
     if (requestContext.get('foo')) {
@@ -129,6 +131,7 @@ const moderationDetector = new ModerationProcessor({
 });
 
 export const chefAgentResponses = new Agent({
+  id: 'chef-agent-responses',
   name: 'Chef Agent Responses',
   instructions: `
     You are Michel, a practical and experienced home chef who helps people cook great meals with whatever
@@ -189,6 +192,7 @@ export const chefAgentResponses = new Agent({
 });
 
 export const agentThatHarassesYou = new Agent({
+  id: 'agent-that-harasses-you',
   name: 'Agent That Harasses You',
   instructions: `
     You are a agent that harasses you. You are a jerk. You are a meanie. You are a bully. You are a asshole.
@@ -204,6 +208,7 @@ const answerRelevance = createAnswerRelevancyScorer({
 console.log(`answerRelevance`, answerRelevance);
 
 export const evalAgent = new Agent({
+  id: 'eval-agent',
   name: 'Eval Agent',
   instructions: `
     You are a helpful assistant with a weather tool.

@@ -108,6 +108,7 @@ describe('Working Memory Tests', () => {
 
     it('should handle LLM responses with working memory using OpenAI (test that the working memory prompt works)', async () => {
       const agent = new Agent({
+        id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
         model: openai('gpt-4o'),
@@ -229,6 +230,7 @@ describe('Working Memory Tests', () => {
 
     it('should handle LLM responses with working memory using tool calls', async () => {
       const agent = new Agent({
+        id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
         model: openai('gpt-4o'),
@@ -254,6 +256,7 @@ describe('Working Memory Tests', () => {
 
     it("shouldn't pollute context with working memory tool call args, only the system instruction working memory should exist", async () => {
       const agent = new Agent({
+        id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
         model: openai('gpt-4o'),
@@ -471,6 +474,7 @@ describe('Working Memory Tests', () => {
       });
       expect(await memory.getWorkingMemory({ threadId: thread.id, resourceId })).toBeNull();
       agent = new Agent({
+        id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
         model: openai('gpt-4o'),
@@ -553,6 +557,7 @@ describe('Working Memory Tests', () => {
         expect(await memory.getWorkingMemory({ threadId: thread.id, resourceId })).toBeNull();
 
         agent = new Agent({
+          id: 'memory-test-agent',
           name: 'Memory Test Agent',
           instructions: `You are a helpful AI agent. Always add working memory tags to remember user information.
           
@@ -729,6 +734,7 @@ describe('Working Memory Tests', () => {
       expect(await memory.getWorkingMemory({ threadId: thread.id, resourceId })).toBeNull();
 
       agent = new Agent({
+        id: 'jsonschema-memory-test-agent',
         name: 'JSONSchema Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always update working memory with user information.',
         model: openai('gpt-4o'),

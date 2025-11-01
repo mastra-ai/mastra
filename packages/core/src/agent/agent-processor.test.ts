@@ -98,6 +98,7 @@ describe('Input and Output Processors', () => {
   describe('Input Processors with generate', () => {
     it('should run input processors before generation', async () => {
       const processor = {
+        id: 'test-processor',
         name: 'test-processor',
         processInput: async ({ messages }) => {
           messages.push(createMessage('Processor was here!'));

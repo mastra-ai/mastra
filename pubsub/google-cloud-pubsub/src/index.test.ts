@@ -324,6 +324,7 @@ describe.sequential(
         });
 
         const agent = new Agent({
+          id: 'test-agent-1',
           name: 'test-agent-1',
           instructions: 'test agent instructions"',
           model: new MockLanguageModelV1({
@@ -345,6 +346,7 @@ describe.sequential(
         });
 
         const agent2 = new Agent({
+          id: 'test-agent-2',
           name: 'test-agent-2',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
@@ -4743,6 +4745,7 @@ describe.sequential(
         });
 
         const agent = new Agent({
+          id: 'test-agent-1',
           name: 'test-agent-1',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
@@ -4764,6 +4767,7 @@ describe.sequential(
         });
 
         const agent2 = new Agent({
+          id: 'test-agent-2',
           name: 'test-agent-2',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
@@ -4884,6 +4888,7 @@ describe.sequential(
         });
 
         const agent = new Agent({
+          id: 'test-agent-1',
           name: 'test-agent-1',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
@@ -4905,6 +4910,7 @@ describe.sequential(
         });
 
         const agent2 = new Agent({
+          id: 'test-agent-2',
           name: 'test-agent-2',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
@@ -5039,6 +5045,7 @@ describe.sequential(
         });
 
         const agent = new Agent({
+          id: 'test-agent-1',
           name: 'test-agent-1',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
@@ -5052,6 +5059,7 @@ describe.sequential(
         });
 
         const agent2 = new Agent({
+          id: 'test-agent-2',
           name: 'test-agent-2',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
@@ -5169,6 +5177,7 @@ describe.sequential(
         });
 
         const agent = new Agent({
+          id: 'test-agent-1',
           name: 'test-agent-1',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
@@ -5181,6 +5190,7 @@ describe.sequential(
           }),
         });
         const agent2 = new Agent({
+          id: 'test-agent-2',
           name: 'test-agent-2',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({

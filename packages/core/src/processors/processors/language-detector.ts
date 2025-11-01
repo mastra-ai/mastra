@@ -171,7 +171,8 @@ export class LanguageDetector implements Processor {
 
     // Create internal detection and translation agent
     this.detectionAgent = new Agent({
-      name: 'language-detector',
+      id: 'language-detector',
+      name: 'Language Detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
     });

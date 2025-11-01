@@ -32,7 +32,8 @@ const voice = new GladiaVoice({
 // Create an agent with voice capabilities
 // Note: Gladia only supports STT, so the agent will only be able to listen.
 export const agent = new Agent({
-  name: 'Agent',
+  id: 'voice-agent',
+  name: 'Voice Agent',
   instructions: `You are a helpful assistant with STT capabilities.`,
   model: google('gemini-1.5-pro-latest'),
   voice: voice,

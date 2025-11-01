@@ -17,6 +17,7 @@ import { weatherTool } from '../tools';
 // });
 
 export const weatherAgent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   instructions: `You are a helpful weather assistant that provides accurate weather information.
 
@@ -40,7 +41,8 @@ Use the weatherTool to fetch current weather data.`,
 });
 
 export const weatherReporterAgent = new Agent({
-  name: 'weatherExplainerAgent',
+  id: 'weatherExplainerAgent',
+  name: 'Weather Explainer Agent',
   model: openai('gpt-4o'),
   instructions: `
   You are a weather explainer. You have access to input that will help you get weather-specific activities for any city. 

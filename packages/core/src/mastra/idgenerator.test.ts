@@ -14,7 +14,8 @@ function createMastraWithMemory(idGenerator?: () => string) {
 
   // Create an agent with the registered memory
   const agent = new Agent({
-    name: 'testAgent',
+    id: 'test-agent',
+    name: 'Test Agent',
     instructions: 'You are a test agent',
     model: new MockLanguageModelV1({
       doGenerate: async () => ({
@@ -294,7 +295,8 @@ describe('Mastra ID Generator', () => {
     it('should use custom ID generator across multiple agents', async () => {
       const memory1 = new MockMemory();
       const agent1 = new Agent({
-        name: 'agent1',
+        id: 'agent1',
+        name: 'Agent 1',
         instructions: 'You are agent 1',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -309,7 +311,8 @@ describe('Mastra ID Generator', () => {
 
       const memory2 = new MockMemory();
       const agent2 = new Agent({
-        name: 'agent2',
+        id: 'agent2',
+        name: 'Agent 2',
         instructions: 'You are agent 2',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -352,7 +355,8 @@ describe('Mastra ID Generator', () => {
       let receivedRequestContext: RequestContext | undefined;
 
       const agent = new Agent({
-        name: 'testAgent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'You are a test agent',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -399,7 +403,8 @@ describe('Mastra ID Generator', () => {
       let contextSessionId: string | undefined;
 
       const agent = new Agent({
-        name: 'testAgent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'You are a context-aware agent',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -452,7 +457,8 @@ describe('Mastra ID Generator', () => {
       const memoryInstances: MockMemory[] = [];
 
       const agent = new Agent({
-        name: 'testAgent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'You are a multi-context agent',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -504,7 +510,8 @@ describe('Mastra ID Generator', () => {
 
     it('should handle dynamic memory creation errors gracefully', async () => {
       const agent = new Agent({
-        name: 'testAgent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'You are a test agent',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -600,7 +607,8 @@ describe('Mastra ID Generator', () => {
     it('should handle complete user conversation workflow', async () => {
       const memory = new MockMemory();
       const agent = new Agent({
-        name: 'helpAgent',
+        id: 'help-agent',
+        name: 'Help Agent',
         instructions: 'You are a helpful assistant',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -632,7 +640,8 @@ describe('Mastra ID Generator', () => {
     it('should handle multi-user concurrent conversations', async () => {
       const memory = new MockMemory();
       const agent = new Agent({
-        name: 'multiUserAgent',
+        id: 'multi-user-agent',
+        name: 'Multi-User Agent',
         instructions: 'You are a multi-user assistant',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -674,7 +683,8 @@ describe('Mastra ID Generator', () => {
     it('should handle complex workflow with memory operations', async () => {
       const memory = new MockMemory();
       const agent = new Agent({
-        name: 'workflowAgent',
+        id: 'workflow-agent',
+        name: 'Workflow Agent',
         instructions: 'You are a workflow assistant',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -721,7 +731,8 @@ describe('Mastra ID Generator', () => {
     it('should handle streaming operations with memory persistence', async () => {
       const memory = new MockMemory();
       const agent = new Agent({
-        name: 'streamingAgent',
+        id: 'streaming-agent',
+        name: 'Streaming Agent',
         instructions: 'You are a streaming assistant',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({

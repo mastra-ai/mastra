@@ -176,7 +176,8 @@ export class PIIDetector implements Processor {
 
     // Create internal detection agent
     this.detectionAgent = new Agent({
-      name: 'pii-detector',
+      id: 'pii-detector',
+      name: 'PII Detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
     });

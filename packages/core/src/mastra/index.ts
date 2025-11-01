@@ -46,7 +46,8 @@ import { createOnScorerHook } from './hooks';
  * const mastra = new Mastra({
  *   agents: {
  *     weatherAgent: new Agent({
- *       name: 'weather-agent',
+ *       id: 'weather-agent',
+ *       name: 'Weather Agent',
  *       instructions: 'You help with weather information',
  *       model: 'openai/gpt-5'
  *     })
@@ -189,7 +190,8 @@ export interface Config<
  * const mastra = new Mastra({
  *   agents: {
  *     weatherAgent: new Agent({
- *       name: 'weather-agent',
+ *       id: 'weather-agent',
+ *       name: 'Weather Agent',
  *       instructions: 'You provide weather information',
  *       model: 'openai/gpt-5',
  *       tools: [getWeatherTool]
@@ -225,7 +227,6 @@ export class Mastra<
   }> = [];
 
   #storage?: MastraStorage;
-  #memory?: MastraMemory;
   #scorers?: TScorers;
   #server?: ServerConfig;
   #mcpServers?: TMCPServers;
@@ -244,13 +245,6 @@ export class Mastra<
    */
   get storage() {
     return this.#storage;
-  }
-
-  /**
-   * @deprecated use getMemory() instead
-   */
-  get memory() {
-    return this.#memory;
   }
 
   get pubsub() {
@@ -336,7 +330,8 @@ export class Mastra<
    * const mastra = new Mastra({
    *   agents: {
    *     assistant: new Agent({
-   *       name: 'assistant',
+   *       id: 'assistant',
+   *       name: 'Assistant',
    *       instructions: 'You are a helpful assistant',
    *       model: 'openai/gpt-5'
    *     })
@@ -458,25 +453,6 @@ export class Mastra<
       });
     }
 
-    if (config && `memory` in config) {
-      const error = new MastraError({
-        id: 'MASTRA_CONSTRUCTOR_INVALID_MEMORY_CONFIG',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `
-  Memory should be added to Agents, not to Mastra.
-
-Instead of:
-  new Mastra({ memory: new Memory() })
-
-do:
-  new Agent({ memory: new Memory() })
-`,
-      });
-      this.#logger?.trackException(error);
-      throw error;
-    }
-
     if (config?.tts) {
       this.#tts = config.tts;
     }
@@ -505,7 +481,6 @@ do:
         agent.__registerPrimitives({
           logger: this.getLogger(),
           storage: this.storage,
-          memory: this.memory,
           agents: agents,
           tts: this.#tts,
           vectors: this.#vectors,
@@ -536,7 +511,6 @@ do:
         workflow.__registerPrimitives({
           logger: this.getLogger(),
           storage: this.storage,
-          memory: this.memory,
           agents: agents,
           tts: this.#tts,
           vectors: this.#vectors,
@@ -615,6 +589,7 @@ do:
    * const mastra = new Mastra({
    *   agents: {
    *     weatherAgent: new Agent({
+   *       id: 'weather-agent',
    *       name: 'weather-agent',
    *       instructions: 'You provide weather information',
    *       model: 'openai/gpt-5'
@@ -659,6 +634,7 @@ do:
    * const mastra = new Mastra({
    *   agents: {
    *     assistant: new Agent({
+   *       id: 'assistant',
    *       name: 'assistant',
    *       instructions: 'You are a helpful assistant',
    *       model: 'openai/gpt-5'
@@ -710,8 +686,8 @@ do:
    * ```typescript
    * const mastra = new Mastra({
    *   agents: {
-   *     weatherAgent: new Agent({ name: 'weather', model: openai('gpt-4o') }),
-   *     supportAgent: new Agent({ name: 'support', model: openai('gpt-4o') })
+   *     weatherAgent: new Agent({ id: 'weather-agent', name: 'weather', model: openai('gpt-4o') }),
+   *     supportAgent: new Agent({ id: 'support-agent', name: 'support', model: openai('gpt-4o') })
    *   }
    * });
    *
@@ -1149,6 +1125,7 @@ do:
    *
    * // Now agents can use memory with the storage
    * const agent = new Agent({
+   *   id: 'assistant',
    *   name: 'assistant',
    *   memory: new Memory({ storage: mastra.getStorage() })
    * });
@@ -1165,10 +1142,6 @@ do:
       Object.keys(this.#agents).forEach(key => {
         this.#agents?.[key]?.__setLogger(this.#logger);
       });
-    }
-
-    if (this.#memory) {
-      this.#memory.__setLogger(this.#logger);
     }
 
     if (this.#deployer) {
@@ -1251,32 +1224,6 @@ do:
   }
 
   /**
-   * Gets the currently configured memory instance.
-   *
-   * @deprecated Memory should be configured directly on agents instead of on the Mastra instance.
-   * Use `new Agent({ memory: new Memory() })` instead.
-   *
-   * @example Legacy memory usage (deprecated)
-   * ```typescript
-   * // This approach is deprecated
-   * const mastra = new Mastra({
-   *   // memory: new Memory() // This is no longer supported
-   * });
-   *
-   * // Use this instead:
-   * const agent = new Agent({
-   *   name: 'assistant',
-   *   memory: new Memory({
-   *     storage: new LibSQLStore({ url: ':memory:' })
-   *   })
-   * });
-   * ```
-   */
-  public getMemory() {
-    return this.#memory;
-  }
-
-  /**
    * Gets the currently configured storage provider.
    *
    * @example
@@ -1287,6 +1234,7 @@ do:
    *
    * // Use the storage in agent memory
    * const agent = new Agent({
+   *   id: 'assistant',
    *   name: 'assistant',
    *   memory: new Memory({
    *     storage: mastra.getStorage()
