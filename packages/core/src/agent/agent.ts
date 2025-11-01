@@ -630,36 +630,34 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * @internal
    */
   private getLegacyHandler(): AgentLegacyHandler {
-    if (!this.#legacyHandler) {
-      this.#legacyHandler = new AgentLegacyHandler({
-        logger: this.logger,
-        name: this.name,
-        id: this.id,
-        mastra: this.#mastra,
-        getDefaultGenerateOptionsLegacy: this.getDefaultGenerateOptionsLegacy.bind(this),
-        getDefaultStreamOptionsLegacy: this.getDefaultStreamOptionsLegacy.bind(this),
-        hasOwnMemory: this.hasOwnMemory.bind(this),
-        getInstructions: async (options: { requestContext: RequestContext }) => {
-          const result = await this.getInstructions(options);
-          return result;
-        },
-        getLLM: this.getLLM.bind(this) as any,
-        getMemory: this.getMemory.bind(this),
-        convertTools: this.convertTools.bind(this),
-        getMemoryMessages: this.getMemoryMessages.bind(this),
-        __runInputProcessors: this.__runInputProcessors.bind(this),
-        getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
-        genTitle: this.genTitle.bind(this),
-        resolveTitleGenerationConfig: this.resolveTitleGenerationConfig.bind(this),
-        saveStepMessages: this.saveStepMessages.bind(this),
-        convertInstructionsToString: this.#convertInstructionsToString.bind(this),
-        tracingPolicy: this.#options?.tracingPolicy,
-        _agentNetworkAppend: this._agentNetworkAppend,
-        listResolvedOutputProcessors: this.listResolvedOutputProcessors.bind(this),
-        __runOutputProcessors: this.__runOutputProcessors.bind(this),
-        runScorers: this.#runScorers.bind(this),
-      });
-    }
+    this.#legacyHandler = new AgentLegacyHandler({
+      logger: this.logger,
+      name: this.name,
+      id: this.id,
+      mastra: this.#mastra,
+      getDefaultGenerateOptionsLegacy: this.getDefaultGenerateOptionsLegacy.bind(this),
+      getDefaultStreamOptionsLegacy: this.getDefaultStreamOptionsLegacy.bind(this),
+      hasOwnMemory: this.hasOwnMemory.bind(this),
+      getInstructions: async (options: { requestContext: RequestContext }) => {
+        const result = await this.getInstructions(options);
+        return result;
+      },
+      getLLM: this.getLLM.bind(this) as any,
+      getMemory: this.getMemory.bind(this),
+      convertTools: this.convertTools.bind(this),
+      getMemoryMessages: this.getMemoryMessages.bind(this),
+      __runInputProcessors: this.__runInputProcessors.bind(this),
+      getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
+      genTitle: this.genTitle.bind(this),
+      resolveTitleGenerationConfig: this.resolveTitleGenerationConfig.bind(this),
+      saveStepMessages: this.saveStepMessages.bind(this),
+      convertInstructionsToString: this.#convertInstructionsToString.bind(this),
+      tracingPolicy: this.#options?.tracingPolicy,
+      _agentNetworkAppend: this._agentNetworkAppend,
+      listResolvedOutputProcessors: this.listResolvedOutputProcessors.bind(this),
+      __runOutputProcessors: this.__runOutputProcessors.bind(this),
+      runScorers: this.#runScorers.bind(this),
+    });
     return this.#legacyHandler;
   }
 
