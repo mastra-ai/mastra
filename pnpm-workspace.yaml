@@ -1,6 +1,7 @@
 packages:
   - packages/*
   - deployers/*
+  - servers/*
   - stores/*
   - voice/*
   - workflows/*
