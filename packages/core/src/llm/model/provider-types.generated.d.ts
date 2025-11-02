@@ -88,6 +88,7 @@ export type ProviderModelsMap = {
     'deepseek-ai/deepseek-v3.1-terminus',
     'google/gemma-3-27b-it',
     'microsoft/phi-4-mini-instruct',
+    'minimaxai/minimax-m2',
     'moonshotai/kimi-k2-instruct',
     'moonshotai/kimi-k2-instruct-0905',
     'nvidia/cosmos-nemotron-34b',
@@ -700,6 +701,25 @@ export type ProviderModelsMap = {
     'x-ai/grok-code-fast-1',
     'z-ai/glm-4.5-air',
     'z-ai/glm-4.6',
+  ];
+  readonly iflowcn: readonly [
+    'deepseek-r1',
+    'deepseek-v3',
+    'deepseek-v3.1',
+    'deepseek-v3.2',
+    'glm-4.6',
+    'kimi-k2',
+    'kimi-k2-0905',
+    'qwen3-235b',
+    'qwen3-235b-a22b-instruct',
+    'qwen3-235b-a22b-thinking-2507',
+    'qwen3-32b',
+    'qwen3-coder',
+    'qwen3-coder-plus',
+    'qwen3-max',
+    'qwen3-max-preview',
+    'qwen3-vl-plus',
+    'tstars2.0',
   ];
   readonly synthetic: readonly [
     'hf:MiniMaxAI/MiniMax-M2',
