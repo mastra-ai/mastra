@@ -314,7 +314,7 @@ const workflowExecutorTool = createTool({
     expect(context?.mastra, 'Mastra instance should be available in tool execution context').toBeTruthy();
 
     const workflow = context?.mastra?.getWorkflow(workflowId);
-    const run = await workflow?.createRunAsync();
+    const run = await workflow?.createRun();
     const result = await run?.start({ inputData: workflowInput });
 
     return { result: result?.status === 'success' ? result.result : null };
@@ -816,7 +816,7 @@ describe('AI Tracing Integration Tests', () => {
 
     const resourceId = 'test-resource-id';
     const workflow = mastra.getWorkflow('branchingWorkflow');
-    const run = await workflow.createRunAsync({ resourceId });
+    const run = await workflow.createRun({ resourceId });
     const result = await run.start({ inputData: { value: 15 }, tracingOptions: { metadata: customMetadata } });
     expect(result.status).toBe('success');
     expect(result.traceId).toBeDefined();
@@ -875,7 +875,7 @@ describe('AI Tracing Integration Tests', () => {
     });
 
     const workflow = mastra.getWorkflow('mainWorkflow');
-    const run = await workflow.createRunAsync();
+    const run = await workflow.createRun();
     const result = await run.start({
       inputData: { input: 'test unregistered workflow as step' },
     });
@@ -904,7 +904,7 @@ describe('AI Tracing Integration Tests', () => {
       execute: async ({ inputData, mastra }) => {
         const childWorkflow = mastra?.getWorkflow('simpleWorkflow');
         expect(childWorkflow, 'Simple workflow should be available from Mastra instance').toBeTruthy();
-        const run = await childWorkflow.createRunAsync();
+        const run = await childWorkflow.createRun();
         const result = await run.start({ inputData: { input: inputData.input } });
 
         return { output: result.status === 'success' ? result.result?.output || 'no output' : 'failed' };
@@ -926,7 +926,7 @@ describe('AI Tracing Integration Tests', () => {
     });
 
     const workflow = mastra.getWorkflow('parentWorkflow');
-    const run = await workflow.createRunAsync();
+    const run = await workflow.createRun();
     const result = await run.start({ inputData: { input: 'nested test' } });
     expect(result.status).toBe('success');
     expect(result.traceId).toBeDefined();
@@ -959,7 +959,7 @@ describe('AI Tracing Integration Tests', () => {
     });
 
     const workflow = mastra.getWorkflow('toolWorkflow');
-    const run = await workflow.createRunAsync();
+    const run = await workflow.createRun();
     const result = await run.start({
       inputData: { a: 5, b: 3, operation: 'add' },
     });
@@ -1014,7 +1014,7 @@ describe('AI Tracing Integration Tests', () => {
     });
 
     const workflow = mastra.getWorkflow('metadataWorkflow');
-    const run = await workflow.createRunAsync();
+    const run = await workflow.createRun();
     const result = await run.start({ inputData: { value: 'tacos' } });
     expect(result.status).toBe('success');
     expect(result.traceId).toBeDefined();
@@ -1075,7 +1075,7 @@ describe('AI Tracing Integration Tests', () => {
     });
 
     const workflow = mastra.getWorkflow('childSpanWorkflow');
-    const run = await workflow.createRunAsync();
+    const run = await workflow.createRun();
     const result = await run.start({
       inputData: { value: 'child-span-test' },
     });
@@ -1678,7 +1678,7 @@ describe('AI Tracing Integration Tests', () => {
       });
 
       const workflow = mastra.getWorkflow('agentWorkflow');
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const result = await run.start({ inputData: { prompt: 'Hello from workflow' } });
       expect(result.status).toBe('success');
       expect(result.traceId).toBeDefined();
@@ -2033,7 +2033,7 @@ describe('AI Tracing Integration Tests', () => {
     });
 
     const workflow = mastra.getWorkflow('testWorkflow');
-    const run = await workflow.createRunAsync();
+    const run = await workflow.createRun();
     const result = await run.start({ inputData: { query: 'test query' } });
 
     expect(result.status).toBe('success');

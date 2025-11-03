@@ -240,7 +240,7 @@ Use `resumeData` to pass structured input when resuming a suspended step. It mus
 ```typescript {14-20} showLineNumbers copy
 const workflow = mastra.getWorkflow("approvalWorkflow");
 
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: {
