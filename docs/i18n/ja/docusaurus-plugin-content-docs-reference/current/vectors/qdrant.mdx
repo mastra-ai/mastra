@@ -1,0 +1,267 @@
+---
+title: "リファレンス: Qdrant ベクターストア | ベクター | Mastra ドキュメント"
+description: Qdrant を Mastra と統合するためのドキュメント。ベクターとペイロードを管理するためのベクター類似検索エンジンについて説明します。
+---
+
+<div id="qdrant-vector-store">
+  # Qdrant ベクターストア
+</div>
+
+QdrantVector クラスは、ベクトル類似検索エンジンである [Qdrant](https://qdrant.tech/) を利用したベクトル検索を提供します。
+このクラスは、追加ペイロードや高度なフィルタリングに対応し、ベクトルの保存・検索・管理のための使いやすい API を備えた本番運用向けサービスを提供します。
+
+<div id="constructor-options">
+  ## コンストラクターのオプション
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "string",
+      description:
+        "Qdrant インスタンスの REST URL。例: https://xyz-example.eu-central.aws.cloud.qdrant.io:6333",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "任意の Qdrant API キー",
+    },
+    {
+      name: "https",
+      type: "boolean",
+      description:
+        "接続時に TLS を使用するかどうか。推奨。",
+    },
+  ]}
+/>
+
+<div id="methods">
+  ## メソッド
+</div>
+
+<div id="createindex">
+  ### createIndex()
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "作成するインデックス名",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "ベクトルの次元数（使用する埋め込みモデルと一致させる必要があります）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "類似検索に使用する距離指標",
+    },
+  ]}
+/>
+
+<div id="upsert">
+  ### upsert()
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "埋め込みベクトルの配列",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "各ベクトルに対応するメタデータ",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "ベクトルの任意のID（未指定の場合は自動生成）",
+    },
+  ]}
+/>
+
+<div id="query">
+  ### query()
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "クエリ対象のインデックス名",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "類似ベクトル検索に用いるクエリベクトル",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "返す結果の件数",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "クエリに適用するメタデータフィルター",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "結果にベクトルを含めるかどうか",
+    },
+  ]}
+/>
+
+<div id="listindexes">
+  ### listIndexes()
+</div>
+
+インデックス名の文字列の配列を返します。
+
+<div id="describeindex">
+  ### describeIndex()
+</div>
+
+<PropertiesTable
+  content={[
+{
+  name: "indexName",
+  type: "string",
+  description: "説明するインデックス名",
+},
+]}
+/>
+
+戻り値:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+
+<div id="deleteindex">
+  ### deleteIndex()
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除するインデックス名",
+    },
+  ]}
+/>
+
+<div id="updatevector">
+  ### updateVector()
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "更新対象のインデックス名",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "更新対象のベクターID",
+    },
+    {
+      name: "update",
+      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+      description: "更新するベクターやメタデータを含むオブジェクト",
+    },
+  ]}
+/>
+
+指定したインデックス内のベクターやそのメタデータを更新します。ベクターとメタデータの両方が指定された場合は両方を更新し、どちらか一方のみが指定された場合はその内容のみを更新します。
+
+<div id="deletevector">
+  ### deleteVector()
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルを削除する対象のインデックス名",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "削除するベクトルのID",
+    },
+  ]}
+/>
+
+指定したインデックスから、IDを指定してベクトルを削除します。
+
+<div id="response-types">
+  ## レスポンスの種類
+</div>
+
+クエリの結果は次の形式で返されます。
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // includeVectorがtrueの場合のみ含まれる
+}
+```
+
+
+<div id="error-handling">
+  ## エラー処理
+</div>
+
+ストアは型付きエラーをスローし、catch できます：
+
+```typescript copy
+try {
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | など
+    console.log(error.details); // エラーの詳細情報
+  }
+}
+```
+
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [メタデータフィルター](../rag/metadata-filters)

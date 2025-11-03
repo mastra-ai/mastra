@@ -1,0 +1,142 @@
+---
+title: "例: Vector Query Tool の利用 | RAG | Mastra ドキュメント"
+description: OpenAI の埋め込みと、ベクター保存に PGVector を使用して、Mastra で基本的な RAG システムを実装する例。
+---
+
+import GithubLink from "@site/src/components/GithubLink";
+
+
+<div id="using-the-vector-query-tool">
+  # Vector Query Tool の使用
+</div>
+
+この例では、RAG システムにおけるセマンティック検索のために `createVectorQueryTool` を実装して利用する方法を示します。ツールの設定、ベクター格納の管理、関連するコンテキストの効果的な取得方法を解説します。
+
+<div id="overview">
+  ## 概要
+</div>
+
+このシステムは Mastra と OpenAI を用いて RAG を実装しています。主な処理は次のとおりです:
+
+1. 応答生成のために gpt-4o-mini を用いる Mastra エージェントを構成する
+2. ベクターストアとのやり取りを管理するためのベクタークエリツールを作成する
+3. 既存の埋め込みを用いて関連コンテキストを取得する
+4. Mastra エージェントでコンテキストに即した応答を生成する
+
+> 注意: 埋め込みの作成と保存方法については、[Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) ガイドをご覧ください。
+
+<div id="setup">
+  ## セットアップ
+</div>
+
+<div id="environment-setup">
+  ### 環境のセットアップ
+</div>
+
+環境変数を必ず設定してください。
+
+```bash title=".env"
+OPENAI_API_KEY=your_openai_api_key_here
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+
+<div id="dependencies">
+  ### 依存関係
+</div>
+
+必要な依存物をインポートします:
+
+```typescript copy showLineNumbers title="src/index.ts"
+import { openai } from "@ai-sdk/openai";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { createVectorQueryTool } from "@mastra/rag";
+import { PgVector } from "@mastra/pg";
+```
+
+
+<div id="vector-query-tool-creation">
+  ## ベクタークエリツールの作成
+</div>
+
+ベクターデータベースを照会できるツールを作成します。
+
+```typescript copy showLineNumbers{7} title="src/index.ts"
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
+});
+```
+
+
+<div id="agent-configuration">
+  ## エージェントの設定
+</div>
+
+応答を処理する Mastra エージェントを設定します。
+
+```typescript copy showLineNumbers{13} title="src/index.ts"
+export const ragAgent = new Agent({
+  name: "RAG Agent",
+  instructions:
+    "提供されたコンテキストに基づいて質問に答える有用なアシスタントです。回答は簡潔かつ関連性の高いものにしてください。",
+  model: openai("gpt-4o-mini"),
+  tools: {
+    vectorQueryTool,
+  },
+});
+```
+
+
+<div id="instantiate-pgvector-and-mastra">
+  ## PgVector と Mastra をインスタンス化する
+</div>
+
+すべてのコンポーネントを含めて PgVector と Mastra をインスタンス化します：
+
+```typescript copy showLineNumbers{23} title="src/index.ts"
+const pgVector = new PgVector({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+});
+
+export const mastra = new Mastra({
+  agents: { ragAgent },
+  vectors: { pgVector },
+});
+
+const agent = mastra.getAgent("ragAgent");
+```
+
+
+<div id="example-usage">
+  ## 使い方の例
+</div>
+
+```typescript copy showLineNumbers{32} title="src/index.ts"
+const prompt = `
+[ここにドキュメントに基づくクエリを挿入]
+ツールで提供されたコンテキストのみに基づいて回答してください。
+コンテキストに質問に完全に答えるための十分な情報が含まれていない場合は、その旨を明示してください。
+`;
+
+const completion = await agent.generate(prompt);
+console.log(completion.text);
+```
+
+<br />
+
+<br />
+
+<hr className="dark:border-[#404040] border-gray-300" />
+
+<br />
+
+<br />
+
+<GithubLink
+  link={
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/basic-rag"
+}
+/>

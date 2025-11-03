@@ -1,0 +1,275 @@
+---
+title: "リファレンス: Faithfulness Scorer | Scorers | Mastra ドキュメント"
+description: Mastra の Faithfulness Scorer に関するドキュメント。提供されたコンテキストに照らして、LLM 出力の事実整合性を評価します。
+---
+
+<div id="faithfulness-scorer">
+  # Faithfulness Scorer
+</div>
+
+`createFaithfulnessScorer()` 関数は、提供されたコンテキストと照らし合わせて、LLM の出力がどれほど事実に忠実かを評価します。出力から主張を抽出し、それらをコンテキストに基づいて検証するため、RAG パイプラインの応答の信頼性を測定するうえで不可欠です。
+
+<div id="parameters">
+  ## パラメーター
+</div>
+
+`createFaithfulnessScorer()` 関数は、次のプロパティを持つ単一のオプションオブジェクトを受け取ります：
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      required: true,
+      description: "忠実性を評価するために使用するモデルの設定。",
+    },
+    {
+      name: "context",
+      type: "string[]",
+      required: true,
+      description:
+        "出力内の主張を照合・検証する対象となるコンテキストチャンクの配列。",
+    },
+    {
+      name: "scale",
+      type: "number",
+      required: false,
+      defaultValue: "1",
+      description:
+        "スコアの最大値。最終スコアはこのスケールに正規化されます。",
+    },
+  ]}
+/>
+
+この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドは他のスコアラーと同じ入力を受け付けます（[MastraScorer リファレンス](./mastra-scorer)を参照）が、戻り値には以下に記載の LLM 固有のフィールドが含まれます。
+
+<div id="run-returns">
+  ## .run() の戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "実行のID（任意）。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "string[]",
+      description: "出力から抽出された主張の配列。",
+    },
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description:
+        "preprocess ステップで LLM に送信されたプロンプト（任意）。",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description:
+        "判定を含むオブジェクト: { verdicts: Array<{ verdict: 'yes' | 'no' | 'unsure', reason: string }> }",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description:
+        "analyze ステップで LLM に送信されたプロンプト（任意）。",
+    },
+    {
+      name: "score",
+      type: "number",
+      description:
+        "0 から設定されたスケールまでのスコアで、コンテキストによって裏付けられた主張の割合を表します。",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description:
+        "どの主張が支持されたか、矛盾したか、または不確かとされたかを含む、スコアの詳細な説明。",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description:
+        "generateReason ステップで LLM に送信されたプロンプト（任意）。",
+    },
+  ]}
+/>
+
+<div id="scoring-details">
+  ## 採点の詳細
+</div>
+
+採点者は、提供されたコンテキストに照らして主張を検証し、忠実性を評価します。
+
+<div id="scoring-process">
+  ### スコアリングプロセス
+</div>
+
+1. 主張とコンテキストを分析:
+   - すべての主張（事実および推測）を抽出
+   - 各主張をコンテキストと照合して検証
+   - 次のいずれかの判定を付与:
+     - "yes" - コンテキストによって主張が裏付けられている
+     - "no" - 主張がコンテキストと矛盾している
+     - "unsure" - 主張は検証不能
+2. 忠実度スコアを算出:
+   - 裏付けられた主張をカウント
+   - 主張の総数で割る
+   - 設定された範囲にスケーリング
+
+最終スコア: `(supported_claims / total_claims) * scale`
+
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
+
+忠実度スコアは 0 から 1 の範囲です：
+
+- **1.0**: すべての主張が正確で、文脈によって直接裏づけられている。
+- **0.7–0.9**: ほとんどの主張は正しいが、軽微な追加や抜けがある。
+- **0.4–0.6**: 一部の主張は裏づけられるが、他は検証できない。
+- **0.1–0.3**: 内容の大半が不正確、または裏づけがない。
+- **0.0**: すべての主張が誤っているか、文脈と矛盾している。
+
+<div id="examples">
+  ## 例
+</div>
+
+<div id="high-faithfulness-example">
+  ### 高い忠実度の例
+</div>
+
+この例では、応答がコンテキストと緊密に一致しています。出力内の各記述は検証可能で、提供されたコンテキスト項目によって裏付けられており、その結果、高いスコアが得られます。
+
+```typescript title="src/example-high-faithfulness.ts" showLineNumbers copy
+import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
+  context: [
+    "Tesla Model 3は2017年に発売されました。",
+    "航続距離は最大358マイルです。",
+    "ベースモデルは0-60 mphを5.8秒で加速します。"
+  ]
+});
+
+const query = "Tesla Model 3について教えてください。";
+const response = "Tesla Model 3は2017年に発表されました。1回の充電で最大358マイル走行でき、ベースバージョンは0から60 mphまで5.8秒で加速します。";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+
+<div id="high-faithfulness-output">
+  #### 高忠実度の出力
+</div>
+
+提供されている情報のすべてが文脈に直接裏づけられるため、出力はスコア1となります。欠落や矛盾する事実はありません。
+
+```typescript
+{
+  score: 1,
+  reason: 'スコアが1である理由は、出力内のすべての主張が提供されたコンテキストによって裏付けられているためです。'
+}
+```
+
+
+<div id="mixed-faithfulness-example">
+  ### 忠実性が混在する例
+</div>
+
+この例では、裏付けのある主張と裏付けのない主張が混在しています。応答の一部は文脈によって支えられていますが、他の部分はソース資料にない新情報を持ち込んでいます。
+
+```typescript title="src/example-mixed-faithfulness.ts" showLineNumbers copy
+import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
+  context: [
+    "PythonはGuido van Rossumによって作成されました。",
+    "最初のバージョンは1991年にリリースされました。",
+    "Pythonはコードの可読性を重視しています。"
+  ]
+});
+
+const query = "Pythonについて教えてください";
+const response = "PythonはGuido van Rossumによって作成され、1991年にリリースされました。現在最も人気のあるプログラミング言語であり、世界中の数百万人の開発者に使用されています。";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+
+<div id="mixed-faithfulness-output">
+  #### 忠実性が混在する出力
+</div>
+
+応答のうち検証可能なのは一部に限られるため、スコアは低めになります。いくつかの主張は文脈と一致している一方、他は未確認または対象外であり、全体としての忠実性を損なっています。
+
+```typescript
+{
+  score: 0.5,
+  reason: "スコアが0.5である理由は、4つの主張のうち2つ(PythonはGuido van Rossumによって作成された、Pythonは1991年にリリースされた)はコンテキストで裏付けられていますが、残りの2つの主張(Pythonの人気と使用状況)はコンテキストに記載がないため検証できないためです。"
+}
+```
+
+
+<div id="low-faithfulness-example">
+  ### 忠実性が低い例
+</div>
+
+この例では、回答が文脈と直接矛盾しています。いずれの主張にも根拠がなく、いくつかは提示された事実と食い違っています。
+
+```typescript title="src/example-low-faithfulness.ts" showLineNumbers copy
+import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
+  context: [
+    "火星は太陽から4番目の惑星です。",
+    "主に二酸化炭素からなる薄い大気を持っています。",
+    "火星の周りには2つの小さな衛星、フォボスとダイモスが周回しています。"
+  ]
+});
+
+const query = "火星について何を知っていますか?";
+const response = "火星は太陽から3番目の惑星です。酸素と窒素が豊富な厚い大気を持ち、3つの大きな衛星が周回しています。";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+
+<div id="low-faithfulness-output">
+  #### 忠実度の低い出力
+</div>
+
+各主張が不正確、または文脈と矛盾しているため、スコアは0となります。
+
+```typescript
+{
+  score: 0,
+  reason: "スコアが0である理由は、出力に含まれるすべての主張が提供されたコンテキストと矛盾しているためです。出力では火星が太陽から3番目の惑星であると述べていますが、コンテキストでは明確に4番目であると記載されています。さらに、火星には酸素と窒素が豊富な厚い大気があると主張していますが、これはコンテキストで説明されている主に二酸化炭素で構成される薄い大気という記述と矛盾しています。最後に、出力では火星が3つの大きな衛星に周回されていると述べていますが、コンテキストではフォボスとダイモスという2つの小さな衛星のみを持つと明記されています。したがって、裏付けられる主張が一つもないため、スコアは0となります。"
+}
+```
+
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [回答の関連性スコアラー](./answer-relevancy)
+- [幻覚スコアラー](./hallucination)

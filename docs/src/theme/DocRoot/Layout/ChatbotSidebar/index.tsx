@@ -19,6 +19,7 @@ import {
 import { useStickToBottom } from "use-stick-to-bottom";
 import styles from "./styles.module.css";
 import { cn } from "@site/src/lib/utils";
+import { useGT, T } from "gt-react";
 
 interface ChatbotSidebarProps {
   hiddenChatbotSidebar: boolean;
@@ -31,6 +32,7 @@ export default function ChatbotSidebar({
   hiddenChatbotSidebar,
   setHiddenChatbotSidebar,
 }: ChatbotSidebarProps): ReactNode {
+  const gt = useGT();
   const [hiddenSidebar, setHiddenSidebar] = useState(false);
 
   const toggleSidebar = useCallback(() => {
@@ -152,9 +154,11 @@ export default function ChatbotSidebar({
               )}
             </button>
             {!hiddenChatbotSidebar && (
-              <span className="text-sm font-medium text-(--mastra-text-tertiary)">
-                Chat with Mastra docs
-              </span>
+              <T>
+                <span className="text-sm font-medium text-(--mastra-text-tertiary)">
+                  Chat with Mastra docs
+                </span>
+              </T>
             )}
           </div>
           {!hiddenChatbotSidebar && (
@@ -183,9 +187,11 @@ export default function ChatbotSidebar({
                                 {/* Feedback buttons - only show when answer is complete */}
                                 {id && (
                                   <div className="flex gap-2 items-center mt-3">
-                                    <span className="text-xs text-icons-2">
-                                      Was this helpful?
-                                    </span>
+                                    <T>
+                                      <span className="text-xs text-icons-2">
+                                        Was this helpful?
+                                      </span>
+                                    </T>
                                     <Button
                                       variant="ghost"
                                       size="icon-sm"
@@ -238,7 +244,7 @@ export default function ChatbotSidebar({
                   <Textarea
                     className="overflow-hidden font-medium placeholder:text-(--mastra-text-muted) placeholder:font-medium p-0 w-full text-sm border-none shadow-none outline-none resize-none text-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
                     rows={1}
-                    placeholder="Ask questions about Mastra..."
+                    placeholder={gt("Ask questions about Mastra...")}
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyDown={handleKeyDown}
@@ -269,16 +275,18 @@ export default function ChatbotSidebar({
                 </form>
 
                 <div className="flex items-center -mx-[10px] py-2 px-3 border-t border-(--border)">
-                  <span className="text-xs font-medium text-(--mastra-text-muted)">
-                    Powered by{" "}
-                    <a
-                      href="https://www.kapa.ai"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      kapa.ai
-                    </a>
-                  </span>
+                  <T>
+                    <span className="text-xs font-medium text-(--mastra-text-muted)">
+                      Powered by{" "}
+                      <a
+                        href="https://kapaai.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        KapaAI
+                      </a>
+                    </span>
+                  </T>
                 </div>
               </div>
             </>

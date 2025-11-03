@@ -1,0 +1,67 @@
+---
+title: "リファレンス: voice.close() | Voice | Mastra ドキュメント"
+description: "音声プロバイダーで利用可能な close() メソッドのドキュメント。リアルタイム音声サービスから切断します。"
+---
+
+<div id="voiceclose">
+  # voice.close()
+</div>
+
+`close()` メソッドは、リアルタイム音声サービスから切断し、リソースを解放します。これは、音声セッションを正しく終了し、リソースリークを防ぐうえで重要です。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { getMicrophoneStream } from "@mastra/node-audio";
+
+// リアルタイム音声プロバイダーを初期化
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-4o-mini-realtime",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// リアルタイムサービスに接続
+await voice.connect();
+
+// 会話を開始
+voice.speak("こんにちは、AIアシスタントです。");
+
+// マイクから音声をストリーミング
+const microphoneStream = getMicrophoneStream();
+voice.send(microphoneStream);
+
+// 会話が終了したら
+setTimeout(() => {
+  // 接続を閉じてリソースを解放
+  voice.close();
+  console.log("音声セッションを終了しました");
+}, 60000); // 1分後に終了
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+このメソッドに引数はありません。
+
+<div id="return-value">
+  ## 戻り値
+</div>
+
+このメソッドは値を返しません。
+
+<div id="notes">
+  ## 注意事項
+</div>
+
+- リアルタイム音声セッションを終了したら、リソースを解放するために必ず `close()` を呼び出してください
+- `close()` を呼び出した後に新しいセッションを開始する場合は、あらためて `connect()` を呼び出す必要があります
+- このメソッドは、永続接続を維持するリアルタイム音声プロバイダーで主に使用されます
+- リアルタイム接続をサポートしていない音声プロバイダーで呼び出した場合は、警告をログ出力するだけで何もしません
+- 接続を閉じないと、リソースリークや音声サービスプロバイダーでの課金トラブルにつながる可能性があります

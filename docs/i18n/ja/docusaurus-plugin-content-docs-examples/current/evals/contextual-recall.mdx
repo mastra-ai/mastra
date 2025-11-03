@@ -1,0 +1,217 @@
+---
+title: "例: 文脈リコール評価 | Evals | Mastra Docs"
+description: 文脈リコール指標を用いて、回答がどの程度文脈情報を取り入れているかを評価する例。
+---
+
+<div id="contextual-recall-evaluation">
+  # コンテキスト想起評価
+</div>
+
+:::note
+Scorers API は現在ベータ版です。改善に積極的に取り組んでおり、皆さまからのフィードバックを歓迎します。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までお寄せください。
+:::
+
+`ContextualRecallMetric` を使用して、提供されたコンテキストの関連情報が応答にどれだけ適切に反映されているかを評価します。本メトリクスは `query` と `response` を受け取り、スコアと理由を含む `info` オブジェクトを返します。
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash copy
+npm install @mastra/evals
+```
+
+
+<div id="high-recall-example">
+  ## 高リコールの例
+</div>
+
+この例では、応答にコンテキストの情報がすべて含まれています。各要素が正確に再現されて出力に反映されており、リコールスコアは満点になります。
+
+```typescript title="src/example-high-recall.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextualRecallMetric } from "@mastra/evals/llm";
+
+const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
+  context: [
+    "製品機能にはクラウド同期が含まれます。",
+    "オフラインモードが利用可能です。",
+    "複数のデバイスに対応しています。",
+  ],
+});
+
+const query = "製品の主な機能は何ですか?";
+const response =
+  "この製品は、クラウド同期、オフラインモード対応、複数のデバイスでの動作機能を備えています。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+<div id="high-recall-output">
+  ### 高リコールの出力
+</div>
+
+回答にすべてのコンテキスト要素が含まれているため、この出力は満点となります。コンテキストで言及された各機能が正確に想起・統合されており、欠落や余分な情報はありません。
+
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'スコアが1であるのは、期待される出力のすべての要素が、取得コンテキスト内の対応するノード――具体的にはクラウド同期、オフラインモード対応、マルチデバイス機能を詳述するノード――によって完全に裏付けられているためです。'
+  }
+}
+```
+
+
+<div id="mixed-recall-example">
+  ## 混在リコールの例
+</div>
+
+この例では、応答にいくつかの文脈要素が含まれている一方で、無関係な内容も混在しています。不要な情報が含まれることで、全体のリコールスコアが下がります。
+
+```typescript title="src/example-mixed-recall.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextualRecallMetric } from "@mastra/evals/llm";
+
+const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Pythonは高水準プログラミング言語です。",
+    "Pythonはコードの可読性を重視しています。",
+    "Pythonは複数のプログラミングパラダイムをサポートしています。",
+    "Pythonはデータサイエンスで広く使用されています。",
+  ],
+});
+
+const query = "Pythonの主な特徴は何ですか?";
+const response =
+  "Pythonは高水準プログラミング言語です。また、ヘビの一種でもあります。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+<div id="mixed-recall-output">
+  ### 混在リコールの出力
+</div>
+
+この出力は、中程度のスコアです。関連するコンテキストの記述が1つ含まれている一方で、元のコンテキストに支えられていない無関係な内容も含まれているためです。
+
+```typescript
+{
+  score: 0.25,
+  info: {
+    reason: "スコアが0.25であるのは、文「Python is a high-level programming language」が検索コンテキストのノード1と一致している一方、ノード2・3・4に含まれる他の関連情報に言及がないため、全体的な文脈に大きな抜けがあると判断されるからです。"
+  }
+}
+```
+
+
+<div id="low-recall-example">
+  ## リコールが低い例
+</div>
+
+この例では、応答に関連する文脈がほとんど、もしくはまったく含まれていません。応答の情報の大半が根拠に欠けているため、リコールスコアが低くなります。
+
+```typescript title="src/example-low-recall.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextualRecallMetric } from "@mastra/evals/llm";
+
+const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
+  context: [
+    "太陽系には8つの惑星があります。",
+    "水星は太陽に最も近い惑星です。",
+    "金星は最も高温の惑星です。",
+    "火星は赤い惑星と呼ばれています。",
+  ],
+});
+
+const query = "太陽系について教えてください。";
+const response = "木星は太陽系で最も大きな惑星です。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+<div id="low-recall-output">
+  ### リコールの低い出力
+</div>
+
+この出力は、コンテキストにない情報を含み、提供された詳細を無視しているため、低いスコアとなります。どのコンテキスト項目も回答に反映されていません。
+
+```typescript
+{
+  score: 0,
+  info: {
+    reason: "スコアが0なのは、出力に検索コンテキスト内のノードからの関連情報が一切含まれておらず、惑星の数、水星の位置、金星の温度、火星の異名といった重要点に触れられていないためです。"
+  }
+}
+```
+
+
+<div id="metric-configuration">
+  ## メトリクスの設定
+</div>
+
+応答に関連する背景情報を表す `context` 配列を指定して、`ContextualRecallMetric` のインスタンスを作成できます。スコアの範囲を定義する `scale` などの任意パラメータも設定できます。
+
+```typescript showLineNumbers copy
+const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
+  context: [""],
+  scale: 1,
+});
+```
+
+> 設定オプションの一覧は [ContextualRecallMetric](/reference/evals/contextual-recall) を参照してください。
+
+
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
+
+`ContextualRecallMetric` は次の形式の結果を返します:
+
+```typescript
+{
+  score: number,
+  info: {
+    reason: string
+  }
+}
+```
+
+
+<div id="recall-score">
+  ### リコールスコア
+</div>
+
+リコールスコアは 0 から 1 の範囲です:
+
+- **1.0**: 完全に再現 – すべてのコンテキスト情報を使用。
+- **0.7–0.9**: 高い再現 – ほとんどのコンテキスト情報を使用。
+- **0.4–0.6**: ばらつきあり – 一部のコンテキスト情報を使用。
+- **0.1–0.3**: 低い再現 – わずかなコンテキスト情報のみ使用。
+- **0.0**: 再現なし – コンテキスト情報は未使用。
+
+<div id="recall-info">
+  ### リコール情報
+</div>
+
+スコアの説明（以下の詳細を含む）:
+
+- 情報の取り込み状況
+- 欠落している文脈
+- 応答の網羅性
+- リコール全体の品質
+
+<GithubLink
+  outdated={true}
+  marginTop="mt-16"
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/contextual-recall"
+/>

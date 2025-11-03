@@ -1,0 +1,286 @@
+---
+title: "リファレンス: createGraphRAGTool() | Tools & MCP | Mastra ドキュメント"
+description: Mastra における Graph RAG ツールのドキュメント。文書間の意味的関係をグラフ化して RAG を強化します。
+---
+
+<div id="creategraphragtool">
+  # createGraphRAGTool()
+</div>
+
+`createGraphRAGTool()` は、ドキュメント間の意味関係をグラフ化して RAG を強化するツールを作成します。内部では `GraphRAG` システムを用いてグラフベースのリトリーバルを行い、直接的な類似性と接続関係の両面から関連コンテンツを見つけます。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { createGraphRAGTool } from "@mastra/rag";
+
+const graphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
+  graphOptions: {
+    dimension: 1536,
+    threshold: 0.7,
+    randomWalkSteps: 100,
+    restartProb: 0.15,
+  },
+});
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+:::note
+
+**パラメータ要件:** ほとんどのフィールドは作成時に既定値として設定できます。
+一部のフィールドは、実行時コンテキストまたは入力によって実行時に上書きできます。必須フィールドが作成時・実行時のどちらにも存在しない場合は、エラーがスローされます。なお、`model`、`id`、`description` は作成時にのみ設定可能です。
+
+:::
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description:
+        "ツールのカスタム ID。既定値: 'GraphRAG {vectorStoreName} {indexName} Tool'。（作成時のみ設定可能）",
+      isOptional: true,
+    },
+    {
+      name: "description",
+      type: "string",
+      description:
+        "ツールのカスタム説明。既定値: 'ナレッジベース内の情報同士の関係にアクセスして分析し、つながりやパターンに関する複雑な問いに回答します。'（作成時のみ設定可能）",
+      isOptional: true,
+    },
+    {
+      name: "vectorStoreName",
+      type: "string",
+      description:
+        "クエリ対象のベクトルストア名。（作成時に設定、または実行時に上書き可能）",
+      isOptional: false,
+    },
+    {
+      name: "indexName",
+      type: "string",
+      description:
+        "ベクトルストア内のインデックス名。（作成時に設定、または実行時に上書き可能）",
+      isOptional: false,
+    },
+    {
+      name: "model",
+      type: "EmbeddingModel",
+      description:
+        "ベクトル検索に使用する埋め込みモデル。（作成時のみ設定可能）",
+      isOptional: false,
+    },
+    {
+      name: "enableFilter",
+      type: "boolean",
+      description:
+        "メタデータに基づく結果のフィルタリングを有効化します。（作成時のみ設定可能ですが、実行時コンテキストでフィルタが指定された場合は自動的に有効化されます）",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "includeSources",
+      type: "boolean",
+      description:
+        "結果に完全なリトリーバルオブジェクトを含めます。（作成時に設定、または実行時に上書き可能）",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "graphOptions",
+      type: "GraphOptions",
+      description: "グラフベースのリトリーバル設定",
+      isOptional: true,
+      defaultValue: "既定のグラフオプション",
+    },
+    {
+      name: "providerOptions",
+      type: "Record<string, Record<string, any>>",
+      description:
+        "埋め込みモデルのプロバイダ固有オプション（例: outputDimensionality）。**重要**: AI SDK の EmbeddingModel V2 のみ対応します。V1 ではモデル作成時にオプションを設定してください。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="graphoptions">
+  ### GraphOptions
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "dimension",
+      type: "number",
+      description: "埋め込みベクトルの次元数",
+      isOptional: true,
+      defaultValue: "1536",
+    },
+    {
+      name: "threshold",
+      type: "number",
+      description:
+        "ノード間にエッジを作成するための類似度のしきい値（0〜1）",
+      isOptional: true,
+      defaultValue: "0.7",
+    },
+    {
+      name: "randomWalkSteps",
+      type: "number",
+      description:
+        "グラフ探索におけるランダムウォークのステップ数（作成時に設定、または実行時に上書き可能）",
+      isOptional: true,
+      defaultValue: "100",
+    },
+    {
+      name: "restartProb",
+      type: "number",
+      description:
+        "クエリノードからランダムウォークを再開する確率（作成時に設定、または実行時に上書き可能）",
+      isOptional: true,
+      defaultValue: "0.15",
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 返り値
+</div>
+
+このツールは次のプロパティを持つオブジェクトを返します:
+
+<PropertiesTable
+  content={[
+    {
+      name: "relevantContext",
+      type: "string",
+      description:
+        "グラフベースのランキングで特定した最も関連性の高いドキュメントのチャンクから抽出したテキストを結合したもの",
+    },
+    {
+      name: "sources",
+      type: "QueryResult[]",
+      description:
+        "取得結果の完全なオブジェクト配列。各オブジェクトには、元のドキュメント、チャンク、類似度スコアを参照するために必要なすべての情報が含まれます。",
+    },
+  ]}
+/>
+
+<div id="queryresult-object-structure">
+  ### QueryResult オブジェクト構造
+</div>
+
+```typescript
+{
+  id: string;         // 一意のチャンク／ドキュメント識別子
+  metadata: any;      // すべてのメタデータフィールド（ドキュメントID など）
+  vector: number[];   // 埋め込みベクトル（利用可能な場合）
+  score: number;      // この取得結果の類似度スコア
+  document: string;   // チャンク／ドキュメントの全文（利用可能な場合）
+}
+```
+
+
+<div id="default-tool-description">
+  ## デフォルトのツール説明
+</div>
+
+デフォルトの説明は次の点に重点を置きます:
+
+- 文書間の関係を分析する
+- パターンや関連性を見つける
+- 複雑な質問に答える
+
+<div id="advanced-example">
+  ## 応用例
+</div>
+
+```typescript
+const graphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
+  graphOptions: {
+    dimension: 1536,
+    threshold: 0.8, // 類似度のしきい値を上げる
+    randomWalkSteps: 200, // 探索ステップを増やす
+    restartProb: 0.2, // 再開確率を上げる
+  },
+});
+```
+
+
+<div id="example-with-custom-description">
+  ## カスタムの説明付きの例
+</div>
+
+```typescript
+const graphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
+  description:
+    "社内の過去データにおける複雑なパターンや関連性を見つけるために、文書間の関係を分析します",
+});
+```
+
+この例では、関係性分析という本来の目的を保ちながら、特定のユースケースに合わせてツールの説明をカスタマイズする方法を示します。
+
+
+<div id="example-using-runtime-context">
+  ## 例：ランタイムコンテキストの使用
+</div>
+
+```typescript
+const graphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
+});
+```
+
+ランタイムコンテキストを使用する場合、必須パラメータは実行時にランタイムコンテキスト経由で指定してください。
+
+```typescript
+const runtimeContext = new RuntimeContext<{
+  vectorStoreName: string;
+  indexName: string;
+  topK: number;
+  filter: any;
+}>();
+runtimeContext.set("vectorStoreName", "my-store");
+runtimeContext.set("indexName", "my-index");
+runtimeContext.set("topK", 5);
+runtimeContext.set("filter", { category: "docs" });
+runtimeContext.set("randomWalkSteps", 100);
+runtimeContext.set("restartProb", 0.15);
+
+const response = await agent.generate(
+  "ナレッジベースからドキュメントを検索してください。",
+  {
+    runtimeContext,
+  },
+);
+```
+
+ランタイムコンテキストの詳細については、以下をご参照ください。
+
+* [Agent Runtime Context](/docs/server-db/runtime-context)
+* [Tool Runtime Context](/docs/tools-mcp/overview#using-runtimecontext)
+
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [createVectorQueryTool](./vector-query-tool)
+- [GraphRAG](../rag/graph-rag)

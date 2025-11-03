@@ -1,0 +1,51 @@
+---
+title: "例: HTML の意味的チャンク化 | RAG | Mastra Docs"
+description: Mastra で HTML コンテンツを意味的に分割し、ドキュメントをチャンク化します。
+---
+
+import GithubLink from "@site/src/components/GithubLink";
+
+
+<div id="semantically-chunking-html">
+  # HTML を意味単位でチャンク化する
+</div>
+
+HTML コンテンツを扱う際は、文書構造を保ったまま、より小さく扱いやすい単位に分割する必要がよくあります。chunk メソッドは、HTML タグや要素の整合性を維持しつつ、HTML コンテンツを賢く分割します。以下の例では、検索や検索結果の取得に向けて HTML ドキュメントをどのようにチャンク化するかを示します。
+
+```tsx copy
+import { MDocument } from "@mastra/rag";
+
+const html = `
+<div>
+    <h1>h1 の内容...</h1>
+    <p>p の内容...</p>
+</div>
+`;
+
+const doc = MDocument.fromHTML(html);
+
+const chunks = await doc.chunk({
+  headers: [
+    ["h1", "見出し1"],
+    ["p", "段落"],
+  ],
+});
+
+console.log(chunks);
+```
+
+<br />
+
+<br />
+
+<hr className="dark:border-[#404040] border-gray-300" />
+
+<br />
+
+<br />
+
+<GithubLink
+  link={
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/chunk-html"
+}
+/>

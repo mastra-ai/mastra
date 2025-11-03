@@ -1,0 +1,394 @@
+---
+title: "リファレンス: LibSQLVector ストア | ベクター | Mastra ドキュメント"
+description: ベクター拡張機能付きの LibSQL を用いたベクター検索を提供する、Mastra の LibSQLVector クラスに関するドキュメント。
+---
+
+<div id="libsqlvector-store">
+  # LibSQLVector ストア
+</div>
+
+LibSQL のストレージ実装は、ベクター拡張を備えた SQLite のフォークである [LibSQL](https://github.com/tursodatabase/libsql) および同拡張を備えた [Turso](https://turso.tech/) に対して、SQLite 互換のベクター検索を提供し、軽量かつ高効率なベクターデータベースソリューションを実現します。
+これは `@mastra/libsql` パッケージの一部で、メタデータによるフィルタリングに対応した効率的なベクター類似検索を提供します。
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash copy
+npm install @mastra/libsql@latest
+```
+
+
+<div id="usage">
+  ## 使い方
+</div>
+
+```typescript copy showLineNumbers
+import { LibSQLVector } from "@mastra/libsql";
+
+// 新しいベクトルストアインスタンスを作成
+const store = new LibSQLVector({
+  connectionUrl: process.env.DATABASE_URL,
+  // オプション: Tursoクラウドデータベース用
+  authToken: process.env.DATABASE_AUTH_TOKEN,
+});
+
+// インデックスを作成
+await store.createIndex({
+  indexName: "myCollection",
+  dimension: 1536,
+});
+
+// メタデータ付きベクトルを追加
+const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
+const metadata = [
+  { text: "最初のドキュメント", category: "A" },
+  { text: "2番目のドキュメント", category: "B" }
+];
+await store.upsert({
+  indexName: "myCollection",
+  vectors,
+  metadata,
+});
+
+// 類似ベクトルをクエリ
+const queryVector = [0.1, 0.2, ...];
+const results = await store.query({
+  indexName: "myCollection",
+  queryVector,
+  topK: 10, // 上位K件の結果
+  filter: { category: "A" } // オプションのメタデータフィルタ
+});
+```
+
+
+<div id="constructor-options">
+  ## コンストラクターのオプション
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "connectionUrl",
+      type: "string",
+      description:
+        "LibSQL データベースの URL。インメモリーデータベースには ':memory:'、ローカルファイルには 'file:dbname.db'、または 'libsql://your-database.turso.io' のような LibSQL 互換の接続文字列を使用します。",
+    },
+    {
+      name: "authToken",
+      type: "string",
+      isOptional: true,
+      description: "Turso クラウドデータベース用の認証トークン",
+    },
+    {
+      name: "syncUrl",
+      type: "string",
+      isOptional: true,
+      description: "データベース複製用の URL（Turso 固有）",
+    },
+    {
+      name: "syncInterval",
+      type: "number",
+      isOptional: true,
+      description:
+        "データベース同期の間隔（ミリ秒、Turso 固有）",
+    },
+  ]}
+/>
+
+<div id="methods">
+  ## 方法
+</div>
+
+<div id="createindex">
+  ### createIndex()
+</div>
+
+新しいベクトルコレクションを作成します。インデックス名は英字またはアンダースコアで始まり、英字・数字・アンダースコアのみを含める必要があります。dimension は正の整数でなければなりません。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "作成するインデックス名",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "ベクトルの次元数（使用する埋め込みモデルに合わせる必要があります）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description:
+        "類似検索の距離指標。注: 現在 LibSQL がサポートしているのは cosine 類似度のみです。",
+    },
+  ]}
+/>
+
+<div id="upsert">
+  ### upsert()
+</div>
+
+インデックス内のベクトルとそのメタデータを追加または更新します。すべてのベクトルがアトミックに挿入されるようトランザクションを使用します。いずれかの挿入が失敗した場合は、操作全体がロールバックされます。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "挿入先のインデックス名",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "埋め込みベクトルの配列",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "各ベクトルのメタデータ",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "任意のベクトルID（未指定の場合は自動生成）",
+    },
+  ]}
+/>
+
+<div id="query">
+  ### query()
+</div>
+
+メタデータのフィルタリングを任意で指定して、類似ベクトルを検索します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "検索対象のインデックス名",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "類似ベクトルを検索するためのクエリベクトル",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "返す結果件数",
+    },
+    {
+      name: "filter",
+      type: "Filter",
+      isOptional: true,
+      description: "メタデータフィルタ",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "結果にベクトルデータを含めるかどうか",
+    },
+    {
+      name: "minScore",
+      type: "number",
+      isOptional: true,
+      defaultValue: "0",
+      description: "類似度スコアの最小しきい値",
+    },
+  ]}
+/>
+
+<div id="describeindex">
+  ### describeIndex()
+</div>
+
+インデックスの情報を取得します。
+
+<PropertiesTable
+  content={[
+{
+  name: "indexName",
+  type: "string",
+  description: "説明する対象のインデックス名",
+},
+]}
+/>
+
+戻り値:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+
+<div id="deleteindex">
+  ### deleteIndex()
+</div>
+
+インデックスとそのデータをすべて削除します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除するインデックス名",
+    },
+  ]}
+/>
+
+<div id="listindexes">
+  ### listIndexes()
+</div>
+
+データベース内のすべてのベクターインデックスを一覧表示します。
+
+Returns: `Promise<string[]>`
+
+<div id="truncateindex">
+  ### truncateIndex()
+</div>
+
+インデックスの構造は維持したまま、インデックスからすべてのベクトルを削除します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "切り詰めるインデックスの名前",
+    },
+  ]}
+/>
+
+<div id="updatevector">
+  ### updateVector()
+</div>
+
+ID を指定して、特定のベクトリエントリを新しいベクトルデータやメタデータで更新します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルを含むインデックス名",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "更新対象のベクトリエントリの ID",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "ベクトルおよび/またはメタデータを含む更新内容",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      isOptional: true,
+      description: "更新後のベクトルデータ",
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "更新後のメタデータ",
+    },
+  ]}
+/>
+
+<div id="deletevector">
+  ### deleteVector()
+</div>
+
+ID を指定して、インデックスから特定のベクター項目を削除します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクターを含むインデックス名",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "削除するベクター項目の ID",
+    },
+  ]}
+/>
+
+<div id="response-types">
+  ## レスポンスの種類
+</div>
+
+クエリ結果は次の形式で返されます。
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // includeVectorがtrueの場合のみ含まれる
+}
+```
+
+
+<div id="error-handling">
+  ## エラー処理
+</div>
+
+ストアは、状況ごとに特定のエラーを投げます。
+
+```typescript copy
+try {
+  await store.query({
+    indexName: "my-collection",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  // 特定のエラーケースを処理
+  if (error.message.includes("Invalid index name format")) {
+    console.error(
+      "インデックス名は文字またはアンダースコアで始まり、英数字のみを含む必要があります",
+    );
+  } else if (error.message.includes("Table not found")) {
+    console.error("指定されたインデックスは存在しません");
+  } else {
+    console.error("ベクトルストアエラー:", error.message);
+  }
+}
+```
+
+一般的なエラー事例には次のものが含まれます：
+
+* インデックス名の形式が不正
+* ベクトルの次元が不正
+* テーブル／インデックスが見つからない
+* データベース接続の問題
+* アップサート中のトランザクションの失敗
+
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [メタデータ フィルター](../rag/metadata-filters)

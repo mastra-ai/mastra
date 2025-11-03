@@ -1,0 +1,92 @@
+---
+title: "リファレンス: getScorer() | Core | Mastra ドキュメント"
+description: "Mastra の `getScorer()` メソッドに関するドキュメント。登録キーで特定のスコアラーを取得します。"
+---
+
+<div id="getscorer">
+  # getScorer()
+</div>
+
+`getScorer()` メソッドは、登録キーを使って Mastra インスタンスに登録された特定のスコアラーを取得します。このメソッドはスコアラーへの型安全なアクセスを提供し、要求したスコアラーが見つからない場合はエラーを送出します。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript
+import { mastra } from "./mastra";
+
+// キーを指定してスコアラーを取得
+const relevancyScorer = mastra.getScorer("relevancyScorer");
+
+const weatherAgent = mastra.getAgent("weatherAgent");
+
+// スコアラーを使用してAI出力を評価
+await weatherAgent.generate("ローマの天気はどうですか", {
+  scorers: {
+    answerRelevancy: {
+      scorer: relevancyScorer,
+    },
+  },
+});
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "key",
+      type: "string",
+      description:
+        "取得するスコアラーの登録キー。Mastra のコンストラクターでスコアラーを登録した際に使用したキーと一致している必要があります。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "scorer",
+      type: "MastraScorer",
+      description:
+        "指定されたキーに対応する MastraScorer インスタンス。",
+    },
+  ]}
+/>
+
+<div id="error-handling">
+  ## エラー処理
+</div>
+
+このメソッドは、次の場合に `MastraError` をスローします：
+
+* 指定されたキーのスコアラーが見つからない場合
+* Mastra インスタンスにスコアラーが1つも登録されていない場合
+
+```typescript
+try {
+  const scorer = mastra.getScorer("nonExistentScorer");
+} catch (error) {
+  if (error.id === "MASTRA_GET_SCORER_NOT_FOUND") {
+    console.log("スコアラーが見つかりません。デフォルトの評価を使用します");
+  }
+}
+```
+
+
+<div id="related">
+  ## 関連
+</div>
+
+- [getScorers()](/reference/core/getScorers) - 登録済みのスコアラーをすべて取得
+- [getScorerByName()](/reference/core/getScorerByName) - name プロパティで指定してスコアラーを取得
+- [Custom Scorers](/docs/scorers/custom-scorers) - カスタムスコアラーの作成方法

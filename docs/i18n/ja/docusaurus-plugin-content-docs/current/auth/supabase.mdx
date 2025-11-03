@@ -1,0 +1,152 @@
+---
+title: "MastraAuthSupabase クラス | 認証 | Mastra ドキュメント"
+description: "Supabase Auth を用いて Mastra アプリケーションを認証する MastraAuthSupabase クラスのドキュメント。"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+
+<div id="mastraauthsupabase-class">
+  # MastraAuthSupabase クラス
+</div>
+
+`MastraAuthSupabase` クラスは、Supabase Auth を用いて Mastra の認証を行います。Supabase の認証機構で受信リクエストを検証し、`experimental_auth` オプションを通じて Mastra サーバーと統合します。
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+この例では Supabase Auth を使用します。`.env` ファイルに Supabase の認証情報を追加し、Supabase プロジェクトが正しく設定されていることを確認してください。
+
+```env title=".env" copy
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+```
+
+> **注:** 適切なデータアクセス制御を行うため、Supabase の Row Level Security（RLS）設定を確認してください。
+
+
+<div id="installation">
+  ## インストール
+</div>
+
+`MastraAuthSupabase` クラスを使用する前に、`@mastra/auth-supabase` パッケージをインストールしてください。
+
+```bash copy
+npm install @mastra/auth-supabase@latest
+```
+
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript {2,7-9} title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthSupabase } from "@mastra/auth-supabase";
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthSupabase({
+      url: process.env.SUPABASE_URL,
+      anonKey: process.env.SUPABASE_ANON_KEY,
+    }),
+  },
+});
+```
+
+> **注意:** 既定の `authorizeUser` メソッドは、`public` スキーマ内の `users` テーブルにある `isAdmin` カラムを確認します。ユーザーの認可をカスタマイズするには、プロバイダーを作成する際にカスタムの `authorizeUser` 関数を指定してください。
+
+> 利用可能な設定オプションの一覧は、[MastraAuthSupabase](/reference/auth/supabase) の API リファレンスをご覧ください。
+
+
+<div id="client-side-setup">
+  ## クライアント側のセットアップ
+</div>
+
+Supabase 認証を使用する場合は、クライアント側で Supabase からアクセストークンを取得し、それを Mastra へのリクエストに渡す必要があります。
+
+<div id="retrieving-the-access-token">
+  ### アクセストークンの取得
+</div>
+
+Supabase クライアントを使ってユーザーを認証し、アクセストークンを取得します：
+
+```typescript title="lib/auth.ts" showLineNumbers copy
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient("<supabase-url>", "<supabase-key>");
+
+const authTokenResponse = await supabase.auth.signInWithPassword({
+  email: "<ユーザーのメール>",
+  password: "<ユーザーのパスワード>",
+});
+
+const accessToken = authTokenResponse.data?.session?.access_token;
+```
+
+> OAuth やマジックリンクなど、その他の認証方法については [Supabase ドキュメント](https://supabase.com/docs/guides/auth)をご参照ください。
+
+
+<div id="configuring-mastraclient">
+  ## `MastraClient` の設定
+</div>
+
+`experimental_auth` を有効化すると、`MastraClient` で送信するすべてのリクエストに、`Authorization` ヘッダーで有効な Supabase アクセストークンを含める必要があります。
+
+```typescript {6} title="lib/mastra/mastra-client.ts" showLineNumbers copy
+import { MastraClient } from "@mastra/client-js";
+
+export const mastraClient = new MastraClient({
+  baseUrl: "https://<mastra-api-url>",
+  headers: {
+    Authorization: `Bearer ${accessToken}`,
+  },
+});
+```
+
+> **注:** Authorization ヘッダーのアクセストークンには `Bearer` プレフィックスを付ける必要があります。
+
+> さらに多くの設定オプションについては、[Mastra Client SDK](/docs/server-db/mastra-client) を参照してください。
+
+
+<div id="making-authenticated-requests">
+  ### 認証済みリクエストの送信
+</div>
+
+`MastraClient` に Supabase のアクセス トークンを設定すると、認証済みリクエストを送信できます:
+
+<Tabs>
+  <TabItem value="curl" label="cURL">
+    ```tsx title="src/components/test-agent.tsx" showLineNumbers copy
+    import { mastraClient } from "../../lib/mastra-client";
+
+    export const TestAgent = () => {
+      async function handleClick() {
+        const agent = mastraClient.getAgent("weatherAgent");
+
+        const response = await agent.generate({
+          messages: "What's the weather like in New York"
+        });
+
+        console.log(response);
+      }
+
+      return <button onClick={handleClick}>Test Agent</button>;
+    };
+    ```
+
+  </TabItem>
+  <TabItem value="react" label="React">
+    ```bash copy
+    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <your-supabase-access-token>" \
+      -d '{
+        "messages": "Weather in London"
+      }'
+    ```
+  </TabItem>
+</Tabs>
