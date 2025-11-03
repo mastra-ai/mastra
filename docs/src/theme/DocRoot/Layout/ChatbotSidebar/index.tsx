@@ -95,16 +95,12 @@ export default function ChatbotSidebar({
 
   return (
     <motion.aside
+      layout
+      initial={false}
       className={clsx(
         styles.chatbotSidebarContainer,
         hiddenChatbotSidebar && styles.chatbotSidebarContainerHidden,
       )}
-      initial={false}
-      animate={{
-        width: hiddenChatbotSidebar
-          ? "var(--chatbot-sidebar-hidden-width)"
-          : "var(--chatbot-sidebar-width)",
-      }}
       transition={{
         duration: 0.3,
         ease: [0.4, 0, 0.2, 1],
@@ -141,12 +137,12 @@ export default function ChatbotSidebar({
         <div className={styles.chatbotContent} ref={scrollRef}>
           <div
             className={cn(
-              "sticky top-0 backdrop-blur-md bg-(--mastra-surface-1)/50 z-10 flex items-center gap-2 px-3  py-2 pt-1 -mx-[10px]",
+              "sticky top-0 backdrop-blur-md justify-start bg-(--mastra-surface-1)/50 z-10 flex items-center gap-2 px-3  py-2 pt-1 -mx-[10px]",
               !hiddenChatbotSidebar && "border-b border-(--border)",
             )}
           >
             <button
-              className="hover:bg-(--mastra-surface-5) p-1.5 rounded-lg cursor-pointer"
+              className="hover:bg-(--mastra-surface-5) w-fit p-1.5 rounded-lg cursor-pointer"
               onClick={toggleSidebar}
             >
               {!hiddenChatbotSidebar ? (
