@@ -21,6 +21,20 @@ import type { Context } from 'hono';
 import { handleError } from '../../error';
 import { parseLimit, parsePage, parsePerPage } from '../../utils/query-parsers';
 
+/**
+ * Helper function to parse JSON query parameters
+ * @param value - The query parameter value to parse
+ * @returns Parsed JSON object or undefined if parsing fails or value is undefined
+ */
+function parseJsonParam<T>(value: string | undefined): T | undefined {
+  if (!value) return undefined;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return undefined;
+  }
+}
+
 // Memory handlers
 export async function getMemoryStatusHandler(c: Context) {
   try {
@@ -233,36 +247,9 @@ export async function listMessagesHandler(c: Context) {
     const resourceId = c.req.query('resourceId');
     const page = parsePage(c.req.query('page'));
     const perPage = parsePerPage(c.req.query('perPage'));
-    const orderByArgs = c.req.query('orderBy');
-    const includeArgs = c.req.query('include');
-    const filterArgs = c.req.query('filter');
-
-    let orderBy;
-    if (orderByArgs) {
-      try {
-        orderBy = JSON.parse(orderByArgs);
-      } catch {
-        // swallow
-      }
-    }
-
-    let include;
-    if (includeArgs) {
-      try {
-        include = JSON.parse(includeArgs);
-      } catch {
-        // swallow
-      }
-    }
-
-    let filter;
-    if (filterArgs) {
-      try {
-        filter = JSON.parse(filterArgs);
-      } catch {
-        // swallow
-      }
-    }
+    const orderBy = parseJsonParam(c.req.query('orderBy'));
+    const include = parseJsonParam(c.req.query('include'));
+    const filter = parseJsonParam(c.req.query('filter'));
 
     const result = await getOriginalListMessagesHandler({
       mastra,

@@ -187,7 +187,6 @@ export class Memory extends MastraMemory {
         threadId,
         resourceId,
         ...selectBy,
-        ...selectBy,
         ...(vectorResults?.length
           ? {
               include: vectorResults.map(r => ({

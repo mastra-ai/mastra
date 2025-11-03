@@ -286,7 +286,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         threads: [],
         total: 0,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }

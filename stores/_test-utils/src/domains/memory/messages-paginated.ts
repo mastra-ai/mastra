@@ -42,7 +42,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       expect(page2.hasMore).toBe(true);
     });
 
-    it('should filter by date with pagination for getMessages', async () => {
+    it('should filter by date with pagination', async () => {
       resetRole();
       const threadData = createSampleThread();
       const thread = await storage.saveThread({ thread: threadData as StorageThreadType });
@@ -389,7 +389,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       ];
       await storage.saveMessages({ messages });
 
-      // Use last: 2 and include a message from another thread with context
+      // Include a message from another thread with context
       const { messages: result } = await storage.listMessages({
         threadId: thread.id,
         include: [

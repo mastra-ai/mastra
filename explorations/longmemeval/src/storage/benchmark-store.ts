@@ -415,8 +415,8 @@ export class BenchmarkStore extends MastraStorage {
     // Get all messages
     const allMessages = await this.getMessages({
       threadId,
-      format: 'v1' as any,
-    } as any);
+      format: 'v2',
+    });
 
     // Apply filters
     let filteredMessages = allMessages;
@@ -432,8 +432,8 @@ export class BenchmarkStore extends MastraStorage {
 
     // Apply pagination
     const normalizedPerPage = perPage === false ? filteredMessages.length : perPage;
-    const start = page * normalizedPerPage;
-    const messages = filteredMessages.slice(start, start + normalizedPerPage) as any;
+    const start = perPage === false ? 0 : page * normalizedPerPage;
+    const messages = filteredMessages.slice(start, start + normalizedPerPage);
 
     return {
       messages,

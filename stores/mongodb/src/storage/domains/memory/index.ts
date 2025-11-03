@@ -698,12 +698,14 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // MongoDB sort: 1 = ASC, -1 = DESC
       const sortOrder = direction === 'ASC' ? 1 : -1;
 
-      const threads = await collection
+      let cursor = collection
         .find(query)
         .sort({ [field]: sortOrder })
-        .skip(offset)
-        .limit(perPage)
-        .toArray();
+        .skip(offset);
+      if (perPageInput !== false) {
+        cursor = cursor.limit(perPage);
+      }
+      const threads = await cursor.toArray();
 
       return {
         threads: threads.map((thread: any) => ({
