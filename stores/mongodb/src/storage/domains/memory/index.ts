@@ -327,7 +327,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
-      const perPage = normalizePerPage(perPageInput, 40);
       const mastraError = new MastraError(
         {
           id: 'MONGODB_STORE_LIST_MESSAGES_FAILED',
