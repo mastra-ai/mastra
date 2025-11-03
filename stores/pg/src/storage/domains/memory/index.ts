@@ -132,7 +132,6 @@ export class MemoryPG extends MemoryStorage {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
       const baseQuery = `FROM ${tableName} WHERE "resourceId" = $1`;
       const queryParams: any[] = [resourceId];
-      // When perPage is false (get all), ignore page offset
 
       const countQuery = `SELECT COUNT(*) ${baseQuery}`;
       const countResult = await this.client.one(countQuery, queryParams);
@@ -148,8 +147,9 @@ export class MemoryPG extends MemoryStorage {
         };
       }
 
+      const limitValue = perPageInput === false ? total : perPage;
       const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`;
-      const rows = await this.client.manyOrNone(dataQuery, [...queryParams, perPage, offset]);
+      const rows = await this.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
 
       const threads = (rows || []).map(thread => ({
         ...thread,
@@ -163,7 +163,7 @@ export class MemoryPG extends MemoryStorage {
         total,
         page,
         perPage: perPageForResponse,
-        hasMore: offset + perPage < total,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
       const mastraError = new MastraError(
@@ -612,8 +612,9 @@ export class MemoryPG extends MemoryStorage {
       const total = parseInt(countResult.count, 10);
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      const limitValue = perPageInput === false ? total : perPage;
       const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-      const rows = await this.client.manyOrNone(dataQuery, [...queryParams, perPage, offset]);
+      const rows = await this.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
       const messages: MessageRowFromDB[] = [...(rows || [])];
 
       if (total === 0 && messages.length === 0) {

@@ -931,7 +931,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           total,
           page,
           perPage: perPageForResponse,
-          hasMore: false,
+          hasMore: offset < total,
         };
       }
 

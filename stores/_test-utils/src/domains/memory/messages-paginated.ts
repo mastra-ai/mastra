@@ -5,7 +5,7 @@ import { MastraStorage } from '@mastra/core/storage';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { MessageList } from '@mastra/core/agent';
 
-export function createMessagesPaginatedTest({ storage }: { storage: MastraStorage }) {
+export function createListMessagesTest({ storage }: { storage: MastraStorage }) {
   describe('listMessages', () => {
     it('should return paginated messages with total count', async () => {
       const thread = createSampleThread();

@@ -250,7 +250,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           total,
           page,
           perPage: perPageForResponse,
-          hasMore: false,
+          hasMore: offset < total,
         };
       }
 
@@ -677,7 +677,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       }
 
       const perPage = normalizePerPage(perPageInput, 100);
-      // When perPage is false (get all), ignore page offset
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const { field, direction } = this.parseOrderBy(orderBy);
       const collection = await this.operations.getCollection(TABLE_THREADS);
@@ -719,7 +718,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         total,
         page,
         perPage: perPageForResponse,
-        hasMore: offset + perPage < total,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
       throw new MastraError(

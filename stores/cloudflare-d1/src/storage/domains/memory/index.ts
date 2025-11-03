@@ -249,12 +249,13 @@ export class MemoryStorageD1 extends MemoryStorage {
       }[];
       const total = Number(countResult?.[0]?.count ?? 0);
 
+      const limitValue = perPageInput === false ? total : perPage;
       const selectQuery = createSqlBuilder()
         .select('*')
         .from(fullTableName)
         .where('resourceId = ?', resourceId)
         .orderBy(field, direction)
-        .limit(perPage)
+        .limit(limitValue)
         .offset(offset);
 
       const results = (await this.operations.executeQuery(selectQuery.build())) as Record<string, any>[];
@@ -265,7 +266,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         total,
         page,
         perPage: perPageForResponse,
-        hasMore: offset + perPage < total,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
       const mastraError = new MastraError(

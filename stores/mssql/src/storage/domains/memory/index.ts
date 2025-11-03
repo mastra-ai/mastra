@@ -109,7 +109,6 @@ export class MemoryMSSQL extends MemoryStorage {
   ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
     const perPage = normalizePerPage(perPageInput, 100);
-    // When perPage is false (get all), ignore page offset
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
     try {
@@ -133,15 +132,16 @@ export class MemoryMSSQL extends MemoryStorage {
 
       const orderByField = field === 'createdAt' ? '[createdAt]' : '[updatedAt]';
       const dir = (direction || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      const limitValue = perPageInput === false ? total : perPage;
       const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
       const dataRequest = this.pool.request();
       dataRequest.input('resourceId', resourceId);
       dataRequest.input('offset', offset);
 
-      if (perPage > 2147483647) {
-        dataRequest.input('perPage', sql.BigInt, perPage);
+      if (limitValue > 2147483647) {
+        dataRequest.input('perPage', sql.BigInt, limitValue);
       } else {
-        dataRequest.input('perPage', perPage);
+        dataRequest.input('perPage', limitValue);
       }
       const rowsResult = await dataRequest.query(dataQuery);
       const rows = rowsResult.recordset || [];
@@ -157,7 +157,7 @@ export class MemoryMSSQL extends MemoryStorage {
         total,
         page,
         perPage: perPageForResponse,
-        hasMore: offset + perPage < total,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
       const mastraError = new MastraError(
@@ -613,13 +613,14 @@ export class MemoryMSSQL extends MemoryStorage {
       const total = parseInt(countResult.recordset[0]?.total, 10) || 0;
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      const limitValue = perPageInput === false ? total : perPage;
       const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
       request.input('offset', offset);
 
-      if (perPage > 2147483647) {
-        request.input('limit', sql.BigInt, perPage);
+      if (limitValue > 2147483647) {
+        request.input('limit', sql.BigInt, limitValue);
       } else {
-        request.input('limit', perPage);
+        request.input('limit', limitValue);
       }
 
       const rowsResult = await request.query(dataQuery);

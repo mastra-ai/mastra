@@ -82,7 +82,7 @@ export function normalizePerPage(perPageInput: number | false | undefined, defau
 /**
  * Calculates pagination offset and prepares perPage value for response.
  * When perPage is false (fetch all), offset is always 0 regardless of page.
- * 
+ *
  * @param page - The page number (0-indexed)
  * @param perPageInput - The original perPage input (number, false for all, or undefined)
  * @param normalizedPerPage - The normalized perPage value (from normalizePerPage)
