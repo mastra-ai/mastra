@@ -2,16 +2,17 @@ import { MastraStorage } from '@mastra/core/storage';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2 } from '@mastra/core/agent';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
-import type { Trace } from '@mastra/core/telemetry';
 import type {
   TABLE_NAMES,
   StorageColumn,
   StorageGetMessagesArg,
   StorageResourceType,
-  EvalRow,
   WorkflowRun,
   WorkflowRuns,
   PaginationInfo,
+  StorageListWorkflowRunsInput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import { writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -21,7 +22,6 @@ type DBMode = 'read' | 'read-write';
 export class BenchmarkStore extends MastraStorage {
   private data: Record<TABLE_NAMES, Map<string, any>> = {
     mastra_workflow_snapshot: new Map(),
-    mastra_evals: new Map(),
     mastra_messages: new Map(),
     mastra_threads: new Map(),
     mastra_traces: new Map(),
@@ -77,16 +77,6 @@ export class BenchmarkStore extends MastraStorage {
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     const thread = this.data.mastra_threads.get(threadId);
     return thread || null;
-  }
-
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    const threads: StorageThreadType[] = [];
-    for (const thread of this.data.mastra_threads.values()) {
-      if (thread.resourceId === resourceId) {
-        threads.push(thread);
-      }
-    }
-    return threads;
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
@@ -239,7 +229,7 @@ export class BenchmarkStore extends MastraStorage {
     messages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
     const list = new MessageList().add(messages, 'memory');
-    return format === 'v2' ? list.get.all.v2() : list.get.all.v1();
+    return format === 'v2' ? list.get.all.db() : list.get.all.v1();
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
@@ -256,7 +246,7 @@ export class BenchmarkStore extends MastraStorage {
     }
 
     const list = new MessageList().add(messages, 'memory');
-    return format === 'v2' ? list.get.all.v2() : list.get.all.v1();
+    return format === 'v2' ? list.get.all.db() : list.get.all.v1();
   }
 
   async updateMessages(args: { messages: Partial<MastraMessageV2> & { id: string }[] }): Promise<MastraMessageV2[]> {
@@ -332,21 +322,14 @@ export class BenchmarkStore extends MastraStorage {
     return evals as EvalRow[];
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     let runs = Array.from(this.data.mastra_workflow_snapshot.values());
 
     if (workflowName) runs = runs.filter((run: any) => run.workflow_name === workflowName);
@@ -403,50 +386,24 @@ export class BenchmarkStore extends MastraStorage {
     return parsedRun as WorkflowRun;
   }
 
-  async getTracesPaginated({
-    name,
-    scope,
-    attributes,
-    page,
-    perPage,
-    fromDate,
-    toDate,
-  }: {
-    name?: string;
-    scope?: string;
-    attributes?: Record<string, string>;
-    page: number;
-    perPage: number;
-    fromDate?: Date;
-    toDate?: Date;
-  }): Promise<PaginationInfo & { traces: Trace[] }> {
-    const traces = await this.getTraces({ name, scope, page, perPage, attributes, fromDate, toDate });
-    const total = Array.from(this.data.mastra_traces.values()).length;
-
-    return {
-      traces,
-      total,
-      page,
-      perPage,
-      hasMore: total > (page + 1) * perPage,
-    };
-  }
-
-  async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const allThreads = await this.getThreadsByResourceId({ resourceId: args.resourceId });
-    const start = args.page * args.perPage;
-    const threads = allThreads.slice(start, start + args.perPage);
+  async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const allThreads: StorageThreadType[] = [];
+    for (const thread of this.data.mastra_threads.values()) {
+      if (thread.resourceId === args.resourceId) {
+        allThreads.push(thread);
+      }
+    }
+    const start = args.offset * args.limit;
+    const threads = allThreads.slice(start, start + args.limit);
 
     return {
       threads,
       total: allThreads.length,
-      page: args.page,
-      perPage: args.perPage,
-      hasMore: allThreads.length > (args.page + 1) * args.perPage,
+      page: args.offset,
+      perPage: args.limit,
+      hasMore: allThreads.length > (args.offset + 1) * args.limit,
     };
   }
 

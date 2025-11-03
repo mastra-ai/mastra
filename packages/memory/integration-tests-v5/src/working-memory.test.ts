@@ -4,11 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import type { MastraMessageV1 } from '@mastra/core/memory';
+import type { MastraDBMessage } from '@mastra/core/memory';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import type { ToolCallPart } from 'ai';
+
 import { config } from 'dotenv';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
@@ -16,6 +16,33 @@ import { z } from 'zod';
 
 const resourceId = 'test-resource';
 let messageCounter = 0;
+
+// Helper function to extract text content from MastraDBMessage
+function getTextContent(message: any): string {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+
+  if (message.content && typeof message.content === 'object') {
+    // Handle format 2 (MastraMessageContentV2)
+    if (message.content.parts && Array.isArray(message.content.parts)) {
+      const textParts = message.content.parts.filter((part: any) => part.type === 'text').map((part: any) => part.text);
+      return textParts.join(' ');
+    }
+
+    // Handle direct text property
+    if (message.content.text) {
+      return message.content.text;
+    }
+
+    // Handle nested content property
+    if (message.content.content && typeof message.content.content === 'string') {
+      return message.content.content;
+    }
+  }
+
+  return '';
+}
 
 // Test helpers
 const createTestThread = (title: string, metadata = {}) => ({
@@ -27,12 +54,15 @@ const createTestThread = (title: string, metadata = {}) => ({
   updatedAt: new Date(),
 });
 
-const createTestMessage = (threadId: string, content: string, role: 'user' | 'assistant' = 'user'): MastraMessageV1 => {
+const createTestMessage = (threadId: string, content: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage => {
   messageCounter++;
   return {
     id: randomUUID(),
     threadId,
-    content,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text: content }],
+    },
     role,
     type: 'text',
     createdAt: new Date(Date.now() + messageCounter * 1000),
@@ -84,9 +114,7 @@ describe('Working Memory Tests', () => {
             topK: 3,
             messageRange: 2,
           },
-          threads: {
-            generateTitle: false,
-          },
+          generateTitle: false,
         },
         storage,
         vector,
@@ -109,6 +137,7 @@ describe('Working Memory Tests', () => {
 
     it('should handle LLM responses with working memory using OpenAI (test that the working memory prompt works)', async () => {
       const agent = new Agent({
+        id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
         model: openai('gpt-4o'),
@@ -121,7 +150,7 @@ describe('Working Memory Tests', () => {
       });
 
       // Get working memory
-      const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+      const workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       expect(workingMemory).not.toBeNull();
       if (workingMemory) {
         // Check for specific Markdown format
@@ -132,7 +161,7 @@ describe('Working Memory Tests', () => {
     });
 
     it('should initialize with default working memory template', async () => {
-      const systemInstruction = await memory.getSystemMessage({ threadId: thread.id });
+      const systemInstruction = await memory.getSystemMessage({ threadId: thread.id, resourceId });
       expect(systemInstruction).not.toBeNull();
       if (systemInstruction) {
         // Should match our Markdown template
@@ -158,7 +187,7 @@ describe('Working Memory Tests', () => {
         ),
       ];
 
-      await memory.saveMessages({ messages, format: 'v2' });
+      await memory.saveMessages({ messages });
 
       const remembered = await memory.rememberMessages({
         threadId: thread.id,
@@ -166,8 +195,8 @@ describe('Working Memory Tests', () => {
       });
 
       // Working memory tags should be stripped from the messages
-      expect(remembered.messages[1].content).not.toContain('<working_memory>');
-      expect(remembered.messages[1].content).toContain('Hello John!');
+      expect(getTextContent(remembered.messages[1])).not.toContain('<working_memory>');
+      expect(getTextContent(remembered.messages[1])).toContain('Hello John!');
     });
 
     it('should respect working memory enabled/disabled setting', async () => {
@@ -195,9 +224,7 @@ describe('Working Memory Tests', () => {
             topK: 3,
             messageRange: 2,
           },
-          threads: {
-            generateTitle: false,
-          },
+          generateTitle: false,
         },
       });
 
@@ -219,7 +246,7 @@ describe('Working Memory Tests', () => {
         ),
       ];
 
-      await disabledMemory.saveMessages({ messages, format: 'v2' });
+      await disabledMemory.saveMessages({ messages });
 
       // Working memory should be null when disabled
       const workingMemory = await disabledMemory.getWorkingMemory({ threadId: thread.id });
@@ -232,6 +259,7 @@ describe('Working Memory Tests', () => {
 
     it('should handle LLM responses with working memory using tool calls', async () => {
       const agent = new Agent({
+        id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
         model: openai('gpt-4o'),
@@ -245,7 +273,7 @@ describe('Working Memory Tests', () => {
         resourceId,
       });
 
-      const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+      const workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       expect(workingMemory).not.toBeNull();
       if (workingMemory) {
         // Check for specific Markdown format
@@ -257,6 +285,7 @@ describe('Working Memory Tests', () => {
 
     it("shouldn't pollute context with working memory tool call args, only the system instruction working memory should exist", async () => {
       const agent = new Agent({
+        id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
         model: openai('gpt-4o'),
@@ -270,7 +299,7 @@ describe('Working Memory Tests', () => {
         resourceId,
       });
 
-      let workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+      let workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       expect(workingMemory).not.toBeNull();
       if (workingMemory) {
         expect(workingMemory).toContain('# User Information');
@@ -284,7 +313,7 @@ describe('Working Memory Tests', () => {
         resourceId,
       });
 
-      workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+      workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       expect(workingMemory).not.toBeNull();
       if (workingMemory) {
         expect(workingMemory).toContain('# User Information');
@@ -298,7 +327,7 @@ describe('Working Memory Tests', () => {
         resourceId,
       });
 
-      workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+      workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       expect(workingMemory).not.toBeNull();
       if (workingMemory) {
         expect(workingMemory).toContain('# User Information');
@@ -318,8 +347,7 @@ describe('Working Memory Tests', () => {
 
       for (const message of history.messages) {
         if (message.role === `assistant`) {
-          for (const part of message.content) {
-            if (typeof part === `string`) continue;
+          for (const part of message.content.parts) {
             if (part.type === `tool-call` && part.toolName === `updateWorkingMemory`) {
               memoryArgs.push((part.args as any).memory);
             }
@@ -333,7 +361,7 @@ describe('Working Memory Tests', () => {
       expect(memoryArgs).not.toContain('Vancouver Island');
       expect(memoryArgs).toEqual([]);
 
-      workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+      workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       expect(workingMemory).not.toBeNull();
       if (workingMemory) {
         // Format-specific assertion that checks for Markdown format
@@ -345,22 +373,28 @@ describe('Working Memory Tests', () => {
 
     it('should remove tool-call/tool-result messages with toolName "updateWorkingMemory"', async () => {
       const threadId = thread.id;
-      const messages = [
+      const messages: MastraDBMessage[] = [
         createTestMessage(threadId, 'User says something'),
         // Pure tool-call message (should be removed)
         {
           id: randomUUID(),
           threadId,
           role: 'assistant',
-          type: 'tool-call',
-          content: [
-            {
-              type: 'tool-call',
-              toolName: 'updateWorkingMemory',
-              // ...other fields as needed
-            },
-          ],
-          toolNames: ['updateWorkingMemory'],
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolCallId: randomUUID(),
+                  toolName: 'updateWorkingMemory',
+                  args: {},
+                  state: 'result',
+                  result: {},
+                },
+              },
+            ],
+          },
           createdAt: new Date(),
           resourceId,
         },
@@ -369,18 +403,25 @@ describe('Working Memory Tests', () => {
           id: randomUUID(),
           threadId,
           role: 'assistant',
-          type: 'text',
-          content: [
-            {
-              type: 'tool-call',
-              toolName: 'updateWorkingMemory',
-              args: { memory: 'should not persist' },
-            },
-            {
-              type: 'text',
-              text: 'Normal message',
-            },
-          ],
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolCallId: randomUUID(),
+                  toolName: 'updateWorkingMemory',
+                  args: { memory: 'should not persist' },
+                  state: 'result',
+                  result: {},
+                },
+              },
+              {
+                type: 'text',
+                text: 'Normal message',
+              },
+            ],
+          },
           createdAt: new Date(),
           resourceId,
         },
@@ -389,21 +430,28 @@ describe('Working Memory Tests', () => {
           id: randomUUID(),
           threadId,
           role: 'assistant',
-          type: 'text',
-          content: 'Another normal message',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'text',
+                text: 'Another normal message',
+              },
+            ],
+          },
           createdAt: new Date(),
           resourceId,
         },
       ];
 
       // Save messages
-      const saved = await memory.saveMessages({ messages: messages as MastraMessageV1[], format: 'v2' });
+      const result = await memory.saveMessages({ messages: messages as MastraDBMessage[] });
+      const saved = result.messages;
 
       // Should not include any updateWorkingMemory tool-call messages (pure or mixed)
       expect(
         saved.some(
           m =>
-            (m.type === 'tool-call' || m.type === 'tool-result') &&
             Array.isArray(m.content.parts) &&
             m.content.parts.some(
               c => c.type === 'tool-invocation' && c.toolInvocation.toolName === `updateWorkingMemory`,
@@ -415,7 +463,6 @@ describe('Working Memory Tests', () => {
       const assistantMessages = saved.filter(m => m.role === 'assistant');
       expect(
         assistantMessages.every(m => {
-          // TODO: seems like saveMessages says it returns MastraMessageV2 but it's returning V1
           return JSON.stringify(m).includes(`updateWorkingMemory`);
         }),
       ).toBe(false);
@@ -423,20 +470,20 @@ describe('Working Memory Tests', () => {
       expect(
         saved.some(
           m =>
-            (m.type === 'tool-call' || m.type === 'tool-result') &&
-            Array.isArray(m.content) &&
-            m.content.some(c => (c as ToolCallPart).toolName === 'updateWorkingMemory'),
+            Array.isArray(m.content.parts) &&
+            m.content.parts.some(
+              c => c.type === 'tool-invocation' && c.toolInvocation.toolName === 'updateWorkingMemory',
+            ),
         ),
       ).toBe(false);
 
-      // TODO: again seems like we're getting V1 here but types say V2
-      // It actually should return V1 for now (CoreMessage compatible)
-
-      // Pure text message should be present
-      expect(saved.some(m => m.content.content === 'Another normal message')).toBe(true);
-      // User message should be present
+      // Pure text message should be present (check parts array for text)
       expect(
-        saved.some(m => typeof m.content.content === 'string' && m.content.content.includes('User says something')),
+        saved.some(m => m.content.parts?.some(p => p.type === 'text' && p.text === 'Another normal message')),
+      ).toBe(true);
+      // User message should be present (check parts array for text)
+      expect(
+        saved.some(m => m.content.parts?.some(p => p.type === 'text' && p.text.includes('User says something'))),
       ).toBe(true);
     });
   });
@@ -462,9 +509,7 @@ describe('Working Memory Tests', () => {
             }),
           },
           lastMessages: 1,
-          threads: {
-            generateTitle: false,
-          },
+          generateTitle: false,
         },
       });
       // Reset message counter
@@ -474,8 +519,9 @@ describe('Working Memory Tests', () => {
       thread = await memory.saveThread({
         thread: createTestThread('Working Memory Test Thread'),
       });
-      expect(await memory.getWorkingMemory({ threadId: thread.id })).toBeNull();
+      expect(await memory.getWorkingMemory({ threadId: thread.id, resourceId })).toBeNull();
       agent = new Agent({
+        id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
         model: openai('gpt-4o'),
@@ -495,7 +541,7 @@ describe('Working Memory Tests', () => {
       });
 
       // Verify it's in the working memory
-      const workingMemoryAfterFirstCall = await memory.getWorkingMemory({ threadId: thread.id });
+      const workingMemoryAfterFirstCall = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       expect(workingMemoryAfterFirstCall).not.toBeNull();
       if (workingMemoryAfterFirstCall) {
         expect(workingMemoryAfterFirstCall.toLowerCase()).toContain('wolf');
@@ -544,9 +590,7 @@ describe('Working Memory Tests', () => {
               topK: 3,
               messageRange: 2,
             },
-            threads: {
-              generateTitle: false,
-            },
+            generateTitle: false,
           },
         });
         // Reset message counter
@@ -557,9 +601,10 @@ describe('Working Memory Tests', () => {
           thread: createTestThread('Working Memory Test Thread'),
         });
 
-        expect(await memory.getWorkingMemory({ threadId: thread.id })).toBeNull();
+        expect(await memory.getWorkingMemory({ threadId: thread.id, resourceId })).toBeNull();
 
         agent = new Agent({
+          id: 'memory-test-agent',
           name: 'Memory Test Agent',
           instructions: `
             You are a helpful AI agent. Always add working memory tags to remember user information.
@@ -586,7 +631,7 @@ describe('Working Memory Tests', () => {
           resourceId,
         });
 
-        const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+        const wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
         const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
         const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
         expect(extractUserData(wmObj)).toMatchObject(validMemory);
@@ -605,7 +650,7 @@ describe('Working Memory Tests', () => {
           modelSettings: { temperature: 0 },
         });
 
-        const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+        const wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
         const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
         const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
         expect(extractUserData(wmObj)).toMatchObject(second);
@@ -632,9 +677,7 @@ describe('Working Memory Tests', () => {
                   temperature: z.number().optional(),
                 }),
               },
-              threads: {
-                generateTitle: false,
-              },
+              generateTitle: false,
             },
           },
         };
@@ -642,7 +685,7 @@ describe('Working Memory Tests', () => {
 
         await agent.generate('how are you doing?', generateOptions);
 
-        const firstWorkingMemory = await memory.getWorkingMemory({ threadId: newThread.id });
+        const firstWorkingMemory = await memory.getWorkingMemory({ threadId: newThread.id, resourceId });
         const wm = typeof firstWorkingMemory === 'string' ? JSON.parse(firstWorkingMemory) : firstWorkingMemory;
         const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
 
@@ -670,7 +713,7 @@ describe('Working Memory Tests', () => {
         const result = await agent.generate('Can you tell me where I am?', generateOptions);
 
         expect(result.text).toContain('Waterloo');
-        const secondWorkingMemory = await memory.getWorkingMemory({ threadId: newThread.id });
+        const secondWorkingMemory = await memory.getWorkingMemory({ threadId: newThread.id, resourceId });
         expect(secondWorkingMemory).toMatchObject({ city: 'Waterloo', temperature: 78 });
       });
     });
@@ -721,9 +764,7 @@ describe('Working Memory Tests', () => {
             topK: 3,
             messageRange: 2,
           },
-          threads: {
-            generateTitle: false,
-          },
+          generateTitle: false,
         },
       });
 
@@ -736,9 +777,10 @@ describe('Working Memory Tests', () => {
       });
 
       // Verify initial working memory is empty
-      expect(await memory.getWorkingMemory({ threadId: thread.id })).toBeNull();
+      expect(await memory.getWorkingMemory({ threadId: thread.id, resourceId })).toBeNull();
 
       agent = new Agent({
+        id: 'jsonschema-memory-test-agent',
         name: 'JSONSchema Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always update working memory with user information.',
         model: openai('gpt-4o'),
@@ -798,7 +840,7 @@ describe('Working Memory Tests', () => {
         },
       );
 
-      const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+      const wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
       const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
       const userData = extractUserData(wmObj);
@@ -815,7 +857,7 @@ describe('Working Memory Tests', () => {
         resourceId,
       });
 
-      const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+      const wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
       const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
       const userData = extractUserData(wmObj);
@@ -832,7 +874,7 @@ describe('Working Memory Tests', () => {
         resourceId,
       });
 
-      let wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+      let wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       let wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
       let wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
       let userData = extractUserData(wmObj);
@@ -846,7 +888,7 @@ describe('Working Memory Tests', () => {
         resourceId,
       });
 
-      wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+      wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
       wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
       userData = extractUserData(wmObj);
@@ -864,7 +906,7 @@ describe('Working Memory Tests', () => {
       });
 
       // Verify working memory is set
-      let wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+      let wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       let wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
       let wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
       let userData = extractUserData(wmObj);
@@ -913,9 +955,7 @@ describe('Working Memory Tests', () => {
             topK: 3,
             messageRange: 2,
           },
-          threads: {
-            generateTitle: false,
-          },
+          generateTitle: false,
         },
         storage,
         vector,
@@ -1260,12 +1300,12 @@ describe('Working Memory Tests', () => {
         connectionUrl: `file:${dbPath}`,
       });
 
-      // Create memory instance with thread-scoped working memory (default)
+      // Create memory instance with thread-scoped working memory
       memory = new Memory({
         options: {
           workingMemory: {
             enabled: true,
-            // scope defaults to 'thread'
+            scope: 'thread',
             template: `# User Information
 - **First Name**: 
 - **Last Name**: 
@@ -1277,9 +1317,7 @@ describe('Working Memory Tests', () => {
             topK: 3,
             messageRange: 2,
           },
-          threads: {
-            generateTitle: false,
-          },
+          generateTitle: false,
         },
         storage,
         vector,
@@ -1429,6 +1467,7 @@ describe('Working Memory Tests', () => {
     it('should handle working memory tools in agent network - thread scope', { retry: 3 }, async () => {
       // Create an agent that has memory capabilities
       const memoryAgent = new Agent({
+        id: 'memory-agent',
         name: 'memory-agent',
         instructions: 'You are a helpful assistant that can remember things when asked.',
         description: 'Agent that can use working memory',
@@ -1492,6 +1531,7 @@ describe('Working Memory Tests', () => {
 
       // Create an agent that has memory capabilities
       const memoryAgent = new Agent({
+        id: 'memory-agent',
         name: 'memory-agent',
         instructions: 'You are a helpful assistant that can remember things when asked.',
         description: 'Agent that can use working memory',

@@ -1,8 +1,8 @@
 import type { z } from 'zod';
 import type { TracingContext } from '../ai-tracing';
+import type { MastraScorers } from '../evals';
 import type { Mastra } from '../mastra';
-import type { RuntimeContext } from '../runtime-context';
-import type { MastraScorers } from '../scores';
+import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
@@ -11,7 +11,7 @@ import type { Emitter, StepResult } from './types';
 import type { Workflow } from './workflow';
 
 export type SuspendOptions = {
-  resumeLabel?: string;
+  resumeLabel?: string | string[];
 };
 
 export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = {
@@ -19,12 +19,14 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
   resourceId?: string;
   workflowId: string;
   mastra: Mastra;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   inputData: TStepInput;
   state: TState;
   setState(state: TState): void;
   resumeData?: TResumeSchema;
+  /** @deprecated This parameter will be removed on November 4th, 2025. Use `retryCount` instead. */
   runCount: number;
+  retryCount: number;
   tracingContext: TracingContext;
   getInitData<T extends z.ZodType<any>>(): z.infer<T>;
   getInitData<T extends Workflow<any, any, any, any, any>>(): T extends undefined

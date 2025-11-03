@@ -108,7 +108,7 @@ describe('CLI', () => {
     vi.spyOn(utils, 'writeIndexFile').mockImplementation(async ({ dirPath, addExample }) => {
       const content = addExample
         ? `
-        import { Mastra } from '@mastra/core';
+        import { Mastra } from '@mastra/core/mastra';
         export const mastra = new Mastra({});
       `
         : ``;

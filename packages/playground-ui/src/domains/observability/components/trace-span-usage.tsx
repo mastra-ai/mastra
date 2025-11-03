@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import { ArrowRightIcon, ArrowRightToLineIcon, CoinsIcon } from 'lucide-react';
-import { AISpanRecord } from '@mastra/core';
+import { AISpanRecord } from '@mastra/core/storage';
 
 // V5 format (AI SDK v5)
 type V5TokenUsage = {
@@ -38,7 +38,7 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
     return null;
   }
 
-  const generationSpans = traceSpans.filter(span => span.spanType === 'llm_generation');
+  const generationSpans = traceSpans.filter(span => span.spanType === 'model_generation');
 
   // Determine if we're using v5 format (inputTokens/outputTokens) or legacy format (promptTokens/completionTokens)
   const hasV5Format = generationSpans.some(

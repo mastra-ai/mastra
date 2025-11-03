@@ -1,6 +1,6 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import { saveScorePayloadSchema } from '@mastra/core/scores';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import type { StoreOperationsCloudflare } from '../operations';
@@ -15,7 +15,7 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
   deserialized.analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
   deserialized.metadata = safelyParseJSON(row.metadata);
   deserialized.additionalContext = safelyParseJSON(row.additionalContext);
-  deserialized.runtimeContext = safelyParseJSON(row.runtimeContext);
+  deserialized.requestContext = safelyParseJSON(row.requestContext);
   deserialized.entity = safelyParseJSON(row.entity);
 
   return deserialized as ScoreRowData;
@@ -113,7 +113,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     entityId,
     entityType,
@@ -185,7 +185,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -240,7 +240,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -297,7 +297,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     }
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,

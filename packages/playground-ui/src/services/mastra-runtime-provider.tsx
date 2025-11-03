@@ -7,7 +7,7 @@ import {
   AssistantRuntimeProvider,
 } from '@assistant-ui/react';
 import { useState, ReactNode, useRef } from 'react';
-import { RuntimeContext } from '@mastra/core/di';
+import { RequestContext } from '@mastra/core/di';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
@@ -17,6 +17,8 @@ import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
 
 import { ModelSettings, MastraUIMessage, useChat } from '@mastra/react';
+import { ToolCallProvider } from './tool-call-provider';
+import { useAgentPromptExperiment } from '@/domains/agents/context';
 
 const handleFinishReason = (finishReason: string) => {
   switch (finishReason) {
@@ -148,12 +150,13 @@ export function MastraRuntimeProvider({
   threadId,
   refreshThreadList,
   settings,
-  runtimeContext,
+  requestContext,
   modelVersion,
 }: Readonly<{
   children: ReactNode;
 }> &
   ChatProps) {
+  const { prompt: instructions } = useAgentPromptExperiment();
   const [isLegacyRunning, setIsLegacyRunning] = useState(false);
   const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>(() =>
     memory ? initializeMessageState(initialLegacyMessages || []) : [],
@@ -165,6 +168,9 @@ export function MastraRuntimeProvider({
     cancelRun,
     isRunning: isRunningStream,
     setMessages,
+    approveToolCall,
+    declineToolCall,
+    toolCallApprovals,
   } = useChat({
     agentId,
     initializeMessages: () => initialMessages || [],
@@ -182,17 +188,17 @@ export function MastraRuntimeProvider({
     temperature,
     topK,
     topP,
-    instructions,
     chatWithGenerateLegacy,
     chatWithGenerate,
     chatWithNetwork,
     providerOptions,
+    requireToolApproval,
   } = settings?.modelSettings ?? {};
   const toolCallIdToName = useRef<Record<string, string>>({});
 
-  const runtimeContextInstance = new RuntimeContext();
-  Object.entries(runtimeContext ?? {}).forEach(([key, value]) => {
-    runtimeContextInstance.set(key, value);
+  const requestContextInstance = new RequestContext();
+  Object.entries(requestContext ?? {}).forEach(([key, value]) => {
+    requestContextInstance.set(key, value);
   });
 
   const modelSettingsArgs: ModelSettings = {
@@ -206,6 +212,7 @@ export function MastraRuntimeProvider({
     instructions,
     providerOptions,
     maxSteps,
+    requireToolApproval,
   };
 
   const baseClient = useMastraClient();
@@ -241,7 +248,7 @@ export function MastraRuntimeProvider({
             message: input,
             mode: 'network',
             coreUserMessages: attachments,
-            runtimeContext: runtimeContextInstance,
+            requestContext: requestContextInstance,
             threadId,
             modelSettings: modelSettingsArgs,
             signal: controller.signal,
@@ -255,6 +262,10 @@ export function MastraRuntimeProvider({
               ) {
                 refreshWorkingMemory?.();
               }
+
+              if (chunk.type === 'network-execution-event-step-finish') {
+                refreshThreadList?.();
+              }
             },
           });
         } else {
@@ -263,11 +274,13 @@ export function MastraRuntimeProvider({
               message: input,
               mode: 'generate',
               coreUserMessages: attachments,
-              runtimeContext: runtimeContextInstance,
+              requestContext: requestContextInstance,
               threadId,
               modelSettings: modelSettingsArgs,
               signal: controller.signal,
             });
+
+            await refreshThreadList?.();
 
             return;
           } else {
@@ -275,10 +288,14 @@ export function MastraRuntimeProvider({
               message: input,
               mode: 'stream',
               coreUserMessages: attachments,
-              runtimeContext: runtimeContextInstance,
+              requestContext: requestContextInstance,
               threadId,
               modelSettings: modelSettingsArgs,
               onChunk: async chunk => {
+                if (chunk.type === 'finish') {
+                  await refreshThreadList?.();
+                }
+
                 if (
                   chunk.type === 'tool-result' &&
                   chunk.payload?.toolName === 'updateWorkingMemory' &&
@@ -316,7 +333,7 @@ export function MastraRuntimeProvider({
             topK,
             topP,
             instructions,
-            runtimeContext: runtimeContextInstance,
+            requestContext: requestContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
             providerOptions,
           });
@@ -433,7 +450,7 @@ export function MastraRuntimeProvider({
             topK,
             topP,
             instructions,
-            runtimeContext: runtimeContextInstance,
+            requestContext: requestContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
             providerOptions,
           });
@@ -683,9 +700,24 @@ export function MastraRuntimeProvider({
     onNew,
     onCancel,
     adapters: isReady ? adapters : undefined,
+    extras: {
+      approveToolCall,
+      declineToolCall,
+    },
   });
 
   if (!isReady) return null;
 
-  return <AssistantRuntimeProvider runtime={runtime}>{children}</AssistantRuntimeProvider>;
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      <ToolCallProvider
+        approveToolcall={approveToolCall}
+        declineToolcall={declineToolCall}
+        isRunning={isRunningStream}
+        toolCallApprovals={toolCallApprovals}
+      >
+        {children}
+      </ToolCallProvider>
+    </AssistantRuntimeProvider>
+  );
 }

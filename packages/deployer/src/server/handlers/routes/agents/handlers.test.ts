@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import type { Agent } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { ChunkFrom } from '@mastra/core/stream';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -103,8 +103,8 @@ describe('Handlers', () => {
       warn: vi.fn(),
       debug: vi.fn(),
       getTransports: vi.fn(() => []),
-      getLogs: vi.fn(() => []),
-      getLogsByRunId: vi.fn(() => []),
+      listLogs: vi.fn(() => []),
+      listLogsByRunId: vi.fn(() => []),
       trackException: vi.fn(),
     };
 
@@ -127,6 +127,7 @@ describe('Handlers', () => {
         json: vi.fn().mockResolvedValue({
           messages: [{ role: 'user', content: 'test message' }],
           runId: 'test-run-id',
+          toolCallId: 'test-tool-call-id',
         }),
         raw: {
           signal: new AbortController().signal,
@@ -134,7 +135,7 @@ describe('Handlers', () => {
       } as any,
       get: vi.fn((key: string) => {
         if (key === 'mastra') return mockMastra;
-        if (key === 'runtimeContext') return new RuntimeContext();
+        if (key === 'requestContext') return new RequestContext();
         return undefined;
       }),
       header: vi.fn(),
@@ -361,6 +362,7 @@ describe('Handlers', () => {
   });
 
   describe('approveToolCallHandler', () => {
+    beforeEach(async () => {});
     it('should return HTTP 429 when rate limit error occurs before streaming', async () => {
       const rateLimitError = createAI_APICallError({
         message: 'Rate limit exceeded',

@@ -85,7 +85,7 @@ await memory?.createThread({ resourceId: "user-123" });
 
 ## Extended usage example
 
-```typescript filename="src/test-memory.ts" showLineNumbers copy
+```typescript title="src/test-memory.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
 const agent = mastra.getAgent("agent");
@@ -96,15 +96,15 @@ const thread = await memory?.createThread({
   title: "Memory Test Thread",
   metadata: {
     source: "test-script",
-    purpose: "memory-testing"
-  }
+    purpose: "memory-testing",
+  },
 });
 
 const response = await agent.generate("message for agent", {
   memory: {
     thread: thread!.id,
-    resource: thread!.resourceId
-  }
+    resource: thread!.resourceId,
+  },
 });
 
 console.log(response.text);
@@ -112,8 +112,8 @@ console.log(response.text);
 
 ### Related
 
-- [Memory Class Reference](/reference/memory/Memory.mdx)
-- [Getting Started with Memory](/docs/memory/overview.mdx) (Covers threads concept)
-- [getThreadById](/reference/memory/getThreadById.mdx)
-- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId.mdx)
-- [query](/reference/memory/query.mdx)
+- [Memory Class Reference](/reference/memory/memory-class)
+- [Getting Started with Memory](/docs/memory/overview) (Covers threads concept)
+- [getThreadById](/reference/memory/getThreadById)
+- [listThreadsByResourceId](/reference/memory/listThreadsByResourceId)
+- [query](/reference/memory/query)

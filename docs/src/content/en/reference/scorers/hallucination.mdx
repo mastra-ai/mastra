@@ -1,5 +1,5 @@
 ---
-title: "Reference: Hallucination | Scorers | Mastra Docs"
+title: "Reference: Hallucination Scorer | Scorers | Mastra Docs"
 description: Documentation for the Hallucination Scorer in Mastra, which evaluates the factual correctness of LLM outputs by identifying contradictions with provided context.
 ---
 
@@ -17,7 +17,8 @@ The `createHallucinationScorer()` function accepts a single options object with 
       name: "model",
       type: "LanguageModel",
       required: true,
-      description: "Configuration for the model used to evaluate hallucination.",
+      description:
+        "Configuration for the model used to evaluate hallucination.",
     },
     {
       name: "scale",
@@ -48,17 +49,20 @@ This function returns an instance of the MastraScorer class. The `.run()` method
     {
       name: "preprocessPrompt",
       type: "string",
-      description: "The prompt sent to the LLM for the preprocess step (optional).",
+      description:
+        "The prompt sent to the LLM for the preprocess step (optional).",
     },
     {
       name: "analyzeStepResult",
       type: "object",
-      description: "Object with verdicts: { verdicts: Array<{ statement: string, verdict: 'yes' | 'no', reason: string }> }",
+      description:
+        "Object with verdicts: { verdicts: Array<{ statement: string, verdict: 'yes' | 'no', reason: string }> }",
     },
     {
       name: "analyzePrompt",
       type: "string",
-      description: "The prompt sent to the LLM for the analyze step (optional).",
+      description:
+        "The prompt sent to the LLM for the analyze step (optional).",
     },
     {
       name: "score",
@@ -68,12 +72,14 @@ This function returns an instance of the MastraScorer class. The `.run()` method
     {
       name: "reason",
       type: "string",
-      description: "Detailed explanation of the score and identified contradictions.",
+      description:
+        "Detailed explanation of the score and identified contradictions.",
     },
     {
       name: "generateReasonPrompt",
       type: "string",
-      description: "The prompt sent to the LLM for the generateReason step (optional).",
+      description:
+        "The prompt sent to the LLM for the generateReason step (optional).",
     },
   ]}
 />
@@ -131,11 +137,10 @@ A hallucination score between 0 and 1:
 
 In this example, the response is fully aligned with the provided context. All claims are factually correct and directly supported by the source material, resulting in a low hallucination score.
 
-```typescript filename="src/example-no-hallucination.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { createHallucinationScorer } from "@mastra/evals/scorers/llm";
+```typescript title="src/example-no-hallucination.ts" showLineNumbers copy
+import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createHallucinationScorer({ model: openai("gpt-4o-mini"), options: {
+const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {
   context: [
     "The iPhone was first released in 2007.",
     "Steve Jobs unveiled it at Macworld.",
@@ -169,11 +174,10 @@ The response receives a score of 0 because there are no contradictions. Every st
 
 In this example, the response includes both accurate and inaccurate claims. Some details align with the context, while others directly contradict it—such as inflated numbers or incorrect locations. These contradictions increase the hallucination score.
 
-```typescript filename="src/example-mixed-hallucination.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { createHallucinationScorer } from "@mastra/evals/scorers/llm";
+```typescript title="src/example-mixed-hallucination.ts" showLineNumbers copy
+import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createHallucinationScorer({ model: openai("gpt-4o-mini"), options: {
+const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {
   context: [
     "The first Star Wars movie was released in 1977.",
     "It was directed by George Lucas.",
@@ -208,11 +212,10 @@ The Scorer assigns a mid-range score because parts of the response conflict with
 
 In this example, the response contradicts every key fact in the context. None of the claims can be verified, and all presented details are factually incorrect.
 
-```typescript filename="src/example-complete-hallucination.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { createHallucinationScorer } from "@mastra/evals/scorers/llm";
+```typescript title="src/example-complete-hallucination.ts" showLineNumbers copy
+import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createHallucinationScorer({ model: openai("gpt-4o-mini"), options: {
+const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {
   context: [
     "The Wright brothers made their first flight in 1903.",
     "The flight lasted 12 seconds.",
@@ -242,7 +245,6 @@ The Scorer assigns a score of 1 because every statement in the response conflict
   reason: 'The score is 1.0 because all three statements from the output directly contradict the context: the first flight was in 1903, not 1908; it lasted 12 seconds, not about 2 minutes; and it covered 120 feet, not nearly a mile.'
 }
 ```
-
 
 ## Related
 

@@ -1,8 +1,7 @@
-import type { Schema } from 'ai';
-import type { JSONSchema7 } from 'json-schema';
 import type { z as zV3 } from 'zod/v3';
 import type { z as zV4, ZodType } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
+import type { JSONSchema7 } from './json-schema';
 import {
   SchemaCompatLayer as SchemaCompatLayerV3,
   ALL_STRING_CHECKS,
@@ -29,40 +28,11 @@ import type {
   ShapeValue as ShapeValueV4,
   AllZodType as AllZodTypeV4,
 } from './schema-compatibility-v4';
+import type { Schema, ModelInformation } from './types';
 
-// Define constraint types locally since they're not exported from v3/v4 files
-type StringConstraints = {
-  minLength?: number;
-  maxLength?: number;
-  email?: boolean;
-  url?: boolean;
-  uuid?: boolean;
-  cuid?: boolean;
-  emoji?: boolean;
-  regex?: { pattern: string; flags?: string };
-};
-
-type NumberConstraints = {
-  gt?: number;
-  gte?: number;
-  lt?: number;
-  lte?: number;
-  multipleOf?: number;
-};
-
-type ArrayConstraints = {
-  minLength?: number;
-  maxLength?: number;
-  exactLength?: number;
-};
-
-type DateConstraints = {
-  minDate?: string;
-  maxDate?: string;
-  dateFormat?: string;
-};
-import type { ModelInformation } from './types';
 import { convertZodSchemaToAISDKSchema } from './utils';
+
+type ConstraintHelperText = string[];
 
 export abstract class SchemaCompatLayer {
   private model: ModelInformation;
@@ -287,12 +257,7 @@ export abstract class SchemaCompatLayer {
    */
   public mergeParameterDescription(
     description: string | undefined,
-    constraints:
-      | NumberConstraints
-      | StringConstraints
-      | ArrayConstraints
-      | DateConstraints
-      | { defaultValue?: unknown },
+    constraints: ConstraintHelperText,
   ): string | undefined {
     // This method doesn't depend on Zod version, so we can use either layer
     return this.v3Layer.mergeParameterDescription(description, constraints);

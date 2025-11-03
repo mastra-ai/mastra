@@ -1,5 +1,6 @@
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { Tool } from '@mastra/core/tools';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type {
   ElicitRequest,
@@ -37,7 +38,6 @@ export interface MCPClientOptions {
  * ```typescript
  * import { MCPClient } from '@mastra/mcp';
  * import { Agent } from '@mastra/core/agent';
- * import { openai } from '@ai-sdk/openai';
  *
  * const mcp = new MCPClient({
  *   servers: {
@@ -54,10 +54,11 @@ export interface MCPClientOptions {
  * });
  *
  * const agent = new Agent({
+ *   id: 'multi-tool-agent',
  *   name: 'Multi-tool Agent',
  *   instructions: 'You have access to multiple tools.',
- *   model: openai('gpt-4'),
- *   tools: await mcp.getTools(),
+ *   model: 'openai/gpt-4o',
+ *   tools: await mcp.listTools(),
  * });
  * ```
  */
@@ -684,16 +685,17 @@ To fix this you have three different options:
    * @example
    * ```typescript
    * const agent = new Agent({
+   *   id: 'multi-tool-agent',
    *   name: 'Multi-tool Agent',
    *   instructions: 'You have access to weather and stock tools.',
-   *   model: openai('gpt-4'),
-   *   tools: await mcp.getTools(), // weather_getWeather, stockPrice_getPrice
+   *   model: 'openai/gpt-4',
+   *   tools: await mcp.listTools(), // weather_getWeather, stockPrice_getPrice
    * });
    * ```
    */
-  public async getTools() {
+  public async listTools(): Promise<Record<string, Tool<any, any, any, any>>> {
     this.addToInstanceCache();
-    const connectedTools: Record<string, any> = {}; // <- any because we don't have proper tool schemas
+    const connectedTools: Record<string, Tool<any, any, any, any>> = {};
 
     try {
       await this.eachClientTools(async ({ serverName, tools }) => {
@@ -718,7 +720,7 @@ To fix this you have three different options:
   /**
    * Returns toolsets organized by server name for dynamic tool injection.
    *
-   * Unlike getTools(), this returns tools grouped by server without namespacing.
+   * Unlike listTools(), this returns tools grouped by server without namespacing.
    * This is intended to be passed dynamically to the generate() or stream() method.
    *
    * @returns Object mapping server names to their tool collections
@@ -727,19 +729,20 @@ To fix this you have three different options:
    * @example
    * ```typescript
    * const agent = new Agent({
+   *   id: 'dynamic-agent',
    *   name: 'Dynamic Agent',
    *   instructions: 'You can use tools dynamically.',
-   *   model: openai('gpt-4'),
+   *   model: 'openai/gpt-4',
    * });
    *
    * const response = await agent.stream(prompt, {
-   *   toolsets: await mcp.getToolsets(), // { weather: {...}, stockPrice: {...} }
+   *   toolsets: await mcp.listToolsets(), // { weather: {...}, stockPrice: {...} }
    * });
    * ```
    */
-  public async getToolsets() {
+  public async listToolsets(): Promise<Record<string, Record<string, Tool<any, any, any, any>>>> {
     this.addToInstanceCache();
-    const connectedToolsets: Record<string, Record<string, any>> = {}; // <- any because we don't have proper tool schemas
+    const connectedToolsets: Record<string, Record<string, Tool<any, any, any, any>>> = {};
 
     try {
       await this.eachClientTools(async ({ serverName, tools }) => {
@@ -861,7 +864,7 @@ To fix this you have three different options:
   private async eachClientTools(
     cb: (args: {
       serverName: string;
-      tools: Record<string, any>; // <- any because we don't have proper tool schemas
+      tools: Record<string, Tool<any, any, any, any>>;
       client: InstanceType<typeof InternalMastraMCPClient>;
     }) => Promise<void>,
   ) {
@@ -914,8 +917,13 @@ export class MCPConfiguration extends MCPClient {
    */
   constructor(args: MCPClientOptions) {
     super(args);
-    this.logger.warn(
-      `MCPConfiguration has been renamed to MCPClient and MCPConfiguration is deprecated. The API is identical but the MCPConfiguration export will be removed in the future. Update your imports now to prevent future errors.`,
+    throw new MastraError(
+      {
+        id: 'MCP_CLIENT_CONFIGURATION_DEPRECATED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.USER,
+        text: '[DEPRECATION] MCPConfiguration has been renamed to MCPClient and MCPConfiguration is deprecated. The API is identical but the MCPConfiguration export will be removed in the future. Update your imports now to prevent future errors.',
+      },
     );
   }
 }

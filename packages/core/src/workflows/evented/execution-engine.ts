@@ -1,14 +1,9 @@
-import type {
-  Emitter,
-  ExecutionGraph,
-  SerializedStepFlowEntry,
-  StepResult,
-  Mastra,
-  ExecutionEngineOptions,
-} from '../..';
-import type { RuntimeContext } from '../../di';
+import type { RequestContext } from '../../di';
 import type { Event } from '../../events/types';
+import type { Mastra } from '../../mastra';
 import { ExecutionEngine } from '../../workflows/execution-engine';
+import type { ExecutionEngineOptions, ExecutionGraph } from '../../workflows/execution-engine';
+import type { Emitter, SerializedStepFlowEntry, StepResult } from '../types';
 import type { WorkflowEventProcessor } from './workflow-event-processor';
 import { getStep } from './workflow-event-processor/utils';
 
@@ -52,7 +47,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       resumePath: number[];
     };
     emitter: Emitter;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     retryConfig?: {
       attempts?: number;
       delay?: number;
@@ -80,7 +75,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           resumeSteps: params.resume.steps,
           prevResult: { status: 'success', output: prevResult?.payload },
           resumeData: params.resume.resumePayload,
-          runtimeContext: Object.fromEntries(params.runtimeContext.entries()),
+          requestContext: Object.fromEntries(params.requestContext.entries()),
           format: params.format,
         },
       });
@@ -92,7 +87,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           workflowId: params.workflowId,
           runId: params.runId,
           prevResult: { status: 'success', output: params.input },
-          runtimeContext: Object.fromEntries(params.runtimeContext.entries()),
+          requestContext: Object.fromEntries(params.requestContext.entries()),
           format: params.format,
         },
       });

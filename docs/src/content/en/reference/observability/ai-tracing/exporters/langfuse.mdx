@@ -1,9 +1,9 @@
 ---
-title: "LangfuseExporter | Exporters | AI Tracing | Reference"
+title: "Reference: LangfuseExporter | Observability | Mastra Docs"
 description: Langfuse exporter for AI tracing
 ---
 
-import { PropertiesTable } from "@/components/properties-table";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # LangfuseExporter
 
@@ -23,7 +23,7 @@ interface LangfuseExporterConfig {
   secretKey?: string;
   baseUrl?: string;
   realtime?: boolean;
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  logLevel?: "debug" | "info" | "warn" | "error";
   options?: any;
 }
 ```
@@ -98,12 +98,12 @@ Flushes pending data and shuts down the client.
 ## Usage
 
 ```typescript
-import { LangfuseExporter } from '@mastra/langfuse';
+import { LangfuseExporter } from "@mastra/langfuse";
 
 const exporter = new LangfuseExporter({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY,
   secretKey: process.env.LANGFUSE_SECRET_KEY,
-  baseUrl: 'https://cloud.langfuse.com',
+  baseUrl: "https://cloud.langfuse.com",
   realtime: true,
 });
 ```
@@ -111,6 +111,6 @@ const exporter = new LangfuseExporter({
 ## Span Mapping
 
 - Root spans → Langfuse traces
-- `LLM_GENERATION` spans → Langfuse generations
+- `MODEL_GENERATION` spans → Langfuse generations
 - All other spans → Langfuse spans
 - Event spans → Langfuse events

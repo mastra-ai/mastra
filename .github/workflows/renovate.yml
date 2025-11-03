@@ -39,31 +39,13 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'mastra-ai/mastra'
     steps:
-      - uses: actions/create-github-app-token@v2
-        id: app-token
+      - name: Initial checkout
+        uses: actions/checkout@v5
         with:
-          app-id: ${{ vars.DANE_APP_ID }}
-          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
-          minutes: 120
-          #permission-pull-requests: write
-          #permission-issues: write
-          #permission-security-events: write
-          #permission-statuses: write
-          #permission-contents: write
-          #permission-workflows: write
-
-      - name: Get GitHub App User ID
-        id: get-user-id
-        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
-          persist-credentials: false
+          # Use default GITHUB_TOKEN for initial checkout
+          # This is needed to access the .github/actions/app-auth action
+          fetch-depth: 1
+          persist-credentials: true
 
       # This third party action allows you to download the cache artifact from different workflow runs
       # Note that actions/cache doesn't work well because the cache key would need to be computed from
@@ -100,24 +82,12 @@ jobs:
           sudo chown -R 12021:0 /tmp/renovate/
           ls -R $cache_dir
 
-      - run: |
-          cat <<- EOF > $HOME/.netrc
-            machine github.com
-            login ${{ steps.app-token.outputs.app-slug }}
-            password ${{ steps.app-token.outputs.token }}
-            machine api.github.com
-            login ${{ steps.app-token.outputs.app-slug }}
-            password ${{ steps.app-token.outputs.token }}
-          EOF
-          git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
-          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
-
       - name: Self-hosted Renovate
         uses: renovatebot/github-action@v43.0.17
         with:
           configurationFile: renovate.json
           docker-user: '${{ steps.id.outputs.user }}:${{ steps.id.outputs.group }}'
-          token: ${{ steps.app-token.outputs.token  }}
+          token: ${{ secrets.RENOVATE_PAT  }}
         env:
           LOG_LEVEL: ${{ github.event.inputs.logLevel }}
           RENOVATE_REPOSITORIES: ${{ github.repository }}
@@ -133,7 +103,7 @@ jobs:
           # To solve *that*, we'd have to extract to root (/), which isn't safe.
           tar -czvf $cache_archive -C $cache_dir .
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: github.event.inputs.repoCache != 'disabled'
         with:
           name: ${{ env.cache_key }}

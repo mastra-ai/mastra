@@ -9,8 +9,9 @@ import { createMessagesPaginatedTest } from './messages-paginated';
 import { createThreadsTest } from './threads';
 import { createMessagesUpdateTest } from './messages-update';
 import { createMessagesBulkDeleteTest } from './messages-bulk-delete';
-// import { createResourcesTest } from './resources';
+import { createResourcesTest } from './resources';
 import { beforeAll } from 'vitest';
+import { createMessagesListTest } from './messages-list';
 
 export function createMemoryTest({ storage }: { storage: MastraStorage }) {
   beforeAll(async () => {
@@ -28,11 +29,13 @@ export function createMemoryTest({ storage }: { storage: MastraStorage }) {
 
   createThreadsTest({ storage });
 
+  createMessagesListTest({ storage });
+
   createMessagesPaginatedTest({ storage });
 
   createMessagesUpdateTest({ storage });
 
   createMessagesBulkDeleteTest({ storage });
 
-  // createResourcesTest({ storage });
+  createResourcesTest({ storage });
 }

@@ -1,53 +1,24 @@
-import type { MastraModelOutput, ChunkType, OutputSchema, MastraAgentNetworkStream } from '@mastra/core/stream';
-import type { MastraWorkflowStream, Step } from '@mastra/core/workflows';
-import type { InferUIMessageChunk, UIMessage } from 'ai';
-import type { ZodObject, ZodType } from 'zod';
-import {
-  AgentNetworkToAISDKTransformer,
-  AgentStreamToAISDKTransformer,
-  WorkflowStreamToAISDKTransformer,
-} from './transformers';
-
-type ToAISDKFrom = 'agent' | 'network' | 'workflow';
-
-export function toAISdkFormat<
-  TOutput extends ZodType<any>,
-  TInput extends ZodType<any>,
-  TSteps extends Step<string, any, any, any, any, any>[],
-  TState extends ZodObject<any>,
->(
-  stream: MastraWorkflowStream<TState, TInput, TOutput, TSteps>,
-  options: { from: 'workflow' },
-): ReadableStream<InferUIMessageChunk<UIMessage>>;
-export function toAISdkFormat(
-  stream: MastraAgentNetworkStream,
-  options: { from: 'network' },
-): ReadableStream<InferUIMessageChunk<UIMessage>>;
-export function toAISdkFormat<TOutput extends OutputSchema>(
-  stream: MastraModelOutput<TOutput>,
-  options: { from: 'agent' },
-): ReadableStream<InferUIMessageChunk<UIMessage>>;
-export function toAISdkFormat(
-  stream: MastraAgentNetworkStream | MastraWorkflowStream<any, any, any, any> | MastraModelOutput,
-  options: { from: ToAISDKFrom } = { from: 'agent' },
-): ReadableStream<InferUIMessageChunk<UIMessage>> {
-  const from = options?.from;
-
-  if (from === 'workflow') {
-    return (stream as ReadableStream<ChunkType>).pipeThrough(WorkflowStreamToAISDKTransformer()) as ReadableStream<
-      InferUIMessageChunk<UIMessage>
-    >;
-  }
-
-  if (from === 'network') {
-    return (stream as ReadableStream<ChunkType>).pipeThrough(AgentNetworkToAISDKTransformer()) as ReadableStream<
-      InferUIMessageChunk<UIMessage>
-    >;
-  }
-
-  const agentReadable: ReadableStream<ChunkType> =
-    'fullStream' in stream ? (stream as MastraModelOutput).fullStream : (stream as ReadableStream<ChunkType>);
-  return agentReadable.pipeThrough(AgentStreamToAISDKTransformer<any>()) as ReadableStream<
-    InferUIMessageChunk<UIMessage>
-  >;
+/**
+ * @deprecated Use `toAISdkStream` instead. This function has been renamed for clarity.
+ *
+ * @example
+ * ```typescript
+ * // Old (deprecated):
+ * import { toAISdkFormat } from '@mastra/ai-sdk';
+ * const stream = toAISdkFormat(agentStream, { from: 'agent' });
+ *
+ * // New:
+ * import { toAISdkStream } from '@mastra/ai-sdk';
+ * const stream = toAISdkStream(agentStream, { from: 'agent' });
+ * ```
+ */
+export function toAISdkFormat(): never {
+  throw new Error(
+    'toAISdkFormat() has been deprecated. Please use toAISdkStream() instead.\n\n' +
+      'Migration:\n' +
+      '  import { toAISdkFormat } from "@mastra/ai-sdk";\n' +
+      '  // Change to:\n' +
+      '  import { toAISdkStream } from "@mastra/ai-sdk";\n\n' +
+      'The function signature remains the same.',
+  );
 }

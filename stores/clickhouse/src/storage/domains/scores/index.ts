@@ -1,7 +1,7 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { saveScorePayloadSchema } from '@mastra/core/scores';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsClickhouse } from '../operations';
@@ -23,7 +23,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     const input = safelyParseJSON(row.input);
     const output = safelyParseJSON(row.output);
     const additionalContext = safelyParseJSON(row.additionalContext);
-    const runtimeContext = safelyParseJSON(row.runtimeContext);
+    const requestContext = safelyParseJSON(row.requestContext);
     const entity = safelyParseJSON(row.entity);
 
     return {
@@ -35,7 +35,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
       input,
       output,
       additionalContext,
-      runtimeContext,
+      requestContext,
       entity,
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt),
@@ -121,7 +121,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -193,7 +193,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     entityId,
     entityType,
@@ -290,7 +290,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -365,7 +365,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     }
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,

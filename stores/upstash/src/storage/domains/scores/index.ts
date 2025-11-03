@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
-import { saveScorePayloadSchema } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
 import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
 import type { StoreOperationsUpstash } from '../operations';
@@ -28,7 +28,7 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     input: parseField(row.input),
     output: parseField(row.output),
     additionalContext: parseField(row.additionalContext),
-    runtimeContext: parseField(row.runtimeContext),
+    requestContext: parseField(row.requestContext),
     entity: parseField(row.entity),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -66,7 +66,7 @@ export class ScoresUpstash extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     entityId,
     entityType,
@@ -152,7 +152,7 @@ export class ScoresUpstash extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination = { page: 0, perPage: 20 },
   }: {
@@ -194,7 +194,7 @@ export class ScoresUpstash extends ScoresStorage {
     };
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination = { page: 0, perPage: 20 },
@@ -243,7 +243,7 @@ export class ScoresUpstash extends ScoresStorage {
     };
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination = { page: 0, perPage: 20 },

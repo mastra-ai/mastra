@@ -1,14 +1,16 @@
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import type { MessageList } from '../../../agent/message-list';
+import { RequestContext } from '../../../request-context';
 import { ChunkFrom } from '../../../stream/types';
+import { ToolStream } from '../../../tools/stream';
 import { createToolCallStep } from './tool-call-step';
 
 describe('createToolCallStep tool approval workflow', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
   let streamState: { serialize: Mock };
-  let tools: Record<string, { execute: Mock }>;
+  let tools: Record<string, { execute: Mock; requireApproval: boolean }>;
   let messageList: MessageList;
   let toolCallStep: ReturnType<typeof createToolCallStep>;
   let neverResolve: Promise<never>;
@@ -18,6 +20,34 @@ describe('createToolCallStep tool approval workflow', () => {
     toolCallId: 'test-call-id',
     toolName: 'test-tool',
     args: { param: 'test' },
+  });
+
+  const makeExecuteParams = (overrides: any = {}) => ({
+    runId: 'test-run-id',
+    workflowId: 'test-workflow-id',
+    mastra: {} as any,
+    requestContext: new RequestContext(),
+    state: {},
+    setState: vi.fn(),
+    runCount: 1,
+    retryCount: 1,
+    tracingContext: {} as any,
+    getInitData: vi.fn(),
+    getStepResult: vi.fn(),
+    suspend,
+    bail: vi.fn(),
+    abort: vi.fn(),
+    engine: 'default' as any,
+    abortSignal: new AbortController().signal,
+    writer: new ToolStream({
+      prefix: 'tool',
+      callId: 'test-call-id',
+      name: 'test-tool',
+      runId: 'test-run-id',
+    }),
+    validateSchemas: false,
+    inputData: makeInputData(),
+    ...overrides,
   });
 
   const expectNoToolExecution = () => {
@@ -36,6 +66,7 @@ describe('createToolCallStep tool approval workflow', () => {
     tools = {
       'test-tool': {
         execute: vi.fn(),
+        requireApproval: true,
       },
     };
     messageList = {
@@ -68,7 +99,7 @@ describe('createToolCallStep tool approval workflow', () => {
     const inputData = makeInputData();
 
     // Act: Execute the tool call step
-    const executePromise = toolCallStep.execute({ inputData, suspend });
+    const executePromise = toolCallStep.execute(makeExecuteParams({ inputData }));
 
     // Assert: Verify approval flow and execution prevention
     expect(controller.enqueue).toHaveBeenCalledWith({
@@ -82,14 +113,19 @@ describe('createToolCallStep tool approval workflow', () => {
       },
     });
 
-    expect(suspend).toHaveBeenCalledWith({
-      requireToolApproval: {
-        toolCallId: 'test-call-id',
-        toolName: 'test-tool',
-        args: { param: 'test' },
+    expect(suspend).toHaveBeenCalledWith(
+      {
+        requireToolApproval: {
+          toolCallId: 'test-call-id',
+          toolName: 'test-tool',
+          args: { param: 'test' },
+        },
+        __streamState: 'serialized-state',
       },
-      __streamState: 'serialized-state',
-    });
+      {
+        resumeLabel: 'test-call-id',
+      },
+    );
 
     expectNoToolExecution();
 
@@ -103,21 +139,13 @@ describe('createToolCallStep tool approval workflow', () => {
     const resumeData = { approved: false };
 
     // Act: Execute the tool call step with declined approval
-    const result = await toolCallStep.execute({ inputData, suspend, resumeData });
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData }));
 
     // Assert: Verify error handling and execution prevention
     expect(result).toEqual({
-      error: expect.any(Error),
+      result: 'Tool call was not approved by the user',
       ...inputData,
     });
-    expect(result.error.message).toContain('Tool call was declined');
-    expect(result.error.message).toContain(
-      JSON.stringify({
-        toolCallId: 'test-call-id',
-        toolName: 'test-tool',
-        args: { param: 'test' },
-      }),
-    );
     expectNoToolExecution();
   });
 
@@ -129,7 +157,7 @@ describe('createToolCallStep tool approval workflow', () => {
     const resumeData = { approved: true };
 
     // Act: Execute tool call step with approval
-    const result = await toolCallStep.execute({ inputData, suspend, resumeData });
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData }));
 
     // Assert: Verify tool execution and return value
     expect(tools['test-tool'].execute).toHaveBeenCalledWith(

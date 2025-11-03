@@ -1,6 +1,6 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT, safelyParseJSON } from '@mastra/core/storage';
-import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT, safelyParseJSON, normalizePerPage } from '@mastra/core/storage';
+import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { StoreOperationsMongoDB } from '../operations';
 
@@ -18,13 +18,13 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       // runId,
       // stepId,
       // result,
-      // runtimeContext,
+      // requestContext,
     }: {
       workflowName: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
+      requestContext: Record<string, any>;
     },
   ): Promise<Record<string, StepResult<any, any, any, any>>> {
     throw new Error('Method not implemented.');
@@ -123,14 +123,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns(args?: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns> {
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     const options = args || {};
     try {
       const query: any = {};
@@ -152,14 +145,21 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       }
 
       const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
-      const total = await collection.countDocuments(query);
+      let total = 0;
 
       let cursor = collection.find(query).sort({ createdAt: -1 });
-      if (options.offset) {
-        cursor = cursor.skip(options.offset);
-      }
-      if (options.limit) {
-        cursor = cursor.limit(options.limit);
+      if (options.page !== undefined && typeof options.perPage === 'number') {
+        total = await collection.countDocuments(query);
+        const normalizedPerPage = normalizePerPage(options.perPage, Number.MAX_SAFE_INTEGER);
+
+        // Handle perPage = 0 edge case (MongoDB limit(0) disables limit)
+        if (normalizedPerPage === 0) {
+          return { runs: [], total };
+        }
+
+        const offset = options.page * normalizedPerPage;
+        cursor = cursor.skip(offset);
+        cursor = cursor.limit(normalizedPerPage);
       }
 
       const results = await cursor.toArray();
@@ -168,12 +168,12 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
 
       return {
         runs,
-        total,
+        total: total || runs.length,
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'STORAGE_MONGODB_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName: options.workflowName || 'unknown' },

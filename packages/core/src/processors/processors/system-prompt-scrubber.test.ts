@@ -1,13 +1,13 @@
-import type { TextPart } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import type { TextPart } from '@internal/ai-sdk-v4/message';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import { SystemPromptScrubber } from './system-prompt-scrubber';
 
 // Helper function to create test messages
-function createTestMessage(text: string, role: 'user' | 'assistant' = 'assistant'): MastraMessageV2 {
+function createTestMessage(text: string, role: 'user' | 'assistant' = 'assistant'): MastraDBMessage {
   return {
     id: 'test-id',
     role,
@@ -27,7 +27,7 @@ describe('SystemPromptScrubber', () => {
     mockModel = new MockLanguageModelV1({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
-        text: '{"detections": [], "redacted_content": ""}',
+        text: '{"detections": null, "reason": null, "redacted_content": null}',
         finishReason: 'stop',
         usage: { completionTokens: 10, promptTokens: 5 },
       }),
@@ -53,7 +53,7 @@ describe('SystemPromptScrubber', () => {
 
     it('should not process messages without text content', async () => {
       processor = new SystemPromptScrubber({ model: mockModel });
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test-id',
         role: 'assistant',
         content: {
@@ -83,8 +83,10 @@ describe('SystemPromptScrubber', () => {
               confidence: 0.9,
               start: 0,
               end: 25,
+              redacted_value: null,
             },
           ],
+          reason: 'System prompt detected',
           redacted_content: '*** [SYSTEM_PROMPT] ***. Hello there!',
         }),
         finishReason: 'stop',
@@ -121,6 +123,7 @@ describe('SystemPromptScrubber', () => {
               end: 25,
             },
           ],
+          reason: 'System prompt detected',
         }),
         finishReason: 'stop',
         usage: { completionTokens: 10, promptTokens: 5 },
@@ -173,6 +176,7 @@ describe('SystemPromptScrubber', () => {
               end: 25,
             },
           ],
+          reason: 'System prompt detected',
         }),
         finishReason: 'stop',
         usage: { completionTokens: 10, promptTokens: 5 },
@@ -211,6 +215,7 @@ describe('SystemPromptScrubber', () => {
               end: 25,
             },
           ],
+          reason: 'System prompt detected',
         }),
         finishReason: 'stop',
         usage: { completionTokens: 10, promptTokens: 5 },
@@ -281,8 +286,10 @@ describe('SystemPromptScrubber', () => {
               confidence: 0.9,
               start: 0,
               end: 12,
+              redacted_value: null,
             },
           ],
+          reason: 'System prompt detected',
           redacted_content: '*** [SYSTEM] ***. Hello there!',
         }),
         finishReason: 'stop',

@@ -10,7 +10,7 @@ The `.sendEvent()` resumes execution when an event is sent.
 ## Usage example
 
 ```typescript copy
-workflow.sendEvent('event-name', step1);
+run.sendEvent("event-name", { value: "data" });
 ```
 
 ## Parameters
@@ -44,6 +44,27 @@ workflow.sendEvent('event-name', step1);
   ]}
 />
 
+## Extended usage example
+
+```typescript showLineNumbers copy
+import { mastra } from "./mastra";
+
+const run = await mastra.getWorkflow("testWorkflow").createRun();
+
+const result = run.start({
+  inputData: {
+    value: "hello",
+  },
+});
+
+setTimeout(() => {
+  run.sendEvent("event-name", { value: "from event" });
+}, 3000);
+```
+
+> In this example, avoid using `await run.start()` directly, as it would block sending the event before the workflow reaches its waiting state.
+
 ## Related
 
-- [Sleep & Events](../../../docs/workflows/pausing-execution.mdx)
+- [.waitForEvent()](./waitForEvent)
+- [Suspend & Resume](/docs/workflows/suspend-and-resume#sleep--events)

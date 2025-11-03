@@ -40,7 +40,7 @@ class MockRun {
 class MockWorkflow {
   execute = vi.fn();
   createRun = vi.fn();
-  createRunAsync = vi.fn();
+  createRun = vi.fn();
   otherMethod = vi.fn().mockReturnValue('workflow-other-result');
 }
 
@@ -81,7 +81,7 @@ describe('AI Tracing Context Integration', () => {
     mockMastra.getWorkflow.mockReturnValue(mockWorkflow);
     mockMastra.getWorkflowById.mockReturnValue(mockWorkflow);
     mockWorkflow.createRun.mockReturnValue(mockRun);
-    mockWorkflow.createRunAsync.mockResolvedValue(mockRun);
+    mockWorkflow.createRun.mockResolvedValue(mockRun);
 
     tracingContext = { currentSpan: mockSpan as any };
     noOpContext = { currentSpan: noOpSpan as any };
@@ -151,26 +151,26 @@ describe('AI Tracing Context Integration', () => {
   });
 
   describe('workflow run creation and tracing', () => {
-    it('should wrap createRunAsync to return run proxy', async () => {
+    it('should wrap createRun to return run proxy', async () => {
       const wrapped = wrapMastra(mockMastra as any, tracingContext);
       const workflow = wrapped.getWorkflow('test-workflow');
 
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
 
-      expect(mockWorkflow.createRunAsync).toHaveBeenCalled();
+      expect(mockWorkflow.createRun).toHaveBeenCalled();
       expect(run).not.toBe(mockRun); // Should be wrapped
     });
 
     it('should inject tracing context into run start method', async () => {
       const wrapped = wrapMastra(mockMastra as any, tracingContext);
       const workflow = wrapped.getWorkflow('test-workflow');
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
 
-      await run.start({ inputData: { test: 'data' }, runtimeContext: {} });
+      await run.start({ inputData: { test: 'data' }, requestContext: {} });
 
       expect(mockRun.start).toHaveBeenCalledWith({
         inputData: { test: 'data' },
-        runtimeContext: {},
+        requestContext: {},
         tracingContext,
       });
     });
@@ -179,7 +179,7 @@ describe('AI Tracing Context Integration', () => {
       const userTracingContext = { currentSpan: 'user-span' as any };
       const wrapped = wrapMastra(mockMastra as any, tracingContext);
       const workflow = wrapped.getWorkflow('test-workflow');
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
 
       await run.start({
         inputData: { test: 'data' },
@@ -195,7 +195,7 @@ describe('AI Tracing Context Integration', () => {
     it('should pass through other run methods unchanged', async () => {
       const wrapped = wrapMastra(mockMastra as any, tracingContext);
       const workflow = wrapped.getWorkflow('test-workflow');
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
 
       const result = run.otherMethod();
       expect(result).toBe('run-other-result');

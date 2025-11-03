@@ -13,7 +13,12 @@ vi.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
 
 vi.mock('@opentelemetry/sdk-trace-base', () => ({
   SimpleSpanProcessor: vi.fn(),
-  BatchSpanProcessor: vi.fn(),
+  BatchSpanProcessor: vi.fn().mockImplementation(() => ({
+    onEnd: vi.fn(),
+    onStart: vi.fn(),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+    forceFlush: vi.fn().mockResolvedValue(undefined),
+  })),
 }));
 
 vi.mock('@opentelemetry/sdk-trace-node', () => ({
@@ -261,7 +266,7 @@ describe('OtelExporter', () => {
         id: 'llm-1',
         traceId: 'trace-1',
         parent: undefined,
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         name: 'LLM Generation',
         startTime: new Date(),
         endTime: new Date(),

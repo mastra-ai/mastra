@@ -329,6 +329,83 @@ export function pgTests() {
       });
     });
 
+    describe('Function Namespace in Schema', () => {
+      const testSchema = 'schema_fn_test';
+      let testStore: PostgresStore;
+
+      beforeAll(async () => {
+        // Use a temp connection to set up schema
+        const tempPgp = pgPromise();
+        const tempDb = tempPgp(connectionString);
+
+        try {
+          await tempDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+          await tempDb.none(`CREATE SCHEMA ${testSchema}`);
+          // Drop the function from public schema if it exists from other tests
+          await tempDb.none(`DROP FUNCTION IF EXISTS public.trigger_set_timestamps() CASCADE`);
+        } finally {
+          tempPgp.end();
+        }
+
+        testStore = new PostgresStore({
+          ...TEST_CONFIG,
+          schemaName: testSchema,
+        });
+        await testStore.init();
+      });
+
+      afterAll(async () => {
+        await testStore?.close();
+
+        // Use a temp connection to clean up
+        const tempPgp = pgPromise();
+        const tempDb = tempPgp(connectionString);
+
+        try {
+          await tempDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+        } finally {
+          tempPgp.end();
+        }
+      });
+
+      it('should create trigger function in the correct schema namespace', async () => {
+        const aiSpansSchema = {
+          id: { type: 'text', primaryKey: true, nullable: false },
+          name: { type: 'text', nullable: true },
+          createdAt: { type: 'timestamp', nullable: false },
+          updatedAt: { type: 'timestamp', nullable: false },
+        } as Record<string, StorageColumn>;
+
+        await testStore.createTable({
+          tableName: 'mastra_ai_spans' as TABLE_NAMES,
+          schema: aiSpansSchema,
+        });
+
+        // Verify trigger function exists in the correct schema
+        const functionInfo = await testStore.db.oneOrNone(
+          `SELECT p.proname, n.nspname
+           FROM pg_proc p
+           JOIN pg_namespace n ON p.pronamespace = n.oid
+           WHERE n.nspname = $1 AND p.proname = 'trigger_set_timestamps'`,
+          [testSchema],
+        );
+
+        expect(functionInfo).toBeDefined();
+        expect(functionInfo?.proname).toBe('trigger_set_timestamps');
+        expect(functionInfo?.nspname).toBe(testSchema);
+
+        // Verify function does NOT exist in public schema
+        const publicFunction = await testStore.db.oneOrNone(
+          `SELECT p.proname, n.nspname
+           FROM pg_proc p
+           JOIN pg_namespace n ON p.pronamespace = n.oid
+           WHERE n.nspname = 'public' AND p.proname = 'trigger_set_timestamps'`,
+        );
+
+        expect(publicFunction).toBeNull();
+      });
+    });
+
     describe('Timestamp Fallback Handling', () => {
       let testThreadId: string;
       let testResourceId: string;
@@ -366,18 +443,18 @@ export function pgTests() {
         );
 
         // Test getMessages
-        const messages = await store.getMessages({ threadId: testThreadId, format: 'v2' });
-        expect(messages.length).toBe(1);
-        expect(messages[0]?.createdAt).toBeInstanceOf(Date);
-        expect(messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
-        expect(messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
+        const messagesResult = await store.getMessages({ threadId: testThreadId });
+        expect(messagesResult.messages.length).toBe(1);
+        expect(messagesResult.messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesResult.messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
+        expect(messagesResult.messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
 
-        // Test getMessagesById
-        const messagesById = await store.getMessagesById({ messageIds: [testMessageId], format: 'v2' });
-        expect(messagesById.length).toBe(1);
-        expect(messagesById[0]?.createdAt).toBeInstanceOf(Date);
-        expect(messagesById[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
-        expect(messagesById[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
+        // Test listMessagesById
+        const messagesByIdResult = await store.listMessagesById({ messageIds: [testMessageId] });
+        expect(messagesByIdResult.messages.length).toBe(1);
+        expect(messagesByIdResult.messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesByIdResult.messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
+        expect(messagesByIdResult.messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
 
         // Test getMessagesPaginated
         const messagesPaginated = await store.getMessagesPaginated({
@@ -405,21 +482,20 @@ export function pgTests() {
         );
 
         // Test getMessages
-        const messages = await store.getMessages({ threadId: testThreadId, format: 'v2' });
-        expect(messages.length).toBe(1);
-        expect(messages[0]?.createdAt).toBeInstanceOf(Date);
-        expect(messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
+        const messagesResult = await store.getMessages({ threadId: testThreadId });
+        expect(messagesResult.messages.length).toBe(1);
+        expect(messagesResult.messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesResult.messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
 
-        // Test getMessagesById
-        const messagesById = await store.getMessagesById({ messageIds: [testMessageId], format: 'v2' });
-        expect(messagesById.length).toBe(1);
-        expect(messagesById[0]?.createdAt).toBeInstanceOf(Date);
-        expect(messagesById[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
+        // Test listMessagesById
+        const messagesByIdResult = await store.listMessagesById({ messageIds: [testMessageId] });
+        expect(messagesByIdResult.messages.length).toBe(1);
+        expect(messagesByIdResult.messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesByIdResult.messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
 
         // Test getMessagesPaginated
         const messagesPaginated = await store.getMessagesPaginated({
           threadId: testThreadId,
-          format: 'v2',
         });
         expect(messagesPaginated.messages.length).toBe(1);
         expect(messagesPaginated.messages[0]?.createdAt).toBeInstanceOf(Date);
@@ -446,7 +522,6 @@ export function pgTests() {
               createdAt: messageCreatedAt,
             },
           ],
-          format: 'v2',
         });
 
         // Get thread
@@ -456,10 +531,10 @@ export function pgTests() {
         expect(retrievedThread?.createdAt.getTime()).toBe(threadCreatedAt.getTime());
 
         // Get messages
-        const messages = await store.getMessages({ threadId: testThreadId, format: 'v2' });
-        expect(messages.length).toBe(1);
-        expect(messages[0]?.createdAt).toBeInstanceOf(Date);
-        expect(messages[0]?.createdAt.getTime()).toBe(messageCreatedAt.getTime());
+        const messagesResult = await store.getMessages({ threadId: testThreadId });
+        expect(messagesResult.messages.length).toBe(1);
+        expect(messagesResult.messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesResult.messages[0]?.createdAt.getTime()).toBe(messageCreatedAt.getTime());
       });
 
       it('should handle included messages with correct timestamp fallback', async () => {
@@ -500,9 +575,8 @@ export function pgTests() {
         );
 
         // Test getMessages with include
-        const messages = await store.getMessages({
+        const messagesResult = await store.getMessages({
           threadId: testThreadId,
-          format: 'v2',
           selectBy: {
             include: [
               {
@@ -514,20 +588,20 @@ export function pgTests() {
           },
         });
 
-        expect(messages.length).toBe(3);
+        expect(messagesResult.messages.length).toBe(3);
 
         // Find each message and verify correct timestamps
-        const message1 = messages.find(m => m.id === msg1Id);
+        const message1 = messagesResult.messages.find(m => m.id === msg1Id);
         expect(message1).toBeDefined();
         expect(message1?.createdAt).toBeInstanceOf(Date);
         expect(message1?.createdAt.getTime()).toBe(date1.getTime());
 
-        const message2 = messages.find(m => m.id === msg2Id);
+        const message2 = messagesResult.messages.find(m => m.id === msg2Id);
         expect(message2).toBeDefined();
         expect(message2?.createdAt).toBeInstanceOf(Date);
         expect(message2?.createdAt.getTime()).toBe(date2.getTime());
 
-        const message3 = messages.find(m => m.id === msg3Id);
+        const message3 = messagesResult.messages.find(m => m.id === msg3Id);
         expect(message3).toBeDefined();
         expect(message3?.createdAt).toBeInstanceOf(Date);
         // Should use createdAtZ (date2Z), not createdAt (date3)

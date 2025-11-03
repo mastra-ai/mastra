@@ -1,4 +1,4 @@
-import type { LLMGenerationAttributes } from '@mastra/core/ai-tracing';
+import type { ModelGenerationAttributes } from '@mastra/core/ai-tracing';
 /**
  * BraintrustUsageMetrics
  *
@@ -21,32 +21,32 @@ export interface BraintrustUsageMetrics {
   [key: string]: number | undefined;
 }
 
-export function normalizeUsageMetrics(llmAttr: LLMGenerationAttributes): BraintrustUsageMetrics {
+export function normalizeUsageMetrics(modelAttr: ModelGenerationAttributes): BraintrustUsageMetrics {
   const metrics: BraintrustUsageMetrics = {};
 
-  if (llmAttr.usage?.inputTokens !== undefined) {
-    metrics.prompt_tokens = llmAttr.usage?.inputTokens;
-  } else if (llmAttr.usage?.promptTokens !== undefined) {
-    metrics.prompt_tokens = llmAttr.usage?.promptTokens;
+  if (modelAttr.usage?.inputTokens !== undefined) {
+    metrics.prompt_tokens = modelAttr.usage?.inputTokens;
+  } else if (modelAttr.usage?.promptTokens !== undefined) {
+    metrics.prompt_tokens = modelAttr.usage?.promptTokens;
   }
 
-  if (llmAttr.usage?.outputTokens !== undefined) {
-    metrics.completion_tokens = llmAttr.usage?.outputTokens;
-  } else if (llmAttr.usage?.completionTokens !== undefined) {
-    metrics.completion_tokens = llmAttr.usage?.completionTokens;
+  if (modelAttr.usage?.outputTokens !== undefined) {
+    metrics.completion_tokens = modelAttr.usage?.outputTokens;
+  } else if (modelAttr.usage?.completionTokens !== undefined) {
+    metrics.completion_tokens = modelAttr.usage?.completionTokens;
   }
 
-  if (llmAttr.usage?.totalTokens !== undefined) {
-    metrics.tokens = llmAttr.usage?.totalTokens;
+  if (modelAttr.usage?.totalTokens !== undefined) {
+    metrics.tokens = modelAttr.usage?.totalTokens;
   }
-  if (llmAttr.usage?.reasoningTokens !== undefined) {
-    metrics.completion_reasoning_tokens = llmAttr.usage?.reasoningTokens;
+  if (modelAttr.usage?.reasoningTokens !== undefined) {
+    metrics.completion_reasoning_tokens = modelAttr.usage?.reasoningTokens;
   }
-  if (llmAttr.usage?.promptCacheHitTokens !== undefined) {
-    metrics.prompt_cached_tokens = llmAttr.usage?.promptCacheHitTokens;
+  if (modelAttr.usage?.promptCacheHitTokens !== undefined) {
+    metrics.prompt_cached_tokens = modelAttr.usage?.promptCacheHitTokens;
   }
-  if (llmAttr.usage?.promptCacheMissTokens !== undefined) {
-    metrics.prompt_cache_creation_tokens = llmAttr.usage?.promptCacheMissTokens;
+  if (modelAttr.usage?.promptCacheMissTokens !== undefined) {
+    metrics.prompt_cache_creation_tokens = modelAttr.usage?.promptCacheMissTokens;
   }
 
   return metrics;

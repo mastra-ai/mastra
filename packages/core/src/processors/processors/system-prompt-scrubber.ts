@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { Agent } from '../../agent';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import type { TracingContext } from '../../ai-tracing';
-import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
@@ -20,16 +20,25 @@ export interface SystemPromptScrubberOptions {
   /** Custom placeholder text for redaction */
   placeholderText?: string;
   /** Model to use for the detection agent */
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
+  /**
+   * Structured output options used for the detection agent
+   */
+  structuredOutputOptions?: {
+    /**
+     * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
+     */
+    jsonPromptInjection?: boolean;
+  };
 }
 
 export interface SystemPromptDetectionResult {
   /** Specific detections with locations */
-  detections?: SystemPromptDetection[];
+  detections: SystemPromptDetection[] | null;
   /** Redacted content if available */
-  redacted_content?: string;
+  redacted_content?: string | null;
   /** Reason for detection */
-  reason?: string;
+  reason: string | null;
 }
 
 export interface SystemPromptDetection {
@@ -44,11 +53,12 @@ export interface SystemPromptDetection {
   /** End position in text */
   end: number;
   /** Redacted value if available */
-  redacted_value?: string;
+  redacted_value: string | null;
 }
 
 export class SystemPromptScrubber implements Processor {
-  public readonly name = 'system-prompt-scrubber';
+  public readonly id = 'system-prompt-scrubber';
+  public readonly name = 'System Prompt Scrubber';
 
   private strategy: 'block' | 'warn' | 'filter' | 'redact';
   private customPatterns: string[];
@@ -56,8 +66,9 @@ export class SystemPromptScrubber implements Processor {
   private instructions: string;
   private redactionMethod: 'mask' | 'placeholder' | 'remove';
   private placeholderText: string;
-  private model: MastraLanguageModel;
+  private model: MastraModelConfig;
   private detectionAgent: Agent;
+  private structuredOutputOptions?: SystemPromptScrubberOptions['structuredOutputOptions'];
 
   constructor(options: SystemPromptScrubberOptions) {
     if (!options.model) {
@@ -69,6 +80,7 @@ export class SystemPromptScrubber implements Processor {
     this.includeDetections = options.includeDetections || false;
     this.redactionMethod = options.redactionMethod || 'mask';
     this.placeholderText = options.placeholderText || '[SYSTEM_PROMPT]';
+    this.structuredOutputOptions = options.structuredOutputOptions;
 
     // Initialize instructions after customPatterns is set
     this.instructions = options.instructions || this.getDefaultInstructions();
@@ -77,6 +89,7 @@ export class SystemPromptScrubber implements Processor {
     this.model = options.model;
 
     this.detectionAgent = new Agent({
+      id: 'system-prompt-detector',
       name: 'system-prompt-detector',
       model: this.model,
       instructions: this.instructions,
@@ -159,11 +172,11 @@ export class SystemPromptScrubber implements Processor {
     abort,
     tracingContext,
   }: {
-    messages: MastraMessageV2[];
+    messages: MastraDBMessage[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-  }): Promise<MastraMessageV2[]> {
-    const processedMessages: MastraMessageV2[] = [];
+  }): Promise<MastraDBMessage[]> {
+    const processedMessages: MastraDBMessage[] = [];
 
     for (const message of messages) {
       if (message.role !== 'assistant' || !message.content?.parts) {
@@ -235,26 +248,39 @@ export class SystemPromptScrubber implements Processor {
     try {
       const model = await this.detectionAgent.getModel();
       let result: any;
-      const schema = z.object({
-        detections: z
-          .array(
-            z.object({
-              type: z.string(),
-              value: z.string(),
-              confidence: z.number().min(0).max(1),
-              start: z.number(),
-              end: z.number(),
-              redacted_value: z.string().optional(),
-            }),
-          )
-          .optional(),
-        redacted_content: z.string().optional(),
+
+      const baseDetectionSchema = z.object({
+        type: z.string().describe('Type of system prompt detected'),
+        value: z.string().describe('The detected content'),
+        confidence: z.number().min(0).max(1).describe('Confidence score'),
+        start: z.number().describe('Start position in text'),
+        end: z.number().describe('End position in text'),
       });
+
+      const detectionSchema =
+        this.strategy === 'redact'
+          ? baseDetectionSchema.extend({
+              redacted_value: z.string().describe('Redacted value if available').nullable(),
+            })
+          : baseDetectionSchema;
+
+      const baseSchema = z.object({
+        detections: z.array(detectionSchema).describe('Array of system prompt detections').nullable(),
+        reason: z.string().describe('Reason for detection').nullable(),
+      });
+
+      const schema =
+        this.strategy === 'redact'
+          ? baseSchema.extend({
+              redacted_content: z.string().describe('Redacted content').nullable(),
+            })
+          : baseSchema;
 
       if (model.specificationVersion === 'v2') {
         result = await this.detectionAgent.generate(text, {
           structuredOutput: {
             schema,
+            ...(this.structuredOutputOptions ?? {}),
           },
           tracingContext,
         });
@@ -268,7 +294,10 @@ export class SystemPromptScrubber implements Processor {
       return result.object as SystemPromptDetectionResult;
     } catch (error) {
       console.warn('[SystemPromptScrubber] Detection agent failed:', error);
-      return {};
+      return {
+        detections: null,
+        reason: null,
+      };
     }
   }
 
@@ -313,7 +342,7 @@ export class SystemPromptScrubber implements Processor {
   /**
    * Extract text content from a message
    */
-  private extractTextFromMessage(message: MastraMessageV2): string | null {
+  private extractTextFromMessage(message: MastraDBMessage): string | null {
     if (!message.content?.parts) {
       return null;
     }
@@ -332,7 +361,7 @@ export class SystemPromptScrubber implements Processor {
   /**
    * Create a redacted message with the given text
    */
-  private createRedactedMessage(originalMessage: Exclude<MastraMessageV2, { role: 'system' }>, redactedText: string): MastraMessageV2 {
+  private createRedactedMessage(originalMessage: Exclude<MastraDBMessage, { role: 'system' }>, redactedText: string): MastraDBMessage {
     return {
       ...originalMessage,
       content: {

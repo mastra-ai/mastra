@@ -5,8 +5,8 @@ import { createServer } from 'node:net';
 import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { useChat } from '@ai-sdk/react';
-import { Mastra } from '@mastra/core';
-import { Agent } from '@mastra/core/agent';
+import { Agent, MessageList } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import type { Message } from 'ai';
 import { JSDOM } from 'jsdom';
@@ -42,6 +42,7 @@ describe('Memory Streaming Tests', () => {
   it('should handle multiple tool calls in memory thread history', async () => {
     // Create agent with memory and tools
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test',
       instructions:
         'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code.',
@@ -91,6 +92,7 @@ describe('Memory Streaming Tests', () => {
 
   it('should use custom mastra ID generator for messages in memory', async () => {
     const agent = new Agent({
+      id: 'test-msg-id',
       name: 'test-msg-id',
       instructions: 'you are a helpful assistant.',
       model: openai('gpt-4o'),
@@ -251,7 +253,9 @@ describe('Memory Streaming Tests', () => {
       await weatherAgent.generateLegacy(`LA weather`, { threadId, resourceId });
 
       const agentMemory = (await weatherAgent.getMemory())!;
-      const initialMessages = (await agentMemory.query({ threadId })).uiMessages;
+      // Get initial messages from memory and convert to AI SDK v4 format
+      const { messages } = await agentMemory.query({ threadId });
+      const initialMessages = messages.map(m => MessageList.mastraDBMessageToAIV4UIMessage(m)) as Message[];
       const state = { clipboard: '' };
       const { result } = renderHook(() => {
         const chat = useChat({

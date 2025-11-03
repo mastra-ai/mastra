@@ -1,5 +1,5 @@
 ---
-title: "Reference: Completeness | Scorers | Mastra Docs"
+title: "Reference: Completeness Scorer | Scorers | Mastra Docs"
 description: Documentation for the Completeness Scorer in Mastra, which evaluates how thoroughly LLM outputs cover key elements present in the input.
 ---
 
@@ -25,12 +25,14 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
     {
       name: "preprocessStepResult",
       type: "object",
-      description: "Object with extracted elements and coverage details: { inputElements: string[], outputElements: string[], missingElements: string[], elementCounts: { input: number, output: number } }",
+      description:
+        "Object with extracted elements and coverage details: { inputElements: string[], outputElements: string[], missingElements: string[], elementCounts: { input: number, output: number } }",
     },
     {
       name: "score",
       type: "number",
-      description: "Completeness score (0-1) representing the proportion of input elements covered in the output.",
+      description:
+        "Completeness score (0-1) representing the proportion of input elements covered in the output.",
     },
   ]}
 />
@@ -109,18 +111,18 @@ A completeness score between 0 and 1:
 
 In this example, the response comprehensively addresses all aspects of the query with detailed information covering multiple dimensions.
 
-```typescript filename="src/example-high-completeness.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { createCompletenessScorer } from "@mastra/evals/scorers/llm";
+```typescript title="src/example-high-completeness.ts" showLineNumbers copy
+import { createCompletenessScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createCompletenessScorer({ model: openai("gpt-4o-mini") });
+const scorer = createCompletenessScorer({ model: "openai/gpt-4o-mini" });
 
-const query = "Explain the process of photosynthesis, including the inputs, outputs, and stages involved.";
+const query =
+  "Explain the process of photosynthesis, including the inputs, outputs, and stages involved.";
 const response =
   "Photosynthesis is the process by which plants convert sunlight into chemical energy. Inputs: Carbon dioxide (CO2) from the air enters through stomata, water (H2O) is absorbed by roots, and sunlight provides energy captured by chlorophyll. The process occurs in two main stages: 1) Light-dependent reactions in the thylakoids convert light energy to ATP and NADPH while splitting water and releasing oxygen. 2) Light-independent reactions (Calvin cycle) in the stroma use ATP, NADPH, and CO2 to produce glucose. Outputs: Glucose (C6H12O6) serves as food for the plant, and oxygen (O2) is released as a byproduct. The overall equation is: 6CO2 + 6H2O + light energy → C6H12O6 + 6O2.";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: query }],
+  input: [{ role: "user", content: query }],
   output: { text: response },
 });
 
@@ -142,18 +144,18 @@ The output receives a high score because it addresses all requested aspects: inp
 
 In this example, the response addresses some key points but misses important aspects or lacks sufficient detail.
 
-```typescript filename="src/example-partial-completeness.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { createCompletenessScorer } from "@mastra/evals/scorers/llm";
+```typescript title="src/example-partial-completeness.ts" showLineNumbers copy
+import { createCompletenessScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createCompletenessScorer({ model: openai("gpt-4o-mini") });
+const scorer = createCompletenessScorer({ model: "openai/gpt-4o-mini" });
 
-const query = "What are the benefits and drawbacks of remote work for both employees and employers?";
+const query =
+  "What are the benefits and drawbacks of remote work for both employees and employers?";
 const response =
   "Remote work offers several benefits for employees including flexible schedules, no commuting time, and better work-life balance. It also reduces costs for office space and utilities for employers. However, remote work can lead to isolation and communication challenges for employees.";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: query }],
+  input: [{ role: "user", content: query }],
   output: { text: response },
 });
 
@@ -175,18 +177,18 @@ The output receives a moderate score because it covers employee benefits and som
 
 In this example, the response only partially addresses the query and misses several important aspects.
 
-```typescript filename="src/example-low-completeness.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { createCompletenessScorer } from "@mastra/evals/scorers/llm";
+```typescript title="src/example-low-completeness.ts" showLineNumbers copy
+import { createCompletenessScorer } from "@mastra/evals/scorers/prebuilt";
 
-const scorer = createCompletenessScorer({ model: openai("gpt-4o-mini") });
+const scorer = createCompletenessScorer({ model: "openai/gpt-4o-mini" });
 
-const query = "Compare renewable and non-renewable energy sources in terms of cost, environmental impact, and sustainability.";
+const query =
+  "Compare renewable and non-renewable energy sources in terms of cost, environmental impact, and sustainability.";
 const response =
   "Renewable energy sources like solar and wind are becoming cheaper. They're better for the environment than fossil fuels.";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: query }],
+  input: [{ role: "user", content: query }],
   output: { text: response },
 });
 

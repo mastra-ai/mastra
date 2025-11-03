@@ -4,7 +4,7 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter } from '@mastra/memory/processors';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 
 const memory = new Memory({
@@ -16,6 +16,7 @@ const memory = new Memory({
 });
 
 const techSupport = new Agent({
+  id: 'technical-support',
   name: 'Technical Support',
   instructions:
     'You are a technical support agent who helps users solve software problems. You provide concise, short, instructions and ask clarifying questions when needed. You remember details from earlier in the conversation. Your goal is to efficiently resolve user issues. Make sure you provide concise responses without tons of text',

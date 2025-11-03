@@ -10,7 +10,7 @@ The `.cancel()` method cancels a workflow run, stopping execution and cleaning u
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 await run.cancel();
 ```
@@ -35,7 +35,8 @@ await run.cancel();
     {
       name: "result",
       type: "Promise<void>",
-      description: "A promise that resolves when the workflow run has been cancelled",
+      description:
+        "A promise that resolves when the workflow run has been cancelled",
     },
   ]}
 />
@@ -43,7 +44,7 @@ await run.cancel();
 ## Extended usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 try {
   const result = await run.start({ inputData: { value: "initial data" } });
@@ -54,5 +55,5 @@ try {
 
 ## Related
 
-- [Workflows overview](../../../docs/workflows/overview.mdx#run-workflow)
-- [Workflow.createRunAsync()](../create-run.mdx)
+- [Workflows overview](/docs/workflows/overview#running-workflows)
+- [Workflow.createRun()](../workflow-methods/create-run)

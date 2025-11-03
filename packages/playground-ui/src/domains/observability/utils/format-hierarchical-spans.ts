@@ -1,4 +1,4 @@
-import { AISpanRecord } from '@mastra/core';
+import { AISpanRecord } from '@mastra/core/storage';
 import { UISpan } from '../types';
 
 export const formatHierarchicalSpans = (spans: AISpanRecord[]): UISpan[] => {

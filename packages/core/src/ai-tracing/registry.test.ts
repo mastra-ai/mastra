@@ -162,20 +162,20 @@ describe('AI Tracing Registry', () => {
       registerAITracing('langfuse', tracing2);
 
       const selector: ConfigSelector = (context, _availableTracers) => {
-        // For testing, we'll simulate routing based on runtime context
-        if (context.runtimeContext?.['environment'] === 'production') return 'langfuse';
-        if (context.runtimeContext?.['environment'] === 'development') return 'console';
+        // For testing, we'll simulate routing based on request context
+        if (context.requestContext?.['environment'] === 'production') return 'langfuse';
+        if (context.requestContext?.['environment'] === 'development') return 'console';
         return undefined; // Fall back to default
       };
 
       setSelector(selector);
 
       const prodOptions: ConfigSelectorOptions = {
-        runtimeContext: { environment: 'production' } as any,
+        requestContext: { environment: 'production' } as any,
       };
 
       const devOptions: ConfigSelectorOptions = {
-        runtimeContext: { environment: 'development' } as any,
+        requestContext: { environment: 'development' } as any,
       };
 
       expect(getSelectedAITracing(prodOptions)).toBe(tracing2); // langfuse
@@ -195,7 +195,7 @@ describe('AI Tracing Registry', () => {
       setSelector(selector);
 
       const options: ConfigSelectorOptions = {
-        runtimeContext: undefined,
+        requestContext: undefined,
       };
 
       expect(getSelectedAITracing(options)).toBe(tracing1); // Falls back to default
@@ -406,8 +406,8 @@ describe('AI Tracing Registry', () => {
 
     it('should support selector function configuration', async () => {
       const selector: ConfigSelector = (context, _availableTracers) => {
-        if (context.runtimeContext?.['service'] === 'agent') return 'langfuse';
-        if (context.runtimeContext?.['service'] === 'workflow') return 'datadog';
+        if (context.requestContext?.['service'] === 'agent') return 'langfuse';
+        if (context.requestContext?.['service'] === 'workflow') return 'datadog';
         return undefined; // Use default
       };
 
@@ -431,15 +431,15 @@ describe('AI Tracing Registry', () => {
 
       // Test selector functionality
       const agentOptions: ConfigSelectorOptions = {
-        runtimeContext: { service: 'agent' } as any,
+        requestContext: { service: 'agent' } as any,
       };
 
       const workflowOptions: ConfigSelectorOptions = {
-        runtimeContext: { service: 'workflow' } as any,
+        requestContext: { service: 'workflow' } as any,
       };
 
       const genericOptions: ConfigSelectorOptions = {
-        runtimeContext: undefined,
+        requestContext: undefined,
       };
 
       // Verify selector routes correctly
@@ -749,7 +749,7 @@ describe('AI Tracing Registry', () => {
 
     it('should work with selector when default config is enabled', async () => {
       const selector: ConfigSelector = (context, _availableTracers) => {
-        if (context.runtimeContext?.['useDefault'] === true) return 'default';
+        if (context.requestContext?.['useDefault'] === true) return 'default';
         return 'custom';
       };
 
@@ -765,11 +765,11 @@ describe('AI Tracing Registry', () => {
       });
 
       const defaultOptions: ConfigSelectorOptions = {
-        runtimeContext: { useDefault: true } as any,
+        requestContext: { useDefault: true } as any,
       };
 
       const customOptions: ConfigSelectorOptions = {
-        runtimeContext: { useDefault: false } as any,
+        requestContext: { useDefault: false } as any,
       };
 
       // Should route to default config
@@ -787,17 +787,20 @@ describe('AI Tracing Registry', () => {
 
       const logger = new ConsoleLogger({ level: LogLevel.DEBUG });
 
-      // Spy on console to check for combined warning message
-      const debugSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      // Spy on console to check for warning message
+      // Note: ConsoleLogger.warn() calls console.info() internally
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       // CloudExporter should not throw, but log warning instead
       const exporter = new CloudExporter({ logger });
 
-      // Verify combined warning message was logged
-      expect(debugSpy).toHaveBeenCalledWith(
-        expect.stringContaining('CloudExporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set'),
+      // Verify warning message was logged with new exporter name
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'mastra-cloud-ai-tracing-exporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set',
+        ),
       );
-      expect(debugSpy).toHaveBeenCalledWith(
+      expect(infoSpy).toHaveBeenCalledWith(
         expect.stringContaining('Sign up for Mastra Cloud at https://cloud.mastra.ai'),
       );
 
@@ -821,7 +824,7 @@ describe('AI Tracing Registry', () => {
       await expect(exporter.exportEvent(event)).resolves.not.toThrow();
 
       // Restore mocks
-      debugSpy.mockRestore();
+      infoSpy.mockRestore();
       if (originalToken) {
         process.env.MASTRA_CLOUD_ACCESS_TOKEN = originalToken;
       }

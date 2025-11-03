@@ -1,5 +1,6 @@
 import { ReadableStream } from 'stream/web';
 import type { ToolSet } from 'ai-v5';
+import { RequestContext } from '../../request-context';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
@@ -28,19 +29,17 @@ export function workflowLoopStream<
 >({
   resumeContext,
   requireToolApproval,
-  telemetry_settings,
   models,
   toolChoice,
   modelSettings,
   _internal,
-  modelStreamSpan,
-  llmAISpan,
   messageId,
   runId,
   messageList,
   startTimestamp,
   streamState,
   agentId,
+  toolCallId,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
@@ -51,24 +50,13 @@ export function workflowLoopStream<
         },
       });
 
-      modelStreamSpan.setAttributes({
-        ...(telemetry_settings?.recordInputs !== false
-          ? {
-              'stream.prompt.toolChoice': toolChoice ? JSON.stringify(toolChoice) : 'auto',
-            }
-          : {}),
-      });
-
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         resumeContext,
-        requireToolApproval,
         messageId: messageId!,
         models,
-        telemetry_settings,
         _internal,
         modelSettings,
         toolChoice,
-        modelStreamSpan,
         controller,
         writer,
         runId,
@@ -103,17 +91,6 @@ export function workflowLoopStream<
         },
       };
 
-      const msToFirstChunk = _internal?.now?.()! - startTimestamp!;
-
-      modelStreamSpan.addEvent('ai.stream.firstChunk', {
-        'ai.response.msToFirstChunk': msToFirstChunk,
-      });
-
-      modelStreamSpan.setAttributes({
-        'stream.response.timestamp': new Date(startTimestamp).toISOString(),
-        'stream.response.msToFirstChunk': msToFirstChunk,
-      });
-
       if (!resumeContext) {
         controller.enqueue({
           type: 'start',
@@ -125,32 +102,26 @@ export function workflowLoopStream<
         });
       }
 
-      const existingSnapshot = await rest.mastra?.getStorage()?.loadWorkflowSnapshot({
-        workflowName: 'agentic-loop',
+      const run = await agenticLoopWorkflow.createRun({
         runId,
       });
-      if (existingSnapshot) {
-        for (const key in existingSnapshot?.context) {
-          const step = existingSnapshot?.context[key];
-          if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
-            streamState.deserialize(step.suspendPayload?.__streamState);
-            break;
-          }
-        }
-      }
 
-      const run = await agenticLoopWorkflow.createRunAsync({
-        runId,
-      });
+      const requestContext = new RequestContext();
+
+      if (requireToolApproval) {
+        requestContext.set('__mastra_requireToolApproval', true);
+      }
 
       const executionResult = resumeContext
         ? await run.resume({
-            resumeData: resumeContext,
-            tracingContext: { currentSpan: llmAISpan },
+            resumeData: resumeContext.resumeData,
+            tracingContext: rest.modelSpanTracker?.getTracingContext(),
+            label: toolCallId,
           })
         : await run.start({
             inputData: initialData,
-            tracingContext: { currentSpan: llmAISpan },
+            tracingContext: rest.modelSpanTracker?.getTracingContext(),
+            requestContext,
           });
 
       if (executionResult.status !== 'success') {
@@ -175,14 +146,6 @@ export function workflowLoopStream<
             reason: executionResult.result.stepResult.reason,
           },
         },
-      });
-
-      const msToFinish = (_internal?.now?.() ?? Date.now()) - startTimestamp;
-      modelStreamSpan.addEvent('ai.stream.finish');
-      modelStreamSpan.setAttributes({
-        'stream.response.msToFinish': msToFinish,
-        'stream.response.avgOutputTokensPerSecond':
-          (1000 * (executionResult?.result?.output?.usage?.outputTokens ?? 0)) / msToFinish,
       });
 
       controller.close();

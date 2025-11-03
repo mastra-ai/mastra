@@ -3,14 +3,12 @@ import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory';
 import type { MastraStorage } from '../storage';
-import type { Telemetry } from '../telemetry';
 import type { MastraTTS } from '../tts';
 import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
 import type { MastraVector } from '../vector';
 
 export type MastraPrimitives = {
   logger?: IMastraLogger;
-  telemetry?: Telemetry;
   storage?: MastraStorage;
   agents?: Record<string, Agent>;
   tts?: Record<string, MastraTTS>;

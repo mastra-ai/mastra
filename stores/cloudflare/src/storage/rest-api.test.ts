@@ -1,13 +1,7 @@
 import { createSampleMessageV1, createSampleThread, checkWorkflowSnapshot } from '@internal/storage-test-utils';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
-import {
-  TABLE_MESSAGES,
-  TABLE_THREADS,
-  TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_EVALS,
-  TABLE_TRACES,
-} from '@mastra/core/storage';
+import { TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT, TABLE_TRACES } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
@@ -47,7 +41,6 @@ describe.skip('CloudflareStore REST API', () => {
       TABLE_THREADS,
       TABLE_MESSAGES,
       TABLE_WORKFLOW_SNAPSHOT,
-      TABLE_EVALS,
       TABLE_TRACES,
     ] as TABLE_NAMES[];
 
@@ -65,7 +58,7 @@ describe.skip('CloudflareStore REST API', () => {
 
   const cleanupKVData = async () => {
     // List and delete all keys in each namespace
-    const tables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES] as TABLE_NAMES[];
+    const tables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_TRACES] as TABLE_NAMES[];
 
     for (const table of tables) {
       try {
@@ -306,9 +299,9 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveThread({ thread: thread1 });
       await store.saveThread({ thread: thread2 });
 
-      const threads = await retryUntil(
-        async () => await store.getThreadsByResourceId({ resourceId: thread1.resourceId }),
-        threads => threads?.length === 2,
+      const { threads } = await retryUntil(
+        async () => await store.listThreadsByResourceId({ resourceId: thread1.resourceId, perPage: 10, page: 0 }),
+        result => result?.threads?.length === 2,
       );
       expect(threads).toHaveLength(2);
       expect(threads.map(t => t.id)).toEqual(expect.arrayContaining([thread1.id, thread2.id]));
@@ -434,7 +427,7 @@ describe.skip('CloudflareStore REST API', () => {
     });
 
     // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
-    //   const messages: MastraMessageV2[] = [
+    //   const messages: MastraDBMessage[] = [
     //     createSampleMessageV2({
     //       threadId: 'thread-one',
     //       content: 'First',
@@ -993,13 +986,13 @@ describe.skip('CloudflareStore REST API', () => {
     });
   });
 
-  describe('getWorkflowRuns', () => {
+  describe('listWorkflowRuns', () => {
     const testNamespace = 'test-namespace';
     beforeEach(async () => {
       await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     });
     it('returns empty array when no workflows exist', async () => {
-      const { runs, total } = await store.getWorkflowRuns();
+      const { runs, total } = await store.listWorkflowRuns();
       expect(runs).toEqual([]);
       expect(total).toBe(0);
     });
@@ -1035,7 +1028,7 @@ describe.skip('CloudflareStore REST API', () => {
         snapshot: workflow2,
       });
 
-      const { runs, total } = await store.getWorkflowRuns({ namespace: 'test' });
+      const { runs, total } = await store.listWorkflowRuns({ namespace: 'test' });
       expect(runs).toHaveLength(2);
       expect(total).toBe(2);
       expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
@@ -1072,7 +1065,7 @@ describe.skip('CloudflareStore REST API', () => {
         snapshot: workflow2,
       });
 
-      const { runs, total } = await store.getWorkflowRuns({ namespace: 'test', workflowName: workflowName1 });
+      const { runs, total } = await store.listWorkflowRuns({ namespace: 'test', workflowName: workflowName1 });
       expect(runs).toHaveLength(1);
       expect(total).toBe(1);
       expect(runs[0]!.workflowName).toBe(workflowName1);
@@ -1138,7 +1131,7 @@ describe.skip('CloudflareStore REST API', () => {
         },
       });
 
-      const { runs } = await store.getWorkflowRuns({
+      const { runs } = await store.listWorkflowRuns({
         namespace: testNamespace,
         fromDate: yesterday,
         toDate: now,
@@ -1197,10 +1190,10 @@ describe.skip('CloudflareStore REST API', () => {
       });
 
       // Get first page
-      const page1 = await store.getWorkflowRuns({
+      const page1 = await store.listWorkflowRuns({
         namespace: testNamespace,
-        limit: 2,
-        offset: 0,
+        perPage: 2,
+        page: 0,
       });
       expect(page1.runs).toHaveLength(2);
       expect(page1.total).toBe(3); // Total count of all records
@@ -1212,10 +1205,10 @@ describe.skip('CloudflareStore REST API', () => {
       checkWorkflowSnapshot(secondSnapshot, stepId2, 'waiting');
 
       // Get second page
-      const page2 = await store.getWorkflowRuns({
+      const page2 = await store.listWorkflowRuns({
         namespace: testNamespace,
-        limit: 2,
-        offset: 2,
+        perPage: 2,
+        page: 1,
       });
       expect(page2.runs).toHaveLength(1);
       expect(page2.total).toBe(3);
@@ -1271,7 +1264,7 @@ describe.skip('CloudflareStore REST API', () => {
       expect(notFound).toBeNull();
     });
   });
-  describe('getWorkflowRuns with resourceId', () => {
+  describe('listWorkflowRuns with resourceId', () => {
     const testNamespace = 'test-workflows-id';
     const workflowName = 'workflow-id-test';
     let resourceId: string;
@@ -1314,7 +1307,7 @@ describe.skip('CloudflareStore REST API', () => {
     });
 
     it('should retrieve all workflow runs by resourceId', async () => {
-      const { runs } = await store.getWorkflowRuns({
+      const { runs } = await store.listWorkflowRuns({
         namespace: testNamespace,
         resourceId,
         workflowName,
@@ -1327,7 +1320,7 @@ describe.skip('CloudflareStore REST API', () => {
     });
 
     it('should return an empty array if no workflow runs match resourceId', async () => {
-      const { runs } = await store.getWorkflowRuns({
+      const { runs } = await store.listWorkflowRuns({
         namespace: testNamespace,
         resourceId: 'non-existent-resource',
         workflowName,
@@ -1346,13 +1339,13 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveThread({ thread });
 
       // Should be able to retrieve thread
-      const threads = await retryUntil(
-        async () => await store.getThreadsByResourceId({ resourceId: thread.resourceId }),
-        threads => threads.length > 0,
+      const { threads } = await retryUntil(
+        async () => await store.listThreadsByResourceId({ resourceId: thread.resourceId, perPage: 10, page: 0 }),
+        result => result?.threads?.length === 1,
       );
       expect(threads).toHaveLength(1);
-      expect(threads[0].id).toBe(thread.id);
-      expect(threads[0].metadata).toStrictEqual({});
+      expect(threads[0]?.id).toBe(thread.id);
+      expect(threads[0]?.metadata).toStrictEqual({});
     });
 
     it('should sanitize and handle special characters', async () => {
@@ -1548,8 +1541,8 @@ describe.skip('CloudflareStore REST API', () => {
       expect(finalOrder).toHaveLength(0);
 
       // Verify thread is gone
-      const threads = await store.getThreadsByResourceId({ resourceId: thread.resourceId });
-      expect(threads).toHaveLength(0);
+      const { threads } = await store.listThreadsByResourceId({ resourceId: thread.resourceId, perPage: 10, page: 0 });
+      expect(threads?.length).toBe(0);
     });
 
     it('should handle namespace cleanup edge cases', async () => {
@@ -1593,11 +1586,11 @@ describe.skip('CloudflareStore REST API', () => {
       expect(remainingMessages).toHaveLength(0);
 
       // Verify thread is gone
-      const threads = await retryUntil(
-        async () => await store.getThreadsByResourceId({ resourceId: thread.resourceId }),
-        threads => threads.length === 0,
+      const { threads } = await retryUntil(
+        async () => await store.listThreadsByResourceId({ resourceId: thread.resourceId, perPage: 10, page: 0 }),
+        result => result?.threads?.length === 0,
       );
-      expect(threads).toHaveLength(0);
+      expect(threads?.length).toBe(0);
 
       // Verify message order is cleaned up
       const orderKey = store['getThreadMessagesKey'](thread.id);

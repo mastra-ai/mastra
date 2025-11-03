@@ -2,7 +2,7 @@ import type { AgentExecutionOptions } from '@mastra/core/agent';
 import { registerApiRoute } from '@mastra/core/server';
 import type { OutputSchema } from '@mastra/core/stream';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
-import { toAISdkFormat } from './to-ai-sdk-format';
+import { toAISdkV5Stream } from './convert-streams';
 
 export type NetworkRouteOptions<OUTPUT extends OutputSchema = undefined> =
   | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: AgentExecutionOptions<OUTPUT, 'aisdk'> }
@@ -40,13 +40,12 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
               type: 'object',
               properties: {
                 messages: { type: 'array', items: { type: 'object' } },
-                runtimeContext: { type: 'object', additionalProperties: true },
+                requestContext: { type: 'object', additionalProperties: true },
                 runId: { type: 'string' },
                 maxSteps: { type: 'number' },
                 threadId: { type: 'string' },
                 resourceId: { type: 'string' },
                 modelSettings: { type: 'object', additionalProperties: true },
-                telemetry: { type: 'object', additionalProperties: true },
                 tools: { type: 'array', items: { type: 'object' } },
               },
               required: ['messages'],
@@ -103,7 +102,7 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
 
       const uiMessageStream = createUIMessageStream({
         execute: async ({ writer }) => {
-          for await (const part of toAISdkFormat(result, { from: 'network' })) {
+          for await (const part of toAISdkV5Stream(result, { from: 'network' })) {
             writer.write(part);
           }
         },

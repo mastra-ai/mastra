@@ -1,11 +1,11 @@
 ---
-title: "VNext to Standard APIs | Migration Guide"
+title: "Migration: VNext to Standard APIs | Migration Guide"
 description: "Learn how to migrate from VNext methods to the new standard agent APIs in Mastra."
 ---
 
-## Overview
+#  Migrate from VNext to Standard APIs
 
-As of `v0.20.0`, the following changes apply:
+As of `v0.20.0` for `@mastra/core`, the following changes apply.
 
 ## Legacy APIs (AI SDK v4)
 
@@ -51,7 +51,7 @@ Choose the migration path that fits your needs:
 
 The updated `.stream()` and `.generate()` methods differ from their legacy counterparts in behavior, compatibility, return types, and available options. This section highlights the most important changes you need to understand when migrating.
 
-### 1. Model version support
+### Model version support
 
 **Legacy APIs**
 
@@ -69,7 +69,7 @@ Only support **AI SDK v5** models (`specificationVersion: 'v2'`)
 
 > This is enforced at runtime with clear error messages.
 
-### 2. Return types
+### Return types
 
 **Legacy APIs**
 
@@ -81,8 +81,8 @@ Only support **AI SDK v5** models (`specificationVersion: 'v2'`)
 
 See the following API references for more information:
 
-- [Agent.generateLegacy()](../../reference/agents/generateLegacy.mdx)
-- [Agent.streamLegacy()](../../reference/streaming/agents/streamLegacy.mdx)
+- [Agent.generateLegacy()](/reference/agents/generateLegacy)
+- [Agent.streamLegacy()](/reference/streaming/agents/streamLegacy)
 
 **Standard APIs**
 
@@ -97,14 +97,14 @@ See the following API references for more information:
 
 See the following API references for more information:
 
-- [Agent.generate()](../../reference/agents/generate.mdx)
-- [Agent.stream()](../../reference/streaming/agents/stream.mdx)
+- [Agent.generate()](/reference/agents/generate)
+- [Agent.stream()](/reference/streaming/agents/stream)
 
-### 3. Format control
+### Format control
 
 **Legacy APIs**
 
--  No `format` option: Always return AI SDK v4 types
+No `format` option: Always return AI SDK v4 types
 
 ```typescript showLineNumbers copy
 // Mastra native format (default)
@@ -113,223 +113,227 @@ const result = await agent.stream(messages);
 
 **Standard APIs**
 
-- Use `format` option to choose output:
-  - `'mastra'` (default)
-  - `'aisdk'` (AI SDK v5 compatible)
+Use `format` option to choose output:
+
+- `'mastra'` (default)
+- `'aisdk'` (AI SDK v5 compatible)
 
 ```typescript showLineNumbers copy
 // AI SDK v5 compatibility
 const result = await agent.stream(messages, {
-  format: 'aisdk'
+  format: "aisdk",
 });
 ```
 
-### 4. New options in standard APIs
+### New options in standard APIs
 
 The following options are available in the standard `.stream()` and `generate()`, but **NOT** in their legacy counterparts:
 
 - `format` - Choose between 'mastra' or 'aisdk' output format:
 
-```typescript showLineNumbers copy
-const result = await agent.stream(messages, {
-  format: 'aisdk' // or 'mastra' (default)
-});
-```
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    format: "aisdk", // or 'mastra' (default)
+  });
+  ```
+
 - `system` - Custom system message (separate from instructions).
 
-```typescript showLineNumbers copy
-const result = await agent.stream(messages, {
-  system: 'You are a helpful assistant'
-});
-```
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    system: "You are a helpful assistant",
+  });
+  ```
 
 - `structuredOutput` - Enhanced structured output with model override and custom options.
   - `jsonPromptInjection` - Used to override the default behaviour of passing response_format to the model. This will inject context into the prompt to coerce the model into returning structured outputs.
   - `model` - If a model is added this will create a sub agent to structure the response from the main agent. The main agent will call tools and return text, and the sub agent will return an object that conforms to your schema provided. This is a replacement for `experimental_output`.
   - `errorStrategy` - Determines what happens when the output doesn’t match the schema:
-      - 'warn' - log a warning
-      - 'error' - throw an error
-      - 'fallback' - return a fallback value you provide
+    - 'warn' - log a warning
+    - 'error' - throw an error
+    - 'fallback' - return a fallback value you provide
 
-```typescript showLineNumbers copy
-const result = await agent.generate(messages, {
-  structuredOutput: {
-    schema: z.object({
-      name: z.string(),
-      age: z.number()
-    }),
-    model: "openai/gpt-4o-mini", // Optional model override for structuring
-    errorStrategy: 'fallback',
-    fallbackValue: { name: 'unknown', age: 0 },
-    instructions: 'Extract user information' // Override default structuring instructions
-  }
-});
-```
+    ```typescript showLineNumbers copy
+    const result = await agent.generate(messages, {
+      structuredOutput: {
+        schema: z.object({
+          name: z.string(),
+          age: z.number(),
+        }),
+        model: "openai/gpt-4o-mini", // Optional model override for structuring
+        errorStrategy: "fallback",
+        fallbackValue: { name: "unknown", age: 0 },
+        instructions: "Extract user information", // Override default structuring instructions
+      },
+    });
+    ```
 
 - `stopWhen` - Flexible stop conditions (step count, token limit, etc).
 
-```typescript showLineNumbers copy
-const result = await agent.stream(messages, {
-  stopWhen: ({ steps, totalTokens }) => steps >= 5 || totalTokens >= 10000
-});
-```
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    stopWhen: ({ steps, totalTokens }) => steps >= 5 || totalTokens >= 10000,
+  });
+  ```
 
 - `providerOptions` - Provider-specific options (e.g., OpenAI-specific settings)
 
-```typescript showLineNumbers copy
-const result = await agent.stream(messages, {
-  providerOptions: {
-    openai: {
-      store: true,
-      metadata: { userId: '123' }
-    }
-  }
-});
-```
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    providerOptions: {
+      openai: {
+        store: true,
+        metadata: { userId: "123" },
+      },
+    },
+  });
+  ```
 
 - `onChunk` - Callback for each streaming chunk.
 
-```typescript showLineNumbers copy
-const result = await agent.stream(messages, {
-  onChunk: (chunk) => {
-    console.log('Received chunk:', chunk);
-  }
-});
-```
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    onChunk: (chunk) => {
+      console.log("Received chunk:", chunk);
+    },
+  });
+  ```
 
 - `onError` - Error callback.
 
-```typescript showLineNumbers copy
-const result = await agent.stream(messages, {
-  onError: (error) => {
-    console.error('Stream error:', error);
-  }
-});
-```
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    onError: (error) => {
+      console.error("Stream error:", error);
+    },
+  });
+  ```
 
 - `onAbort` - Abort callback.
 
-```typescript showLineNumbers copy
-const result = await agent.stream(messages, {
-  onAbort: () => {
-    console.log('Stream aborted');
-  }
-});
-```
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    onAbort: () => {
+      console.log("Stream aborted");
+    },
+  });
+  ```
 
 - `activeTools` - Specify which tools are active for this execution.
 
-```typescript showLineNumbers copy
-const result = await agent.stream(messages, {
-  activeTools: ['search', 'calculator'] // Only these tools will be available
-});
-```
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    activeTools: ["search", "calculator"], // Only these tools will be available
+  });
+  ```
 
 - `abortSignal` - AbortSignal for cancellation.
 
-```typescript showLineNumbers copy
-const controller = new AbortController();
-const result = await agent.stream(messages, {
-  abortSignal: controller.signal
-});
+  ```typescript showLineNumbers copy
+  const controller = new AbortController();
+  const result = await agent.stream(messages, {
+    abortSignal: controller.signal,
+  });
 
-// Later: controller.abort();
-```
+  // Later: controller.abort();
+  ```
 
 - `prepareStep` - Callback before each step in multi-step execution.
 
-```typescript showLineNumbers copy
-const result = await agent.stream(messages, {
-  prepareStep: ({ step, state }) => {
-    console.log('About to execute step:', step);
-    return { /* modified state */ };
-  }
-});
-```
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    prepareStep: ({ step, state }) => {
+      console.log("About to execute step:", step);
+      return {
+        /* modified state */
+      };
+    },
+  });
+  ```
 
 - `requireToolApproval` - Require approval for all tool calls.
 
-```typescript showLineNumbers copy
-const result = await agent.stream(messages, {
-  requireToolApproval: true
-});
-```
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    requireToolApproval: true,
+  });
+  ```
 
-### 5. Legacy options that moved
+### Legacy options that moved
 
 - `temperature` and other `modelSettings`.
 
-Unified in `modelSettings`
+  Unified in `modelSettings`
 
-```typescript showLineNumbers copy
-const result = await agent.stream(messages, {
-  modelSettings: {
-    temperature: 0.7,
-    maxTokens: 1000,
-    topP: 0.9
-  }
-});
-```
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    modelSettings: {
+      temperature: 0.7,
+      maxTokens: 1000,
+      topP: 0.9,
+    },
+  });
+  ```
 
 - `resourceId` and `threadId`.
-Moved to memory object.
 
-```typescript showLineNumbers copy
-const result = await agent.stream(messages, {
-  memory: {
-    resource: 'user-123',
-    thread: 'thread-456'
-  }
-});
-```
+  Moved to memory object.
 
-### 6. Deprecated or removed options
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    memory: {
+      resource: "user-123",
+      thread: "thread-456",
+    },
+  });
+  ```
+
+### Deprecated or removed options
 
 - `experimental_output`
 
-Use `structuredOutput` instead to allow for tool calls and an object return.
+  Use `structuredOutput` instead to allow for tool calls and an object return.
 
-```typescript showLineNumbers copy
-const result = await agent.generate(messages, {
-  structuredOutput: {
-    schema: z.object({
-      summary: z.string(),
-    }),
-    model: "openai/gpt-4o"
-  }
-});
-```
+  ```typescript showLineNumbers copy
+  const result = await agent.generate(messages, {
+    structuredOutput: {
+      schema: z.object({
+        summary: z.string(),
+      }),
+      model: "openai/gpt-4o",
+    },
+  });
+  ```
 
 - `output`
 
-The `output` property is deprecated in favor of `structuredOutput`, to achieve the same results, omit the model and only pass `structuredOutput.schema`, optionally add `jsonPromptInjection: true` if your model does not natively support `response_format`.
+  The `output` property is deprecated in favor of `structuredOutput`, to achieve the same results, omit the model and only pass `structuredOutput.schema`, optionally add `jsonPromptInjection: true` if your model does not natively support `response_format`.
 
-```typescript showLineNumbers copy
-const result = await agent.generate(messages, {
-  structuredOutput: {
-    schema: {
-      z.object({
-        name: z.string()
-      })
-    }
-  },
-});
-```
+  ```typescript showLineNumbers copy
+  const result = await agent.generate(messages, {
+    structuredOutput: {
+      schema: {
+        z.object({
+          name: z.string()
+        })
+      }
+    },
+  });
+  ```
 
 - `memoryOptions`
 
-Use `memory` instead.
+  Use `memory` instead.
 
-```typescript showLineNumbers copy
-const result = await agent.generate(messages, {
-  memory: {
-    // ...
-  }
-});
-```
+  ```typescript showLineNumbers copy
+  const result = await agent.generate(messages, {
+    memory: {
+      // ...
+    },
+  });
+  ```
 
-
-### 7. Type changes
+### Type changes
 
 **Legacy APIs**
 
@@ -337,23 +341,27 @@ const result = await agent.generate(messages, {
 
 See the following API references for more information:
 
-- [Agent.generateLegacy()](../../reference/agents/generateLegacy.mdx)
-- [Agent.streamLegacy()](../../reference/streaming/agents/streamLegacy.mdx)
+- [Agent.generateLegacy()](/reference/agents/generateLegacy)
+- [Agent.streamLegacy()](/reference/streaming/agents/streamLegacy)
 
 **Standard APIs**
 
 - `ModelMessage[]`
 
-`toolChoice` uses the AI SDK v5 `ToolChoice` type.
+  `toolChoice` uses the AI SDK v5 `ToolChoice` type.
 
-```typescript showLineNumbers copy
-type ToolChoice<TOOLS extends Record<string, unknown>> = 'auto' | 'none' | 'required' | {
-    type: 'tool';
-    toolName: Extract<keyof TOOLS, string>;
-};
-```
+  ```typescript showLineNumbers copy
+  type ToolChoice<TOOLS extends Record<string, unknown>> =
+    | "auto"
+    | "none"
+    | "required"
+    | {
+        type: "tool";
+        toolName: Extract<keyof TOOLS, string>;
+      };
+  ```
 
 See the following API references for more information:
 
-- [Agent.generate()](../../reference/agents/generate.mdx)
-- [Agent.stream()](../../reference/streaming/agents/stream.mdx)
+- [Agent.generate()](/reference/agents/generate)
+- [Agent.stream()](/reference/streaming/agents/stream)

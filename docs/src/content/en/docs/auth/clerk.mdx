@@ -1,9 +1,10 @@
 ---
-title: "MastraAuthClerk Class"
+title: "MastraAuthClerk Class | Auth | Mastra Docs"
 description: "Documentation for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication."
 ---
 
-import { Tabs, Tab } from "@/components/tabs";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # MastraAuthClerk Class
 
@@ -13,7 +14,7 @@ The `MastraAuthClerk` class provides authentication for Mastra using Clerk. It v
 
 This example uses Clerk authentication. Make sure to add your Clerk credentials to your `.env` file and ensure your Clerk project is properly configured.
 
-```env filename=".env" copy
+```env title=".env" copy
 CLERK_PUBLISHABLE_KEY=pk_test_...
 CLERK_SECRET_KEY=sk_test_...
 CLERK_JWKS_URI=https://your-clerk-domain.clerk.accounts.dev/.well-known/jwks.json
@@ -31,9 +32,9 @@ npm install @mastra/auth-clerk@latest
 
 ## Usage example
 
-```typescript {2,7-11} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { MastraAuthClerk } from '@mastra/auth-clerk';
+```typescript {2,7-11} title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { MastraAuthClerk } from "@mastra/auth-clerk";
 
 export const mastra = new Mastra({
   // ..
@@ -41,7 +42,7 @@ export const mastra = new Mastra({
     experimental_auth: new MastraAuthClerk({
       publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
       secretKey: process.env.CLERK_SECRET_KEY,
-      jwksUri: process.env.CLERK_JWKS_URI
+      jwksUri: process.env.CLERK_JWKS_URI,
     }),
   },
 });
@@ -49,7 +50,7 @@ export const mastra = new Mastra({
 
 > **Note:** The default `authorizeUser` method allows all authenticated users. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
 
-> See the [MastraAuthClerk](/reference/auth/clerk.mdx) API reference for all available configuration options.
+> See the [MastraAuthClerk](/reference/auth/clerk) API reference for all available configuration options.
 
 ## Client-side setup
 
@@ -59,17 +60,17 @@ When using Clerk auth, you'll need to retrieve the access token from Clerk on th
 
 Use the Clerk React hooks to authenticate users and retrieve their access token:
 
-```typescript filename="lib/auth.ts" showLineNumbers copy
+```typescript title="lib/auth.ts" showLineNumbers copy
 import { useAuth } from "@clerk/nextjs";
 
 export const useClerkAuth = () => {
   const { getToken } = useAuth();
-  
+
   const getAccessToken = async () => {
     const token = await getToken();
     return token;
   };
-  
+
   return { getAccessToken };
 };
 ```
@@ -80,27 +81,27 @@ export const useClerkAuth = () => {
 
 When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Clerk access token in the `Authorization` header:
 
-```typescript {6} filename="lib/mastra/mastra-client.ts" showLineNumbers copy
+```typescript {6} title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
   baseUrl: "https://<mastra-api-url>",
   headers: {
-    Authorization: `Bearer ${accessToken}`
-  }
+    Authorization: `Bearer ${accessToken}`,
+  },
 });
 ```
 
 > **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
-> See [Mastra Client SDK](/docs/server-db/mastra-client.mdx) for more configuration options.
+> See [Mastra Client SDK](/docs/server-db/mastra-client) for more configuration options.
 
 ### Making authenticated requests
 
 Once `MastraClient` is configured with the Clerk access token, you can send authenticated requests:
 
-<Tabs items={["MastraClient", "curl"]}>
-  <Tab>
-    ```tsx filename="src/components/test-agent.tsx" showLineNumbers copy
+<Tabs>
+  <TabItem value="react" label="React">
+    ```tsx title="src/components/test-agent.tsx" showLineNumbers copy
     "use client";
 
     import { useAuth } from "@clerk/nextjs";
@@ -128,8 +129,9 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
       return <button onClick={handleClick}>Test Agent</button>;
     };
     ```
-  </Tab>
-  <Tab>
+
+  </TabItem>
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -138,5 +140,5 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
         "messages": "Weather in London"
       }'
     ```
-  </Tab>
+  </TabItem>
 </Tabs>

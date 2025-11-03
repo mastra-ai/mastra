@@ -1,9 +1,7 @@
 ---
-title: "Basic AI Tracing | Examples | Observability | Mastra Docs"
+title: "Example: Basic AI Tracing Example | Observability | Mastra Docs"
 description: Get started with AI tracing in your Mastra application
 ---
-
-import { Callout } from "nextra/components";
 
 # Basic AI Tracing Example
 
@@ -33,24 +31,25 @@ export MASTRA_CLOUD_ACCESS_TOKEN=your_token_here
 
 Create your Mastra configuration with AI tracing enabled:
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core";
 import { LibSQLStorage } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   // Configure storage (required for DefaultExporter)
   storage: new LibSQLStorage({
-    url: 'file:local.db'
+    url: "file:local.db",
   }),
 
   // Enable AI tracing with default configuration
   observability: {
-    default: { enabled: true }
-  }
+    default: { enabled: true },
+  },
 });
 ```
 
 This default configuration automatically includes:
+
 - **[DefaultExporter](/docs/observability/ai-tracing/exporters/default)** - Persists traces to your storage
 - **[CloudExporter](/docs/observability/ai-tracing/exporters/cloud)** - Sends to Mastra Cloud (if token is set)
 - **[SensitiveDataFilter](/docs/observability/ai-tracing/processors/sensitive-data-filter)** - Redacts sensitive fields
@@ -58,7 +57,7 @@ This default configuration automatically includes:
 
 ### 3. Create an Agent with Automatic Tracing
 
-```typescript filename="src/mastra/agents/example-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/example-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
 import { openai } from "@ai-sdk/openai";
@@ -71,22 +70,23 @@ const getCurrentTime = createTool({
   execute: async () => {
     // Tool calls are automatically traced
     return { time: new Date().toISOString() };
-  }
+  },
 });
 
 export const exampleAgent = new Agent({
-  name: "example-agent",
+  id: "example-agent",
+  name: "Example Agent",
   instructions: "You are a helpful AI assistant.",
   model: openai("gpt-4"),
   tools: {
-    getCurrentTime
-  }
+    getCurrentTime,
+  },
 });
 ```
 
 ### 4. Execute and View Traces
 
-```typescript filename="src/example.ts" showLineNumbers copy
+```typescript title="src/example.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
 async function main() {
@@ -109,49 +109,48 @@ main().catch(console.error);
 When you run this example, Mastra automatically creates spans for:
 
 1. **AGENT_RUN** - The complete agent execution
-2. **LLM_GENERATION** - The model execution inside the agent
+2. **MODEL_GENERATION** - The model execution inside the agent
 3. **TOOL_CALL** - Tool executions
 
 Example trace hierarchy:
+
 ```
 AGENT_RUN (example-agent)
-├── LLM_GENERATION (gpt-4) - Model input & output
+├── MODEL_GENERATION (gpt-4) - Model input & output
 ├── TOOL_CALL (getCurrentTime) - Tool execution
 ```
 
 ## Viewing Traces
 
-In the Playground or in Mastra Cloud, go to the Observability page, and click on a Trace. You can also click on individual spans to get input, output, attributes & metadata.
-
+In Studio or Mastra Cloud, go to the Observability page, and click on a Trace. You can also click on individual spans to get input, output, attributes & metadata.
 
 ## Adding Custom Metadata
 
 Enhance your traces with custom metadata:
 
-```typescript filename="src/example-with-metadata.ts" showLineNumbers copy
-const result = await agent.generate(
-  "What time is it?",
-  {
-    // Add custom metadata to traces
-    metadata: {
-      userId: "user_123",
-      sessionId: "session_abc",
-      feature: "time-query",
-      environment: "development"
-    }
-  }
-);
+```typescript title="src/example-with-metadata.ts" showLineNumbers copy
+const result = await agent.generate("What time is it?", {
+  // Add custom metadata to traces
+  metadata: {
+    userId: "user_123",
+    sessionId: "session_abc",
+    feature: "time-query",
+    environment: "development",
+  },
+});
 ```
 
 ## Related
 
 ### Documentation
+
 - [AI Tracing Overview](/docs/observability/ai-tracing/overview) - Complete guide to tracing
 - [Sensitive Data Filter](/docs/observability/ai-tracing/processors/sensitive-data-filter) - Redact sensitive information
 - [Configuration Patterns](/docs/observability/ai-tracing/overview#common-configuration-patterns--troubleshooting) - Best practices
 
 ### Reference
+
 - [Configuration](/reference/observability/ai-tracing/configuration) - ObservabilityConfig API
 - [Exporters](/reference/observability/ai-tracing/exporters/default-exporter) - DefaultExporter details
 - [Span Types](/reference/observability/ai-tracing/span) - Span interfaces and methods
-- [AITracing Classes](/reference/observability/ai-tracing/ai-tracing) - Core tracing classes
+- [AITracing Classes](/reference/observability/ai-tracing/) - Core tracing classes

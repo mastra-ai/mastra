@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
-import { saveScorePayloadSchema } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
 import { ScoresStorage } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
@@ -92,10 +92,10 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
         typeof validatedScore.additionalContext === 'string'
           ? validatedScore.additionalContext
           : JSON.stringify(validatedScore.additionalContext),
-      runtimeContext:
-        typeof validatedScore.runtimeContext === 'string'
-          ? validatedScore.runtimeContext
-          : JSON.stringify(validatedScore.runtimeContext),
+      requestContext:
+        typeof validatedScore.requestContext === 'string'
+          ? validatedScore.requestContext
+          : JSON.stringify(validatedScore.requestContext),
       entityType: validatedScore.entityType,
       entityData:
         typeof validatedScore.entity === 'string' ? validatedScore.entity : JSON.stringify(validatedScore.entity),
@@ -131,7 +131,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     pagination,
     entityId,
@@ -204,7 +204,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -255,7 +255,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -311,7 +311,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     }
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,

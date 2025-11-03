@@ -3,7 +3,7 @@
  * used in AI tracing and observability.
  */
 
-import type { RuntimeContext } from '../runtime-context';
+import type { RequestContext } from '../request-context';
 import { getSelectedAITracing } from './registry';
 import type {
   AISpan,
@@ -55,7 +55,7 @@ export function selectFields(obj: any, fields: string[]): any {
  * @param path - Dot notation path (e.g., 'output.text')
  * @returns The value at the path, or undefined if not found
  */
-function getNestedValue(obj: any, path: string): any {
+export function getNestedValue(obj: any, path: string): any {
   return path.split('.').reduce((current, key) => {
     return current && typeof current === 'object' ? current[key] : undefined;
   }, obj);
@@ -67,7 +67,7 @@ function getNestedValue(obj: any, path: string): any {
  * @param path - Dot notation path (e.g., 'output.text')
  * @param value - Value to set
  */
-function setNestedValue(obj: any, path: string, value: any): void {
+export function setNestedValue(obj: any, path: string, value: any): void {
   const keys = path.split('.');
   const lastKey = keys.pop();
   if (!lastKey) {
@@ -117,13 +117,13 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
   tracingPolicy?: TracingPolicy;
   tracingOptions?: TracingOptions;
   tracingContext?: TracingContext;
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
 }): AISpan<T> | undefined {
-  const { type, attributes, tracingContext, runtimeContext, ...rest } = options;
+  const { type, attributes, tracingContext, requestContext, tracingOptions, ...rest } = options;
 
   const metadata = {
     ...(rest.metadata ?? {}),
-    ...(rest.tracingOptions?.metadata ?? {}),
+    ...(tracingOptions?.metadata ?? {}),
   };
 
   // If we have a current span, create a child span
@@ -138,7 +138,7 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
 
   // Otherwise, try to create a new root span
   const aiTracing = getSelectedAITracing({
-    runtimeContext: runtimeContext,
+    requestContext: requestContext,
   });
 
   return aiTracing?.startSpan<T>({
@@ -146,8 +146,12 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
     attributes,
     ...rest,
     metadata,
+    requestContext,
+    tracingOptions,
+    traceId: tracingOptions?.traceId,
+    parentSpanId: tracingOptions?.parentSpanId,
     customSamplerOptions: {
-      runtimeContext,
+      requestContext,
       metadata,
     },
   });

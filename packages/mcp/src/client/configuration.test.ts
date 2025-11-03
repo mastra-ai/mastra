@@ -1,8 +1,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { RuntimeContext } from '@mastra/core/di';
+import { RequestContext } from '@mastra/core/di';
 import type { ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest';
 import { allTools, mcpServerName } from '../__fixtures__/fire-crawl-complex-schema';
@@ -98,7 +97,7 @@ describe('MCPClient', () => {
     });
 
     it('should get connected tools with namespaced tool names', async () => {
-      const connectedTools = await mcp.getTools();
+      const connectedTools = await mcp.listTools();
 
       // Each tool should be namespaced with its server name
       expect(connectedTools).toHaveProperty('stockPrice_getStockPrice');
@@ -106,7 +105,7 @@ describe('MCPClient', () => {
     });
 
     it('should get connected toolsets grouped by server', async () => {
-      const connectedToolsets = await mcp.getToolsets();
+      const connectedToolsets = await mcp.listToolsets();
 
       expect(connectedToolsets).toHaveProperty('stockPrice');
       expect(connectedToolsets).toHaveProperty('weather');
@@ -488,7 +487,7 @@ describe('MCPClient', () => {
         },
       });
 
-      const error = await config.getTools().catch(e => e);
+      const error = await config.listTools().catch(e => e);
       expect(error).toBeDefined(); // Will throw since server exits before responding
       expect(error.message).not.toMatch(/Request timed out/);
 
@@ -516,7 +515,7 @@ describe('MCPClient', () => {
       });
 
       // This should succeed since server timeout (3s) is longer than delay (2s)
-      const error = await config.getTools().catch(e => e);
+      const error = await config.listTools().catch(e => e);
       expect(error).toBeDefined(); // Will throw since server exits before responding
       expect(error.message).not.toMatch(/Request timed out/);
 
@@ -537,7 +536,7 @@ describe('MCPClient', () => {
         },
       });
 
-      await expect(slowConfig.getTools()).rejects.toThrow(/Request timed out/);
+      await expect(slowConfig.listTools()).rejects.toThrow(/Request timed out/);
       await slowConfig.disconnect();
     });
 
@@ -553,7 +552,7 @@ describe('MCPClient', () => {
         },
       });
 
-      const error = await slowConfig.getTools().catch(e => e);
+      const error = await slowConfig.listTools().catch(e => e);
       expect(error).toBeDefined();
       expect(error.message).not.toMatch(/Request timed out/);
       await slowConfig.disconnect();
@@ -577,7 +576,7 @@ describe('MCPClient', () => {
       });
 
       // Quick server should timeout
-      await expect(mixedConfig.getTools()).rejects.toThrow(/Request timed out/);
+      await expect(mixedConfig.listTools()).rejects.toThrow(/Request timed out/);
       await mixedConfig.disconnect();
     });
 
@@ -591,7 +590,7 @@ describe('MCPClient', () => {
         },
       });
 
-      await expect(badConfig.getTools()).rejects.toThrow();
+      await expect(badConfig.listTools()).rejects.toThrow();
       await badConfig.disconnect();
     });
   });
@@ -617,11 +616,11 @@ describe('MCPClient', () => {
 
     afterEach(async () => {
       mockLogHandler.mockClear();
-      await complexClient?.disconnect().catch(() => {});
+      await complexClient?.disconnect().catch(() => { });
     });
 
     it('should process tools from firecrawl-mcp without crashing', async () => {
-      const tools = await complexClient.getTools();
+      const tools = await complexClient.listTools();
 
       Object.keys(allTools).forEach(toolName => {
         expect(tools).toHaveProperty(`${mcpServerName.replace(`-fixture`, ``)}_${toolName}`);
@@ -643,9 +642,9 @@ describe('MCPClient', () => {
       clientsToCleanup = []; // Reset for the next test
     });
 
-    it('should pass runtimeContext to the server logger function during tool execution', async () => {
+    it('should pass requestContext to the server logger function during tool execution', async () => {
       type TestContext = { channel: string; userId: string };
-      const testContextInstance = new RuntimeContext<TestContext>();
+      const testContextInstance = new RequestContext<TestContext>();
       testContextInstance.set('channel', 'test-channel-123');
       testContextInstance.set('userId', 'user-abc-987');
       const loggerFn = vi.fn();
@@ -662,23 +661,22 @@ describe('MCPClient', () => {
       });
       clientsToCleanup.push(clientForTest);
 
-      const tools = await clientForTest.getTools();
+      const tools = await clientForTest.listTools();
       const stockTool = tools['stockPrice_getStockPrice'];
       expect(stockTool).toBeDefined();
 
-      await stockTool.execute({
-        context: { symbol: 'MSFT' },
-        runtimeContext: testContextInstance,
-      });
+      await stockTool.execute!({
+        symbol: 'MSFT',
+      }, { requestContext: testContextInstance });
 
       expect(loggerFn).toHaveBeenCalled();
       const callWithContext = loggerFn.mock.calls.find(call => {
         const logMessage = call[0] as LogMessage;
         return (
-          logMessage.runtimeContext &&
-          typeof logMessage.runtimeContext.get === 'function' &&
-          logMessage.runtimeContext.get('channel') === 'test-channel-123' &&
-          logMessage.runtimeContext.get('userId') === 'user-abc-987'
+          logMessage.requestContext &&
+          typeof logMessage.requestContext.get === 'function' &&
+          logMessage.requestContext.get('channel') === 'test-channel-123' &&
+          logMessage.requestContext.get('userId') === 'user-abc-987'
         );
       });
       expect(callWithContext).toBeDefined();
@@ -686,9 +684,9 @@ describe('MCPClient', () => {
       expect(capturedLogMessage?.serverName).toEqual('stockPrice');
     }, 15000);
 
-    it('should pass runtimeContext to MCP logger when tool is called via an Agent', async () => {
+    it('should pass requestContext to MCP logger when tool is called via an Agent', async () => {
       type TestAgentContext = { traceId: string; tenant: string };
-      const agentTestContext = new RuntimeContext<TestAgentContext>();
+      const agentTestContext = new RequestContext<TestAgentContext>();
       agentTestContext.set('traceId', 'agent-trace-xyz');
       agentTestContext.set('tenant', 'acme-corp');
       const loggerFn = vi.fn();
@@ -708,22 +706,23 @@ describe('MCPClient', () => {
 
       const agentName = 'stockAgentForContextTest';
       const agent = new Agent({
+        id: agentName,
         name: agentName,
-        model: openai('gpt-4o'),
+        model: 'openai/gpt-4o',
         instructions: 'Use the getStockPrice tool to find the price of MSFT.',
-        tools: await mcpClientForAgentTest.getTools(),
+        tools: await mcpClientForAgentTest.listTools(),
       });
 
-      await agent.generate('What is the price of MSFT?', { runtimeContext: agentTestContext });
+      await agent.generate('What is the price of MSFT?', { requestContext: agentTestContext });
 
       expect(loggerFn).toHaveBeenCalled();
       const callWithAgentContext = loggerFn.mock.calls.find(call => {
         const logMessage = call[0] as LogMessage;
         return (
-          logMessage.runtimeContext &&
-          typeof logMessage.runtimeContext.get === 'function' &&
-          logMessage.runtimeContext.get('traceId') === 'agent-trace-xyz' &&
-          logMessage.runtimeContext.get('tenant') === 'acme-corp'
+          logMessage.requestContext &&
+          typeof logMessage.requestContext.get === 'function' &&
+          logMessage.requestContext.get('traceId') === 'agent-trace-xyz' &&
+          logMessage.requestContext.get('tenant') === 'acme-corp'
         );
       });
       expect(callWithAgentContext).toBeDefined();
@@ -733,7 +732,7 @@ describe('MCPClient', () => {
       }
     }, 20000);
 
-    it('should correctly use different runtimeContexts on sequential direct tool calls', async () => {
+    it('should correctly use different requestContexts on sequential direct tool calls', async () => {
       const loggerFn = vi.fn();
       const clientForSeqTest = new MCPClient({
         id: 'mcp-sequential-context-test',
@@ -748,45 +747,45 @@ describe('MCPClient', () => {
       });
       clientsToCleanup.push(clientForSeqTest);
 
-      const tools = await clientForSeqTest.getTools();
+      const tools = await clientForSeqTest.listTools();
       const stockTool = tools['stockPriceServer_getStockPrice'];
       expect(stockTool).toBeDefined();
 
       type ContextA = { callId: string };
-      const runtimeContextA = new RuntimeContext<ContextA>();
-      runtimeContextA.set('callId', 'call-A-111');
-      await stockTool.execute({ context: { symbol: 'MSFT' }, runtimeContext: runtimeContextA });
+      const requestContextA = new RequestContext<ContextA>();
+      requestContextA.set('callId', 'call-A-111');
+      await stockTool.execute({ symbol: 'MSFT' }, { requestContext: requestContextA });
 
       expect(loggerFn).toHaveBeenCalled();
       let callsAfterA = [...loggerFn.mock.calls];
       const logCallForA = callsAfterA.find(
-        call => (call[0] as LogMessage).runtimeContext?.get('callId') === 'call-A-111',
+        call => (call[0] as LogMessage).requestContext?.get('callId') === 'call-A-111',
       );
       expect(logCallForA).toBeDefined();
-      expect((logCallForA?.[0] as LogMessage)?.runtimeContext?.get('callId')).toBe('call-A-111');
+      expect((logCallForA?.[0] as LogMessage)?.requestContext?.get('callId')).toBe('call-A-111');
 
       loggerFn.mockClear();
 
       type ContextB = { sessionId: string };
-      const runtimeContextB = new RuntimeContext<ContextB>();
-      runtimeContextB.set('sessionId', 'session-B-222');
-      await stockTool.execute({ context: { symbol: 'GOOG' }, runtimeContext: runtimeContextB });
+      const requestContextB = new RequestContext<ContextB>();
+      requestContextB.set('sessionId', 'session-B-222');
+      await stockTool.execute({ symbol: 'GOOG' }, { requestContext: requestContextB });
 
       expect(loggerFn).toHaveBeenCalled();
       let callsAfterB = [...loggerFn.mock.calls];
       const logCallForB = callsAfterB.find(
-        call => (call[0] as LogMessage).runtimeContext?.get('sessionId') === 'session-B-222',
+        call => (call[0] as LogMessage).requestContext?.get('sessionId') === 'session-B-222',
       );
       expect(logCallForB).toBeDefined();
-      expect((logCallForB?.[0] as LogMessage)?.runtimeContext?.get('sessionId')).toBe('session-B-222');
+      expect((logCallForB?.[0] as LogMessage)?.requestContext?.get('sessionId')).toBe('session-B-222');
 
       const contextALeak = callsAfterB.some(
-        call => (call[0] as LogMessage).runtimeContext?.get('callId') === 'call-A-111',
+        call => (call[0] as LogMessage).requestContext?.get('callId') === 'call-A-111',
       );
       expect(contextALeak).toBe(false);
     }, 20000);
 
-    it('should isolate runtimeContext between different servers on the same MCPClient', async () => {
+    it('should isolate requestContext between different servers on the same MCPClient', async () => {
       const sharedLoggerFn = vi.fn();
 
       const clientWithTwoServers = new MCPClient({
@@ -808,7 +807,7 @@ describe('MCPClient', () => {
       });
       clientsToCleanup.push(clientWithTwoServers);
 
-      const tools = await clientWithTwoServers.getTools();
+      const tools = await clientWithTwoServers.listTools();
       const toolX = tools['serverX_getStockPrice'];
       const toolY = tools['serverY_getStockPrice'];
       expect(toolX).toBeDefined();
@@ -816,42 +815,42 @@ describe('MCPClient', () => {
 
       // --- Call tool on Server X with contextX ---
       type ContextX = { requestId: string };
-      const runtimeContextX = new RuntimeContext<ContextX>();
-      runtimeContextX.set('requestId', 'req-X-001');
+      const requestContextX = new RequestContext<ContextX>();
+      requestContextX.set('requestId', 'req-X-001');
 
-      await toolX.execute({ context: { symbol: 'AAA' }, runtimeContext: runtimeContextX });
+      await toolX.execute({ symbol: 'AAA' }, { requestContext: requestContextX });
 
       expect(sharedLoggerFn).toHaveBeenCalled();
       let callsAfterToolX = [...sharedLoggerFn.mock.calls];
       const logCallForX = callsAfterToolX.find(call => {
         const logMessage = call[0] as LogMessage;
-        return logMessage.serverName === 'serverX' && logMessage.runtimeContext?.get('requestId') === 'req-X-001';
+        return logMessage.serverName === 'serverX' && logMessage.requestContext?.get('requestId') === 'req-X-001';
       });
       expect(logCallForX).toBeDefined();
-      expect((logCallForX?.[0] as LogMessage)?.runtimeContext?.get('requestId')).toBe('req-X-001');
+      expect((logCallForX?.[0] as LogMessage)?.requestContext?.get('requestId')).toBe('req-X-001');
 
       sharedLoggerFn.mockClear(); // Clear for next distinct operation
 
       // --- Call tool on Server Y with contextY ---
       type ContextY = { customerId: string };
-      const runtimeContextY = new RuntimeContext<ContextY>();
-      runtimeContextY.set('customerId', 'cust-Y-002');
+      const requestContextY = new RequestContext<ContextY>();
+      requestContextY.set('customerId', 'cust-Y-002');
 
-      await toolY.execute({ context: { symbol: 'BBB' }, runtimeContext: runtimeContextY });
+      await toolY.execute({ symbol: 'BBB' }, { requestContext: requestContextY });
 
       expect(sharedLoggerFn).toHaveBeenCalled();
       let callsAfterToolY = [...sharedLoggerFn.mock.calls];
       const logCallForY = callsAfterToolY.find(call => {
         const logMessage = call[0] as LogMessage;
-        return logMessage.serverName === 'serverY' && logMessage.runtimeContext?.get('customerId') === 'cust-Y-002';
+        return logMessage.serverName === 'serverY' && logMessage.requestContext?.get('customerId') === 'cust-Y-002';
       });
       expect(logCallForY).toBeDefined();
-      expect((logCallForY?.[0] as LogMessage)?.runtimeContext?.get('customerId')).toBe('cust-Y-002');
+      expect((logCallForY?.[0] as LogMessage)?.requestContext?.get('customerId')).toBe('cust-Y-002');
 
       // Ensure contextX did not leak into logs from serverY's operation
       const contextXLeakInYLogs = callsAfterToolY.some(call => {
         const logMessage = call[0] as LogMessage;
-        return logMessage.runtimeContext?.get('requestId') === 'req-X-001';
+        return logMessage.requestContext?.get('requestId') === 'req-X-001';
       });
       expect(contextXLeakInYLogs).toBe(false);
     }, 25000); // Increased timeout for multiple server ops

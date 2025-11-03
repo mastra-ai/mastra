@@ -3,17 +3,15 @@ import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { ToolSet } from 'ai-v5';
 import { MessageList } from '../../../agent/message-list';
-import { safeParseErrorObject } from '../../../error/utils.js';
+import { getErrorFromUnknown } from '../../../error/utils.js';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
-import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
 import { MastraModelOutput } from '../../../stream/base/output';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type {
   ChunkType,
   ExecuteStreamModelManager,
   ModelManagerModelConfig,
-  ReasoningStartPayload,
   TextStartPayload,
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
@@ -61,37 +59,6 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       continue;
     }
 
-    // Reasoning
-    if (
-      chunk.type !== 'reasoning-delta' &&
-      chunk.type !== 'reasoning-signature' &&
-      chunk.type !== 'redacted-reasoning' &&
-      runState.state.isReasoning
-    ) {
-      if (runState.state.reasoningDeltas.length) {
-        messageList.add(
-          {
-            id: messageId,
-            role: 'assistant',
-            content: [
-              {
-                type: 'reasoning',
-                text: runState.state.reasoningDeltas.join(''),
-                signature: (chunk.payload as ReasoningStartPayload).signature,
-                providerOptions:
-                  (chunk.payload as ReasoningStartPayload).providerMetadata ?? runState.state.providerOptions,
-              },
-            ],
-          },
-          'response',
-        );
-      }
-      runState.setState({
-        isReasoning: false,
-        reasoningDeltas: [],
-      });
-    }
-
     // Streaming
     if (
       chunk.type !== 'text-delta' &&
@@ -135,6 +102,21 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       runState.setState({
         isStreaming: false,
         textDeltas: [],
+      });
+    }
+
+    if (
+      chunk.type !== 'reasoning-start' &&
+      chunk.type !== 'reasoning-delta' &&
+      chunk.type !== 'reasoning-end' &&
+      chunk.type !== 'redacted-reasoning' &&
+      chunk.type !== 'reasoning-signature' &&
+      chunk.type !== 'response-metadata' &&
+      runState.state.isReasoning
+    ) {
+      runState.setState({
+        isReasoning: false,
+        reasoningDeltas: [],
       });
     }
 
@@ -212,6 +194,8 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
 
       case 'reasoning-start': {
         runState.setState({
+          isReasoning: true,
+          reasoningDeltas: [],
           providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
         });
 
@@ -249,6 +233,37 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
           reasoningDeltas: reasoningDeltasFromState,
           providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
         });
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
+        break;
+      }
+
+      case 'reasoning-end': {
+        // Use the accumulated reasoning deltas from runState
+        if (runState.state.reasoningDeltas.length > 0) {
+          messageList.add(
+            {
+              id: messageId,
+              role: 'assistant',
+              content: [
+                {
+                  type: 'reasoning',
+                  text: runState.state.reasoningDeltas.join(''),
+                  providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
+                },
+              ],
+            },
+            'response',
+          );
+        }
+
+        // Reset reasoning state
+        runState.setState({
+          isReasoning: false,
+          reasoningDeltas: [],
+        });
+
         if (isControllerOpen(controller)) {
           controller.enqueue(chunk);
         }
@@ -333,18 +348,13 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
           },
         });
 
-        let e = chunk.payload.error as any;
-        if (typeof e === 'object') {
-          const errorMessage = safeParseErrorObject(e);
-          const originalCause = e instanceof Error ? e.cause : undefined;
-          e = new Error(errorMessage, originalCause ? { cause: originalCause } : undefined);
-          Object.assign(e, chunk.payload.error);
-        }
-
-        controller.enqueue({ ...chunk, payload: { ...chunk.payload, error: e } });
-        await options?.onError?.({ error: e });
-
+        const error = getErrorFromUnknown(chunk.payload.error, {
+          fallbackMessage: 'Unknown error in agent stream',
+        });
+        controller.enqueue({ ...chunk, payload: { ...chunk.payload, error } });
+        await options?.onError?.({ error });
         break;
+
       default:
         if (isControllerOpen(controller)) {
           controller.enqueue(chunk);
@@ -362,14 +372,11 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         'raw',
       ].includes(chunk.type)
     ) {
-      const transformedChunk = convertMastraChunkToAISDKv5({
-        chunk,
-      });
       if (chunk.type === 'raw' && !includeRawChunks) {
-        return;
+        continue;
       }
 
-      await options?.onChunk?.({ chunk: transformedChunk } as any);
+      await options?.onChunk?.(chunk);
     }
 
     if (runState.state.hasErrored) {
@@ -425,8 +432,6 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   _internal,
   messageId,
   runId,
-  modelStreamSpan,
-  telemetry_settings,
   tools,
   toolChoice,
   messageList,
@@ -530,7 +535,6 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               toolChoice: stepToolChoice,
               options,
               modelSettings,
-              telemetry_settings,
               includeRawChunks,
               structuredOutput,
               headers,
@@ -560,7 +564,6 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
                   },
                 });
               },
-              modelStreamSpan,
               shouldThrowError: !isLastModel,
             });
             break;
@@ -581,9 +584,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
           messageId,
           options: {
             runId,
-            rootSpan: modelStreamSpan,
             toolCallStreaming,
-            telemetry_settings,
             includeRawChunks,
             structuredOutput,
             outputProcessors,
@@ -702,14 +703,14 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
 
       if (toolCalls.length > 0) {
         const assistantContent = [
-          ...(toolCalls.map(toolCall => {
+          ...toolCalls.map(toolCall => {
             return {
-              type: 'tool-call',
+              type: 'tool-call' as const,
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
               args: toolCall.args,
             };
-          }) as any),
+          }),
         ];
 
         messageList.add(

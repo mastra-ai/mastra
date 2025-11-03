@@ -1,9 +1,10 @@
 ---
-title: "Reference: create-mastra | CLI"
+title: "Reference: create-mastra | CLI | Mastra Docs"
 description: Documentation for the create-mastra command, which creates a new Mastra project with interactive setup options.
 ---
 
-import { Tabs, Tab } from "@/components/tabs";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # create-mastra
 
@@ -11,52 +12,68 @@ The `create-mastra` command **creates** a new standalone Mastra project. Use thi
 
 ## Usage
 
-<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
-  <Tab>
-    ```bash copy
-    npx create-mastra@latest
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    yarn dlx create-mastra@latest
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    pnpm create mastra@latest
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    bun create mastra@latest
-    ```
-  </Tab>
+<Tabs>
+<TabItem value="npm" label="npm">
+
+```bash copy
+npx create-mastra@latest
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn dlx create-mastra@latest
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm create mastra@latest
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun create mastra@latest
+```
+
+</TabItem>
 </Tabs>
 
 `create-mastra` automatically runs in _interactive_ mode, but you can also specify your project name and template with command line arguments.
 
-<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
-  <Tab>
-    ```bash copy
-    npx create-mastra@latest my-mastra-project -- --template coding-agent
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    yarn dlx create-mastra@latest --template coding-agent
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    pnpm create mastra@latest --template coding-agent
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    bun create mastra@latest --template coding-agent
-    ```
-  </Tab>
+<Tabs>
+<TabItem value="npm" label="npm">
+
+```bash copy
+npx create-mastra@latest my-mastra-project -- --template coding-agent
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn dlx create-mastra@latest --template coding-agent
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm create mastra@latest --template coding-agent
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun create mastra@latest --template coding-agent
+```
+
+</TabItem>
 </Tabs>
 
 Check out the [full list](https://mastra.ai/api/templates.json) of templates and use the `slug` as input to the `--template` CLI flag.
@@ -96,7 +113,7 @@ Instead of an interactive prompt you can also define these CLI flags.
       name: "--components",
       type: "string",
       description:
-        "Comma-separated list of components (agents, tools, workflows)",
+        "Comma-separated list of components (agents, tools, workflows, scorers)",
       isOptional: true,
     },
     {

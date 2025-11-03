@@ -13,11 +13,12 @@ You can increase this limit by passing the `lastMessages` parameter to the `Memo
 
 ```typescript {3-7} showLineNumbers
 export const testAgent = new Agent({
+  id: "test-agent",
   // ...
   memory: new Memory({
     options: {
-      lastMessages: 20
+      lastMessages: 20,
     },
-  })
+  }),
 });
 ```

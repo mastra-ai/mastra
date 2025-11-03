@@ -11,6 +11,7 @@ const memory = new Memory({
 });
 
 export const pdfSummarizationAgent = new Agent({
+  id: 'pdf-summarization-agent',
   name: 'PDF Summarization Agent',
   description: 'An agent that summarizes extracted PDF text using a large context window model',
   instructions: `

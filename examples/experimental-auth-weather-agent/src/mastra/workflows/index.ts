@@ -4,6 +4,7 @@ import { Step, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 const agent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   instructions: `
         You are a local activities and travel expert who excels at weather-based planning. Analyze the weather data and provide practical activity recommendations.
@@ -48,19 +49,13 @@ const fetchWeather = new Step({
   inputSchema: z.object({
     city: z.string().describe('The city to get the weather for'),
   }),
-  execute: async ({ context }) => {
-    const triggerData = context?.getStepResult<{ city: string }>('trigger');
-
-    if (!triggerData) {
-      throw new Error('Trigger data not found');
-    }
-
-    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(triggerData.city)}&count=1`;
+  execute: async (inputData, context) => {
+    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`;
     const geocodingResponse = await fetch(geocodingUrl);
     const geocodingData = await geocodingResponse.json();
 
     if (!geocodingData.results?.[0]) {
-      throw new Error(`Location '${triggerData.city}' not found`);
+      throw new Error(`Location '${inputData.city}' not found`);
     }
 
     const { latitude, longitude, name } = geocodingData.results[0];
@@ -97,15 +92,13 @@ const planActivities = new Step({
   id: 'plan-activities',
   description: 'Suggests activities based on weather conditions',
   inputSchema: forecastSchema,
-  execute: async ({ context, mastra }) => {
-    const forecast = context?.getStepResult<z.infer<typeof forecastSchema>>('fetch-weather');
-
-    if (!forecast) {
+  execute: async (inputData, context) => {
+    if (!inputData || inputData.length === 0) {
       throw new Error('Forecast data not found');
     }
 
-    const prompt = `Based on the following weather forecast for ${forecast[0].location}, suggest appropriate activities:
-      ${JSON.stringify(forecast, null, 2)}
+    const prompt = `Based on the following weather forecast for ${inputData[0].location}, suggest appropriate activities:
+      ${JSON.stringify(inputData, null, 2)}
       `;
 
     const response = await agent.stream([

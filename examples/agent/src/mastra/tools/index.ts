@@ -7,10 +7,11 @@ export const cookingTool = createTool({
   inputSchema: z.object({
     ingredient: z.string(),
   }),
-  execute: async ({ context }, options) => {
-    console.log('My cooking tool is running!', context.ingredient);
-    if (options?.toolCallId) {
-      console.log('Cooking tool call ID:', options.toolCallId);
+  execute: async (inputData, context) => {
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    console.log('My cooking tool is running!', inputData.ingredient);
+    if (context?.agent?.toolCallId) {
+      console.log('Cooking tool call ID:', context.agent.toolCallId);
     }
     return 'My tool result';
   },

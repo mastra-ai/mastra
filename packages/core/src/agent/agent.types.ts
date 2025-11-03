@@ -1,13 +1,13 @@
-import type { TelemetrySettings } from 'ai';
 import type { ModelMessage, ToolChoice } from 'ai-v5';
 import type { TracingContext, TracingOptions } from '../ai-tracing';
+import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
+import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { InputProcessor, OutputProcessor } from '../processors';
-import type { RuntimeContext } from '../runtime-context';
-import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
+import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import type { MessageListInput } from './message-list';
@@ -19,8 +19,8 @@ export type MultiPrimitiveExecutionOptions = {
   /** Unique identifier for this execution run */
   runId?: string;
 
-  /** Runtime context containing dynamic configuration and state */
-  runtimeContext?: RuntimeContext;
+  /** Request Context containing dynamic configuration and state */
+  requestContext?: RequestContext;
 
   /** Maximum number of steps to run */
   maxSteps?: number;
@@ -30,20 +30,12 @@ export type MultiPrimitiveExecutionOptions = {
 
   /** Model-specific settings like temperature, maxTokens, topP, etc. */
   modelSettings?: LoopOptions['modelSettings'];
-
-  telemetry?: TelemetrySettings;
 };
 
 export type AgentExecutionOptions<
   OUTPUT extends OutputSchema = undefined,
   FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
 > = {
-  /**
-   * Determines the output stream format. Use 'mastra' for Mastra's native format (default) or 'aisdk' for AI SDK v5 compatibility.
-   * @default 'mastra'
-   */
-  format?: FORMAT;
-
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;
 
@@ -62,16 +54,13 @@ export type AgentExecutionOptions<
   /** Save messages incrementally after each stream step completes (default: false). */
   savePerStep?: boolean;
 
-  /** Runtime context containing dynamic configuration and state */
-  runtimeContext?: RuntimeContext;
+  /** Request Context containing dynamic configuration and state */
+  requestContext?: RequestContext;
 
   /** @deprecated Use memory.resource instead. Identifier for the resource/user */
   resourceId?: string;
   /** @deprecated Use memory.thread instead. Thread identifier for conversation continuity */
   threadId?: string;
-
-  /** Telemetry collection settings for observability */
-  telemetry?: TelemetrySettings;
 
   /** Maximum number of steps to run */
   maxSteps?: number;
@@ -80,7 +69,7 @@ export type AgentExecutionOptions<
   stopWhen?: LoopOptions['stopWhen'];
 
   /** Provider-specific options passed to the language model */
-  providerOptions?: LoopOptions['providerOptions'];
+  providerOptions?: ProviderOptions;
 
   /** Callback fired after each execution step. Type varies by format */
   onStepFinish?: FORMAT extends 'aisdk' ? StreamTextOnStepFinishCallback<any> : LoopConfig['onStepFinish'];
@@ -134,13 +123,6 @@ export type AgentExecutionOptions<
   structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
 };
 
-export type DeprecatedOutputOptions<OUTPUT extends OutputSchema = undefined> = {
-  /** Schema for structured output generation (Zod schema or JSON Schema)
-   * @deprecated Use `structuredOutput.schema` instead. The `output` property will be removed in a future version.
-   */
-  output?: OUTPUT;
-};
-
 export type InnerAgentExecutionOptions<
   OUTPUT extends OutputSchema = undefined,
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
@@ -151,5 +133,9 @@ export type InnerAgentExecutionOptions<
   /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
   model?: MastraLanguageModel;
   /** Internal: Whether the execution is a resume */
-  resumeContext?: any;
+  resumeContext?: {
+    resumeData: any;
+    snapshot: any;
+  };
+  toolCallId?: string;
 };

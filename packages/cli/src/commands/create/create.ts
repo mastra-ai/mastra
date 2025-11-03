@@ -8,14 +8,14 @@ import { loadTemplates, selectTemplate, findTemplateByName, getDefaultProjectNam
 import type { Template } from '../../utils/template-utils';
 import { init } from '../init/init';
 import type { Editor } from '../init/mcp-docs-server-install';
-import type { LLMProvider } from '../init/utils';
+import type { Component, LLMProvider } from '../init/utils';
 import { getPackageManager } from '../utils.js';
 
 import { createMastraProject } from './utils';
 
 export const create = async (args: {
   projectName?: string;
-  components?: string[];
+  components?: Component[];
   llmProvider?: LLMProvider;
   addExample?: boolean;
   llmApiKey?: string;
@@ -60,8 +60,9 @@ export const create = async (args: {
     await init({
       ...result,
       llmApiKey: result?.llmApiKey as string | undefined,
-      components: ['agents', 'tools', 'workflows'],
+      components: ['agents', 'tools', 'workflows', 'scorers'],
       addExample: true,
+      versionTag: args.createVersionTag,
     });
     postCreate({ projectName });
     return;
@@ -85,6 +86,7 @@ export const create = async (args: {
     addExample,
     llmApiKey,
     configureEditorWithDocsMCP: args.mcpServer,
+    versionTag: args.createVersionTag,
   });
 
   postCreate({ projectName });

@@ -5,6 +5,7 @@
 import { MastraBase } from '../../base';
 import type { IMastraLogger } from '../../logger';
 import { RegisteredLogger } from '../../logger/constants';
+import type { RequestContext } from '../../request-context';
 import { NoOpAISpan } from '../spans/no-op';
 import type {
   TracingConfig,
@@ -21,8 +22,11 @@ import type {
   AITracing,
   CustomSamplerOptions,
   AnyExportedAISpan,
+  TraceState,
+  TracingOptions,
 } from '../types';
 import { SamplingStrategyType, AITracingEventType } from '../types';
+import { getNestedValue, setNestedValue } from '../utils';
 
 // ============================================================================
 // Abstract Base Class
@@ -45,14 +49,24 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
       exporters: config.exporters ?? [],
       processors: config.processors ?? [],
       includeInternalSpans: config.includeInternalSpans ?? false,
+      requestContextKeys: config.requestContextKeys ?? [],
     };
   }
 
   /**
    * Override setLogger to add AI tracing specific initialization log
+   * and propagate logger to exporters
    */
   __setLogger(logger: IMastraLogger) {
     super.__setLogger(logger);
+
+    // Propagate logger to all exporters that support it
+    this.exporters.forEach(exporter => {
+      if (typeof exporter.__setLogger === 'function') {
+        exporter.__setLogger(logger);
+      }
+    });
+
     // Log AI tracing initialization details after logger is properly set
     this.logger.debug(
       `[AI Tracing] Initialized [service=${this.config.serviceName}] [instance=${this.config.name}] [sampling=${this.config.sampling.type}]`,
@@ -79,13 +93,31 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
    * Start a new span of a specific AISpanType
    */
   startSpan<TType extends AISpanType>(options: StartSpanOptions<TType>): AISpan<TType> {
-    const { customSamplerOptions, ...createSpanOptions } = options;
+    const { customSamplerOptions, requestContext, metadata, tracingOptions, ...rest } = options;
 
     if (!this.shouldSample(customSamplerOptions)) {
-      return new NoOpAISpan<TType>(createSpanOptions, this);
+      return new NoOpAISpan<TType>({ ...rest, metadata }, this);
     }
 
-    const span = this.createSpan<TType>(createSpanOptions);
+    // Compute or inherit TraceState
+    let traceState: TraceState | undefined;
+
+    if (options.parent) {
+      // Child span: inherit from parent
+      traceState = options.parent.traceState;
+    } else {
+      // Root span: compute new TraceState
+      traceState = this.computeTraceState(tracingOptions);
+    }
+
+    // Extract metadata from RequestContext
+    const enrichedMetadata = this.extractMetadataFromRequestContext(requestContext, metadata, traceState);
+
+    const span = this.createSpan<TType>({
+      ...rest,
+      metadata: enrichedMetadata,
+      traceState,
+    });
 
     if (span.isEvent) {
       this.emitSpanEnded(span);
@@ -221,6 +253,80 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
       default:
         throw new Error(`Sampling strategy type not implemented: ${(sampling as any).type}`);
     }
+  }
+
+  /**
+   * Compute TraceState for a new trace based on configured and per-request keys
+   */
+  protected computeTraceState(tracingOptions?: TracingOptions): TraceState | undefined {
+    const configuredKeys = this.config.requestContextKeys ?? [];
+    const additionalKeys = tracingOptions?.requestContextKeys ?? [];
+
+    // Merge: configured + additional
+    const allKeys = [...configuredKeys, ...additionalKeys];
+
+    if (allKeys.length === 0) {
+      return undefined; // No metadata extraction needed
+    }
+
+    return {
+      requestContextKeys: allKeys,
+    };
+  }
+
+  /**
+   * Extract metadata from RequestContext using TraceState
+   */
+  protected extractMetadataFromRequestContext(
+    requestContext: RequestContext | undefined,
+    explicitMetadata: Record<string, any> | undefined,
+    traceState: TraceState | undefined,
+  ): Record<string, any> | undefined {
+    if (!requestContext || !traceState || traceState.requestContextKeys.length === 0) {
+      return explicitMetadata;
+    }
+
+    const extracted = this.extractKeys(requestContext, traceState.requestContextKeys);
+
+    // Only return an object if we have extracted or explicit metadata
+    if (Object.keys(extracted).length === 0 && !explicitMetadata) {
+      return undefined;
+    }
+
+    return {
+      ...extracted,
+      ...explicitMetadata, // Explicit metadata always wins
+    };
+  }
+
+  /**
+   * Extract specific keys from RequestContext
+   */
+  protected extractKeys(requestContext: RequestContext, keys: string[]): Record<string, any> {
+    const result: Record<string, any> = {};
+
+    for (const key of keys) {
+      // Handle dot notation: get first part from RequestContext, then navigate nested properties
+      const parts = key.split('.');
+      const rootKey = parts[0]!; // parts[0] always exists since key is a non-empty string
+      const value = requestContext.get(rootKey);
+
+      if (value !== undefined) {
+        // If there are nested parts, extract them from the value
+        if (parts.length > 1) {
+          const nestedPath = parts.slice(1).join('.');
+          const nestedValue = getNestedValue(value, nestedPath);
+          if (nestedValue !== undefined) {
+            setNestedValue(result, key, nestedValue);
+          }
+        } else {
+          // Simple key, set directly
+          setNestedValue(result, key, value);
+        }
+      }
+    }
+
+    return result;
   }
 
   /**

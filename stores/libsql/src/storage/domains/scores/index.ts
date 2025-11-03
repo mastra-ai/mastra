@@ -1,7 +1,7 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { saveScorePayloadSchema } from '@mastra/core/scores';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { TABLE_SCORERS, ScoresStorage, safelyParseJSON } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsLibSQL } from '../operations';
@@ -15,7 +15,7 @@ export class ScoresLibSQL extends ScoresStorage {
     this.client = client;
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -48,7 +48,7 @@ export class ScoresLibSQL extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     entityId,
     entityType,
@@ -118,7 +118,7 @@ export class ScoresLibSQL extends ScoresStorage {
     const inputValue = safelyParseJSON(row.input ?? '{}');
     const outputValue = safelyParseJSON(row.output ?? '{}');
     const additionalLLMContextValue = row.additionalLLMContext ? safelyParseJSON(row.additionalLLMContext) : null;
-    const runtimeContextValue = row.runtimeContext ? safelyParseJSON(row.runtimeContext) : null;
+    const requestContextValue = row.requestContext ? safelyParseJSON(row.requestContext) : null;
     const metadataValue = row.metadata ? safelyParseJSON(row.metadata) : null;
     const entityValue = row.entity ? safelyParseJSON(row.entity) : null;
     const preprocessStepResultValue = row.preprocessStepResult ? safelyParseJSON(row.preprocessStepResult) : null;
@@ -142,7 +142,7 @@ export class ScoresLibSQL extends ScoresStorage {
       input: inputValue,
       output: outputValue,
       additionalContext: additionalLLMContextValue,
-      runtimeContext: runtimeContextValue,
+      requestContext: requestContextValue,
       entityType: row.entityType,
       entity: entityValue,
       entityId: row.entityId,
@@ -174,7 +174,7 @@ export class ScoresLibSQL extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer.name,
+            scorer: score.scorer.id,
             entityId: score.entityId,
             entityType: score.entityType,
             traceId: score.traceId || '',
@@ -212,7 +212,7 @@ export class ScoresLibSQL extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -247,7 +247,7 @@ export class ScoresLibSQL extends ScoresStorage {
     }
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,

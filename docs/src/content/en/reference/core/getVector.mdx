@@ -20,7 +20,8 @@ mastra.getVector("testVectorStore");
     {
       name: "name",
       type: "TVectorName extends keyof TVectors",
-      description: "The name of the vector store to retrieve. Must be a valid vector store name that exists in the Mastra configuration.",
+      description:
+        "The name of the vector store to retrieve. Must be a valid vector store name that exists in the Mastra configuration.",
     },
   ]}
 />
@@ -32,12 +33,13 @@ mastra.getVector("testVectorStore");
     {
       name: "vector",
       type: "TVectors[TVectorName]",
-      description: "The vector store instance with the specified name. Throws an error if the vector store is not found.",
+      description:
+        "The vector store instance with the specified name. Throws an error if the vector store is not found.",
     },
   ]}
 />
 
 ## Related
 
-- [Vector stores overview](../../docs/rag/vector-databases.mdx)
-- [RAG overview](../../docs/rag/overview.mdx)
+- [Vector stores overview](/docs/rag/vector-databases)
+- [RAG overview](/docs/rag/overview)

@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { saveScorePayloadSchema } from '@mastra/core/scores';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import { safelyParseJSON, ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
@@ -17,7 +17,7 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     metadata: safelyParseJSON(row.metadata),
     output: safelyParseJSON(row.output),
     additionalContext: safelyParseJSON(row.additionalContext),
-    runtimeContext: safelyParseJSON(row.runtimeContext),
+    requestContext: safelyParseJSON(row.requestContext),
     entity: safelyParseJSON(row.entity),
     createdAt: row.createdAtZ || row.createdAt,
     updatedAt: row.updatedAtZ || row.updatedAt,
@@ -64,7 +64,7 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     pagination,
     entityId,
@@ -152,7 +152,7 @@ export class ScoresPG extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer.name,
+            scorer: score.scorer.id,
             entityId: score.entityId,
             entityType: score.entityType,
             traceId: score.traceId || '',
@@ -175,7 +175,7 @@ export class ScoresPG extends ScoresStorage {
         input,
         output,
         additionalContext,
-        runtimeContext,
+        requestContext,
         entity,
         ...rest
       } = parsedScore;
@@ -192,7 +192,7 @@ export class ScoresPG extends ScoresStorage {
           analyzeStepResult: analyzeStepResult ? JSON.stringify(analyzeStepResult) : null,
           metadata: metadata ? JSON.stringify(metadata) : null,
           additionalContext: additionalContext ? JSON.stringify(additionalContext) : null,
-          runtimeContext: runtimeContext ? JSON.stringify(runtimeContext) : null,
+          requestContext: requestContext ? JSON.stringify(requestContext) : null,
           entity: entity ? JSON.stringify(entity) : null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -213,7 +213,7 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -262,7 +262,7 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -314,7 +314,7 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,

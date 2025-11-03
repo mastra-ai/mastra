@@ -1,5 +1,5 @@
 ---
-title: "Reference: Run.observeStreamVNext() | Workflows | Mastra Docs"
+title: "Reference: Run.observeStreamVNext() (Experimental) | Streaming | Mastra Docs"
 description: Documentation for the `Run.observeStreamVNext()` method in workflows, which enables reopening the stream of an already active workflow run.
 ---
 
@@ -10,7 +10,7 @@ The `.observeStreamVNext()` method opens a new `ReadableStream` to a workflow ru
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 run.streamVNext({
   inputData: {
@@ -41,7 +41,7 @@ The stream emits various event types during workflow execution. Each event has a
 
 ## Related
 
-- [Workflows overview](../../../docs/workflows/overview.mdx#run-workflow)
-- [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run.mdx)
-- [Run.streamVNext()](./streamVNext.mdx)
-- [Run.resumeStreamVNext()](./resumeStreamVNext.mdx)
+- [Workflows overview](/docs/workflows/overview#running-workflows)
+- [Workflow.createRun()](/reference/workflows/workflow-methods/create-run)
+- [Run.streamVNext()](./streamVNext)
+- [Run.resumeStreamVNext()](./resumeStreamVNext)

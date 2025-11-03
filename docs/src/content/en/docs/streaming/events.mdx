@@ -1,5 +1,5 @@
 ---
-title: "Streaming Events | Streaming | Mastra"
+title: "Streaming Events | Streaming | Mastra Docs"
 description: "Learn about the different types of streaming events in Mastra, including text deltas, tool calls, step events, and how to handle them in your applications."
 ---
 
@@ -56,7 +56,7 @@ for await (const chunk of stream) {
 }
 ```
 
-> See [Agent.stream()](../../reference/agents/stream.mdx) for more information.
+> See [Agent.stream()](/reference/streaming/agents/stream) for more information.
 
 ### Example agent output
 
@@ -94,12 +94,12 @@ Iterate over the `stream` with a `for await` loop to inspect all emitted event c
 ```typescript {5,11} showLineNumbers copy
 const testWorkflow = mastra.getWorkflow("testWorkflow");
 
-const run = await testWorkflow.createRunAsync();
+const run = await testWorkflow.createRun();
 
 const stream = await run.stream({
   inputData: {
-    value: "initial data"
-  }
+    value: "initial data",
+  },
 });
 
 for await (const chunk of stream) {
@@ -139,14 +139,16 @@ When using multi-agent collaboration with `agent.network()`, iterate over the st
 ```typescript {3,5} showLineNumbers copy
 const networkAgent = mastra.getAgent("networkAgent");
 
-const networkStream = await networkAgent.network("Research dolphins then write a report");
+const networkStream = await networkAgent.network(
+  "Research dolphins then write a report",
+);
 
 for await (const chunk of networkStream) {
   console.log(chunk);
 }
 ```
 
-> See [Agent.network()](../../reference/agents/network.mdx) for more information.
+> See [Agent.network()](/reference/agents/network) for more information.
 
 ### Example network output
 
@@ -201,23 +203,29 @@ Network streams emit events that track the orchestration flow. Each iteration be
 You can filter events by type to track specific aspects of the network execution:
 
 ```typescript {5-8,11-13,16-18} showLineNumbers copy
-const networkStream = await networkAgent.network("Analyze data and create visualization");
+const networkStream = await networkAgent.network(
+  "Analyze data and create visualization",
+);
 
 for await (const chunk of networkStream) {
   // Track routing decisions
-  if (chunk.type === 'routing-agent-end') {
-    console.log('Selected:', chunk.payload.resourceType, chunk.payload.resourceId);
-    console.log('Reason:', chunk.payload.selectionReason);
+  if (chunk.type === "routing-agent-end") {
+    console.log(
+      "Selected:",
+      chunk.payload.resourceType,
+      chunk.payload.resourceId,
+    );
+    console.log("Reason:", chunk.payload.selectionReason);
   }
-  
+
   // Track agent delegations
-  if (chunk.type === 'agent-execution-start') {
-    console.log('Delegating to agent:', chunk.payload.agentId);
+  if (chunk.type === "agent-execution-start") {
+    console.log("Delegating to agent:", chunk.payload.agentId);
   }
-  
+
   // Track workflow delegations
-  if (chunk.type === 'workflow-execution-start') {
-    console.log('Executing workflow:', chunk.payload.name);
+  if (chunk.type === "workflow-execution-start") {
+    console.log("Executing workflow:", chunk.payload.name);
   }
 }
 ```

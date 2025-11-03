@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { describeRoute } from 'hono-openapi';
-import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers';
+import { listLogsByRunIdHandler, listLogsHandler, listLogTransports } from './handlers';
 
 export function logsRouter() {
   const router = new Hono();
@@ -60,7 +60,7 @@ export function logsRouter() {
         },
       },
     }),
-    getLogsHandler,
+    listLogsHandler,
   );
 
   router.get(
@@ -74,7 +74,7 @@ export function logsRouter() {
         },
       },
     }),
-    getLogTransports,
+    listLogTransports,
   );
 
   router.get(
@@ -138,7 +138,7 @@ export function logsRouter() {
         },
       },
     }),
-    getLogsByRunIdHandler,
+    listLogsByRunIdHandler,
   );
 
   return router;

@@ -5,7 +5,6 @@ import {
   TABLE_THREADS,
   TABLE_MESSAGES,
   TABLE_TRACES,
-  TABLE_EVALS,
   TABLE_SCORERS,
   TABLE_AI_SPANS,
   TABLE_SCHEMAS,
@@ -57,8 +56,9 @@ export class StoreOperationsPG extends StoreOperations {
       const schema = TABLE_SCHEMAS[tableName];
       const columnSchema = schema?.[key];
 
-      // If the column is JSONB and the value is an object/array, stringify it
-      if (columnSchema?.type === 'jsonb' && value !== null && typeof value === 'object') {
+      // If the column is JSONB, stringify the value (unless it's null/undefined)
+      // PostgreSQL JSONB columns require valid JSON, so even primitives need to be stringified
+      if (columnSchema?.type === 'jsonb' && value !== null && value !== undefined) {
         return JSON.stringify(value);
       }
       return value;
@@ -82,15 +82,33 @@ export class StoreOperationsPG extends StoreOperations {
 
   /**
    * Prepares a value for database operations, handling Date objects and JSON serialization
+   * This is schema-aware and only stringifies objects for JSONB columns
    */
-  private prepareValue(value: any): any {
-    if (value instanceof Date) {
-      return value.toISOString();
-    } else if (typeof value === 'object' && value !== null) {
-      return JSON.stringify(value);
-    } else {
+  private prepareValue(value: any, columnName: string, tableName: TABLE_NAMES): any {
+    if (value === null || value === undefined) {
       return value;
     }
+
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    // Get the schema for this table to determine column types
+    const schema = TABLE_SCHEMAS[tableName];
+    const columnSchema = schema?.[columnName];
+
+    // If the column is JSONB, stringify the value
+    // PostgreSQL JSONB columns require valid JSON, so all non-null values need to be stringified
+    if (columnSchema?.type === 'jsonb') {
+      return JSON.stringify(value);
+    }
+
+    // For non-JSONB columns with object values, stringify them (for backwards compatibility)
+    if (typeof value === 'object') {
+      return JSON.stringify(value);
+    }
+
+    return value;
   }
 
   private async setupSchema() {
@@ -293,12 +311,14 @@ export class StoreOperationsPG extends StoreOperations {
    * Set up timestamp triggers for a table to automatically manage createdAt/updatedAt
    */
   private async setupTimestampTriggers(tableName: TABLE_NAMES): Promise<void> {
-    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+    const schemaName = getSchemaName(this.schemaName);
+    const fullTableName = getTableName({ indexName: tableName, schemaName });
+    const functionName = `${schemaName}.trigger_set_timestamps`;
 
     try {
       const triggerSQL = `
-        -- Create or replace the trigger function
-        CREATE OR REPLACE FUNCTION trigger_set_timestamps()
+        -- Create or replace the trigger function in the schema
+        CREATE OR REPLACE FUNCTION ${functionName}()
         RETURNS TRIGGER AS $$
         BEGIN
             IF TG_OP = 'INSERT' THEN
@@ -324,7 +344,7 @@ export class StoreOperationsPG extends StoreOperations {
         CREATE TRIGGER ${tableName}_timestamps
             BEFORE INSERT OR UPDATE ON ${fullTableName}
             FOR EACH ROW
-            EXECUTE FUNCTION trigger_set_timestamps();
+            EXECUTE FUNCTION ${functionName}();
       `;
 
       await this.client.none(triggerSQL);
@@ -717,12 +737,6 @@ export class StoreOperationsPG extends StoreOperations {
         table: TABLE_TRACES,
         columns: ['name', 'startTime DESC'],
       },
-      // Composite index for evals (filter + sort)
-      {
-        name: `${schemaPrefix}mastra_evals_agent_name_created_at_idx`,
-        table: TABLE_EVALS,
-        columns: ['agent_name', 'created_at DESC'],
-      },
       // Composite index for scores (filter + sort)
       {
         name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
@@ -875,7 +889,7 @@ export class StoreOperationsPG extends StoreOperations {
       Object.entries(data).forEach(([key, value]) => {
         const parsedKey = parseSqlIdentifier(key, 'column name');
         setColumns.push(`"${parsedKey}" = $${paramIndex++}`);
-        setValues.push(this.prepareValue(value));
+        setValues.push(this.prepareValue(value, key, tableName));
       });
 
       // Build WHERE clause
@@ -885,7 +899,7 @@ export class StoreOperationsPG extends StoreOperations {
       Object.entries(keys).forEach(([key, value]) => {
         const parsedKey = parseSqlIdentifier(key, 'column name');
         whereConditions.push(`"${parsedKey}" = $${paramIndex++}`);
-        whereValues.push(this.prepareValue(value));
+        whereValues.push(this.prepareValue(value, key, tableName));
       });
 
       const tableName_ = getTableName({

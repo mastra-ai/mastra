@@ -1,4 +1,4 @@
-import type { TextPart } from 'ai';
+import type { TextPart } from '@internal/ai-sdk-v4/message';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
@@ -28,8 +28,8 @@ const mockLogger: IMastraLogger = {
   error: vi.fn(),
   trackException: vi.fn(),
   getTransports: vi.fn(() => []),
-  getLogs: vi.fn(() => []),
-  getLogsByRunId: vi.fn(() => []),
+  listLogs: vi.fn(() => []),
+  listLogsByRunId: vi.fn(() => []),
 } as any;
 
 describe('ProcessorRunner', () => {
@@ -51,7 +51,8 @@ describe('ProcessorRunner', () => {
       const executionOrder: string[] = [];
       const inputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processInput: async ({ messages }) => {
             executionOrder.push('processor1');
             messages.push(createMessage('processed by 1', 'user'));
@@ -59,7 +60,8 @@ describe('ProcessorRunner', () => {
           },
         },
         {
-          name: 'processor2',
+          id: 'processor2',
+          name: 'Processor 2',
           processInput: async ({ messages }) => {
             executionOrder.push('processor2');
             messages.push(createMessage('processed by 2', 'user'));
@@ -90,7 +92,8 @@ describe('ProcessorRunner', () => {
       const executionOrder: string[] = [];
       const inputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processInput: async ({ messages }) => {
             executionOrder.push('processor1-start');
             await new Promise(resolve => setTimeout(resolve, 10));
@@ -99,7 +102,8 @@ describe('ProcessorRunner', () => {
           },
         },
         {
-          name: 'processor2',
+          id: 'processor2',
+          name: 'Processor 2',
           processInput: async ({ messages }) => {
             executionOrder.push('processor2-start');
             await new Promise(resolve => setTimeout(resolve, 10));
@@ -125,7 +129,8 @@ describe('ProcessorRunner', () => {
     it('should abort if tripwire is triggered in input processor', async () => {
       const inputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processInput: async ({ messages, abort }) => {
             messages.push(createMessage('before abort', 'user'));
             abort('Test abort reason');
@@ -133,7 +138,8 @@ describe('ProcessorRunner', () => {
           },
         },
         {
-          name: 'processor2',
+          id: 'processor2',
+          name: 'Processor 2',
           processInput: async ({ messages }) => {
             messages.push(createMessage('should not run', 'user'));
             return messages;
@@ -157,7 +163,8 @@ describe('ProcessorRunner', () => {
     it('should abort with default message when no reason provided', async () => {
       const inputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processInput: async ({ messages: _messages, abort }) => {
             abort();
             return _messages;
@@ -182,7 +189,8 @@ describe('ProcessorRunner', () => {
       const executionOrder: string[] = [];
       const inputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processInput: async ({ messages, abort }) => {
             executionOrder.push('processor1');
             abort('Abort after processor1');
@@ -191,7 +199,8 @@ describe('ProcessorRunner', () => {
           },
         },
         {
-          name: 'processor2',
+          id: 'processor2',
+          name: 'Processor 2',
           processInput: async ({ messages }) => {
             executionOrder.push('processor2');
             return messages;
@@ -216,7 +225,8 @@ describe('ProcessorRunner', () => {
       const executionOrder: string[] = [];
       const inputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processInput: async ({ messages }) => {
             executionOrder.push('processor1');
             messages.push(createMessage('from processor 1', 'user'));
@@ -224,11 +234,13 @@ describe('ProcessorRunner', () => {
           },
         },
         {
-          name: 'processor2',
+          id: 'processor2',
+          name: 'Processor 2',
           // No processInput method - should be skipped
         },
         {
-          name: 'processor3',
+          id: 'processor3',
+          name: 'Processor 3',
           processInput: async ({ messages }) => {
             executionOrder.push('processor3');
             messages.push(createMessage('from processor 3', 'user'));
@@ -254,86 +266,22 @@ describe('ProcessorRunner', () => {
       expect((messages[1].content[0] as TextPart).text).toBe('from processor 1');
       expect((messages[2].content[0] as TextPart).text).toBe('from processor 3');
     });
-
-    describe('telemetry integration', () => {
-      it('should use telemetry.traceMethod for individual processors when telemetry is provided', async () => {
-        const mockTelemetry = {
-          traceMethod: vi.fn((fn, _options) => {
-            return () => fn({ messageList });
-          }),
-        };
-
-        const inputProcessors: Processor[] = [
-          {
-            name: 'processor1',
-            processInput: async ({ messages }) => {
-              messages.push(createMessage('processed', 'user'));
-              return messages;
-            },
-          },
-        ];
-
-        runner = new ProcessorRunner({
-          inputProcessors,
-          outputProcessors: [],
-          logger: mockLogger,
-          agentName: 'test-agent',
-        });
-
-        messageList.add([createMessage('original', 'user')], 'user');
-        await runner.runInputProcessors(messageList, undefined, mockTelemetry);
-
-        expect(mockTelemetry.traceMethod).toHaveBeenCalledWith(expect.any(Function), {
-          spanName: 'agent.inputProcessor.processor1',
-          attributes: {
-            'processor.name': 'processor1',
-            'processor.index': '0',
-            'processor.total': '1',
-          },
-        });
-      });
-
-      it('should work without telemetry when not provided', async () => {
-        const inputProcessors: Processor[] = [
-          {
-            name: 'processor1',
-            processInput: async ({ messages }) => {
-              messages.push(createMessage('processed', 'user'));
-              return messages;
-            },
-          },
-        ];
-
-        runner = new ProcessorRunner({
-          inputProcessors,
-          outputProcessors: [],
-          logger: mockLogger,
-          agentName: 'test-agent',
-        });
-
-        messageList.add([createMessage('original', 'user')], 'user');
-        const result = await runner.runInputProcessors(messageList);
-
-        const messages = await result.get.all.prompt();
-        expect(messages).toHaveLength(2);
-        expect((messages[0].content[0] as TextPart).text).toBe('original');
-        expect((messages[1].content[0] as TextPart).text).toBe('processed');
-      });
-    });
   });
 
   describe('Output Processors', () => {
     it('should run output processors in order', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processOutputResult: async ({ messages }) => {
             messages.push(createMessage('extra message A', 'assistant'));
             return messages;
           },
         },
         {
-          name: 'processor2',
+          id: 'processor2',
+          name: 'Processor 2',
           processOutputResult: async ({ messages }) => {
             messages.push(createMessage('extra message B', 'assistant'));
             return messages;
@@ -367,7 +315,8 @@ describe('ProcessorRunner', () => {
     it('should abort if tripwire is triggered in output processor', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processOutputResult: async ({ messages, abort }) => {
             messages.push(createMessage('before abort', 'assistant'));
             abort('Output processor abort');
@@ -392,18 +341,21 @@ describe('ProcessorRunner', () => {
     it('should skip processors that do not implement processOutputResult', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processOutputResult: async ({ messages }) => {
             messages.push(createMessage('message from processor 1', 'assistant'));
             return messages;
           },
         },
         {
-          name: 'processor2',
+          id: 'processor2',
+          name: 'Processor 2',
           // No processOutputResult method - should be skipped
         },
         {
-          name: 'processor3',
+          id: 'processor3',
+          name: 'Processor 3',
           processOutputResult: async ({ messages }) => {
             messages.push(createMessage('message from processor 3', 'assistant'));
             return messages;
@@ -433,52 +385,14 @@ describe('ProcessorRunner', () => {
       expect((assistantMessage!.content[1] as TextPart).text).toBe('message from processor 1');
       expect((assistantMessage!.content[2] as TextPart).text).toBe('message from processor 3');
     });
-
-    describe('telemetry integration', () => {
-      it('should use telemetry.traceMethod for individual processors when telemetry is provided', async () => {
-        const mockTelemetry = {
-          traceMethod: vi.fn((fn, _options) => {
-            return () => fn({ messageList });
-          }),
-        };
-
-        const outputProcessors: Processor[] = [
-          {
-            name: 'processor1',
-            processOutputResult: async ({ messages }) => {
-              messages.push(createMessage('processed', 'assistant'));
-              return messages;
-            },
-          },
-        ];
-
-        runner = new ProcessorRunner({
-          inputProcessors: [],
-          outputProcessors,
-          logger: mockLogger,
-          agentName: 'test-agent',
-        });
-
-        messageList.add([createMessage('original', 'assistant')], 'response');
-        await runner.runOutputProcessors(messageList, undefined, mockTelemetry);
-
-        expect(mockTelemetry.traceMethod).toHaveBeenCalledWith(expect.any(Function), {
-          spanName: 'agent.outputProcessor.processor1',
-          attributes: {
-            'processor.name': 'processor1',
-            'processor.index': '0',
-            'processor.total': '1',
-          },
-        });
-      });
-    });
   });
 
   describe('Stream Processing', () => {
     it('should process text chunks through output processors', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processOutputStream: async ({ part }) => {
             // Only process text-delta chunks
             if (part.type === 'text-delta') {
@@ -512,7 +426,8 @@ describe('ProcessorRunner', () => {
     it('should abort stream when processor calls abort', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processOutputStream: async ({ part, abort }) => {
             if (part.type === 'text-delta' && part.payload.text?.includes('blocked')) {
               abort('Content blocked');
@@ -542,7 +457,8 @@ describe('ProcessorRunner', () => {
     it('should handle processor errors gracefully', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processOutputStream: async () => {
             throw new Error('Processor error');
           },
@@ -568,7 +484,8 @@ describe('ProcessorRunner', () => {
     it('should skip processors that do not implement processOutputStream', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'processor1',
+          id: 'processor1',
+          name: 'Processor 1',
           processOutputStream: async ({ part }) => {
             // Only process text-delta chunks
             if (part.type === 'text-delta') {
@@ -583,11 +500,13 @@ describe('ProcessorRunner', () => {
           },
         },
         {
-          name: 'processor2',
+          id: 'processor2',
+          name: 'Processor 2',
           // No processOutputStream method - should be skipped
         },
         {
-          name: 'processor3',
+          id: 'processor3',
+          name: 'Processor 3',
           processOutputStream: async ({ part }) => {
             // Only process text-delta chunks
             if (part.type === 'text-delta') {
@@ -641,7 +560,8 @@ describe('ProcessorRunner', () => {
     it('should process chunks with state management', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'statefulProcessor',
+          id: 'statefulProcessor',
+          name: 'Stateful Processor',
           processOutputStream: async ({ part, streamParts }) => {
             // Only emit when we have a complete sentence (ends with period)
             const shouldEmit = part.type === 'text-delta' && part.payload.text?.includes('.');
@@ -685,7 +605,8 @@ describe('ProcessorRunner', () => {
     it('should accumulate chunks for moderation decisions', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'moderationProcessor',
+          id: 'moderationProcessor',
+          name: 'Moderation Processor',
           processOutputStream: async ({ part, abort, streamParts }) => {
             // Check for violence in accumulated text
             const accumulatedText = streamParts.map(c => (c.type === 'text-delta' ? c.payload.text : '')).join('');
@@ -734,7 +655,8 @@ describe('ProcessorRunner', () => {
     it('should handle custom state management', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'customStateProcessor',
+          id: 'customStateProcessor',
+          name: 'Custom State Processor',
           processOutputStream: async ({ part, state }) => {
             // Track word count in custom state
             const wordCount = state.wordCount || 0;
@@ -783,7 +705,8 @@ describe('ProcessorRunner', () => {
     it('should handle stream end detection', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'streamEndProcessor',
+          id: 'streamEndProcessor',
+          name: 'Stream End Processor',
           processOutputStream: async ({ part, streamParts }) => {
             if (part.type === 'text-delta' && part.payload.text === '') {
               // Emit accumulated text at stream end
@@ -838,7 +761,8 @@ describe('ProcessorRunner', () => {
     it('should create a readable stream that processes text chunks', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'filterProcessor',
+          id: 'filterProcessor',
+          name: 'Filter Processor',
           processOutputStream: async ({ part }) => {
             // Only process text-delta chunks
             if (part.type === 'text-delta' && part.payload.text?.includes('blocked')) {
@@ -889,7 +813,8 @@ describe('ProcessorRunner', () => {
     it('should emit tripwire when processor aborts stream', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'abortProcessor',
+          id: 'abortProcessor',
+          name: 'Abort Processor',
           processOutputStream: async ({ part, abort }) => {
             // Only process text-delta chunks
             if (part.type === 'text-delta' && part.payload.text?.includes('abort')) {
@@ -935,7 +860,8 @@ describe('ProcessorRunner', () => {
     it('should pass through non-text chunks unchanged', async () => {
       const outputProcessors: Processor[] = [
         {
-          name: 'textProcessor',
+          id: 'textProcessor',
+          name: 'Text Processor',
           processOutputStream: async ({ part }) => {
             // Only process text-delta chunks
             if (part.type === 'text-delta') {

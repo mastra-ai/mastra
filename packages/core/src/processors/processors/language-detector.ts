@@ -1,9 +1,9 @@
 import z from 'zod';
 import { Agent } from '../../agent';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { TracingContext } from '../../ai-tracing';
-import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { Processor } from '../index';
 
 /**
@@ -30,9 +30,9 @@ export interface TranslationResult {
  * Language detection and translation result (simplified for minimal tokens)
  */
 export interface LanguageDetectionResult {
-  iso_code?: string;
-  confidence?: number;
-  translated_text?: string;
+  iso_code: string | null;
+  confidence: number | null;
+  translated_text?: string | null; // Only present when strategy is 'translate'
 }
 
 /**
@@ -40,7 +40,7 @@ export interface LanguageDetectionResult {
  */
 export interface LanguageDetectorOptions {
   /** Model configuration for the detection/translation agent */
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
 
   /**
    * Target language(s) for the project.
@@ -104,7 +104,8 @@ export interface LanguageDetectorOptions {
  * making it ideal for multilingual AI applications and global deployment.
  */
 export class LanguageDetector implements Processor {
-  readonly name = 'language-detector';
+  readonly id = 'language-detector';
+  readonly name = 'Language Detector';
 
   private detectionAgent: Agent;
   private targetLanguages: string[];
@@ -170,17 +171,18 @@ export class LanguageDetector implements Processor {
 
     // Create internal detection and translation agent
     this.detectionAgent = new Agent({
-      name: 'language-detector',
+      id: 'language-detector',
+      name: 'Language Detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
     });
   }
 
   async processInput(args: {
-    messages: MastraMessageV2[];
+    messages: MastraDBMessage[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     try {
       const { messages, abort, tracingContext } = args;
 
@@ -188,7 +190,7 @@ export class LanguageDetector implements Processor {
         return messages;
       }
 
-      const processedMessages: MastraMessageV2[] = [];
+      const processedMessages: MastraDBMessage[] = [];
 
       // Process each message
       for (const message of messages) {
@@ -254,11 +256,18 @@ export class LanguageDetector implements Processor {
     try {
       const model = await this.detectionAgent.getModel();
       let response;
-      const schema = z.object({
-        iso_code: z.string().optional(),
-        confidence: z.number().min(0).max(1).optional(),
-        translated_text: z.string().optional(),
+
+      const baseSchema = z.object({
+        iso_code: z.string().describe('ISO language code').nullable(),
+        confidence: z.number().min(0).max(1).describe('Detection confidence').nullable(),
       });
+
+      const schema =
+        this.strategy === 'translate'
+          ? baseSchema.extend({
+              translated_text: z.string().describe('Translated text').nullable(),
+            })
+          : baseSchema;
 
       if (model.specificationVersion === 'v2') {
         response = await this.detectionAgent.generate(prompt, {
@@ -278,15 +287,20 @@ export class LanguageDetector implements Processor {
         });
       }
 
-      if (response.object.translated_text && !response.object.confidence) {
-        response.object.confidence = 0.95;
+      const result = response.object as LanguageDetectionResult;
+
+      if (result.translated_text && !result.confidence) {
+        result.confidence = 0.95;
       }
 
-      return response.object;
+      return result;
     } catch (error) {
       console.warn('[LanguageDetector] Detection agent failed, assuming target language:', error);
       // Fail open - assume target language if detection fails
-      return {};
+      return {
+        iso_code: null,
+        confidence: null,
+      };
     }
   }
 
@@ -312,11 +326,11 @@ export class LanguageDetector implements Processor {
    * Handle detected language based on strategy
    */
   private async handleDetectedLanguage(
-    message: MastraMessageV2,
+    message: MastraDBMessage,
     result: LanguageDetectionResult,
     strategy: 'detect' | 'translate' | 'block' | 'warn',
     abort: (reason?: string) => never,
-  ): Promise<MastraMessageV2 | null> {
+  ): Promise<MastraDBMessage | null> {
     const detectedLanguage = result.iso_code ? this.getLanguageName(result.iso_code) : 'Unknown';
     const alertMessage = `Language detected: ${detectedLanguage} (${result.iso_code}) with confidence ${result.confidence?.toFixed(2)}`;
 
@@ -352,12 +366,12 @@ export class LanguageDetector implements Processor {
   /**
    * Create a translated message with original preserved in metadata
    */
-  private createTranslatedMessage(originalMessage: MastraMessageV2, result: LanguageDetectionResult): MastraMessageV2 {
+  private createTranslatedMessage(originalMessage: MastraDBMessage, result: LanguageDetectionResult): MastraDBMessage {
     if (!result.translated_text) {
       return this.addLanguageMetadata(originalMessage, result);
     }
 
-    const translatedMessage: MastraMessageV2 = {
+    const translatedMessage: MastraDBMessage = {
       ...originalMessage,
       content: {
         ...originalMessage.content,
@@ -373,11 +387,11 @@ export class LanguageDetector implements Processor {
    * Add language detection metadata to message
    */
   private addLanguageMetadata(
-    message: MastraMessageV2,
+    message: MastraDBMessage,
     result: LanguageDetectionResult,
-    originalMessage?: MastraMessageV2,
-  ): MastraMessageV2 {
-    const isTargetLanguage = this.isTargetLanguage(result.iso_code);
+    originalMessage?: MastraDBMessage,
+  ): MastraDBMessage {
+    const isTargetLanguage = this.isTargetLanguage(result.iso_code ?? undefined);
 
     const metadata = {
       ...message.content.metadata,
@@ -429,7 +443,7 @@ export class LanguageDetector implements Processor {
   /**
    * Extract text content from message for analysis
    */
-  private extractTextContent(message: MastraMessageV2): string {
+  private extractTextContent(message: MastraDBMessage): string {
     let text = '';
 
     if (message.content.parts) {

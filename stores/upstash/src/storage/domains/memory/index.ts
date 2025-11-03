@@ -1,15 +1,27 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
   MemoryStorage,
   TABLE_RESOURCES,
   TABLE_THREADS,
   resolveMessageLimit,
   TABLE_MESSAGES,
+  preservePerPageForResponse,
+  normalizePerPage,
 } from '@mastra/core/storage';
-import type { StorageGetMessagesArg, PaginationInfo, StorageResourceType } from '@mastra/core/storage';
+import type {
+  StorageGetMessagesArg,
+  PaginationInfo,
+  StorageResourceType,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
+  ThreadOrderBy,
+  ThreadSortDirection,
+} from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
 import type { StoreOperationsUpstash } from '../operations';
 import { ensureDate, getKey, processRecord } from '../utils';
@@ -62,19 +74,30 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  /**
-   * @deprecated use getThreadsByResourceIdPaginated instead
-   */
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
     try {
+      let allThreads: StorageThreadType[] = [];
       const pattern = `${TABLE_THREADS}:*`;
       const keys = await this.operations.scanKeys(pattern);
 
-      if (keys.length === 0) {
-        return [];
-      }
-
-      const allThreads: StorageThreadType[] = [];
       const pipeline = this.client.pipeline();
       keys.forEach(key => pipeline.get(key));
       const results = await pipeline.exec();
@@ -91,53 +114,26 @@ export class StoreMemoryUpstash extends MemoryStorage {
         }
       }
 
-      allThreads.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-      return allThreads;
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            resourceId,
-          },
-        },
-        error,
-      );
-      this.logger?.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      return [];
-    }
-  }
+      // Apply sorting with parameters
+      const sortedThreads = this.sortThreads(allThreads, field, direction);
 
-  public async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page = 0, perPage = 100 } = args;
-
-    try {
-      const allThreads = await this.getThreadsByResourceId({ resourceId });
-
-      const total = allThreads.length;
-      const start = page * perPage;
-      const end = start + perPage;
-      const paginatedThreads = allThreads.slice(start, end);
+      const total = sortedThreads.length;
+      const offset = page * perPage;
+      const end = offset + perPage;
+      const paginatedThreads = sortedThreads.slice(offset, end);
       const hasMore = end < total;
 
       return {
         threads: paginatedThreads,
         total,
         page,
-        perPage,
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         hasMore,
       };
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+          id: 'STORAGE_UPSTASH_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -154,7 +150,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         threads: [],
         total: 0,
         page,
-        perPage,
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         hasMore: false,
       };
     }
@@ -270,13 +266,9 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
-    const { messages, format = 'v1' } = args;
-    if (messages.length === 0) return [];
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+    const { messages } = args;
+    if (messages.length === 0) return { messages: [] };
 
     const threadId = messages[0]?.threadId;
     try {
@@ -341,9 +333,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
             const pipeline2 = this.client.pipeline();
             keys.forEach(key => pipeline2.get(key));
             const results = await pipeline2.exec();
-            const existingMessages = results.filter(
-              (msg): msg is MastraMessageV2 | MastraMessageV1 => msg !== null,
-            ) as (MastraMessageV2 | MastraMessageV1)[];
+            const existingMessages = results.filter((msg): msg is MastraDBMessage => msg !== null) as MastraDBMessage[];
             for (const existingMessage of existingMessages) {
               const existingMessageKey = getMessageKey(existingMessage.threadId!, existingMessage.id);
               if (existingMessage && existingMessage.threadId !== message.threadId) {
@@ -376,9 +366,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
         await pipeline.exec();
       }
 
-      const list = new MessageList().add(messages, 'memory');
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
+      const list = new MessageList().add(messages as any, 'memory');
+      return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
         {
@@ -397,7 +386,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
   private async _getIncludedMessages(
     threadId: string,
     selectBy: StorageGetMessagesArg['selectBy'],
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+  ): Promise<MastraDBMessage[]> {
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     const messageIds = new Set<string>();
@@ -443,33 +432,27 @@ export class StoreMemoryUpstash extends MemoryStorage {
         pipeline.get(getMessageKey(tId, id as string));
       });
       const results = await pipeline.exec();
-      return results.filter(result => result !== null) as MastraMessageV2[] | MastraMessageV1[];
+      return results.filter(result => result !== null) as MastraDBMessage[];
     }
 
     return [];
   }
 
-  private parseStoredMessage(storedMessage: MastraMessageV2 & { _index?: number }): MastraMessageV2 {
+  private parseStoredMessage(storedMessage: MastraDBMessage & { _index?: number }): MastraDBMessage {
     const defaultMessageContent = { format: 2, parts: [{ type: 'text', text: '' }] };
     const { _index, ...rest } = storedMessage;
     return {
       ...rest,
       createdAt: new Date(rest.createdAt),
       content: rest.content || defaultMessageContent,
-    } satisfies MastraMessageV2;
+    } satisfies MastraDBMessage;
   }
 
   /**
    * @deprecated use getMessagesPaginated instead
    */
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
+    const { threadId, resourceId, selectBy } = args;
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
@@ -481,7 +464,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const messageIdToThreadIds: Record<string, string> = {};
 
       if (limit === 0 && !selectBy?.include) {
-        return [];
+        return { messages: [] };
       }
 
       // Then get the most recent messages (or all if no limit)
@@ -510,13 +493,13 @@ export class StoreMemoryUpstash extends MemoryStorage {
           await Promise.all(
             Array.from(messageIds).map(async id => {
               const tId = messageIdToThreadIds[id] || threadId;
-              const byThreadId = await this.client.get<MastraMessageV2 & { _index?: number }>(getMessageKey(tId, id));
+              const byThreadId = await this.client.get<MastraDBMessage & { _index?: number }>(getMessageKey(tId, id));
               if (byThreadId) return byThreadId;
 
               return null;
             }),
           )
-        ).filter(msg => msg !== null) as (MastraMessageV2 & { _index?: number })[]),
+        ).filter(msg => msg !== null) as (MastraDBMessage & { _index?: number })[]),
       ];
 
       // Sort messages by their position in the sorted set
@@ -532,26 +515,20 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Remove _index before returning and handle format conversion properly
       const prepared = dedupedMessages
         .filter(message => message !== null && message !== undefined)
+        .filter(message => !resourceId || message.resourceId === resourceId)
         .map(message => {
-          const { _index, ...messageWithoutIndex } = message as MastraMessageV2 & { _index?: number };
-          return messageWithoutIndex as unknown as MastraMessageV1;
+          const { _index, ...messageWithoutIndex } = message as MastraDBMessage & { _index?: number };
+          return messageWithoutIndex as MastraDBMessage;
         });
 
-      // For backward compatibility, return messages directly without using MessageList
-      // since MessageList has deduplication logic that can cause issues
-      if (format === 'v2') {
-        // Convert V1 format back to V2 format
-        return prepared.map(msg => ({
+      // Return messages in MastraDBMessage format
+      return {
+        messages: prepared.map(msg => ({
           ...msg,
           createdAt: new Date(msg.createdAt),
           content: msg.content || { format: 2, parts: [{ type: 'text', text: '' }] },
-        })) as MastraMessageV2[];
-      }
-
-      return prepared.map(msg => ({
-        ...msg,
-        createdAt: new Date(msg.createdAt),
-      }));
+        })) as MastraDBMessage[],
+      };
     } catch (error) {
       throw new MastraError(
         {
@@ -568,28 +545,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    if (messageIds.length === 0) return [];
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    if (messageIds.length === 0) return { messages: [] };
 
     try {
       // Search in all threads in parallel
@@ -599,21 +556,20 @@ export class StoreMemoryUpstash extends MemoryStorage {
         threadKeys.map(threadKey => {
           const threadId = threadKey.split(':')[1];
           if (!threadId) throw new Error(`Failed to parse thread ID from thread key "${threadKey}"`);
-          return this.client.mget<(MastraMessageV2 & { _index?: number })[]>(
+          return this.client.mget<(MastraDBMessage & { _index?: number })[]>(
             messageIds.map(id => getMessageKey(threadId, id)),
           );
         }),
       );
 
-      const rawMessages = result.flat(1).filter(msg => !!msg) as (MastraMessageV2 & { _index?: number })[];
+      const rawMessages = result.flat(1).filter(msg => !!msg) as (MastraDBMessage & { _index?: number })[];
 
       const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
-      if (format === `v1`) return list.get.all.v1();
-      return list.get.all.v2();
+      return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_MESSAGES_BY_ID_FAILED',
+          id: 'STORAGE_UPSTASH_STORAGE_LIST_MESSAGES_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -625,17 +581,230 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
+  public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+
+    if (!threadId.trim()) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_LIST_MESSAGES_INVALID_THREAD_ID',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        new Error('threadId must be a non-empty string'),
+      );
+    }
+
+    const threadMessagesKey = getThreadMessagesKey(threadId);
+
+    try {
+      const perPage = normalizePerPage(perPageInput, 40);
+
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_UPSTASH_LIST_MESSAGES_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
+      const offset = page * perPage;
+
+      // Get included messages with context if specified
+      let includedMessages: MastraDBMessage[] = [];
+      if (include && include.length > 0) {
+        const selectBy = { include };
+        const included = (await this._getIncludedMessages(threadId, selectBy)) as MastraDBMessage[];
+        includedMessages = included.map(this.parseStoredMessage);
+      }
+
+      // Get all message IDs from the sorted set
+      const allMessageIds = await this.client.zrange(threadMessagesKey, 0, -1);
+      if (allMessageIds.length === 0) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage: preservePerPageForResponse(perPageInput, perPage),
+          hasMore: false,
+        };
+      }
+
+      // Use pipeline to fetch all messages efficiently
+      const pipeline = this.client.pipeline();
+      allMessageIds.forEach(id => pipeline.get(getMessageKey(threadId, id as string)));
+      const results = await pipeline.exec();
+
+      // Process messages and apply filters
+      let messagesData = results
+        .filter((msg): msg is MastraDBMessage & { _index?: number } => msg !== null)
+        .map(this.parseStoredMessage);
+
+      // Filter by resourceId if provided
+      if (resourceId) {
+        messagesData = messagesData.filter(msg => msg.resourceId === resourceId);
+      }
+
+      // Apply date filters if provided
+      const dateRange = filter?.dateRange;
+      if (dateRange?.start) {
+        const fromDate = dateRange.start;
+        messagesData = messagesData.filter(msg => new Date(msg.createdAt).getTime() >= fromDate.getTime());
+      }
+
+      if (dateRange?.end) {
+        const toDate = dateRange.end;
+        messagesData = messagesData.filter(msg => new Date(msg.createdAt).getTime() <= toDate.getTime());
+      }
+
+      // Determine sort field and direction, default to DESC (newest first)
+      const { field, direction } = this.parseOrderBy(orderBy);
+
+      // Type-safe field accessor helper
+      const getFieldValue = (msg: MastraDBMessage): number => {
+        if (field === 'createdAt') {
+          return new Date(msg.createdAt).getTime();
+        }
+        // Access other fields with type-safe casting
+        const value = (msg as Record<string, unknown>)[field];
+        if (typeof value === 'number') {
+          return value;
+        }
+        if (value instanceof Date) {
+          return value.getTime();
+        }
+        // Handle missing/undefined values - treat as 0 for numeric comparison
+        return 0;
+      };
+
+      // Sort messages by their position in the sorted set (or by orderBy if specified)
+      if (orderBy) {
+        messagesData.sort((a, b) => {
+          const aValue = getFieldValue(a);
+          const bValue = getFieldValue(b);
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        });
+      } else {
+        // Default: sort by position in sorted set
+        // Build Map for O(1) lookups instead of O(n) indexOf
+        const messageIdToPosition = new Map<string, number>();
+        allMessageIds.forEach((id, index) => {
+          messageIdToPosition.set(id as string, index);
+        });
+
+        messagesData.sort((a, b) => {
+          const aPos = messageIdToPosition.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+          const bPos = messageIdToPosition.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+          return aPos - bPos;
+        });
+      }
+
+      const total = messagesData.length;
+
+      // Apply pagination
+      const start = offset;
+      const end = perPageInput === false ? total : start + perPage;
+      const paginatedMessages = messagesData.slice(start, end);
+
+      // Combine paginated messages with included messages, deduplicating
+      const messageIds = new Set<string>();
+      const allMessages: MastraDBMessage[] = [];
+
+      // Add paginated messages first
+      for (const msg of paginatedMessages) {
+        if (!messageIds.has(msg.id)) {
+          allMessages.push(msg);
+          messageIds.add(msg.id);
+        }
+      }
+
+      // Add included messages (with context), avoiding duplicates
+      for (const msg of includedMessages) {
+        if (!messageIds.has(msg.id)) {
+          allMessages.push(msg);
+          messageIds.add(msg.id);
+        }
+      }
+
+      // Final sort to maintain order
+      if (orderBy) {
+        allMessages.sort((a, b) => {
+          const aValue = getFieldValue(a);
+          const bValue = getFieldValue(b);
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        });
+      } else {
+        // Build Map for O(1) lookups instead of O(n) indexOf
+        const messageIdToPosition = new Map<string, number>();
+        allMessageIds.forEach((id, index) => {
+          messageIdToPosition.set(id as string, index);
+        });
+
+        allMessages.sort((a, b) => {
+          const aPos = messageIdToPosition.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+          const bPos = messageIdToPosition.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+          return aPos - bPos;
+        });
+      }
+
+      // Use MessageList for proper deduplication and format conversion
+      const list = new MessageList().add(allMessages, 'memory');
+      const finalMessages = list.get.all.db();
+
+      // Calculate hasMore based on pagination window
+      // If all thread messages have been returned (through pagination or include), hasMore = false
+      // Otherwise, check if there are more pages in the pagination window
+      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
+      const hasMore = perPageInput === false ? false : allThreadMessagesReturned ? false : end < total;
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage: preservePerPageForResponse(perPageInput, perPage),
+        hasMore,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_STORAGE_LIST_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+            resourceId: resourceId ?? '',
+          },
+        },
+        error,
+      );
+      this.logger.error(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      const perPage = normalizePerPage(perPageInput, 40);
+      return {
+        messages: [],
+        total: 0,
+        page,
+        perPage: preservePerPageForResponse(perPageInput, perPage),
+        hasMore: false,
+      };
+    }
+  }
+
   public async getMessagesPaginated(
-    args: StorageGetMessagesArg & {
-      format?: 'v1' | 'v2';
-    },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, resourceId, selectBy, format } = args;
+    args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
+    const { threadId, resourceId, selectBy } = args;
     const { page = 0, perPage = 40, dateRange } = selectBy?.pagination || {};
     const fromDate = dateRange?.start;
     const toDate = dateRange?.end;
     const threadMessagesKey = getThreadMessagesKey(threadId);
-    const messages: (MastraMessageV2 | MastraMessageV1)[] = [];
+    const messages: MastraDBMessage[] = [];
 
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
@@ -664,10 +833,9 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const results = await pipeline.exec();
 
       // Process messages and apply filters - handle undefined results from pipeline
-      let messagesData = results.filter((msg): msg is MastraMessageV2 | MastraMessageV1 => msg !== null) as (
-        | MastraMessageV2
-        | MastraMessageV1
-      )[];
+      let messagesData = results
+        .filter((msg): msg is MastraDBMessage & { _index?: number } => msg !== null)
+        .map(msg => this.parseStoredMessage(msg));
 
       // Apply date filters if provided
       if (fromDate) {
@@ -690,10 +858,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       messages.push(...paginatedMessages);
 
-      const list = new MessageList().add(messages, 'memory');
-      const finalMessages = (format === `v2` ? list.get.all.v2() : list.get.all.v1()) as
-        | MastraMessageV1[]
-        | MastraMessageV2[];
+      const list = new MessageList().add(messages as any, 'memory');
+      const finalMessages = list.get.all.db();
 
       return {
         messages: finalMessages,
@@ -812,11 +978,11 @@ export class StoreMemoryUpstash extends MemoryStorage {
   }
 
   async updateMessages(args: {
-    messages: (Partial<Omit<MastraMessageV2, 'createdAt'>> & {
+    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
       content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
     })[];
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     const { messages } = args;
 
     if (messages.length === 0) {
@@ -828,7 +994,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const messageIds = messages.map(m => m.id);
 
       // Find all existing messages by scanning for their keys
-      const existingMessages: (MastraMessageV2 | MastraMessageV1)[] = [];
+      const existingMessages: MastraDBMessage[] = [];
       const messageIdToKey: Record<string, string> = {};
 
       // Scan for all message keys that match any of the IDs
@@ -837,7 +1003,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         const keys = await this.operations.scanKeys(pattern);
 
         for (const key of keys) {
-          const message = await this.client.get<MastraMessageV2 | MastraMessageV1>(key);
+          const message = await this.client.get<MastraDBMessage>(key);
           if (message && message.id === messageId) {
             existingMessages.push(message);
             messageIdToKey[messageId] = key;
@@ -946,15 +1112,13 @@ export class StoreMemoryUpstash extends MemoryStorage {
       await pipeline.exec();
 
       // Return the updated messages
-      const updatedMessages: MastraMessageV2[] = [];
+      const updatedMessages: MastraDBMessage[] = [];
       for (const messageId of messageIds) {
         const key = messageIdToKey[messageId];
         if (key) {
-          const updatedMessage = await this.client.get<MastraMessageV2 | MastraMessageV1>(key);
+          const updatedMessage = await this.client.get<MastraDBMessage>(key);
           if (updatedMessage) {
-            // Convert to V2 format if needed
-            const v2e = updatedMessage as MastraMessageV2;
-            updatedMessages.push(v2e);
+            updatedMessages.push(updatedMessage);
           }
         }
       }
@@ -990,7 +1154,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         const keys = await this.operations.scanKeys(pattern);
 
         for (const key of keys) {
-          const message = await this.client.get<MastraMessageV2 | MastraMessageV1>(key);
+          const message = await this.client.get<MastraDBMessage>(key);
           if (message && message.id === messageId) {
             messageKeys.push(key);
             if (message.threadId) {
@@ -1043,5 +1207,22 @@ export class StoreMemoryUpstash extends MemoryStorage {
         error,
       );
     }
+  }
+
+  private sortThreads(
+    threads: StorageThreadType[],
+    field: ThreadOrderBy,
+    direction: ThreadSortDirection,
+  ): StorageThreadType[] {
+    return threads.sort((a, b) => {
+      const aValue = new Date(a[field]).getTime();
+      const bValue = new Date(b[field]).getTime();
+
+      if (direction === 'ASC') {
+        return aValue - bValue;
+      } else {
+        return bValue - aValue;
+      }
+    });
   }
 }

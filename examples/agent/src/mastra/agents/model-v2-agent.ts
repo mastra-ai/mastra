@@ -1,10 +1,14 @@
+import { MockLanguageModelV2 } from 'ai-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { openai, openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { myWorkflow } from '../workflows';
+import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
+import { logDataMiddleware } from '../../model-middleware';
+import { APICallError, wrapLanguageModel } from 'ai-v5';
+import { cookingTool } from '../tools';
 
 export const weatherInfo = createTool({
   id: 'weather-info',
@@ -12,9 +16,9 @@ export const weatherInfo = createTool({
   inputSchema: z.object({
     city: z.string(),
   }),
-  execute: async ({ context }) => {
+  execute: async input => {
     return {
-      city: context.city,
+      city: inputData.city,
       weather: 'sunny',
       temperature_celsius: 19,
       temperature_fahrenheit: 66,
@@ -22,11 +26,33 @@ export const weatherInfo = createTool({
       wind: '10 mph',
     };
   },
+  // requireApproval: true,
 });
 
 const memory = new Memory();
 
+const testAPICallError = new APICallError({
+  message: 'Test API error',
+  url: 'https://test.api.com',
+  requestBodyValues: { test: 'test' },
+  statusCode: 401,
+  isRetryable: false,
+  responseBody: 'Test API error response',
+});
+
+export const errorAgent = new Agent({
+  id: 'error-agent',
+  name: 'Error Agent',
+  instructions: 'You are an error agent that always errors',
+  model: new MockLanguageModelV2({
+    doStream: async () => {
+      throw testAPICallError;
+    },
+  }),
+});
+
 export const chefModelV2Agent = new Agent({
+  id: 'chef-model-v2-agent',
   name: 'Chef Agent V2 Model',
   description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
   instructions: {
@@ -37,19 +63,24 @@ export const chefModelV2Agent = new Agent({
       `,
     role: 'system',
   },
-  model: openai_v5('gpt-4o-mini'),
+  model: wrapLanguageModel({
+    model: openai_v5('gpt-4o-mini'),
+    middleware: logDataMiddleware,
+  }),
 
   tools: {
     weatherInfo,
+    cookingTool,
   },
   workflows: {
     myWorkflow,
+    lessComplexWorkflow,
   },
   scorers: ({ mastra }) => {
     if (!mastra) {
       throw new Error('Mastra not found');
     }
-    const scorer1 = mastra.getScorer('testScorer');
+    const scorer1 = mastra.getScorerById('scorer1');
 
     return {
       scorer1: { scorer: scorer1, sampling: { rate: 1, type: 'ratio' } },
@@ -68,6 +99,7 @@ export const chefModelV2Agent = new Agent({
 });
 
 const weatherAgent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   instructions: `Your goal is to execute the recipe-maker workflow with the given ingredient`,
   description: `An agent that can help you get a recipe for a given ingredient`,
@@ -81,6 +113,7 @@ const weatherAgent = new Agent({
 });
 
 export const networkAgent = new Agent({
+  id: 'network-agent',
   name: 'Chef Network',
   description:
     'A chef agent that can help you cook great meals with whatever ingredients you have available based on your location and current weather.',

@@ -1,12 +1,15 @@
 import EventEmitter from 'events';
-import type { Emitter, LoopConditionFunction, Mastra, Step, StepFlowEntry, StepResult } from '../..';
 import { MastraBase } from '../../base';
-import type { RuntimeContext } from '../../di';
+import type { RequestContext } from '../../di';
+import { getErrorFromUnknown } from '../../error/utils.js';
 import type { PubSub } from '../../events';
 import { RegisteredLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { getStepResult } from '../step';
-import { validateStepInput } from '../utils';
+import type { LoopConditionFunction, Step } from '../step';
+import type { Emitter, StepFlowEntry, StepResult } from '../types';
+import { validateStepInput, createDeprecationProxy, runCountDeprecationMessage } from '../utils';
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
@@ -28,12 +31,12 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     state: Record<string, any>;
     emitter: EventEmitter;
-    runtimeContext: RuntimeContext;
-    runCount?: number;
+    requestContext: RequestContext;
+    retryCount?: number;
     foreachIdx?: number;
     validateInputs?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
-    const { step, stepResults, runId, runtimeContext, runCount = 0 } = params;
+    const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
     const abortController = new AbortController();
 
@@ -69,39 +72,49 @@ export class StepExecutor extends MastraBase {
         throw validationError;
       }
 
-      const stepResult = await step.execute({
-        workflowId: params.workflowId,
-        runId,
-        mastra: this.mastra!,
-        runtimeContext,
-        inputData,
-        state: params.state,
-        setState: (state: any) => {
-          // TODO
-          params.state = state;
-        },
-        runCount,
-        resumeData: params.resumeData,
-        getInitData: () => stepResults?.input as any,
-        getStepResult: getStepResult.bind(this, stepResults),
-        suspend: async (suspendPayload: any): Promise<any> => {
-          suspended = { payload: { ...suspendPayload, __workflow_meta: { runId, path: [step.id] } } };
-        },
-        bail: (result: any) => {
-          bailed = { payload: result };
-        },
-        // TODO
-        writer: undefined as any,
-        abort: () => {
-          abortController?.abort();
-        },
-        [EMITTER_SYMBOL]: params.emitter as unknown as Emitter, // TODO: refactor this to use our PubSub actually
-        [STREAM_FORMAT_SYMBOL]: undefined, // TODO
-        engine: {},
-        abortSignal: abortController?.signal,
-        // TODO
-        tracingContext: {},
-      });
+      const stepResult = await step.execute(
+        createDeprecationProxy(
+          {
+            workflowId: params.workflowId,
+            runId,
+            mastra: this.mastra!,
+            requestContext,
+            inputData,
+            state: params.state,
+            setState: (state: any) => {
+              // TODO
+              params.state = state;
+            },
+            runCount: retryCount,
+            retryCount,
+            resumeData: params.resumeData,
+            getInitData: () => stepResults?.input as any,
+            getStepResult: getStepResult.bind(this, stepResults),
+            suspend: async (suspendPayload: any): Promise<any> => {
+              suspended = { payload: { ...suspendPayload, __workflow_meta: { runId, path: [step.id] } } };
+            },
+            bail: (result: any) => {
+              bailed = { payload: result };
+            },
+            // TODO
+            writer: undefined as any,
+            abort: () => {
+              abortController?.abort();
+            },
+            [EMITTER_SYMBOL]: params.emitter as unknown as Emitter, // TODO: refactor this to use our PubSub actually
+            [STREAM_FORMAT_SYMBOL]: undefined, // TODO
+            engine: {},
+            abortSignal: abortController?.signal,
+            // TODO
+            tracingContext: {},
+          },
+          {
+            paramName: 'runCount',
+            deprecationMessage: runCountDeprecationMessage,
+            logger: this.logger,
+          },
+        ),
+      );
 
       const endedAt = Date.now();
 
@@ -137,11 +150,16 @@ export class StepExecutor extends MastraBase {
     } catch (error: any) {
       const endedAt = Date.now();
 
+      const errorInstance = getErrorFromUnknown(error, {
+        includeStack: false,
+        fallbackMessage: 'Unknown step execution error',
+      });
+
       return {
         ...stepInfo,
         status: 'failed',
         endedAt,
-        error: error instanceof Error ? (error?.stack ?? error.message) : error,
+        error: `Error: ${errorInstance.message}`,
       };
     }
   }
@@ -155,10 +173,10 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     state: Record<string, any>;
     emitter: { runtime: PubSub; events: PubSub };
-    runtimeContext: RuntimeContext;
-    runCount?: number;
+    requestContext: RequestContext;
+    retryCount?: number;
   }): Promise<number[]> {
-    const { step, stepResults, runId, runtimeContext, runCount = 0 } = params;
+    const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
     const abortController = new AbortController();
     const ee = new EventEmitter();
@@ -170,10 +188,10 @@ export class StepExecutor extends MastraBase {
             workflowId: params.workflowId,
             condition,
             runId,
-            runtimeContext,
+            requestContext,
             inputData: params.input,
             state: params.state,
-            runCount,
+            retryCount,
             resumeData: params.resumeData,
             abortController,
             stepResults,
@@ -206,10 +224,10 @@ export class StepExecutor extends MastraBase {
     resumeData,
     stepResults,
     state,
-    runtimeContext,
+    requestContext,
     emitter,
     abortController,
-    runCount = 0,
+    retryCount = 0,
     iterationCount,
   }: {
     workflowId: string;
@@ -220,44 +238,54 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     state: Record<string, any>;
     emitter: EventEmitter;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     abortController: AbortController;
-    runCount?: number;
+    retryCount?: number;
     iterationCount: number;
   }): Promise<boolean> {
-    return condition({
-      workflowId,
-      runId,
-      mastra: this.mastra!,
-      runtimeContext,
-      inputData,
-      state,
-      setState: (_state: any) => {
-        // TODO
-      },
-      runCount,
-      resumeData: resumeData,
-      getInitData: () => stepResults?.input as any,
-      getStepResult: getStepResult.bind(this, stepResults),
-      suspend: async (_suspendPayload: any): Promise<any> => {
-        throw new Error('Not implemented');
-      },
-      bail: (_result: any) => {
-        throw new Error('Not implemented');
-      },
-      // TODO
-      writer: undefined as any,
-      abort: () => {
-        abortController?.abort();
-      },
-      [EMITTER_SYMBOL]: emitter as unknown as Emitter, // TODO: refactor this to use our PubSub actually
-      [STREAM_FORMAT_SYMBOL]: undefined, // TODO
-      engine: {},
-      abortSignal: abortController?.signal,
-      // TODO
-      tracingContext: {},
-      iterationCount,
-    });
+    return condition(
+      createDeprecationProxy(
+        {
+          workflowId,
+          runId,
+          mastra: this.mastra!,
+          requestContext,
+          inputData,
+          state,
+          setState: (_state: any) => {
+            // TODO
+          },
+          runCount: retryCount,
+          retryCount,
+          resumeData: resumeData,
+          getInitData: () => stepResults?.input as any,
+          getStepResult: getStepResult.bind(this, stepResults),
+          suspend: async (_suspendPayload: any): Promise<any> => {
+            throw new Error('Not implemented');
+          },
+          bail: (_result: any) => {
+            throw new Error('Not implemented');
+          },
+          // TODO
+          writer: undefined as any,
+          abort: () => {
+            abortController?.abort();
+          },
+          [EMITTER_SYMBOL]: emitter as unknown as Emitter, // TODO: refactor this to use our PubSub actually
+          [STREAM_FORMAT_SYMBOL]: undefined, // TODO
+          engine: {},
+          abortSignal: abortController?.signal,
+          // TODO
+          tracingContext: {},
+          iterationCount,
+        },
+        {
+          paramName: 'runCount',
+          deprecationMessage: runCountDeprecationMessage,
+          logger: this.logger,
+        },
+      ),
+    );
   }
 
   async resolveSleep(params: {
@@ -268,10 +296,10 @@ export class StepExecutor extends MastraBase {
     resumeData?: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
     emitter: { runtime: PubSub; events: PubSub };
-    runtimeContext: RuntimeContext;
-    runCount?: number;
+    requestContext: RequestContext;
+    retryCount?: number;
   }): Promise<number> {
-    const { step, stepResults, runId, runtimeContext, runCount = 0 } = params;
+    const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
     const abortController = new AbortController();
     const ee = new EventEmitter();
@@ -285,39 +313,49 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
-      return await step.fn({
-        workflowId: params.workflowId,
-        runId,
-        mastra: this.mastra!,
-        runtimeContext,
-        inputData: params.input,
-        // TODO: implement state
-        state: {},
-        setState: (_state: any) => {
-          // TODO
-        },
-        runCount,
-        resumeData: params.resumeData,
-        getInitData: () => stepResults?.input as any,
-        getStepResult: getStepResult.bind(this, stepResults),
-        suspend: async (_suspendPayload: any): Promise<any> => {
-          throw new Error('Not implemented');
-        },
-        bail: (_result: any) => {
-          throw new Error('Not implemented');
-        },
-        abort: () => {
-          abortController?.abort();
-        },
-        // TODO
-        writer: undefined as any,
-        [EMITTER_SYMBOL]: ee as unknown as Emitter, // TODO: refactor this to use our PubSub actually
-        [STREAM_FORMAT_SYMBOL]: undefined, // TODO
-        engine: {},
-        abortSignal: abortController?.signal,
-        // TODO
-        tracingContext: {},
-      });
+      return await step.fn(
+        createDeprecationProxy(
+          {
+            workflowId: params.workflowId,
+            runId,
+            mastra: this.mastra!,
+            requestContext,
+            inputData: params.input,
+            // TODO: implement state
+            state: {},
+            setState: (_state: any) => {
+              // TODO
+            },
+            runCount: retryCount,
+            retryCount,
+            resumeData: params.resumeData,
+            getInitData: () => stepResults?.input as any,
+            getStepResult: getStepResult.bind(this, stepResults),
+            suspend: async (_suspendPayload: any): Promise<any> => {
+              throw new Error('Not implemented');
+            },
+            bail: (_result: any) => {
+              throw new Error('Not implemented');
+            },
+            abort: () => {
+              abortController?.abort();
+            },
+            // TODO
+            writer: undefined as any,
+            [EMITTER_SYMBOL]: ee as unknown as Emitter, // TODO: refactor this to use our PubSub actually
+            [STREAM_FORMAT_SYMBOL]: undefined, // TODO
+            engine: {},
+            abortSignal: abortController?.signal,
+            // TODO
+            tracingContext: {},
+          },
+          {
+            paramName: 'runCount',
+            deprecationMessage: runCountDeprecationMessage,
+            logger: this.logger,
+          },
+        ),
+      );
     } catch (e) {
       console.error('error evaluating condition', e);
       return 0;
@@ -332,10 +370,10 @@ export class StepExecutor extends MastraBase {
     resumeData?: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
     emitter: { runtime: PubSub; events: PubSub };
-    runtimeContext: RuntimeContext;
-    runCount?: number;
+    requestContext: RequestContext;
+    retryCount?: number;
   }): Promise<number> {
-    const { step, stepResults, runId, runtimeContext, runCount = 0 } = params;
+    const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
     const abortController = new AbortController();
     const ee = new EventEmitter();
@@ -349,39 +387,49 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
-      const result = await step.fn({
-        workflowId: params.workflowId,
-        runId,
-        mastra: this.mastra!,
-        runtimeContext,
-        inputData: params.input,
-        // TODO: implement state
-        state: {},
-        setState: (_state: any) => {
-          // TODO
-        },
-        runCount,
-        resumeData: params.resumeData,
-        getInitData: () => stepResults?.input as any,
-        getStepResult: getStepResult.bind(this, stepResults),
-        suspend: async (_suspendPayload: any): Promise<any> => {
-          throw new Error('Not implemented');
-        },
-        bail: (_result: any) => {
-          throw new Error('Not implemented');
-        },
-        abort: () => {
-          abortController?.abort();
-        },
-        // TODO
-        writer: undefined as any,
-        [EMITTER_SYMBOL]: ee as unknown as Emitter, // TODO: refactor this to use our PubSub actually
-        [STREAM_FORMAT_SYMBOL]: undefined, // TODO
-        engine: {},
-        abortSignal: abortController?.signal,
-        // TODO
-        tracingContext: {},
-      });
+      const result = await step.fn(
+        createDeprecationProxy(
+          {
+            workflowId: params.workflowId,
+            runId,
+            mastra: this.mastra!,
+            requestContext,
+            inputData: params.input,
+            // TODO: implement state
+            state: {},
+            setState: (_state: any) => {
+              // TODO
+            },
+            runCount: retryCount,
+            retryCount,
+            resumeData: params.resumeData,
+            getInitData: () => stepResults?.input as any,
+            getStepResult: getStepResult.bind(this, stepResults),
+            suspend: async (_suspendPayload: any): Promise<any> => {
+              throw new Error('Not implemented');
+            },
+            bail: (_result: any) => {
+              throw new Error('Not implemented');
+            },
+            abort: () => {
+              abortController?.abort();
+            },
+            // TODO
+            writer: undefined as any,
+            [EMITTER_SYMBOL]: ee as unknown as Emitter, // TODO: refactor this to use our PubSub actually
+            [STREAM_FORMAT_SYMBOL]: undefined, // TODO
+            engine: {},
+            abortSignal: abortController?.signal,
+            // TODO
+            tracingContext: {},
+          },
+          {
+            paramName: 'runCount',
+            deprecationMessage: runCountDeprecationMessage,
+            logger: this.logger,
+          },
+        ),
+      );
 
       return result.getTime() - Date.now();
     } catch (e) {

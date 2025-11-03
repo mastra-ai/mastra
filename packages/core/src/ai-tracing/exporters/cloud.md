@@ -3,7 +3,7 @@
 Track and monitor AI operations and spans with the `CloudExporter`:
 
 ```typescript
-import { CloudExporter } from '@mastra/core';
+import { CloudExporter } from '@mastra/core/ai-tracing';
 
 // Initialize the AI tracing exporter
 const cloudExporter = new CloudExporter({
