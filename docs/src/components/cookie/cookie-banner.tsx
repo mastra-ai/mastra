@@ -99,8 +99,8 @@ export function CookieBanner({
       <div className="fixed shadow-[0_4px_24px_rgba(0,0,0,.1)] bottom-8 right-20 z-50 flex w-[322px] items-center justify-center rounded-xl dark:border-neutral-700 dark:border bg-white dark:bg-black p-4">
         <div>
           <p className="mb-4 font-sans dark:text-white text-sm">
-            We use tracking cookies to understand how you use the product and help
-            us improve it. Please accept cookies to help us improve.
+            We use tracking cookies to understand how you use the product and
+            help us improve it. Please accept cookies to help us improve.
           </p>
           <Button
             variant="secondary"
@@ -121,8 +121,8 @@ export function CookieBanner({
           >
             Decline cookies
           </Button>
+        </div>
       </div>
-    </div>
     </T>
   );
 }

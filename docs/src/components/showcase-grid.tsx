@@ -1,5 +1,5 @@
 import React from "react";
-import { msg, useMessages,T } from "gt-react";
+import { msg, useMessages, T } from "gt-react";
 
 interface ShowcaseCardProps {
   title: string;
@@ -33,44 +33,44 @@ const ShowcaseCard = ({
 }: ShowcaseCardProps) => {
   const m = useMessages();
   return (
-  <div className="group showcase-item rounded-lg border-[0.5px] border-(--border) dark:border-[#343434] bg-white dark:bg-[#050505] overflow-hidden transition-all hover:opacity-90">
-    <a
-      style={{
-        textDecoration: "none",
-      }}
-      href={link}
-      className="block showcase-link"
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      <div className="aspect-video relative overflow-hidden bg-[#050505]">
-        <img
-          src={`/img/showcase/optimized/${image}`}
-          alt={title}
-          className="object-cover w-full h-full transition-transform group-hover:scale-105"
-          loading="lazy"
-        />
-      </div>
-      <div className="p-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-[var(--mastra-text-primary)] group-hover:text-[var(--mastra-green-accent-2)]">
-            {title}
-          </h3>
-          <div className="opacity-0 -translate-y-1 translate-x-1 group-hover:opacity-100 group-hover:translate-y-0 group-hover:translate-x-0 transition-all text-[var(--mastra-text-tertiary)]">
-            <ArrowUpRight />
-          </div>
+    <div className="group showcase-item rounded-lg border-[0.5px] border-(--border) dark:border-[#343434] bg-white dark:bg-[#050505] overflow-hidden transition-all hover:opacity-90">
+      <a
+        style={{
+          textDecoration: "none",
+        }}
+        href={link}
+        className="block showcase-link"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <div className="aspect-video relative overflow-hidden bg-[#050505]">
+          <img
+            src={`/img/showcase/optimized/${image}`}
+            alt={title}
+            className="object-cover w-full h-full transition-transform group-hover:scale-105"
+            loading="lazy"
+          />
         </div>
-        {description && (
-          <p
-            className="mt-2 text-sm text-[var(--mastra-text-tertiary)]"
-            style={{ textDecoration: "none" }}
-          >
-            {m(description)}
-          </p>
-        )}
-      </div>
-    </a>
-  </div>
+        <div className="p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-[var(--mastra-text-primary)] group-hover:text-[var(--mastra-green-accent-2)]">
+              {title}
+            </h3>
+            <div className="opacity-0 -translate-y-1 translate-x-1 group-hover:opacity-100 group-hover:translate-y-0 group-hover:translate-x-0 transition-all text-[var(--mastra-text-tertiary)]">
+              <ArrowUpRight />
+            </div>
+          </div>
+          {description && (
+            <p
+              className="mt-2 text-sm text-[var(--mastra-text-tertiary)]"
+              style={{ textDecoration: "none" }}
+            >
+              {m(description)}
+            </p>
+          )}
+        </div>
+      </a>
+    </div>
   );
 };
 
@@ -78,15 +78,17 @@ export const ShowcaseGrid = () => {
   const showcaseItems: ShowcaseCardProps[] = [
     {
       title: "Olive",
-      description:
-        msg("Generate powerful tools and dashboards connected to your data sources in minutes"),
+      description: msg(
+        "Generate powerful tools and dashboards connected to your data sources in minutes",
+      ),
       image: "from-olive.png",
       link: "https://fromolive.com/",
     },
     {
       title: "Artifact",
-      description:
-        msg("Design tool that lets you design at any level of fidelity - from concept to connector"),
+      description: msg(
+        "Design tool that lets you design at any level of fidelity - from concept to connector",
+      ),
       image: "artifact-engineer.png",
       link: "https://www.artifact.engineer/",
     },
@@ -104,28 +106,34 @@ export const ShowcaseGrid = () => {
     },
     {
       title: "Dalus",
-      description:
-        msg("AI-Powered Systems Engineering for Mission-Critical Hardware"),
+      description: msg(
+        "AI-Powered Systems Engineering for Mission-Critical Hardware",
+      ),
       image: "dalus-io.webp",
       link: "https://www.dalus.io/",
     },
     {
       title: "Demeter",
-      description: msg("Instant portfolio insights across all your investments"),
+      description: msg(
+        "Instant portfolio insights across all your investments",
+      ),
       image: "demeter.png",
       link: "https://www.joindemeter.com/",
     },
 
     {
       title: "NotebookLM-Mastra",
-      description:
-        msg("AI-powered assistant that creates podcasts from the sources you upload"),
+      description: msg(
+        "AI-powered assistant that creates podcasts from the sources you upload",
+      ),
       image: "notebook-lm.png",
       link: "https://notebooklm-mastra.vercel.app/",
     },
     {
       title: "Repo Base",
-      description: msg("Chat with any GitHub repository. Understand code faster"),
+      description: msg(
+        "Chat with any GitHub repository. Understand code faster",
+      ),
       image: "repo-base.png",
       link: "https://repo-base.vercel.app/",
     },
@@ -137,8 +145,9 @@ export const ShowcaseGrid = () => {
     },
     {
       title: "Excalidraw app",
-      description:
-        msg("A tool that converts whiteboard images into editable Excalidraw diagrams"),
+      description: msg(
+        "A tool that converts whiteboard images into editable Excalidraw diagrams",
+      ),
       image: "excalidraw-app.png",
       link: "https://image2excalidraw.netlify.app/",
     },

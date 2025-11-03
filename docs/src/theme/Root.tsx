@@ -29,7 +29,6 @@ export default function Root({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-
       <PostHogProvider
         apiKey={posthogApiKey}
         options={{

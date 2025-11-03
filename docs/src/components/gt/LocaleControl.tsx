@@ -1,7 +1,7 @@
-import React from 'react';
-import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
-import { useAlternatePageUtils } from '@docusaurus/theme-common/internal';
-import { useLocaleSelector } from 'gt-react';
+import React from "react";
+import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
+import { useAlternatePageUtils } from "@docusaurus/theme-common/internal";
+import { useLocaleSelector } from "gt-react";
 
 /*
 This component is used to display a language selector in the navbar.
@@ -27,14 +27,14 @@ export default function LocaleControl() {
 
   return (
     <select
-      value={docusaurusLocale || ''}
+      value={docusaurusLocale || ""}
       onChange={(e) => onChange(e.target.value)}
       aria-label="Change language"
       className="navbar__item"
     >
       {locales.map((loc) => {
         // Return the native name for the locale
-        const props = getLocaleProperties(loc); 
+        const props = getLocaleProperties(loc);
         return (
           <option key={loc} value={loc}>
             {props.nativeNameWithRegionCode}

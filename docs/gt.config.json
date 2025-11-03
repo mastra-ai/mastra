@@ -2,9 +2,7 @@
   "defaultLocale": "en",
   "files": {
     "mdx": {
-      "include": [
-        "src/content/**/*.mdx"
-      ],
+      "include": ["src/content/**/*.mdx"],
       "transform": [
         {
           "match": "^src/content/{locale}/docs/(.*)\\.mdx$",
@@ -17,17 +15,13 @@
       ]
     },
     "json": {
-      "include": [
-        "i18n/[locale]/**/*.json"
-      ]
+      "include": ["i18n/[locale]/**/*.json"]
     },
     "gt": {
       "output": "i18n/locales/[locale].json"
     }
   },
-  "locales": [
-    "ja"
-  ],
+  "locales": ["ja"],
   "options": {
     "experimentalClearLocaleDirs": true,
     "experimentalLocalizeStaticUrls": true,

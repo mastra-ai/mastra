@@ -17,54 +17,58 @@ const ShowcaseCard = ({
 }: ShowcaseCardProps) => {
   const m = useMessages();
   return (
-  <div className={styles.showcaseItem}>
-    <a
-      href={link}
-      className={styles.showcaseLink}
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      <div className={styles.imageContainer}>
-        <img
-          src={`/img/showcase/optimized/${image}`}
-          alt={title}
-          className={styles.image}
-        />
-      </div>
-      <div className={styles.content}>
-        <div className={styles.header}>
-          <h3 className={styles.title}>{title}</h3>
-          <svg
-            className={styles.icon}
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path d="M7 17L17 7M17 7H7M17 7V17" />
-          </svg>
+    <div className={styles.showcaseItem}>
+      <a
+        href={link}
+        className={styles.showcaseLink}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <div className={styles.imageContainer}>
+          <img
+            src={`/img/showcase/optimized/${image}`}
+            alt={title}
+            className={styles.image}
+          />
         </div>
-        {description && <p className={styles.description}>{m(description)}</p>}
-      </div>
-    </a>
-  </div>
+        <div className={styles.content}>
+          <div className={styles.header}>
+            <h3 className={styles.title}>{title}</h3>
+            <svg
+              className={styles.icon}
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M7 17L17 7M17 7H7M17 7V17" />
+            </svg>
+          </div>
+          {description && (
+            <p className={styles.description}>{m(description)}</p>
+          )}
+        </div>
+      </a>
+    </div>
   );
 };
 
 const showcaseItems: ShowcaseCardProps[] = [
   {
     title: "Olive",
-    description:
-      msg("Generate powerful tools and dashboards connected to your data sources in minutes"),
+    description: msg(
+      "Generate powerful tools and dashboards connected to your data sources in minutes",
+    ),
     image: "from-olive.png",
     link: "https://fromolive.com/",
   },
   {
     title: "Artifact",
-    description:
-      msg("Design tool that lets you design at any level of fidelity - from concept to connector"),
+    description: msg(
+      "Design tool that lets you design at any level of fidelity - from concept to connector",
+    ),
     image: "artifact-engineer.png",
     link: "https://www.artifact.engineer/",
   },
@@ -82,7 +86,9 @@ const showcaseItems: ShowcaseCardProps[] = [
   },
   {
     title: "Dalus",
-    description: msg("AI-Powered Systems Engineering for Mission-Critical Hardware"),
+    description: msg(
+      "AI-Powered Systems Engineering for Mission-Critical Hardware",
+    ),
     image: "dalus-io.webp",
     link: "https://www.dalus.io/",
   },
@@ -94,8 +100,9 @@ const showcaseItems: ShowcaseCardProps[] = [
   },
   {
     title: "NotebookLM-Mastra",
-    description:
-      msg("AI-powered assistant that creates podcasts from the sources you upload"),
+    description: msg(
+      "AI-powered assistant that creates podcasts from the sources you upload",
+    ),
     image: "notebook-lm.png",
     link: "https://notebooklm-mastra.vercel.app/",
   },
@@ -113,8 +120,9 @@ const showcaseItems: ShowcaseCardProps[] = [
   },
   {
     title: "Excalidraw app",
-    description:
-      msg("A tool that converts whiteboard images into editable Excalidraw diagrams"),
+    description: msg(
+      "A tool that converts whiteboard images into editable Excalidraw diagrams",
+    ),
     image: "excalidraw-app.png",
     link: "https://image2excalidraw.netlify.app/",
   },
