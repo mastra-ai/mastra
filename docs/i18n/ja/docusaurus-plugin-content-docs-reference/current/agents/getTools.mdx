@@ -1,0 +1,85 @@
+---
+title: "リファレンス: Agent.getTools() | Agents | Mastra ドキュメント"
+description: "Mastra のエージェントにおける `Agent.getTools()` メソッドのリファレンス。エージェントが利用可能なツールを取得します。"
+---
+
+<div id="agentgettools">
+  # Agent.getTools()
+</div>
+
+`.getTools()` メソッドは、エージェントに設定されたツールを取得し、それらが関数である場合は解決（評価）します。これらのツールによってエージェントの機能が拡張され、特定のアクションの実行や外部システムへのアクセスが可能になります。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+await agent.getTools();
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ runtimeContext?: RuntimeContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "ランタイムコンテキストを含むオプションの設定オブジェクト。",
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "tools",
+      type: "TTools | Promise<TTools>",
+      description:
+        "エージェントに設定されたツール。ツールを表すオブジェクト、またはそのツールに解決される Promise のいずれかです。",
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 応用的な使用例
+</div>
+
+```typescript copy
+await agent.getTools({
+  runtimeContext: new RuntimeContext(),
+});
+```
+
+
+<div id="options-parameters">
+  ### オプション引数
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      defaultValue: "new RuntimeContext()",
+      description:
+        "依存性注入やコンテキスト情報のための実行時コンテキスト。",
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [エージェントでのツールの使用](/docs/agents/using-tools)
+- [ツールの作成](/docs/tools-mcp/overview)

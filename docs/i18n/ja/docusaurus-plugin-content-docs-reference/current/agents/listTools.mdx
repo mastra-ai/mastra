@@ -1,0 +1,85 @@
+---
+title: "リファレンス: Agent.listTools() | エージェント | Mastra ドキュメント"
+description: "Mastra のエージェントで使用される `Agent.listTools()` メソッドのドキュメント。エージェントが利用可能なツールを取得します。"
+---
+
+<div id="agentlisttools">
+  # Agent.listTools()
+</div>
+
+`.listTools()` メソッドは、エージェントに設定されたツールを取得し、関数である場合はそれを解決します。これらのツールはエージェントの機能を拡張し、特定の操作の実行や外部システムへのアクセスを可能にします。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+await agent.listTools();
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ requestContext?: RequestContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "リクエストコンテキストを含む任意の構成オブジェクト（オプション）。",
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "tools",
+      type: "TTools | Promise<TTools>",
+      description:
+        "エージェントに構成されたツール。ツールのオブジェクト自体、またはツールへと解決される Promise のいずれかです。",
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 応用的な使用例
+</div>
+
+```typescript copy
+await agent.listTools({
+  requestContext: new RequestContext(),
+});
+```
+
+
+<div id="options-parameters">
+  ### オプションパラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description:
+        "依存性注入とコンテキスト情報のためのリクエストコンテキスト。",
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [エージェントでツールを使う](/docs/agents/using-tools)
+- [ツールを作成する](/docs/tools-mcp/overview)

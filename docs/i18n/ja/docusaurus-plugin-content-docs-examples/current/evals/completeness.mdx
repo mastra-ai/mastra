@@ -1,0 +1,231 @@
+---
+title: "例：完全性評価 | Evals | Mastra Docs"
+description: 応答が入力要素をどの程度カバーしているかを評価するために完全性指標を用いる例。
+---
+
+<div id="completeness-evaluation">
+  # 完全性評価
+</div>
+
+:::note
+Scorers API は現在ベータ版です。改善に鋭意取り組んでおり、皆さまからのフィードバックを歓迎します。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) でお寄せください。
+:::
+
+`CompletenessMetric` を使用して、応答が入力の重要な要素をすべて含んでいるかを評価します。このメトリックは `query` と `response` を受け取り、スコアと、要素単位の詳細な比較を含む `info` オブジェクトを返します。
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash copy
+npm install @mastra/evals
+```
+
+
+<div id="complete-coverage-example">
+  ## 完全網羅の例
+</div>
+
+この例では、応答に入力のすべての要素が含まれます。内容が完全に一致するため、網羅率は100%になります。
+
+```typescript title="src/example-complete-coverage.ts" showLineNumbers copy
+import { CompletenessMetric } from "@mastra/evals/nlp";
+
+const metric = new CompletenessMetric();
+
+const query = "三原色は赤、青、黄です。";
+const response = "三原色は赤、青、黄です。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+<div id="complete-coverage-output">
+  ### 網羅的な出力
+</div>
+
+すべての入力要素が欠けることなく応答に含まれているため、出力のスコアは1となります。
+
+```typescript
+{
+  score: 1,
+  info: {
+    inputElements: [
+      'the',    'primary',
+      'colors', 'be',
+      'red',    'blue',
+      'and',    'yellow'
+    ],
+    outputElements: [
+      'the',    'primary',
+      'colors', 'be',
+      'red',    'blue',
+      'and',    'yellow'
+    ],
+    missingElements: [],
+    elementCounts: { input: 8, output: 8 }
+  }
+}
+```
+
+
+<div id="partial-coverage-example">
+  ## 部分的カバレッジの例
+</div>
+
+この例では、応答に入力要素はすべて含まれていますが、元のクエリにはなかった追加の内容も含まれています。
+
+```typescript title="src/example-partial-coverage.ts" showLineNumbers copy
+import { CompletenessMetric } from "@mastra/evals/nlp";
+
+const metric = new CompletenessMetric();
+
+const query = "三原色は赤と青です。";
+const response = "三原色は赤、青、黄色です。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+<div id="partial-coverage-output">
+  ### 部分的カバレッジの出力
+</div>
+
+入力要素に欠落がないため、出力は高評価となります。ただし、応答には入力範囲を超える追加内容が含まれています。
+
+```typescript
+{
+  score: 1,
+  info: {
+    inputElements: [
+      'the',    'primary',
+      'colors', 'be',
+      'red',    'and',
+      'blue'
+    ],
+    outputElements: [
+      'the',    'primary',
+      'colors', 'be',
+      'red',    'blue',
+      'and',    'yellow'
+    ],
+    missingElements: [],
+    elementCounts: { input: 7, output: 8 }
+  }
+}
+```
+
+
+<div id="minimal-coverage-example">
+  ## 最小限のカバレッジ例
+</div>
+
+この例では、レスポンスには入力の要素の一部しか含まれていません。重要な用語が欠落したり改変されたりしており、その結果、カバレッジが低下しています。
+
+```typescript title="src/example-minimal-coverage.ts" showLineNumbers copy
+import { CompletenessMetric } from "@mastra/evals/nlp";
+
+const metric = new CompletenessMetric();
+
+const query = "季節には夏が含まれます。";
+const response = "四季は春、夏、秋、冬です。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+<div id="minimal-coverage-output">
+  ### 最小限のカバレッジ出力
+</div>
+
+入力の要素が一つ以上欠けているため、出力の評価は低くなります。応答は一部で重なりがありますが、元の内容を完全には反映していません。
+
+```typescript
+{
+  score: 0.75,
+  info: {
+    inputElements: [ 'the', 'seasons', 'summer', 'include' ],
+    outputElements: [
+      'the',     'four',
+      'seasons', 'spring',
+      'summer',  'winter',
+      'be',      'fall',
+      'and'
+    ],
+    missingElements: [ 'include' ],
+    elementCounts: { input: 4, output: 9 }
+  }
+}
+```
+
+
+<div id="metric-configuration">
+  ## メトリクスの設定
+</div>
+
+`CompletenessMetric` のインスタンスは、デフォルト設定で作成できます。追加の設定は不要です。
+
+```typescript showLineNumbers copy
+const metric = new CompletenessMetric();
+```
+
+> 設定オプションの一覧は [CompletenessMetric](/reference/evals/completeness) を参照してください。
+
+
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
+
+`CompletenessMetric` は次の形式の結果を返します:
+
+```typescript
+{
+  score: 数値,
+  info: {
+    inputElements: 文字列[],
+    outputElements: 文字列[],
+    missingElements: 文字列[],
+    elementCounts: {
+      input: 数値,
+      output: 数値
+    }
+  }
+}
+
+```
+
+
+<div id="completeness-score">
+  ### 完全性スコア
+</div>
+
+0〜1の範囲の完全性スコア:
+
+- **1.0**: すべての入力要素が応答に含まれている。
+- **0.7–0.9**: 主要な要素のほとんどが含まれており、欠落は最小限。
+- **0.4–0.6**: いくつかの入力要素は含まれているが、重要なものが欠けている。
+- **0.1–0.3**: ごく一部の入力要素しか該当せず、ほとんどが欠落している。
+- **0.0**: 応答に入力要素がまったく含まれていない。
+
+<div id="completeness-info">
+  ### 完全性に関する情報
+</div>
+
+スコアの説明。詳細は以下を含みます:
+
+- クエリから抽出された入力要素
+- レスポンスで一致した出力要素
+- レスポンスで欠落している入力要素
+- 入力と出力における要素数の比較
+
+<GithubLink
+  outdated={true}
+  marginTop="mt-16"
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/completeness"
+/>

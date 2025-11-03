@@ -1,0 +1,84 @@
+---
+title: "テンプレート | はじめに | Mastra ドキュメント"
+description: 一般的な Mastra のユースケースやパターンを示す、あらかじめ用意されたプロジェクト構成
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+
+<div id="templates">
+  # テンプレート
+</div>
+
+テンプレートは、特定のユースケースやパターンを示す、あらかじめ用意された Mastra プロジェクトです。[templates ディレクトリ](https://mastra.ai/templates)で利用可能なテンプレートを参照してください。
+
+<div id="using-templates">
+  ## テンプレートを使う
+</div>
+
+`create-mastra` コマンドでテンプレートをインストールします：
+
+<Tabs>
+  <TabItem value="npm" label="npm">
+    ```bash copy
+    npx create-mastra@latest --template template-name
+    ```
+  </TabItem>
+
+  <TabItem value="yarn" label="yarn">
+    ```bash copy
+    yarn dlx create-mastra@latest --template template-name
+    ```
+  </TabItem>
+
+  <TabItem value="pnpm" label="pnpm">
+    ```bash copy
+    pnpm create mastra@latest --template template-name
+    ```
+  </TabItem>
+
+  <TabItem value="bun" label="bun">
+    ```bash copy
+    bun create mastra@latest --template template-name
+    ```
+  </TabItem>
+</Tabs>
+
+例：text-to-SQL アプリを作成する場合：
+
+```bash copy
+npx create-mastra@latest --template text-to-sql
+```
+
+
+<div id="setting-up-a-template">
+  ## テンプレートのセットアップ
+</div>
+
+インストール後：
+
+1. **プロジェクトに移動**:
+
+   ```bash copy
+   cd your-project-name
+   ```
+
+2. **環境変数を設定**:
+
+   ```bash copy
+   cp .env.example .env
+   ```
+
+   テンプレートの README に従い、必要な API キーを設定して `.env` を編集してください。
+
+3. **開発を開始**:
+   ```bash copy
+   npm run dev
+   ```
+
+:::info
+各テンプレートには、具体的なセットアップ手順や使用例を含む詳細な README が同梱されています。
+:::
+
+テンプレートの作成に関する詳細は、[テンプレートリファレンス](/reference/templates/overview)をご覧ください。

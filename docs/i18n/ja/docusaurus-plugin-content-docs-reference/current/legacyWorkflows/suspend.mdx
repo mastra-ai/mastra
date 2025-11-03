@@ -1,0 +1,84 @@
+---
+title: "リファレンス: suspend() | 旧式ワークフロー | Mastra ドキュメント"
+description: "Mastra のワークフローにおける suspend 関数のドキュメント。実行は再開されるまで一時停止します。"
+---
+
+<div id="suspend">
+  # suspend()
+</div>
+
+現在のステップでワークフローの実行を一時停止し、明示的に再開されるまで待機します。ワークフローの状態は保存され、後で再開できます。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript
+const approvalStep = new LegacyStep({
+  id: "承認が必要",
+  execute: async ({ context, suspend }) => {
+    if (context.steps.amount > 1000) {
+      await suspend();
+    }
+    return { 承認済: true };
+  },
+});
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "サスペンド状態とともに保存できる任意のデータ",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "Promise<void>",
+      type: "Promise",
+      description: "ワークフローが正常に一時停止されると解決されます",
+    },
+  ]}
+/>
+
+<div id="additional-examples">
+  ## 追加の例
+</div>
+
+メタデータ付きのサスペンド:
+
+```typescript
+const reviewStep = new LegacyStep({
+  id: "review",
+  execute: async ({ context, suspend }) => {
+    await suspend({
+      reason: "マネージャーの承認が必要です",
+      requestedBy: context.user,
+    });
+    return { reviewed: true };
+  },
+});
+```
+
+
+<div id="related">
+  ### 関連項目
+</div>
+
+- [ワークフローの一時停止と再開](/docs/workflows-legacy/suspend-and-resume)
+- [.resume()](./resume)
+- [.watch()](./watch)

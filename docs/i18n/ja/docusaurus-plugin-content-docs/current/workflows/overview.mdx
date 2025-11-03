@@ -1,0 +1,319 @@
+---
+title: "Workflows 概要 | Workflows | Mastra ドキュメント"
+description: "Mastra の Workflows は、分岐、並行実行、リソースの一時停止などの機能により、複雑なタスクの一連の処理を効率的にオーケストレーションできます。"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+
+<div id="workflows-overview">
+  # Workflows の概要
+</div>
+
+Workflows は、単一のエージェントの推論に頼るのではなく、明確で構造化された手順で複雑なタスクの一連の流れを定義できるようにします。これにより、タスクの分割方法、タスク間のデータの受け渡し、どのタイミングで何を実行するかまでを完全に制御できます。
+
+![Workflows の概要](/img/workflows/workflows-overview.jpg)
+
+<div id="when-to-use-workflows">
+  ## ワークフローを使うタイミング
+</div>
+
+ワークフローは、事前に明確に定義され、決まった実行順序で複数のステップを踏むタスクに適しています。ステップ間でのデータの流れや変換、各段階でどのプリミティブを呼び出すかまで、きめ細かく制御できます。
+
+> **📹 視聴**: → ワークフローの概要とエージェントとの比較 [YouTube（7分）](https://youtu.be/0jg2g3sNvgw)
+
+<div id="core-principles">
+  ## 中核原則
+</div>
+
+Mastra のワークフローは次の原則で動作します:
+
+- `createStep` で**ステップ**を定義し、入出力スキーマとビジネスロジックを指定する。
+- `createWorkflow` で**ステップ**を組み合わせ、実行フローを定義する。
+- **ワークフロー**を実行して処理全体を動かし、一時停止・再開・ストリーミング結果を標準でサポートする。
+
+<div id="creating-a-workflow-step">
+  ## ワークフローステップの作成
+</div>
+
+ステップはワークフローの基本的な構成要素です。受け取るデータと返すデータを定義するために、`inputSchema` と `outputSchema` を指定して `createStep()` でステップを作成します。
+
+`execute` 関数は、ステップが何を行うかを定義します。これを使って、コードベース内の関数や外部 API、エージェント、ツールを呼び出します。
+
+```typescript {6,9,15} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createStep } from "@mastra/core/workflows";
+
+const step1 = createStep({
+  id: "step-1",
+  inputSchema: z.object({
+    message: z.string(),
+  }),
+  outputSchema: z.object({
+    formatted: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    const { message } = inputData;
+
+    return {
+      formatted: message.toUpperCase(),
+    };
+  },
+});
+```
+
+> 設定項目の全一覧は [Step クラス](/reference/workflows/step) を参照してください。
+
+
+<div id="using-agents-and-tools">
+  ### エージェントとツールの使用
+</div>
+
+ワークフローの各ステップでは、登録済みのエージェントを呼び出したり、ツールを直接インポートして実行したりすることもできます。詳しくは [Agents and Tools](./agents-and-tools) ページをご覧ください。
+
+<div id="creating-a-workflow">
+  ## ワークフローの作成
+</div>
+
+受け取るデータと返すデータを定義するために、`inputSchema` と `outputSchema` を指定して `createWorkflow()` でワークフローを作成します。`.then()` でステップを追加し、最後に `.commit()` でワークフローを確定します。
+
+```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  })
+})
+  .then(step1)
+  .commit();
+
+```
+
+> すべての設定オプションの一覧については、[Workflow Class](/reference/workflows/workflow) を参照してください。
+
+
+<div id="understanding-control-flow">
+  ### 制御フローを理解する
+</div>
+
+ワークフローは複数の方法で構成できます。選択した方法によって、各ステップのスキーマの構成が異なります。詳しくは [Control Flow](./control-flow) のページをご覧ください。
+
+<div id="composing-workflow-steps">
+  #### ワークフローのステップを構成する
+</div>
+
+`.then()` を使用すると、ステップは順番に実行されます。各ステップの `inputSchema` は直前のステップの `outputSchema` と一致している必要があります。最後のステップの `outputSchema` は、エンドツーエンドの型安全性を確保するために、ワークフローの `outputSchema` と一致している必要があります。
+
+```typescript {4,7,14,17,24,27} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  //...
+  inputSchema: z.object({
+    message: z.string(),
+  }),
+  outputSchema: z.object({
+    formatted: z.string(),
+  }),
+});
+
+const step2 = createStep({
+  // ...
+  inputSchema: z.object({
+    formatted: z.string(),
+  }),
+  outputSchema: z.object({
+    emphasized: z.string(),
+  }),
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.object({
+    message: z.string(),
+  }),
+  outputSchema: z.object({
+    emphasized: z.string(),
+  }),
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+```
+
+
+<div id="registering-a-workflow">
+  ### ワークフローの登録
+</div>
+
+アプリケーション全体で利用できるように、Mastra インスタンスにワークフローを登録します。登録後は、エージェントやツールから呼び出せるようになり、ログやオブザーバビリティ機能などの共有リソースにもアクセスできます。
+
+```typescript {6} title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { testWorkflow } from "./workflows/test-workflow";
+
+export const mastra = new Mastra({
+  // ...
+  workflows: { testWorkflow },
+});
+```
+
+
+<div id="referencing-a-workflow">
+  ## ワークフローの参照
+</div>
+
+エージェント、ツール、Mastra Client、またはコマンドラインからワークフローを実行できます。セットアップに応じて、`mastra` もしくは `mastraClient` のインスタンスで `.getWorkflow()` を呼び出して、ワークフローの参照を取得します。
+
+```typescript showLineNumbers copy
+const testWorkflow = mastra.getWorkflow("testWorkflow");
+```
+
+:::info
+
+`mastra.getWorkflow()` は直接インポートよりも推奨されます。Mastra インスタンスの設定（ロガー、テレメトリー、ストレージ、登録済みエージェント、ベクターストア）にアクセスできるためです。
+
+:::
+
+> 詳しくは、[Running Workflows](/examples/workflows_legacy/creating-a-workflow) をご覧ください。
+
+
+<div id="running-workflows">
+  ## ワークフローの実行
+</div>
+
+ワークフローは2つのモードで実行できます。start はすべてのステップが完了するまで待って結果を返し、stream は実行中にイベントを発行します。ユースケースに合わせて選択してください。最終結果だけが必要なら start、進行状況を監視したり各ステップ完了時にアクションをトリガーしたい場合は stream を使います。
+
+<Tabs>
+  <TabItem value="start" label="Start">
+
+`createRunAsync()` を使ってワークフローの実行インスタンスを作成し、ワークフローの `inputSchema` に一致する `inputData` とともに `.start()` を呼び出します。ワークフローはすべてのステップを実行し、最終結果を返します。
+
+```typescript showLineNumbers copy
+const run = await testWorkflow.createRunAsync();
+
+const result = await run.start({
+  inputData: {
+    message: "Hello world",
+  },
+});
+
+console.log(result);
+```
+
+  </TabItem>
+  <TabItem value="stream" label="Stream">
+
+`.createRunAsync()` を使ってワークフローの実行インスタンスを作成し、ワークフローの `inputSchema` に一致する `inputData` とともに `.stream()` を呼び出します。ワークフローは各ステップの実行時にイベントを発行し、これを反復処理して進行状況を追跡できます。
+
+```typescript showLineNumbers copy
+const run = await testWorkflow.createRunAsync();
+
+const result = await run.stream({
+  inputData: {
+    message: "Hello world",
+  },
+});
+
+for await (const chunk of result.stream) {
+  console.log(chunk);
+}
+```
+
+  </TabItem>
+</Tabs>
+
+<div id="workflow-output">
+  ## ワークフローの出力
+</div>
+
+ワークフローの出力には、各ステップの入出力を含む実行の全ライフサイクルが表示されます。各ステップのステータス、ワークフロー全体のステータス、最終結果も含まれます。これにより、データがワークフロー内をどのように流れ、各ステップが何を生成し、最終的にどのように完了したかを明確に把握できます。
+
+```json
+{
+  "status": "success",
+  "steps": {
+    // ...
+    "step-1": {
+      "status": "success",
+      "payload": {
+        "message": "こんにちは、世界"
+      },
+      "output": {
+        "formatted": "HELLO WORLD"
+      }
+    },
+    "step-2": {
+      "status": "success",
+      "payload": {
+        "formatted": "HELLO WORLD"
+      },
+      "output": {
+        "emphasized": "HELLO WORLD!!!"
+      }
+    }
+  },
+  "input": {
+    "message": "こんにちは、世界"
+  },
+  "result": {
+    "emphasized": "HELLO WORLD!!!"
+  }
+}
+```
+
+
+<div id="using-runtimecontext">
+  ## `RuntimeContext` の使用
+</div>
+
+[RuntimeContext](/docs/server-db/runtime-context) を使うと、リクエストごとの値にアクセスできます。これにより、リクエストの状況に応じて動作を条件付きで調整できます。
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const step1 = createStep({
+  // ...
+  execute: async ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+
+    const maxResults = userTier === "enterprise" ? 1000 : 50;
+
+    return { maxResults };
+  },
+});
+```
+
+> 詳細については、[Runtime Context](/docs/server-db/runtime-context)を参照してください。
+
+
+<div id="testing-with-mastra-playground">
+  ## Mastra Playground でのテスト
+</div>
+
+Mastra の [Playground](/docs/getting-started/studio) を使うと、さまざまな入力でワークフローを手軽に実行し、実行ライフサイクルを可視化し、各ステップの入出力を確認し、ワークフローの各要素をより詳しく確認できます。
+
+<div id="related">
+  ## 関連
+</div>
+
+ワークフローの詳細については、実践的な例を用いて中核概念を解説する[Workflow Guide](/guides/guide/ai-recruiter)をご覧ください。
+
+- [Parallel Steps のワークフロー例](/examples/workflows_legacy/parallel-steps)
+- [Conditional Branching のワークフロー例](/examples/workflows_legacy/conditional-branching)
+- [Inngest のワークフロー例](/examples/workflows/inngest-workflow)
+- [Suspend and Resume のワークフロー例](/examples/workflows_legacy/human-in-the-loop)
+
+<div id="workflows-legacy">
+  ## ワークフロー（レガシー）
+</div>
+
+レガシー版ワークフローのドキュメントは、[Workflows (Legacy)](../workflows-legacy/overview)をご参照ください。

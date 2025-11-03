@@ -1,0 +1,47 @@
+---
+title: "リファレンス: Mastra.getDeployer() | コア | Mastra ドキュメント"
+description: "Mastra の `Mastra.getDeployer()` メソッドのリファレンス。設定されたデプロイヤーインスタンスを取得します。"
+---
+
+<div id="mastragetdeployer">
+  # Mastra.getDeployer()
+</div>
+
+`.getDeployer()` メソッドは、Mastra インスタンスで設定されたデプロイアインスタンスを取得するために使用します。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+mastra.getDeployer();
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+このメソッドはパラメータを受け付けません。
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "deployer",
+      type: "MastraDeployer | undefined",
+      description:
+        "設定されたデプロイヤーインスタンス。デプロイヤーが未設定の場合は undefined。",
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [デプロイメント概要](/docs/deployment/overview)
+- [Deployer リファレンス](/reference/deployer/)

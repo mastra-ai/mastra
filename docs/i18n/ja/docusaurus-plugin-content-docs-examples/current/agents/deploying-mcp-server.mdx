@@ -1,0 +1,121 @@
+---
+title: "例: MCPServer のデプロイ | Agents | Mastra ドキュメント"
+description: stdio トランスポートを使って Mastra の MCPServer をセットアップ、ビルド、デプロイし、NPM に公開する手順例。
+---
+
+import GithubLink from "@site/src/components/GithubLink";
+
+
+<div id="example-deploying-an-mcpserver">
+  # 例: MCPServer のデプロイ
+</div>
+
+この例では、stdio トランスポートを使って基本的な Mastra MCPServer をセットアップし、ビルドして、NPM への公開などのデプロイ準備を行う方法を説明します。
+
+<div id="install-dependencies">
+  ## 依存関係をインストール
+</div>
+
+必要なパッケージをインストールします：
+
+```bash
+pnpm add @mastra/mcp @mastra/core tsup
+```
+
+
+<div id="set-up-mcp-server">
+  ## MCP サーバーをセットアップする
+</div>
+
+1. 例として、stdio サーバー用のファイルを `/src/mastra/stdio.ts` に作成します。
+
+2. 次のコードをファイルに追加します。実際の Mastra ツールをインポートし、サーバー名を適切に設定するのを忘れないでください。
+
+   ```typescript title="src/mastra/stdio.ts" copy
+   #!/usr/bin/env node
+   import { MCPServer } from "@mastra/mcp";
+   import { weatherTool } from "./tools";
+
+   const server = new MCPServer({
+     name: "my-mcp-server",
+     version: "1.0.0",
+     tools: { weatherTool },
+   });
+
+   server.startStdio().catch((error) => {
+     console.error("Error running MCP server:", error);
+     process.exit(1);
+   });
+   ```
+
+3. `package.json` を更新し、ビルド済みのサーバーファイルを指す `bin` エントリと、サーバーをビルドするためのスクリプトを追加します。
+
+```json title="package.json" copy
+{
+  "bin": "dist/stdio.js",
+  "scripts": {
+    "build:mcp": "tsup src/mastra/stdio.ts --format esm --no-splitting --dts && chmod +x dist/stdio.js"
+  }
+}
+```
+
+4. ビルドコマンドを実行します：
+
+   ```bash
+   pnpm run build:mcp
+   ```
+
+   これによりサーバーコードがコンパイルされ、出力ファイルが実行可能になります。
+
+
+<div id="deploying-to-npm">
+  ## NPM へのデプロイ
+</div>
+
+`npx` 経由または依存関係として、他の人（や自分自身）が MCP サーバーを利用できるようにするには、NPM に公開します。
+
+1. NPM アカウントを作成し、ログインしていることを確認します（`npm login`）。
+2. `package.json` のパッケージ名が一意で、利用可能であることを確認します。
+3. ビルド後、プロジェクトのルートで公開コマンドを実行します：
+
+    ```bash
+    npm publish --access public
+    ```
+
+    パッケージの公開に関する詳細は、[NPM ドキュメント](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages)を参照してください。
+
+<div id="use-the-deployed-mcp-server">
+  ## デプロイ済みの MCP サーバーを使用する
+</div>
+
+公開が完了すると、`MCPClient` でパッケージを実行するコマンドを指定して MCP サーバーを利用できます。Claude Desktop、Cursor、Windsurf など、ほかの MCP クライアントを使うことも可能です。
+
+```typescript
+import { MCPClient } from "@mastra/mcp";
+
+const mcp = new MCPClient({
+  servers: {
+    // このMCPサーバーインスタンスに名前を付けます
+    yourServerName: {
+      command: "npx",
+      args: ["-y", "@your-org-name/your-package-name@latest"], // パッケージ名を置き換えてください
+    },
+  },
+});
+
+// この設定からツールやツールセットを取得し、エージェントで使用できます
+const tools = await mcp.listTools();
+const toolsets = await mcp.listToolsets();
+```
+
+注: 組織スコープを付けずに公開した場合、`args` は単に `["-y", "your-package-name@latest"]` になることがあります。
+
+<br />
+
+<br />
+
+<hr className="dark:border-[#404040] border-gray-300" />
+
+<br />
+
+<br />

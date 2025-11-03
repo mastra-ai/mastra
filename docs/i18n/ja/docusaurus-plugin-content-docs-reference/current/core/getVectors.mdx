@@ -1,0 +1,47 @@
+---
+title: "リファレンス: Mastra.getVectors() | Core | Mastra Docs"
+description: "Mastra の `Mastra.getVectors()` メソッドに関するドキュメント。設定済みのすべてのベクトルストアを取得します。"
+---
+
+<div id="mastragetvectors">
+  # Mastra.getVectors()
+</div>
+
+`.getVectors()` メソッドは、Mastra インスタンスで設定されたすべてのベクターストアを取得するために使用します。
+
+<div id="usage-example">
+  ## 使用例
+</div>
+
+```typescript copy
+mastra.getVectors();
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+このメソッドはパラメータを受け取りません。
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "vectors",
+      type: "TVectors",
+      description:
+        "設定されたすべてのベクターストアのレコード。キーはベクターストア名、値はベクターストアのインスタンスです。",
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連情報
+</div>
+
+- [ベクターストア概要](/docs/rag/vector-databases)
+- [RAG概要](/docs/rag/overview)

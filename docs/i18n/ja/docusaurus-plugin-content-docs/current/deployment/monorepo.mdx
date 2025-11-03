@@ -1,0 +1,116 @@
+---
+title: "モノレポでのデプロイ | デプロイ | Mastra ドキュメント"
+description: モノレポ構成に含まれる Mastra アプリケーションのデプロイ方法を学びましょう
+---
+
+<div id="monorepo-deployment">
+  # モノレポのデプロイ
+</div>
+
+モノレポでの Mastra のデプロイは、スタンドアロンアプリケーションのデプロイと同様の方法で行えます。[クラウド](./cloud-providers/) や [サーバーレスプラットフォーム](./serverless-platforms/) の一部のプロバイダーでは追加要件がある場合もありますが、基本的なセットアップは同じです。
+
+<div id="example-monorepo">
+  ## モノレポの例
+</div>
+
+この例では、Mastra アプリケーションは `apps/api` に配置されています。
+
+```
+apps/
+├── api/
+│   ├── src/
+│   │   └── mastra/
+│   │       ├── agents/
+│   │       ├── tools/
+│   │       ├── workflows/
+│   │       └── index.ts
+│   ├── package.json
+│   └── tsconfig.json
+└── web/
+packages/
+├── ui/
+└── utils/
+package.json
+```
+
+
+<div id="environment-variables">
+  ## 環境変数
+</div>
+
+`OPENAI_API_KEY` のような環境変数は、Mastra アプリケーションのルートディレクトリ `(apps/api)` にある `.env` ファイルに保存してください。例：
+
+```
+api/
+├── src/
+│   └── mastra/
+├── .env
+├── package.json
+└── tsconfig.json
+```
+
+
+<div id="deployment-configuration">
+  ## デプロイ構成
+</div>
+
+下の画像は、[Mastra Cloud](../mastra-cloud/overview) にデプロイする際、プロジェクトのルートとして `apps/api` を選択する方法を示しています。プロバイダーによってインターフェースは異なる場合がありますが、設定内容は同じです。
+
+![Deployment configuration](/img/monorepo/monorepo-mastra-cloud.jpg)
+
+<div id="dependency-management">
+  ## 依存関係の管理
+</div>
+
+モノレポでは、バージョンの競合やビルドエラーを避けるために依存関係を一貫して保ちましょう。
+
+- すべてのパッケージが同じバージョンに解決されるよう、プロジェクトのルートで**単一のロックファイル**を使用する。
+- 重複を防ぐために、**共有ライブラリ**（Mastra や各種フレームワークなど）のバージョンを揃える。
+
+<div id="deployment-pitfalls">
+  ## デプロイ時の落とし穴
+</div>
+
+モノレポで Mastra をデプロイする際に注意すべきよくある問題:
+
+- **誤ったプロジェクトルート**: 正しいパッケージ（例: `apps/api`）がデプロイ対象として選択されていることを確認してください。
+
+<div id="bundler-options">
+  ## バンドラーのオプション
+</div>
+
+`transpilePackages` を使用して、TypeScript のワークスペース内パッケージやライブラリをコンパイルします。各 `package.json` に記載されているとおりのパッケージ名を正確に列挙してください。実行時に解決される依存関係を除外するには `externals` を、読みやすいスタックトレースを出力するには `sourcemap` を使用します。
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+export const mastra = new Mastra({
+  // ...
+  bundler: {
+    transpilePackages: ["utils"],
+    externals: ["ui"],
+    sourcemap: true,
+  },
+});
+```
+
+> そのほかの設定オプションについては、[Mastra Class](/reference/core/mastra-class) を参照してください。
+
+
+<div id="supported-monorepos">
+  ## サポート対象のモノレポ
+</div>
+
+Mastra は次に対応しています:
+
+- npm workspaces
+- pnpm workspaces
+- Yarn workspaces
+- Turborepo
+
+既知の制限:
+
+- Bun workspaces — 部分的に対応（既知の問題あり）
+- Nx — Nx の[サポートされている依存関係戦略](https://nx.dev/concepts/decisions/dependency-management)を使用できますが、ワークスペース内の各パッケージに `package.json` ファイルが必要です
+
+> モノレポで問題が発生している場合は、こちらをご覧ください: [Monorepos Support mega issue](https://github.com/mastra-ai/mastra/issues/6852)。

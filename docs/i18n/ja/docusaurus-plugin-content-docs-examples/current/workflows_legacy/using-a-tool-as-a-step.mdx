@@ -1,0 +1,79 @@
+---
+title: "例：ワークフローのステップとしてのツール（レガシー） | ワークフロー（レガシー） | Mastra ドキュメント"
+description: Mastra を使用して、カスタムツールをレガシーのワークフローのステップとして統合する例。
+---
+
+import GithubLink from "@site/src/components/GithubLink";
+
+
+<div id="tool-as-a-workflow-step-legacy">
+  # ワークフローのステップとしてのツール（レガシー）
+</div>
+
+この例では、カスタムツールをワークフローのステップとして作成して統合する方法を示し、入力・出力スキーマの定義方法と、ツールの実行ロジックの実装方法を解説します。
+
+```ts showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
+
+const crawlWebpage = createTool({
+  id: "Crawl Webpage",
+  description: "ウェブページをクロールしてテキスト内容を抽出します",
+  inputSchema: z.object({
+    url: z.string().url(),
+  }),
+  outputSchema: z.object({
+    rawText: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const response = await fetch(context.triggerData.url);
+    const text = await response.text();
+    return { rawText: "このウェブページのテキスト内容です: " + text };
+  },
+});
+
+const contentWorkflow = new LegacyWorkflow({ name: "content-review" });
+
+contentWorkflow.step(crawlWebpage).commit();
+
+const { start } = contentWorkflow.createRun();
+
+const res = await start({ triggerData: { url: "https://example.com" } });
+
+console.log(res.results);
+```
+
+<br />
+
+<br />
+
+<hr className="dark:border-[#404040] border-gray-300" />
+
+<br />
+
+<br />
+
+<GithubLink
+  link={
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/tool-as-workflow-step"
+}
+/>
+
+
+<div id="workflows-legacy">
+  ## ワークフロー（レガシー）
+</div>
+
+以下のリンクは、レガシー・ワークフローのサンプルドキュメントです。
+
+- [シンプルなワークフローの作成（レガシー）](/examples/workflows_legacy/creating-a-workflow)
+- [順次ステップのワークフロー（レガシー）](/examples/workflows_legacy/sequential-steps)
+- [ステップの並列実行](/examples/workflows_legacy/parallel-steps)
+- [分岐パス](/examples/workflows_legacy/branching-paths)
+- [条件分岐付きワークフロー（レガシー・試験的）](/examples/workflows_legacy/conditional-branching)
+- [ワークフロー（レガシー）からのエージェント呼び出し](/examples/workflows_legacy/calling-agent)
+- [循環依存を持つワークフロー（レガシー）](/examples/workflows_legacy/cyclical-dependencies)
+- [ワークフロー変数によるデータマッピング（レガシー）](/examples/workflows_legacy/workflow-variables)
+- [Human-in-the-Loop ワークフロー（レガシー）](/examples/workflows_legacy/human-in-the-loop)
+- [一時停止と再開が可能なワークフロー（レガシー）](/examples/workflows_legacy/suspend-and-resume)

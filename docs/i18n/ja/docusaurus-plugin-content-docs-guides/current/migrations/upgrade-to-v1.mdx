@@ -1,0 +1,118 @@
+---
+title: "移行: Mastra v1 へのアップグレード | 移行ガイド"
+description: "Mastra の v1 未満のバージョンにおける破壊的変更への対応を含むアップグレード方法を解説します。"
+---
+
+<div id="upgrade-to-mastra-v1">
+  # Mastra v1 へのアップグレード
+</div>
+
+このガイドでは、Mastra の v1 以前のバージョンにおける破壊的変更への対応方法と、Mastra v1 へのアップグレード手順を学べます。
+
+パッケージマネージャーを使ってプロジェクトの依存関係を更新してください。Mastra のパッケージは必ずすべて同時に更新してください。
+
+:::info
+
+見出しで示しているバージョンは `@mastra/core` パッケージを指します。必要に応じて、他の Mastra パッケージのバージョンは詳細説明の中で個別に言及します。
+
+すべての Mastra パッケージは `@mastra/core` に対する peer dependency を持っているため、パッケージマネージャーで互換性の有無を確認できます。
+
+:::
+
+<div id="migrate-to-v022">
+  ## v0.22 へのアップグレード
+</div>
+
+<div id="changed-memory-scope-defaults">
+  ### 変更点: メモリスコープのデフォルト
+</div>
+
+`@mastra/memory` - `0.16.0`
+`@mastra/core` - `0.22.0`
+
+**working memory** と **semantic recall** のデフォルトのメモリスコープが `'thread'` から `'resource'` に変更されました。
+
+**変更前:**
+
+* Working memory のデフォルトは `scope: 'thread'`（会話ごとに分離）
+* Semantic recall のデフォルトは `scope: 'thread'`（現在の会話内のみ検索）
+
+**変更後:**
+
+* Working memory のデフォルトは `scope: 'resource'`（すべてのユーザーとの会話をまたいで保持）
+* Semantic recall のデフォルトは `scope: 'resource'`（すべてのユーザーとの会話をまたいで検索）
+
+**なぜこの変更を行ったのか？**
+
+1. **より良いユーザー体験**: 多くのアプリケーションは単一のスレッド内だけでなく、会話をまたいでユーザー情報を記憶したい
+2. **より直感的なデフォルト**: ユーザーは AI エージェントが自分を「覚えている」ことを期待しており、そのためには resource スコープのメモリが必要
+3. **一般的なユースケースとの整合**: 多くの本番環境のアプリケーションは resource スコープのメモリを使用している
+
+**移行:**
+
+メモリを会話スレッドごとに分離する従来の動作を維持したい場合は、メモリ設定で明示的に `scope: 'thread'` を設定してください。
+
+```typescript showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+
+const memory = new Memory({
+  storage: new LibSQLStore({ url: "file:local.db" }),
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: "thread", // スレッドスコープに明示的に設定
+      template: `# ユーザープロフィール
+- **名前**:
+- **関心事**:
+`,
+    },
+    semanticRecall: {
+      topK: 3,
+      scope: "thread", // スレッドスコープに明示的に設定
+    },
+  },
+});
+```
+
+新しいデフォルトの動作を採用する場合、`scope: 'resource'` の明示的な宣言は不要になったため、任意で削除できます。
+
+
+<div id="deprecated-format-aisdk">
+  ### 非推奨: `format: "aisdk"`
+</div>
+
+`stream()`／`generate()` メソッドの `format: "aisdk"` オプションは非推奨です。代わりに `@mastra/ai-sdk` パッケージを使用してください。詳細は [Vercel AI SDK の使用方法ドキュメント](/docs/frameworks/agentic-uis/ai-sdk)をご覧ください。
+
+<div id="removed-mcp-classes">
+  ### 削除: MCP クラス
+</div>
+
+`@mastra/mcp` - `0.14.0`
+
+- `MastraMCPClient` クラスを削除しました。代わりに [`MCPClient`](/reference/tools/mcp-client) クラスを使用してください。
+- `MCPConfigurationOptions` 型を削除しました。代わりに [`MCPClientOptions`](/reference/tools/mcp-client#mcpclientoptions) 型を使用してください。API は同一です。
+- `MCPConfiguration` クラスを削除しました。代わりに [`MCPClient`](/reference/tools/mcp-client) クラスを使用してください。
+
+<div id="removed-cli-flags-commands">
+  ### 変更点: CLI フラグおよびコマンドの削除
+</div>
+
+`mastra` - `0.17.0`
+
+- `mastra deploy` CLI コマンドを削除しました。各プラットフォームのデプロイ手順に従ってください。
+- `mastra build` コマンドから `--env` フラグを削除しました。ビルド成果物をカスタム環境で起動する場合は、代わりに `mastra start --env <env>` を使用してください。
+- `mastra dev` から `--port` フラグを削除しました。代わりに `new Mastra()` クラスで `server.port` を設定してください。
+
+<div id="migrate-to-v021">
+  ## v0.21 への移行
+</div>
+
+変更は不要です。
+
+<div id="migrate-to-v020">
+  ## v0.20 への移行
+</div>
+
+- [VNext から Standard APIs へ](./vnext-to-standard-apis)
+- [AgentNetwork から .network() へ](./agentnetwork)

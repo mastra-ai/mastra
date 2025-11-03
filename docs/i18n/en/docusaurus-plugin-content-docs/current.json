@@ -1,0 +1,538 @@
+{
+  "version.label": {
+    "message": "Next",
+    "description": "The label for version current"
+  },
+  "sidebar.docsSidebar.category.Getting Started": {
+    "message": "Getting Started",
+    "description": "The label for category 'Getting Started' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Agents": {
+    "message": "Agents",
+    "description": "The label for category 'Agents' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Workflows": {
+    "message": "Workflows",
+    "description": "The label for category 'Workflows' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Streaming": {
+    "message": "Streaming",
+    "description": "The label for category 'Streaming' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Tools & MCP": {
+    "message": "Tools & MCP",
+    "description": "The label for category 'Tools & MCP' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Memory": {
+    "message": "Memory",
+    "description": "The label for category 'Memory' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Storage": {
+    "message": "Storage",
+    "description": "The label for category 'Storage' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.RAG": {
+    "message": "RAG",
+    "description": "The label for category 'RAG' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Server & DB": {
+    "message": "Server & DB",
+    "description": "The label for category 'Server & DB' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Deployment": {
+    "message": "Deployment",
+    "description": "The label for category 'Deployment' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Serverless Platforms": {
+    "message": "Serverless Platforms",
+    "description": "The label for category 'Serverless Platforms' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Cloud Providers": {
+    "message": "Cloud Providers",
+    "description": "The label for category 'Cloud Providers' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Mastra Cloud": {
+    "message": "Mastra Cloud",
+    "description": "The label for category 'Mastra Cloud' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Observability": {
+    "message": "Observability",
+    "description": "The label for category 'Observability' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.AI Tracing": {
+    "message": "AI Tracing",
+    "description": "The label for category 'AI Tracing' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Exporters": {
+    "message": "Exporters",
+    "description": "The label for category 'Exporters' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Processors": {
+    "message": "Processors",
+    "description": "The label for category 'Processors' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Scorers": {
+    "message": "Scorers",
+    "description": "The label for category 'Scorers' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Evals (old API)": {
+    "message": "Evals (old API)",
+    "description": "The label for category 'Evals (old API)' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Auth": {
+    "message": "Auth",
+    "description": "The label for category 'Auth' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Voice": {
+    "message": "Voice",
+    "description": "The label for category 'Voice' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Frameworks": {
+    "message": "Frameworks",
+    "description": "The label for category 'Frameworks' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Agentic UIs": {
+    "message": "Agentic UIs",
+    "description": "The label for category 'Agentic UIs' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Servers": {
+    "message": "Servers",
+    "description": "The label for category 'Servers' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Web Frameworks": {
+    "message": "Web Frameworks",
+    "description": "The label for category 'Web Frameworks' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.category.Community": {
+    "message": "Community",
+    "description": "The label for category 'Community' in sidebar 'docsSidebar'"
+  },
+  "sidebar.docsSidebar.doc.Installation": {
+    "message": "Installation",
+    "description": "The label for the doc item 'Installation' in sidebar 'docsSidebar', linking to the doc getting-started/installation"
+  },
+  "sidebar.docsSidebar.doc.Project Structure": {
+    "message": "Project Structure",
+    "description": "The label for the doc item 'Project Structure' in sidebar 'docsSidebar', linking to the doc getting-started/project-structure"
+  },
+  "sidebar.docsSidebar.doc.MCP Docs Server": {
+    "message": "MCP Docs Server",
+    "description": "The label for the doc item 'MCP Docs Server' in sidebar 'docsSidebar', linking to the doc getting-started/mcp-docs-server"
+  },
+  "sidebar.docsSidebar.doc.Templates": {
+    "message": "Templates",
+    "description": "The label for the doc item 'Templates' in sidebar 'docsSidebar', linking to the doc getting-started/templates"
+  },
+  "sidebar.docsSidebar.doc.agents.overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc agents/overview"
+  },
+  "sidebar.docsSidebar.doc.Using Tools": {
+    "message": "Using Tools",
+    "description": "The label for the doc item 'Using Tools' in sidebar 'docsSidebar', linking to the doc agents/using-tools"
+  },
+  "sidebar.docsSidebar.doc.Memory": {
+    "message": "Memory",
+    "description": "The label for the doc item 'Memory' in sidebar 'docsSidebar', linking to the doc agents/agent-memory"
+  },
+  "sidebar.docsSidebar.doc.Networks": {
+    "message": "Networks",
+    "description": "The label for the doc item 'Networks' in sidebar 'docsSidebar', linking to the doc agents/networks"
+  },
+  "sidebar.docsSidebar.doc.Guardrails": {
+    "message": "Guardrails",
+    "description": "The label for the doc item 'Guardrails' in sidebar 'docsSidebar', linking to the doc agents/guardrails"
+  },
+  "sidebar.docsSidebar.doc.Adding Voice": {
+    "message": "Adding Voice",
+    "description": "The label for the doc item 'Adding Voice' in sidebar 'docsSidebar', linking to the doc agents/adding-voice"
+  },
+  "sidebar.docsSidebar.doc.workflows.overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc workflows/overview"
+  },
+  "sidebar.docsSidebar.doc.Control Flow": {
+    "message": "Control Flow",
+    "description": "The label for the doc item 'Control Flow' in sidebar 'docsSidebar', linking to the doc workflows/control-flow"
+  },
+  "sidebar.docsSidebar.doc.Agents & Tools": {
+    "message": "Agents & Tools",
+    "description": "The label for the doc item 'Agents & Tools' in sidebar 'docsSidebar', linking to the doc workflows/agents-and-tools"
+  },
+  "sidebar.docsSidebar.doc.Suspend & Resume": {
+    "message": "Suspend & Resume",
+    "description": "The label for the doc item 'Suspend & Resume' in sidebar 'docsSidebar', linking to the doc workflows/suspend-and-resume"
+  },
+  "sidebar.docsSidebar.doc.Error Handling": {
+    "message": "Error Handling",
+    "description": "The label for the doc item 'Error Handling' in sidebar 'docsSidebar', linking to the doc workflows/error-handling"
+  },
+  "sidebar.docsSidebar.doc.Input Data Mapping": {
+    "message": "Input Data Mapping",
+    "description": "The label for the doc item 'Input Data Mapping' in sidebar 'docsSidebar', linking to the doc workflows/input-data-mapping"
+  },
+  "sidebar.docsSidebar.doc.Human-in-the-loop": {
+    "message": "Human-in-the-loop",
+    "description": "The label for the doc item 'Human-in-the-loop' in sidebar 'docsSidebar', linking to the doc workflows/human-in-the-loop"
+  },
+  "sidebar.docsSidebar.doc.Snapshots": {
+    "message": "Snapshots",
+    "description": "The label for the doc item 'Snapshots' in sidebar 'docsSidebar', linking to the doc workflows/snapshots"
+  },
+  "sidebar.docsSidebar.doc.Inngest Workflow": {
+    "message": "Inngest Workflow",
+    "description": "The label for the doc item 'Inngest Workflow' in sidebar 'docsSidebar', linking to the doc workflows/inngest-workflow"
+  },
+  "sidebar.docsSidebar.doc.streaming.overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc streaming/overview"
+  },
+  "sidebar.docsSidebar.doc.Events": {
+    "message": "Events",
+    "description": "The label for the doc item 'Events' in sidebar 'docsSidebar', linking to the doc streaming/events"
+  },
+  "sidebar.docsSidebar.doc.Tool Streaming": {
+    "message": "Tool Streaming",
+    "description": "The label for the doc item 'Tool Streaming' in sidebar 'docsSidebar', linking to the doc streaming/tool-streaming"
+  },
+  "sidebar.docsSidebar.doc.Workflow Streaming": {
+    "message": "Workflow Streaming",
+    "description": "The label for the doc item 'Workflow Streaming' in sidebar 'docsSidebar', linking to the doc streaming/workflow-streaming"
+  },
+  "sidebar.docsSidebar.doc.tools-mcp.overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc tools-mcp/overview"
+  },
+  "sidebar.docsSidebar.doc.MCP Overview": {
+    "message": "MCP Overview",
+    "description": "The label for the doc item 'MCP Overview' in sidebar 'docsSidebar', linking to the doc tools-mcp/mcp-overview"
+  },
+  "sidebar.docsSidebar.doc.Advanced Usage": {
+    "message": "Advanced Usage",
+    "description": "The label for the doc item 'Advanced Usage' in sidebar 'docsSidebar', linking to the doc tools-mcp/advanced-usage"
+  },
+  "sidebar.docsSidebar.doc.memory.overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc memory/overview"
+  },
+  "sidebar.docsSidebar.doc.Threads and Resources": {
+    "message": "Threads and Resources",
+    "description": "The label for the doc item 'Threads and Resources' in sidebar 'docsSidebar', linking to the doc memory/threads-and-resources"
+  },
+  "sidebar.docsSidebar.doc.Working Memory": {
+    "message": "Working Memory",
+    "description": "The label for the doc item 'Working Memory' in sidebar 'docsSidebar', linking to the doc memory/working-memory"
+  },
+  "sidebar.docsSidebar.doc.Conversation History": {
+    "message": "Conversation History",
+    "description": "The label for the doc item 'Conversation History' in sidebar 'docsSidebar', linking to the doc memory/conversation-history"
+  },
+  "sidebar.docsSidebar.doc.Semantic Recall": {
+    "message": "Semantic Recall",
+    "description": "The label for the doc item 'Semantic Recall' in sidebar 'docsSidebar', linking to the doc memory/semantic-recall"
+  },
+  "sidebar.docsSidebar.doc.Memory Processors": {
+    "message": "Memory Processors",
+    "description": "The label for the doc item 'Memory Processors' in sidebar 'docsSidebar', linking to the doc memory/memory-processors"
+  },
+  "sidebar.docsSidebar.doc.Memory with LibSQL": {
+    "message": "Memory with LibSQL",
+    "description": "The label for the doc item 'Memory with LibSQL' in sidebar 'docsSidebar', linking to the doc memory/storage/memory-with-libsql"
+  },
+  "sidebar.docsSidebar.doc.Memory with PostgreSQL": {
+    "message": "Memory with PostgreSQL",
+    "description": "The label for the doc item 'Memory with PostgreSQL' in sidebar 'docsSidebar', linking to the doc memory/storage/memory-with-pg"
+  },
+  "sidebar.docsSidebar.doc.Memory with Upstash": {
+    "message": "Memory with Upstash",
+    "description": "The label for the doc item 'Memory with Upstash' in sidebar 'docsSidebar', linking to the doc memory/storage/memory-with-upstash"
+  },
+  "sidebar.docsSidebar.doc.rag.overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc rag/overview"
+  },
+  "sidebar.docsSidebar.doc.Chunking and Embedding": {
+    "message": "Chunking and Embedding",
+    "description": "The label for the doc item 'Chunking and Embedding' in sidebar 'docsSidebar', linking to the doc rag/chunking-and-embedding"
+  },
+  "sidebar.docsSidebar.doc.Vector Databases": {
+    "message": "Vector Databases",
+    "description": "The label for the doc item 'Vector Databases' in sidebar 'docsSidebar', linking to the doc rag/vector-databases"
+  },
+  "sidebar.docsSidebar.doc.Retrieval": {
+    "message": "Retrieval",
+    "description": "The label for the doc item 'Retrieval' in sidebar 'docsSidebar', linking to the doc rag/retrieval"
+  },
+  "sidebar.docsSidebar.doc.Production Server": {
+    "message": "Production Server",
+    "description": "The label for the doc item 'Production Server' in sidebar 'docsSidebar', linking to the doc server-db/production-server"
+  },
+  "sidebar.docsSidebar.doc.Middleware": {
+    "message": "Middleware",
+    "description": "The label for the doc item 'Middleware' in sidebar 'docsSidebar', linking to the doc server-db/middleware"
+  },
+  "sidebar.docsSidebar.doc.Runtime Context": {
+    "message": "Runtime Context",
+    "description": "The label for the doc item 'Runtime Context' in sidebar 'docsSidebar', linking to the doc server-db/runtime-context"
+  },
+  "sidebar.docsSidebar.doc.Custom API Routes": {
+    "message": "Custom API Routes",
+    "description": "The label for the doc item 'Custom API Routes' in sidebar 'docsSidebar', linking to the doc server-db/custom-api-routes"
+  },
+  "sidebar.docsSidebar.doc.Storage": {
+    "message": "Storage",
+    "description": "The label for the doc item 'Storage' in sidebar 'docsSidebar', linking to the doc server-db/storage"
+  },
+  "sidebar.docsSidebar.doc.Mastra Client": {
+    "message": "Mastra Client",
+    "description": "The label for the doc item 'Mastra Client' in sidebar 'docsSidebar', linking to the doc server-db/mastra-client"
+  },
+  "sidebar.docsSidebar.doc.deployment.overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc deployment/overview"
+  },
+  "sidebar.docsSidebar.doc.Server deployment": {
+    "message": "Server deployment",
+    "description": "The label for the doc item 'Server deployment' in sidebar 'docsSidebar', linking to the doc deployment/server-deployment"
+  },
+  "sidebar.docsSidebar.doc.With a Monorepo": {
+    "message": "With a Monorepo",
+    "description": "The label for the doc item 'With a Monorepo' in sidebar 'docsSidebar', linking to the doc deployment/monorepo"
+  },
+  "sidebar.docsSidebar.doc.With a Web Framework": {
+    "message": "With a Web Framework",
+    "description": "The label for the doc item 'With a Web Framework' in sidebar 'docsSidebar', linking to the doc deployment/web-framework"
+  },
+  "sidebar.docsSidebar.doc.deployment.serverless-platforms.overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc deployment/serverless-platforms/index"
+  },
+  "sidebar.docsSidebar.doc.Cloudflare": {
+    "message": "Cloudflare",
+    "description": "The label for the doc item 'Cloudflare' in sidebar 'docsSidebar', linking to the doc deployment/serverless-platforms/cloudflare-deployer"
+  },
+  "sidebar.docsSidebar.doc.Netlify": {
+    "message": "Netlify",
+    "description": "The label for the doc item 'Netlify' in sidebar 'docsSidebar', linking to the doc deployment/serverless-platforms/netlify-deployer"
+  },
+  "sidebar.docsSidebar.doc.Vercel": {
+    "message": "Vercel",
+    "description": "The label for the doc item 'Vercel' in sidebar 'docsSidebar', linking to the doc deployment/serverless-platforms/vercel-deployer"
+  },
+  "sidebar.docsSidebar.doc.deployment.cloud-providers.overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc deployment/cloud-providers/index"
+  },
+  "sidebar.docsSidebar.doc.Amazon EC2": {
+    "message": "Amazon EC2",
+    "description": "The label for the doc item 'Amazon EC2' in sidebar 'docsSidebar', linking to the doc deployment/cloud-providers/amazon-ec2"
+  },
+  "sidebar.docsSidebar.doc.AWS Lambda": {
+    "message": "AWS Lambda",
+    "description": "The label for the doc item 'AWS Lambda' in sidebar 'docsSidebar', linking to the doc deployment/cloud-providers/aws-lambda"
+  },
+  "sidebar.docsSidebar.doc.Digital Ocean": {
+    "message": "Digital Ocean",
+    "description": "The label for the doc item 'Digital Ocean' in sidebar 'docsSidebar', linking to the doc deployment/cloud-providers/digital-ocean"
+  },
+  "sidebar.docsSidebar.doc.Azure App Services": {
+    "message": "Azure App Services",
+    "description": "The label for the doc item 'Azure App Services' in sidebar 'docsSidebar', linking to the doc deployment/cloud-providers/azure-app-services"
+  },
+  "sidebar.docsSidebar.doc.observability.overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc observability/overview"
+  },
+  "sidebar.docsSidebar.doc.Logging": {
+    "message": "Logging",
+    "description": "The label for the doc item 'Logging' in sidebar 'docsSidebar', linking to the doc observability/logging"
+  },
+  "sidebar.docsSidebar.doc.OTEL Tracing": {
+    "message": "OTEL Tracing",
+    "description": "The label for the doc item 'OTEL Tracing' in sidebar 'docsSidebar', linking to the doc observability/otel-tracing"
+  },
+  "sidebar.docsSidebar.doc.Next.js Tracing": {
+    "message": "Next.js Tracing",
+    "description": "The label for the doc item 'Next.js Tracing' in sidebar 'docsSidebar', linking to the doc observability/nextjs-tracing"
+  },
+  "sidebar.docsSidebar.doc.observability.ai-tracing.overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc observability/ai-tracing/overview"
+  },
+  "sidebar.docsSidebar.doc.Default": {
+    "message": "Default",
+    "description": "The label for the doc item 'Default' in sidebar 'docsSidebar', linking to the doc observability/ai-tracing/exporters/default"
+  },
+  "sidebar.docsSidebar.doc.Cloud": {
+    "message": "Cloud",
+    "description": "The label for the doc item 'Cloud' in sidebar 'docsSidebar', linking to the doc observability/ai-tracing/exporters/cloud"
+  },
+  "sidebar.docsSidebar.doc.Arize": {
+    "message": "Arize",
+    "description": "The label for the doc item 'Arize' in sidebar 'docsSidebar', linking to the doc observability/ai-tracing/exporters/arize"
+  },
+  "sidebar.docsSidebar.doc.Braintrust": {
+    "message": "Braintrust",
+    "description": "The label for the doc item 'Braintrust' in sidebar 'docsSidebar', linking to the doc observability/ai-tracing/exporters/braintrust"
+  },
+  "sidebar.docsSidebar.doc.Langfuse": {
+    "message": "Langfuse",
+    "description": "The label for the doc item 'Langfuse' in sidebar 'docsSidebar', linking to the doc observability/ai-tracing/exporters/langfuse"
+  },
+  "sidebar.docsSidebar.doc.LangSmith": {
+    "message": "LangSmith",
+    "description": "The label for the doc item 'LangSmith' in sidebar 'docsSidebar', linking to the doc observability/ai-tracing/exporters/langsmith"
+  },
+  "sidebar.docsSidebar.doc.OpenTelemetry": {
+    "message": "OpenTelemetry",
+    "description": "The label for the doc item 'OpenTelemetry' in sidebar 'docsSidebar', linking to the doc observability/ai-tracing/exporters/otel"
+  },
+  "sidebar.docsSidebar.doc.SensitiveDataFilter": {
+    "message": "SensitiveDataFilter",
+    "description": "The label for the doc item 'SensitiveDataFilter' in sidebar 'docsSidebar', linking to the doc observability/ai-tracing/processors/sensitive-data-filter"
+  },
+  "sidebar.docsSidebar.doc.scorers.overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc scorers/overview"
+  },
+  "sidebar.docsSidebar.doc.Off the Shelf Scorers": {
+    "message": "Off the Shelf Scorers",
+    "description": "The label for the doc item 'Off the Shelf Scorers' in sidebar 'docsSidebar', linking to the doc scorers/off-the-shelf-scorers"
+  },
+  "sidebar.docsSidebar.doc.Custom Scorers": {
+    "message": "Custom Scorers",
+    "description": "The label for the doc item 'Custom Scorers' in sidebar 'docsSidebar', linking to the doc scorers/custom-scorers"
+  },
+  "sidebar.docsSidebar.doc.scorers.evals-old-api.overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc scorers/evals-old-api/overview"
+  },
+  "sidebar.docsSidebar.doc.Textual Evals": {
+    "message": "Textual Evals",
+    "description": "The label for the doc item 'Textual Evals' in sidebar 'docsSidebar', linking to the doc scorers/evals-old-api/textual-evals"
+  },
+  "sidebar.docsSidebar.doc.Custom Evals": {
+    "message": "Custom Evals",
+    "description": "The label for the doc item 'Custom Evals' in sidebar 'docsSidebar', linking to the doc scorers/evals-old-api/custom-eval"
+  },
+  "sidebar.docsSidebar.doc.Running in CI": {
+    "message": "Running in CI",
+    "description": "The label for the doc item 'Running in CI' in sidebar 'docsSidebar', linking to the doc scorers/evals-old-api/running-in-ci"
+  },
+  "sidebar.docsSidebar.doc.auth.overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc auth/index"
+  },
+  "sidebar.docsSidebar.doc.JSON Web Token": {
+    "message": "JSON Web Token",
+    "description": "The label for the doc item 'JSON Web Token' in sidebar 'docsSidebar', linking to the doc auth/jwt"
+  },
+  "sidebar.docsSidebar.doc.Clerk": {
+    "message": "Clerk",
+    "description": "The label for the doc item 'Clerk' in sidebar 'docsSidebar', linking to the doc auth/clerk"
+  },
+  "sidebar.docsSidebar.doc.Supabase": {
+    "message": "Supabase",
+    "description": "The label for the doc item 'Supabase' in sidebar 'docsSidebar', linking to the doc auth/supabase"
+  },
+  "sidebar.docsSidebar.doc.Firebase": {
+    "message": "Firebase",
+    "description": "The label for the doc item 'Firebase' in sidebar 'docsSidebar', linking to the doc auth/firebase"
+  },
+  "sidebar.docsSidebar.doc.WorkOS": {
+    "message": "WorkOS",
+    "description": "The label for the doc item 'WorkOS' in sidebar 'docsSidebar', linking to the doc auth/workos"
+  },
+  "sidebar.docsSidebar.doc.Auth0": {
+    "message": "Auth0",
+    "description": "The label for the doc item 'Auth0' in sidebar 'docsSidebar', linking to the doc auth/auth0"
+  },
+  "sidebar.docsSidebar.doc.voice.overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc voice/overview"
+  },
+  "sidebar.docsSidebar.doc.Text to Speech": {
+    "message": "Text to Speech",
+    "description": "The label for the doc item 'Text to Speech' in sidebar 'docsSidebar', linking to the doc voice/text-to-speech"
+  },
+  "sidebar.docsSidebar.doc.Speech to Text": {
+    "message": "Speech to Text",
+    "description": "The label for the doc item 'Speech to Text' in sidebar 'docsSidebar', linking to the doc voice/speech-to-text"
+  },
+  "sidebar.docsSidebar.doc.Speech to Speech": {
+    "message": "Speech to Speech",
+    "description": "The label for the doc item 'Speech to Speech' in sidebar 'docsSidebar', linking to the doc voice/speech-to-speech"
+  },
+  "sidebar.docsSidebar.doc.With Vercel AI SDK": {
+    "message": "With Vercel AI SDK",
+    "description": "The label for the doc item 'With Vercel AI SDK' in sidebar 'docsSidebar', linking to the doc frameworks/agentic-uis/ai-sdk"
+  },
+  "sidebar.docsSidebar.doc.With CopilotKit": {
+    "message": "With CopilotKit",
+    "description": "The label for the doc item 'With CopilotKit' in sidebar 'docsSidebar', linking to the doc frameworks/agentic-uis/copilotkit"
+  },
+  "sidebar.docsSidebar.doc.With Assistant UI": {
+    "message": "With Assistant UI",
+    "description": "The label for the doc item 'With Assistant UI' in sidebar 'docsSidebar', linking to the doc frameworks/agentic-uis/assistant-ui"
+  },
+  "sidebar.docsSidebar.doc.With Cedar-OS": {
+    "message": "With Cedar-OS",
+    "description": "The label for the doc item 'With Cedar-OS' in sidebar 'docsSidebar', linking to the doc frameworks/agentic-uis/cedar-os"
+  },
+  "sidebar.docsSidebar.doc.With OpenRouter": {
+    "message": "With OpenRouter",
+    "description": "The label for the doc item 'With OpenRouter' in sidebar 'docsSidebar', linking to the doc frameworks/agentic-uis/openrouter"
+  },
+  "sidebar.docsSidebar.doc.With Express": {
+    "message": "With Express",
+    "description": "The label for the doc item 'With Express' in sidebar 'docsSidebar', linking to the doc frameworks/servers/express"
+  },
+  "sidebar.docsSidebar.doc.With Vite/React": {
+    "message": "With Vite/React",
+    "description": "The label for the doc item 'With Vite/React' in sidebar 'docsSidebar', linking to the doc frameworks/web-frameworks/vite-react"
+  },
+  "sidebar.docsSidebar.doc.With Next.js": {
+    "message": "With Next.js",
+    "description": "The label for the doc item 'With Next.js' in sidebar 'docsSidebar', linking to the doc frameworks/web-frameworks/next-js"
+  },
+  "sidebar.docsSidebar.doc.With Astro": {
+    "message": "With Astro",
+    "description": "The label for the doc item 'With Astro' in sidebar 'docsSidebar', linking to the doc frameworks/web-frameworks/astro"
+  },
+  "sidebar.docsSidebar.doc.With SvelteKit": {
+    "message": "With SvelteKit",
+    "description": "The label for the doc item 'With SvelteKit' in sidebar 'docsSidebar', linking to the doc frameworks/web-frameworks/sveltekit"
+  },
+  "sidebar.docsSidebar.doc.Contributing Templates": {
+    "message": "Contributing Templates",
+    "description": "The label for the doc item 'Contributing Templates' in sidebar 'docsSidebar', linking to the doc community/contributing-templates"
+  },
+  "sidebar.docsSidebar.doc.License": {
+    "message": "License",
+    "description": "The label for the doc item 'License' in sidebar 'docsSidebar', linking to the doc community/licensing"
+  },
+  "sidebar.docsSidebar.doc.Discord": {
+    "message": "Discord",
+    "description": "The label for the doc item 'Discord' in sidebar 'docsSidebar', linking to the doc community/discord"
+  },
+  "sidebar.docsSidebar.doc.Studio": {
+    "message": "Studio",
+    "description": "The label for the doc item 'Studio' in sidebar 'docsSidebar', linking to the doc getting-started/studio"
+  },
+  "sidebar.docsSidebar.doc.mastra.cloud.overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc mastra-cloud/overview"
+  },
+  "sidebar.docsSidebar.doc.mastra.cloud.setting-up": {
+    "message": "Setup & Deploy",
+    "description": "The label for the doc item 'Setup & Deploy' in sidebar 'docsSidebar', linking to the doc mastra-cloud/setting-up"
+  },
+  "sidebar.docsSidebar.doc.mastra.cloud.dashboard": {
+    "message": "Dashboard",
+    "description": "The label for the doc item 'Dashboard' in sidebar 'docsSidebar', linking to the doc mastra-cloud/dashboard"
+  },
+  "sidebar.docsSidebar.doc.mastra.cloud.observability": {
+    "message": "Observability",
+    "description": "The label for the doc item 'Observability' in sidebar 'docsSidebar', linking to the doc mastra-cloud/observability"
+  }
+}

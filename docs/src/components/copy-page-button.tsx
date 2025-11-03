@@ -10,6 +10,7 @@ import {
 } from "./copy-page-icons";
 import { Button } from "./ui/button";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { useGT, T } from "gt-react";
 
 function openInChatGpt(
   url: string,
@@ -38,6 +39,7 @@ function openWindow(url: string) {
 }
 
 export const CopyPageButton = () => {
+  const gt = useGT();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const { getMarkdownContent } = useMarkdownContent();
@@ -73,7 +75,7 @@ export const CopyPageButton = () => {
         )}
       >
         <CopyPageIcon className="size-3" />
-        <span>{copied ? "Copied" : "Copy page"}</span>
+        <span>{copied ? gt("Copied") : gt("Copy page")}</span>
       </Button>
 
       <DropdownMenu.Root open={open} onOpenChange={setOpen}>
@@ -95,88 +97,90 @@ export const CopyPageButton = () => {
         </DropdownMenu.Trigger>
 
         <DropdownMenu.Portal>
-          <DropdownMenu.Content
-            className={cn(
-              "min-w-[280px] bg-(--ifm-background-color) dark:bg-(--mastra-surface-3) rounded-xl",
-              "border border-(--border)/50 dark:border-(--border)",
-              "p-1 z-50",
-              "animate-in fade-in-0 zoom-in-95",
-            )}
-            sideOffset={5}
-            align="end"
-          >
-            <DropdownMenu.Item
+          <T>
+            <DropdownMenu.Content
               className={cn(
-                "flex group items-center gap-3 px-2 py-2 text-sm",
-                "text-(--mastra-text-secondary) dark:text-white",
-                "rounded-lg cursor-pointer outline-none",
-                "hover:bg-(--mastra-surface-2) dark:hover:bg-(--mastra-surface-5)/50",
-                "focus:bg-(--mastra-surface-2)",
-                "transition-colors duration-150",
+                "min-w-[280px] bg-(--ifm-background-color) dark:bg-(--mastra-surface-3) rounded-xl",
+                "border border-(--border)/50 dark:border-(--border)",
+                "p-1 z-50",
+                "animate-in fade-in-0 zoom-in-95",
               )}
-              onClick={handleCopyPage}
+              sideOffset={5}
+              align="end"
             >
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-(--mastra-surface-2) dark:bg-(--mastra-surface-5) border border-(--border)/50   dark:border-(--border)">
-                <CopyPageIcon className="w-4 h-4" />
-              </div>
-              <div className="flex flex-col gap-0.5 flex-1">
-                <div className="font-medium">Copy page</div>
-                <div className="text-xs text-(--mastra-text-primary) dark:text-(--mastra-text-tertiary)">
-                  Copy page as Markdown for LLMs
+              <DropdownMenu.Item
+                className={cn(
+                  "flex group items-center gap-3 px-2 py-2 text-sm",
+                  "text-(--mastra-text-secondary) dark:text-white",
+                  "rounded-lg cursor-pointer outline-none",
+                  "hover:bg-(--mastra-surface-2) dark:hover:bg-(--mastra-surface-5)/50",
+                  "focus:bg-(--mastra-surface-2)",
+                  "transition-colors duration-150",
+                )}
+                onClick={handleCopyPage}
+              >
+                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-(--mastra-surface-2) dark:bg-(--mastra-surface-5) border border-(--border)/50   dark:border-(--border)">
+                  <CopyPageIcon className="w-4 h-4" />
                 </div>
-              </div>
-            </DropdownMenu.Item>
+                <div className="flex flex-col gap-0.5 flex-1">
+                  <div className="font-medium">Copy page</div>
+                  <div className="text-xs text-(--mastra-text-primary) dark:text-(--mastra-text-tertiary)">
+                    Copy page as Markdown for LLMs
+                  </div>
+                </div>
+              </DropdownMenu.Item>
 
-            <DropdownMenu.Item
-              className={cn(
-                "flex items-center gap-3 p-2 text-sm",
-                "text-(--mastra-text-secondary) dark:text-white",
-                "rounded-lg cursor-pointer outline-none",
-                "hover:bg-(--mastra-surface-2) dark:hover:bg-(--mastra-surface-5)/50",
-                "focus:bg-(--mastra-surface-2)",
-                "transition-colors duration-150",
-              )}
-              onClick={handleOpenInChatGPT}
-            >
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-(--mastra-surface-2) dark:bg-(--mastra-surface-5) border border-(--border)/50 dark:border-(--border)">
-                <ChatGPTIcon className="w-4 h-4" />
-              </div>
-              <div className="flex flex-col gap-0.5 flex-1">
-                <div className="font-medium flex items-center gap-1.5">
-                  Open in ChatGPT
-                  <ExternalLinkIcon className="w-3 h-3" />
+              <DropdownMenu.Item
+                className={cn(
+                  "flex items-center gap-3 p-2 text-sm",
+                  "text-(--mastra-text-secondary) dark:text-white",
+                  "rounded-lg cursor-pointer outline-none",
+                  "hover:bg-(--mastra-surface-2) dark:hover:bg-(--mastra-surface-5)/50",
+                  "focus:bg-(--mastra-surface-2)",
+                  "transition-colors duration-150",
+                )}
+                onClick={handleOpenInChatGPT}
+              >
+                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-(--mastra-surface-2) dark:bg-(--mastra-surface-5) border border-(--border)/50 dark:border-(--border)">
+                  <ChatGPTIcon className="w-4 h-4" />
                 </div>
-                <div className="text-xs text-(--mastra-text-primary) dark:text-(--mastra-text-tertiary)">
-                  Ask questions about this page
+                <div className="flex flex-col gap-0.5 flex-1">
+                  <div className="font-medium flex items-center gap-1.5">
+                    Open in ChatGPT
+                    <ExternalLinkIcon className="w-3 h-3" />
+                  </div>
+                  <div className="text-xs text-(--mastra-text-primary) dark:text-(--mastra-text-tertiary)">
+                    Ask questions about this page
+                  </div>
                 </div>
-              </div>
-            </DropdownMenu.Item>
+              </DropdownMenu.Item>
 
-            <DropdownMenu.Item
-              className={cn(
-                "flex items-center gap-3 p-2 text-sm",
-                "text-(--mastra-text-secondary) dark:text-white",
-                "rounded-lg cursor-pointer outline-none",
-                "hover:bg-(--mastra-surface-2) dark:hover:bg-(--mastra-surface-5)/50",
-                "focus:bg-(--mastra-surface-2)",
-                "transition-colors duration-150",
-              )}
-              onClick={handleOpenInClaude}
-            >
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-(--mastra-surface-2) dark:bg-(--mastra-surface-5) border border-(--border)/50 dark:border-(--border)">
-                <ClaudeIcon className="w-4 h-4" />
-              </div>
-              <div className="flex flex-col gap-0.5 flex-1">
-                <div className="font-medium flex items-center gap-1.5">
-                  Open in Claude
-                  <ExternalLinkIcon className="w-3 h-3" />
+              <DropdownMenu.Item
+                className={cn(
+                  "flex items-center gap-3 p-2 text-sm",
+                  "text-(--mastra-text-secondary) dark:text-white",
+                  "rounded-lg cursor-pointer outline-none",
+                  "hover:bg-(--mastra-surface-2) dark:hover:bg-(--mastra-surface-5)/50",
+                  "focus:bg-(--mastra-surface-2)",
+                  "transition-colors duration-150",
+                )}
+                onClick={handleOpenInClaude}
+              >
+                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-(--mastra-surface-2) dark:bg-(--mastra-surface-5) border border-(--border)/50 dark:border-(--border)">
+                  <ClaudeIcon className="w-4 h-4" />
                 </div>
-                <div className="text-xs text-(--mastra-text-primary) dark:text-(--mastra-text-tertiary)">
-                  Ask questions about this page
+                <div className="flex flex-col gap-0.5 flex-1">
+                  <div className="font-medium flex items-center gap-1.5">
+                    Open in Claude
+                    <ExternalLinkIcon className="w-3 h-3" />
+                  </div>
+                  <div className="text-xs text-(--mastra-text-primary) dark:text-(--mastra-text-tertiary)">
+                    Ask questions about this page
+                  </div>
                 </div>
-              </div>
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </T>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
     </div>

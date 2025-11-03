@@ -1,0 +1,1166 @@
+{
+  "version.label": {
+    "message": "Next",
+    "description": "The label for version current"
+  },
+  "sidebar.referenceSidebar.category.reference.core.index": {
+    "message": "Core",
+    "description": "The label for category 'Core' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.reference.agents": {
+    "message": "Agents",
+    "description": "The label for category 'Agents' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.reference.workflows": {
+    "message": "Workflows",
+    "description": "The label for category 'Workflows' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.reference.workflows.methods": {
+    "message": "Methods",
+    "description": "The label for category 'Methods' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.AI Tracing": {
+    "message": "AI Tracing",
+    "description": "The label for category 'AI Tracing' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Scorers": {
+    "message": "Scorers",
+    "description": "The label for category 'Scorers' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Auth": {
+    "message": "Auth",
+    "description": "The label for category 'Auth' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.doc.reference.index": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'referenceSidebar', linking to the doc index"
+  },
+  "sidebar.referenceSidebar.doc.reference.core.getWorkflow": {
+    "message": ".getWorkflow()",
+    "description": "The label for the doc item '.getWorkflow()' in sidebar 'referenceSidebar', linking to the doc core/getWorkflow"
+  },
+  "sidebar.referenceSidebar.doc.reference.core.getWorkflows": {
+    "message": ".getWorkflows()",
+    "description": "The label for the doc item '.getWorkflows()' in sidebar 'referenceSidebar', linking to the doc core/getWorkflows"
+  },
+  "sidebar.referenceSidebar.doc.reference.core.getMemory": {
+    "message": ".getMemory()",
+    "description": "The label for the doc item '.getMemory()' in sidebar 'referenceSidebar', linking to the doc core/getMemory"
+  },
+  "sidebar.referenceSidebar.doc.reference.core.setStorage": {
+    "message": ".setStorage()",
+    "description": "The label for the doc item '.setStorage()' in sidebar 'referenceSidebar', linking to the doc core/setStorage"
+  },
+  "sidebar.referenceSidebar.doc.reference.core.getScorers": {
+    "message": ".getScorers()",
+    "description": "The label for the doc item '.getScorers()' in sidebar 'referenceSidebar', linking to the doc core/getScorers"
+  },
+  "sidebar.referenceSidebar.doc.reference.core.getScorer": {
+    "message": ".getScorer()",
+    "description": "The label for the doc item '.getScorer()' in sidebar 'referenceSidebar', linking to the doc core/getScorer"
+  },
+  "sidebar.referenceSidebar.doc.reference.workflows.workflow": {
+    "message": "Workflow Class",
+    "description": "The label for the doc item 'Workflow Class' in sidebar 'referenceSidebar', linking to the doc workflows/workflow"
+  },
+  "sidebar.referenceSidebar.doc.reference.workflows.methods.then": {
+    "message": ".then()",
+    "description": "The label for the doc item '.then()' in sidebar 'referenceSidebar', linking to the doc workflows/workflow-methods/then"
+  },
+  "sidebar.referenceSidebar.doc.reference.workflows.methods.commit": {
+    "message": ".commit()",
+    "description": "The label for the doc item '.commit()' in sidebar 'referenceSidebar', linking to the doc workflows/workflow-methods/commit"
+  },
+  "sidebar.referenceSidebar.doc.reference.workflows.methods.dowhile": {
+    "message": ".dowhile()",
+    "description": "The label for the doc item '.dowhile()' in sidebar 'referenceSidebar', linking to the doc workflows/workflow-methods/dowhile"
+  },
+  "sidebar.referenceSidebar.doc.reference.workflows.run-methods.start": {
+    "message": ".start()",
+    "description": "The label for the doc item '.start()' in sidebar 'referenceSidebar', linking to the doc workflows/run-methods/start"
+  },
+  "sidebar.referenceSidebar.doc.reference.workflows.run-methods.resume": {
+    "message": ".resume()",
+    "description": "The label for the doc item '.resume()' in sidebar 'referenceSidebar', linking to the doc workflows/run-methods/resume"
+  },
+  "sidebar.referenceSidebar.doc.reference.workflows.run-methods.watch": {
+    "message": ".watch()",
+    "description": "The label for the doc item '.watch()' in sidebar 'referenceSidebar', linking to the doc workflows/run-methods/watch"
+  },
+  "sidebar.referenceSidebar.doc.reference.streaming.agents.stream": {
+    "message": ".stream()",
+    "description": "The label for the doc item '.stream()' in sidebar 'referenceSidebar', linking to the doc streaming/agents/stream"
+  },
+  "sidebar.referenceSidebar.doc.MSSQL Storage": {
+    "message": "MSSQL Storage",
+    "description": "The label for the doc item 'MSSQL Storage' in sidebar 'referenceSidebar', linking to the doc storage/mssql"
+  },
+  "sidebar.referenceSidebar.doc.reference.deployer.deployer": {
+    "message": "Deployer",
+    "description": "The label for the doc item 'Deployer' in sidebar 'referenceSidebar', linking to the doc deployer/deployer"
+  },
+  "sidebar.referenceSidebar.doc.reference.deployer.cloudflare": {
+    "message": "Cloudflare",
+    "description": "The label for the doc item 'Cloudflare' in sidebar 'referenceSidebar', linking to the doc deployer/cloudflare"
+  },
+  "sidebar.referenceSidebar.doc.reference.deployer.netlify": {
+    "message": "Netlify",
+    "description": "The label for the doc item 'Netlify' in sidebar 'referenceSidebar', linking to the doc deployer/netlify"
+  },
+  "sidebar.referenceSidebar.doc.reference.deployer.vercel": {
+    "message": "Vercel",
+    "description": "The label for the doc item 'Vercel' in sidebar 'referenceSidebar', linking to the doc deployer/vercel"
+  },
+  "sidebar.referenceSidebar.doc.reference.evals.bias": {
+    "message": "Bias",
+    "description": "The label for the doc item 'Bias' in sidebar 'referenceSidebar', linking to the doc evals/bias"
+  },
+  "sidebar.referenceSidebar.doc.reference.evals.completeness": {
+    "message": "Completeness",
+    "description": "The label for the doc item 'Completeness' in sidebar 'referenceSidebar', linking to the doc evals/completeness"
+  },
+  "sidebar.referenceSidebar.doc.reference.evals.faithfulness": {
+    "message": "Faithfulness",
+    "description": "The label for the doc item 'Faithfulness' in sidebar 'referenceSidebar', linking to the doc evals/faithfulness"
+  },
+  "sidebar.referenceSidebar.doc.reference.evals.hallucination": {
+    "message": "Hallucination",
+    "description": "The label for the doc item 'Hallucination' in sidebar 'referenceSidebar', linking to the doc evals/hallucination"
+  },
+  "sidebar.referenceSidebar.doc.reference.evals.summarization": {
+    "message": "Summarization",
+    "description": "The label for the doc item 'Summarization' in sidebar 'referenceSidebar', linking to the doc evals/summarization"
+  },
+  "sidebar.referenceSidebar.doc.reference.evals.toxicity": {
+    "message": "Toxicity",
+    "description": "The label for the doc item 'Toxicity' in sidebar 'referenceSidebar', linking to the doc evals/toxicity"
+  },
+  "sidebar.referenceSidebar.doc.OpenAI": {
+    "message": "OpenAI",
+    "description": "The label for the doc item 'OpenAI' in sidebar 'referenceSidebar', linking to the doc voice/openai"
+  },
+  "sidebar.referenceSidebar.category.CLI": {
+    "message": "CLI",
+    "description": "The label for category 'CLI' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Methods": {
+    "message": "Methods",
+    "description": "The label for category 'Methods' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Legacy Workflows": {
+    "message": "Legacy Workflows",
+    "description": "The label for category 'Legacy Workflows' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Streaming": {
+    "message": "Streaming",
+    "description": "The label for category 'Streaming' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Agents": {
+    "message": "Agents",
+    "description": "The label for category 'Agents' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Workflows": {
+    "message": "Workflows",
+    "description": "The label for category 'Workflows' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Tools & MCP": {
+    "message": "Tools & MCP",
+    "description": "The label for category 'Tools & MCP' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Memory": {
+    "message": "Memory",
+    "description": "The label for category 'Memory' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.RAG": {
+    "message": "RAG",
+    "description": "The label for category 'RAG' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Storage": {
+    "message": "Storage",
+    "description": "The label for category 'Storage' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Vectors": {
+    "message": "Vectors",
+    "description": "The label for category 'Vectors' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Deployer": {
+    "message": "Deployer",
+    "description": "The label for category 'Deployer' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Client SDK": {
+    "message": "Client SDK",
+    "description": "The label for category 'Client SDK' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Observability": {
+    "message": "Observability",
+    "description": "The label for category 'Observability' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Exporters": {
+    "message": "Exporters",
+    "description": "The label for category 'Exporters' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Processors": {
+    "message": "Processors",
+    "description": "The label for category 'Processors' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Logging": {
+    "message": "Logging",
+    "description": "The label for category 'Logging' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.OTEL Tracing": {
+    "message": "OTEL Tracing",
+    "description": "The label for category 'OTEL Tracing' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Providers": {
+    "message": "Providers",
+    "description": "The label for category 'Providers' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Evals": {
+    "message": "Evals",
+    "description": "The label for category 'Evals' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.reference.processors": {
+    "message": "Processors",
+    "description": "The label for category 'Processors' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Voice": {
+    "message": "Voice",
+    "description": "The label for category 'Voice' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.category.Templates": {
+    "message": "Templates",
+    "description": "The label for category 'Templates' in sidebar 'referenceSidebar'"
+  },
+  "sidebar.referenceSidebar.doc.Mastra Class": {
+    "message": "Mastra Class",
+    "description": "The label for the doc item 'Mastra Class' in sidebar 'referenceSidebar', linking to the doc core/mastra-class"
+  },
+  "sidebar.referenceSidebar.doc..getAgent()": {
+    "message": ".getAgent()",
+    "description": "The label for the doc item '.getAgent()' in sidebar 'referenceSidebar', linking to the doc core/getAgent"
+  },
+  "sidebar.referenceSidebar.doc..getAgents()": {
+    "message": ".getAgents()",
+    "description": "The label for the doc item '.getAgents()' in sidebar 'referenceSidebar', linking to the doc core/getAgents"
+  },
+  "sidebar.referenceSidebar.doc..getAgentById()": {
+    "message": ".getAgentById()",
+    "description": "The label for the doc item '.getAgentById()' in sidebar 'referenceSidebar', linking to the doc core/getAgentById"
+  },
+  "sidebar.referenceSidebar.doc..getServer()": {
+    "message": ".getServer()",
+    "description": "The label for the doc item '.getServer()' in sidebar 'referenceSidebar', linking to the doc core/getServer"
+  },
+  "sidebar.referenceSidebar.doc..getMCPServer()": {
+    "message": ".getMCPServer()",
+    "description": "The label for the doc item '.getMCPServer()' in sidebar 'referenceSidebar', linking to the doc core/getMCPServer"
+  },
+  "sidebar.referenceSidebar.doc..getVector()": {
+    "message": ".getVector()",
+    "description": "The label for the doc item '.getVector()' in sidebar 'referenceSidebar', linking to the doc core/getVector"
+  },
+  "sidebar.referenceSidebar.doc..getVectors()": {
+    "message": ".getVectors()",
+    "description": "The label for the doc item '.getVectors()' in sidebar 'referenceSidebar', linking to the doc core/getVectors"
+  },
+  "sidebar.referenceSidebar.doc..getDeployer()": {
+    "message": ".getDeployer()",
+    "description": "The label for the doc item '.getDeployer()' in sidebar 'referenceSidebar', linking to the doc core/getDeployer"
+  },
+  "sidebar.referenceSidebar.doc..getStorage()": {
+    "message": ".getStorage()",
+    "description": "The label for the doc item '.getStorage()' in sidebar 'referenceSidebar', linking to the doc core/getStorage"
+  },
+  "sidebar.referenceSidebar.doc..getMCPServers()": {
+    "message": ".getMCPServers()",
+    "description": "The label for the doc item '.getMCPServers()' in sidebar 'referenceSidebar', linking to the doc core/getMCPServers"
+  },
+  "sidebar.referenceSidebar.doc..getTelemetry()": {
+    "message": ".getTelemetry()",
+    "description": "The label for the doc item '.getTelemetry()' in sidebar 'referenceSidebar', linking to the doc core/getTelemetry"
+  },
+  "sidebar.referenceSidebar.doc..setTelemetry()": {
+    "message": ".setTelemetry()",
+    "description": "The label for the doc item '.setTelemetry()' in sidebar 'referenceSidebar', linking to the doc core/setTelemetry"
+  },
+  "sidebar.referenceSidebar.doc..getLogs()": {
+    "message": ".getLogs()",
+    "description": "The label for the doc item '.getLogs()' in sidebar 'referenceSidebar', linking to the doc core/getLogs"
+  },
+  "sidebar.referenceSidebar.doc..getLogsByRunId()": {
+    "message": ".getLogsByRunId()",
+    "description": "The label for the doc item '.getLogsByRunId()' in sidebar 'referenceSidebar', linking to the doc core/getLogsByRunId"
+  },
+  "sidebar.referenceSidebar.doc..getLogger()": {
+    "message": ".getLogger()",
+    "description": "The label for the doc item '.getLogger()' in sidebar 'referenceSidebar', linking to the doc core/getLogger"
+  },
+  "sidebar.referenceSidebar.doc..setLogger()": {
+    "message": ".setLogger()",
+    "description": "The label for the doc item '.setLogger()' in sidebar 'referenceSidebar', linking to the doc core/setLogger"
+  },
+  "sidebar.referenceSidebar.doc..getScorerByName()": {
+    "message": ".getScorerByName()",
+    "description": "The label for the doc item '.getScorerByName()' in sidebar 'referenceSidebar', linking to the doc core/getScorerByName"
+  },
+  "sidebar.referenceSidebar.doc.mastra": {
+    "message": "mastra",
+    "description": "The label for the doc item 'mastra' in sidebar 'referenceSidebar', linking to the doc cli/mastra"
+  },
+  "sidebar.referenceSidebar.doc.create-mastra": {
+    "message": "create-mastra",
+    "description": "The label for the doc item 'create-mastra' in sidebar 'referenceSidebar', linking to the doc cli/create-mastra"
+  },
+  "sidebar.referenceSidebar.doc.references.agents.agent": {
+    "message": "Agent",
+    "description": "The label for the doc item 'Agent' in sidebar 'referenceSidebar', linking to the doc agents/agent"
+  },
+  "sidebar.referenceSidebar.doc.references.agents.generate": {
+    "message": ".generate()",
+    "description": "The label for the doc item '.generate()' in sidebar 'referenceSidebar', linking to the doc agents/generate"
+  },
+  "sidebar.referenceSidebar.doc..generateLegacy() (Legacy)": {
+    "message": ".generateLegacy() (Legacy)",
+    "description": "The label for the doc item '.generateLegacy() (Legacy)' in sidebar 'referenceSidebar', linking to the doc agents/generateLegacy"
+  },
+  "sidebar.referenceSidebar.doc..network()": {
+    "message": ".network()",
+    "description": "The label for the doc item '.network()' in sidebar 'referenceSidebar', linking to the doc agents/network"
+  },
+  "sidebar.referenceSidebar.doc..listAgents()": {
+    "message": ".listAgents()",
+    "description": "The label for the doc item '.listAgents()' in sidebar 'referenceSidebar', linking to the doc agents/listAgents"
+  },
+  "sidebar.referenceSidebar.doc..getWorkflows()": {
+    "message": ".getWorkflows()",
+    "description": "The label for the doc item '.getWorkflows()' in sidebar 'referenceSidebar', linking to the doc agents/getWorkflows"
+  },
+  "sidebar.referenceSidebar.doc..getTools()": {
+    "message": ".getTools()",
+    "description": "The label for the doc item '.getTools()' in sidebar 'referenceSidebar', linking to the doc agents/getTools"
+  },
+  "sidebar.referenceSidebar.doc..getScorers()": {
+    "message": ".getScorers()",
+    "description": "The label for the doc item '.getScorers()' in sidebar 'referenceSidebar', linking to the doc agents/getScorers"
+  },
+  "sidebar.referenceSidebar.doc..getModel()": {
+    "message": ".getModel()",
+    "description": "The label for the doc item '.getModel()' in sidebar 'referenceSidebar', linking to the doc agents/getModel"
+  },
+  "sidebar.referenceSidebar.doc..getMemory()": {
+    "message": ".getMemory()",
+    "description": "The label for the doc item '.getMemory()' in sidebar 'referenceSidebar', linking to the doc agents/getMemory"
+  },
+  "sidebar.referenceSidebar.doc..getVoice()": {
+    "message": ".getVoice()",
+    "description": "The label for the doc item '.getVoice()' in sidebar 'referenceSidebar', linking to the doc agents/getVoice"
+  },
+  "sidebar.referenceSidebar.doc..getDescription()": {
+    "message": ".getDescription()",
+    "description": "The label for the doc item '.getDescription()' in sidebar 'referenceSidebar', linking to the doc agents/getDescription"
+  },
+  "sidebar.referenceSidebar.doc..getInstructions()": {
+    "message": ".getInstructions()",
+    "description": "The label for the doc item '.getInstructions()' in sidebar 'referenceSidebar', linking to the doc agents/getInstructions"
+  },
+  "sidebar.referenceSidebar.doc..getLLM()": {
+    "message": ".getLLM()",
+    "description": "The label for the doc item '.getLLM()' in sidebar 'referenceSidebar', linking to the doc agents/getLLM"
+  },
+  "sidebar.referenceSidebar.doc..getDefaultGenerateOptions()": {
+    "message": ".getDefaultGenerateOptions()",
+    "description": "The label for the doc item '.getDefaultGenerateOptions()' in sidebar 'referenceSidebar', linking to the doc agents/getDefaultGenerateOptions"
+  },
+  "sidebar.referenceSidebar.doc..getDefaultStreamOptions()": {
+    "message": ".getDefaultStreamOptions()",
+    "description": "The label for the doc item '.getDefaultStreamOptions()' in sidebar 'referenceSidebar', linking to the doc agents/getDefaultStreamOptions"
+  },
+  "sidebar.referenceSidebar.doc..branch()": {
+    "message": ".branch()",
+    "description": "The label for the doc item '.branch()' in sidebar 'referenceSidebar', linking to the doc workflows/workflow-methods/branch"
+  },
+  "sidebar.referenceSidebar.doc..parallel()": {
+    "message": ".parallel()",
+    "description": "The label for the doc item '.parallel()' in sidebar 'referenceSidebar', linking to the doc workflows/workflow-methods/parallel"
+  },
+  "sidebar.referenceSidebar.doc..dountil()": {
+    "message": ".dountil()",
+    "description": "The label for the doc item '.dountil()' in sidebar 'referenceSidebar', linking to the doc workflows/workflow-methods/dountil"
+  },
+  "sidebar.referenceSidebar.doc..foreach()": {
+    "message": ".foreach()",
+    "description": "The label for the doc item '.foreach()' in sidebar 'referenceSidebar', linking to the doc workflows/workflow-methods/foreach"
+  },
+  "sidebar.referenceSidebar.doc..map()": {
+    "message": ".map()",
+    "description": "The label for the doc item '.map()' in sidebar 'referenceSidebar', linking to the doc workflows/workflow-methods/map"
+  },
+  "sidebar.referenceSidebar.doc..sleep()": {
+    "message": ".sleep()",
+    "description": "The label for the doc item '.sleep()' in sidebar 'referenceSidebar', linking to the doc workflows/workflow-methods/sleep"
+  },
+  "sidebar.referenceSidebar.doc..sleepUntil()": {
+    "message": ".sleepUntil()",
+    "description": "The label for the doc item '.sleepUntil()' in sidebar 'referenceSidebar', linking to the doc workflows/workflow-methods/sleepUntil"
+  },
+  "sidebar.referenceSidebar.doc..waitForEvent()": {
+    "message": ".waitForEvent()",
+    "description": "The label for the doc item '.waitForEvent()' in sidebar 'referenceSidebar', linking to the doc workflows/workflow-methods/waitForEvent"
+  },
+  "sidebar.referenceSidebar.doc..sendEvent()": {
+    "message": ".sendEvent()",
+    "description": "The label for the doc item '.sendEvent()' in sidebar 'referenceSidebar', linking to the doc workflows/workflow-methods/sendEvent"
+  },
+  "sidebar.referenceSidebar.doc..createRunAsync()": {
+    "message": ".createRunAsync()",
+    "description": "The label for the doc item '.createRunAsync()' in sidebar 'referenceSidebar', linking to the doc workflows/workflow-methods/create-run"
+  },
+  "sidebar.referenceSidebar.doc.Step Class": {
+    "message": "Step Class",
+    "description": "The label for the doc item 'Step Class' in sidebar 'referenceSidebar', linking to the doc workflows/step"
+  },
+  "sidebar.referenceSidebar.doc.Run Class": {
+    "message": "Run Class",
+    "description": "The label for the doc item 'Run Class' in sidebar 'referenceSidebar', linking to the doc workflows/run"
+  },
+  "sidebar.referenceSidebar.doc..cancel()": {
+    "message": ".cancel()",
+    "description": "The label for the doc item '.cancel()' in sidebar 'referenceSidebar', linking to the doc workflows/run-methods/cancel"
+  },
+  "sidebar.referenceSidebar.doc.Workflow": {
+    "message": "Workflow",
+    "description": "The label for the doc item 'Workflow' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/workflow"
+  },
+  "sidebar.referenceSidebar.doc..after()": {
+    "message": ".after()",
+    "description": "The label for the doc item '.after()' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/after"
+  },
+  "sidebar.referenceSidebar.doc..then()": {
+    "message": ".then()",
+    "description": "The label for the doc item '.then()' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/then"
+  },
+  "sidebar.referenceSidebar.doc..until()": {
+    "message": ".until()",
+    "description": "The label for the doc item '.until()' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/until"
+  },
+  "sidebar.referenceSidebar.doc..while()": {
+    "message": ".while()",
+    "description": "The label for the doc item '.while()' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/while"
+  },
+  "sidebar.referenceSidebar.doc..if()": {
+    "message": ".if()",
+    "description": "The label for the doc item '.if()' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/if"
+  },
+  "sidebar.referenceSidebar.doc..else()": {
+    "message": ".else()",
+    "description": "The label for the doc item '.else()' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/else"
+  },
+  "sidebar.referenceSidebar.doc..createRun()": {
+    "message": ".createRun()",
+    "description": "The label for the doc item '.createRun()' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/createRun"
+  },
+  "sidebar.referenceSidebar.doc..start()": {
+    "message": ".start()",
+    "description": "The label for the doc item '.start()' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/start"
+  },
+  "sidebar.referenceSidebar.doc..execute()": {
+    "message": ".execute()",
+    "description": "The label for the doc item '.execute()' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/execute"
+  },
+  "sidebar.referenceSidebar.doc..suspend()": {
+    "message": ".suspend()",
+    "description": "The label for the doc item '.suspend()' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/suspend"
+  },
+  "sidebar.referenceSidebar.doc.Snapshots": {
+    "message": "Snapshots",
+    "description": "The label for the doc item 'Snapshots' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/snapshots"
+  },
+  "sidebar.referenceSidebar.doc..resume()": {
+    "message": ".resume()",
+    "description": "The label for the doc item '.resume()' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/resume"
+  },
+  "sidebar.referenceSidebar.doc..commit()": {
+    "message": ".commit()",
+    "description": "The label for the doc item '.commit()' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/commit"
+  },
+  "sidebar.referenceSidebar.doc..watch()": {
+    "message": ".watch()",
+    "description": "The label for the doc item '.watch()' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/watch"
+  },
+  "sidebar.referenceSidebar.doc.Event-Driven Workflows": {
+    "message": "Event-Driven Workflows",
+    "description": "The label for the doc item 'Event-Driven Workflows' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/events"
+  },
+  "sidebar.referenceSidebar.doc..afterEvent()": {
+    "message": ".afterEvent()",
+    "description": "The label for the doc item '.afterEvent()' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/afterEvent"
+  },
+  "sidebar.referenceSidebar.doc..resumeWithEvent()": {
+    "message": ".resumeWithEvent()",
+    "description": "The label for the doc item '.resumeWithEvent()' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/resumeWithEvent"
+  },
+  "sidebar.referenceSidebar.doc.Workflow.step()": {
+    "message": "Workflow.step()",
+    "description": "The label for the doc item 'Workflow.step()' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/step-function"
+  },
+  "sidebar.referenceSidebar.doc.StepOptions": {
+    "message": "StepOptions",
+    "description": "The label for the doc item 'StepOptions' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/step-options"
+  },
+  "sidebar.referenceSidebar.doc.Step Retries": {
+    "message": "Step Retries",
+    "description": "The label for the doc item 'Step Retries' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/step-retries"
+  },
+  "sidebar.referenceSidebar.doc.Step": {
+    "message": "Step",
+    "description": "The label for the doc item 'Step' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/step-class"
+  },
+  "sidebar.referenceSidebar.doc.StepCondition": {
+    "message": "StepCondition",
+    "description": "The label for the doc item 'StepCondition' in sidebar 'referenceSidebar', linking to the doc legacyWorkflows/step-condition"
+  },
+  "sidebar.referenceSidebar.doc.ChunkType": {
+    "message": "ChunkType",
+    "description": "The label for the doc item 'ChunkType' in sidebar 'referenceSidebar', linking to the doc streaming/ChunkType"
+  },
+  "sidebar.referenceSidebar.doc..streamLegacy() (Legacy)": {
+    "message": ".streamLegacy() (Legacy)",
+    "description": "The label for the doc item '.streamLegacy() (Legacy)' in sidebar 'referenceSidebar', linking to the doc streaming/agents/streamLegacy"
+  },
+  "sidebar.referenceSidebar.doc.MastraModelOutput": {
+    "message": "MastraModelOutput",
+    "description": "The label for the doc item 'MastraModelOutput' in sidebar 'referenceSidebar', linking to the doc streaming/agents/MastraModelOutput"
+  },
+  "sidebar.referenceSidebar.doc..stream()": {
+    "message": ".stream()",
+    "description": "The label for the doc item '.stream()' in sidebar 'referenceSidebar', linking to the doc streaming/workflows/stream"
+  },
+  "sidebar.referenceSidebar.doc..streamVNext()": {
+    "message": ".streamVNext()",
+    "description": "The label for the doc item '.streamVNext()' in sidebar 'referenceSidebar', linking to the doc streaming/workflows/streamVNext"
+  },
+  "sidebar.referenceSidebar.doc..resumeStreamVNext()": {
+    "message": ".resumeStreamVNext()",
+    "description": "The label for the doc item '.resumeStreamVNext()' in sidebar 'referenceSidebar', linking to the doc streaming/workflows/resumeStreamVNext"
+  },
+  "sidebar.referenceSidebar.doc..observeStream()": {
+    "message": ".observeStream()",
+    "description": "The label for the doc item '.observeStream()' in sidebar 'referenceSidebar', linking to the doc streaming/workflows/observeStream"
+  },
+  "sidebar.referenceSidebar.doc..observeStreamVNext()": {
+    "message": ".observeStreamVNext()",
+    "description": "The label for the doc item '.observeStreamVNext()' in sidebar 'referenceSidebar', linking to the doc streaming/workflows/observeStreamVNext"
+  },
+  "sidebar.referenceSidebar.doc.createTool()": {
+    "message": "createTool()",
+    "description": "The label for the doc item 'createTool()' in sidebar 'referenceSidebar', linking to the doc tools/create-tool"
+  },
+  "sidebar.referenceSidebar.doc.MCPClient": {
+    "message": "MCPClient",
+    "description": "The label for the doc item 'MCPClient' in sidebar 'referenceSidebar', linking to the doc tools/mcp-client"
+  },
+  "sidebar.referenceSidebar.doc.MCPServer": {
+    "message": "MCPServer",
+    "description": "The label for the doc item 'MCPServer' in sidebar 'referenceSidebar', linking to the doc tools/mcp-server"
+  },
+  "sidebar.referenceSidebar.doc.createDocumentChunkerTool()": {
+    "message": "createDocumentChunkerTool()",
+    "description": "The label for the doc item 'createDocumentChunkerTool()' in sidebar 'referenceSidebar', linking to the doc tools/document-chunker-tool"
+  },
+  "sidebar.referenceSidebar.doc.createGraphRAGTool()": {
+    "message": "createGraphRAGTool()",
+    "description": "The label for the doc item 'createGraphRAGTool()' in sidebar 'referenceSidebar', linking to the doc tools/graph-rag-tool"
+  },
+  "sidebar.referenceSidebar.doc.createVectorQueryTool()": {
+    "message": "createVectorQueryTool()",
+    "description": "The label for the doc item 'createVectorQueryTool()' in sidebar 'referenceSidebar', linking to the doc tools/vector-query-tool"
+  },
+  "sidebar.referenceSidebar.doc.Memory Class": {
+    "message": "Memory Class",
+    "description": "The label for the doc item 'Memory Class' in sidebar 'referenceSidebar', linking to the doc memory/memory-class"
+  },
+  "sidebar.referenceSidebar.doc..createThread()": {
+    "message": ".createThread()",
+    "description": "The label for the doc item '.createThread()' in sidebar 'referenceSidebar', linking to the doc memory/createThread"
+  },
+  "sidebar.referenceSidebar.doc..query()": {
+    "message": ".query()",
+    "description": "The label for the doc item '.query()' in sidebar 'referenceSidebar', linking to the doc memory/query"
+  },
+  "sidebar.referenceSidebar.doc..getThreadById()": {
+    "message": ".getThreadById()",
+    "description": "The label for the doc item '.getThreadById()' in sidebar 'referenceSidebar', linking to the doc memory/getThreadById"
+  },
+  "sidebar.referenceSidebar.doc..getThreadsByResourceId()": {
+    "message": ".getThreadsByResourceId()",
+    "description": "The label for the doc item '.getThreadsByResourceId()' in sidebar 'referenceSidebar', linking to the doc memory/getThreadsByResourceId"
+  },
+  "sidebar.referenceSidebar.doc..getThreadsByResourceIdPaginated()": {
+    "message": ".getThreadsByResourceIdPaginated()",
+    "description": "The label for the doc item '.getThreadsByResourceIdPaginated()' in sidebar 'referenceSidebar', linking to the doc memory/getThreadsByResourceIdPaginated"
+  },
+  "sidebar.referenceSidebar.doc..deleteMessages()": {
+    "message": ".deleteMessages()",
+    "description": "The label for the doc item '.deleteMessages()' in sidebar 'referenceSidebar', linking to the doc memory/deleteMessages"
+  },
+  "sidebar.referenceSidebar.doc.rerank()": {
+    "message": "rerank()",
+    "description": "The label for the doc item 'rerank()' in sidebar 'referenceSidebar', linking to the doc rag/rerank"
+  },
+  "sidebar.referenceSidebar.doc.Embed": {
+    "message": "Embed",
+    "description": "The label for the doc item 'Embed' in sidebar 'referenceSidebar', linking to the doc rag/embeddings"
+  },
+  "sidebar.referenceSidebar.doc.rerankWithScorer()": {
+    "message": "rerankWithScorer()",
+    "description": "The label for the doc item 'rerankWithScorer()' in sidebar 'referenceSidebar', linking to the doc rag/rerankWithScorer"
+  },
+  "sidebar.referenceSidebar.doc.MDocument": {
+    "message": "MDocument",
+    "description": "The label for the doc item 'MDocument' in sidebar 'referenceSidebar', linking to the doc rag/document"
+  },
+  "sidebar.referenceSidebar.doc.GraphRAG": {
+    "message": "GraphRAG",
+    "description": "The label for the doc item 'GraphRAG' in sidebar 'referenceSidebar', linking to the doc rag/graph-rag"
+  },
+  "sidebar.referenceSidebar.doc.DatabaseConfig": {
+    "message": "DatabaseConfig",
+    "description": "The label for the doc item 'DatabaseConfig' in sidebar 'referenceSidebar', linking to the doc rag/database-config"
+  },
+  "sidebar.referenceSidebar.doc.ExtractParams": {
+    "message": "ExtractParams",
+    "description": "The label for the doc item 'ExtractParams' in sidebar 'referenceSidebar', linking to the doc rag/extract-params"
+  },
+  "sidebar.referenceSidebar.doc.Metadata Filters": {
+    "message": "Metadata Filters",
+    "description": "The label for the doc item 'Metadata Filters' in sidebar 'referenceSidebar', linking to the doc rag/metadata-filters"
+  },
+  "sidebar.referenceSidebar.doc.Reference: .chunk()": {
+    "message": "Reference: .chunk()",
+    "description": "The label for the doc item 'Reference: .chunk()' in sidebar 'referenceSidebar', linking to the doc rag/chunk"
+  },
+  "sidebar.referenceSidebar.doc.LibSQL Storage": {
+    "message": "LibSQL Storage",
+    "description": "The label for the doc item 'LibSQL Storage' in sidebar 'referenceSidebar', linking to the doc storage/libsql"
+  },
+  "sidebar.referenceSidebar.doc.PostgreSQL Storage": {
+    "message": "PostgreSQL Storage",
+    "description": "The label for the doc item 'PostgreSQL Storage' in sidebar 'referenceSidebar', linking to the doc storage/postgresql"
+  },
+  "sidebar.referenceSidebar.doc.Upstash Storage": {
+    "message": "Upstash Storage",
+    "description": "The label for the doc item 'Upstash Storage' in sidebar 'referenceSidebar', linking to the doc storage/upstash"
+  },
+  "sidebar.referenceSidebar.doc.Cloudflare KV Storage": {
+    "message": "Cloudflare KV Storage",
+    "description": "The label for the doc item 'Cloudflare KV Storage' in sidebar 'referenceSidebar', linking to the doc storage/cloudflare"
+  },
+  "sidebar.referenceSidebar.doc.DynamoDB Storage": {
+    "message": "DynamoDB Storage",
+    "description": "The label for the doc item 'DynamoDB Storage' in sidebar 'referenceSidebar', linking to the doc storage/dynamodb"
+  },
+  "sidebar.referenceSidebar.doc.Cloudflare D1 Storage": {
+    "message": "Cloudflare D1 Storage",
+    "description": "The label for the doc item 'Cloudflare D1 Storage' in sidebar 'referenceSidebar', linking to the doc storage/cloudflare-d1"
+  },
+  "sidebar.referenceSidebar.doc.LanceDB Storage": {
+    "message": "LanceDB Storage",
+    "description": "The label for the doc item 'LanceDB Storage' in sidebar 'referenceSidebar', linking to the doc storage/lance"
+  },
+  "sidebar.referenceSidebar.doc.MongoDB Storage": {
+    "message": "MongoDB Storage",
+    "description": "The label for the doc item 'MongoDB Storage' in sidebar 'referenceSidebar', linking to the doc storage/mongodb"
+  },
+  "sidebar.referenceSidebar.doc.Astra Vector Store": {
+    "message": "Astra Vector Store",
+    "description": "The label for the doc item 'Astra Vector Store' in sidebar 'referenceSidebar', linking to the doc vectors/astra"
+  },
+  "sidebar.referenceSidebar.doc.Lance Vector Store": {
+    "message": "Lance Vector Store",
+    "description": "The label for the doc item 'Lance Vector Store' in sidebar 'referenceSidebar', linking to the doc vectors/lance"
+  },
+  "sidebar.referenceSidebar.doc.Cloudflare Vector Store": {
+    "message": "Cloudflare Vector Store",
+    "description": "The label for the doc item 'Cloudflare Vector Store' in sidebar 'referenceSidebar', linking to the doc vectors/vectorize"
+  },
+  "sidebar.referenceSidebar.doc.LibSQLVector Store": {
+    "message": "LibSQLVector Store",
+    "description": "The label for the doc item 'LibSQLVector Store' in sidebar 'referenceSidebar', linking to the doc vectors/libsql"
+  },
+  "sidebar.referenceSidebar.doc.Qdrant Vector Store": {
+    "message": "Qdrant Vector Store",
+    "description": "The label for the doc item 'Qdrant Vector Store' in sidebar 'referenceSidebar', linking to the doc vectors/qdrant"
+  },
+  "sidebar.referenceSidebar.doc.OpenSearch Vector Store": {
+    "message": "OpenSearch Vector Store",
+    "description": "The label for the doc item 'OpenSearch Vector Store' in sidebar 'referenceSidebar', linking to the doc vectors/opensearch"
+  },
+  "sidebar.referenceSidebar.doc.Pinecone Vector Store": {
+    "message": "Pinecone Vector Store",
+    "description": "The label for the doc item 'Pinecone Vector Store' in sidebar 'referenceSidebar', linking to the doc vectors/pinecone"
+  },
+  "sidebar.referenceSidebar.doc.MongoDB Vector Store": {
+    "message": "MongoDB Vector Store",
+    "description": "The label for the doc item 'MongoDB Vector Store' in sidebar 'referenceSidebar', linking to the doc vectors/mongodb"
+  },
+  "sidebar.referenceSidebar.doc.Amazon S3 Vectors Store": {
+    "message": "Amazon S3 Vectors Store",
+    "description": "The label for the doc item 'Amazon S3 Vectors Store' in sidebar 'referenceSidebar', linking to the doc vectors/s3vectors"
+  },
+  "sidebar.referenceSidebar.doc.Turbopuffer Vector Store": {
+    "message": "Turbopuffer Vector Store",
+    "description": "The label for the doc item 'Turbopuffer Vector Store' in sidebar 'referenceSidebar', linking to the doc vectors/turbopuffer"
+  },
+  "sidebar.referenceSidebar.doc.Upstash Vector Store": {
+    "message": "Upstash Vector Store",
+    "description": "The label for the doc item 'Upstash Vector Store' in sidebar 'referenceSidebar', linking to the doc vectors/upstash"
+  },
+  "sidebar.referenceSidebar.doc.Couchbase Vector Store": {
+    "message": "Couchbase Vector Store",
+    "description": "The label for the doc item 'Couchbase Vector Store' in sidebar 'referenceSidebar', linking to the doc vectors/couchbase"
+  },
+  "sidebar.referenceSidebar.doc.Chroma Vector Store": {
+    "message": "Chroma Vector Store",
+    "description": "The label for the doc item 'Chroma Vector Store' in sidebar 'referenceSidebar', linking to the doc vectors/chroma"
+  },
+  "sidebar.referenceSidebar.doc.PG Vector Store": {
+    "message": "PG Vector Store",
+    "description": "The label for the doc item 'PG Vector Store' in sidebar 'referenceSidebar', linking to the doc vectors/pg"
+  },
+  "sidebar.referenceSidebar.doc.Agents API": {
+    "message": "Agents API",
+    "description": "The label for the doc item 'Agents API' in sidebar 'referenceSidebar', linking to the doc client-js/agents"
+  },
+  "sidebar.referenceSidebar.doc.Memory API": {
+    "message": "Memory API",
+    "description": "The label for the doc item 'Memory API' in sidebar 'referenceSidebar', linking to the doc client-js/memory"
+  },
+  "sidebar.referenceSidebar.doc.Tools API": {
+    "message": "Tools API",
+    "description": "The label for the doc item 'Tools API' in sidebar 'referenceSidebar', linking to the doc client-js/tools"
+  },
+  "sidebar.referenceSidebar.doc.Workflows API": {
+    "message": "Workflows API",
+    "description": "The label for the doc item 'Workflows API' in sidebar 'referenceSidebar', linking to the doc client-js/workflows"
+  },
+  "sidebar.referenceSidebar.doc.Vectors API": {
+    "message": "Vectors API",
+    "description": "The label for the doc item 'Vectors API' in sidebar 'referenceSidebar', linking to the doc client-js/vectors"
+  },
+  "sidebar.referenceSidebar.doc.Logs API": {
+    "message": "Logs API",
+    "description": "The label for the doc item 'Logs API' in sidebar 'referenceSidebar', linking to the doc client-js/logs"
+  },
+  "sidebar.referenceSidebar.doc.Telemetry API": {
+    "message": "Telemetry API",
+    "description": "The label for the doc item 'Telemetry API' in sidebar 'referenceSidebar', linking to the doc client-js/telemetry"
+  },
+  "sidebar.referenceSidebar.doc.Observability API": {
+    "message": "Observability API",
+    "description": "The label for the doc item 'Observability API' in sidebar 'referenceSidebar', linking to the doc client-js/observability"
+  },
+  "sidebar.referenceSidebar.doc.Workflows (Legacy) API": {
+    "message": "Workflows (Legacy) API",
+    "description": "The label for the doc item 'Workflows (Legacy) API' in sidebar 'referenceSidebar', linking to the doc client-js/workflows-legacy"
+  },
+  "sidebar.referenceSidebar.doc.Error Handling": {
+    "message": "Error Handling",
+    "description": "The label for the doc item 'Error Handling' in sidebar 'referenceSidebar', linking to the doc client-js/error-handling"
+  },
+  "sidebar.referenceSidebar.doc.Mastra Client SDK": {
+    "message": "Mastra Client SDK",
+    "description": "The label for the doc item 'Mastra Client SDK' in sidebar 'referenceSidebar', linking to the doc client-js/mastra-client"
+  },
+  "sidebar.referenceSidebar.doc.AITracing": {
+    "message": "AITracing",
+    "description": "The label for the doc item 'AITracing' in sidebar 'referenceSidebar', linking to the doc observability/ai-tracing/ai-tracing"
+  },
+  "sidebar.referenceSidebar.doc.Configuration": {
+    "message": "Configuration",
+    "description": "The label for the doc item 'Configuration' in sidebar 'referenceSidebar', linking to the doc observability/ai-tracing/configuration"
+  },
+  "sidebar.referenceSidebar.doc.Span": {
+    "message": "Span",
+    "description": "The label for the doc item 'Span' in sidebar 'referenceSidebar', linking to the doc observability/ai-tracing/span"
+  },
+  "sidebar.referenceSidebar.doc.Interfaces": {
+    "message": "Interfaces",
+    "description": "The label for the doc item 'Interfaces' in sidebar 'referenceSidebar', linking to the doc observability/ai-tracing/interfaces"
+  },
+  "sidebar.referenceSidebar.doc.ArizeExporter": {
+    "message": "ArizeExporter",
+    "description": "The label for the doc item 'ArizeExporter' in sidebar 'referenceSidebar', linking to the doc observability/ai-tracing/exporters/arize"
+  },
+  "sidebar.referenceSidebar.doc.CloudExporter": {
+    "message": "CloudExporter",
+    "description": "The label for the doc item 'CloudExporter' in sidebar 'referenceSidebar', linking to the doc observability/ai-tracing/exporters/cloud-exporter"
+  },
+  "sidebar.referenceSidebar.doc.ConsoleExporter": {
+    "message": "ConsoleExporter",
+    "description": "The label for the doc item 'ConsoleExporter' in sidebar 'referenceSidebar', linking to the doc observability/ai-tracing/exporters/console-exporter"
+  },
+  "sidebar.referenceSidebar.doc.LangSmithExporter": {
+    "message": "LangSmithExporter",
+    "description": "The label for the doc item 'LangSmithExporter' in sidebar 'referenceSidebar', linking to the doc observability/ai-tracing/exporters/langsmith"
+  },
+  "sidebar.referenceSidebar.doc.LangfuseExporter": {
+    "message": "LangfuseExporter",
+    "description": "The label for the doc item 'LangfuseExporter' in sidebar 'referenceSidebar', linking to the doc observability/ai-tracing/exporters/langfuse"
+  },
+  "sidebar.referenceSidebar.doc.OtelExporter": {
+    "message": "OtelExporter",
+    "description": "The label for the doc item 'OtelExporter' in sidebar 'referenceSidebar', linking to the doc observability/ai-tracing/exporters/otel"
+  },
+  "sidebar.referenceSidebar.doc.BraintrustExporter": {
+    "message": "BraintrustExporter",
+    "description": "The label for the doc item 'BraintrustExporter' in sidebar 'referenceSidebar', linking to the doc observability/ai-tracing/exporters/braintrust"
+  },
+  "sidebar.referenceSidebar.doc.DefaultExporter": {
+    "message": "DefaultExporter",
+    "description": "The label for the doc item 'DefaultExporter' in sidebar 'referenceSidebar', linking to the doc observability/ai-tracing/exporters/default-exporter"
+  },
+  "sidebar.referenceSidebar.doc.SensitiveDataFilter": {
+    "message": "SensitiveDataFilter",
+    "description": "The label for the doc item 'SensitiveDataFilter' in sidebar 'referenceSidebar', linking to the doc observability/ai-tracing/processors/sensitive-data-filter"
+  },
+  "sidebar.referenceSidebar.doc.PinoLogger": {
+    "message": "PinoLogger",
+    "description": "The label for the doc item 'PinoLogger' in sidebar 'referenceSidebar', linking to the doc observability/logging/pino-logger"
+  },
+  "sidebar.referenceSidebar.doc.OtelConfig": {
+    "message": "OtelConfig",
+    "description": "The label for the doc item 'OtelConfig' in sidebar 'referenceSidebar', linking to the doc observability/otel-tracing/otel-config"
+  },
+  "sidebar.referenceSidebar.doc.Traceloop": {
+    "message": "Traceloop",
+    "description": "The label for the doc item 'Traceloop' in sidebar 'referenceSidebar', linking to the doc observability/otel-tracing/providers/traceloop"
+  },
+  "sidebar.referenceSidebar.doc.Dash0": {
+    "message": "Dash0",
+    "description": "The label for the doc item 'Dash0' in sidebar 'referenceSidebar', linking to the doc observability/otel-tracing/providers/dash0"
+  },
+  "sidebar.referenceSidebar.doc.New Relic": {
+    "message": "New Relic",
+    "description": "The label for the doc item 'New Relic' in sidebar 'referenceSidebar', linking to the doc observability/otel-tracing/providers/new-relic"
+  },
+  "sidebar.referenceSidebar.doc.LangWatch": {
+    "message": "LangWatch",
+    "description": "The label for the doc item 'LangWatch' in sidebar 'referenceSidebar', linking to the doc observability/otel-tracing/providers/langwatch"
+  },
+  "sidebar.referenceSidebar.doc.OTLP Providers": {
+    "message": "OTLP Providers",
+    "description": "The label for the doc item 'OTLP Providers' in sidebar 'referenceSidebar', linking to the doc observability/otel-tracing/providers/index"
+  },
+  "sidebar.referenceSidebar.doc.LangSmith": {
+    "message": "LangSmith",
+    "description": "The label for the doc item 'LangSmith' in sidebar 'referenceSidebar', linking to the doc observability/otel-tracing/providers/langsmith"
+  },
+  "sidebar.referenceSidebar.doc.Langfuse": {
+    "message": "Langfuse",
+    "description": "The label for the doc item 'Langfuse' in sidebar 'referenceSidebar', linking to the doc observability/otel-tracing/providers/langfuse"
+  },
+  "sidebar.referenceSidebar.doc.Arize AX": {
+    "message": "Arize AX",
+    "description": "The label for the doc item 'Arize AX' in sidebar 'referenceSidebar', linking to the doc observability/otel-tracing/providers/arize-ax"
+  },
+  "sidebar.referenceSidebar.doc.Laminar": {
+    "message": "Laminar",
+    "description": "The label for the doc item 'Laminar' in sidebar 'referenceSidebar', linking to the doc observability/otel-tracing/providers/laminar"
+  },
+  "sidebar.referenceSidebar.doc.Braintrust": {
+    "message": "Braintrust",
+    "description": "The label for the doc item 'Braintrust' in sidebar 'referenceSidebar', linking to the doc observability/otel-tracing/providers/braintrust"
+  },
+  "sidebar.referenceSidebar.doc.SigNoz": {
+    "message": "SigNoz",
+    "description": "The label for the doc item 'SigNoz' in sidebar 'referenceSidebar', linking to the doc observability/otel-tracing/providers/signoz"
+  },
+  "sidebar.referenceSidebar.doc.Arize Phoenix": {
+    "message": "Arize Phoenix",
+    "description": "The label for the doc item 'Arize Phoenix' in sidebar 'referenceSidebar', linking to the doc observability/otel-tracing/providers/arize-phoenix"
+  },
+  "sidebar.referenceSidebar.doc.Keywords AI": {
+    "message": "Keywords AI",
+    "description": "The label for the doc item 'Keywords AI' in sidebar 'referenceSidebar', linking to the doc observability/otel-tracing/providers/keywordsai"
+  },
+  "sidebar.referenceSidebar.doc.KeywordCoverageMetric": {
+    "message": "KeywordCoverageMetric",
+    "description": "The label for the doc item 'KeywordCoverageMetric' in sidebar 'referenceSidebar', linking to the doc evals/keyword-coverage"
+  },
+  "sidebar.referenceSidebar.doc.ToneConsistencyMetric": {
+    "message": "ToneConsistencyMetric",
+    "description": "The label for the doc item 'ToneConsistencyMetric' in sidebar 'referenceSidebar', linking to the doc evals/tone-consistency"
+  },
+  "sidebar.referenceSidebar.doc.ContentSimilarityMetric": {
+    "message": "ContentSimilarityMetric",
+    "description": "The label for the doc item 'ContentSimilarityMetric' in sidebar 'referenceSidebar', linking to the doc evals/content-similarity"
+  },
+  "sidebar.referenceSidebar.doc.ContextRelevancyMetric": {
+    "message": "ContextRelevancyMetric",
+    "description": "The label for the doc item 'ContextRelevancyMetric' in sidebar 'referenceSidebar', linking to the doc evals/context-relevancy"
+  },
+  "sidebar.referenceSidebar.doc.AnswerRelevancyMetric": {
+    "message": "AnswerRelevancyMetric",
+    "description": "The label for the doc item 'AnswerRelevancyMetric' in sidebar 'referenceSidebar', linking to the doc evals/answer-relevancy"
+  },
+  "sidebar.referenceSidebar.doc.ContextPrecisionMetric": {
+    "message": "ContextPrecisionMetric",
+    "description": "The label for the doc item 'ContextPrecisionMetric' in sidebar 'referenceSidebar', linking to the doc evals/context-precision"
+  },
+  "sidebar.referenceSidebar.doc.ContextualRecallMetric": {
+    "message": "ContextualRecallMetric",
+    "description": "The label for the doc item 'ContextualRecallMetric' in sidebar 'referenceSidebar', linking to the doc evals/contextual-recall"
+  },
+  "sidebar.referenceSidebar.doc.ContextPositionMetric": {
+    "message": "ContextPositionMetric",
+    "description": "The label for the doc item 'ContextPositionMetric' in sidebar 'referenceSidebar', linking to the doc evals/context-position"
+  },
+  "sidebar.referenceSidebar.doc.TextualDifferenceMetric": {
+    "message": "TextualDifferenceMetric",
+    "description": "The label for the doc item 'TextualDifferenceMetric' in sidebar 'referenceSidebar', linking to the doc evals/textual-difference"
+  },
+  "sidebar.referenceSidebar.doc.PromptAlignmentMetric": {
+    "message": "PromptAlignmentMetric",
+    "description": "The label for the doc item 'PromptAlignmentMetric' in sidebar 'referenceSidebar', linking to the doc evals/prompt-alignment"
+  },
+  "sidebar.referenceSidebar.doc.Bias": {
+    "message": "Bias",
+    "description": "The label for the doc item 'Bias' in sidebar 'referenceSidebar', linking to the doc scorers/bias"
+  },
+  "sidebar.referenceSidebar.doc.Completeness": {
+    "message": "Completeness",
+    "description": "The label for the doc item 'Completeness' in sidebar 'referenceSidebar', linking to the doc scorers/completeness"
+  },
+  "sidebar.referenceSidebar.doc.Faithfulness": {
+    "message": "Faithfulness",
+    "description": "The label for the doc item 'Faithfulness' in sidebar 'referenceSidebar', linking to the doc scorers/faithfulness"
+  },
+  "sidebar.referenceSidebar.doc.Hallucination": {
+    "message": "Hallucination",
+    "description": "The label for the doc item 'Hallucination' in sidebar 'referenceSidebar', linking to the doc scorers/hallucination"
+  },
+  "sidebar.referenceSidebar.doc.Toxicity": {
+    "message": "Toxicity",
+    "description": "The label for the doc item 'Toxicity' in sidebar 'referenceSidebar', linking to the doc scorers/toxicity"
+  },
+  "sidebar.referenceSidebar.doc.Keyword Coverage Scorer": {
+    "message": "Keyword Coverage Scorer",
+    "description": "The label for the doc item 'Keyword Coverage Scorer' in sidebar 'referenceSidebar', linking to the doc scorers/keyword-coverage"
+  },
+  "sidebar.referenceSidebar.doc.Tone Consistency Scorer": {
+    "message": "Tone Consistency Scorer",
+    "description": "The label for the doc item 'Tone Consistency Scorer' in sidebar 'referenceSidebar', linking to the doc scorers/tone-consistency"
+  },
+  "sidebar.referenceSidebar.doc.Noise Sensitivity Scorer (CI/Testing Only)": {
+    "message": "Noise Sensitivity Scorer (CI/Testing Only)",
+    "description": "The label for the doc item 'Noise Sensitivity Scorer (CI/Testing Only)' in sidebar 'referenceSidebar', linking to the doc scorers/noise-sensitivity"
+  },
+  "sidebar.referenceSidebar.doc.MastraScorer": {
+    "message": "MastraScorer",
+    "description": "The label for the doc item 'MastraScorer' in sidebar 'referenceSidebar', linking to the doc scorers/mastra-scorer"
+  },
+  "sidebar.referenceSidebar.doc.createScorer": {
+    "message": "createScorer",
+    "description": "The label for the doc item 'createScorer' in sidebar 'referenceSidebar', linking to the doc scorers/create-scorer"
+  },
+  "sidebar.referenceSidebar.doc.Content Similarity Scorer": {
+    "message": "Content Similarity Scorer",
+    "description": "The label for the doc item 'Content Similarity Scorer' in sidebar 'referenceSidebar', linking to the doc scorers/content-similarity"
+  },
+  "sidebar.referenceSidebar.doc.runExperiment": {
+    "message": "runExperiment",
+    "description": "The label for the doc item 'runExperiment' in sidebar 'referenceSidebar', linking to the doc scorers/run-experiment"
+  },
+  "sidebar.referenceSidebar.doc.Answer Relevancy Scorer": {
+    "message": "Answer Relevancy Scorer",
+    "description": "The label for the doc item 'Answer Relevancy Scorer' in sidebar 'referenceSidebar', linking to the doc scorers/answer-relevancy"
+  },
+  "sidebar.referenceSidebar.doc.Context Precision Scorer": {
+    "message": "Context Precision Scorer",
+    "description": "The label for the doc item 'Context Precision Scorer' in sidebar 'referenceSidebar', linking to the doc scorers/context-precision"
+  },
+  "sidebar.referenceSidebar.doc.Answer Similarity Scorer": {
+    "message": "Answer Similarity Scorer",
+    "description": "The label for the doc item 'Answer Similarity Scorer' in sidebar 'referenceSidebar', linking to the doc scorers/answer-similarity"
+  },
+  "sidebar.referenceSidebar.doc.Context Relevance Scorer": {
+    "message": "Context Relevance Scorer",
+    "description": "The label for the doc item 'Context Relevance Scorer' in sidebar 'referenceSidebar', linking to the doc scorers/context-relevance"
+  },
+  "sidebar.referenceSidebar.doc.Tool Call Accuracy Scorers": {
+    "message": "Tool Call Accuracy Scorers",
+    "description": "The label for the doc item 'Tool Call Accuracy Scorers' in sidebar 'referenceSidebar', linking to the doc scorers/tool-call-accuracy"
+  },
+  "sidebar.referenceSidebar.doc.Textual Difference Scorer": {
+    "message": "Textual Difference Scorer",
+    "description": "The label for the doc item 'Textual Difference Scorer' in sidebar 'referenceSidebar', linking to the doc scorers/textual-difference"
+  },
+  "sidebar.referenceSidebar.doc.Prompt Alignment Scorer": {
+    "message": "Prompt Alignment Scorer",
+    "description": "The label for the doc item 'Prompt Alignment Scorer' in sidebar 'referenceSidebar', linking to the doc scorers/prompt-alignment"
+  },
+  "sidebar.referenceSidebar.doc.LanguageDetector": {
+    "message": "LanguageDetector",
+    "description": "The label for the doc item 'LanguageDetector' in sidebar 'referenceSidebar', linking to the doc processors/language-detector"
+  },
+  "sidebar.referenceSidebar.doc.BatchPartsProcessor": {
+    "message": "BatchPartsProcessor",
+    "description": "The label for the doc item 'BatchPartsProcessor' in sidebar 'referenceSidebar', linking to the doc processors/batch-parts-processor"
+  },
+  "sidebar.referenceSidebar.doc.ModerationProcessor": {
+    "message": "ModerationProcessor",
+    "description": "The label for the doc item 'ModerationProcessor' in sidebar 'referenceSidebar', linking to the doc processors/moderation-processor"
+  },
+  "sidebar.referenceSidebar.doc.PromptInjectionDetector": {
+    "message": "PromptInjectionDetector",
+    "description": "The label for the doc item 'PromptInjectionDetector' in sidebar 'referenceSidebar', linking to the doc processors/prompt-injection-detector"
+  },
+  "sidebar.referenceSidebar.doc.PIIDetector": {
+    "message": "PIIDetector",
+    "description": "The label for the doc item 'PIIDetector' in sidebar 'referenceSidebar', linking to the doc processors/pii-detector"
+  },
+  "sidebar.referenceSidebar.doc.UnicodeNormalizer": {
+    "message": "UnicodeNormalizer",
+    "description": "The label for the doc item 'UnicodeNormalizer' in sidebar 'referenceSidebar', linking to the doc processors/unicode-normalizer"
+  },
+  "sidebar.referenceSidebar.doc.TokenLimiterProcessor": {
+    "message": "TokenLimiterProcessor",
+    "description": "The label for the doc item 'TokenLimiterProcessor' in sidebar 'referenceSidebar', linking to the doc processors/token-limiter-processor"
+  },
+  "sidebar.referenceSidebar.doc.SystemPromptScrubber": {
+    "message": "SystemPromptScrubber",
+    "description": "The label for the doc item 'SystemPromptScrubber' in sidebar 'referenceSidebar', linking to the doc processors/system-prompt-scrubber"
+  },
+  "sidebar.referenceSidebar.doc.JSON Web Token": {
+    "message": "JSON Web Token",
+    "description": "The label for the doc item 'JSON Web Token' in sidebar 'referenceSidebar', linking to the doc auth/jwt"
+  },
+  "sidebar.referenceSidebar.doc.Clerk": {
+    "message": "Clerk",
+    "description": "The label for the doc item 'Clerk' in sidebar 'referenceSidebar', linking to the doc auth/clerk"
+  },
+  "sidebar.referenceSidebar.doc.Supabase": {
+    "message": "Supabase",
+    "description": "The label for the doc item 'Supabase' in sidebar 'referenceSidebar', linking to the doc auth/supabase"
+  },
+  "sidebar.referenceSidebar.doc.Firebase": {
+    "message": "Firebase",
+    "description": "The label for the doc item 'Firebase' in sidebar 'referenceSidebar', linking to the doc auth/firebase"
+  },
+  "sidebar.referenceSidebar.doc.WorkOS": {
+    "message": "WorkOS",
+    "description": "The label for the doc item 'WorkOS' in sidebar 'referenceSidebar', linking to the doc auth/workos"
+  },
+  "sidebar.referenceSidebar.doc.Auth0": {
+    "message": "Auth0",
+    "description": "The label for the doc item 'Auth0' in sidebar 'referenceSidebar', linking to the doc auth/auth0"
+  },
+  "sidebar.referenceSidebar.doc.Mastra Voice": {
+    "message": "Mastra Voice",
+    "description": "The label for the doc item 'Mastra Voice' in sidebar 'referenceSidebar', linking to the doc voice/mastra-voice"
+  },
+  "sidebar.referenceSidebar.doc.Composite Voice": {
+    "message": "Composite Voice",
+    "description": "The label for the doc item 'Composite Voice' in sidebar 'referenceSidebar', linking to the doc voice/composite-voice"
+  },
+  "sidebar.referenceSidebar.doc..speak()": {
+    "message": ".speak()",
+    "description": "The label for the doc item '.speak()' in sidebar 'referenceSidebar', linking to the doc voice/voice.speak"
+  },
+  "sidebar.referenceSidebar.doc..listen()": {
+    "message": ".listen()",
+    "description": "The label for the doc item '.listen()' in sidebar 'referenceSidebar', linking to the doc voice/voice.listen"
+  },
+  "sidebar.referenceSidebar.doc..getSpeakers()": {
+    "message": ".getSpeakers()",
+    "description": "The label for the doc item '.getSpeakers()' in sidebar 'referenceSidebar', linking to the doc voice/voice.getSpeakers"
+  },
+  "sidebar.referenceSidebar.doc..connect() (rt.)": {
+    "message": ".connect() (rt.)",
+    "description": "The label for the doc item '.connect() (rt.)' in sidebar 'referenceSidebar', linking to the doc voice/voice.connect"
+  },
+  "sidebar.referenceSidebar.doc..send() (rt.)": {
+    "message": ".send() (rt.)",
+    "description": "The label for the doc item '.send() (rt.)' in sidebar 'referenceSidebar', linking to the doc voice/voice.send"
+  },
+  "sidebar.referenceSidebar.doc..answer() (rt.)": {
+    "message": ".answer() (rt.)",
+    "description": "The label for the doc item '.answer() (rt.)' in sidebar 'referenceSidebar', linking to the doc voice/voice.answer"
+  },
+  "sidebar.referenceSidebar.doc..on() (rt.)": {
+    "message": ".on() (rt.)",
+    "description": "The label for the doc item '.on() (rt.)' in sidebar 'referenceSidebar', linking to the doc voice/voice.on"
+  },
+  "sidebar.referenceSidebar.doc.Events (rt.)": {
+    "message": "Events (rt.)",
+    "description": "The label for the doc item 'Events (rt.)' in sidebar 'referenceSidebar', linking to the doc voice/voice.events"
+  },
+  "sidebar.referenceSidebar.doc..off() (rt.)": {
+    "message": ".off() (rt.)",
+    "description": "The label for the doc item '.off() (rt.)' in sidebar 'referenceSidebar', linking to the doc voice/voice.off"
+  },
+  "sidebar.referenceSidebar.doc..close() (rt.)": {
+    "message": ".close() (rt.)",
+    "description": "The label for the doc item '.close() (rt.)' in sidebar 'referenceSidebar', linking to the doc voice/voice.close"
+  },
+  "sidebar.referenceSidebar.doc..addInstructions() (rt.)": {
+    "message": ".addInstructions() (rt.)",
+    "description": "The label for the doc item '.addInstructions() (rt.)' in sidebar 'referenceSidebar', linking to the doc voice/voice.addInstructions"
+  },
+  "sidebar.referenceSidebar.doc..addTools() (rt.)": {
+    "message": ".addTools() (rt.)",
+    "description": "The label for the doc item '.addTools() (rt.)' in sidebar 'referenceSidebar', linking to the doc voice/voice.addTools"
+  },
+  "sidebar.referenceSidebar.doc..updateConfig() (rt.)": {
+    "message": ".updateConfig() (rt.)",
+    "description": "The label for the doc item '.updateConfig() (rt.)' in sidebar 'referenceSidebar', linking to the doc voice/voice.updateConfig"
+  },
+  "sidebar.referenceSidebar.doc.Deepgram": {
+    "message": "Deepgram",
+    "description": "The label for the doc item 'Deepgram' in sidebar 'referenceSidebar', linking to the doc voice/deepgram"
+  },
+  "sidebar.referenceSidebar.doc.ElevenLabs": {
+    "message": "ElevenLabs",
+    "description": "The label for the doc item 'ElevenLabs' in sidebar 'referenceSidebar', linking to the doc voice/elevenlabs"
+  },
+  "sidebar.referenceSidebar.doc.Google": {
+    "message": "Google",
+    "description": "The label for the doc item 'Google' in sidebar 'referenceSidebar', linking to the doc voice/google"
+  },
+  "sidebar.referenceSidebar.doc.Google Gemini Live": {
+    "message": "Google Gemini Live",
+    "description": "The label for the doc item 'Google Gemini Live' in sidebar 'referenceSidebar', linking to the doc voice/google-gemini-live"
+  },
+  "sidebar.referenceSidebar.doc.Murf": {
+    "message": "Murf",
+    "description": "The label for the doc item 'Murf' in sidebar 'referenceSidebar', linking to the doc voice/murf"
+  },
+  "sidebar.referenceSidebar.doc.OpenAI Realtime": {
+    "message": "OpenAI Realtime",
+    "description": "The label for the doc item 'OpenAI Realtime' in sidebar 'referenceSidebar', linking to the doc voice/openai-realtime"
+  },
+  "sidebar.referenceSidebar.doc.PlayAI": {
+    "message": "PlayAI",
+    "description": "The label for the doc item 'PlayAI' in sidebar 'referenceSidebar', linking to the doc voice/playai"
+  },
+  "sidebar.referenceSidebar.doc.Sarvam": {
+    "message": "Sarvam",
+    "description": "The label for the doc item 'Sarvam' in sidebar 'referenceSidebar', linking to the doc voice/sarvam"
+  },
+  "sidebar.referenceSidebar.doc.Speechify": {
+    "message": "Speechify",
+    "description": "The label for the doc item 'Speechify' in sidebar 'referenceSidebar', linking to the doc voice/speechify"
+  },
+  "sidebar.referenceSidebar.doc.Azure": {
+    "message": "Azure",
+    "description": "The label for the doc item 'Azure' in sidebar 'referenceSidebar', linking to the doc voice/azure"
+  },
+  "sidebar.referenceSidebar.doc.Cloudflare": {
+    "message": "Cloudflare",
+    "description": "The label for the doc item 'Cloudflare' in sidebar 'referenceSidebar', linking to the doc voice/cloudflare"
+  },
+  "sidebar.referenceSidebar.doc.Overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'referenceSidebar', linking to the doc templates/overview"
+  }
+}

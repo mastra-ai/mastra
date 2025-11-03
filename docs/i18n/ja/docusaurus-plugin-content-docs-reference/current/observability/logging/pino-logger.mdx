@@ -1,0 +1,169 @@
+---
+title: "リファレンス: PinoLogger | Observability | Mastra Docs"
+description: さまざまな重大度レベルでのイベント記録メソッドを提供する PinoLogger のドキュメント。
+---
+
+<div id="pinologger">
+  # PinoLogger
+</div>
+
+`new PinoLogger()` で Logger インスタンスを作成し、さまざまな重要度レベルでイベントを記録するメソッドを提供します。
+
+Mastra Cloud にデプロイした場合、ログは [Logs](/docs/mastra-cloud/dashboard#logs) ページに表示されます。セルフホストやカスタム環境では、設定したトランスポートに応じて、ログをファイルや外部サービスへ送ることができます。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
+
+export const mastra = new Mastra({
+  // ...
+  logger: new PinoLogger({
+    name: "Mastra",
+    level: "info",
+  }),
+});
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "このロガーのログをグループ化・識別するためのラベル。",
+    },
+    {
+      name: "level",
+      type: `"debug" | "info" | "warn" | "error"`,
+      description:
+        "最小ログレベルを設定します。このレベル未満のメッセージは無視されます。",
+    },
+    {
+      name: "transports",
+      type: "Record<string, LoggerTransport>",
+      description: "ログの永続化に使用する transport インスタンスのマップ。",
+    },
+    {
+      name: "overrideDefaultTransports",
+      type: "boolean",
+      isOptional: true,
+      description: "true の場合、デフォルトの console transport を無効化します。",
+    },
+    {
+      name: "formatters",
+      type: "pino.LoggerOptions['formatters']",
+      isOptional: true,
+      description: "ログをシリアライズするためのカスタム Pino フォーマッタ。",
+    },
+  ]}
+/>
+
+<div id="file-transport-structured-logs">
+  ## ファイルトランスポート（構造化ログ）
+</div>
+
+`FileTransport` を使って構造化ログをファイルに書き込みます。ロガーは第1引数にプレーンなメッセージ、第2引数に構造化メタデータを受け取ります。これらは内部で `BaseLogMessage` に変換され、設定したファイルパスに書き出されます。
+
+```typescript title="src/mastra/loggers/file-transport.ts" showLineNumbers copy
+import { FileTransport } from "@mastra/loggers/file";
+import { PinoLogger } from "@mastra/loggers/pino";
+
+export const fileLogger = new PinoLogger({
+  name: "Mastra",
+  transports: { file: new FileTransport({ path: "test-dir/test.log" }) },
+  level: "warn",
+});
+```
+
+
+<div id="file-transport-usage">
+  ### ファイル転送の使い方
+</div>
+
+```typescript showLineNumbers copy
+fileLogger.warn("ディスク容量不足", {
+  destinationPath: "system",
+  type: "WORKFLOW",
+});
+```
+
+
+<div id="upstash-transport-remote-log-drain">
+  ## Upstash トランスポート（リモートログドレイン）
+</div>
+
+`UpstashTransport` を使用して、構造化ログをリモートの Redis リストにストリーミングします。ロガーは文字列メッセージと構造化メタデータオブジェクトを受け取ります。これにより、分散環境における集中型ロギングが可能になり、`destinationPath`、`type`、`runId` によるフィルタリングをサポートします。
+
+```typescript title="src/mastra/loggers/upstash-transport.ts" showLineNumbers copy
+import { UpstashTransport } from "@mastra/loggers/upstash";
+import { PinoLogger } from "@mastra/loggers/pino";
+
+export const upstashLogger = new PinoLogger({
+  name: "Mastra",
+  transports: {
+    upstash: new UpstashTransport({
+      listName: "production-logs",
+      upstashUrl: process.env.UPSTASH_URL!,
+      upstashToken: process.env.UPSTASH_TOKEN!,
+    }),
+  },
+  level: "info",
+});
+```
+
+
+<div id="upstash-transport-usage">
+  ### Upstash トランスポートの使い方
+</div>
+
+```typescript showLineNumbers copy
+upstashLogger.info("ユーザーがサインインしました", {
+  destinationPath: "auth",
+  type: "AGENT",
+  runId: "run_123",
+});
+```
+
+
+<div id="custom-transport">
+  ## カスタムトランスポート
+</div>
+
+任意のログサービスやストリームと統合するために、`createCustomTransport` ユーティリティを使ってカスタムトランスポートを作成できます。
+
+<div id="sentry-transport-example">
+  ### Sentry トランスポートの例
+</div>
+
+`createCustomTransport` を使ってカスタムトランスポートを作成し、`pino-sentry-transport` のようなサードパーティ製のロギングストリームと統合します。これにより、Sentry などの外部システムにログを転送し、より高度な監視と可観測性を実現できます。
+
+```typescript title="src/mastra/loggers/sentry-transport.ts" showLineNumbers copy
+import { createCustomTransport } from "@mastra/core/loggers";
+import { PinoLogger } from "@mastra/loggers/pino";
+import pinoSentry from "pino-sentry-transport";
+
+const sentryStream = await pinoSentry({
+  sentry: {
+    dsn: "YOUR_SENTRY_DSN",
+    _experiments: {
+      enableLogs: true,
+    },
+  },
+});
+
+const customTransport = createCustomTransport(sentryStream);
+
+export const sentryLogger = new PinoLogger({
+  name: "Mastra",
+  level: "info",
+  transports: { sentry: customTransport },
+});
+```

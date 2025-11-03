@@ -1,0 +1,155 @@
+---
+title: "リファレンス: MastraAuthFirebase クラス | Auth | Mastra ドキュメント"
+description: "Firebase Authentication を用いて Mastra アプリケーションを認証する MastraAuthFirebase クラスの API リファレンス。"
+---
+
+<div id="mastraauthfirebase-class">
+  # MastraAuthFirebase クラス
+</div>
+
+`MastraAuthFirebase` クラスは、Firebase Authentication を用いて Mastra の認証を提供します。Firebase ID トークンで受信リクエストを検証し、`experimental_auth` オプションを介して Mastra サーバーと統合します。
+
+<div id="usage-examples">
+  ## 使い方の例
+</div>
+
+<div id="basic-usage-with-environment-variables">
+  ### 環境変数を使った基本的な使い方
+</div>
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthFirebase } from "@mastra/auth-firebase";
+
+// FIREBASE_SERVICE_ACCOUNT と FIRESTORE_DATABASE_ID の環境変数を自動的に使用します
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthFirebase(),
+  },
+});
+```
+
+
+<div id="custom-configuration">
+  ### カスタム設定
+</div>
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthFirebase } from "@mastra/auth-firebase";
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthFirebase({
+      serviceAccount: "/path/to/service-account-key.json",
+      databaseId: "your-database-id",
+    }),
+  },
+});
+```
+
+
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "serviceAccount",
+      type: "string",
+      description:
+        "Firebase のサービスアカウント JSON ファイルへのパス。サーバー側で Firebase ID トークンを検証するために必要な認証情報が含まれています。",
+      isOptional: true,
+      defaultValue: "process.env.FIREBASE_SERVICE_ACCOUNT",
+    },
+    {
+      name: "databaseId",
+      type: "string",
+      description:
+        "使用する Firestore のデータベース ID。通常はデフォルトのデータベースでは '(default)' を指定します。",
+      isOptional: true,
+      defaultValue:
+        "process.env.FIRESTORE_DATABASE_ID || process.env.FIREBASE_DATABASE_ID",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "認証プロバイダーインスタンスのカスタム名。",
+      isOptional: true,
+      defaultValue: '"firebase"',
+    },
+    {
+      name: "authorizeUser",
+      type: "(user: FirebaseUser) => Promise<boolean> | boolean",
+      description:
+        "ユーザーにアクセス権を付与すべきかを判断するためのカスタム認可関数。トークン検証後に呼び出されます。デフォルトでは、ユーザーの UID をキーとする 'user_access' コレクションに該当ドキュメントが存在するかを確認します。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="environment-variables">
+  ## 環境変数
+</div>
+
+コンストラクターのオプションが指定されていない場合、次の環境変数が自動的に使用されます。
+
+<PropertiesTable
+  content={[
+    {
+      name: "FIREBASE_SERVICE_ACCOUNT",
+      type: "string",
+      description:
+        "Firebase サービス アカウントの JSON ファイルへのパス。serviceAccount オプションが指定されていない場合に使用されます。",
+      isOptional: true,
+    },
+    {
+      name: "FIRESTORE_DATABASE_ID",
+      type: "string",
+      description:
+        "Firestore のデータベース ID。データベース設定における主要な環境変数です。",
+      isOptional: true,
+    },
+    {
+      name: "FIREBASE_DATABASE_ID",
+      type: "string",
+      description:
+        "Firestore のデータベース ID 用の代替環境変数。FIRESTORE_DATABASE_ID が設定されていない場合に使用されます。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="default-authorization-behavior">
+  ## デフォルトの認可動作
+</div>
+
+デフォルトでは、`MastraAuthFirebase` は Firestore を使用してユーザーのアクセスを管理します:
+
+1. Firebase ID トークンの検証に成功すると、`authorizeUser` メソッドが呼び出される
+2. `user_access` コレクションで、ユーザーの UID をドキュメント ID とするドキュメントの有無を確認する
+3. ドキュメントが存在すればユーザーは認可され、存在しなければアクセスは拒否される
+4. 使用する Firestore データベースは、`databaseId` パラメータまたは環境変数によって決定される
+
+<div id="firebase-user-type">
+  ## Firebase ユーザー型
+</div>
+
+`authorizeUser` 関数で使用される `FirebaseUser` 型は、Firebase の `DecodedIdToken` インターフェースに対応しており、次の情報を含みます:
+
+- `uid`: ユーザーの一意の識別子
+- `email`: ユーザーのメールアドレス（存在する場合）
+- `email_verified`: メールアドレスが確認済みかどうか
+- `name`: ユーザーの表示名（存在する場合）
+- `picture`: ユーザーのプロフィール画像の URL（存在する場合）
+- `auth_time`: ユーザーが認証した日時
+- その他の標準的な JWT クレーム
+
+<div id="related">
+  ## 関連情報
+</div>
+
+[MastraAuthFirebase クラス](/docs/auth/firebase)

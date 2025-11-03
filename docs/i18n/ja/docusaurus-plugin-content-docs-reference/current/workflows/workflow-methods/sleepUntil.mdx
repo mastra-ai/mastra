@@ -1,0 +1,76 @@
+---
+title: "リファレンス: Workflow.sleepUntil() | Workflows | Mastra ドキュメント"
+description: ワークフローで使用する `Workflow.sleepUntil()` メソッドのドキュメント。指定した日時まで実行を一時停止します。
+---
+
+<div id="workflowsleepuntil">
+  # Workflow.sleepUntil()
+</div>
+
+`.sleepUntil()` メソッドは、指定した日時まで実行を一時停止します。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+workflow.sleepUntil(new Date(Date.now() + 5000));
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "dateOrCallback",
+      type: "Date | ((params: ExecuteFunctionParams) => Promise<Date>)",
+      description:
+        "Date オブジェクト、または Date を返すコールバック関数のいずれか。コールバックは実行時のコンテキストを受け取り、入力データに基づいて目標時刻を動的に算出できます。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "メソッドチェーン用のワークフローのインスタンス",
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## さらに発展した使用例
+</div>
+
+```typescript showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .sleepUntil(async ({ inputData }) => {
+    const { delayInMs } = inputData;
+    return new Date(Date.now() + delayInMs);
+  })
+  .then(step2)
+  .commit();
+```
+
+
+<div id="related">
+  ## 関連
+</div>
+
+- [一時停止と再開](/docs/workflows/suspend-and-resume#sleep--events)

@@ -1,0 +1,80 @@
+---
+title: "リファレンス: Workflow.waitForEvent() | Workflows | Mastra ドキュメント"
+description: ワークフローで使用する `Workflow.waitForEvent()` メソッドのドキュメント。イベントを受信するまで実行を一時停止します。
+---
+
+<div id="workflowwaitforevent">
+  # Workflow.waitForEvent()
+</div>
+
+`.waitForEvent()` メソッドは、イベントを受信するまで実行を一時停止します。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+workflow.waitForEvent("event-name", step1);
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "eventName",
+      type: "string",
+      description: "待機するイベント名",
+      isOptional: false,
+    },
+    {
+      name: "step",
+      type: "Step",
+      description: "イベント受信後に再開するステップ",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 返り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "メソッドチェーンのための Workflow インスタンス",
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 応用的な使用例
+</div>
+
+```typescript showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+const step3 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .waitForEvent("event-name", step2)
+  .then(step3)
+  .commit();
+```
+
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [.sendEvent()](./sendEvent)
+- [サスペンドと再開](/docs/workflows/suspend-and-resume#sleep--events)

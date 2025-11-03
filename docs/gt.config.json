@@ -1,0 +1,32 @@
+{
+  "defaultLocale": "en",
+  "files": {
+    "mdx": {
+      "include": ["src/content/**/*.mdx"],
+      "transform": [
+        {
+          "match": "^src/content/{locale}/docs/(.*)\\.mdx$",
+          "replace": "i18n/{locale}/docusaurus-plugin-content-docs/current/$1.mdx"
+        },
+        {
+          "match": "^src/content/{locale}/(examples|guides|models|reference)/(.*)\\.mdx$",
+          "replace": "i18n/{locale}/docusaurus-plugin-content-docs-$1/current/$2.mdx"
+        }
+      ]
+    },
+    "json": {
+      "include": ["i18n/[locale]/**/*.json"]
+    },
+    "gt": {
+      "output": "i18n/locales/[locale].json"
+    }
+  },
+  "locales": ["ja"],
+  "options": {
+    "experimentalClearLocaleDirs": true,
+    "experimentalLocalizeStaticUrls": true,
+    "experimentalAddHeaderAnchorIds": "mintlify"
+  },
+  "projectId": "48751091-773e-4a3e-8c83-5c3906117b30",
+  "_versionId": "9fcf920ead458f267f6011477fa5339fec34cd7edae0d6336e5f4d90801d8c23"
+}
