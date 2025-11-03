@@ -273,7 +273,7 @@ describe('Memory Streaming Tests', () => {
       const { result } = renderHook(() => {
         const chat = useChat({
           transport: new DefaultChatTransport({
-            api: `http://localhost:${port}/api/agents/test/stream/ui`,
+            api: `http://localhost:${port}/chat`,
             prepareSendMessagesRequest({ messages }) {
               return {
                 body: {
