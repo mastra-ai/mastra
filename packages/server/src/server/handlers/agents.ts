@@ -788,7 +788,10 @@ export async function streamNetworkHandler({
   }
 }
 
-export async function streamUIMessageHandler({}: Context & {
+export async function streamUIMessageHandler(_params: Context & {
+  requestContext: RequestContext;
+  agentId: string;
+  body: GetBody<'stream'> & {
   requestContext: RequestContext;
   agentId: string;
   body: GetBody<'stream'> & {
