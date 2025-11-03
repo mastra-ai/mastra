@@ -47,6 +47,7 @@ export interface SerializedWorkflow {
 
 export interface SerializedAgent {
   name: string;
+  description?: string;
   instructions?: SystemMessage;
   tools: Record<string, SerializedTool>;
   agents: Record<string, SerializedAgentDefinition>;
@@ -185,6 +186,7 @@ async function formatAgentList({
   agent: Agent;
   requestContext: RequestContext;
 }): Promise<SerializedAgentWithId> {
+  const description = agent.getDescription();
   const instructions = await agent.getInstructions({ requestContext });
   const tools = await agent.listTools({ requestContext });
   const llm = await agent.getLLM({ requestContext });
@@ -239,6 +241,7 @@ async function formatAgentList({
   return {
     id,
     name: agent.name,
+    description,
     instructions,
     agents: serializedAgentAgents,
     tools: serializedAgentTools,
@@ -334,6 +337,7 @@ async function formatAgent({
   requestContext: RequestContext;
   isPlayground: boolean;
 }): Promise<SerializedAgent> {
+  const description = agent.getDescription();
   const tools = await agent.listTools({ requestContext });
 
   const serializedAgentTools = await getSerializedAgentTools(tools);
@@ -419,6 +423,7 @@ async function formatAgent({
 
   return {
     name: agent.name,
+    description,
     instructions,
     tools: serializedAgentTools,
     agents: serializedAgentAgents,
