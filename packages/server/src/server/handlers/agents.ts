@@ -1,4 +1,5 @@
 import type { Agent, AgentModelManagerConfig } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { SystemMessage } from '@mastra/core/llm';
 import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
@@ -15,7 +16,6 @@ import type { Context } from '../types';
 
 import { handleError } from './error';
 import { sanitizeBody, validateBody } from './utils';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 type GetBody<
   T extends keyof Agent & { [K in keyof Agent]: Agent[K] extends (...args: any) => any ? K : never }[keyof Agent],
