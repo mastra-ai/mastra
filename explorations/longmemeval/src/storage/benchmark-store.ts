@@ -13,6 +13,8 @@ import type {
   StorageListWorkflowRunsInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
 } from '@mastra/core/storage';
 import { writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -407,31 +409,39 @@ export class BenchmarkStore extends MastraStorage {
     };
   }
 
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, selectBy, format = 'v1' } = args;
+  async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    const { threadId, page = 0, perPage = 40, resourceId, filter } = args;
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-    const { page = 0, perPage = 40 } = selectBy?.pagination || {};
 
     // Get all messages
     const allMessages = await this.getMessages({
       threadId,
-      selectBy: { ...selectBy, pagination: undefined },
-      format: format as any,
+      format: 'v1' as any,
     } as any);
 
+    // Apply filters
+    let filteredMessages = allMessages;
+    if (resourceId) {
+      filteredMessages = filteredMessages.filter((m: any) => m.resourceId === resourceId);
+    }
+    if (filter?.dateRange?.start) {
+      filteredMessages = filteredMessages.filter((m: any) => new Date(m.createdAt) >= filter.dateRange!.start!);
+    }
+    if (filter?.dateRange?.end) {
+      filteredMessages = filteredMessages.filter((m: any) => new Date(m.createdAt) <= filter.dateRange!.end!);
+    }
+
     // Apply pagination
-    const start = page * perPage;
-    const messages = allMessages.slice(start, start + perPage);
+    const normalizedPerPage = perPage === false ? filteredMessages.length : perPage;
+    const start = page * normalizedPerPage;
+    const messages = filteredMessages.slice(start, start + normalizedPerPage) as any;
 
     return {
       messages,
-      total: allMessages.length,
+      total: filteredMessages.length,
       page,
-      perPage,
-      hasMore: allMessages.length > (page + 1) * perPage,
+      perPage: perPage === false ? false : normalizedPerPage,
+      hasMore: perPage === false ? false : filteredMessages.length > (page + 1) * normalizedPerPage,
     };
   }
 

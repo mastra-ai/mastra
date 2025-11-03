@@ -25,10 +25,11 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type {
   AITraceRecord,
   AISpanRecord,
-  StorageGetMessagesArg,
   PaginationInfo,
   WorkflowRun,
   WorkflowRuns,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
 } from '@mastra/core/storage';
 import type { OutputSchema } from '@mastra/core/stream';
 
@@ -292,15 +293,13 @@ export interface GetMemoryThreadMessagesParams {
   limit?: number;
 }
 
-export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg, 'threadConfig' | 'threadId'>;
+export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'>;
 
 export interface GetMemoryThreadMessagesResponse {
   messages: MastraDBMessage[];
 }
 
-export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
-  messages: MastraDBMessage[];
-};
+export type ListMemoryThreadMessagesResponse = StorageListMessagesOutput;
 
 export interface GetLogsParams {
   transportId: string;
