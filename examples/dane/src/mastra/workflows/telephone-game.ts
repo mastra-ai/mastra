@@ -7,7 +7,8 @@ import { z } from 'zod';
 const llm = anthropic('claude-3-5-sonnet-20241022');
 
 const agent = new Agent({
-  name: 'telephoneGameAgent',
+  id: 'telephone-game-agent',
+  name: 'Telephone Game Agent',
   instructions: `Telephone game agent`,
   model: llm,
 });

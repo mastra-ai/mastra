@@ -211,6 +211,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { weatherTool } from '../tools/weather-tool';
 
 export const weatherAgent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   instructions: \${instructions},
   model: openai('gpt-4o-mini'),

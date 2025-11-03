@@ -21,6 +21,7 @@ const mcp = new MCPClient({
 });
 
 export const stockWeatherAgent = new Agent({
+  id: 'stock-weather-agent',
   name: 'Stock + Weather Agent',
   instructions:
     'You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price. You also love to check the weather when your stock market buddies ask you what the weather is.',

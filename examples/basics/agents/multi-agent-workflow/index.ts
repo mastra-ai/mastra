@@ -5,6 +5,7 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 const copywriterAgent = new Agent({
+  id: 'copywriter',
   name: 'Copywriter',
   instructions: 'You are a copywriter agent that writes blog post copy.',
   model: anthropic('claude-3-5-sonnet-20241022'),
@@ -31,6 +32,7 @@ const copywriterStep = createStep({
 });
 
 const editorAgent = new Agent({
+  id: 'editor',
   name: 'Editor',
   instructions: 'You are an editor agent that edits blog post copy.',
   model: openai('gpt-4o-mini'),

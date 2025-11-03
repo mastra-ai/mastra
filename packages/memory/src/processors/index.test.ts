@@ -106,7 +106,8 @@ describe('TokenLimiter', () => {
   });
 
   const agent = new Agent({
-    name: 'token estimate agent',
+    id: 'token-estimate-agent',
+    name: 'Token Estimate Agent',
     model: openai('gpt-4o-mini'),
     instructions: ``,
     tools: { calculatorTool },

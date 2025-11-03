@@ -4,6 +4,7 @@ import { Step, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 const agent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   instructions: `
         You are a local activities and travel expert who excels at weather-based planning. Analyze the weather data and provide practical activity recommendations.
