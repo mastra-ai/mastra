@@ -102,25 +102,10 @@ export class AgentBuilder extends BaseResource {
   }
 
   /**
-   * @deprecated Use createRunAsync() instead.
-   * @throws {Error} Always throws an error directing users to use createRunAsync()
-   */
-  async createRun(_params?: { runId?: string }): Promise<{ runId: string }> {
-    throw new Error(
-      'createRun() has been deprecated. ' +
-        'Please use createRunAsync() instead.\n\n' +
-        'Migration guide:\n' +
-        '  Before: const run = agentBuilder.createRun();\n' +
-        '  After:  const run = await agentBuilder.createRunAsync();\n\n' +
-        'Note: createRunAsync() is an async method, so make sure your calling function is async.',
-    );
-  }
-
-  /**
    * Creates a new agent builder action run and returns the runId.
    * This calls `/api/agent-builder/:actionId/create-run`.
    */
-  async createRunAsync(params?: { runId?: string }): Promise<{ runId: string }> {
+  async createRun(params?: { runId?: string }): Promise<{ runId: string }> {
     const searchParams = new URLSearchParams();
 
     if (!!params?.runId) {

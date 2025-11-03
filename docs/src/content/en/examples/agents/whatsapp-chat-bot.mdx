@@ -347,7 +347,7 @@ export const mastra = new Mastra({
 
           const body = await c.req.json();
 
-          const workflowRun = await chatWorkflow.createRunAsync();
+          const workflowRun = await chatWorkflow.createRun();
           const runResult = await workflowRun.start({
             inputData: { userMessage: JSON.stringify(body) },
           });
@@ -392,7 +392,7 @@ const mockWebhookData = {
 };
 
 const workflow = mastra.getWorkflow("chatWorkflow");
-const workflowRun = await workflow.createRunAsync();
+const workflowRun = await workflow.createRun();
 
 const result = await workflowRun.start({
   inputData: { userMessage: JSON.stringify(mockWebhookData) },

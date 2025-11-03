@@ -70,7 +70,7 @@ const myWorkflow = createWorkflow({
 // Run steps sequentially.
 myWorkflow.then(copywriterStep).then(editorStep).commit();
 
-const run = await myWorkflow.createRunAsync();
+const run = await myWorkflow.createRun();
 
 const res = await run.start({ inputData: { topic: 'React JavaScript frameworks' } });
 console.log('Response: ', res);

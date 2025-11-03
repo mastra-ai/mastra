@@ -121,15 +121,15 @@ registerApiRoute("/my-custom-route", {
 ### Special Mastra headers
 
 When integrating with Mastra Cloud or custom clients the following headers can
-be inspected by middleware to tailor behaviour:
+be inspected by middleware to tailor behavior:
 
 ```typescript copy
 {
   handler: async (c, next) => {
     const isFromMastraCloud = c.req.header('x-mastra-cloud') === 'true';
     const clientType = c.req.header('x-mastra-client-type');
-    const isDevPlayground =
-      c.req.header('x-mastra-dev-playground') === 'true';
+    const isStudio =
+      c.req.header('x-studio') === 'true';
 
     if (isFromMastraCloud) {
       // Special handling
@@ -141,7 +141,7 @@ be inspected by middleware to tailor behaviour:
 
 - `x-mastra-cloud`: request originates from Mastra Cloud
 - `x-mastra-client-type`: identifies the client SDK, e.g. `js` or `python`
-- `x-mastra-dev-playground`: request triggered from a local playground
+- `x-studio`: request triggered from Studio
 
 ### Setting `requestContext`
 

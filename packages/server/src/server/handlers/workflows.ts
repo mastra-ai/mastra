@@ -172,7 +172,7 @@ export async function createWorkflowRunHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
-    const run = await workflow.createRunAsync({ runId: prevRunId });
+    const run = await workflow.createRun({ runId: prevRunId });
 
     return { runId: run.runId };
   } catch (error) {
@@ -203,7 +203,7 @@ export async function startAsyncWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId });
+    const _run = await workflow.createRun({ runId });
     const result = await _run.start({
       inputData,
       requestContext,
@@ -248,7 +248,7 @@ export async function startWorkflowRunHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
+    const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
     void _run.start({
       inputData,
       requestContext,
@@ -305,7 +305,7 @@ export async function streamLegacyWorkflowHandler({
 
     const serverCache = mastra.getServerCache();
 
-    const run = await workflow.createRunAsync({ runId });
+    const run = await workflow.createRun({ runId });
     const result = run.streamLegacy({
       inputData,
       requestContext,
@@ -350,7 +350,7 @@ export async function observeStreamLegacyWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
+    const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
     const serverCache = mastra.getServerCache();
     if (!serverCache) {
       throw new HTTPException(500, { message: 'Server cache not found' });
@@ -414,7 +414,7 @@ export async function streamVNextWorkflowHandler({
 
     const serverCache = mastra.getServerCache();
 
-    const run = await workflow.createRunAsync({ runId });
+    const run = await workflow.createRun({ runId });
     const result = run.stream({
       inputData,
       requestContext,
@@ -463,7 +463,7 @@ export async function observeStreamVNextWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
+    const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
     const serverCache = mastra.getServerCache();
     if (!serverCache) {
       throw new HTTPException(500, { message: 'Server cache not found' });
@@ -553,7 +553,7 @@ export async function resumeAsyncWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
+    const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
     const result = await _run.resume({
       step: body.step,
       resumeData: body.resumeData,
@@ -600,7 +600,7 @@ export async function resumeWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
+    const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
     void _run.resume({
       step: body.step,
@@ -648,7 +648,7 @@ export async function resumeStreamWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
+    const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
     const serverCache = mastra.getServerCache();
 
     const stream = _run
@@ -747,7 +747,7 @@ export async function cancelWorkflowRunHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
+    const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
     await _run.cancel();
 
@@ -788,7 +788,7 @@ export async function sendWorkflowRunEventHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
+    const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
     await _run.sendEvent(event, data);
 

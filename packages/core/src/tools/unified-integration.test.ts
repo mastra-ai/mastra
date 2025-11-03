@@ -207,7 +207,7 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
       workflow.then(prepareStep).then(toolStep).commit();
 
       // Create and run the workflow
-      const run = await workflow.createRunAsync({
+      const run = await workflow.createRun({
         runId: 'workflow-run-123',
       });
 
@@ -252,7 +252,7 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
 
       workflow.parallel([createStep(tool1 as any), createStep(tool2 as any)]).commit();
 
-      const run = await workflow.createRunAsync({
+      const run = await workflow.createRun({
         runId: 'parallel-run-456',
       });
 
