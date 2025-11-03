@@ -71,6 +71,7 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
     });
 
     const miniAgent = new Agent({
+      id: 'question-extractor',
       model: this.llm,
       name: 'question-extractor',
       instructions:

@@ -516,30 +516,9 @@ const sidebars = {
           label: "Custom Scorers",
         },
         {
-          type: "category",
-          label: "Evals (old API)",
-          items: [
-            {
-              type: "doc",
-              id: "scorers/evals-old-api/overview",
-              label: "Overview",
-            },
-            {
-              type: "doc",
-              id: "scorers/evals-old-api/textual-evals",
-              label: "Textual Evals",
-            },
-            {
-              type: "doc",
-              id: "scorers/evals-old-api/custom-eval",
-              label: "Custom Evals",
-            },
-            {
-              type: "doc",
-              id: "scorers/evals-old-api/running-in-ci",
-              label: "Running in CI",
-            },
-          ],
+          type: "doc",
+          id: "scorers/running-in-ci",
+          label: "Running in CI",
         },
       ],
     },

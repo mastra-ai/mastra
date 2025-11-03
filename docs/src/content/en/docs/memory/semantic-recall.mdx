@@ -36,6 +36,7 @@ import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
+  id: "support-agent",
   name: "SupportAgent",
   instructions: "You are a helpful support agent.",
   model: openai("gpt-4o"),

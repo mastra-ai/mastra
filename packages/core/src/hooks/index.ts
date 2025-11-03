@@ -1,4 +1,4 @@
-import type { ScoringHookInput } from '../scores';
+import type { ScoringHookInput } from '../evals';
 
 import mitt from './mitt';
 import type { Handler } from './mitt';

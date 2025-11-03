@@ -18,6 +18,7 @@ When creating agents in Mastra, you can specify any AI SDK-supported model.
 import { Agent } from "@mastra/core/agent";
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   name: "Weather Agent",
   instructions: "Instructions for the agent...",
   model: "openai/gpt-4-turbo",

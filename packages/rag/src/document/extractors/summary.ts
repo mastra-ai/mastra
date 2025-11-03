@@ -70,6 +70,7 @@ export class SummaryExtractor extends BaseExtractor {
     });
 
     const miniAgent = new Agent({
+      id: 'summary-extractor',
       model: this.llm,
       name: 'summary-extractor',
       instructions:

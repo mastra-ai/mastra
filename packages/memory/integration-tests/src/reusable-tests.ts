@@ -2,7 +2,8 @@ import { randomUUID } from 'crypto';
 import * as path from 'path';
 import { Worker } from 'worker_threads';
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV1, SharedMemoryConfig } from '@mastra/core/memory';
+import type { MastraDBMessage } from '@mastra/core/agent';
+import type { SharedMemoryConfig } from '@mastra/core/memory';
 import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
 import type { Memory } from '@mastra/memory';
 import type { PostgresStoreConfig } from '@mastra/pg';
@@ -44,29 +45,80 @@ const createTestMessage = (
   content: string | TextPart[] | ToolCallPart[] | ToolResultPart[],
   role: 'user' | 'assistant' | 'tool' = 'user',
   type: 'text' | 'tool-call' | 'tool-result' = 'text',
-): MastraMessageV1 => {
+): MastraDBMessage => {
   messageCounter++;
+
+  // Convert content to MastraDBMessage format
+  let parts: (TextPart | ToolCallPart | ToolResultPart)[];
+  if (typeof content === 'string') {
+    parts = [{ type: 'text', text: content }];
+  } else {
+    parts = content;
+  }
+
   return {
     id: randomUUID(),
     threadId,
-    content,
+    content: {
+      format: 2,
+      parts,
+    },
     role,
-    type,
+    type: type === 'text' ? undefined : type,
     createdAt: new Date(Date.now() + messageCounter * 1000), // Add 1 second per message to prevent messages having the same timestamp
     resourceId,
   };
 };
 
+// Helper to extract text content from MastraDBMessage
+const getTextContent = (message: any): string => {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+  if (message.content?.parts && Array.isArray(message.content.parts)) {
+    // Concatenate all text parts
+    const textParts = message.content.parts.filter((p: any) => p.type === 'text' && p.text).map((p: any) => p.text);
+    if (textParts.length > 0) {
+      return textParts.join(' ');
+    }
+  }
+  // Fallback: check if content has a direct text property
+  if (message.content?.text) {
+    return message.content.text;
+  }
+  // Fallback: check if content.content exists (nested structure)
+  if (message.content?.content && typeof message.content.content === 'string') {
+    return message.content.content;
+  }
+  console.error('Unable to extract text from message:', JSON.stringify(message, null, 2));
+  return '';
+};
+
 export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
+  const cleanupAllThreads = async () => {
+    let allThreads: any[] = [];
+    let offset = 0;
+    const limit = 100;
+    while (true) {
+      const { threads, hasMore } = await memory.listThreadsByResourceId({
+        resourceId,
+        offset,
+        limit,
+      });
+      allThreads.push(...threads);
+      if (!hasMore || threads.length === 0) break;
+      offset += limit;
+    }
+    await Promise.all(allThreads.map(thread => memory.deleteThread(thread.id)));
+  };
+
   beforeEach(async () => {
     messageCounter = 0;
-    const threads = await memory.getThreadsByResourceId({ resourceId });
-    await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
+    await cleanupAllThreads();
   });
 
   afterAll(async () => {
-    const threads = await memory.getThreadsByResourceId({ resourceId });
-    await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
+    await cleanupAllThreads();
   });
 
   describe('Memory Features', () => {
@@ -90,8 +142,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           config: { lastMessages: 10 },
         });
         expect(result.messages).toHaveLength(10); // lastMessages is set to 10
-        expect(result.messages[0].content).toBe('Message 6'); // First message
-        expect(result.messages[9].content).toBe('Message 15'); // Last message
+        expect(getTextContent(result.messages[0])).toBe('Message 6'); // First message
+        expect(getTextContent(result.messages[9])).toBe('Message 15'); // Last message
 
         const result2 = await memory.rememberMessages({
           threadId: thread.id,
@@ -101,8 +153,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           },
         });
         expect(result2.messages).toHaveLength(15); // lastMessages is set to 10
-        expect(result2.messages[0].content).toBe('Message 1'); // First message
-        expect(result2.messages[14].content).toBe('Message 15'); // Last message
+        expect(getTextContent(result2.messages[0])).toBe('Message 1'); // First message
+        expect(getTextContent(result2.messages[14])).toBe('Message 15'); // Last message
       });
 
       it('should maintain conversation context', async () => {
@@ -134,7 +186,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
         const threadId = thread.id;
 
-        const content = Array(1000).fill(`This is a long message to test chunking with`).join(`\n`);
+        const content = Array(1000).fill(`This is a long message to test chunking with`).join(`
+`);
         await expect(
           memory.saveMessages({
             messages: [
@@ -187,10 +240,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
 
         // Should find the weather-related messages due to semantic similarity
-        expect(weatherQuery.messages).toEqual([
-          expect.objectContaining({ content: 'The weather is nice today' }),
-          expect.objectContaining({ content: "Yes, it's sunny and warm" }),
-        ]);
+        expect(weatherQuery.messages.length).toBe(2);
+        expect(getTextContent(weatherQuery.messages[0])).toBe('The weather is nice today');
+        expect(getTextContent(weatherQuery.messages[1])).toBe("Yes, it's sunny and warm");
 
         // Search for location-related messages
         const locationQuery = await memory.rememberMessages({
@@ -207,10 +259,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
 
         // Should find the Paris-related messages
-        expect(locationQuery.messages).toEqual([
-          expect.objectContaining({ content: "What's the capital of France?" }),
-          expect.objectContaining({ content: 'The capital of France is Paris' }),
-        ]);
+        expect(locationQuery.messages.length).toBe(2);
+        expect(getTextContent(locationQuery.messages[0])).toBe("What's the capital of France?");
+        expect(getTextContent(locationQuery.messages[1])).toBe('The capital of France is Paris');
 
         // Search for location-related messages
         const locationQuery2 = await memory.rememberMessages({
@@ -227,10 +278,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
 
         // Should find the Paris-related messages
-        expect(locationQuery2.messages).toEqual([
-          expect.objectContaining({ content: "Yes, it's sunny and warm" }),
-          expect.objectContaining({ content: "What's the capital of France?" }),
-        ]);
+        expect(locationQuery2.messages.length).toBe(2);
+        expect(getTextContent(locationQuery2.messages[0])).toBe("Yes, it's sunny and warm");
+        expect(getTextContent(locationQuery2.messages[1])).toBe("What's the capital of France?");
 
         // Search for location-related messages
         const locationQuery3 = await memory.rememberMessages({
@@ -247,11 +297,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
 
         // Should find the Paris-related messages
-        expect(locationQuery3.messages).toEqual([
-          expect.objectContaining({ content: "Yes, it's sunny and warm" }),
-          expect.objectContaining({ content: "What's the capital of France?" }),
-          expect.objectContaining({ content: 'The capital of France is Paris' }),
-        ]);
+        expect(locationQuery3.messages.length).toBe(3);
+        expect(getTextContent(locationQuery3.messages[0])).toBe("Yes, it's sunny and warm");
+        expect(getTextContent(locationQuery3.messages[1])).toBe("What's the capital of France?");
+        expect(getTextContent(locationQuery3.messages[2])).toBe('The capital of France is Paris');
       });
 
       it('should respect semantic search configuration', async () => {
@@ -291,9 +340,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(result.messages.length).toBe(3); // Should still only get 3 messages even though there are 7 total
 
         // Should get exactly these 3 consecutive messages in chronological order
-        expect(result.messages[0].content).toBe('Another unrelated message');
-        expect(result.messages[1].content).toBe('Message about topic X');
-        expect(result.messages[2].content).toBe('Yet another message');
+        expect(getTextContent(result.messages[0])).toBe('Another unrelated message');
+        expect(getTextContent(result.messages[1])).toBe('Message about topic X');
+        expect(getTextContent(result.messages[2])).toBe('Yet another message');
 
         // Messages should be in the order they were created
         expect(
@@ -340,9 +389,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           },
           vectorMessageSearch: 'JavaScript',
         });
-        const programmingContents = resultProgramming.messages.map(m =>
-          Array.isArray(m.content) && m.content[0]?.type === 'text' ? m.content[0].text : m.content,
-        );
+        const programmingContents = resultProgramming.messages.map(m => getTextContent(m));
         expect(programmingContents).toContain('JavaScript is a versatile language.');
         expect(programmingContents).not.toContain('The weather is rainy and cold.');
 
@@ -356,9 +403,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           },
           vectorMessageSearch: 'rainy',
         });
-        const weatherContents = resultWeather.messages.map(m =>
-          Array.isArray(m.content) && m.content[0]?.type === 'text' ? m.content[0].text : m.content,
-        );
+        const weatherContents = resultWeather.messages.map(m => getTextContent(m));
         expect(weatherContents).toContain('The weather is rainy and cold.');
         expect(weatherContents).not.toContain('JavaScript is a versatile language.');
       });
@@ -382,9 +427,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           config: { lastMessages: 0, semanticRecall: { messageRange: 0, topK: 1, scope: 'thread' } },
           vectorMessageSearch: 'world',
         });
-        const contents = result.messages.map(m =>
-          Array.isArray(m.content) ? m.content.map(p => (p as TextPart).text).join(' ') : m.content,
-        );
+        const contents = result.messages.map(m => getTextContent(m));
         expect(contents[0]).toContain('world');
         expect(contents[0]).toContain('Hello');
         expect(contents[0]).toContain('again');
@@ -408,9 +451,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           config: { lastMessages: 0, semanticRecall: { messageRange: 0, topK: 1, scope: 'thread' } },
           vectorMessageSearch: 'assistant',
         });
-        const contents = result.messages.map(m =>
-          Array.isArray(m.content) ? m.content.map(p => (p as TextPart).text).join(' ') : m.content,
-        );
+        const contents = result.messages.map(m => getTextContent(m));
         expect(contents[0]).toContain('Assistant says hello.');
         expect(contents[0]).toContain('This is a test.');
       });
@@ -457,8 +498,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         // Should only find messages from thread1
         expect(threadScopeResult.messages).toHaveLength(2);
         expect(threadScopeResult.messages.map(m => m.threadId)).toEqual([thread1.id, thread1.id]);
-        expect(threadScopeResult.messages[0].content).toBe('The sky is blue today');
-        expect(threadScopeResult.messages[1].content).toBe('Yes, very clear skies');
+        expect(getTextContent(threadScopeResult.messages[0])).toBe('The sky is blue today');
+        expect(getTextContent(threadScopeResult.messages[1])).toBe('Yes, very clear skies');
 
         // 2. Test resource scope (explicitly set)
         const resourceScopeResult = await memory.rememberMessages({
@@ -482,7 +523,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(resourceScopeResult.messages.some(m => m.threadId === thread1.id)).toBe(true);
         expect(resourceScopeResult.messages.some(m => m.threadId === thread2.id)).toBe(true);
         // Check content to be reasonably sure we got the right ones (order might vary based on embedding similarity)
-        const contents = resourceScopeResult.messages.map(m => m.content);
+        const contents = resourceScopeResult.messages.map(m => getTextContent(m));
         expect(contents).toContain('The sky is blue today');
         expect(contents).toContain('Yes, very clear skies');
         expect(contents).toContain('Oceans are vast and blue');
@@ -514,7 +555,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(defaultScopeResult.messages).toHaveLength(4);
         expect(defaultScopeResult.messages.some(m => m.threadId === thread1.id)).toBe(true);
         expect(defaultScopeResult.messages.some(m => m.threadId === thread2.id)).toBe(true);
-        const defaultContents = defaultScopeResult.messages.map(m => m.content);
+        const defaultContents = defaultScopeResult.messages.map(m => getTextContent(m));
         expect(defaultContents).toContain('The sky is blue today');
         expect(defaultContents).toContain('Yes, very clear skies');
         expect(defaultContents).toContain('Oceans are vast and blue');
@@ -544,7 +585,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         messageList.add(userMessage, 'user');
         messageList.add(assistantMessages, 'response');
 
-        const messages = messageList.get.all.v2();
+        const messages = messageList.get.all.db();
 
         await memory.saveMessages({ messages });
         const result = await memory.rememberMessages({
@@ -557,9 +598,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
         expect(result.messages).toHaveLength(3);
         expect(result.messages).toEqual([
-          expect.objectContaining({ type: 'text' }),
-          expect.objectContaining({ type: 'tool-call' }),
-          expect.objectContaining({ type: 'tool-result' }),
+          expect.objectContaining({ role: 'user' }),
+          expect.objectContaining({ role: 'assistant' }),
+          expect.objectContaining({ role: 'tool' }),
         ]);
       });
 
@@ -579,20 +620,21 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(result.messages).toHaveLength(2);
         expect(result.messages[0]).toMatchObject({
           role: 'user',
-          type: 'text',
         });
-        // Accept both string and object as content, but if object, check shape
-        const content = result.messages[0].content[0];
-        if (typeof content === 'object' && content !== null && 'type' in content && content.type === 'text') {
-          expect(content).toEqual(userPart);
-        } else {
-          expect(content).toEqual('Hello');
-        }
+        // Check content.parts structure for MastraDBMessage
+        expect(result.messages[0].content.parts).toBeDefined();
+        expect(result.messages[0].content.parts[0]).toMatchObject({
+          type: 'text',
+          text: 'Hello',
+        });
         expect(result.messages[1]).toMatchObject({
           role: 'assistant',
-          type: 'text',
         });
-        expect(result.messages[1].content).toEqual(`Goodbye`);
+        expect(result.messages[1].content.parts).toBeDefined();
+        expect(result.messages[1].content.parts[0]).toMatchObject({
+          type: 'text',
+          text: 'Goodbye',
+        });
       });
 
       it('should handle complex message content', async () => {
@@ -612,7 +654,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
             lastMessages: 10,
           },
         });
-        expect(result.messages[0].content).toEqual(complexMessage);
+        expect(result.messages[0].content.parts).toEqual(complexMessage);
       });
     });
 
@@ -624,7 +666,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           createTestMessage(thread.id, 'Message 3'),
         ];
         const savedMessages = await memory.saveMessages({ messages });
-        const messageToDelete = savedMessages[1];
+        const messageToDelete = savedMessages.messages[1];
 
         // Delete the middle message
         await memory.deleteMessages([messageToDelete.id]);
@@ -636,7 +678,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
 
         expect(remainingMessages.messages).toHaveLength(2);
-        expect(remainingMessages.messages.map(m => m.content)).toEqual(['Message 1', 'Message 3']);
+        expect(remainingMessages.messages.map(m => getTextContent(m))).toEqual(['Message 1', 'Message 3']);
         expect(remainingMessages.messages.find(m => m.id === messageToDelete.id)).toBeUndefined();
       });
 
@@ -681,7 +723,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const savedMessages = await memory.saveMessages({ messages: [textMessage, complexMessage] });
 
         // Delete the complex message
-        await memory.deleteMessages([savedMessages[1].id]);
+        await memory.deleteMessages([savedMessages.messages[1].id]);
 
         const remainingMessages = await memory.query({
           threadId: thread.id,
@@ -689,7 +731,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
 
         expect(remainingMessages.messages).toHaveLength(1);
-        expect(remainingMessages.messages[0].content).toBe('Simple text');
+        expect(getTextContent(remainingMessages.messages[0])).toBe('Simple text');
       });
 
       it('should not affect other threads when deleting a message', async () => {
@@ -720,7 +762,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           selectBy: { last: 10 },
         });
         expect(thread2Messages.messages).toHaveLength(1);
-        expect(thread2Messages.messages[0].content).toBe('Thread 2 message');
+        expect(getTextContent(thread2Messages.messages[0])).toBe('Thread 2 message');
       });
 
       it('should throw error when messageId is not provided', async () => {
@@ -740,7 +782,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
 
         expect(result.messages).toHaveLength(1);
-        expect(result.messages[0].content).toBe('Test message');
+        const textContent = result.messages[0].content.parts?.find((p: any) => p.type === 'text')?.text;
+        expect(textContent).toBe('Test message');
       });
 
       it('should reject access with incorrect resourceId', async () => {
@@ -768,7 +811,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
 
         expect(result.messages).toHaveLength(1);
-        expect(result.messages[0].content).toBe('Test message');
+        const textContent = result.messages[0].content.parts?.find((p: any) => p.type === 'text')?.text;
+        expect(textContent).toBe('Test message');
       });
     });
     describe('Concurrent Operations', () => {
@@ -814,12 +858,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       );
 
       // Get first page
-      const result = await memory.getThreadsByResourceIdPaginated({
+      const result = await memory.listThreadsByResourceId({
         resourceId,
-        page: 0,
-        perPage: 10,
-        orderBy: 'createdAt',
-        sortDirection: 'DESC',
+        offset: 0,
+        limit: 10,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(result.threads).toHaveLength(10);
@@ -835,12 +878,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
     it('should handle edge cases (empty results, last page)', async () => {
       // Empty result set
-      const emptyResult = await memory.getThreadsByResourceIdPaginated({
+      const emptyResult = await memory.listThreadsByResourceId({
         resourceId: 'non-existent-resource',
-        page: 0,
-        perPage: 10,
-        orderBy: 'createdAt',
-        sortDirection: 'DESC',
+        offset: 0,
+        limit: 10,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(emptyResult.threads).toHaveLength(0);
@@ -856,12 +898,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         ),
       );
 
-      const lastPageResult = await memory.getThreadsByResourceIdPaginated({
+      const lastPageResult = await memory.listThreadsByResourceId({
         resourceId,
-        page: 0,
-        perPage: 10,
-        orderBy: 'createdAt',
-        sortDirection: 'DESC',
+        offset: 0,
+        limit: 10,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(lastPageResult.threads).toHaveLength(5);
@@ -880,12 +921,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       );
 
       // Test second page
-      const page2Result = await memory.getThreadsByResourceIdPaginated({
+      const page2Result = await memory.listThreadsByResourceId({
         resourceId,
-        page: 1,
-        perPage: 7,
-        orderBy: 'createdAt',
-        sortDirection: 'DESC',
+        offset: 7,
+        limit: 7,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(page2Result.threads).toHaveLength(7);
@@ -893,12 +933,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       expect(page2Result.hasMore).toBe(true);
 
       // Test third page (final page)
-      const page3Result = await memory.getThreadsByResourceIdPaginated({
+      const page3Result = await memory.listThreadsByResourceId({
         resourceId,
-        page: 2,
-        perPage: 7,
-        orderBy: 'createdAt',
-        sortDirection: 'DESC',
+        offset: 14,
+        limit: 7,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(page3Result.threads).toHaveLength(1);
@@ -970,22 +1009,19 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
         // Sort based on numeric part of content for consistent comparison
         const sortedResultMessages = [...result.messages].sort((a, b) => {
-          const numA = parseInt(((a.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
-          const numB = parseInt(((b.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
+          const numA = parseInt(getTextContent(a).match(/Message (\d+)/)?.[1] || '0');
+          const numB = parseInt(getTextContent(b).match(/Message (\d+)/)?.[1] || '0');
           return numA - numB;
         });
 
         const sortedExpectedMessages = [...messagesToSave].sort((a, b) => {
-          const numA = parseInt(((a.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
-          const numB = parseInt(((b.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
+          const numA = parseInt(getTextContent(a).match(/Message (\d+)/)?.[1] || '0');
+          const numB = parseInt(getTextContent(b).match(/Message (\d+)/)?.[1] || '0');
           return numA - numB;
         });
 
         sortedExpectedMessages.forEach((expectedMessage, index) => {
-          const resultContent = sortedResultMessages[index].content;
-          // messagesToSave contains the direct output of createTestMessage
-          const expectedContent = expectedMessage.content;
-          expect(resultContent).toBe(expectedContent);
+          expect(getTextContent(sortedResultMessages[index])).toBe(getTextContent(expectedMessage));
         });
       });
     });
