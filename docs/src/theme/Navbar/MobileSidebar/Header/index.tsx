@@ -1,7 +1,7 @@
 import { useNavbarMobileSidebar } from "@docusaurus/theme-common/internal";
 import { translate } from "@docusaurus/Translate";
-import { ThemeSwitcher } from "@site/src/components/theme-switcher";
 import { MobileDocsDropdown } from "@site/src/components/mobile-docs-dropdown";
+import { ThemeSwitcher } from "@site/src/components/theme-switcher";
 import { Button } from "@site/src/components/ui/button";
 import { cn } from "@site/src/css/utils";
 import { type ReactNode } from "react";

@@ -96,7 +96,7 @@ export function CookieBanner({
 
   return (
     <T>
-      <div className="fixed shadow-[0_4px_24px_rgba(0,0,0,.1)] bottom-8 right-20 z-50 flex w-[322px] items-center justify-center rounded-xl dark:border-neutral-700 dark:border bg-white dark:bg-black p-4">
+      <div className="fixed shadow-[0_4px_24px_rgba(0,0,0,.1)] bottom-8 -translate-x-1/2 md:translate-x-0 left-1/2 md:left-auto md:right-20 z-50 flex w-[322px] items-center justify-center rounded-xl dark:border-neutral-700 dark:border bg-white dark:bg-black p-4">
         <div>
           <p className="mb-4 font-sans dark:text-white text-sm">
             We use tracking cookies to understand how you use the product and

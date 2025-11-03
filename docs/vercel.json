@@ -261,8 +261,8 @@
       "permanent": true
     },
     {
-      "source": "/docs/guide/engine/:path*",
-      "destination": "/docs",
+      "source": "/:locale(ja)?/docs/guide/engine/:path*",
+      "destination": "/:locale/docs",
       "permanent": true
     },
     {
