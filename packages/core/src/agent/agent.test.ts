@@ -629,6 +629,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
 
           const userAgent = new Agent({
+            id: 'user-agent',
             name: 'User agent',
             instructions: 'You are an agent that can get list of users using findUserTool.',
             model: openaiModel,
@@ -711,6 +712,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'You are an agent that can get list of users using findUserTool.',
         model: openaiModel,
@@ -745,6 +747,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('generate - should pass and call client side tools', async () => {
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'You are an agent that can get list of users using client side tools.',
         model: openaiModel,
@@ -784,6 +787,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('stream - should pass and call client side tools', async () => {
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'You are an agent that can get list of users using client side tools.',
         model: openaiModel,
@@ -841,6 +845,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'You are an agent that can get list of users using findUserTool.',
         model: openaiModel,
@@ -877,6 +882,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should reach default max steps', async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'Test agent',
         instructions: 'Test agent',
         model: openaiModel,
@@ -906,6 +912,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should reach default max steps / stopWhen', async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'Test agent',
         instructions: 'Test agent',
         model: openaiModel,
@@ -948,6 +955,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       const agent = new Agent({
+        id: 'retry-agent',
         name: 'retry-agent',
         instructions: 'Call the flakey tool with input "test data".',
         model: openaiModel,
@@ -1146,7 +1154,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
-        name: 'title-test-agent',
+        id: 'title-test-agent',
+        name: 'Title Test Agent',
         instructions: 'test agent for title generation',
         model: agentModel,
         memory: mockMemory,
@@ -1331,7 +1340,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
-        id: 'dynamic-title-agent',
+        id: 'dynamic-title-test-agent',
         name: 'Dynamic Title Agent',
         instructions: 'test agent',
         model: dummyModel,
@@ -2365,7 +2374,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
-        name: 'custom-instructions-agent',
+        id: 'custom-instructions-test-agent',
+        name: 'Custom Instructions Test Agent',
         instructions: 'test agent',
         model: dummyModel,
         memory: mockMemory,
@@ -2504,7 +2514,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
-        name: 'default-instructions-agent',
+        id: 'default-instructions-test-agent',
+        name: 'Default Instructions Test Agent',
         instructions: 'test agent',
         model: dummyModel,
         memory: mockMemory,
@@ -2629,7 +2640,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
-        name: 'error-instructions-agent',
+        id: 'error-instructions-test-agent',
+        name: 'Error Instructions Test Agent',
         instructions: 'test agent',
         model: dummyModel,
         memory: mockMemory,
@@ -2847,7 +2859,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
-        name: 'empty-instructions-agent',
+        id: 'empty-instructions-test-agent',
+        name: 'Empty Instructions Test Agent',
         instructions: 'test agent',
         model: dummyModel,
         memory: mockMemory,
@@ -2927,7 +2940,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     formatArray.forEach(format => {
       it(`should handle system messages in context parameter ${version === 'v2' ? `format: ${format}` : ''}`, async () => {
         const agent = new Agent({
-          id: 'test-system-context',
+          id: 'test-system-context-agent',
           name: 'Test System Context',
           model: openaiModel,
           instructions: 'You are a helpful assistant.',

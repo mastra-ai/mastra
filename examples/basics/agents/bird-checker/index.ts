@@ -69,7 +69,8 @@ const instructions = `
 `;
 
 export const birdCheckerAgent = new Agent({
-  name: 'Bird checker',
+  id: 'bird-checker',
+  name: 'Bird Checker',
   instructions,
   model: anthropic('claude-3-haiku-20240307'),
 });
