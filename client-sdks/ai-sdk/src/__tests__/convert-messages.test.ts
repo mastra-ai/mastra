@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { toAISdkV4Messages, toAISdkV5Messages } from '../convert-messages';
 import { toAISdkV5Stream } from '../convert-streams';
+import { MastraModelOutput } from '@mastra/core/stream';
 
 describe('toAISdkFormat', () => {
   const sampleMessages: MastraDBMessage[] = [
@@ -85,19 +86,19 @@ describe('toAISdkFormat', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as any, { from: 'agent' });
+      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
 
-      const chunks: any[] = [];
-      const reader = aiSdkStream.getReader();
+      const errorChunks: any[] = [];
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
+      for await (const chunk of aiSdkStream) {
+        if (chunk.type === 'error') {
+          errorChunks.push(chunk);
+          break;
+        }
       }
 
       // Find the error chunk
-      const errorChunk = chunks.find(chunk => chunk.type === 'error');
+      const errorChunk = errorChunks[0];
 
       expect(errorChunk).toBeDefined();
       expect(errorChunk.errorText).toBeDefined();
