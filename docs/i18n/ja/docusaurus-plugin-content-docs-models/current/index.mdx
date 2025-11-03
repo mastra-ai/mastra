@@ -187,24 +187,24 @@ const reasoningAgent = new Agent({
   ## 動的なモデル選択
 </div>
 
-モデルは単なる文字列にすぎないため、[ランタイムコンテキスト](/docs/server-db/runtime-context)や変数、その他のロジックに応じて動的に選択できます。
+モデルは単なる文字列にすぎないため、[request context](/docs/server-db/request-context)や変数、その他のロジックに応じて動的に選択できます。
 
 ```typescript showLineNumbers
 const agent = new Agent({
   name: "dynamic-assistant",
-  model: ({ runtimeContext }) => {
-    const provider = runtimeContext.get("provider-id");
-    const model = runtimeContext.get("model-id");
+  model: ({ requestContext }) => {
+    const provider = requestContext.get("provider-id");
+    const model = requestContext.get("model-id");
     return `${provider}/${model}`;
   },
 });
 ```
 
-これは強力な活用パターンを可能にします：
+これは強力な活用パターンを可能にします:
 
 * A/Bテスト - 本番環境でモデルの性能を比較。
-* ユーザー選択式モデル - アプリ内でユーザーが好みのモデルを選択可能。
-* マルチテナントアプリケーション - 顧客ごとに独自のAPIキーとモデル設定を利用可能。
+* ユーザーが選べるモデル - アプリ内でユーザーが好みのモデルを選択できるようにする。
+* マルチテナントアプリケーション - 各顧客が自分のAPIキーとモデル設定を持ち込める。
 
 
 <div id="provider-specific-options">

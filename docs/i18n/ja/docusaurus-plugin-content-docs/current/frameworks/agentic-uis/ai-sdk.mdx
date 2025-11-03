@@ -36,20 +36,28 @@ export const weatherAgent = new Agent({
   ## ストリーミング
 </div>
 
-Mastra と AI SDK をあわせて利用する際の推奨方法は、`@mastra/ai-sdk` パッケージをインストールすることです。`@mastra/ai-sdk` は、AI SDK 互換の形式で Mastra エージェントをストリーミングするためのカスタム API ルートやユーティリティを提供します。チャット、ワークフロー、ネットワークのルートハンドラーに加え、UI 連携向けのユーティリティやエクスポート型も含まれます。
+Mastra と AI SDK を併用する推奨方法は、`@mastra/ai-sdk` パッケージをインストールすることです。`@mastra/ai-sdk` は、AI SDK 互換の形式で Mastra エージェントをストリーミングするためのカスタム API ルートとユーティリティを提供します。チャット、ワークフロー、ネットワークのルートハンドラーに加え、UI 統合向けのユーティリティやエクスポート型も含まれます。
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy npm install @mastra/ai-sdk ```
+    ```bash copy
+    npm install @mastra/ai-sdk
+    ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm add @mastra/ai-sdk ```
+    ```bash copy
+    pnpm add @mastra/ai-sdk
+    ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
-    ```bash copy yarn add @mastra/ai-sdk ```
+    ```bash copy
+    yarn add @mastra/ai-sdk
+    ```
   </TabItem>
   <TabItem value="bun" label="bun">
-    ```bash copy bun add @mastra/ai-sdk ```
+    ```bash copy
+    bun add @mastra/ai-sdk
+    ```
   </TabItem>
 </Tabs>
 
@@ -372,25 +380,33 @@ for await (const part of uiMessageStream) {
 
 
 <div id="ui-hooks">
-  ## UIフック
+  ## UI Hooks
 </div>
 
-Mastraは、HTTPストリームを用いてフロントエンドのコンポーネントをエージェントに直接接続するためのAI SDKのUIフックをサポートしています。
+Mastra は、HTTP ストリーミングを使ってフロントエンドコンポーネントをエージェントに直接接続できる AI SDK の UI フックをサポートしています。
 
-必要なAI SDKのReactパッケージをインストールします:
+必要な AI SDK の React パッケージをインストールします:
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy npm install @ai-sdk/react ```
+    ```bash copy
+    npm install @ai-sdk/react
+    ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm add @ai-sdk/react ```
+    ```bash copy
+    pnpm add @ai-sdk/react
+    ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
-    ```bash copy yarn add @ai-sdk/react ```
+    ```bash copy
+    yarn add @ai-sdk/react
+    ```
   </TabItem>
   <TabItem value="bun" label="bun">
-    ```bash copy bun add @ai-sdk/react ```
+    ```bash copy
+    bun add @ai-sdk/react
+    ```
   </TabItem>
 </Tabs>
 

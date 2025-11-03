@@ -37,9 +37,9 @@ const { stream } = await run.stream({
       isOptional: true,
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      description: "ワークフローの実行時に使用するランタイムコンテキストデータ",
+      name: "requestContext",
+      type: "RequestContext",
+      description: "ワークフロー実行時に使用するリクエストコンテキスト",
       isOptional: true,
     },
     {
@@ -47,7 +47,7 @@ const { stream } = await run.stream({
       type: "TracingContext",
       isOptional: true,
       description:
-        "子スパンの作成やメタデータの追加に使用する AI トレーシング用コンテキスト。Mastra のトレーシングシステムを使用している場合は自動的に注入されます。",
+        "子スパンの作成やメタデータの追加に用いる AI トレーシングコンテキスト。Mastra のトレーシングシステムを使用する場合は自動的に挿入されます。",
       properties: [
         {
           parameters: [
@@ -56,7 +56,7 @@ const { stream } = await run.stream({
               type: "AISpan",
               isOptional: true,
               description:
-                "子スパンの作成やメタデータの追加に使用する現在の AI スパン。実行中にカスタムの子スパンを作成したり、スパン属性を更新する際に使用します。",
+                "子スパンの作成やメタデータの追加に用いる現在の AI スパン。これを使ってカスタムの子スパンを作成したり、実行中にスパン属性を更新できます。",
             },
           ],
         },
@@ -66,7 +66,7 @@ const { stream } = await run.stream({
       name: "tracingOptions",
       type: "TracingOptions",
       isOptional: true,
-      description: "AI トレーシングの設定オプション。",
+      description: "AI トレーシングの構成オプション。",
       properties: [
         {
           parameters: [
@@ -75,7 +75,7 @@ const { stream } = await run.stream({
               type: "Record<string, any>",
               isOptional: true,
               description:
-                "ルートトレーススパンに追加するメタデータ。ユーザー ID、セッション ID、機能フラグなどのカスタム属性の追加に役立ちます。",
+                "ルートトレーススパンに追加するメタデータ。ユーザー ID、セッション ID、フィーチャーフラグなどのカスタム属性の追加に便利です。",
             },
           ],
         },

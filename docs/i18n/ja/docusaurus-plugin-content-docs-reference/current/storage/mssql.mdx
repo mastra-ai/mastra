@@ -41,14 +41,14 @@ const storage = new MSSQLStore({
       name: "connectionString",
       type: "string",
       description:
-        "MSSQL の接続文字列（例：mssql://user:pass@host:1433/dbname）",
+        "MSSQL の接続文字列（例: Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true）",
       isOptional: false,
     },
     {
       name: "schemaName",
       type: "string",
       description:
-        "ストレージで使用するスキーマ名。未指定の場合は既定のスキーマが使用されます。",
+        "ストレージで使用するスキーマ名。指定しない場合はデフォルトのスキーマが使用されます。",
       isOptional: true,
     },
   ]}
@@ -58,20 +58,20 @@ const storage = new MSSQLStore({
   ## コンストラクターの例
 </div>
 
-`MSSQLStore` は次の方法でインスタンス化できます：
+`MSSQLStore` は次の方法でインスタンス化できます。
 
 ```ts
 import { MSSQLStore } from "@mastra/mssql";
 
 // 接続文字列のみを使用
 const store1 = new MSSQLStore({
-  connectionString: "mssql://user:password@localhost:1433/mydb",
+  connectionString: "Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true",
 });
 
-// カスタムスキーマ名付きの接続文字列を使用
+// カスタムスキーマ名を使用した接続文字列
 const store2 = new MSSQLStore({
-  connectionString: "mssql://user:password@localhost:1433/mydb",
-  schemaName: "custom_schema", // 省略可
+  connectionString: "Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true",
+  schemaName: "custom_schema", // 省略可能
 });
 
 // 個別の接続パラメータを使用
@@ -83,14 +83,14 @@ const store4 = new MSSQLStore({
   password: "password",
 });
 
-// schemaName を含む個別パラメータ
+// schemaNameを使用した個別パラメータ
 const store5 = new MSSQLStore({
   server: "localhost",
   port: 1433,
   database: "mydb",
   user: "user",
   password: "password",
-  schemaName: "custom_schema", // 省略可
+  schemaName: "custom_schema", // 省略可能
 });
 ```
 

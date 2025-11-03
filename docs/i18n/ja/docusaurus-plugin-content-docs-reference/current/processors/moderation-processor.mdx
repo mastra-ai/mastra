@@ -1,6 +1,6 @@
 ---
-title: "リファレンス: ModerationProcessor | Processors | Mastra ドキュメント"
-description: "Mastra の ModerationProcessor に関するドキュメント。LLM を用いて複数のカテゴリにわたる不適切なコンテンツを検出し、コンテンツのモデレーションを提供します。"
+title: "リファレンス: Moderation Processor | Processors | Mastra ドキュメント"
+description: "Mastra の ModerationProcessor のドキュメント。LLM を用いて複数のカテゴリにわたる不適切な内容を検出し、コンテンツのモデレーションを提供します。"
 ---
 
 <div id="moderationprocessor">
@@ -14,14 +14,13 @@ description: "Mastra の ModerationProcessor に関するドキュメント。LL
 </div>
 
 ```typescript copy
-import { openai } from "@ai-sdk/openai";
 import { ModerationProcessor } from "@mastra/core/processors";
 
 const processor = new ModerationProcessor({
-  model: openai("gpt-4.1-nano"),
+  model: "openai/gpt-4.1-nano",
   threshold: 0.7,
   strategy: "block",
-  categories: ["ヘイト", "ハラスメント", "暴力"],
+  categories: ["ヘイト", "ハラスメント", "暴力"]
 });
 ```
 
@@ -49,56 +48,49 @@ const processor = new ModerationProcessor({
   content={[
     {
       name: "model",
-      type: "MastraLanguageModel",
+      type: "MastraModelConfig",
       description: "モデレーションエージェントのモデル設定",
       isOptional: false,
     },
     {
       name: "categories",
       type: "string[]",
-      description:
-        "モデレーションでチェックするカテゴリ。未指定の場合は OpenAI のデフォルトカテゴリを使用します",
+      description: "モデレーションでチェックするカテゴリ。未指定の場合は OpenAI のデフォルトカテゴリを使用します",
       isOptional: true,
-      default:
-        "['hate', 'hate/threatening', 'harassment', 'harassment/threatening', 'self-harm', 'self-harm/intent', 'self-harm/instructions', 'sexual', 'sexual/minors', 'violence', 'violence/graphic']",
+      default: "['hate', 'hate/threatening', 'harassment', 'harassment/threatening', 'self-harm', 'self-harm/intent', 'self-harm/instructions', 'sexual', 'sexual/minors', 'violence', 'violence/graphic']",
     },
     {
       name: "threshold",
       type: "number",
-      description:
-        "フラグ付けの信頼度しきい値 (0〜1)。いずれかのカテゴリスコアがこのしきい値を超えるとフラグを立てます",
+      description: "フラグ付けの信頼度しきい値 (0〜1)。いずれかのカテゴリのスコアがこのしきい値を超えるとコンテンツがフラグ付けされます",
       isOptional: true,
       default: "0.5",
     },
     {
       name: "strategy",
       type: "'block' | 'warn' | 'filter'",
-      description:
-        "コンテンツがフラグ付けされた場合の方針: 'block' はエラーとして拒否、'warn' は警告を記録して通過させる、'filter' は該当メッセージを除去します",
+      description: "コンテンツがフラグ付けされた場合の方針: 'block' はエラーで拒否、'warn' は警告を記録して通過させる、'filter' はフラグ付きメッセージを除去",
       isOptional: true,
       default: "'block'",
     },
     {
       name: "instructions",
       type: "string",
-      description:
-        "エージェント向けのカスタムモデレーション指示。未指定の場合は、カテゴリに基づくデフォルトの指示を使用します",
+      description: "エージェント向けのカスタムモデレーション指示。未指定の場合は、カテゴリに基づくデフォルト指示を使用します",
       isOptional: true,
       default: "undefined",
     },
     {
       name: "includeScores",
       type: "boolean",
-      description:
-        "ログに信頼度スコアを含めるかどうか。しきい値調整やデバッグに役立ちます",
+      description: "ログに信頼度スコアを含めるかどうか。しきい値の調整やデバッグに有用です",
       isOptional: true,
       default: "false",
     },
     {
       name: "chunkWindow",
       type: "number",
-      description:
-        "ストリームのチャンクをモデレートする際、文脈として含める直前チャンクの数。1 に設定すると直前の部分を含めます",
+      description: "ストリームのチャンクをモデレートする際、文脈として含める直前のチャンク数。1 に設定すると直前の部分を含めます",
       isOptional: true,
       default: "0（コンテキストウィンドウなし）",
     },
@@ -114,21 +106,19 @@ const processor = new ModerationProcessor({
     {
       name: "name",
       type: "string",
-      description: "プロセッサ名。'moderation' に設定されます",
+      description: "プロセッサ名。値は 'moderation' に設定されます",
       isOptional: false,
     },
     {
       name: "processInput",
       type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
-      description:
-        "LLM に送信する前にコンテンツをモデレートするため、入力メッセージを処理します",
+      description: "LLM に送信する前に、入力メッセージを処理してコンテンツをモデレーションします",
       isOptional: false,
     },
     {
       name: "processOutputStream",
       type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>",
-      description:
-        "ストリーミング中のコンテンツをモデレートするため、ストリーミング出力の各パートを処理します",
+      description: "ストリーミング中に、出力の各パートを処理してコンテンツをモデレーションします",
       isOptional: false,
     },
   ]}
@@ -138,33 +128,64 @@ const processor = new ModerationProcessor({
   ## 拡張された使用例
 </div>
 
+<div id="input-processing">
+  ### 入力の処理
+</div>
+
 ```typescript title="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { ModerationProcessor } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "moderated-agent",
-  instructions: "あなたは役に立つアシスタントです",
-  model: openai("gpt-4o-mini"),
+  instructions: "あなたは親切なアシスタントです",
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new ModerationProcessor({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       categories: ["hate", "harassment", "violence"],
       threshold: 0.7,
       strategy: "block",
       instructions: "ユーザーメッセージ内の不適切なコンテンツを検出し、フラグを立てます",
-      includeScores: true,
+      includeScores: true
+    })
+  ]
+});
+```
+
+
+<div id="output-processing-with-batching">
+  ### バッチ処理による出力処理
+</div>
+
+`ModerationProcessor` を出力プロセッサとして使用する場合は、パフォーマンス最適化のために `BatchPartsProcessor` と組み合わせて使うことを推奨します。`BatchPartsProcessor` は、モデレーターに渡す前にストリームのチャンクをまとめて一括処理し、モデレーションに必要な LLM の呼び出し回数を減らします。
+
+```typescript title="src/mastra/agents/output-moderated-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { BatchPartsProcessor, ModerationProcessor } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "output-moderated-agent",
+  instructions: "あなたは親切なアシスタントです",
+  model: "openai/gpt-4o-mini",
+  outputProcessors: [
+    // LLM呼び出しを削減するため、まずストリームパーツをバッチ処理
+    new BatchPartsProcessor({
+      batchSize: 10,
+    }),
+    // 次にバッチ処理されたコンテンツにモデレーションを適用
+    new ModerationProcessor({
+      model: "openai/gpt-4.1-nano",
+      strategy: "filter",
       chunkWindow: 1,
     }),
-  ],
+  ]
 });
 ```
 
 
 <div id="related">
-  ## 関連
+  ## 関連項目
 </div>
 
-- [入力プロセッサ](/docs/agents/guardrails)
-- [出力プロセッサ](/docs/agents/guardrails)
+- [ガードレール](/docs/agents/guardrails)

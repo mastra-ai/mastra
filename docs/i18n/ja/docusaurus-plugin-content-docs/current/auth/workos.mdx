@@ -191,10 +191,10 @@ export const createMastraClient = (accessToken: string) => {
   ### 認証付きリクエストの実行
 </div>
 
-`MastraClient` に WorkOS のアクセス・トークンを設定すると、認証付きリクエストを送信できます。
+`MastraClient` に WorkOS のアクセス トークンを設定すると、認証付きリクエストを送信できます:
 
 <Tabs>
-  <TabItem value="curl" label="cURL">
+  <TabItem value="react" label="React">
     ```typescript title="src/api/agents.ts" showLineNumbers copy
     import { WorkOS } from '@workos-inc/node';
     import { MastraClient } from '@mastra/client-js';
@@ -224,9 +224,8 @@ export const createMastraClient = (accessToken: string) => {
       return response.text;
     };
     ```
-
   </TabItem>
-  <TabItem value="react" label="React">
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \

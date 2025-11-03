@@ -111,10 +111,6 @@
     "message": "インストール",
     "description": "サイドバー「docsSidebar」にあるドキュメント項目「Installation」のラベルで、ドキュメント getting-started/installation へリンクしています"
   },
-  "sidebar.docsSidebar.doc.Playground": {
-    "message": "Playground",
-    "description": "サイドバー「docsSidebar」のドキュメント項目「Playground」のラベル。ドキュメント「getting-started/studio」へのリンクです"
-  },
   "sidebar.docsSidebar.doc.Project Structure": {
     "message": "プロジェクト構造",
     "description": "サイドバー「docsSidebar」にあるドキュメント項目「Project Structure」のラベル。リンク先はドキュメント「getting-started/project-structure」です"
@@ -343,22 +339,6 @@
     "message": "Azure App Service",
     "description": "サイドバー「docsSidebar」にあるドキュメント項目「Azure App Services」のラベルで、ドキュメント deployment/cloud-providers/azure-app-services へのリンクです"
   },
-  "sidebar.docsSidebar.doc.mastra-cloud.overview": {
-    "message": "概要",
-    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Overview」のラベルで、ドキュメント mastra-cloud/overview へのリンクです"
-  },
-  "sidebar.docsSidebar.doc.Setup & Deploy": {
-    "message": "セットアップとデプロイ",
-    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Setup & Deploy」のラベルで、ドキュメント「mastra-cloud/setting-up」へのリンクです"
-  },
-  "sidebar.docsSidebar.doc.Dashboard": {
-    "message": "ダッシュボード",
-    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Dashboard」のラベルで、ドキュメント「mastra-cloud/dashboard」へリンクしています"
-  },
-  "sidebar.docsSidebar.doc.Observability": {
-    "message": "オブザーバビリティ",
-    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Observability」のラベル。ドキュメント「mastra-cloud/observability」へリンクします"
-  },
   "sidebar.docsSidebar.doc.observability.overview": {
     "message": "概要",
     "description": "サイドバー「docsSidebar」にあるドキュメント項目「Overview」のラベルで、ドキュメント observability/overview へのリンクです"
@@ -534,5 +514,25 @@
   "sidebar.docsSidebar.doc.Discord": {
     "message": "Discord",
     "description": "サイドバー「docsSidebar」にあるドキュメント項目「Discord」のラベルで、ドキュメント community/discord へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.Studio": {
+    "message": "スタジオ",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Studio」のラベルで、ドキュメント「getting-started/studio」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.mastra.cloud.overview": {
+    "message": "概要",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Overview」のラベル。ドキュメント mastra-cloud/overview へのリンク"
+  },
+  "sidebar.docsSidebar.doc.mastra.cloud.setting-up": {
+    "message": "セットアップとデプロイ",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Setup & Deploy」のラベルで、ドキュメント「mastra-cloud/setting-up」へリンクしています"
+  },
+  "sidebar.docsSidebar.doc.mastra.cloud.dashboard": {
+    "message": "ダッシュボード",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Dashboard」のラベルで、ドキュメント「mastra-cloud/dashboard」へのリンクです"
+  },
+  "sidebar.docsSidebar.doc.mastra.cloud.observability": {
+    "message": "オブザーバビリティ",
+    "description": "サイドバー「docsSidebar」で、ドキュメント mastra-cloud/observability へリンクするドキュメント項目「Observability」のラベル"
   }
 }

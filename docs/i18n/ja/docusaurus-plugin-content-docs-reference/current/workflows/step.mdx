@@ -104,52 +104,52 @@ const step1 = createStep({
     {
       name: "inputData",
       type: "z.infer<TStepInput>",
-      description: "inputSchema に適合する入力データ",
+      description: "inputSchema に適合する入力データ。",
     },
     {
       name: "resumeData",
       type: "z.infer<TResumeSchema>",
       description:
-        "中断状態からステップを再開する際に用いる、resumeSchema に適合する再開データ。ステップが再開される場合にのみ存在します。",
+        "一時停止状態からステップを再開する際の、resumeSchema に適合する再開用データ。ステップが再開される場合にのみ存在します。",
     },
     {
       name: "mastra",
       type: "Mastra",
-      description: "Mastra のサービス（エージェント、ツールなど）へのアクセス",
+      description: "Mastra のサービス（エージェント、ツールなど）へのアクセス。",
     },
     {
       name: "getStepResult",
       type: "(step: Step | string) => any",
-      description: "他のステップの結果にアクセスする関数",
+      description: "他のステップの結果にアクセスするための関数。",
     },
     {
       name: "getInitData",
       type: "() => any",
       description:
-        "任意のステップでワークフローの初期入力データにアクセスする関数",
+        "任意のステップからワークフローの初期入力データにアクセスするための関数。",
     },
     {
       name: "suspend",
       type: "(suspendPayload: any, suspendOptions?: { resumeLabel?: string }) => Promise<void>",
-      description: "ワークフローの実行を一時停止する関数",
+      description: "ワークフローの実行を一時停止する関数。",
     },
     {
       name: "setState",
       type: "(state: z.infer<TState>) => void",
       description:
-        "ワークフローの状態を設定する関数。reducer 風のパターンで使用します（例: setState({ ...state, ...newState })）。",
+        "ワークフローの状態を設定する関数。リデューサー風のパターンで注入します（例: setState({ ...state, ...newState })）。",
     },
     {
       name: "runId",
       type: "string",
-      description: "現在の実行 ID",
+      description: "現在の実行 ID。",
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       description:
-        "依存性注入やコンテキスト情報のための実行時コンテキスト。",
+        "依存性注入と文脈情報のためのリクエストコンテキスト。",
     },
     {
       name: "runCount",

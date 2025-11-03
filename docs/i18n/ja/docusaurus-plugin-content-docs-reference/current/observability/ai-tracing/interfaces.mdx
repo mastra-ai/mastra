@@ -708,7 +708,7 @@ type SamplingStrategy =
 
 ```typescript
 interface CustomSamplerOptions {
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   metadata?: Record<string, any>;
 }
 ```
@@ -736,12 +736,12 @@ type ConfigSelector = (
   ### ConfigSelectorOptions
 </div>
 
-カスタムのトレーシング設定セレクターを使用する際に渡すオプション。
+カスタムのトレーシング用コンフィグセレクターを使用する際に渡されるオプション。
 
 ```typescript
 interface ConfigSelectorOptions {
-  /** ランタイムコンテキスト */
-  runtimeContext?: RuntimeContext;
+  /** リクエストコンテキスト */
+  requestContext?: RequestContext;
 }
 ```
 

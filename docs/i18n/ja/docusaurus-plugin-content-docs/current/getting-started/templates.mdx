@@ -14,30 +14,38 @@ import TabItem from "@theme/TabItem";
 テンプレートは、特定のユースケースやパターンを示す、あらかじめ用意された Mastra プロジェクトです。[templates ディレクトリ](https://mastra.ai/templates)で利用可能なテンプレートを参照してください。
 
 <div id="using-templates">
-  ## テンプレートの利用
+  ## テンプレートを使う
 </div>
 
 `create-mastra` コマンドでテンプレートをインストールします：
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    `bash copy npx create-mastra@latest --template template-name `
+    ```bash copy
+    npx create-mastra@latest --template template-name
+    ```
   </TabItem>
 
   <TabItem value="yarn" label="yarn">
-    `bash copy yarn dlx create-mastra@latest --template template-name `
+    ```bash copy
+    yarn dlx create-mastra@latest --template template-name
+    ```
   </TabItem>
 
   <TabItem value="pnpm" label="pnpm">
-    `bash copy pnpm create mastra@latest --template template-name `
+    ```bash copy
+    pnpm create mastra@latest --template template-name
+    ```
   </TabItem>
 
   <TabItem value="bun" label="bun">
-    `bash copy bun create mastra@latest --template template-name `
+    ```bash copy
+    bun create mastra@latest --template template-name
+    ```
   </TabItem>
 </Tabs>
 
-例えば、text-to-SQL アプリを作成する場合：
+例：text-to-SQL アプリを作成する場合：
 
 ```bash copy
 npx create-mastra@latest --template text-to-sql

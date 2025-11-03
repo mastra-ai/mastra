@@ -88,27 +88,27 @@ pnpm add @mastra/mcp @mastra/core tsup
   ## デプロイ済みの MCP サーバーを使用する
 </div>
 
-公開が完了すると、`MCPClient` はパッケージを実行するコマンドを指定して、あなたの MCP サーバーを利用できます。Claude Desktop、Cursor、Windsurf など、他の MCP クライアントを使うことも可能です。
+公開が完了すると、`MCPClient` でパッケージを実行するコマンドを指定して MCP サーバーを利用できます。Claude Desktop、Cursor、Windsurf など、ほかの MCP クライアントを使うことも可能です。
 
 ```typescript
 import { MCPClient } from "@mastra/mcp";
 
 const mcp = new MCPClient({
   servers: {
-    // この MCP サーバーのインスタンスに名前を付ける
+    // このMCPサーバーインスタンスに名前を付けます
     yourServerName: {
       command: "npx",
-      args: ["-y", "@your-org-name/your-package-name@latest"], // 自分のパッケージ名に置き換えてください
+      args: ["-y", "@your-org-name/your-package-name@latest"], // パッケージ名を置き換えてください
     },
   },
 });
 
-// この設定からツールやツールセットを取得してエージェントで使用できます
-const tools = await mcp.getTools();
-const toolsets = await mcp.getToolsets();
+// この設定からツールやツールセットを取得し、エージェントで使用できます
+const tools = await mcp.listTools();
+const toolsets = await mcp.listToolsets();
 ```
 
-Note: 組織スコープを付けずに公開した場合、`args` は単に `["-y", "your-package-name@latest"]` になることがあります。
+注: 組織スコープを付けずに公開した場合、`args` は単に `["-y", "your-package-name@latest"]` になることがあります。
 
 <br />
 

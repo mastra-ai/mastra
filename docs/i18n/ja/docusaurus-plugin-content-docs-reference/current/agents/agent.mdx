@@ -120,7 +120,7 @@ export const agent = new Agent({
     type: "string",
     isOptional: true,
     description:
-      "エージェントの任意の一意の識別子。指定がない場合は `name` が既定値になります。"
+      "エージェント用の任意の一意の識別子。指定しない場合は `name` が既定値になります。"
   },
   {
     name: "name",
@@ -136,55 +136,55 @@ export const agent = new Agent({
   },
   {
     name: "instructions",
-    type: "SystemMessage | ({ runtimeContext: RuntimeContext }) => SystemMessage | Promise<SystemMessage>",
+    type: "SystemMessage | ({ requestContext: RequestContext }) => SystemMessage | Promise<SystemMessage>",
     isOptional: false,
-    description: `エージェントの振る舞いを規定する指示。文字列、文字列の配列、システムメッセージオブジェクト、, 
-      システムメッセージの配列、またはこれらのいずれかの型を動的に返す関数を指定できます。 
+    description: `エージェントの挙動を指示するインストラクション。文字列、文字列配列、システムメッセージオブジェクト、,
+      システムメッセージ配列、またはこれらのいずれかの型を動的に返す関数を指定できます。 
       SystemMessage の型: string | string[] | CoreSystemMessage | CoreSystemMessage[] | SystemModelMessage | SystemModelMessage[]`
   },
   {
     name: "model",
-    type: "MastraLanguageModel | ({ runtimeContext: RuntimeContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
+    type: "MastraLanguageModel | ({ requestContext: RequestContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
     isOptional: false,
     description:
-      "エージェントが使用する言語モデル。静的に指定するか、実行時に解決できます。"
+      "エージェントが使用する言語モデル。静的に指定することも、実行時に解決することもできます。"
   },
   {
     name: "agents",
-    type: "Record<string, Agent> | ({ runtimeContext: RuntimeContext }) => Record<string, Agent> | Promise<Record<string, Agent>>",
+    type: "Record<string, Agent> | ({ requestContext: RequestContext }) => Record<string, Agent> | Promise<Record<string, Agent>>",
     isOptional: true,
     description:
-      "エージェントがアクセスできるサブエージェント。静的に提供するか、動的に解決できます。"
+      "エージェントがアクセスできるサブエージェント。静的に指定するか、動的に解決できます。"
   },
   {
     name: "tools",
-    type: "ToolsInput | ({ runtimeContext: RuntimeContext }) => ToolsInput | Promise<ToolsInput>",
+    type: "ToolsInput | ({ requestContext: RequestContext }) => ToolsInput | Promise<ToolsInput>",
     isOptional: true,
     description:
-      "エージェントが利用できるツール。静的に提供するか、動的に解決できます。"
+      "エージェントがアクセスできるツール。静的に指定するか、動的に解決できます。"
   },
   {
     name: "workflows",
-    type: "Record<string, Workflow> | ({ runtimeContext: RuntimeContext }) => Record<string, Workflow> | Promise<Record<string, Workflow>>",
+    type: "Record<string, Workflow> | ({ requestContext: RequestContext }) => Record<string, Workflow> | Promise<Record<string, Workflow>>",
     isOptional: true,
     description:
-      "エージェントが実行できるワークフロー。静的または動的に解決可能。"
+      "エージェントが実行できるワークフロー。静的または動的に解決可能です。"
   },
   {
     name: "defaultGenerateOptions",
-    type: "AgentGenerateOptions | ({ runtimeContext: RuntimeContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>",
+    type: "AgentGenerateOptions | ({ requestContext: RequestContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>",
     isOptional: true,
-    description: "`generate()` 呼び出し時に使用される既定のオプション。"
+    description: "Default options used when calling `generate()`."
   },
   {
     name: "defaultStreamOptions",
-    type: "AgentStreamOptions | ({ runtimeContext: RuntimeContext }) => AgentStreamOptions | Promise<AgentStreamOptions>",
+    type: "AgentStreamOptions | ({ requestContext: RequestContext }) => AgentStreamOptions | Promise<AgentStreamOptions>",
     isOptional: true,
-    description: "`stream()` 呼び出し時に使用される既定のオプション。"
+    description: "Default options used when calling `stream()`."
   },
   {
     name: "defaultStreamOptions",
-    type: "AgentExecutionOptions | ({ runtimeContext: RuntimeContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>",
+    type: "AgentExecutionOptions | ({ requestContext: RequestContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>",
     isOptional: true,
     description: "vNext モードで `stream()` を呼び出す際に使用される既定のオプション。"
   },
@@ -197,43 +197,43 @@ export const agent = new Agent({
   },
   {
     name: "scorers",
-    type: "MastraScorers | ({ runtimeContext: RuntimeContext }) => MastraScorers | Promise<MastraScorers>",
+    type: "MastraScorers | ({ requestContext: RequestContext }) => MastraScorers | Promise<MastraScorers>",
     isOptional: true,
     description:
-      "実行時評価およびテレメトリのためのスコアリング設定。静的または動的に提供可能。"
+      "実行時評価およびテレメトリのためのスコアリング設定。静的または動的に指定可能です。"
   },
   {
     name: "evals",
     type: "Record<string, Metric>",
     isOptional: true,
-    description: "エージェントの応答を評価するための指標。"
+    description: "エージェントの応答を採点するための評価指標。"
   },
   {
     name: "memory",
-    type: "MastraMemory | ({ runtimeContext: RuntimeContext }) => MastraMemory | Promise<MastraMemory>",
+    type: "MastraMemory | ({ requestContext: RequestContext }) => MastraMemory | Promise<MastraMemory>",
     isOptional: true,
     description:
-      "状態を保持するコンテキストの保存・取得に使用されるメモリモジュール。"
+      "状態を保持するコンテキストの保存および取得に使用されるメモリモジュール。"
   },
   {
     name: "voice",
     type: "CompositeVoice",
     isOptional: true,
-    description: "音声入出力のための音声設定。"
+    description: "音声入出力用のボイス設定。"
   },
   {
     name: "inputProcessors",
-    type: "Processor[] | ({ runtimeContext: RuntimeContext }) => Processor[] | Promise<Processor[]>",
+    type: "Processor[] | ({ requestContext: RequestContext }) => Processor[] | Promise<Processor[]>",
     isOptional: true,
     description:
-      "エージェントで処理される前にメッセージを修正または検証できる入力プロセッサ。`processInput` 関数を実装する必要があります。"
+      "エージェントで処理される前にメッセージを変更または検証できる入力プロセッサ。`processInput` 関数を実装する必要があります。"
   },
   {
     name: "outputProcessors",
-    type: "Processor[] | ({ runtimeContext: RuntimeContext }) => Processor[] | Promise<Processor[]>",
+    type: "Processor[] | ({ requestContext: RequestContext }) => Processor[] | Promise<Processor[]>",
     isOptional: true,
     description:
-      "クライアントへ送信する前に、エージェントからのメッセージを修正または検証できる出力プロセッサ。`processOutputResult` と `processOutputStream` のいずれか（または両方）を実装する必要があります。"
+      "クライアントに送信される前にエージェントからのメッセージを変更または検証できる出力プロセッサ。`processOutputResult` と `processOutputStream` のいずれか（または両方）を実装する必要があります。"
   }
 ]}
 />

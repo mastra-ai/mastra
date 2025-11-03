@@ -142,28 +142,27 @@ constructor({
   ## 手法
 </div>
 
-<div id="gettools">
-  ### getTools()
+<div id="listtools">
+  ### listTools()
 </div>
 
-構成済みのすべてのサーバーからツールを取得します。ツール名は競合を防ぐため、サーバー名で名前空間化されます（形式は `serverName_toolName`）。\
-Agent の定義に渡すことを想定しています。
+設定済みのすべてのサーバーからツールを取得します。ツール名は衝突を防ぐため、サーバー名で名前空間化されます（形式は `serverName_toolName`）。Agent の定義に渡すことを想定しています。
 
 ```ts
-new Agent({ tools: await mcp.getTools() });
+new Agent({ tools: await mcp.listTools() });
 ```
 
 
-<div id="gettoolsets">
-  ### getToolsets()
+<div id="listtoolsets">
+  ### listToolsets()
 </div>
 
-名前空間付きのツール名（`serverName.toolName` の形式）を、それぞれのツール実装に対応付けたオブジェクトを返します。
+`serverName.toolName` 形式の名前空間付きツール名を、そのツール実装にマッピングしたオブジェクトを返します。
 generate または stream メソッドに動的に渡すことを想定しています。
 
 ```typescript
 const res = await agent.stream(prompt, {
-  toolsets: await mcp.getToolsets(),
+  toolsets: await mcp.listToolsets(),
 });
 ```
 
@@ -709,7 +708,7 @@ await mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
   ### 静的ツール構成
 </div>
 
-アプリ全体で MCP サーバーへの接続が 1 つだけのツールの場合は、`getTools()` を使い、取得したツールをエージェントに渡します:
+アプリ全体で MCP サーバーへの接続が 1 本のみのツールの場合は、`listTools()` を使用して、ツールをエージェントに渡します。
 
 ```typescript
 import { MCPClient } from "@mastra/mcp";
@@ -732,15 +731,15 @@ const mcp = new MCPClient({
       url: new URL("http://localhost:8080/sse"),
     },
   },
-  timeout: 30000, // グローバル30秒タイムアウト
+  timeout: 30000, // グローバルタイムアウト30秒
 });
 
 // すべてのツールにアクセス可能なエージェントを作成
 const agent = new Agent({
-  name: "Multi-tool Agent",
+  name: "マルチツールエージェント",
   instructions: "複数のツールサーバーにアクセスできます。",
   model: openai("gpt-4"),
-  tools: await mcp.getTools(),
+  tools: await mcp.listTools(),
 });
 
 // リソースメソッドの使用例
@@ -753,10 +752,10 @@ async function checkWeatherResource() {
         "weather",
         currentWeatherURI,
       );
-      console.log("Weather data:", weatherData.contents[0].text);
+      console.log("天気データ:", weatherData.contents[0].text);
     }
   } catch (error) {
-    console.error("Error fetching weather resource:", error);
+    console.error("天気リソースの取得エラー:", error);
   }
 }
 checkWeatherResource();
@@ -770,13 +769,13 @@ async function checkWeatherPrompt() {
         (p) => p.name === "current",
       );
       if (currentWeatherPrompt) {
-        console.log("Weather prompt:", currentWeatherPrompt);
+        console.log("天気プロンプト:", currentWeatherPrompt);
       } else {
-        console.log("Current weather prompt not found");
+        console.log("現在の天気プロンプトが見つかりません");
       }
     }
   } catch (error) {
-    console.error("Error fetching weather prompt:", error);
+    console.error("天気プロンプトの取得エラー:", error);
   }
 }
 checkWeatherPrompt();
@@ -787,21 +786,21 @@ checkWeatherPrompt();
   ### 動的ツールセット
 </div>
 
-ユーザーごとに新しい MCP 接続が必要な場合は、`getToolsets()` を使用し、stream または generate を呼び出すときにツールを追加します。
+ユーザーごとに新しい MCP 接続が必要な場合は、`listToolsets()` を使用し、stream または generate を呼び出す際にツールを追加します。
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { MCPClient } from "@mastra/mcp";
 import { openai } from "@ai-sdk/openai";
 
-// まずはツールなしでエージェントを作成します
+// まずツールなしでエージェントを作成
 const agent = new Agent({
   name: "マルチツールエージェント",
-  instructions: "ユーザーの株価と天気の確認を手伝います。",
+  instructions: "株価と天気の確認をサポートします。",
   model: openai("gpt-4"),
 });
 
-// 後で、ユーザー固有の設定で MCP を設定します
+// 後でユーザー固有の設定でMCPを設定
 const mcp = new MCPClient({
   servers: {
     stockPrice: {
@@ -810,7 +809,7 @@ const mcp = new MCPClient({
       env: {
         API_KEY: "user-123-api-key",
       },
-      timeout: 20000, // サーバーごとのタイムアウト
+      timeout: 20000, // サーバー固有のタイムアウト
     },
     weather: {
       url: new URL("http://localhost:8080/sse"),
@@ -823,11 +822,11 @@ const mcp = new MCPClient({
   },
 });
 
-// すべてのツールセットを stream() または generate() に渡します
+// すべてのツールセットをstream()またはgenerate()に渡す
 const response = await agent.stream(
-  "AAPLの状況と天気を教えて",
+  "AAPLの状況と天気はどうですか?",
   {
-    toolsets: await mcp.getToolsets(),
+    toolsets: await mcp.listToolsets(),
   },
 );
 ```

@@ -70,7 +70,7 @@ Mastra はこれらすべてのメモリタイプを単一のコンテキスト�
   ## スレッドとリソースによるメモリのスコープ設定
 </div>
 
-すべてのメモリタイプはデフォルトで[リソーススコープ](./working-memory#resource-scoped-memory-default)であり、同一ユーザーまたはエンティティの全会話にわたって保持されます。[スレッドスコープ](./working-memory#thread-scoped-memory)の設定にすると、メモリは単一の会話スレッド内に限定されます。
+すべてのメモリタイプはデフォルトで[Thread-scoped](./working-memory#thread-scoped-memory-default)であり、単一の会話にのみ適用されます。[resource-scoped](./working-memory#resource-scoped-memory) 設定を使うと、同じユーザーまたはエンティティを利用するすべてのスレッド間で、ワーキングメモリと意味的リコールを持続させられます。
 
 <div id="memory-storage-adapters">
   ## メモリストレージアダプター

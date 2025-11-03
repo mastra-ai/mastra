@@ -30,7 +30,7 @@ npm install @mastra/libsql
   ## エージェントにメモリを追加する
 </div>
 
-エージェントに LibSQL のメモリを追加するには、`Memory` クラスを使用し、`LibSQLStore` で新しい `storage` キーを作成します。`url` にはリモートのロケーション、またはローカルのファイルシステム上のリソースを指定できます。
+エージェントに LibSQL のメモリを追加するには、`Memory` クラスを使用し、`LibSQLStore` を使って新しい `storage` キーを作成します。`url` にはリモートの場所またはローカルのファイルシステム上のリソースを指定できます。
 
 ```typescript title="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
@@ -41,14 +41,14 @@ import { LibSQLStore } from "@mastra/libsql";
 export const libsqlAgent = new Agent({
   name: "libsql-agent",
   instructions:
-    "あなたは過去のやり取りから記憶を自動的に呼び出すことができるAIエージェントです。",
+    "あなたは過去のやり取りの記憶を自動的に呼び出すことができるAIエージェントです。",
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
       url: "file:libsql-agent.db",
     }),
     options: {
-      generateTitle: true, // 自動タイトル生成を明示的に有効にする
+      generateTitle: true,
     },
   }),
 });
@@ -59,7 +59,7 @@ export const libsqlAgent = new Agent({
   ## fastembed を使ったローカル埋め込み
 </div>
 
-埋め込みは、キーワードではなく意味に基づいて関連メッセージを検索するために、memory の `semanticRecall` が利用する数値ベクトルです。このセットアップでは、ベクトル埋め込みを生成するために `@mastra/fastembed` を使用します。
+埋め込みは、memory の `semanticRecall` がキーワードではなく意味にもとづいて関連メッセージを検索するために用いる数値ベクトルです。このセットアップでは、ベクトル埋め込みを生成するために `@mastra/fastembed` を使用します。
 
 まずは `fastembed` をインストールします:
 
@@ -67,7 +67,7 @@ export const libsqlAgent = new Agent({
 npm install @mastra/fastembed
 ```
 
-エージェントに次の内容を追加してください：
+エージェントに次の内容を追加してください:
 
 ```typescript title="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
@@ -96,7 +96,7 @@ export const libsqlAgent = new Agent({
         messageRange: 2,
       },
       threads: {
-        generateTitle: true, // 自動タイトル生成を明示的に有効にする
+        generateTitle: true,
       },
     },
   }),

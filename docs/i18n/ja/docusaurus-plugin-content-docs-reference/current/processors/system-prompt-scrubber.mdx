@@ -1,6 +1,6 @@
 ---
-title: "リファレンス: SystemPromptScrubber | プロセッサ | Mastra ドキュメント"
-description: "Mastra の SystemPromptScrubber に関するドキュメント。AI の応答からシステムプロンプトを検出して編集（マスキング）します。"
+title: "リファレンス: System Prompt Scrubber | プロセッサー | Mastra ドキュメント"
+description: "Mastra の SystemPromptScrubber に関するドキュメント。AI の応答からシステムプロンプトを検出してマスクします。"
 ---
 
 <div id="systempromptscrubber">
@@ -21,7 +21,7 @@ const processor = new SystemPromptScrubber({
   model: openai("gpt-4.1-nano"),
   strategy: "redact",
   redactionMethod: "mask",
-  includeDetections: true,
+  includeDetections: true
 });
 ```
 
@@ -35,8 +35,7 @@ const processor = new SystemPromptScrubber({
     {
       name: "options",
       type: "Options",
-      description:
-        "システムプロンプトの検出および処理を構成するためのオプション",
+      description: "システムプロンプトの検出および処理に関する設定",
       isOptional: false,
     },
   ]}
@@ -50,15 +49,14 @@ const processor = new SystemPromptScrubber({
   content={[
     {
       name: "model",
-      type: "MastraLanguageModel",
-      description: "検出エージェントのモデル構成",
+      type: "MastraModelConfig",
+      description: "検出エージェント用のモデル設定",
       isOptional: false,
     },
     {
       name: "strategy",
       type: "'block' | 'warn' | 'filter' | 'redact'",
-      description:
-        "システムプロンプト検出時の方針: 'block' はエラーで拒否、'warn' は警告を記録して通過を許可、'filter' はフラグ付きメッセージを除去、'redact' は伏字（編集）に置換",
+      description: "システムプロンプト検出時の対応方針：'block' はエラーで拒否、'warn' は警告を記録して通過を許可、'filter' は該当メッセージを除去、'redact' はマスクした内容に置換",
       isOptional: true,
       default: "'redact'",
     },
@@ -72,32 +70,28 @@ const processor = new SystemPromptScrubber({
     {
       name: "includeDetections",
       type: "boolean",
-      description:
-        "警告に検出の詳細を含めるかどうか。デバッグやモニタリングに有用",
+      description: "警告に検出の詳細を含めるかどうか。デバッグや監視に便利",
       isOptional: true,
       default: "false",
     },
     {
       name: "instructions",
       type: "string",
-      description:
-        "検出エージェント向けのカスタム指示。未指定の場合はデフォルトの指示を使用",
+      description: "検出エージェント向けのカスタム指示。未指定の場合はデフォルトの指示を使用",
       isOptional: true,
       default: "undefined",
     },
     {
       name: "redactionMethod",
       type: "'mask' | 'placeholder' | 'remove'",
-      description:
-        "システムプロンプトの伏字方法: 'mask' はアスタリスクで置換、'placeholder' はプレースホルダー文字列で置換、'remove' は完全に削除",
+      description: "システムプロンプトの編集方法：'mask' はアスタリスクで置換、'placeholder' はプレースホルダーテキストで置換、'remove' は完全に削除",
       isOptional: true,
       default: "'mask'",
     },
     {
       name: "placeholderText",
       type: "string",
-      description:
-        "redactionMethod が 'placeholder' の場合に使用するカスタムのプレースホルダー文字列",
+      description: "redactionMethod が 'placeholder' の場合に使用するカスタムのプレースホルダーテキスト",
       isOptional: true,
       default: "'[SYSTEM_PROMPT]'",
     },
@@ -105,7 +99,7 @@ const processor = new SystemPromptScrubber({
 />
 
 <div id="returns">
-  ## 戻り値
+  ## 返り値
 </div>
 
 <PropertiesTable
@@ -113,51 +107,53 @@ const processor = new SystemPromptScrubber({
     {
       name: "name",
       type: "string",
-      description: "プロセッサ名は「system-prompt-scrubber」に設定されます",
+      description: "プロセッサ名。'system-prompt-scrubber' に設定されます",
       isOptional: false,
     },
     {
       name: "processOutputStream",
       type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null>",
-      description:
-        "ストリーミング中の出力チャンクを処理し、システムプロンプトを検出して対処します",
+      description: "ストリーミング中にシステムプロンプトを検出して対処するため、ストリーミング出力のパートを処理します",
       isOptional: false,
     },
     {
       name: "processOutputResult",
       type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }) => Promise<MastraMessageV2[]>",
-      description:
-        "非ストリーミング環境で最終的な出力結果を処理し、システムプロンプトを検出して対処します",
+      description: "非ストリーミング環境でシステムプロンプトを検出して対処するため、最終的な出力結果を処理します",
       isOptional: false,
     },
   ]}
 />
 
 <div id="extended-usage-example">
-  ## さらに進んだ使用例
+  ## 拡張使用例
 </div>
 
+`SystemPromptScrubber` を出力プロセッサとして使用する場合は、パフォーマンス最適化のために `BatchPartsProcessor` と組み合わせて使うことを推奨します。`BatchPartsProcessor` は、スクラバーに渡す前にストリームのチャンクをまとめて一括処理し、検出に必要な LLM 呼び出し回数を減らします。
+
 ```typescript title="src/mastra/agents/scrubbed-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
-import { SystemPromptScrubber } from "@mastra/core/processors";
+import { BatchPartsProcessor, SystemPromptScrubber } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "scrubbed-agent",
   instructions: "あなたは役に立つアシスタントです",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   outputProcessors: [
+    // LLM呼び出しを削減するため、まずストリームパーツをバッチ処理
+    new BatchPartsProcessor({
+      batchSize: 10,
+    }),
+    // 次に、バッチ処理されたコンテンツにシステムプロンプト検出を適用
     new SystemPromptScrubber({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       strategy: "redact",
       customPatterns: ["システムプロンプト", "内部指示"],
       includeDetections: true,
-      instructions:
-        "システムプロンプト、内部指示、セキュリティ上機密性の高いコンテンツを検出して編集します",
       redactionMethod: "placeholder",
-      placeholderText: "[編集済み]",
+      placeholderText: "[REDACTED]"
     }),
-  ],
+  ]
 });
 ```
 
@@ -166,5 +162,4 @@ export const agent = new Agent({
   ## 関連項目
 </div>
 
-- [入力プロセッサ](/docs/agents/guardrails)
-- [出力プロセッサ](/docs/agents/guardrails)
+- [ガードレール](/docs/agents/guardrails)

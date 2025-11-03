@@ -13,10 +13,10 @@ Logs API は、Mastra のシステムログやデバッグ情報にアクセス�
   ## ログの取得
 </div>
 
-必要に応じてフィルタリングしてシステムログを取得します。
+必要に応じてフィルタリングしながらシステムログを取得します。
 
 ```typescript
-const logs = await mastraClient.getLogs({
+const logs = await mastraClient.listLogs({
   transportId: "transport-1",
 });
 ```

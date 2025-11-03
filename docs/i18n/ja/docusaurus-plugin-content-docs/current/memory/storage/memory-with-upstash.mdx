@@ -36,7 +36,7 @@ npm install @mastra/upstash
   ## エージェントにメモリを追加する
 </div>
 
-エージェントに Upstash のメモリを追加するには、`Memory` クラスを使用し、`UpstashStore` で新しい `storage` キーを、`UpstashVector` で新しい `vector` キーを作成します。設定はリモートサービスにもローカル環境にも向けられます。
+エージェントに Upstash のメモリを追加するには、`Memory` クラスを使用し、`UpstashStore` で新たな `storage` キーを、`UpstashVector` で新たな `vector` キーを作成します。設定はリモートサービスまたはローカル環境のどちらにも向けられます。
 
 ```typescript title="src/mastra/agents/example-upstash-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
@@ -47,7 +47,7 @@ import { UpstashStore } from "@mastra/upstash";
 export const upstashAgent = new Agent({
   name: "upstash-agent",
   instructions:
-    "あなたは過去のやり取りから記憶を自動的に呼び出すことができるAIエージェントです。",
+    "あなたは過去のやり取りから自動的に記憶を呼び出すことができるAIエージェントです。",
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new UpstashStore({
@@ -55,7 +55,7 @@ export const upstashAgent = new Agent({
       token: process.env.UPSTASH_REDIS_REST_TOKEN!,
     }),
     options: {
-      generateTitle: true, // 自動タイトル生成を明示的に有効にする
+      generateTitle: true,
     },
   }),
 });

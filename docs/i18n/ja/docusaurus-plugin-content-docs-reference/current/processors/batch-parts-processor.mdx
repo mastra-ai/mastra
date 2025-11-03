@@ -1,6 +1,6 @@
 ---
-title: "リファレンス: BatchPartsProcessor | プロセッサ | Mastra ドキュメント"
-description: "Mastra の BatchPartsProcessor に関するドキュメント。複数のストリームのパーツをまとめてバッチ化し、エミッション（出力）の頻度を抑えます。"
+title: "リファレンス: Batch Parts Processor | プロセッサ | Mastra ドキュメント"
+description: "Mastra の BatchPartsProcessor に関するドキュメント。複数のストリームパーツをまとめてバッチ化し、出力の頻度を抑えます."
 ---
 
 <div id="batchpartsprocessor">
@@ -10,7 +10,7 @@ description: "Mastra の BatchPartsProcessor に関するドキュメント。�
 `BatchPartsProcessor` は、ストリーミング中の出力回数を減らすために複数のストリームのパートをまとめてバッチ化する **出力プロセッサ** です。小さなテキストチャンクをまとめてユーザー体験を向上させ、ネットワークオーバーヘッドを削減し、クライアントへのパートの送出タイミングを制御することでストリーミングのパフォーマンスを最適化できます。
 
 <div id="usage-example">
-  ## 使い方の例
+  ## 使用例
 </div>
 
 ```typescript copy
@@ -19,7 +19,7 @@ import { BatchPartsProcessor } from "@mastra/core/processors";
 const processor = new BatchPartsProcessor({
   batchSize: 5,
   maxWaitTime: 100,
-  emitOnNonText: true,
+  emitOnNonText: true
 });
 ```
 
@@ -48,23 +48,21 @@ const processor = new BatchPartsProcessor({
     {
       name: "batchSize",
       type: "number",
-      description: "出力前にまとめて処理する要素の数",
+      description: "出力前にまとめる要素の数",
       isOptional: true,
       default: "5",
     },
     {
       name: "maxWaitTime",
       type: "number",
-      description:
-        "バッチを出力するまでの最大待機時間（ミリ秒）。設定されている場合、batchSize に達していなくても現在のバッチを出力します",
+      description: "バッチを出力するまでの最大待機時間（ミリ秒）。設定されている場合、batchSize に達していなくても現在のバッチを出力します",
       isOptional: true,
       default: "undefined（タイムアウトなし）",
     },
     {
       name: "emitOnNonText",
       type: "boolean",
-      description:
-        "非テキスト要素に遭遇した場合に即時に出力するかどうか",
+      description: "非テキスト要素に遭遇した際に即時出力するかどうか",
       isOptional: true,
       default: "true",
     },
@@ -80,51 +78,49 @@ const processor = new BatchPartsProcessor({
     {
       name: "name",
       type: "string",
-      description: "プロセッサ名が 'batch-parts' に設定されます",
+      description: "プロセッサ名は 'batch-parts' に設定されます",
       isOptional: false,
     },
     {
       name: "processOutputStream",
       type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never }) => Promise<ChunkType | null>",
-      description: "ストリーミング出力のパーツを処理して一括化します",
+      description: "ストリーミング出力の部品を処理してまとめてバッチ化します",
       isOptional: false,
     },
     {
       name: "flush",
       type: "(state?: BatchPartsState) => ChunkType | null",
-      description:
-        "ストリーム終了時に残っている一括化済みのパーツを強制的にフラッシュします",
+      description: "ストリーム終了時に残っているバッチ済みの部品を強制的にフラッシュします",
       isOptional: false,
     },
   ]}
 />
 
 <div id="extended-usage-example">
-  ## 追加の使用例
+  ## 発展的な使用例
 </div>
 
 ```typescript title="src/mastra/agents/batched-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { BatchPartsProcessor } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "batched-agent",
   instructions: "あなたは親切なアシスタントです",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   outputProcessors: [
     new BatchPartsProcessor({
       batchSize: 5,
       maxWaitTime: 100,
-      emitOnNonText: true,
-    }),
-  ],
+      emitOnNonText: true
+    })
+  ]
 });
 ```
 
 
 <div id="related">
-  ## 関連
+  ## 関連情報
 </div>
 
-- [Output Processors ドキュメント](/docs/agents/guardrails)
+- [ガードレール](/docs/agents/guardrails)

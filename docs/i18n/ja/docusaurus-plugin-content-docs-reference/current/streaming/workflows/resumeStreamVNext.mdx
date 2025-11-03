@@ -51,15 +51,15 @@ if (result!.status === "suspended") {
       isOptional: true,
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      description: "ワークフロー実行時に使用するランタイムコンテキストデータ",
+      name: "requestContext",
+      type: "RequestContext",
+      description: "ワークフロー実行時に使用するリクエストコンテキストのデータ",
       isOptional: true,
     },
     {
       name: "step",
       type: "Step<string, any, any, any, any, TEngineType>",
-      description: "実行を再開する起点となるステップ",
+      description: "実行を再開する開始ステップ",
       isOptional: true,
     },
     {
@@ -75,7 +75,7 @@ if (result!.status === "suspended") {
               type: "Record<string, any>",
               isOptional: true,
               description:
-                "ルートトレーススパンに追加するメタデータ。ユーザーID、セッションID、フィーチャーフラッグなどのカスタム属性を付与するのに有用です。",
+                "ルートトレーススパンに追加するメタデータ。ユーザー ID、セッション ID、フィーチャーフラグなどのカスタム属性の付与に便利です。",
             },
           ],
         },

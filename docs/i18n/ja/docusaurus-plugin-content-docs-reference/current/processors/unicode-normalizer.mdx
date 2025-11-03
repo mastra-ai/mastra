@@ -1,6 +1,6 @@
 ---
-title: "リファレンス: UnicodeNormalizer | プロセッサ | Mastra ドキュメント"
-description: "Mastra の UnicodeNormalizer に関するドキュメント。Unicode テキストを正規化し、表記を一貫させ、問題の原因となり得る文字を除去します。"
+title: "リファレンス: Unicode Normalizer | プロセッサ | Mastra ドキュメント"
+description: "Mastra の UnicodeNormalizer に関するドキュメント。Unicode テキストを正規化して表記を統一し、問題の原因になり得る文字を除去します。"
 ---
 
 <div id="unicodenormalizer">
@@ -18,7 +18,7 @@ import { UnicodeNormalizer } from "@mastra/core/processors";
 
 const processor = new UnicodeNormalizer({
   stripControlChars: true,
-  collapseWhitespace: true,
+  collapseWhitespace: true
 });
 ```
 
@@ -47,31 +47,28 @@ const processor = new UnicodeNormalizer({
     {
       name: "stripControlChars",
       type: "boolean",
-      description:
-        "制御文字を除去するかどうか。有効にすると、\t、\n、\r を除く制御文字を削除します",
+      description: "制御文字を除去するかどうか。有効にすると、\t、\n、\r を除く制御文字を削除します",
       isOptional: true,
       default: "false",
     },
     {
       name: "preserveEmojis",
       type: "boolean",
-      description:
-        "絵文字を保持するかどうか。無効にすると、制御文字を含む絵文字は削除される場合があります",
+      description: "絵文字を保持するかどうか。無効にすると、制御文字を含む絵文字は削除される場合があります",
       isOptional: true,
       default: "true",
     },
     {
       name: "collapseWhitespace",
       type: "boolean",
-      description:
-        "連続する空白をまとめるかどうか。有効にすると、複数のスペース/タブ/改行を単一のものにまとめます",
+      description: "連続する空白をまとめるかどうか。有効にすると、複数のスペース／タブ／改行は1つにまとめられます",
       isOptional: true,
       default: "true",
     },
     {
       name: "trim",
       type: "boolean",
-      description: "先頭と末尾の空白をトリミングするかどうか",
+      description: "先頭と末尾の空白を削除（トリミング）するかどうか",
       isOptional: true,
       default: "true",
     },
@@ -104,28 +101,27 @@ const processor = new UnicodeNormalizer({
 </div>
 
 ```typescript title="src/mastra/agents/normalized-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { UnicodeNormalizer } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "normalized-agent",
   instructions: "あなたは親切なアシスタントです",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new UnicodeNormalizer({
       stripControlChars: true,
       preserveEmojis: true,
       collapseWhitespace: true,
-      trim: true,
-    }),
-  ],
+      trim: true
+    })
+  ]
 });
 ```
 
 
 <div id="related">
-  ## 関連情報
+  ## 関連項目
 </div>
 
-- [入力プロセッサ](/docs/agents/guardrails)
+- [ガードレール](/docs/agents/guardrails)

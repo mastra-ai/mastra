@@ -113,13 +113,13 @@ export const mastraClient = new MastraClient({
 
 
 <div id="making-authenticated-requests">
-  ### 認証済みリクエストの送信
+  ### 認証リクエストの送信
 </div>
 
 `MastraClient` に Supabase のアクセス トークンを設定すると、認証済みリクエストを送信できます:
 
 <Tabs>
-  <TabItem value="curl" label="cURL">
+  <TabItem value="react" label="React">
     ```tsx title="src/components/test-agent.tsx" showLineNumbers copy
     import { mastraClient } from "../../lib/mastra-client";
 
@@ -137,9 +137,8 @@ export const mastraClient = new MastraClient({
       return <button onClick={handleClick}>Test Agent</button>;
     };
     ```
-
   </TabItem>
-  <TabItem value="react" label="React">
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \

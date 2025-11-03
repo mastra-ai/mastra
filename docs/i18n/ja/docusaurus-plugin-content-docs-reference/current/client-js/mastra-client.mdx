@@ -83,14 +83,14 @@ export const mastraClient = new MastraClient({
 <PropertiesTable
   content={[
     {
-      name: "getAgents()",
+      name: "listAgents()",
       type: "Promise<Record<string, GetAgentResponse>>",
       description: "利用可能なすべてのエージェントインスタンスを返します。",
     },
     {
       name: "getAgent(agentId)",
       type: "Agent",
-      description: "IDで特定のエージェントインスタンスを取得します。",
+      description: "IDによって特定のエージェントインスタンスを取得します。",
     },
     {
       name: "getMemoryThreads(params)",
@@ -106,7 +106,7 @@ export const mastraClient = new MastraClient({
     {
       name: "getMemoryThread({ threadId, agentId })",
       type: "MemoryThread",
-      description: "IDで特定のメモリスレッドを取得します。",
+      description: "IDによって特定のメモリスレッドを取得します。",
     },
     {
       name: "saveMessageToMemory(params)",
@@ -119,32 +119,32 @@ export const mastraClient = new MastraClient({
       description: "メモリシステムの現在の状態を返します。",
     },
     {
-      name: "getTools()",
+      name: "listTools()",
       type: "Record<string, Tool>",
       description: "利用可能なすべてのツールを返します。",
     },
     {
       name: "getTool(toolId)",
       type: "Tool",
-      description: "IDで特定のツールインスタンスを取得します。",
+      description: "IDによって特定のツールインスタンスを取得します。",
     },
     {
-      name: "getWorkflows()",
+      name: "listWorkflows()",
       type: "Record<string, Workflow>",
       description: "利用可能なすべてのワークフローインスタンスを返します。",
     },
     {
       name: "getWorkflow(workflowId)",
       type: "Workflow",
-      description: "IDで特定のワークフローインスタンスを取得します。",
+      description: "IDによって特定のワークフローインスタンスを取得します。",
     },
     {
       name: "getVector(vectorName)",
       type: "MastraVector",
-      description: "名前を指定してベクターストアのインスタンスを返します。",
+      description: "名前でベクターストアのインスタンスを返します。",
     },
     {
-      name: "getLogs(params)",
+      name: "listLogs(params)",
       type: "Promise<LogEntry[]>",
       description: "指定したフィルターに一致するシステムログを取得します。",
     },
@@ -154,7 +154,7 @@ export const mastraClient = new MastraClient({
       description: "IDまたはフィルターで特定のログエントリを取得します。",
     },
     {
-      name: "getLogTransports()",
+      name: "listLogTransports()",
       type: "string[]",
       description: "設定済みのログトランスポート種別の一覧を返します。",
     },
@@ -162,13 +162,13 @@ export const mastraClient = new MastraClient({
       name: "getAITrace(traceId)",
       type: "Promise<AITraceRecord>",
       description:
-        "IDで特定のAIトレースを取得し、関連するすべてのスパンと詳細を含みます。",
+        "すべてのスパンと詳細を含む、IDによる特定のAIトレースを取得します。",
     },
     {
       name: "getAITraces(params)",
       type: "Promise<GetAITracesResponse>",
       description:
-        "オプションのフィルター付きで、AIトレースのルートスパンのページネートされた一覧を取得します。全スパンを含む完全なトレースを取得するには getAITrace() を使用してください。",
+        "任意のフィルターで絞り込める、AIトレースのルートスパンのページネートされた一覧を取得します。すべてのスパンを含む完全なトレースは getAITrace() を使用してください。",
     },
   ]}
 />

@@ -1,60 +1,70 @@
 ---
-title: "Playground | はじめに | Mastra ドキュメント"
-description: Mastra のインストール方法と、各種 LLM プロバイダーで動作させるために必要な前提条件のセットアップ手順を解説します。
+title: "Studio | はじめに | Mastra ドキュメント"
+description: さまざまな LLM プロバイダーで Mastra を実行するためのインストール手順と必要な前提条件の設定ガイド。
 ---
 
-import Youtube from "@site/src/components/YouTube-player";
+import YouTube from "@site/src/components/YouTube-player";
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 import { VideoPlayer } from "@site/src/components/video-player";
 
 
-<div id="playground">
-  # Playground
+<div id="studio">
+  # Studio
 </div>
 
-Playground は、エージェントの構築とテストのためのインタラクティブな UI と、Mastra アプリケーションをローカルサービスとして公開する REST API を提供します。これにより、統合のことをすぐに気にせず開発を始められます。
+Studio は、エージェントの構築とテストに使えるインタラクティブな UI と、Mastra アプリケーションをローカルサービスとして公開する REST API を提供します。これにより、統合をすぐに気にせず開発を始められます。
 
-プロジェクトが進むにつれて、Playground の開発環境はエージェントの改善を素早く繰り返すのに役立ちます。同時に、Observability と Scorer の機能により、あらゆる段階でのパフォーマンスを把握できます。
+プロジェクトが進むにつれ、Studio の開発環境はエージェントの素早い反復開発を支援します。同時に、Observability と Scorer の各機能により、あらゆる段階でのパフォーマンスを可視化できます。
 
-始めるには、以下の手順に従ってローカルで Playground を起動するか、チームで共同作業するために [Mastra Cloud にデプロイ](https://mastra.ai/docs/mastra-cloud/setting-up) してください。
+まずは以下の手順に従ってローカルで Studio を起動するか、チームで共同作業するために[Mastra Cloud でプロジェクトを作成](https://mastra.ai/docs/mastra-cloud/setting-up)してください。
 
-<YouTube id="spGlcTEjuXY" startTime={126} />
+<YouTube id="ojGu6Bi4wYk" />
 
-<div id="start-playground">
-  ## プレイグラウンドを開始
+<div id="start-studio">
+  ## Studio を起動する
 </div>
 
 `create mastra` でアプリケーションを作成した場合は、`dev` スクリプトでローカル開発サーバーを起動します。`mastra dev` で直接実行することもできます。
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy npm run dev ```
+    ```bash copy
+    npm run dev
+    ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm run dev ```
+    ```bash copy
+    pnpm run dev
+    ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
-    ```bash copy yarn run dev ```
+    ```bash copy
+    yarn run dev
+    ```
   </TabItem>
   <TabItem value="bun" label="bun">
-    ```bash copy bun run dev ```
+    ```bash copy
+    bun run dev
+    ```
   </TabItem>
   <TabItem value="mastra" label="mastra">
-    ```bash copy mastra dev ```
+    ```bash copy
+    mastra dev
+    ```
   </TabItem>
 </Tabs>
 
-サーバーが起動したら、次のことができます：
+サーバーが起動したら、次のことができます。
 
-- http://localhost:4111/ で Playground UI を開き、エージェントを対話的にテストします。
-- http://localhost:4111/swagger-ui にアクセスして、基盤となる REST API を確認・操作します。
+- http://localhost:4111/ で Studio UI を開き、エージェントを対話的にテストできます。
+- http://localhost:4111/swagger-ui にアクセスして、基盤となる REST API を確認・操作できます。
 
-<div id="playground-ui">
-  ## Playground UI
+<div id="studio-ui">
+  ## Studio UI
 </div>
 
-Playground UI は、エージェントやワークフロー、ツールをテストし、各やり取りで内部で何が起きているかを正確に把握し、試しながら調整していけるインタラクティブな開発環境を提供します。
+Studio UI は、エージェント、ワークフロー、ツールをテストし、各インタラクションの裏側で何が起きているかを正確に可視化し、作業しながら微調整できる、対話的な開発環境を提供します。
 
 <div id="agents">
   ### エージェント

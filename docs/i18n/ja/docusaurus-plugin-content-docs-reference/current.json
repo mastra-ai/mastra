@@ -7,10 +7,6 @@
     "message": "コア",
     "description": "サイドバー「referenceSidebar」にあるカテゴリ「Core」のラベル"
   },
-  "sidebar.referenceSidebar.category.reference.cli.index": {
-    "message": "CLI（コマンドラインインターフェース）",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「CLI」のラベル"
-  },
   "sidebar.referenceSidebar.category.reference.agents": {
     "message": "エージェント",
     "description": "サイドバー「referenceSidebar」のカテゴリ「Agents」のラベル"
@@ -23,121 +19,21 @@
     "message": "方法",
     "description": "サイドバー「referenceSidebar」のカテゴリ「Methods」のラベル"
   },
-  "sidebar.referenceSidebar.category.reference.workflows.run-methods": {
-    "message": "メソッド",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Methods」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.legacyWorkflows.index": {
-    "message": "レガシーワークフロー",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Legacy Workflows」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.streaming.index": {
-    "message": "ストリーミング",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Streaming」のラベル"
-  },
-  "sidebar.referenceSidebar.category.streaming.agents": {
-    "message": "エージェント",
-    "description": "サイドバー「referenceSidebar」内のカテゴリ「Agents」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.streaming.workflows": {
-    "message": "ワークフロー",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Workflows」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.tools.index": {
-    "message": "ツールとMCP",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Tools & MCP」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.memory.index": {
-    "message": "メモリー",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Memory」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.rag.index": {
-    "message": "RAG",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「RAG」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.storage.index": {
-    "message": "保存容量",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Storage」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.vectors.index": {
-    "message": "ベクトル",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Vectors」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.deployer.index": {
-    "message": "デプロイ担当者",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Deployer」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.client-js.index": {
-    "message": "クライアント SDK",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Client SDK」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.observability.index": {
-    "message": "オブザーバビリティ",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Observability」のラベル"
-  },
   "sidebar.referenceSidebar.category.AI Tracing": {
     "message": "AIトレース",
     "description": "サイドバー「referenceSidebar」のカテゴリ「AI Tracing」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.observability.ai-tracing.exporters": {
-    "message": "輸出企業",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Exporters」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.observability.ai-tracing.processors": {
-    "message": "プロセッサ",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Processors」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.observability.logging.index": {
-    "message": "ログ",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Logging」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.observability.otel-tracing.index": {
-    "message": "OTel トレーシング",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「OTEL Tracing」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.observability.otel-tracing.providers.index": {
-    "message": "プロバイダ",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Providers」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.evals.index": {
-    "message": "評価",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Evals」のラベル"
   },
   "sidebar.referenceSidebar.category.Scorers": {
     "message": "得点者",
     "description": "サイドバー「referenceSidebar」のカテゴリ「Scorers」のラベル"
   },
-  "sidebar.referenceSidebar.category.reference.processors.index": {
-    "message": "プロセッサ",
-    "description": "サイドバー「referenceSidebar」内のカテゴリ「Processors」のラベル"
-  },
   "sidebar.referenceSidebar.category.Auth": {
     "message": "認証",
     "description": "サイドバー「referenceSidebar」のカテゴリ「Auth」のラベル"
   },
-  "sidebar.referenceSidebar.category.reference.voice.index": {
-    "message": "音声",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Voice」のラベル"
-  },
-  "sidebar.referenceSidebar.category.reference.templates.index": {
-    "message": "テンプレート",
-    "description": "サイドバー「referenceSidebar」のカテゴリ「Templates」のラベル"
-  },
   "sidebar.referenceSidebar.doc.reference.index": {
     "message": "概要",
     "description": "サイドバー「referenceSidebar」にある、ドキュメントの索引ページへリンクするドキュメント項目「Overview」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.core.getAgent": {
-    "message": ".getAgent()",
-    "description": "サイドバー「referenceSidebar」のドキュメント項目「.getAgent()」のラベルで、ドキュメント core/getAgent にリンクしています"
-  },
-  "sidebar.referenceSidebar.doc.reference.core.getAgents": {
-    "message": ".getAgents()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getAgents()」のラベルで、ドキュメント core/getAgents へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.core.getAgentById": {
-    "message": ".getAgentById()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getAgentById()」のラベルで、ドキュメント core/getAgentById へリンクします"
   },
   "sidebar.referenceSidebar.doc.reference.core.getWorkflow": {
     "message": ".getWorkflow()",
@@ -155,58 +51,6 @@
     "message": ".setStorage()",
     "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.setStorage()」のラベルで、ドキュメント「core/setStorage」へのリンクです"
   },
-  "sidebar.referenceSidebar.doc.reference.core.getServer": {
-    "message": ".getServer()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getServer()」のラベルで、ドキュメント「core/getServer」へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.core.getMCPServer": {
-    "message": ".getMCPServer()",
-    "description": "サイドバー「referenceSidebar」内のドキュメント項目「.getMCPServer()」のラベル。ドキュメント core/getMCPServer へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.core.getVector": {
-    "message": ".getVector()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getVector()」のラベル。ドキュメント core/getVector へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.core.getVectors": {
-    "message": ".getVectors()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getVectors()」のラベル。ドキュメント「core/getVectors」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.core.getDeployer": {
-    "message": ".getDeployer()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getDeployer()」のラベル。ドキュメント core/getDeployer へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.core.getStorage": {
-    "message": ".getStorage()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getStorage()」のラベルで、ドキュメント「core/getStorage」へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.core.getMCPServers": {
-    "message": ".getMCPServers()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getMCPServers()」のラベル。ドキュメント「core/getMCPServers」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.core.getTelemetry": {
-    "message": ".getTelemetry()",
-    "description": "サイドバー「referenceSidebar」にある、ドキュメント core/getTelemetry へのリンク先であるドキュメント項目「.getTelemetry()」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.core.setTelemetry": {
-    "message": ".setTelemetry()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.setTelemetry()」のラベル。ドキュメント core/setTelemetry へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.core.getLogs": {
-    "message": ".getLogs()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getLogs()」のラベル。ドキュメント core/getLogs へのリンク。"
-  },
-  "sidebar.referenceSidebar.doc.reference.core.getLogsByRunId": {
-    "message": ".getLogsByRunId()",
-    "description": "サイドバー「referenceSidebar」で、ドキュメント core/getLogsByRunId にリンクするドキュメント項目「.getLogsByRunId()」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.core.getLogger": {
-    "message": ".getLogger()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getLogger()」のラベル。ドキュメント「core/getLogger」へのリンクです。"
-  },
-  "sidebar.referenceSidebar.doc.reference.core.setLogger": {
-    "message": ".setLogger()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.setLogger()」のラベルで、ドキュメント「core/setLogger」へのリンクです"
-  },
   "sidebar.referenceSidebar.doc.reference.core.getScorers": {
     "message": ".getScorers()",
     "description": "サイドバー「referenceSidebar」で、ドキュメント core/getScorers にリンクするドキュメント項目「.getScorers()」のラベル"
@@ -214,86 +58,6 @@
   "sidebar.referenceSidebar.doc.reference.core.getScorer": {
     "message": ".getScorer()",
     "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getScorer()」のラベルで、ドキュメント「core/getScorer」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.core.getScorerByName": {
-    "message": ".getScorerByName()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getScorerByName()」のラベルで、ドキュメント「core/getScorerByName」へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.core.mastra-class": {
-    "message": "Mastra クラス",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Mastra Class」のラベルで、ドキュメント core/mastra-class へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.cli.mastra": {
-    "message": "mastra",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「mastra」のラベルで、ドキュメント「cli/mastra」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.cli.create-mastra": {
-    "message": "create-mastra",
-    "description": "サイドバー「referenceSidebar」のドキュメント項目「create-mastra」のラベルで、ドキュメント cli/create-mastra へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.agents.agent": {
-    "message": "エージェント",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Agent」のラベルで、ドキュメント「agents/agent」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.agents.generate": {
-    "message": ".generate()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.generate()」のラベルで、ドキュメント agents/generate へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.agents.generateLegacy": {
-    "message": ".generateLegacy()（レガシー）",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.generateLegacy() (Legacy)」のラベルで、ドキュメント agents/generateLegacy へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.agents.network": {
-    "message": ".network()",
-    "description": "サイドバー「referenceSidebar」にある、ドキュメント agents/network へのリンクを持つ doc 項目「.network()」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.agents.listAgents": {
-    "message": ".listAgents()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.listAgents()」のラベルで、ドキュメント「agents/listAgents」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.agents.getWorkflows": {
-    "message": ".getWorkflows()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getWorkflows()」のラベルで、ドキュメント「agents/getWorkflows」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.agents.getTools": {
-    "message": ".getTools()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getTools()」のラベル。ドキュメント「agents/getTools」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.agents.getScorers": {
-    "message": ".getScorers()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getScorers()」のラベルで、ドキュメント「agents/getScorers」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.agents.getModel": {
-    "message": ".getModel()",
-    "description": "サイドバー「referenceSidebar」で、ドキュメント agents/getModel へのリンクとなるドキュメント項目「.getModel()」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.agents.getMemory": {
-    "message": ".getMemory()",
-    "description": "サイドバー「referenceSidebar」内のドキュメント項目「.getMemory()」のラベルで、ドキュメント「agents/getMemory」へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.agents.getVoice": {
-    "message": ".getVoice()",
-    "description": "サイドバー「referenceSidebar」で、ドキュメント「agents/getVoice」へのリンクとなっているドキュメント項目「.getVoice()」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.agents.getDescription": {
-    "message": ".getDescription()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getDescription()」のラベル。ドキュメント「agents/getDescription」へのリンク。"
-  },
-  "sidebar.referenceSidebar.doc.reference.agents.getInstructions": {
-    "message": ".getInstructions()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getInstructions()」のラベルで、ドキュメント「agents/getInstructions」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.agents.getLLM": {
-    "message": ".getLLM()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getLLM()」のラベルで、ドキュメント「agents/getLLM」へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.agents.getDefaultGenerateOptions": {
-    "message": ".getDefaultGenerateOptions()",
-    "description": "サイドバー「referenceSidebar」にある、ドキュメント agents/getDefaultGenerateOptions へのリンクとなるドキュメント項目「.getDefaultGenerateOptions()」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.agents.getDefaultStreamOptions": {
-    "message": ".getDefaultStreamOptions()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getDefaultStreamOptions()」のラベルで、ドキュメント「agents/getDefaultStreamOptions」へリンクしています"
   },
   "sidebar.referenceSidebar.doc.reference.workflows.workflow": {
     "message": "Workflow クラス",
@@ -303,14 +67,6 @@
     "message": ".then()",
     "description": "サイドバー「referenceSidebar」内のドキュメント項目「.then()」のラベル。ドキュメント workflows/workflow-methods/then へのリンク"
   },
-  "sidebar.referenceSidebar.doc.reference.workflows.methods.branch": {
-    "message": ".branch()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.branch()」のラベルで、ドキュメント workflows/workflow-methods/branch へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.workflows.methods.parallel": {
-    "message": ".parallel()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.parallel()」のラベルで、ドキュメント workflows/workflow-methods/parallel へのリンクです"
-  },
   "sidebar.referenceSidebar.doc.reference.workflows.methods.commit": {
     "message": ".commit()",
     "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.commit()」のラベルで、ドキュメント workflows/workflow-methods/commit へのリンクです"
@@ -318,46 +74,6 @@
   "sidebar.referenceSidebar.doc.reference.workflows.methods.dowhile": {
     "message": ".dowhile()",
     "description": "サイドバー「referenceSidebar」内のドキュメント項目「.dowhile()」のラベルで、ドキュメント workflows/workflow-methods/dowhile へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.workflows.methods.dountil": {
-    "message": ".dountil()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.dountil()」のラベルで、ドキュメント workflows/workflow-methods/dountil へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.workflows.methods.foreach": {
-    "message": ".foreach()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.foreach()」のラベル。ドキュメント workflows/workflow-methods/foreach へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.workflows.methods.map": {
-    "message": ".map()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.map()」のラベルで、ドキュメント workflows/workflow-methods/map へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.workflows.methods.sleep": {
-    "message": ".sleep()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.sleep()」のラベル。ドキュメント workflows/workflow-methods/sleep へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.workflows.methods.sleepUntil": {
-    "message": ".sleepUntil()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.sleepUntil()」のラベルで、ドキュメント workflows/workflow-methods/sleepUntil へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.workflows.methods.waitForEvent": {
-    "message": ".waitForEvent()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.waitForEvent()」のラベルで、ドキュメント「workflows/workflow-methods/waitForEvent」へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.workflows.methods.sendEvent": {
-    "message": ".sendEvent()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.sendEvent()」のラベルで、ドキュメント workflows/workflow-methods/sendEvent へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.workflows.methods.create-run": {
-    "message": ".createRunAsync()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.createRunAsync()」のラベルで、ドキュメント workflows/workflow-methods/create-run へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.workflows.step": {
-    "message": "Step クラス",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Step Class」のラベルで、ドキュメント workflows/step へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.workflows.run": {
-    "message": "クラスを実行する",
-    "description": "サイドバー「referenceSidebar」にある、ドキュメント workflows/run へのリンクを持つドキュメント項目「Run Class」のラベル"
   },
   "sidebar.referenceSidebar.doc.reference.workflows.run-methods.start": {
     "message": ".start()",
@@ -371,317 +87,13 @@
     "message": ".watch()",
     "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.watch()」のラベルで、ドキュメント workflows/run-methods/watch へのリンク"
   },
-  "sidebar.referenceSidebar.doc.reference.workflows.run-methods.cancel": {
-    "message": ".cancel()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.cancel()」のラベルで、ドキュメント workflows/run-methods/cancel へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.workflow": {
-    "message": "ワークフロー",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Workflow」のラベルで、ドキュメント legacyWorkflows/workflow へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.after": {
-    "message": ".after()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.after()」のラベル。ドキュメント legacyWorkflows/after へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.then": {
-    "message": ".then()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.then()」のラベル。ドキュメント「legacyWorkflows/then」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.until": {
-    "message": ".until()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.until()」のラベルで、ドキュメント「legacyWorkflows/until」へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.while": {
-    "message": ".while()",
-    "description": "サイドバー「referenceSidebar」内のドキュメント項目「.while()」のラベル。リンク先はドキュメント「legacyWorkflows/while」。"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.if": {
-    "message": ".if()",
-    "description": "サイドバー「referenceSidebar」内のドキュメント項目「.if()」のラベルで、ドキュメント legacyWorkflows/if にリンクしています"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.else": {
-    "message": ".else()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.else()」のラベル（ドキュメント legacyWorkflows/else へのリンク）"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.createRun": {
-    "message": ".createRun()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.createRun()」のラベル。ドキュメント legacyWorkflows/createRun へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.start": {
-    "message": ".start()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.start()」のラベルで、ドキュメント「legacyWorkflows/start」へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.execute": {
-    "message": ".execute()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.execute()」のラベルで、ドキュメント legacyWorkflows/execute へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.suspend": {
-    "message": ".suspend()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.suspend()」のラベルで、ドキュメント legacyWorkflows/suspend へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.snapshots": {
-    "message": "スナップショット",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Snapshots」のラベル。リンク先はドキュメント「legacyWorkflows/snapshots」。"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.resume": {
-    "message": ".resume()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.resume()」のラベルで、ドキュメント legacyWorkflows/resume にリンクしています"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.commit": {
-    "message": ".commit()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.commit()」のラベルで、ドキュメント「legacyWorkflows/commit」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.watch": {
-    "message": ".watch()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.watch()」のラベルで、ドキュメント「legacyWorkflows/watch」へリンクしています"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.events": {
-    "message": "イベントドリブン・ワークフロー",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Event-Driven Workflows」のラベルで、ドキュメント「legacyWorkflows/events」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.afterEvent": {
-    "message": ".afterEvent()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.afterEvent()」のラベル。ドキュメント legacyWorkflows/afterEvent へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.resumeWithEvent": {
-    "message": ".resumeWithEvent()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.resumeWithEvent()」のラベルで、ドキュメント legacyWorkflows/resumeWithEvent へのリンクです。"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.step-function": {
-    "message": "Workflow.step()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Workflow.step()」のラベルで、ドキュメント「legacyWorkflows/step-function」へリンクしています"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.step-options": {
-    "message": "StepOptions",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「StepOptions」のラベルで、ドキュメント「legacyWorkflows/step-options」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.step-retries": {
-    "message": "ステップの再試行回数",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Step Retries」のラベル。ドキュメント legacyWorkflows/step-retries へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.step-class": {
-    "message": "手順",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Step」のラベル。ドキュメント legacyWorkflows/step-class へのリンク。"
-  },
-  "sidebar.referenceSidebar.doc.reference.legacyWorkflows.step-condition": {
-    "message": "ステップ条件",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「StepCondition」のラベル。ドキュメント「legacyWorkflows/step-condition」へのリンクです。"
-  },
-  "sidebar.referenceSidebar.doc.reference.streaming.ChunkType": {
-    "message": "チャンクタイプ",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「ChunkType」のラベル。ドキュメント streaming/ChunkType へのリンクです"
-  },
   "sidebar.referenceSidebar.doc.reference.streaming.agents.stream": {
     "message": ".stream()",
     "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.stream()」のラベル。リンク先はドキュメント「streaming/agents/stream」"
   },
-  "sidebar.referenceSidebar.doc.reference.streaming.agents.streamLegacy": {
-    "message": ".streamLegacy()（レガシー）",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.streamLegacy() (Legacy)」のラベルで、ドキュメント streaming/agents/streamLegacy へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.streaming.agents.MastraModelOutput": {
-    "message": "MastraModelOutput",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「MastraModelOutput」のラベルで、ドキュメント streaming/agents/MastraModelOutput へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.streaming.workflows.stream": {
-    "message": ".stream()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.stream()」のラベル。ドキュメント「streaming/workflows/stream」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.streaming.workflows.streamVNext": {
-    "message": ".streamVNext()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.streamVNext()」のラベル。ドキュメント streaming/workflows/streamVNext へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.streaming.workflows.resumeStreamVNext": {
-    "message": ".resumeStreamVNext()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.resumeStreamVNext()」のラベルで、ドキュメント streaming/workflows/resumeStreamVNext へリンクしています"
-  },
-  "sidebar.referenceSidebar.doc.reference.streaming.workflows.observeStream": {
-    "message": ".observeStream()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.observeStream()」のラベルで、ドキュメント「streaming/workflows/observeStream」へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.streaming.workflows.observeStreamVNext": {
-    "message": ".observeStreamVNext()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.observeStreamVNext()」のラベルで、ドキュメント「streaming/workflows/observeStreamVNext」へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.tools.create-tool": {
-    "message": "createTool()",
-    "description": "サイドバー「referenceSidebar」内のドキュメント項目「createTool()」のラベル。ドキュメント「tools/create-tool」へのリンク。"
-  },
-  "sidebar.referenceSidebar.doc.reference.tools.mcp-client": {
-    "message": "MCPClient",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「MCPClient」のラベル。ドキュメント「tools/mcp-client」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.tools.mcp-server": {
-    "message": "MCPServer",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「MCPServer」のラベル。ドキュメント tools/mcp-server へのリンク。"
-  },
-  "sidebar.referenceSidebar.doc.reference.tools.document-chunker-tool": {
-    "message": "createDocumentChunkerTool()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「createDocumentChunkerTool()」のラベル。リンク先はドキュメント「tools/document-chunker-tool」。"
-  },
-  "sidebar.referenceSidebar.doc.reference.tools.graph-rag-tool": {
-    "message": "createGraphRAGTool()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「createGraphRAGTool()」のラベル。ドキュメント「tools/graph-rag-tool」へのリンク。"
-  },
-  "sidebar.referenceSidebar.doc.reference.tools.vector-query-tool": {
-    "message": "createVectorQueryTool()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「createVectorQueryTool()」のラベル。ドキュメント「tools/vector-query-tool」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.memory.memory-class": {
-    "message": "Memory クラス",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Memory Class」のラベルで、ドキュメント memory/memory-class へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.memory.createThread": {
-    "message": ".createThread()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.createThread()」のラベルで、ドキュメント「memory/createThread」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.memory.query": {
-    "message": ".query()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.query()」のラベルで、ドキュメント「memory/query」へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.memory.getThreadById": {
-    "message": ".getThreadById()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getThreadById()」のラベルで、ドキュメント「memory/getThreadById」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.memory.getThreadsByResourceId": {
-    "message": ".getThreadsByResourceId()",
-    "description": "サイドバー「referenceSidebar」で、ドキュメント memory/getThreadsByResourceId へのリンクとなるドキュメント項目「.getThreadsByResourceId()」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.memory.getThreadsByResourceIdPaginated": {
-    "message": ".getThreadsByResourceIdPaginated()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getThreadsByResourceIdPaginated()」のラベル。リンク先はドキュメント「memory/getThreadsByResourceIdPaginated」。"
-  },
-  "sidebar.referenceSidebar.doc.reference.memory.deleteMessages": {
-    "message": ".deleteMessages()",
-    "description": "サイドバー「referenceSidebar」で、ドキュメント項目「.deleteMessages()」のラベル。doc「memory/deleteMessages」へリンクします。"
-  },
-  "sidebar.referenceSidebar.doc.reference.rag.rerank": {
-    "message": "rerank()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「rerank()」のラベルで、ドキュメント「rag/rerank」へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.rag.embeddings": {
-    "message": "埋め込み",
-    "description": "サイドバー「referenceSidebar」にある、ドキュメント項目「Embed」のラベル（ドキュメント「rag/embeddings」へのリンク）"
-  },
-  "sidebar.referenceSidebar.doc.reference.rag.rerankWithScorer": {
-    "message": "rerankWithScorer()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「rerankWithScorer()」のラベル。ドキュメント「rag/rerankWithScorer」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.rag.document": {
-    "message": "Mドキュメント",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「MDocument」のラベルで、ドキュメント「rag/document」へのリンクです。"
-  },
-  "sidebar.referenceSidebar.doc.reference.rag.graph-rag": {
-    "message": "GraphRAG",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「GraphRAG」のラベル。ドキュメント「rag/graph-rag」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.rag.database-config": {
-    "message": "DatabaseConfig",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「DatabaseConfig」のラベル。ドキュメント「rag/database-config」へのリンク。"
-  },
-  "sidebar.referenceSidebar.doc.reference.rag.extract-params": {
-    "message": "ExtractParams",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「ExtractParams」のラベル。ドキュメント「rag/extract-params」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.rag.metadata-filters": {
-    "message": "メタデータ フィルター",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Metadata Filters」のラベル。ドキュメント「rag/metadata-filters」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.rag.chunk": {
-    "message": "リファレンス：.chunk()",
-    "description": "サイドバー「referenceSidebar」内のドキュメント項目「Reference: .chunk()」のラベルで、ドキュメント「rag/chunk」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.storage.libsql": {
-    "message": "LibSQL ストレージ",
-    "description": "サイドバー「referenceSidebar」で、ドキュメント「storage/libsql」へリンクするドキュメント項目「LibSQL Storage」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.storage.postgresql": {
-    "message": "PostgreSQL ストレージ",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「PostgreSQL Storage」のラベルで、ドキュメント「storage/postgresql」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.storage.upstash": {
-    "message": "Upstash Storage",
-    "description": "サイドバー「referenceSidebar」にある、ドキュメント storage/upstash へのリンクとなるドキュメント項目「Upstash Storage」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.storage.cloudflare": {
-    "message": "Cloudflare KV ストレージ",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Cloudflare KV Storage」のラベルで、ドキュメント「storage/cloudflare」へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.storage.dynamodb": {
-    "message": "DynamoDB ストレージ",
-    "description": "サイドバー「referenceSidebar」で、ドキュメント「storage/dynamodb」へリンクするドキュメント項目「DynamoDB Storage」のラベル"
-  },
   "sidebar.referenceSidebar.doc.MSSQL Storage": {
     "message": "MSSQL ストレージ",
     "description": "サイドバー「referenceSidebar」で、ドキュメント「storage/mssql」へリンクするドキュメント項目「MSSQL Storage」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.storage.cloudflare-d1": {
-    "message": "Cloudflare D1 Storage",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Cloudflare D1 Storage」のラベル（ドキュメント storage/cloudflare-d1 へのリンク）"
-  },
-  "sidebar.referenceSidebar.doc.reference.storage.lance": {
-    "message": "LanceDB ストレージ",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「LanceDB Storage」のラベルで、ドキュメント storage/lance へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.storage.mongodb": {
-    "message": "MongoDB ストレージ",
-    "description": "サイドバー「referenceSidebar」で、ドキュメント storage/mongodb にリンクしているドキュメント項目「MongoDB Storage」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.vectors.astra": {
-    "message": "Astra ベクターストア",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Astra Vector Store」のラベルで、ドキュメント vectors/astra へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.vectors.lance": {
-    "message": "Lance ベクトルストア",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Lance Vector Store」のラベルで、ドキュメント「vectors/lance」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.vectors.vectorize": {
-    "message": "Cloudflare Vector Store",
-    "description": "サイドバー「referenceSidebar」内のドキュメント項目「Cloudflare Vector Store」のラベルで、ドキュメント「vectors/vectorize」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.vectors.libsql": {
-    "message": "LibSQLVector ストア",
-    "description": "サイドバー「referenceSidebar」にある、ドキュメント vectors/libsql へのリンクを持つドキュメント項目「LibSQLVector Store」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.vectors.qdrant": {
-    "message": "Qdrant ベクトルストア",
-    "description": "サイドバー「referenceSidebar」で、ドキュメント vectors/qdrant へリンクするドキュメント項目「Qdrant Vector Store」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.vectors.opensearch": {
-    "message": "OpenSearch ベクターストア",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「OpenSearch Vector Store」のラベルで、ドキュメント vectors/opensearch へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.vectors.pinecone": {
-    "message": "Pinecone ベクトルストア",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Pinecone Vector Store」のラベルで、ドキュメント vectors/pinecone へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.vectors.mongodb": {
-    "message": "MongoDB ベクトルストア",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「MongoDB Vector Store」のラベル。ドキュメント vectors/mongodb へのリンク。"
-  },
-  "sidebar.referenceSidebar.doc.reference.vectors.s3vectors": {
-    "message": "Amazon S3 ベクター ストア",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Amazon S3 Vectors Store」のラベルで、ドキュメント vectors/s3vectors へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.vectors.turbopuffer": {
-    "message": "Turbopuffer ベクトルストア",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Turbopuffer Vector Store」のラベルで、ドキュメント「vectors/turbopuffer」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.vectors.upstash": {
-    "message": "Upstash ベクターストア",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Upstash Vector Store」のラベルで、ドキュメント vectors/upstash へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.vectors.couchbase": {
-    "message": "Couchbase ベクター ストア",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Couchbase Vector Store」のラベルで、ドキュメント vectors/couchbase へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.vectors.chroma": {
-    "message": "Chroma ベクトルストア",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Chroma Vector Store」のラベルで、ドキュメント「vectors/chroma」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.vectors.pg": {
-    "message": "PG ベクターストア",
-    "description": "サイドバー「referenceSidebar」内のドキュメント項目「PG Vector Store」のラベル（ドキュメント vectors/pg へのリンク）"
   },
   "sidebar.referenceSidebar.doc.reference.deployer.deployer": {
     "message": "デプロイヤー",
@@ -698,162 +110,6 @@
   "sidebar.referenceSidebar.doc.reference.deployer.vercel": {
     "message": "Vercel",
     "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Vercel」のラベルで、ドキュメント deployer/vercel へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.client-js.agents": {
-    "message": "エージェント API",
-    "description": "サイドバー「referenceSidebar」で、ドキュメント client-js/agents にリンクしているドキュメント項目「Agents API」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.client-js.memory": {
-    "message": "メモリー API",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Memory API」のラベルで、ドキュメント client-js/memory へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.client-js.tools": {
-    "message": "ツール API",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Tools API」のラベル。doc client-js/tools へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.client-js.workflows": {
-    "message": "ワークフロー API",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Workflows API」のラベルで、ドキュメント client-js/workflows へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.client-js.vectors": {
-    "message": "ベクター API",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Vectors API」のラベルで、ドキュメント client-js/vectors へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.client-js.logs": {
-    "message": "Logs API",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Logs API」のラベルで、ドキュメント client-js/logs へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.client-js.telemetry": {
-    "message": "テレメトリー API",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Telemetry API」のラベルで、ドキュメント client-js/telemetry へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.client-js.observability": {
-    "message": "オブザーバビリティ API",
-    "description": "サイドバー「referenceSidebar」で、ドキュメント client-js/observability へリンクするドキュメント項目「Observability API」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.client-js.workflows-legacy": {
-    "message": "Workflows（旧式）API",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Workflows (Legacy) API」のラベル。doc client-js/workflows-legacy へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.client-js.error-handling": {
-    "message": "エラーハンドリング",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Error Handling」のラベルで、ドキュメント client-js/error-handling へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.client-js.mastra-client": {
-    "message": "Mastra クライアントSDK",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Mastra Client SDK」のラベル（ドキュメント client-js/mastra-client へのリンク）"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.ai-tracing.ai-tracing": {
-    "message": "AIトレーシング",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「AITracing」のラベル。ドキュメント observability/ai-tracing/ai-tracing へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.ai-tracing.configuration": {
-    "message": "設定",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Configuration」のラベル。リンク先はドキュメント「observability/ai-tracing/configuration」"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.ai-tracing.span": {
-    "message": "スパン",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Span」のラベルで、ドキュメント observability/ai-tracing/span へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.ai-tracing.interfaces": {
-    "message": "インターフェース",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Interfaces」のラベルで、ドキュメント observability/ai-tracing/interfaces へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.ai-tracing.exporters.arize": {
-    "message": "ArizeExporter",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「ArizeExporter」のラベル。ドキュメント observability/ai-tracing/exporters/arize へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.ai-tracing.exporters.cloud-exporter": {
-    "message": "CloudExporter",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「CloudExporter」のラベルで、ドキュメント「observability/ai-tracing/exporters/cloud-exporter」へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.ai-tracing.exporters.console-exporter": {
-    "message": "コンソールエクスポーター",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「ConsoleExporter」のラベルで、ドキュメント「observability/ai-tracing/exporters/console-exporter」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.ai-tracing.exporters.langsmith": {
-    "message": "LangSmithExporter",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「LangSmithExporter」のラベル。observability/ai-tracing/exporters/langsmith のドキュメントへのリンク。"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.ai-tracing.exporters.langfuse": {
-    "message": "LangfuseExporter",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「LangfuseExporter」のラベル。リンク先はドキュメント「observability/ai-tracing/exporters/langfuse」。"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.ai-tracing.exporters.otel": {
-    "message": "OtelExporter",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「OtelExporter」のラベルで、ドキュメント observability/ai-tracing/exporters/otel へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.ai-tracing.exporters.braintrust": {
-    "message": "BraintrustExporter",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「BraintrustExporter」のラベルで、ドキュメント observability/ai-tracing/exporters/braintrust へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.ai-tracing.exporters.default-exporter": {
-    "message": "デフォルトエクスポーター",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「DefaultExporter」のラベルで、ドキュメント observability/ai-tracing/exporters/default-exporter へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.ai-tracing.processors.sensitive-data-filter": {
-    "message": "SensitiveDataFilter",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「SensitiveDataFilter」のラベルで、ドキュメント observability/ai-tracing/processors/sensitive-data-filter へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.logging.pino-logger": {
-    "message": "PinoLogger",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「PinoLogger」のラベル。リンク先はドキュメント「observability/logging/pino-logger」"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.otel-tracing.otel-config": {
-    "message": "OtelConfig",
-    "description": "サイドバー「referenceSidebar」内のドキュメント項目「OtelConfig」のラベル。ドキュメント「observability/otel-tracing/otel-config」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.otel-tracing.providers.traceloop": {
-    "message": "Traceloop",
-    "description": "サイドバー「referenceSidebar」で、ドキュメント observability/otel-tracing/providers/traceloop にリンクするドキュメント項目「Traceloop」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.otel-tracing.providers.dash0": {
-    "message": "Dash0",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Dash0」のラベル。リンク先はドキュメント observability/otel-tracing/providers/dash0 です。"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.otel-tracing.providers.new-relic": {
-    "message": "New Relic",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「New Relic」のラベル。リンク先はドキュメント「observability/otel-tracing/providers/new-relic」です"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.otel-tracing.providers.langwatch": {
-    "message": "LangWatch",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「LangWatch」のラベルで、ドキュメント observability/otel-tracing/providers/langwatch へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.otel-tracing.providers.index": {
-    "message": "OTLP プロバイダ",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「OTLP Providers」のラベル。ドキュメント observability/otel-tracing/providers/index へのリンクです。"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.otel-tracing.providers.langsmith": {
-    "message": "LangSmith",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「LangSmith」のラベルで、ドキュメント「observability/otel-tracing/providers/langsmith」へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.otel-tracing.providers.langfuse": {
-    "message": "Langfuse",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Langfuse」のラベル。リンク先はドキュメント「observability/otel-tracing/providers/langfuse」。"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.otel-tracing.providers.arize-ax": {
-    "message": "Arize AX",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Arize AX」のラベルで、ドキュメント observability/otel-tracing/providers/arize-ax へリンクしています"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.otel-tracing.providers.laminar": {
-    "message": "層流",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Laminar」のラベル。リンク先はドキュメント「observability/otel-tracing/providers/laminar」"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.otel-tracing.providers.braintrust": {
-    "message": "Braintrust",
-    "description": "サイドバー「referenceSidebar」内のドキュメント項目「Braintrust」のラベル。リンク先はドキュメント observability/otel-tracing/providers/braintrust。"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.otel-tracing.providers.signoz": {
-    "message": "SigNoz",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「SigNoz」のラベルで、ドキュメント observability/otel-tracing/providers/signoz へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.otel-tracing.providers.arize-phoenix": {
-    "message": "Arize Phoenix（アライズ・フェニックス）",
-    "description": "サイドバー「referenceSidebar」内のドキュメント項目「Arize Phoenix」のラベル。リンク先：observability/otel-tracing/providers/arize-phoenix"
-  },
-  "sidebar.referenceSidebar.doc.reference.observability.otel-tracing.providers.keywordsai": {
-    "message": "Keywords AI",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Keywords AI」のラベルで、ドキュメント observability/otel-tracing/providers/keywordsai にリンクします"
   },
   "sidebar.referenceSidebar.doc.reference.evals.bias": {
     "message": "偏り",
@@ -879,288 +135,1032 @@
     "message": "毒性",
     "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Toxicity」のラベルで、ドキュメント「evals/toxicity」へリンクします"
   },
-  "sidebar.referenceSidebar.doc.reference.evals.keyword-coverage": {
-    "message": "KeywordCoverageMetric",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「KeywordCoverageMetric」のラベルで、ドキュメント「evals/keyword-coverage」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.evals.tone-consistency": {
-    "message": "トーン整合性メトリック",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「ToneConsistencyMetric」のラベルで、ドキュメント「evals/tone-consistency」へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.evals.content-similarity": {
-    "message": "ContentSimilarityMetric",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「ContentSimilarityMetric」のラベルで、ドキュメント「evals/content-similarity」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.evals.context-relevancy": {
-    "message": "コンテキスト関連度メトリック",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「ContextRelevancyMetric」のラベルで、ドキュメント「evals/context-relevancy」へリンクしています"
-  },
-  "sidebar.referenceSidebar.doc.reference.evals.answer-relevancy": {
-    "message": "回答関連性メトリクス",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「AnswerRelevancyMetric」のラベル（ドキュメント evals/answer-relevancy へのリンク）"
-  },
-  "sidebar.referenceSidebar.doc.reference.evals.context-precision": {
-    "message": "ContextPrecisionMetric",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「ContextPrecisionMetric」のラベルで、ドキュメント evals/context-precision へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.evals.contextual-recall": {
-    "message": "コンテクストリコールメトリック",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「ContextualRecallMetric」のラベルで、ドキュメント「evals/contextual-recall」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.evals.context-position": {
-    "message": "コンテキスト位置メトリクス",
-    "description": "サイドバー「referenceSidebar」にある、ドキュメント「evals/context-position」へリンクするドキュメント項目「ContextPositionMetric」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.evals.textual-difference": {
-    "message": "TextualDifferenceMetric",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「TextualDifferenceMetric」のラベル。ドキュメント「evals/textual-difference」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.evals.prompt-alignment": {
-    "message": "プロンプト整合性メトリック",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「PromptAlignmentMetric」のラベルで、ドキュメント「evals/prompt-alignment」へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.bias": {
-    "message": "偏り",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Bias」のラベル。ドキュメント「scorers/bias」へのリンク。"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.completeness": {
-    "message": "完全性",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Completeness」のラベル。ドキュメント scorers/completeness へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.faithfulness": {
-    "message": "誠実さ",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Faithfulness」のラベル。ドキュメント「scorers/faithfulness」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.hallucination": {
-    "message": "ハルシネーション",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Hallucination」のラベルで、ドキュメント「scorers/hallucination」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.toxicity": {
-    "message": "毒性",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Toxicity」のラベルで、ドキュメント scorers/toxicity へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.keyword-coverage": {
-    "message": "キーワード網羅スコア",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Keyword Coverage Scorer」のラベルで、ドキュメント「scorers/keyword-coverage」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.tone-consistency": {
-    "message": "トーン一貫性スコア",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Tone Consistency Scorer」のラベル。ドキュメント「scorers/tone-consistency」へのリンク。"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.noise-sensitivity": {
-    "message": "ノイズ感受性スコア（CI／テスト専用）",
-    "description": "サイドバー「referenceSidebar」で、ドキュメント scorers/noise-sensitivity へのリンクに付ける、ドキュメント項目「Noise Sensitivity Scorer (CI/Testing Only)」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.mastra-scorer": {
-    "message": "MastraScorer",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「MastraScorer」のラベルで、ドキュメント「scorers/mastra-scorer」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.create-scorer": {
-    "message": "createScorer",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「createScorer」のラベル。ドキュメント「scorers/create-scorer」へのリンクです。"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.content-similarity": {
-    "message": "コンテンツ類似度スコアリング",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Content Similarity Scorer」のラベルで、ドキュメント scorers/content-similarity へのリンクです。"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.run-experiment": {
-    "message": "実験を実行",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「runExperiment」のラベル。ドキュメント「scorers/run-experiment」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.answer-relevancy": {
-    "message": "回答関連性スコアラー",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Answer Relevancy Scorer」のラベルで、ドキュメント「scorers/answer-relevancy」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.context-precision": {
-    "message": "コンテキスト精度スコアラー",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Context Precision Scorer」のラベル。ドキュメント「scorers/context-precision」へリンクします。"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.answer-similarity": {
-    "message": "回答類似度スコアラー",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Answer Similarity Scorer」のラベルで、ドキュメント「scorers/answer-similarity」へリンクしています"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.context-relevance": {
-    "message": "コンテキスト適合度スコアラー",
-    "description": "サイドバー「referenceSidebar」にある、ドキュメント「scorers/context-relevance」へリンクするドキュメント項目「Context Relevance Scorer」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.tool-call-accuracy": {
-    "message": "ツール呼び出し精度スコアリング",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Tool Call Accuracy Scorers」のラベルで、ドキュメント「scorers/tool-call-accuracy」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.textual-difference": {
-    "message": "テキスト差分スコアリング",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Textual Difference Scorer」のラベル。ドキュメント scorers/textual-difference へのリンク。"
-  },
-  "sidebar.referenceSidebar.doc.reference.scorers.prompt-alignment": {
-    "message": "プロンプト整合性スコアラー",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Prompt Alignment Scorer」のラベル。リンク先はドキュメント「scorers/prompt-alignment」。"
-  },
-  "sidebar.referenceSidebar.doc.reference.processors.language-detector": {
-    "message": "Language Detector",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「LanguageDetector」のラベルで、ドキュメント processors/language-detector へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.processors.batch-parts-processor": {
-    "message": "BatchPartsProcessor",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「BatchPartsProcessor」のラベルで、ドキュメント「processors/batch-parts-processor」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.processors.moderation-processor": {
-    "message": "モデレーションプロセッサー",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「ModerationProcessor」のラベルで、ドキュメント「processors/moderation-processor」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.processors.prompt-injection-detector": {
-    "message": "PromptInjectionDetector",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「PromptInjectionDetector」のラベル。リンク先はドキュメント「processors/prompt-injection-detector」。"
-  },
-  "sidebar.referenceSidebar.doc.reference.processors.pii-detector": {
-    "message": "PII Detector",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「PIIDetector」のラベルで、ドキュメント processors/pii-detector へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.processors.unicode-normalizer": {
-    "message": "UnicodeNormalizer",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「UnicodeNormalizer」のラベル。ドキュメント「processors/unicode-normalizer」へのリンク。"
-  },
-  "sidebar.referenceSidebar.doc.reference.processors.token-limiter-processor": {
-    "message": "TokenLimiterProcessor",
-    "description": "サイドバー「referenceSidebar」にある、ドキュメント processors/token-limiter-processor へのリンクを持つドキュメント項目「TokenLimiterProcessor」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.processors.system-prompt-scrubber": {
-    "message": "SystemPromptScrubber",
-    "description": "サイドバー「referenceSidebar」内の、ドキュメント processors/system-prompt-scrubber へのリンクを持つドキュメント項目「SystemPromptScrubber」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.auth.jwt": {
-    "message": "JSON Web Token（JWT）",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「JSON Web Token」のラベル。ドキュメント auth/jwt へのリンクです。"
-  },
-  "sidebar.referenceSidebar.doc.reference.auth.clerk": {
-    "message": "店員",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Clerk」のラベル。ドキュメント「auth/clerk」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.auth.supabase": {
-    "message": "Supabase",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Supabase」のラベル。ドキュメント auth/supabase へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.auth.firebase": {
-    "message": "Firebase",
-    "description": "サイドバー「referenceSidebar」にある、ドキュメント auth/firebase へのリンクのドキュメント項目「Firebase」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.auth.workos": {
-    "message": "WorkOS",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「WorkOS」のラベルで、ドキュメント auth/workos へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.auth.auth0": {
-    "message": "Auth0",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Auth0」のラベル。ドキュメント「auth/auth0」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.mastra-voice": {
-    "message": "Mastra Voice",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Mastra Voice」のラベル。ドキュメント「voice/mastra-voice」へのリンク。"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.composite-voice": {
-    "message": "合成音声",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Composite Voice」のラベル。リンク先はドキュメント「voice/composite-voice」。"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.voice.speak": {
-    "message": ".speak()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.speak()」のラベル。ドキュメント voice/voice.speak へリンクします。"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.voice.listen": {
-    "message": ".listen()",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.listen()」のラベルで、ドキュメント「voice/voice.listen」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.voice.getSpeakers": {
-    "message": ".getSpeakers()",
-    "description": "サイドバー「referenceSidebar」内のドキュメント項目「.getSpeakers()」のラベル。ドキュメント「voice/voice.getSpeakers」へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.voice.connect": {
-    "message": ".connect()（rt.）",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.connect() (rt.)」のラベルで、ドキュメント voice/voice.connect へリンクします"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.voice.send": {
-    "message": ".send()（rt）",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.send() (rt.)」のラベルで、ドキュメント「voice/voice.send」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.voice.answer": {
-    "message": ".answer()（右）",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.answer() (rt.)」のラベルで、ドキュメント voice/voice.answer へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.voice.on": {
-    "message": ".on()（rt）",
-    "description": "サイドバー「referenceSidebar」で、ドキュメント voice/voice.on へのリンクに使われるドキュメント項目「.on() (rt.)」のラベル"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.voice.events": {
-    "message": "イベント（右）",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Events (rt.)」のラベルで、「voice/voice.events」ドキュメントへのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.voice.off": {
-    "message": ".off()（rt）",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.off() (rt.)」のラベルで、ドキュメント voice/voice.off へのリンクです。"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.voice.close": {
-    "message": ".close()（rt）",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.close() (rt.)」のラベルで、ドキュメント「voice/voice.close」へリンクしています"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.voice.addInstructions": {
-    "message": ".addInstructions()（rt.）",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.addInstructions() (rt.)」のラベル。リンク先はドキュメント voice/voice.addInstructions"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.voice.addTools": {
-    "message": ".addTools()（rt.）",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.addTools() (rt.)」のラベル。ドキュメント voice/voice.addTools へのリンク"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.voice.updateConfig": {
-    "message": ".updateConfig()（rt.）",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.updateConfig() (rt.)」のラベル。リンク先はドキュメント voice/voice.updateConfig。"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.deepgram": {
-    "message": "Deepgram",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Deepgram」のラベル。ドキュメント「voice/deepgram」へのリンクです。"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.elevenlabs": {
-    "message": "ElevenLabs",
-    "description": "サイドバー「referenceSidebar」のドキュメント項目「ElevenLabs」のラベルで、ドキュメント voice/elevenlabs へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.google": {
-    "message": "Google",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Google」のラベル。ドキュメント「voice/google」へのリンクです"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.google-gemini-live": {
-    "message": "Google Gemini ライブ",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Google Gemini Live」のラベル。ドキュメント「voice/google-gemini-live」へのリンク。"
-  },
-  "sidebar.referenceSidebar.doc.reference.voice.murf": {
-    "message": "Murf",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Murf」のラベル。ドキュメント voice/murf へのリンク"
-  },
   "sidebar.referenceSidebar.doc.OpenAI": {
     "message": "OpenAI",
     "description": "サイドバー「referenceSidebar」にあるドキュメント項目「OpenAI」のラベル。ドキュメント「voice/openai」へのリンクです。"
   },
-  "sidebar.referenceSidebar.doc.reference.voice.openai-realtime": {
+  "sidebar.referenceSidebar.category.CLI": {
+    "message": "CLI（コマンドラインインターフェイス）",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「CLI」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Methods": {
+    "message": "方法",
+    "description": "サイドバー「referenceSidebar」にあるカテゴリ「Methods」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Legacy Workflows": {
+    "message": "レガシーワークフロー",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Legacy Workflows」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Streaming": {
+    "message": "ストリーミング",
+    "description": "サイドバー「referenceSidebar」にあるカテゴリ「Streaming」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Agents": {
+    "message": "エージェント",
+    "description": "サイドバー「referenceSidebar」にあるカテゴリ「Agents」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Workflows": {
+    "message": "ワークフロー",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Workflows」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Tools & MCP": {
+    "message": "ツールとMCP",
+    "description": "サイドバー「referenceSidebar」にあるカテゴリ「Tools & MCP」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Memory": {
+    "message": "メモリー",
+    "description": "サイドバー「referenceSidebar」内のカテゴリ「Memory」のラベル"
+  },
+  "sidebar.referenceSidebar.category.RAG": {
+    "message": "RAG",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「RAG」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Storage": {
+    "message": "保存容量",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Storage」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Vectors": {
+    "message": "ベクトル",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Vectors」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Deployer": {
+    "message": "デプロイヤー",
+    "description": "サイドバー「referenceSidebar」にある「Deployer」カテゴリのラベル"
+  },
+  "sidebar.referenceSidebar.category.Client SDK": {
+    "message": "クライアント SDK",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Client SDK」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Observability": {
+    "message": "オブザーバビリティ",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Observability」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Exporters": {
+    "message": "輸出企業",
+    "description": "サイドバー「referenceSidebar」内のカテゴリ「Exporters」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Processors": {
+    "message": "プロセッサー",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Processors」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Logging": {
+    "message": "ログ（ロギング）",
+    "description": "サイドバー「referenceSidebar」のカテゴリー「Logging」のラベル"
+  },
+  "sidebar.referenceSidebar.category.OTEL Tracing": {
+    "message": "OTel トレース",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「OTEL Tracing」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Providers": {
+    "message": "プロバイダー",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Providers」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Evals": {
+    "message": "評価",
+    "description": "サイドバー「referenceSidebar」にあるカテゴリ「Evals」のラベル"
+  },
+  "sidebar.referenceSidebar.category.reference.processors": {
+    "message": "プロセッサ",
+    "description": "サイドバー「referenceSidebar」のカテゴリ「Processors」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Voice": {
+    "message": "音声",
+    "description": "サイドバー「referenceSidebar」にあるカテゴリ「Voice」のラベル"
+  },
+  "sidebar.referenceSidebar.category.Templates": {
+    "message": "テンプレート",
+    "description": "サイドバー「referenceSidebar」のカテゴリー「Templates」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.Mastra Class": {
+    "message": "Mastra クラス",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Mastra Class」のラベルで、ドキュメント core/mastra-class へリンクします"
+  },
+  "sidebar.referenceSidebar.doc..getAgent()": {
+    "message": ".getAgent()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getAgent()」のラベルで、ドキュメント「core/getAgent」へリンクしています"
+  },
+  "sidebar.referenceSidebar.doc..getAgents()": {
+    "message": ".getAgents()",
+    "description": "サイドバー「referenceSidebar」で、ドキュメント core/getAgents にリンクするドキュメント項目「.getAgents()」のラベル"
+  },
+  "sidebar.referenceSidebar.doc..getAgentById()": {
+    "message": ".getAgentById()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getAgentById()」のラベル。ドキュメント「core/getAgentById」へのリンクです。"
+  },
+  "sidebar.referenceSidebar.doc..getServer()": {
+    "message": ".getServer()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getServer()」のラベル。ドキュメント core/getServer へのリンク"
+  },
+  "sidebar.referenceSidebar.doc..getMCPServer()": {
+    "message": ".getMCPServer()",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「.getMCPServer()」のラベルで、ドキュメント core/getMCPServer にリンクしています"
+  },
+  "sidebar.referenceSidebar.doc..getVector()": {
+    "message": ".getVector()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getVector()」のラベルで、ドキュメント「core/getVector」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc..getVectors()": {
+    "message": ".getVectors()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getVectors()」のラベルで、ドキュメント「core/getVectors」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..getDeployer()": {
+    "message": ".getDeployer()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getDeployer()」のラベルで、ドキュメント「core/getDeployer」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc..getStorage()": {
+    "message": ".getStorage()",
+    "description": "サイドバー「referenceSidebar」で、ドキュメント core/getStorage へリンクするドキュメント項目「.getStorage()」のラベル"
+  },
+  "sidebar.referenceSidebar.doc..getMCPServers()": {
+    "message": ".getMCPServers()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getMCPServers()」のラベルで、ドキュメント core/getMCPServers へリンクします。"
+  },
+  "sidebar.referenceSidebar.doc..getTelemetry()": {
+    "message": ".getTelemetry()",
+    "description": "サイドバー「referenceSidebar」にある、ドキュメント core/getTelemetry へのリンク「.getTelemetry()」ドキュメント項目のラベル"
+  },
+  "sidebar.referenceSidebar.doc..setTelemetry()": {
+    "message": ".setTelemetry()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.setTelemetry()」のラベルで、ドキュメント「core/setTelemetry」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc..getLogs()": {
+    "message": ".getLogs()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getLogs()」のラベルで、ドキュメント core/getLogs へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..getLogsByRunId()": {
+    "message": ".getLogsByRunId()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getLogsByRunId()」のラベルで、ドキュメント「core/getLogsByRunId」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..getLogger()": {
+    "message": ".getLogger()",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「.getLogger()」のラベルで、ドキュメント「core/getLogger」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc..setLogger()": {
+    "message": ".setLogger()",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「.setLogger()」のラベル。ドキュメント「core/setLogger」へのリンク"
+  },
+  "sidebar.referenceSidebar.doc..getScorerByName()": {
+    "message": ".getScorerByName()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getScorerByName()」のラベルで、ドキュメント core/getScorerByName へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.mastra": {
+    "message": "mastra",
+    "description": "サイドバー「referenceSidebar」で、ドキュメント「cli/mastra」へリンクするドキュメント項目「mastra」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.create-mastra": {
+    "message": "create-mastra",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「create-mastra」のラベル。ドキュメント「cli/create-mastra」へのリンク。"
+  },
+  "sidebar.referenceSidebar.doc.references.agents.agent": {
+    "message": "エージェント",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Agent」のラベル（ドキュメント agents/agent へのリンク）"
+  },
+  "sidebar.referenceSidebar.doc.references.agents.generate": {
+    "message": ".generate()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.generate()」のラベルで、ドキュメント「agents/generate」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..generateLegacy() (Legacy)": {
+    "message": ".generateLegacy()（旧式）",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.generateLegacy() (Legacy)」のラベルで、ドキュメント「agents/generateLegacy」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc..network()": {
+    "message": ".network()",
+    "description": "サイドバー「referenceSidebar」にある、ドキュメント「agents/network」へリンクするドキュメント項目「.network()」のラベル"
+  },
+  "sidebar.referenceSidebar.doc..listAgents()": {
+    "message": ".listAgents()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.listAgents()」のラベル。ドキュメント「agents/listAgents」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..getWorkflows()": {
+    "message": ".getWorkflows()",
+    "description": "サイドバー「referenceSidebar」にある、ドキュメント「agents/getWorkflows」へリンクするドキュメント項目「.getWorkflows()」のラベル"
+  },
+  "sidebar.referenceSidebar.doc..getTools()": {
+    "message": ".getTools()",
+    "description": "サイドバー「referenceSidebar」にある、ドキュメント「agents/getTools」へリンクするドキュメント項目「.getTools()」のラベル"
+  },
+  "sidebar.referenceSidebar.doc..getScorers()": {
+    "message": ".getScorers()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getScorers()」のラベル。ドキュメント「agents/getScorers」へのリンク。"
+  },
+  "sidebar.referenceSidebar.doc..getModel()": {
+    "message": ".getModel()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getModel()」のラベル。ドキュメント agents/getModel へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..getMemory()": {
+    "message": ".getMemory()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getMemory()」のラベルで、ドキュメント「agents/getMemory」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..getVoice()": {
+    "message": ".getVoice()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getVoice()」のラベルで、ドキュメント「agents/getVoice」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..getDescription()": {
+    "message": ".getDescription()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getDescription()」のラベルで、ドキュメント「agents/getDescription」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..getInstructions()": {
+    "message": ".getInstructions()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getInstructions()」のラベルで、ドキュメント「agents/getInstructions」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..getLLM()": {
+    "message": ".getLLM()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getLLM()」のラベル（ドキュメント agents/getLLM へのリンク）"
+  },
+  "sidebar.referenceSidebar.doc..getDefaultGenerateOptions()": {
+    "message": ".getDefaultGenerateOptions()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getDefaultGenerateOptions()」のラベル。ドキュメント agents/getDefaultGenerateOptions へのリンク"
+  },
+  "sidebar.referenceSidebar.doc..getDefaultStreamOptions()": {
+    "message": ".getDefaultStreamOptions()",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「.getDefaultStreamOptions()」のラベル（ドキュメント「agents/getDefaultStreamOptions」へのリンク）"
+  },
+  "sidebar.referenceSidebar.doc..branch()": {
+    "message": ".branch()",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「.branch()」のラベル。ドキュメント workflows/workflow-methods/branch へのリンク"
+  },
+  "sidebar.referenceSidebar.doc..parallel()": {
+    "message": ".parallel()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.parallel()」のラベルで、ドキュメント workflows/workflow-methods/parallel へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..dountil()": {
+    "message": ".dountil()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.dountil()」のラベルで、ドキュメント workflows/workflow-methods/dountil へのリンクです。"
+  },
+  "sidebar.referenceSidebar.doc..foreach()": {
+    "message": ".foreach()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.foreach()」のラベルで、ドキュメント workflows/workflow-methods/foreach へリンクします"
+  },
+  "sidebar.referenceSidebar.doc..map()": {
+    "message": ".map()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.map()」のラベル。ドキュメント「workflows/workflow-methods/map」へのリンク。"
+  },
+  "sidebar.referenceSidebar.doc..sleep()": {
+    "message": ".sleep()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.sleep()」のラベルで、ドキュメント workflows/workflow-methods/sleep へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..sleepUntil()": {
+    "message": ".sleepUntil()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.sleepUntil()」のラベルで、ドキュメント workflows/workflow-methods/sleepUntil へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..waitForEvent()": {
+    "message": ".waitForEvent()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.waitForEvent()」のラベルで、ドキュメント workflows/workflow-methods/waitForEvent へリンクします"
+  },
+  "sidebar.referenceSidebar.doc..sendEvent()": {
+    "message": ".sendEvent()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.sendEvent()」のラベルで、ドキュメント workflows/workflow-methods/sendEvent へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..createRunAsync()": {
+    "message": ".createRunAsync()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.createRunAsync()」のラベルで、ドキュメント workflows/workflow-methods/create-run へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Step Class": {
+    "message": "Step クラス",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Step Class」のラベルで、ドキュメント workflows/step へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Run Class": {
+    "message": "クラスの実行",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Run Class」のラベルで、ドキュメント「workflows/run」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..cancel()": {
+    "message": ".cancel()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.cancel()」のラベルで、ドキュメント workflows/run-methods/cancel へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Workflow": {
+    "message": "ワークフロー",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Workflow」のラベル。ドキュメント legacyWorkflows/workflow へのリンク"
+  },
+  "sidebar.referenceSidebar.doc..after()": {
+    "message": ".after()",
+    "description": "サイドバー「referenceSidebar」にある、ドキュメント legacyWorkflows/after へのリンクを持つドキュメント項目「.after()」のラベル"
+  },
+  "sidebar.referenceSidebar.doc..then()": {
+    "message": ".then()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.then()」のラベルで、ドキュメント legacyWorkflows/then へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..until()": {
+    "message": ".until()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.until()」のラベルで、ドキュメント「legacyWorkflows/until」へリンクしています"
+  },
+  "sidebar.referenceSidebar.doc..while()": {
+    "message": ".while()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.while()」のラベルで、ドキュメント「legacyWorkflows/while」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc..if()": {
+    "message": ".if()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.if()」のラベルで、ドキュメント「legacyWorkflows/if」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..else()": {
+    "message": ".else()",
+    "description": "サイドバー「referenceSidebar」のドキュメント項目「.else()」のラベルで、ドキュメント「legacyWorkflows/else」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..createRun()": {
+    "message": ".createRun()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.createRun()」のラベルで、ドキュメント「legacyWorkflows/createRun」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc..start()": {
+    "message": ".start()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.start()」のラベルで、ドキュメント「legacyWorkflows/start」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc..execute()": {
+    "message": ".execute()",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「.execute()」のラベル。ドキュメント legacyWorkflows/execute へのリンク"
+  },
+  "sidebar.referenceSidebar.doc..suspend()": {
+    "message": ".suspend()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.suspend()」のラベルで、ドキュメント「legacyWorkflows/suspend」へリンクしています"
+  },
+  "sidebar.referenceSidebar.doc.Snapshots": {
+    "message": "スナップショット",
+    "description": "サイドバー「referenceSidebar」で、ドキュメント legacyWorkflows/snapshots へリンクするドキュメント項目「Snapshots」のラベル"
+  },
+  "sidebar.referenceSidebar.doc..resume()": {
+    "message": ".resume()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.resume()」のラベルで、ドキュメント legacyWorkflows/resume へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..commit()": {
+    "message": ".commit()",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「.commit()」のラベルで、ドキュメント「legacyWorkflows/commit」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..watch()": {
+    "message": ".watch()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.watch()」のラベル。ドキュメント「legacyWorkflows/watch」へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.Event-Driven Workflows": {
+    "message": "イベント駆動ワークフロー",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Event-Driven Workflows」のラベル。ドキュメント legacyWorkflows/events へのリンク"
+  },
+  "sidebar.referenceSidebar.doc..afterEvent()": {
+    "message": ".afterEvent()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.afterEvent()」のラベルで、ドキュメント legacyWorkflows/afterEvent へリンクしています"
+  },
+  "sidebar.referenceSidebar.doc..resumeWithEvent()": {
+    "message": ".resumeWithEvent()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.resumeWithEvent()」のラベルで、ドキュメント「legacyWorkflows/resumeWithEvent」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Workflow.step()": {
+    "message": "Workflow.step()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Workflow.step()」のラベルで、ドキュメント「legacyWorkflows/step-function」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc.StepOptions": {
+    "message": "ステップ設定",
+    "description": "サイドバー 'referenceSidebar' にあるドキュメント項目 'StepOptions' のラベルで、ドキュメント legacyWorkflows/step-options へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Step Retries": {
+    "message": "ステップの再試行回数",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Step Retries」のラベル。ドキュメント legacyWorkflows/step-retries へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Step": {
+    "message": "ステップ",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Step」のラベル。ドキュメント「legacyWorkflows/step-class」へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.StepCondition": {
+    "message": "ステップ条件",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「StepCondition」のラベル。ドキュメント legacyWorkflows/step-condition へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.ChunkType": {
+    "message": "チャンクタイプ",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「ChunkType」のラベルで、ドキュメント「streaming/ChunkType」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..streamLegacy() (Legacy)": {
+    "message": ".streamLegacy()（レガシー）",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.streamLegacy() (Legacy)」のラベルで、ドキュメント「streaming/agents/streamLegacy」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc.MastraModelOutput": {
+    "message": "MastraModelOutput",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「MastraModelOutput」のラベル。ドキュメント「streaming/agents/MastraModelOutput」へのリンク。"
+  },
+  "sidebar.referenceSidebar.doc..stream()": {
+    "message": ".stream()",
+    "description": "サイドバー「referenceSidebar」にある、ドキュメント「streaming/workflows/stream」へリンクするドキュメント項目「.stream()」のラベル"
+  },
+  "sidebar.referenceSidebar.doc..streamVNext()": {
+    "message": ".streamVNext()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.streamVNext()」のラベルで、ドキュメント「streaming/workflows/streamVNext」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..resumeStreamVNext()": {
+    "message": ".resumeStreamVNext()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.resumeStreamVNext()」のラベル。ドキュメント streaming/workflows/resumeStreamVNext へのリンク。"
+  },
+  "sidebar.referenceSidebar.doc..observeStream()": {
+    "message": ".observeStream()",
+    "description": "サイドバー「referenceSidebar」で、ドキュメント「streaming/workflows/observeStream」へのリンクとして表示される、ドキュメント項目「.observeStream()」のラベル"
+  },
+  "sidebar.referenceSidebar.doc..observeStreamVNext()": {
+    "message": ".observeStreamVNext()",
+    "description": "サイドバー「referenceSidebar」のドキュメント項目「.observeStreamVNext()」のラベルで、ドキュメント「streaming/workflows/observeStreamVNext」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc.createTool()": {
+    "message": "createTool()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「createTool()」のラベルで、ドキュメント「tools/create-tool」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.MCPClient": {
+    "message": "MCPClient",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「MCPClient」のラベル。ドキュメント tools/mcp-client へのリンク。"
+  },
+  "sidebar.referenceSidebar.doc.MCPServer": {
+    "message": "MCPServer",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「MCPServer」のラベルで、ドキュメント tools/mcp-server へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.createDocumentChunkerTool()": {
+    "message": "createDocumentChunkerTool()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「createDocumentChunkerTool()」のラベル。ドキュメント tools/document-chunker-tool へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.createGraphRAGTool()": {
+    "message": "createGraphRAGTool()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「createGraphRAGTool()」のラベル。ドキュメント「tools/graph-rag-tool」へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.createVectorQueryTool()": {
+    "message": "createVectorQueryTool()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「createVectorQueryTool()」のラベル（ドキュメント tools/vector-query-tool へのリンク）"
+  },
+  "sidebar.referenceSidebar.doc.Memory Class": {
+    "message": "Memory クラス",
+    "description": "サイドバー「referenceSidebar」で、ドキュメント「memory/memory-class」へリンクするドキュメント項目「Memory Class」のラベル"
+  },
+  "sidebar.referenceSidebar.doc..createThread()": {
+    "message": ".createThread()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.createThread()」のラベルで、ドキュメント「memory/createThread」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..query()": {
+    "message": ".query()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.query()」のラベル。ドキュメント「memory/query」へのリンク"
+  },
+  "sidebar.referenceSidebar.doc..getThreadById()": {
+    "message": ".getThreadById()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getThreadById()」のラベル。ドキュメント「memory/getThreadById」へリンクします。"
+  },
+  "sidebar.referenceSidebar.doc..getThreadsByResourceId()": {
+    "message": ".getThreadsByResourceId()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getThreadsByResourceId()」のラベルで、ドキュメント「memory/getThreadsByResourceId」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc..getThreadsByResourceIdPaginated()": {
+    "message": ".getThreadsByResourceIdPaginated()",
+    "description": "サイドバー「referenceSidebar」にある、ドキュメント memory/getThreadsByResourceIdPaginated へのリンク項目「.getThreadsByResourceIdPaginated()」のラベル"
+  },
+  "sidebar.referenceSidebar.doc..deleteMessages()": {
+    "message": ".deleteMessages()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.deleteMessages()」のラベル。ドキュメント「memory/deleteMessages」へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.rerank()": {
+    "message": "rerank()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「rerank()」のラベルで、ドキュメント「rag/rerank」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Embed": {
+    "message": "埋め込み",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Embed」のラベル。ドキュメント「rag/embeddings」へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.rerankWithScorer()": {
+    "message": "rerankWithScorer()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「rerankWithScorer()」のラベルで、ドキュメント「rag/rerankWithScorer」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc.MDocument": {
+    "message": "Mドキュメント",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「MDocument」のラベルで、ドキュメント「rag/document」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.GraphRAG": {
+    "message": "GraphRAG",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「GraphRAG」のラベル。ドキュメント「rag/graph-rag」へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.DatabaseConfig": {
+    "message": "DatabaseConfig",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「DatabaseConfig」のラベルで、ドキュメント「rag/database-config」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.ExtractParams": {
+    "message": "ExtractParams",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「ExtractParams」のラベルで、ドキュメント「rag/extract-params」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Metadata Filters": {
+    "message": "メタデータフィルタ",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Metadata Filters」のラベル。ドキュメント「rag/metadata-filters」へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.Reference: .chunk()": {
+    "message": "参照: .chunk()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Reference: .chunk()」のラベル（ドキュメント「rag/chunk」へのリンク）"
+  },
+  "sidebar.referenceSidebar.doc.LibSQL Storage": {
+    "message": "LibSQL ストレージ",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「LibSQL Storage」のラベル（ドキュメント storage/libsql へのリンク）"
+  },
+  "sidebar.referenceSidebar.doc.PostgreSQL Storage": {
+    "message": "PostgreSQL ストレージ",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「PostgreSQL Storage」のラベルで、ドキュメント storage/postgresql へリンクします"
+  },
+  "sidebar.referenceSidebar.doc.Upstash Storage": {
+    "message": "Upstash Storage",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Upstash Storage」のラベルで、ドキュメント「storage/upstash」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Cloudflare KV Storage": {
+    "message": "Cloudflare KV ストレージ",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Cloudflare KV Storage」のラベルで、ドキュメント「storage/cloudflare」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.DynamoDB Storage": {
+    "message": "DynamoDB のストレージ",
+    "description": "サイドバー「referenceSidebar」にある、ドキュメント「storage/dynamodb」へのリンクを持つドキュメント項目「DynamoDB Storage」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.Cloudflare D1 Storage": {
+    "message": "Cloudflare D1 ストレージ",
+    "description": "サイドバー「referenceSidebar」で、ドキュメント storage/cloudflare-d1 へリンクするドキュメント項目「Cloudflare D1 Storage」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.LanceDB Storage": {
+    "message": "LanceDB ストレージ",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「LanceDB Storage」のラベル。リンク先はドキュメント「storage/lance」。"
+  },
+  "sidebar.referenceSidebar.doc.MongoDB Storage": {
+    "message": "MongoDB ストレージ",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「MongoDB Storage」のラベルで、ドキュメント「storage/mongodb」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Astra Vector Store": {
+    "message": "Astra Vector Store",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Astra Vector Store」のラベルで、ドキュメント vectors/astra へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Lance Vector Store": {
+    "message": "Lance ベクトルストア",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Lance Vector Store」のラベルで、ドキュメント「vectors/lance」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Cloudflare Vector Store": {
+    "message": "Cloudflare ベクター ストア",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Cloudflare Vector Store」のラベル。リンク先はドキュメント「vectors/vectorize」。"
+  },
+  "sidebar.referenceSidebar.doc.LibSQLVector Store": {
+    "message": "LibSQLベクトルストア",
+    "description": "サイドバー「referenceSidebar」にある、ドキュメント vectors/libsql へのリンク「LibSQLVector Store」ドキュメント項目のラベル"
+  },
+  "sidebar.referenceSidebar.doc.Qdrant Vector Store": {
+    "message": "Qdrant ベクトルストア",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Qdrant Vector Store」のラベル。ドキュメント vectors/qdrant へのリンクです。"
+  },
+  "sidebar.referenceSidebar.doc.OpenSearch Vector Store": {
+    "message": "OpenSearch ベクターストア",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「OpenSearch Vector Store」のラベルで、ドキュメント vectors/opensearch へリンクしています"
+  },
+  "sidebar.referenceSidebar.doc.Pinecone Vector Store": {
+    "message": "Pinecone ベクトルストア",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Pinecone Vector Store」のラベル。ドキュメント「vectors/pinecone」へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.MongoDB Vector Store": {
+    "message": "MongoDB ベクトルストア",
+    "description": "サイドバー「referenceSidebar」にある、ドキュメント項目「MongoDB Vector Store」（ドキュメント vectors/mongodb へのリンク）のラベル"
+  },
+  "sidebar.referenceSidebar.doc.Amazon S3 Vectors Store": {
+    "message": "Amazon S3 ベクター ストア",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Amazon S3 Vectors Store」のラベルで、ドキュメント「vectors/s3vectors」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Turbopuffer Vector Store": {
+    "message": "Turbopuffer ベクトルストア",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「Turbopuffer Vector Store」のラベルで、ドキュメント「vectors/turbopuffer」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Upstash Vector Store": {
+    "message": "Upstash ベクトルストア",
+    "description": "サイドバー「referenceSidebar」にある、ドキュメント vectors/upstash へリンクするドキュメント項目「Upstash Vector Store」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.Couchbase Vector Store": {
+    "message": "Couchbase ベクトルストア",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Couchbase Vector Store」のラベルで、ドキュメント vectors/couchbase へリンクします"
+  },
+  "sidebar.referenceSidebar.doc.Chroma Vector Store": {
+    "message": "Chroma ベクトルストア",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Chroma Vector Store」のラベルで、ドキュメント vectors/chroma へリンクしています"
+  },
+  "sidebar.referenceSidebar.doc.PG Vector Store": {
+    "message": "PGVector ストア",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「PG Vector Store」のラベルで、ドキュメント vectors/pg へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Agents API": {
+    "message": "Agents API",
+    "description": "サイドバー「referenceSidebar」で、ドキュメント client-js/agents へのリンクに使われるドキュメント項目「Agents API」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.Memory API": {
+    "message": "メモリ API",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Memory API」のラベルで、ドキュメント client-js/memory へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Tools API": {
+    "message": "ツールAPI",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Tools API」のラベルで、ドキュメント client-js/tools へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Workflows API": {
+    "message": "ワークフロー API",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Workflows API」のラベルで、doc client-js/workflows へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Vectors API": {
+    "message": "ベクター API",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「Vectors API」のラベルで、ドキュメント client-js/vectors にリンクしています"
+  },
+  "sidebar.referenceSidebar.doc.Logs API": {
+    "message": "ログ API",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Logs API」のラベルで、doc client-js/logs へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Telemetry API": {
+    "message": "テレメトリー API",
+    "description": "サイドバー「referenceSidebar」で、ドキュメント client-js/telemetry へのリンクに使われるドキュメント項目「Telemetry API」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.Observability API": {
+    "message": "オブザーバビリティ API",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Observability API」のラベルで、ドキュメント client-js/observability へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Workflows (Legacy) API": {
+    "message": "ワークフロー（レガシー）API",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Workflows (Legacy) API」のラベルで、ドキュメント client-js/workflows-legacy へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Error Handling": {
+    "message": "エラーハンドリング",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Error Handling」のラベルで、ドキュメント client-js/error-handling へのリンクです。"
+  },
+  "sidebar.referenceSidebar.doc.Mastra Client SDK": {
+    "message": "Mastra クライアント SDK",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Mastra Client SDK」のラベル。doc client-js/mastra-client へのリンク。"
+  },
+  "sidebar.referenceSidebar.doc.AITracing": {
+    "message": "AIトレーシング",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「AITracing」のラベルで、ドキュメント「observability/ai-tracing/ai-tracing」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Configuration": {
+    "message": "設定",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Configuration」のラベルで、ドキュメント observability/ai-tracing/configuration へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Span": {
+    "message": "スパン",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Span」のラベルで、ドキュメント observability/ai-tracing/span へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Interfaces": {
+    "message": "インタフェース",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Interfaces」のラベルで、ドキュメント observability/ai-tracing/interfaces へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.ArizeExporter": {
+    "message": "ArizeExporter",
+    "description": "サイドバー「referenceSidebar」内で、ドキュメント observability/ai-tracing/exporters/arize にリンクするドキュメント項目「ArizeExporter」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.CloudExporter": {
+    "message": "CloudExporter",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「CloudExporter」のラベルで、ドキュメント observability/ai-tracing/exporters/cloud-exporter へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.ConsoleExporter": {
+    "message": "ConsoleExporter",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「ConsoleExporter」のラベルで、ドキュメント observability/ai-tracing/exporters/console-exporter へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.LangSmithExporter": {
+    "message": "LangSmithExporter",
+    "description": "サイドバー「referenceSidebar」で、ドキュメント observability/ai-tracing/exporters/langsmith へのリンクになっている、ドキュメント項目「LangSmithExporter」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.LangfuseExporter": {
+    "message": "LangfuseExporter",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「LangfuseExporter」のラベル。リンク先はドキュメント observability/ai-tracing/exporters/langfuse"
+  },
+  "sidebar.referenceSidebar.doc.OtelExporter": {
+    "message": "OtelExporter",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「OtelExporter」のラベル（ドキュメント observability/ai-tracing/exporters/otel へのリンク）"
+  },
+  "sidebar.referenceSidebar.doc.BraintrustExporter": {
+    "message": "BraintrustExporter",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「BraintrustExporter」のラベルで、ドキュメント observability/ai-tracing/exporters/braintrust へリンクします"
+  },
+  "sidebar.referenceSidebar.doc.DefaultExporter": {
+    "message": "DefaultExporter",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「DefaultExporter」のラベル。リンク先はドキュメント「observability/ai-tracing/exporters/default-exporter」"
+  },
+  "sidebar.referenceSidebar.doc.SensitiveDataFilter": {
+    "message": "機密データフィルター",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「SensitiveDataFilter」のラベルで、ドキュメント observability/ai-tracing/processors/sensitive-data-filter へリンクします"
+  },
+  "sidebar.referenceSidebar.doc.PinoLogger": {
+    "message": "PinoLogger",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「PinoLogger」のラベル。ドキュメント「observability/logging/pino-logger」へのリンク。"
+  },
+  "sidebar.referenceSidebar.doc.OtelConfig": {
+    "message": "Otel設定",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「OtelConfig」のラベル。リンク先はドキュメント「observability/otel-tracing/otel-config」。"
+  },
+  "sidebar.referenceSidebar.doc.Traceloop": {
+    "message": "Traceloop",
+    "description": "サイドバー「referenceSidebar」にある、ドキュメント observability/otel-tracing/providers/traceloop へのリンクとなるドキュメントアイテム「Traceloop」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.Dash0": {
+    "message": "Dash0",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Dash0」のラベルで、ドキュメント「observability/otel-tracing/providers/dash0」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.New Relic": {
+    "message": "New Relic",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「New Relic」のラベル。リンク先はドキュメント observability/otel-tracing/providers/new-relic"
+  },
+  "sidebar.referenceSidebar.doc.LangWatch": {
+    "message": "LangWatch",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「LangWatch」のラベル。リンク先はドキュメント「observability/otel-tracing/providers/langwatch」。"
+  },
+  "sidebar.referenceSidebar.doc.OTLP Providers": {
+    "message": "OTLP プロバイダ",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「OTLP Providers」のラベル。ドキュメント observability/otel-tracing/providers/index へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.LangSmith": {
+    "message": "LangSmith",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「LangSmith」のラベルで、ドキュメント observability/otel-tracing/providers/langsmith へリンクします"
+  },
+  "sidebar.referenceSidebar.doc.Langfuse": {
+    "message": "Langfuse",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Langfuse」のラベル。リンク先はドキュメント observability/otel-tracing/providers/langfuse。"
+  },
+  "sidebar.referenceSidebar.doc.Arize AX": {
+    "message": "Arize AX",
+    "description": "サイドバー「referenceSidebar」で、ドキュメント observability/otel-tracing/providers/arize-ax へリンクしているドキュメント項目「Arize AX」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.Laminar": {
+    "message": "層流",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Laminar」のラベル。リンク先はドキュメント「observability/otel-tracing/providers/laminar」。"
+  },
+  "sidebar.referenceSidebar.doc.Braintrust": {
+    "message": "ブレイントラスト",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Braintrust」のラベルで、ドキュメント observability/otel-tracing/providers/braintrust へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.SigNoz": {
+    "message": "SigNoz",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「SigNoz」のラベルで、ドキュメント observability/otel-tracing/providers/signoz へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.Arize Phoenix": {
+    "message": "Arize Phoenix",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「Arize Phoenix」のラベル。ドキュメント observability/otel-tracing/providers/arize-phoenix へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.Keywords AI": {
+    "message": "Keywords AI",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「Keywords AI」のラベル。ドキュメント observability/otel-tracing/providers/keywordsai へのリンク。"
+  },
+  "sidebar.referenceSidebar.doc.KeywordCoverageMetric": {
+    "message": "KeywordCoverageMetric",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「KeywordCoverageMetric」のラベル。ドキュメント「evals/keyword-coverage」へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.ToneConsistencyMetric": {
+    "message": "トーン一貫性メトリック",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「ToneConsistencyMetric」のラベルで、ドキュメント「evals/tone-consistency」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc.ContentSimilarityMetric": {
+    "message": "ContentSimilarityMetric（コンテンツ類似度指標）",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「ContentSimilarityMetric」のラベルで、ドキュメント evals/content-similarity へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.ContextRelevancyMetric": {
+    "message": "コンテキスト関連性メトリクス",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「ContextRelevancyMetric」のラベル（ドキュメント「evals/context-relevancy」へのリンク）"
+  },
+  "sidebar.referenceSidebar.doc.AnswerRelevancyMetric": {
+    "message": "回答関連性メトリック",
+    "description": "サイドバー「referenceSidebar」で、ドキュメント「evals/answer-relevancy」へリンクしているドキュメント項目「AnswerRelevancyMetric」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.ContextPrecisionMetric": {
+    "message": "ContextPrecisionMetric",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「ContextPrecisionMetric」のラベル。ドキュメント evals/context-precision へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.ContextualRecallMetric": {
+    "message": "ContextualRecallMetric",
+    "description": "サイドバー「referenceSidebar」内のドキュメント evals/contextual-recall へのリンクであるドキュメント項目「ContextualRecallMetric」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.ContextPositionMetric": {
+    "message": "ContextPositionMetric（コンテキスト位置指標）",
+    "description": "サイドバー「referenceSidebar」のドキュメント項目「ContextPositionMetric」のラベルで、ドキュメント「evals/context-position」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.TextualDifferenceMetric": {
+    "message": "TextualDifferenceMetric",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「TextualDifferenceMetric」のラベル（ドキュメント evals/textual-difference へのリンク）"
+  },
+  "sidebar.referenceSidebar.doc.PromptAlignmentMetric": {
+    "message": "PromptAlignmentMetric",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「PromptAlignmentMetric」のラベルで、ドキュメント「evals/prompt-alignment」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Bias": {
+    "message": "偏り",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Bias」のラベルで、ドキュメント「scorers/bias」へリンクしています"
+  },
+  "sidebar.referenceSidebar.doc.Completeness": {
+    "message": "網羅性",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Completeness」のラベル。ドキュメント「scorers/completeness」へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.Faithfulness": {
+    "message": "忠実",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Faithfulness」のラベルで、ドキュメント「scorers/faithfulness」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Hallucination": {
+    "message": "幻覚",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Hallucination」のラベル（ドキュメント scorers/hallucination へのリンク）"
+  },
+  "sidebar.referenceSidebar.doc.Toxicity": {
+    "message": "毒性",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Toxicity」のラベルで、ドキュメント「scorers/toxicity」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Keyword Coverage Scorer": {
+    "message": "キーワード網羅度スコア",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Keyword Coverage Scorer」のラベルで、ドキュメント「scorers/keyword-coverage」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Tone Consistency Scorer": {
+    "message": "トーン一貫性スコア",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Tone Consistency Scorer」のラベル（ドキュメント scorers/tone-consistency へのリンク）"
+  },
+  "sidebar.referenceSidebar.doc.Noise Sensitivity Scorer (CI/Testing Only)": {
+    "message": "ノイズ感受性スコア（CI／テスト専用）",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Noise Sensitivity Scorer（CI/Testing Only）」のラベルで、ドキュメント「scorers/noise-sensitivity」へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.MastraScorer": {
+    "message": "MastraScorer",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「MastraScorer」のラベルで、ドキュメント「scorers/mastra-scorer」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.createScorer": {
+    "message": "createScorer",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「createScorer」のラベルで、ドキュメント「scorers/create-scorer」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc.Content Similarity Scorer": {
+    "message": "コンテンツ類似度スコア",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Content Similarity Scorer」のラベル。ドキュメント scorers/content-similarity へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.runExperiment": {
+    "message": "runExperiment",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「runExperiment」のラベルで、ドキュメント「scorers/run-experiment」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Answer Relevancy Scorer": {
+    "message": "回答関連度スコアラー",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Answer Relevancy Scorer」のラベル。ドキュメント「scorers/answer-relevancy」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc.Context Precision Scorer": {
+    "message": "コンテキスト精度スコアラー",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Context Precision Scorer」のラベルで、ドキュメント「scorers/context-precision」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Answer Similarity Scorer": {
+    "message": "回答類似度スコア",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Answer Similarity Scorer」のラベルで、ドキュメント「scorers/answer-similarity」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc.Context Relevance Scorer": {
+    "message": "コンテキスト関連度スコアラー",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Context Relevance Scorer」のラベルで、ドキュメント「scorers/context-relevance」へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.Tool Call Accuracy Scorers": {
+    "message": "ツール呼び出し精度スコア",
+    "description": "サイドバー「referenceSidebar」で、ドキュメント scorers/tool-call-accuracy へのリンクに使われるドキュメント項目「Tool Call Accuracy Scorers」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.Textual Difference Scorer": {
+    "message": "テキスト差異スコアラー",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Textual Difference Scorer」のラベルで、ドキュメント「scorers/textual-difference」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Prompt Alignment Scorer": {
+    "message": "プロンプト整合性スコアラー",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Prompt Alignment Scorer」のラベルで、ドキュメント「scorers/prompt-alignment」へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.LanguageDetector": {
+    "message": "LanguageDetector（言語判定）",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「LanguageDetector」のラベルで、ドキュメント「processors/language-detector」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.BatchPartsProcessor": {
+    "message": "BatchPartsProcessor",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「BatchPartsProcessor」のラベル。リンク先はドキュメント「processors/batch-parts-processor」です。"
+  },
+  "sidebar.referenceSidebar.doc.ModerationProcessor": {
+    "message": "ModerationProcessor",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「ModerationProcessor」のラベルで、ドキュメント「processors/moderation-processor」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.PromptInjectionDetector": {
+    "message": "PromptInjectionDetector",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「PromptInjectionDetector」のラベルで、ドキュメント「processors/prompt-injection-detector」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.PIIDetector": {
+    "message": "PII検出器",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「PIIDetector」のラベル。ドキュメント processors/pii-detector へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.UnicodeNormalizer": {
+    "message": "UnicodeNormalizer",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「UnicodeNormalizer」のラベルで、ドキュメント processors/unicode-normalizer へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.TokenLimiterProcessor": {
+    "message": "TokenLimiterProcessor",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「TokenLimiterProcessor」のラベルで、ドキュメント processors/token-limiter-processor へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.SystemPromptScrubber": {
+    "message": "SystemPromptScrubber",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「SystemPromptScrubber」のラベルで、ドキュメント processors/system-prompt-scrubber へリンクします"
+  },
+  "sidebar.referenceSidebar.doc.JSON Web Token": {
+    "message": "JSON Webトークン",
+    "description": "サイドバー「referenceSidebar」で、ドキュメント auth/jwt にリンクしているドキュメント項目「JSON Web Token」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.Clerk": {
+    "message": "Clerk",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Clerk」のラベル。ドキュメント「auth/clerk」へリンクします。"
+  },
+  "sidebar.referenceSidebar.doc.Supabase": {
+    "message": "Supabase",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Supabase」のラベル。ドキュメント auth/supabase へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.Firebase": {
+    "message": "Firebase",
+    "description": "サイドバー「referenceSidebar」にある、ドキュメント「auth/firebase」へリンクするドキュメント項目「Firebase」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.WorkOS": {
+    "message": "WorkOS",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「WorkOS」のラベルで、ドキュメント auth/workos へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Auth0": {
+    "message": "Auth0",
+    "description": "サイドバー「referenceSidebar」で、ドキュメント auth/auth0 にリンクしているドキュメント項目「Auth0」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.Mastra Voice": {
+    "message": "Mastra Voice",
+    "description": "サイドバー「referenceSidebar」で、ドキュメント「voice/mastra-voice」へリンクするドキュメント項目「Mastra Voice」のラベル"
+  },
+  "sidebar.referenceSidebar.doc.Composite Voice": {
+    "message": "合成音声",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Composite Voice」のラベル。ドキュメント「voice/composite-voice」へのリンク。"
+  },
+  "sidebar.referenceSidebar.doc..speak()": {
+    "message": ".speak()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.speak()」のラベル。ドキュメント voice/voice.speak へのリンクです。"
+  },
+  "sidebar.referenceSidebar.doc..listen()": {
+    "message": ".listen()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.listen()」のラベルで、ドキュメント voice/voice.listen へのリンク"
+  },
+  "sidebar.referenceSidebar.doc..getSpeakers()": {
+    "message": ".getSpeakers()",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.getSpeakers()」のラベルで、ドキュメント「voice/voice.getSpeakers」へリンクしています"
+  },
+  "sidebar.referenceSidebar.doc..connect() (rt.)": {
+    "message": ".connect()（rt）",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.connect() (rt.)」のラベルで、ドキュメント voice/voice.connect へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..send() (rt.)": {
+    "message": ".send()（右回転）",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「.send() (rt.)」のラベル。ドキュメント voice/voice.send へのリンク"
+  },
+  "sidebar.referenceSidebar.doc..answer() (rt.)": {
+    "message": ".answer()（右）",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.answer() (rt.)」のラベル。リンク先はドキュメント「voice/voice.answer」"
+  },
+  "sidebar.referenceSidebar.doc..on() (rt.)": {
+    "message": ".on()（右寄り）",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.on() (rt.)」のラベルで、ドキュメント「voice/voice.on」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Events (rt.)": {
+    "message": "イベント（右）",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Events (rt.)」のラベルで、ドキュメント「voice/voice.events」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc..off() (rt.)": {
+    "message": ".off() (rt.)",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.off() (rt.)」のラベル。ドキュメント voice/voice.off へのリンク。"
+  },
+  "sidebar.referenceSidebar.doc..close() (rt.)": {
+    "message": ".close()（rt.）",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.close() (rt.)」のラベルで、ドキュメント voice/voice.close へのリンク"
+  },
+  "sidebar.referenceSidebar.doc..addInstructions() (rt.)": {
+    "message": ".addInstructions()（rt）",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.addInstructions() (rt.)」のラベルで、ドキュメント「voice/voice.addInstructions」へリンクしています"
+  },
+  "sidebar.referenceSidebar.doc..addTools() (rt.)": {
+    "message": ".addTools()（rt）",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.addTools() (rt.)」のラベルで、ドキュメント「voice/voice.addTools」へリンクします"
+  },
+  "sidebar.referenceSidebar.doc..updateConfig() (rt.)": {
+    "message": ".updateConfig()（RT）",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「.updateConfig() (rt.)」のラベルで、ドキュメント voice/voice.updateConfig へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.Deepgram": {
+    "message": "Deepgram",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Deepgram」のラベルで、ドキュメント「voice/deepgram」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.ElevenLabs": {
+    "message": "ElevenLabs",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「ElevenLabs」のラベル。doc voice/elevenlabs へのリンク"
+  },
+  "sidebar.referenceSidebar.doc.Google": {
+    "message": "Google",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Google」のラベルで、ドキュメント「voice/google」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.Google Gemini Live": {
+    "message": "Google Gemini ライブ",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Google Gemini Live」のラベル。リンク先はドキュメント voice/google-gemini-live"
+  },
+  "sidebar.referenceSidebar.doc.Murf": {
+    "message": "Murf",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Murf」のラベルで、ドキュメント「voice/murf」へのリンクです"
+  },
+  "sidebar.referenceSidebar.doc.OpenAI Realtime": {
     "message": "OpenAI リアルタイム",
     "description": "サイドバー「referenceSidebar」にあるドキュメント項目「OpenAI Realtime」のラベル。リンク先はドキュメント「voice/openai-realtime」。"
   },
-  "sidebar.referenceSidebar.doc.reference.voice.playai": {
+  "sidebar.referenceSidebar.doc.PlayAI": {
     "message": "PlayAI",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「PlayAI」のラベルで、ドキュメント「voice/playai」へのリンクです"
+    "description": "サイドバー「referenceSidebar」にある、ドキュメント voice/playai へのリンクを持つドキュメント項目「PlayAI」のラベル"
   },
-  "sidebar.referenceSidebar.doc.reference.voice.sarvam": {
-    "message": "Sarvam",
-    "description": "サイドバー「referenceSidebar」にある、ドキュメント「voice/sarvam」へのリンクを持つドキュメント項目「Sarvam」のラベル"
+  "sidebar.referenceSidebar.doc.Sarvam": {
+    "message": "サルヴァム",
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Sarvam」のラベルで、ドキュメント voice/sarvam へのリンクです"
   },
-  "sidebar.referenceSidebar.doc.reference.voice.speechify": {
+  "sidebar.referenceSidebar.doc.Speechify": {
     "message": "Speechify",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Speechify」のラベル。ドキュメント「voice/speechify」へのリンク。"
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Speechify」のラベル。ドキュメント「voice/speechify」へのリンク"
   },
-  "sidebar.referenceSidebar.doc.reference.voice.azure": {
+  "sidebar.referenceSidebar.doc.Azure": {
     "message": "Azure",
-    "description": "サイドバー「referenceSidebar」にある、ドキュメント voice/azure へのリンクを持つドキュメント項目「Azure」のラベル"
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Azure」のラベルで、ドキュメント「voice/azure」へのリンクです"
   },
-  "sidebar.referenceSidebar.doc.reference.voice.cloudflare": {
+  "sidebar.referenceSidebar.doc.Cloudflare": {
     "message": "Cloudflare",
-    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Cloudflare」のラベルで、ドキュメント voice/cloudflare へリンクします"
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Cloudflare」のラベルで、ドキュメント「voice/cloudflare」へのリンクです"
   },
-  "sidebar.referenceSidebar.doc.reference.templates.overview": {
+  "sidebar.referenceSidebar.doc.Overview": {
     "message": "概要",
-    "description": "サイドバー「referenceSidebar」内のドキュメント項目「Overview」のラベルで、ドキュメント「templates/overview」へのリンクです"
+    "description": "サイドバー「referenceSidebar」にあるドキュメント項目「Overview」のラベルで、ドキュメント「templates/overview」へリンクします"
   }
 }

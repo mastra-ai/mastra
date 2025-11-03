@@ -38,11 +38,11 @@ npm install @mastra/libsql
   ### `schema` を用いたワーキングメモリ
 </div>
 
-`workingMemory.enabled` を `true` に設定してワーキングメモリを有効にします。これにより、エージェントはやり取りの間で構造化された情報を保持できます。
+`workingMemory.enabled` を `true` に設定してワーキングメモリを有効にします。これにより、エージェントはやり取りの合間でも構造化された情報を記憶できるようになります。
 
-`schema` を指定すると、エージェントが情報を記憶する際の形式を定義できます。この例では、タスクをアクティブと完了の2つのリストに分けています。
+`schema` を指定すると、エージェントが情報を記憶する形を定義できます。この例では、タスクを「進行中」と「完了」のリストに分けています。
 
-スレッドは関連するメッセージを会話単位にまとめます。`generateTitle` を有効にすると、各スレッドに内容に基づく説明的な名前が自動的に付けられます。
+スレッドは関連するメッセージを会話としてまとめます。`generateTitle` が有効な場合、各スレッドには内容に基づく説明的な名前が自動的に付けられます。
 
 ```typescript title="src/mastra/agents/example-working-memory-schema-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
@@ -56,10 +56,10 @@ export const workingMemorySchemaAgent = new Agent({
   instructions: `
     あなたはToDoリストAIエージェントです。
     会話開始時には、必ず現在のリストを表示してください。
-    各タスクには、インデックス番号付きのタイトル、期限、説明、ステータス、推定時間を含めてください。
-    各フィールドには絵文字を使用してください。
-    サブタスクは箇条書きで対応してください。
-    タイムボクシングに役立てるため、時間の見積もりを尋ねてください。
+    各タスクには、インデックス番号付きのタイトル、期限、説明、ステータス、所要時間の見積もりを含めてください。
+    各項目には絵文字を使用してください。
+    サブタスクは箇条書きで表示してください。
+    タイムボクシングに役立てるため、所要時間の見積もりを確認してください。
   `,
   model: openai("gpt-4o"),
   memory: new Memory({
@@ -82,7 +82,7 @@ export const workingMemorySchemaAgent = new Agent({
         }),
       },
       threads: {
-        generateTitle: true, // 自動タイトル生成を明示的に有効化
+        generateTitle: true,
       },
     },
   }),

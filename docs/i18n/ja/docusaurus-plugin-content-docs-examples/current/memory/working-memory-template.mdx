@@ -38,11 +38,11 @@ npm install @mastra/libsql
   ### `template` を用いたワーキングメモリ
 </div>
 
-`workingMemory.enabled` を `true` に設定してワーキングメモリを有効化します。これにより、エージェントは対話間で構造化された情報を保持できるようになります。
+`workingMemory.enabled` を `true` に設定すると、ワーキングメモリが有効になります。これにより、エージェントはやり取りの間で構造化情報を保持できます。
 
-`template` を指定すると、記憶すべき内容の構造を定義できます。この例では、テンプレートは Markdown 形式を用いて、タスクを「進行中」と「完了」に整理します。
+`template` を指定すると、記憶すべき内容の構造を定義できます。次の例では、テンプレートがタスクを Markdown の書式でアクティブ項目と完了項目に整理します。
 
-スレッドは関連するメッセージを会話としてまとめます。`generateTitle` を有効にすると、各スレッドには内容に基づくわかりやすい名前が自動的に付けられます。
+スレッドは関連するメッセージを会話としてまとめます。`generateTitle` が有効な場合、各スレッドには内容に基づく説明的な名前が自動的に付けられます。
 
 ```typescript title="src/mastra/agents/example-working-memory-template-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
@@ -55,9 +55,9 @@ export const workingMemoryTemplateAgent = new Agent({
   instructions: `
     あなたはToDoリストAIエージェントです。
     会話開始時には、必ず現在のリストを表示してください。
-    各タスクには、インデックス番号付きのタイトル、期限、説明、ステータス、所要時間の見積もりを含めてください。
+    各タスクには、番号付きタイトル、期限、説明、ステータス、所要時間の見積もりを含めてください。
     各項目には絵文字を使用してください。
-    サブタスクは箇条書きで表示してください。
+    サブタスクは箇条書きで対応してください。
     タイムボックス化を支援するため、所要時間の見積もりを尋ねてください。
   `,
   model: openai("gpt-4o"),
@@ -75,13 +75,13 @@ export const workingMemoryTemplateAgent = new Agent({
             - 期限: 2028年2月7日
             - 説明: これはサンプルタスクです
             - ステータス: 未着手
-            - 所要時間の見積もり: 2時間
+            - 所要時間: 2時間
 
           ## 完了した項目
           - まだありません`,
       },
       threads: {
-        generateTitle: true, // 自動タイトル生成を明示的に有効化
+        generateTitle: true,
       },
     },
   }),

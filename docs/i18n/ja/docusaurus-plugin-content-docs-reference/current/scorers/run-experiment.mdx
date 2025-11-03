@@ -91,26 +91,26 @@ console.log(`${result.summary.totalItems} 件のアイテムを処理しまし�
       name: "input",
       type: "string | string[] | CoreMessage[] | any",
       description:
-        "ターゲットへの入力データ。エージェントの場合はメッセージまたは文字列、ワークフローの場合はワークフローの入力データ。",
+        "ターゲットへの入力データ。エージェントの場合: メッセージまたは文字列。ワークフローの場合: ワークフローの入力データ。",
       isOptional: false,
     },
     {
       name: "groundTruth",
       type: "any",
       description:
-        "スコアリング時の比較に用いる期待出力または参照出力。",
+        "スコアリング時の比較に用いる期待値または参照出力。",
       isOptional: true,
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      description: "実行時にターゲットへ渡すランタイムコンテキスト。",
+      name: "requestContext",
+      type: "RequestContext",
+      description: "実行時にターゲットへ渡すリクエストコンテキスト。",
       isOptional: true,
     },
     {
       name: "tracingContext",
       type: "TracingContext",
-      description: "可観測性やデバッグのためのトレーシングコンテキスト。",
+      description: "可観測性とデバッグのためのトレーシングコンテキスト。",
       isOptional: true,
     },
   ]}

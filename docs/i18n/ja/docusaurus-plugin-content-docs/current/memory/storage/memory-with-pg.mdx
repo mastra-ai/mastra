@@ -31,7 +31,7 @@ npm install @mastra/pg
   ## エージェントにメモリを追加する
 </div>
 
-エージェントに PostgreSQL のメモリ機能を追加するには、`Memory` クラスを使用し、`PostgresStore` を用いて新しい `storage` キーを作成します。`connectionString` には、リモートの接続先またはローカルのデータベース接続を指定できます。
+エージェントに PostgreSQL のメモリを追加するには、`Memory` クラスを使い、`PostgresStore` を指定して新しい `storage` キーを作成します。`connectionString` はリモート先でもローカルのデータベース接続でも利用できます。
 
 ```typescript title="src/mastra/agents/example-pg-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
@@ -49,7 +49,7 @@ export const pgAgent = new Agent({
       connectionString: process.env.DATABASE_URL!,
     }),
     options: {
-      generateTitle: true, // 自動タイトル生成を明示的に有効にする
+      generateTitle: true,
     },
   }),
 });

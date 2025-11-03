@@ -30,7 +30,7 @@ import TabItem from "@theme/TabItem";
   ## ネイティブ検索ツールを使う
 </div>
 
-一部の LLM プロバイダーには、追加の API 連携なしでそのまま使える組み込みのウェブ検索機能があります。OpenAI の GPT-4o-mini と Google の Gemini 2.5 Flash は、いずれも生成中にモデルが呼び出せるネイティブ検索ツールを提供しています。
+いくつかの LLM プロバイダーには、追加の API 連携なしでそのまま使える組み込みのウェブ検索機能があります。OpenAI の GPT-4o-mini と Google の Gemini 2.5 Flash は、いずれも生成中にモデルが呼び出せるネイティブ検索ツールを提供しています。
 
 <Steps>
 
@@ -40,10 +40,14 @@ import TabItem from "@theme/TabItem";
 
 <Tabs>
   <TabItem value="openai" label="Open AI">
-    ```bash copy npm install @ai-sdk/openai ```
+    ```bash copy
+    npm install @ai-sdk/openai
+    ```
   </TabItem>
   <TabItem value="gemini" label="Gemini">
-    ```bash copy npm install @ai-sdk/google ```
+    ```bash copy
+    npm install @ai-sdk/google
+    ```
   </TabItem>
 </Tabs>
 
@@ -156,7 +160,7 @@ Mastra の [Playground](/docs/getting-started/studio) で `mastra dev` コマン
 mastra dev
 ```
 
-Playground で「Search Agent」に移動し、次のように質問してください: “What happened last week in AI news?”
+Playground 内で **"Search Agent"** に移動し、次のように尋ねてみてください: "What happened last week in AI news?"
 
 </StepItem>
 

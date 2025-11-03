@@ -7,12 +7,12 @@ description: "Mastra のメモリシステムが、作業メモリ、会話履�
   # メモリのスレッドとリソース
 </div>
 
-Mastra はメモリをスレッドとして整理します。スレッドは関連するやり取りをまとめた記録で、次の2つの識別子を使用します。
+Mastra はメモリをスレッドとして整理します。スレッドは関連するやり取りをまとめた記録で、次の2つの識別子を使用します:
 
-1. **`thread`**: 会話を表すグローバル一意の ID（例: `support_123`）。すべてのリソース間で一意である必要があります。
-2. **`resource`**: スレッドの所有者であるユーザーまたはエンティティ（例: `user_123`、`org_456`）。
+1. **`thread`**: 会話を表すグローバルに一意の ID（例: `support_123`）。すべてのリソースにわたって一意である必要があります。
+2. **`resource`**: スレッドの所有者であるユーザーまたはエンティティ（例: `user_123`, `org_456`）。
 
-`resource` は、同一のユーザーまたはエンティティに紐づくすべてのスレッドにわたってメモリを保持できるようにする[リソーススコープのメモリ](./working-memory#resource-scoped-memory-default)において、特に重要です。
+`resource` は特に [resource-scoped memory](./working-memory#resource-scoped-memory) において重要で、同一のユーザーまたはエンティティに紐づくすべてのスレッド間でメモリを保持できます。
 
 ```typescript {4} showLineNumbers
 const stream = await agent.stream("エージェントへのメッセージ", {
@@ -25,30 +25,32 @@ const stream = await agent.stream("エージェントへのメッセージ", {
 
 :::warning
 
-メモリを設定していても、`thread` と `resource` の両方が指定されない限り、エージェントは情報を保存したり参照したりしません。
+メモリを設定していても、`thread` と `resource` の両方が指定されていない限り、エージェントは情報を保存・参照しません。
 
 :::
 
-> Mastra Playground は `thread` と `resource` の ID を自動的に設定します。独自のアプリケーションでは、各 `.generate()` または `.stream()` の呼び出しごとに手動で指定する必要があります。
+> Mastra Playground は `thread` と `resource` の ID を自動で設定します。独自のアプリケーションでは、各 `.generate()` または `.stream()` の呼び出しごとに、それらを手動で指定する必要があります。
 
 
 <div id="thread-title-generation">
   ### スレッドタイトルの生成
 </div>
 
-Mastra は、ユーザーの最初のメッセージに基づいて、わかりやすいスレッドタイトルを自動生成できます。この機能はデフォルトで無効です。`generateTitle` を `true` に設定して有効にしてください。これにより整理しやすくなり、UI で会話を表示しやすくなります。
+Mastraは、ユーザーの最初のメッセージに基づいて、わかりやすいスレッドタイトルを自動生成できます。`generateTitle` を `true` に設定して有効にしてください。これにより整理しやすくなり、UIで会話を表示するのも簡単になります。
 
 ```typescript {3-7} showLineNumbers
 export const testAgent = new Agent({
   memory: new Memory({
     options: {
-      generateTitle: true, // 自動タイトル生成を明示的に有効にする
+      threads: {
+        generateTitle: true,
+      }
     },
   }),
 });
 ```
 
-> タイトル生成は、エージェントの応答後に非同期で実行され、応答時間には影響しません。詳細と例については、[完全な設定リファレンス](/reference/memory/memory-class)をご覧ください。
+> タイトル生成は、エージェントの応答後に非同期で実行され、応答時間には影響しません。詳細と例については、[完全な構成リファレンス](/reference/memory/memory-class)を参照してください。
 
 
 <div id="optimizing-title-generation">

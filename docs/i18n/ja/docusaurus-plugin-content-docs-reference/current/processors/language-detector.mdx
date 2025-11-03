@@ -1,6 +1,6 @@
 ---
-title: "リファレンス: LanguageDetector | プロセッサ | Mastra ドキュメント"
-description: "Mastra の LanguageDetector に関するドキュメント。言語を検出し、AI の応答内のコンテンツを翻訳できます。"
+title: "リファレンス: Language Detector | プロセッサー | Mastra ドキュメント"
+description: "Mastra の LanguageDetector に関するドキュメント。AI の応答内の言語を検出し、コンテンツを翻訳します。"
 ---
 
 <div id="languagedetector">
@@ -10,24 +10,23 @@ description: "Mastra の LanguageDetector に関するドキュメント。言�
 `LanguageDetector` は、入力テキストの言語を判別し、必要に応じてターゲット言語へ翻訳して処理を統一するための **入力プロセッサ** です。このプロセッサは、受信メッセージの言語を検出し、ターゲット言語への自動翻訳を含む多言語コンテンツの柔軟な取り扱い戦略を提供することで、言語の一貫性を維持するのに役立ちます。
 
 <div id="usage-example">
-  ## 使い方の例
+  ## 使用例
 </div>
 
 ```typescript copy
-import { openai } from "@ai-sdk/openai";
 import { LanguageDetector } from "@mastra/core/processors";
 
 const processor = new LanguageDetector({
-  model: openai("gpt-4.1-nano"),
+  model: "openai/gpt-4.1-nano",
   targetLanguages: ["Japanese", "ja"],
   threshold: 0.8,
-  strategy: "translate",
+  strategy: "translate"
 });
 ```
 
 
 <div id="constructor-parameters">
-  ## コンストラクターのパラメータ
+  ## コンストラクターの引数
 </div>
 
 <PropertiesTable
@@ -35,8 +34,7 @@ const processor = new LanguageDetector({
     {
       name: "options",
       type: "Options",
-      description:
-        "言語検出と翻訳の設定オプション",
+      description: "言語検出および翻訳用の設定オプション",
       isOptional: false,
     },
   ]}
@@ -50,70 +48,63 @@ const processor = new LanguageDetector({
   content={[
     {
       name: "model",
-      type: "MastraLanguageModel",
-      description: "検出/翻訳エージェントのモデル設定",
+      type: "MastraModelConfig",
+      description: "検出／翻訳エージェントのモデル設定",
       isOptional: false,
     },
     {
       name: "targetLanguages",
       type: "string[]",
-      description:
-        "プロジェクトの対象言語。コンテンツが別の言語と検出された場合は翻訳されることがあります。言語名（'English'）または ISO コード（'en'）を指定可能",
+      description: "プロジェクトの対象言語。コンテンツが別の言語と検出された場合は翻訳されることがあります。言語名（'English'）またはISOコード（'en'）を指定可能",
       isOptional: true,
       default: "['English', 'en']",
     },
     {
       name: "threshold",
       type: "number",
-      description:
-        "言語検出の信頼度しきい値（0〜1）。検出信頼度がこのしきい値を超えた場合のみ処理します",
+      description: "言語検出の信頼度閾値（0〜1）。検出信頼度がこの閾値を超えた場合のみ処理を実行",
       isOptional: true,
       default: "0.7",
     },
     {
       name: "strategy",
       type: "'detect' | 'translate' | 'block' | 'warn'",
-      description:
-        "対象外の言語が検出された場合の方針: 'detect' は検出のみ、'translate' は自動で対象言語に翻訳、'block' は対象言語以外のコンテンツを拒否、'warn' は警告を記録しつつ通過を許可",
+      description: "非対象言語が検出された場合の方針：'detect' は検出のみ、'translate' は対象言語へ自動翻訳、'block' は対象言語以外のコンテンツを拒否、'warn' は警告を記録して許可",
       isOptional: true,
       default: "'detect'",
     },
     {
       name: "preserveOriginal",
       type: "boolean",
-      description:
-        "元のコンテンツをメッセージのメタデータに保持するか。監査証跡やデバッグに有用",
+      description: "元のコンテンツをメッセージのメタデータに保持するかどうか。監査やデバッグに有用",
       isOptional: true,
       default: "true",
     },
     {
       name: "instructions",
       type: "string",
-      description:
-        "エージェント向けのカスタム検出用インストラクション。未指定の場合はデフォルトを使用",
+      description: "エージェント向けのカスタム検出指示。未指定の場合はデフォルトの指示を使用",
       isOptional: true,
       default: "undefined",
     },
     {
       name: "minTextLength",
       type: "number",
-      description:
-        "検出を行う最小テキスト長。短いテキストは言語検出の信頼性が低いことが多い",
+      description: "検出を行う最小テキスト長。短いテキストは言語検出の信頼性が低いことが多い",
       isOptional: true,
       default: "10",
     },
     {
       name: "includeDetectionDetails",
       type: "boolean",
-      description: "ログに検出の詳細情報を含めるかどうか",
+      description: "詳細な検出情報をログに含めるかどうか",
       isOptional: true,
       default: "false",
     },
     {
       name: "translationQuality",
       type: "'speed' | 'quality' | 'balanced'",
-      description:
-        "翻訳品質の優先度: 'speed' は速度を優先、'quality' は正確性を優先、'balanced' は速度と品質のバランスを重視",
+      description: "翻訳品質の優先度：'speed' は速度を優先、'quality' は精度を優先、'balanced' は速度と品質のバランスを取る",
       isOptional: true,
       default: "'quality'",
     },
@@ -129,46 +120,43 @@ const processor = new LanguageDetector({
     {
       name: "name",
       type: "string",
-      description: "プロセッサ名。'language-detector' に設定されています",
+      description: "プロセッサ名は 'language-detector' に設定されます",
       isOptional: false,
     },
     {
       name: "processInput",
       type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
-      description:
-        "入力メッセージを処理して言語を検出し、必要に応じて LLM に送信する前にコンテンツを翻訳します",
+      description: "入力メッセージを処理して言語を検出し、必要に応じて LLM に送信する前にコンテンツを翻訳します",
       isOptional: false,
     },
   ]}
 />
 
 <div id="extended-usage-example">
-  ## 拡張された使用例
+  ## 拡張的な使用例
 </div>
 
 ```typescript title="src/mastra/agents/multilingual-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { LanguageDetector } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "multilingual-agent",
   instructions: "あなたは親切なアシスタントです",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new LanguageDetector({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       targetLanguages: ["English", "en"],
       threshold: 0.8,
       strategy: "translate",
       preserveOriginal: true,
-      instructions:
-        "言語を検出し、元の意図を保ちながら英語以外のコンテンツを英語に翻訳する",
+      instructions: "言語を検出し、元の意図を保持しながら英語以外のコンテンツを英語に翻訳します",
       minTextLength: 10,
       includeDetectionDetails: true,
-      translationQuality: "quality",
-    }),
-  ],
+      translationQuality: "quality"
+    })
+  ]
 });
 ```
 
@@ -177,4 +165,4 @@ export const agent = new Agent({
   ## 関連項目
 </div>
 
-- [入力プロセッサ](/docs/agents/guardrails)
+- [ガードレール](/docs/agents/guardrails)

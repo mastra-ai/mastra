@@ -55,7 +55,7 @@ const mastra = new Mastra({
 
 <Tabs>
   <TabItem value="メッセージ" label="メッセージ">
-    会話メッセージとそのメタデータを保存します。各メッセージはスレッドに属し、送信者のロールやメッセージタイプに関するメタデータとともに、実際のコンテンツを含みます。
+    会話メッセージとそのメタデータを保存します。各メッセージはスレッドに属し、送信者のロールやメッセージ種別などのメタデータとともに実際の内容を含みます。
 
     <br />
 
@@ -71,7 +71,7 @@ constraints: [{ type: "primaryKey" }, { type: "nullable", value: false }],
 {
 name: "thread_id",
 type: "uuidv4",
-description: "親スレッドの参照",
+description: "親スレッドへの参照",
 constraints: [
   { type: "foreignKey", value: "threads.id" },
   { type: "nullable", value: false },
@@ -87,7 +87,7 @@ constraints: [{ type: "nullable", value: true }],
 name: "content",
 type: "text",
 description:
-  "V2形式のメッセージ内容を表すJSON。例: `{ format: 2, parts: [...] }`",
+  "V2形式のメッセージ内容のJSON。例: `{ format: 2, parts: [...] }`",
 constraints: [{ type: "nullable", value: false }],
 },
 {
@@ -99,39 +99,39 @@ constraints: [{ type: "nullable", value: false }],
 {
 name: "createdAt",
 type: "timestamp",
-description: "スレッド内でのメッセージの並び順に使用",
+description: "スレッド内でのメッセージの並び替えに使用",
 constraints: [{ type: "nullable", value: false }],
 },
 ]}
     />
 
-    `content` 列には `MastraMessageContentV2` 型に準拠するJSONオブジェクトが含まれます。これは AI SDK の `UIMessage` のメッセージ形状に近づけて設計されています。
+    メッセージの `content` カラムには、AI SDK の `UIMessage` のメッセージ構造に密接に合わせて設計された `MastraMessageContentV2` 型に準拠する JSON オブジェクトが格納されます。
 
     <SchemaTable
       columns={[
 {
 name: "format",
 type: "integer",
-description: "メッセージ形式のバージョン（現在は 2）",
+description: "メッセージフォーマットのバージョン（現在は 2）",
 constraints: [{ type: "nullable", value: false }],
 },
 {
 name: "parts",
 type: "array (JSON)",
 description:
-  "メッセージ部品の配列（text、tool-invocation、file、reasoning など）。この配列内の各要素の構造は `type` によって異なります。",
+  "メッセージパーツ（text、tool-invocation、file、reasoning など）の配列。各項目の構造は `type` によって異なります。",
 constraints: [{ type: "nullable", value: false }],
 },
 {
 name: "experimental_attachments",
 type: "array (JSON)",
-description: "任意のファイル添付の配列",
+description: "任意のファイル添付配列",
 constraints: [{ type: "nullable", value: true }],
 },
 {
 name: "content",
 type: "text",
-description: "メッセージのメインテキスト内容（任意）",
+description: "メッセージのメインテキスト（任意）",
 constraints: [{ type: "nullable", value: true }],
 },
 {
@@ -144,7 +144,7 @@ constraints: [{ type: "nullable", value: true }],
 name: "reasoning",
 type: "object (JSON)",
 description:
-  "アシスタントの応答の背後にある推論プロセスに関する情報（任意）",
+  "アシスタントの応答の背後にある推論過程に関する任意情報",
 constraints: [{ type: "nullable", value: true }],
 },
 {
@@ -158,7 +158,7 @@ constraints: [{ type: "nullable", value: true }],
   </TabItem>
 
   <TabItem value="スレッド" label="スレッド">
-    関連するメッセージをまとめ、リソースに紐づけます。会話に関するメタデータを含みます。
+    関連メッセージをひとまとめにし、リソースに関連付けます。会話に関するメタデータを含みます。
 
     <br />
 
@@ -168,14 +168,14 @@ constraints: [{ type: "nullable", value: true }],
 name: "id",
 type: "uuidv4",
 description:
-  "スレッドの一意な識別子（形式: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`）",
+  "スレッドの一意の識別子（形式: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`）",
 constraints: [{ type: "primaryKey" }, { type: "nullable", value: false }],
 },
 {
 name: "resourceId",
 type: "text",
 description:
-  "このスレッドが紐づく外部リソースの主識別子。関連スレッドのグルーピングや取得に使用します。",
+  "このスレッドが関連付けられている外部リソースの主識別子。関連スレッドのグループ化と取得に使用します。",
 constraints: [{ type: "nullable", value: false }],
 },
 {
@@ -187,7 +187,7 @@ constraints: [{ type: "nullable", value: false }],
 {
 name: "metadata",
 type: "text",
-description: "JSON 文字列として表現したカスタムスレッドメタデータ。例:",
+description: "カスタムスレッドメタデータ（文字列化された JSON）。例:",
 example: {
   category: "support",
   priority: 1,
@@ -201,15 +201,15 @@ constraints: [{ type: "nullable", value: false }],
 {
 name: "updatedAt",
 type: "timestamp",
-description: "スレッドの並び順履歴に使用",
+description: "スレッドの並び順の履歴管理に使用",
 constraints: [{ type: "nullable", value: false }],
 },
 ]}
     />
   </TabItem>
 
-  <TabItem value="リソース" label="リソース">
-    ユーザー固有のデータを、リソース単位のワーキングメモリとして保存します。各リソースはユーザーまたはエンティティを表し、そのユーザーのすべての会話スレッドにわたってワーキングメモリを保持できます。
+  <TabItem value="リソース" label="資料">
+    ユーザー固有のデータを、リソーススコープのワーキングメモリとして保存します。各リソースはユーザーまたはエンティティを表し、そのユーザーのすべての会話スレッド間でワーキングメモリが保持されます。
 
     <br />
 
@@ -219,20 +219,20 @@ constraints: [{ type: "nullable", value: false }],
 name: "id",
 type: "text",
 description:
-  "リソース識別子（ユーザーまたはエンティティ ID）— スレッドやエージェント呼び出しで使用される resourceId と同一",
+  "リソース識別子（ユーザーまたはエンティティのID）— スレッドやエージェント呼び出しで使用される resourceId と同一",
 constraints: [{ type: "primaryKey" }, { type: "nullable", value: false }],
 },
 {
 name: "workingMemory",
 type: "text",
 description:
-  "Markdown テキスト形式の永続的なワーキングメモリデータ。ユーザープロフィール、嗜好、会話スレッドをまたいで保持されるコンテキスト情報を含みます。",
+  "Markdown テキストとして保存される永続的なワーキングメモリデータ。ユーザープロフィール、嗜好、会話スレッド間で保持されるコンテキスト情報を含みます。",
 constraints: [{ type: "nullable", value: true }],
 },
 {
 name: "metadata",
 type: "jsonb",
-description: "JSON 形式の追加リソースメタデータ。例：",
+description: "JSON 形式の追加リソースメタデータ。例:",
 example: {
   preferences: { language: "en", timezone: "UTC" },
   tags: ["premium", "beta-user"],
@@ -253,10 +253,12 @@ constraints: [{ type: "nullable", value: false }],
 },
 ]}
     />
+
+    **注**: このテーブルは、リソーススコープのワーキングメモリをサポートするストレージアダプター（LibSQL、PostgreSQL、Upstash）のみが作成・使用します。その他のストレージアダプターでは、リソーススコープのメモリを使用しようとした場合に、わかりやすいエラーメッセージが返されます。
   </TabItem>
 
   <TabItem value="ワークフロー" label="ワークフロー">
-    ワークフローで `suspend` が呼び出されると、その状態は次の形式で保存されます。`resume` が呼び出されると、その状態が復元されます。
+    ワークフローで `suspend` が呼び出されると、状態は次の形式で保存されます。`resume` が呼び出されると、その状態が復元されます。
 
     <br />
 
@@ -271,13 +273,13 @@ constraints: [{ type: "nullable", value: false }]
 {
 name: "run_id",
 type: "uuidv4",
-description: "ワークフロー実行の一意の識別子。suspend/resume の各サイクルをまたいで状態を追跡するために使用されます（形式: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`）",
+description: "ワークフロー実行の一意識別子。suspend/resume の各サイクルをまたいで状態を追跡するために使用（形式: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`）",
 constraints: [{ type: "nullable", value: false }]
 },
 {
 name: "snapshot",
 type: "text",
-description: "ワークフロー状態を JSON でシリアライズしたもの。例:",
+description: "JSON としてシリアライズされたワークフロー状態。例:",
 example: {
   value: { currentState: 'running' },
   context: {
@@ -299,7 +301,7 @@ constraints: [{ type: "nullable", value: false }]
 {
 name: "updatedAt",
 type: "timestamp",
-description: "最終更新時刻。ワークフロー実行中の状態変更を追跡するために使用されます",
+description: "最終更新時刻。ワークフロー実行中の状態変化の追跡に使用します",
 constraints: [{ type: "nullable", value: false }]
 }
 ]}
@@ -316,7 +318,7 @@ constraints: [{ type: "nullable", value: false }]
 {
 name: "input",
 type: "text",
-description: "エージェントに提供された入力",
+description: "エージェントに与えられた入力",
 constraints: [{ type: "nullable", value: false }]
 },
 {
@@ -358,7 +360,7 @@ constraints: [{ type: "nullable", value: false }]
 {
 name: "test_info",
 type: "jsonb",
-description: "追加のテスト用メタデータおよび設定",
+description: "テストの追加メタデータと構成",
 constraints: [{ type: "nullable", value: false }]
 },
 {
@@ -370,7 +372,7 @@ constraints: [{ type: "nullable", value: false }]
 {
 name: "run_id",
 type: "uuidv4",
-description: "評価対象の実行の一意の識別子（形式: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`）",
+description: "評価対象の実行の一意な識別子（形式: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`）",
 constraints: [{ type: "nullable", value: false }]
 },
 {
@@ -401,12 +403,12 @@ constraints: [
 {
 name: "parentSpanId",
 type: "text",
-description: "親スパンの ID。トップレベルのスパンの場合は null",
+description: "親スパンのID。スパンが最上位の場合はnull",
 },
 {
 name: "name",
 type: "text",
-description: "階層的な操作名（例: `workflow.myWorkflow.execute`、`http.request`、`database.query`）",
+description: "階層的なオペレーション名（例: `workflow.myWorkflow.execute`、`http.request`、`database.query`）",
 constraints: [{ type: "nullable", value: false }],
 },
 {
@@ -418,7 +420,7 @@ constraints: [{ type: "nullable", value: false }]
 {
 name: "scope",
 type: "text",
-description: "スパンを作成したライブラリ/パッケージ/サービス（例: `@mastra/core`、`express`、`pg`）",
+description: "スパンを作成したライブラリ／パッケージ／サービス（例: `@mastra/core`、`express`、`pg`）",
 constraints: [{ type: "nullable", value: false }]
 },
 {
@@ -435,16 +437,16 @@ description: "スパンのメタデータを含むユーザー定義のキーと
 {
 name: "status",
 type: "jsonb",
-description: "`code`（UNSET=0、ERROR=1、OK=2）と任意の `message` を含む JSON オブジェクト。例:",
+description: "`code`（UNSET=0、ERROR=1、OK=2）と任意の`message`を含むJSONオブジェクト。例:",
 example: {
   code: 1,
-  message: "HTTP リクエストがステータス 500 で失敗しました"
+  message: "HTTPリクエストがステータス500で失敗しました"
 }
 },
 {
 name: "events",
 type: "jsonb",
-description: "スパンの実行中に発生したタイムスタンプ付きイベント",
+description: "スパン中に発生したタイムスタンプ付きイベント",
 },
 {
 name: "links",
@@ -454,7 +456,7 @@ description: "他の関連スパンへのリンク",
 {
 name: "other",
 type: "text",
-description: "追加の OpenTelemetry スパンフィールドを文字列化した JSON。例:",
+description: "OpenTelemetryの追加スパンフィールド（JSON文字列）。例:",
 example: {
   droppedAttributesCount: 2,
   droppedEventsCount: 1,
@@ -464,13 +466,13 @@ example: {
 {
 name: "startTime",
 type: "bigint",
-description: "スパン開始時点の Unix エポックからの経過ナノ秒",
+description: "スパン開始時点のUnixエポックからの経過ナノ秒",
 constraints: [{ type: "nullable", value: false }]
 },
 {
 name: "endTime",
 type: "bigint",
-description: "スパン終了時点の Unix エポックからの経過ナノ秒",
+description: "スパン終了時点のUnixエポックからの経過ナノ秒",
 constraints: [{ type: "nullable", value: false }]
 },
 {

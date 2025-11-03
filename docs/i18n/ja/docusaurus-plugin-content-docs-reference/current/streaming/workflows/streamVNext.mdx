@@ -41,9 +41,9 @@ const stream = run.streamVNext({
       isOptional: true,
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      description: "ワークフロー実行時に使用するランタイムコンテキストデータ。",
+      name: "requestContext",
+      type: "RequestContext",
+      description: "ワークフロー実行時に使用するリクエストコンテキストデータ。",
       isOptional: true,
     },
     {
@@ -51,7 +51,7 @@ const stream = run.streamVNext({
       type: "TracingContext",
       isOptional: true,
       description:
-        "子スパンの作成やメタデータの追加に用いる AI トレーシング用のコンテキスト。",
+        "子スパンの作成やメタデータの追加に用いる AI トレーシングコンテキスト。",
       properties: [
         {
           parameters: [
@@ -70,7 +70,7 @@ const stream = run.streamVNext({
       name: "tracingOptions",
       type: "TracingOptions",
       isOptional: true,
-      description: "AI トレーシング設定のオプション。",
+      description: "AI トレーシングの構成オプション。",
       properties: [
         {
           parameters: [
@@ -78,7 +78,7 @@ const stream = run.streamVNext({
               name: "metadata",
               type: "Record<string, any>",
               isOptional: true,
-              description: "ルートトレーススパンに追加するメタデータ。",
+              description: "ルートトレーススパンに付加するメタデータ。",
             },
           ],
         },
@@ -88,7 +88,7 @@ const stream = run.streamVNext({
       name: "closeOnSuspend",
       type: "boolean",
       description:
-        "ワークフローが一時停止された際にストリームを閉じるか、ワークフローが（成功またはエラーで）完了するまで開いたままにするか。既定値は true。",
+        "ワークフローが一時停止された際にストリームを閉じるか、ワークフローが完了（成功またはエラー）するまで開いたままにするか。デフォルト値は true。",
       isOptional: true,
     },
   ]}
