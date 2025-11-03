@@ -133,7 +133,7 @@ program
 program
   .command('playground')
   .description('Start the Mastra playground')
-  .option('-p, --port <port>', 'Port to run the playground on (default: 4111)')
+  .option('-p, --port <port>', 'Port to run the playground on (default: 3000)')
   .option('-e, --env <env>', 'Custom env file to include in the playground')
   .action(playground);
 
