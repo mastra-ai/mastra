@@ -2,7 +2,7 @@ import { convertMessages } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
-import type { StorageGetMessagesArg, StorageOrderBy } from '@mastra/core/storage';
+import type { StorageListMessagesInput, StorageOrderBy } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
@@ -307,13 +307,16 @@ export async function deleteThreadHandler({
   }
 }
 
-export async function getMessagesPaginatedHandler({
+export async function listMessagesHandler({
   mastra,
   threadId,
   resourceId,
-  selectBy,
-  format,
-}: StorageGetMessagesArg & Pick<MemoryContext, 'mastra'>) {
+  perPage,
+  page,
+  orderBy,
+  include,
+  filter,
+}: Pick<MemoryContext, 'mastra'> & StorageListMessagesInput) {
   try {
     validateBody({ threadId });
 
@@ -329,7 +332,15 @@ export async function getMessagesPaginatedHandler({
       throw new HTTPException(404, { message: 'Thread not found' });
     }
 
-    const result = await storage.getMessagesPaginated({ threadId: threadId!, resourceId, selectBy, format });
+    const result = await storage.listMessages({
+      threadId: threadId!,
+      resourceId,
+      perPage,
+      page,
+      orderBy,
+      include,
+      filter,
+    });
     return result;
   } catch (error) {
     return handleError(error, 'Error getting messages');

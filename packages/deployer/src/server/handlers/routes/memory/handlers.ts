@@ -1,10 +1,5 @@
 import type { Mastra } from '@mastra/core/mastra';
-import type {
-  StorageGetMessagesArg,
-  MastraMessageFormat,
-  ThreadOrderBy,
-  ThreadSortDirection,
-} from '@mastra/core/storage';
+import type { ThreadOrderBy, ThreadSortDirection } from '@mastra/core/storage';
 import {
   getMemoryStatusHandler as getOriginalMemoryStatusHandler,
   getMemoryConfigHandler as getOriginalMemoryConfigHandler,
@@ -15,7 +10,7 @@ import {
   updateThreadHandler as getOriginalUpdateThreadHandler,
   deleteThreadHandler as getOriginalDeleteThreadHandler,
   getMessagesHandler as getOriginalGetMessagesHandler,
-  getMessagesPaginatedHandler as getOriginalGetMessagesPaginatedHandler,
+  listMessagesHandler as getOriginalListMessagesHandler,
   getWorkingMemoryHandler as getOriginalGetWorkingMemoryHandler,
   updateWorkingMemoryHandler as getOriginalUpdateWorkingMemoryHandler,
   searchMemoryHandler as getOriginalSearchMemoryHandler,
@@ -231,31 +226,53 @@ export async function getMessagesHandler(c: Context) {
   }
 }
 
-export async function getMessagesPaginatedHandler(c: Context) {
+export async function listMessagesHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const threadId = c.req.param('threadId');
     const resourceId = c.req.query('resourceId');
-    const format = (c.req.query('format') || 'v1') as MastraMessageFormat;
-    const selectByArgs = c.req.query('selectBy');
+    const page = parsePage(c.req.query('page'));
+    const perPage = parsePerPage(c.req.query('perPage'));
+    const orderByArgs = c.req.query('orderBy');
+    const includeArgs = c.req.query('include');
+    const filterArgs = c.req.query('filter');
 
-    let selectBy = {} as StorageGetMessagesArg['selectBy'];
-
-    if (selectByArgs) {
+    let orderBy;
+    if (orderByArgs) {
       try {
-        selectBy = JSON.parse(selectByArgs);
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        orderBy = JSON.parse(orderByArgs);
       } catch (_error) {
         // swallow
       }
     }
 
-    const result = await getOriginalGetMessagesPaginatedHandler({
+    let include;
+    if (includeArgs) {
+      try {
+        include = JSON.parse(includeArgs);
+      } catch (_error) {
+        // swallow
+      }
+    }
+
+    let filter;
+    if (filterArgs) {
+      try {
+        filter = JSON.parse(filterArgs);
+      } catch (_error) {
+        // swallow
+      }
+    }
+
+    const result = await getOriginalListMessagesHandler({
       mastra,
       threadId,
       resourceId,
-      format,
-      selectBy,
+      page,
+      perPage,
+      orderBy,
+      include,
+      filter,
     });
 
     return c.json(result);
