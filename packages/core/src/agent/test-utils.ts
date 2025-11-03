@@ -1,5 +1,9 @@
 import { expect } from 'vitest';
 
+import { MockMemory } from '../memory/mock';
+
+export { MockMemory };
+
 export function assertNoDuplicateParts(parts: any[]) {
   // Check for duplicate tool-invocation results by toolCallId
   const seenToolResults = new Set();

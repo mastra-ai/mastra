@@ -7,6 +7,7 @@ import { webSearchTool } from '../tools/webSearchTool';
 const mainModel = openai('gpt-4o');
 
 export const researchAgent = new Agent({
+  id: 'research-agent',
   name: 'Research Agent',
   instructions: `You are an expert research agent. Your goal is to research topics thoroughly by following this EXACT process:
 

@@ -26,7 +26,8 @@ export const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
  * - Automatic instruction generation based on schema
  */
 export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements Processor {
-  readonly name = STRUCTURED_OUTPUT_PROCESSOR_NAME;
+  readonly id = STRUCTURED_OUTPUT_PROCESSOR_NAME;
+  readonly name = 'Structured Output';
 
   public schema: OUTPUT;
   private structuringAgent: Agent;
@@ -59,6 +60,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     this.jsonPromptInjection = options.jsonPromptInjection;
     // Create internal structuring agent
     this.structuringAgent = new Agent({
+      id: 'structured-output-structurer',
       name: 'structured-output-structurer',
       instructions: options.instructions || this.generateInstructions(),
       model: options.model,

@@ -89,12 +89,9 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Retrieval, Semantic Search, Reranking | RAG | Mastra Docs](https://mastra.ai/en/docs/rag/retrieval): Guide on retrieval processes in Mastras RAG systems, including semantic search, filtering, and re-ranking.
 - [Storing Embeddings in A Vector Database | RAG | Mastra Docs](https://mastra.ai/en/docs/rag/vector-databases): Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
 - [Custom Scorers | Scorers | Mastra Docs](https://mastra.ai/en/docs/scorers/custom-scorers)
-- [Create a Custom Eval | Scorers | Mastra Docs](https://mastra.ai/en/docs/scorers/evals-old-api/custom-eval): Mastra allows you to create your own evals, here is how.
-- [Testing your agents with evals | Scorers | Mastra Docs](https://mastra.ai/en/docs/scorers/evals-old-api/overview): Understanding how to evaluate and measure AI agent quality using Mastra evals.
-- [Running Evals in CI | Scorers | Mastra Docs](https://mastra.ai/en/docs/scorers/evals-old-api/running-in-ci): Learn how to run Mastra evals in your CI/CD pipeline to monitor agent quality over time.
-- [Textual Evals | Scorers | Mastra Docs](https://mastra.ai/en/docs/scorers/evals-old-api/textual-evals): Understand how Mastra uses LLM-as-judge methodology to evaluate text quality.
 - [Built-in Scorers | Scorers | Mastra Docs](https://mastra.ai/en/docs/scorers/off-the-shelf-scorers): Overview of Mastras ready-to-use scorers for evaluating AI outputs across quality, safety, and performance dimensions.
 - [Scorers overview | Scorers | Mastra Docs](https://mastra.ai/en/docs/scorers/overview): Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
+- [Running Scorers in CI | Scorers | Mastra Docs](https://mastra.ai/en/docs/scorers/running-in-ci): Learn how to run scorer experiments in your CI/CD pipeline using the runEvals function.
 - [Custom API Routes | Server & DB | Mastra Docs](https://mastra.ai/en/docs/server-db/custom-api-routes): Expose additional HTTP endpoints from your Mastra server.
 - [Mastra Client SDK | Server & DB | Mastra Docs](https://mastra.ai/en/docs/server-db/mastra-client): Learn how to set up and use the Mastra Client SDK
 - [Middleware | Server & DB | Mastra Docs](https://mastra.ai/en/docs/server-db/middleware): Apply custom middleware functions to intercept requests.
@@ -131,24 +128,6 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Example: Supervisor Agent | Agents | Mastra Docs](https://mastra.ai/en/examples/agents/supervisor-agent): Example of creating a supervisor agent using Mastra, where agents interact through tool functions.
 - [Example: Changing the System Prompt | Agents | Mastra Docs](https://mastra.ai/en/examples/agents/system-prompt): Example of creating an AI agent in Mastra with a system prompt to define its personality and capabilities.
 - [Example: WhatsApp Chat Bot | Agents | Mastra Docs](https://mastra.ai/en/examples/agents/whatsapp-chat-bot): Example of creating a WhatsApp chat bot using Mastra agents and workflows to handle incoming messages and respond naturally via text messages.
-- [Example: Answer Relevancy Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/answer-relevancy): Example of using the Answer Relevancy metric to evaluate response relevancy to queries.
-- [Example: Bias Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/bias): Example of using the Bias metric to evaluate responses for various forms of bias.
-- [Example: Completeness Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/completeness): Example of using the Completeness metric to evaluate how thoroughly responses cover input elements.
-- [Example: Content Similarity Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/content-similarity): Example of using the Content Similarity metric to evaluate text similarity between content.
-- [Example: Context Position Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/context-position): Example of using the Context Position metric to evaluate sequential ordering in responses.
-- [Example: Context Precision Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/context-precision): Example of using the Context Precision metric to evaluate how precisely context information is used.
-- [Example: Context Relevancy Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/context-relevancy): Example of using the Context Relevancy metric to evaluate how relevant context information is to a query.
-- [Example: Contextual Recall Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/contextual-recall): Example of using the Contextual Recall metric to evaluate how well responses incorporate context information.
-- [Example: LLM as a Judge Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/custom-llm-judge-eval): Example of creating a custom LLM-based evaluation metric.
-- [Example: Custom Native JavaScript Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/custom-native-javascript-eval): Example of creating a custom native JavaScript evaluation metric.
-- [Example: Faithfulness Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/faithfulness): Example of using the Faithfulness metric to evaluate how factually accurate responses are compared to context.
-- [Example: Hallucination Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/hallucination): Example of using the Hallucination metric to evaluate factual contradictions in responses.
-- [Example: Keyword Coverage Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/keyword-coverage): Example of using the Keyword Coverage metric to evaluate how well responses cover important keywords from input text.
-- [Example: Prompt Alignment Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/prompt-alignment): Example of using the Prompt Alignment metric to evaluate instruction adherence in responses.
-- [Example: Summarization Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/summarization): Example of using the Summarization metric to evaluate how well LLM-generated summaries capture content while maintaining factual accuracy.
-- [Example: Textual Difference Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/textual-difference): Example of using the Textual Difference metric to evaluate similarity between text strings by analyzing sequence differences and changes.
-- [Example: Tone Consistency Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/tone-consistency): Example of using the Tone Consistency metric to evaluate emotional tone patterns and sentiment consistency in text.
-- [Example: Toxicity Evaluation | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/toxicity): Example of using the Toxicity metric to evaluate responses for harmful content and toxic language.
 - [Examples List: Workflows, Agents, RAG | Mastra Docs](https://mastra.ai/en/examples): Explore practical examples of AI development with Mastra, including text generation, RAG implementations, structured outputs, and multi-modal interactions. Learn how to build AI applications using OpenAI, Anthropic, and Google Gemini.
 - [Example: Memory with MongoDB | Memory | Mastra Docs](https://mastra.ai/en/examples/memory/memory-with-mongodb): Example for how to use Mastras memory system with MongoDB storage and vector capabilities.
 - [Example: Working Memory with Schema | Memory | Mastra Docs](https://mastra.ai/en/examples/memory/working-memory-schema): Example showing how to use Zod schema to structure and validate working memory data.
@@ -181,6 +160,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Example: Database-Specific Configurations | RAG | Mastra Docs](https://mastra.ai/en/examples/rag/usage/database-specific-config): Learn how to use database-specific configurations to optimize vector search performance and leverage unique features of different vector stores.
 - [Example: Agent-Driven Metadata Filtering | RAG | Mastra Docs](https://mastra.ai/en/examples/rag/usage/filter-rag): Example of using a Mastra agent in a RAG system to construct and apply metadata filters for document retrieval.
 - [Example: Graph RAG | RAG | Mastra Docs](https://mastra.ai/en/examples/rag/usage/graph-rag): Example of implementing a Graph RAG system in Mastra using OpenAI embeddings and PGVector for vector storage.
+- [Example: Running Scorers in CI | Scorers | Mastra Docs](https://mastra.ai/en/examples/scorers/running-in-ci): Example of using runEvals to test agents in a CI/CD pipeline with Vitest.
 - [Example: Call Analysis with Mastra | Voice | Mastra Docs](https://mastra.ai/en/examples/voice/speech-to-speech): Example of using Mastra to create a speech to speech application.
 - [Example: Smart Voice Memo App | Voice | Mastra Docs](https://mastra.ai/en/examples/voice/speech-to-text): Example of using Mastra to create a speech to text application.
 - [Example: Interactive Story Generator | Voice | Mastra Docs](https://mastra.ai/en/examples/voice/text-to-speech): Example of using Mastra to create a text to speech application.
@@ -205,7 +185,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 48+ AI providers and 833+ models through Mastras model router.
+- [Models](https://mastra.ai/en/models): Access 49+ AI providers and 853+ models through Mastras model router.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
 - [Alibaba | Models | Mastra](https://mastra.ai/en/models/providers/alibaba): Use Alibaba models with Mastra. 39 models available.
@@ -220,12 +200,13 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Deep Infra | Models | Mastra](https://mastra.ai/en/models/providers/deepinfra): Use Deep Infra models with Mastra. 4 models available.
 - [DeepSeek | Models | Mastra](https://mastra.ai/en/models/providers/deepseek): Use DeepSeek models with Mastra. 2 models available.
 - [FastRouter | Models | Mastra](https://mastra.ai/en/models/providers/fastrouter): Use FastRouter models with Mastra. 14 models available.
-- [Fireworks AI | Models | Mastra](https://mastra.ai/en/models/providers/fireworks-ai): Use Fireworks AI models with Mastra. 10 models available.
+- [Fireworks AI | Models | Mastra](https://mastra.ai/en/models/providers/fireworks-ai): Use Fireworks AI models with Mastra. 11 models available.
 - [GitHub Models | Models | Mastra](https://mastra.ai/en/models/providers/github-models): Use GitHub Models models with Mastra. 55 models available.
 - [Vertex](https://mastra.ai/en/models/providers/google-vertex): Use Vertex models via the AI SDK.
 - [Google | Models | Mastra](https://mastra.ai/en/models/providers/google): Use Google models with Mastra. 24 models available.
 - [Groq | Models | Mastra](https://mastra.ai/en/models/providers/groq): Use Groq models with Mastra. 17 models available.
 - [Hugging Face | Models | Mastra](https://mastra.ai/en/models/providers/huggingface): Use Hugging Face models with Mastra. 14 models available.
+- [iFlow | Models | Mastra](https://mastra.ai/en/models/providers/iflowcn): Use iFlow models with Mastra. 17 models available.
 - [Inception | Models | Mastra](https://mastra.ai/en/models/providers/inception): Use Inception models with Mastra. 2 models available.
 - [Providers](https://mastra.ai/en/models/providers): Direct access to AI model providers.
 - [Inference | Models | Mastra](https://mastra.ai/en/models/providers/inference): Use Inference models with Mastra. 9 models available.
@@ -238,7 +219,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Moonshot AI | Models | Mastra](https://mastra.ai/en/models/providers/moonshotai): Use Moonshot AI models with Mastra. 3 models available.
 - [Morph | Models | Mastra](https://mastra.ai/en/models/providers/morph): Use Morph models with Mastra. 3 models available.
 - [Nebius AI Studio | Models | Mastra](https://mastra.ai/en/models/providers/nebius): Use Nebius AI Studio models with Mastra. 15 models available.
-- [Nvidia | Models | Mastra](https://mastra.ai/en/models/providers/nvidia): Use Nvidia models with Mastra. 16 models available.
+- [Nvidia | Models | Mastra](https://mastra.ai/en/models/providers/nvidia): Use Nvidia models with Mastra. 17 models available.
 - [Ollama](https://mastra.ai/en/models/providers/ollama): Use Ollama models via the AI SDK.
 - [OpenAI | Models | Mastra](https://mastra.ai/en/models/providers/openai): Use OpenAI models with Mastra. 31 models available.
 - [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 14 models available.
@@ -301,9 +282,8 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Mastra.getLogger() | Core | Mastra Docs](https://mastra.ai/en/reference/core/getLogger): Documentation for the `Mastra.getLogger()` method in Mastra, which retrieves the configured logger instance.
 - [Reference: Mastra.getMCPServer() | Core | Mastra Docs](https://mastra.ai/en/reference/core/getMCPServer): Documentation for the `Mastra.getMCPServer()` method in Mastra, which retrieves a specific MCP server instance by ID and optional version.
 - [Reference: Mastra.getMCPServers() | Core | Mastra Docs](https://mastra.ai/en/reference/core/getMCPServers): Documentation for the `Mastra.getMCPServers()` method in Mastra, which retrieves all registered MCP server instances.
-- [Reference: Mastra.getMemory() | Core | Mastra Docs](https://mastra.ai/en/reference/core/getMemory): Documentation for the `Mastra.getMemory()` method in Mastra, which retrieves the configured memory instance.
 - [Reference: getScorer() | Core | Mastra Docs](https://mastra.ai/en/reference/core/getScorer): Documentation for the `getScorer()` method in Mastra, which retrieves a specific scorer by its registration key.
-- [Reference: getScorerByName() | Core | Mastra Docs](https://mastra.ai/en/reference/core/getScorerByName): Documentation for the `getScorerByName()` method in Mastra, which retrieves a scorer by its name property rather than registration key.
+- [Reference: getScorerById() | Core | Mastra Docs](https://mastra.ai/en/reference/core/getScorerById): Documentation for the `getScorerById()` method in Mastra, which retrieves a scorer by its id property rather than registration key.
 - [Reference: Mastra.getServer() | Core | Mastra Docs](https://mastra.ai/en/reference/core/getServer): Documentation for the `Mastra.getServer()` method in Mastra, which retrieves the configured server configuration.
 - [Reference: Mastra.getStorage() | Core | Mastra Docs](https://mastra.ai/en/reference/core/getStorage): Documentation for the `Mastra.getStorage()` method in Mastra, which retrieves the configured storage instance.
 - [Reference: Mastra.getTelemetry() | Core | Mastra Docs](https://mastra.ai/en/reference/core/getTelemetry): Documentation for the `Mastra.getTelemetry()` method in Mastra, which retrieves the configured telemetry instance.
@@ -323,28 +303,11 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Deployer | Deployer | Mastra Docs](https://mastra.ai/en/reference/deployer/deployer): Documentation for the Deployer abstract class, which handles packaging and deployment of Mastra applications.
 - [Reference: NetlifyDeployer | Deployer | Mastra Docs](https://mastra.ai/en/reference/deployer/netlify): Documentation for the NetlifyDeployer class, which deploys Mastra applications to Netlify Functions.
 - [Reference: VercelDeployer | Deployer | Mastra Docs](https://mastra.ai/en/reference/deployer/vercel): Documentation for the VercelDeployer class, which deploys Mastra applications to Vercel.
-- [Reference: AnswerRelevancyMetric | Evals | Mastra Docs](https://mastra.ai/en/reference/evals/answer-relevancy): Documentation for the Answer Relevancy Metric in Mastra, which evaluates how well LLM outputs address the input query.
-- [Reference: BiasMetric | Evals | Mastra Docs](https://mastra.ai/en/reference/evals/bias): Documentation for the Bias Metric in Mastra, which evaluates LLM outputs for various forms of bias, including gender, political, racial/ethnic, or geographical bias.
-- [Reference: CompletenessMetric | Evals | Mastra Docs](https://mastra.ai/en/reference/evals/completeness): Documentation for the Completeness Metric in Mastra, which evaluates how thoroughly LLM outputs cover key elements present in the input.
-- [Reference: ContentSimilarityMetric | Evals | Mastra Docs](https://mastra.ai/en/reference/evals/content-similarity): Documentation for the Content Similarity Metric in Mastra, which measures textual similarity between strings and provides a matching score.
-- [Reference: ContextPositionMetric | Evals | Mastra Docs](https://mastra.ai/en/reference/evals/context-position): Documentation for the Context Position Metric in Mastra, which evaluates the ordering of context nodes based on their relevance to the query and output.
-- [Reference: ContextPrecisionMetric | Evals | Mastra Docs](https://mastra.ai/en/reference/evals/context-precision): Documentation for the Context Precision Metric in Mastra, which evaluates the relevance and precision of retrieved context nodes for generating expected outputs.
-- [Reference: ContextRelevancyMetric | Evals | Mastra Docs](https://mastra.ai/en/reference/evals/context-relevancy): Documentation for the Context Relevancy Metric, which evaluates the relevance of retrieved context in RAG pipelines.
-- [Reference: ContextualRecallMetric | Evals | Mastra Docs](https://mastra.ai/en/reference/evals/contextual-recall): Documentation for the Contextual Recall Metric, which evaluates the completeness of LLM responses in incorporating relevant context.
-- [Reference: FaithfulnessMetric Reference | Evals | Mastra Docs](https://mastra.ai/en/reference/evals/faithfulness): Documentation for the Faithfulness Metric in Mastra, which evaluates the factual accuracy of LLM outputs compared to the provided context.
-- [Reference: HallucinationMetric | Evals | Mastra Docs](https://mastra.ai/en/reference/evals/hallucination): Documentation for the Hallucination Metric in Mastra, which evaluates the factual correctness of LLM outputs by identifying contradictions with provided context.
-- [Reference: KeywordCoverageMetric | Evals | Mastra Docs](https://mastra.ai/en/reference/evals/keyword-coverage): Documentation for the Keyword Coverage Metric in Mastra, which evaluates how well LLM outputs cover important keywords from the input.
-- [Reference: PromptAlignmentMetric | Evals | Mastra Docs](https://mastra.ai/en/reference/evals/prompt-alignment): Documentation for the Prompt Alignment Metric in Mastra, which evaluates how well LLM outputs adhere to given prompt instructions.
-- [Reference: SummarizationMetric | Evals | Mastra Docs](https://mastra.ai/en/reference/evals/summarization): Documentation for the Summarization Metric in Mastra, which evaluates the quality of LLM-generated summaries for content and factual accuracy.
-- [Reference: TextualDifferenceMetric | Evals | Mastra Docs](https://mastra.ai/en/reference/evals/textual-difference): Documentation for the Textual Difference Metric in Mastra, which measures textual differences between strings using sequence matching.
-- [Reference: ToneConsistencyMetric | Evals | Mastra Docs](https://mastra.ai/en/reference/evals/tone-consistency): Documentation for the Tone Consistency Metric in Mastra, which evaluates emotional tone and sentiment consistency in text.
-- [Reference: ToxicityMetric | Evals | Mastra Docs](https://mastra.ai/en/reference/evals/toxicity): Documentation for the Toxicity Metric in Mastra, which evaluates LLM outputs for racist, biased, or toxic elements.
 - [Reference: Overview](https://mastra.ai/en/reference): Reference documentation on Mastras APIs and tools
 - [Reference: Memory.createThread() | Memory | Mastra Docs](https://mastra.ai/en/reference/memory/createThread): Documentation for the `Memory.createThread()` method in Mastra, which creates a new conversation thread in the memory system.
 - [Reference: Memory.deleteMessages() | Memory | Mastra Docs](https://mastra.ai/en/reference/memory/deleteMessages): Documentation for the `Memory.deleteMessages()` method in Mastra, which deletes multiple messages by their IDs.
 - [Reference: Memory.getThreadById() | Memory | Mastra Docs](https://mastra.ai/en/reference/memory/getThreadById): Documentation for the `Memory.getThreadById()` method in Mastra, which retrieves a specific thread by its ID.
-- [Reference: Memory.getThreadsByResourceId() | Memory | Mastra Docs](https://mastra.ai/en/reference/memory/getThreadsByResourceId): Documentation for the `Memory.getThreadsByResourceId()` method in Mastra, which retrieves all threads that belong to a specific resource.
-- [Reference: Memory.getThreadsByResourceIdPaginated() | Memory | Mastra Docs](https://mastra.ai/en/reference/memory/getThreadsByResourceIdPaginated): Documentation for the `Memory.getThreadsByResourceIdPaginated()` method in Mastra, which retrieves threads associated with a specific resource ID with pagination support.
+- [Reference: Memory.listThreadsByResourceId() | Memory | Mastra Docs](https://mastra.ai/en/reference/memory/listThreadsByResourceId): Documentation for the `Memory.listThreadsByResourceId()` method in Mastra, which retrieves threads associated with a specific resource ID with pagination support.
 - [Reference: Memory Class | Memory | Mastra Docs](https://mastra.ai/en/reference/memory/memory-class): Documentation for the `Memory` class in Mastra, which provides a robust system for managing conversation history and thread-based message storage.
 - [Reference: Memory.query() | Memory | Mastra Docs](https://mastra.ai/en/reference/memory/query): Documentation for the `Memory.query()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search.
 - [Reference: AITracing | Observability | Mastra Docs](https://mastra.ai/en/reference/observability/ai-tracing/ai-tracing): Core AI Tracing classes and methods
@@ -406,7 +369,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: MastraScorer | Scorers | Mastra Docs](https://mastra.ai/en/reference/scorers/mastra-scorer): Documentation for the MastraScorer base class in Mastra, which provides the foundation for all custom and built-in scorers.
 - [Reference: Noise Sensitivity Scorer (CI/Testing Only) | Scorers | Mastra Docs](https://mastra.ai/en/reference/scorers/noise-sensitivity): Documentation for the Noise Sensitivity Scorer in Mastra. A CI/testing scorer that evaluates agent robustness by comparing responses between clean and noisy inputs in controlled test environments.
 - [Reference: Prompt Alignment Scorer | Scorers | Mastra Docs](https://mastra.ai/en/reference/scorers/prompt-alignment): Documentation for the Prompt Alignment Scorer in Mastra. Evaluates how well agent responses align with user prompt intent, requirements, completeness, and appropriateness using multi-dimensional analysis.
-- [Reference: runExperiment | Scorers | Mastra Docs](https://mastra.ai/en/reference/scorers/run-experiment): Documentation for the runExperiment function in Mastra, which enables batch evaluation of agents and workflows using multiple scorers.
+- [Reference: runEvals | Scorers | Mastra Docs](https://mastra.ai/en/reference/scorers/run-evals): Documentation for the runEvals function in Mastra, which enables batch evaluation of agents and workflows using multiple scorers.
 - [Reference: Textual Difference Scorer | Scorers | Mastra Docs](https://mastra.ai/en/reference/scorers/textual-difference): Documentation for the Textual Difference Scorer in Mastra, which measures textual differences between strings using sequence matching.
 - [Reference: Tone Consistency Scorer | Scorers | Mastra Docs](https://mastra.ai/en/reference/scorers/tone-consistency): Documentation for the Tone Consistency Scorer in Mastra, which evaluates emotional tone and sentiment consistency in text.
 - [Reference: Tool Call Accuracy Scorers | Scorers | Mastra Docs](https://mastra.ai/en/reference/scorers/tool-call-accuracy): Documentation for the Tool Call Accuracy Scorers in Mastra, which evaluate whether LLM outputs call the correct tools from available options.

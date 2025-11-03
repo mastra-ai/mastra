@@ -228,7 +228,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_WORKFLOW_RUNS_ERROR',
+          id: 'CLOUDFLARE_D1_STORAGE_LIST_WORKFLOW_RUNS_ERROR',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to retrieve workflow runs: ${error instanceof Error ? error.message : String(error)}`,

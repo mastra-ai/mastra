@@ -24,9 +24,10 @@ CHUTES_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507"
+  model: "chutes/MiniMaxAI/MiniMax-M2"
 });
 
 // Generate a response
@@ -170,7 +171,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "chutes/minimaxai/MiniMax-M2",
+    "model": "chutes/MiniMaxAI/MiniMax-M2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -430,10 +431,11 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://llm.chutes.ai/v1",
-    id: "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507",
+    id: "chutes/MiniMaxAI/MiniMax-M2",
     apiKey: process.env.CHUTES_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -446,12 +448,13 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "chutes/zai-org/GLM-4.6-turbo"
-      : "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507";
+      : "chutes/MiniMaxAI/MiniMax-M2";
   }
 });
 ```

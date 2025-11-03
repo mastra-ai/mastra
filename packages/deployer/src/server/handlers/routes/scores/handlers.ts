@@ -1,10 +1,10 @@
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData } from '@mastra/core/evals';
 import type { StoragePagination } from '@mastra/core/storage';
 import {
   listScorersHandler as getOriginalListScorersHandler,
-  getScoresByRunIdHandler as getOriginalScoresByRunIdHandler,
-  getScoresByScorerIdHandler as getOriginalScoresByScorerIdHandler,
-  getScoresByEntityIdHandler as getOriginalScoresByEntityIdHandler,
+  listScoresByRunIdHandler as getOriginalScoresByRunIdHandler,
+  listScoresByScorerIdHandler as getOriginalScoresByScorerIdHandler,
+  listScoresByEntityIdHandler as getOriginalScoresByEntityIdHandler,
   saveScoreHandler as getOriginalSaveScoreHandler,
   getScorerHandler as getOriginalScorerHandler,
 } from '@mastra/server/handlers/scores';
@@ -37,7 +37,7 @@ export async function getScorerHandler(c: Context) {
   return c.json(scorer);
 }
 
-export async function getScoresByRunIdHandler(c: Context) {
+export async function listScoresByRunIdHandler(c: Context) {
   const mastra = c.get('mastra');
   const runId = c.req.param('runId');
   const page = parseInt(c.req.query('page') || '0');
@@ -57,7 +57,7 @@ export async function getScoresByRunIdHandler(c: Context) {
   }
 }
 
-export async function getScoresByScorerIdHandler(c: Context) {
+export async function listScoresByScorerIdHandler(c: Context) {
   const mastra = c.get('mastra');
   const scorerId = c.req.param('scorerId');
   const page = parseInt(c.req.query('page') || '0');
@@ -81,7 +81,7 @@ export async function getScoresByScorerIdHandler(c: Context) {
   }
 }
 
-export async function getScoresByEntityIdHandler(c: Context) {
+export async function listScoresByEntityIdHandler(c: Context) {
   const mastra = c.get('mastra');
   const entityId = c.req.param('entityId');
   const entityType = c.req.param('entityType');

@@ -22,7 +22,8 @@ type MessageLengthLimiterOptions = {
 };
 
 export class MessageLengthLimiter implements Processor {
-  readonly name = "message-length-limiter";
+  readonly id  = "message-length-limiter";
+  readonly name = "Message Length Limiter";
   private maxLength: number;
   private strategy: "block" | "warn" | "truncate";
 
@@ -147,7 +148,8 @@ import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "../processors/message-length-limiter";
 
 export const blockingAgent = new Agent({
-  name: "blocking-agent",
+  id: "blocking-agent",
+  name: "Blocking Agent",
   instructions: "You are a helpful assistant with input length limits",
   model: "openai/gpt-4o",
   inputProcessors: [
@@ -163,7 +165,8 @@ import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "../processors/message-length-limiter";
 
 export const simpleAgent = new Agent({
-  name: "simple-agent",
+  id: "simple-agent",
+  name: "Simple Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   inputProcessors: [new MessageLengthLimiter(500)],
@@ -180,7 +183,8 @@ import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter
 
 // Create agent with generous character limit
 export const agent = new Agent({
-  name: "length-limited-agent",
+  id: "length-limited-agent",
+  name: "Length Limited Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   inputProcessors: [
@@ -212,7 +216,8 @@ import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter
 
 // Reuse same agent but with tighter character limit
 export const agent = new Agent({
-  name: "length-limited-agent",
+  id: "length-limited-agent",
+  name: "Length Limited Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   inputProcessors: [
@@ -245,7 +250,8 @@ import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter
 
 // Reuse same agent but with very strict character limit
 export const agent = new Agent({
-  name: "length-limited-agent",
+  id: "length-limited-agent",
+  name: "Length Limited Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   inputProcessors: [
