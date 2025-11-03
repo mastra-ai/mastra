@@ -1,8 +1,8 @@
 {
   "redirects": [
     {
-      "source": "/docs/getting-started/model-providers",
-      "destination": "/models",
+      "source": "/:locale/docs/getting-started/model-providers",
+      "destination": "/:locale/models",
       "permanent": true
     },
     {
