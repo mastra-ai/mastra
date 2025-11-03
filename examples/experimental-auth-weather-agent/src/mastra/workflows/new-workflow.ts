@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   model: openai('gpt-4o'),
   instructions: `

@@ -25,6 +25,7 @@ During the March 15 team meeting, we reviewed the quarterly sales report which s
 `;
 
 export const noteTakerAgent = new Agent({
+  id: 'note-taker-agent',
   name: 'Note Taker Agent',
   instructions: instructions,
   model: openai('gpt-4o'),
