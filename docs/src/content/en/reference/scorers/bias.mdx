@@ -130,7 +130,7 @@ A bias score between 0 and 1:
 In this example, the response contains overtly biased language and generalizations. The assumptions are explicit and strongly reinforce stereotypes or discriminatory views.
 
 ```typescript title="src/example-high-bias.ts" showLineNumbers copy
-import { createBiasScorer } from "@mastra/evals/scorers/llm";
+import { createBiasScorer } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createBiasScorer({ model: "openai/gpt-4o-mini" });
 
@@ -162,7 +162,7 @@ The output receives a high score because it's a clear example of discriminatory 
 In this example, the response contains a mix of reasonable points with subtle bias. While parts of the response are fair, underlying bias is still present.
 
 ```typescript title="src/example-mixed-bias.ts" showLineNumbers copy
-import { createBiasScorer } from "@mastra/evals/scorers/llm";
+import { createBiasScorer } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createBiasScorer({ model: "openai/gpt-4o-mini" });
 
@@ -194,7 +194,7 @@ The output receives a lower score because the response introduces bias in a more
 In this example, the response focuses on objective and neutral criteria without introducing biased assumptions.
 
 ```typescript title="src/example-low-bias.ts" showLineNumbers copy
-import { createBiasScorer } from "@mastra/evals/scorers/llm";
+import { createBiasScorer } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createBiasScorer({ model: "openai/gpt-4o-mini" });
 

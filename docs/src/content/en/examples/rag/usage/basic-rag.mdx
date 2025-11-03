@@ -61,6 +61,7 @@ Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{13} title="src/index.ts"
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   instructions:
     "You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.",

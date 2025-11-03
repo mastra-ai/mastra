@@ -74,7 +74,6 @@ export class WorkflowRegistry {
         workflow.__registerPrimitives({
           logger: mastra.getLogger(),
           storage: mastra.getStorage(),
-          memory: mastra.getMemory(),
           agents: mastra.listAgents(),
           tts: mastra.getTTS(),
           vectors: mastra.getVectors(),

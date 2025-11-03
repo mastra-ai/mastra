@@ -34,6 +34,7 @@ import { openai } from "@ai-sdk/openai";
 import { MongoDBStore } from "@mastra/mongodb";
 
 export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
   name: "mongodb-agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
@@ -75,6 +76,7 @@ import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
 import { fastembed } from "@mastra/fastembed";
 
 export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
   name: "mongodb-agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",

@@ -3,7 +3,7 @@ import { describeRoute } from 'hono-openapi';
 import {
   getAITraceHandler,
   getAITracesPaginatedHandler,
-  getScoresBySpan,
+  listScoresBySpan,
   processTraceScoringHandler,
 } from './handlers';
 
@@ -141,7 +141,7 @@ export function observabilityRouter() {
         },
       },
     }),
-    getScoresBySpan,
+    listScoresBySpan,
   );
 
   router.post(

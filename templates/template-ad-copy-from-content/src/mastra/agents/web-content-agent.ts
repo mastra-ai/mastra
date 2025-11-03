@@ -7,6 +7,7 @@ import { pageExtractTool } from '../tools/page-extract-tool';
 const memory = new Memory();
 
 export const webContentAgent = new Agent({
+  id: 'web-content-agent',
   name: 'Web Content Extraction Agent',
   instructions: `
     You are a specialized web content extraction agent focused on gathering content from blog posts, articles, and websites for marketing and ad copy generation purposes.

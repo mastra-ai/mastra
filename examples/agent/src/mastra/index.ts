@@ -6,7 +6,7 @@ import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, eval
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
 import { chefModelV2Agent, errorAgent, networkAgent } from './agents/model-v2-agent';
-import { createScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
 import { myWorkflowX } from './workflows/other';
 
 const storage = new LibSQLStore({
@@ -14,7 +14,8 @@ const storage = new LibSQLStore({
 });
 
 const testScorer = createScorer({
-  name: 'scorer1',
+  id: 'scorer1',
+  name: 'My Scorer',
   description: 'Scorer 1',
 }).generateScore(() => {
   return 1;

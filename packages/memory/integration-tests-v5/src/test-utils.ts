@@ -1,5 +1,5 @@
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { MastraMessageV1 } from '@mastra/core/memory';
 
@@ -36,7 +36,7 @@ export function generateConversationHistory({
   toolNames?: (keyof typeof toolArgs)[];
 }): {
   messages: MastraMessageV1[];
-  messagesV2: MastraMessageV2[];
+  messagesV2: MastraDBMessage[];
   fakeCore: CoreMessage[];
   counts: { messages: number; toolCalls: number; toolResults: number };
 } {
@@ -45,7 +45,7 @@ export function generateConversationHistory({
   const words = ['apple', 'banana', 'orange', 'grape'];
   // Arguments for different tools
 
-  const messages: MastraMessageV2[] = [];
+  const messages: MastraDBMessage[] = [];
   const startTime = Date.now();
 
   // Generate message pairs (user message followed by assistant response)
@@ -130,7 +130,7 @@ export function generateConversationHistory({
   return {
     fakeCore: list.get.all.v1() as CoreMessage[],
     messages: list.get.all.v1(),
-    messagesV2: list.get.all.v2(),
+    messagesV2: list.get.all.db(),
     counts,
   };
 }
