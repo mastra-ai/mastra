@@ -97,7 +97,7 @@ export const mastraClient = new MastraClient({
 Once `MastraClient` is configured with the Supabase access token, you can send authenticated requests:
 
 <Tabs>
-  <TabItem value="curl" label="cURL">
+  <TabItem value="react" label="React">
     ```tsx title="src/components/test-agent.tsx" showLineNumbers copy
     import { mastraClient } from "../../lib/mastra-client";
 
@@ -117,7 +117,7 @@ Once `MastraClient` is configured with the Supabase access token, you can send a
     ```
 
   </TabItem>
-  <TabItem value="react" label="React">
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
