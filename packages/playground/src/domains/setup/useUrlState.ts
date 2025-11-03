@@ -16,12 +16,12 @@ export const useUrlState = () => {
   const [urlState, setUrlState] = useState<{ url: string; isLoading: boolean }>({ url: '', isLoading: true });
 
   useLayoutEffect(() => {
+    const storedUrl = localStorage.getItem('mastra-instance-url');
+    if (storedUrl) return setUrlState({ url: storedUrl, isLoading: false });
+
     if (isMastraRunning) {
       return setUrlState({ url: 'http://localhost:4111', isLoading: false });
     }
-
-    const storedUrl = localStorage.getItem('mastra-instance-url');
-    if (storedUrl) return setUrlState({ url: storedUrl, isLoading: false });
 
     return setUrlState({ url: '', isLoading: false });
   }, [isMastraRunning]);
