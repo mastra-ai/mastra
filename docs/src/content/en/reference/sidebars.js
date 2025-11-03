@@ -180,7 +180,7 @@ const sidebars = {
             {
               type: "doc",
               id: "workflows/workflow-methods/create-run",
-              label: ".createRunAsync()",
+              label: ".createRun()",
             },
           ],
         },

@@ -656,22 +656,7 @@ export class InngestWorkflow<
     }
   }
 
-  /**
-   * @deprecated Use createRunAsync() instead.
-   * @throws {Error} Always throws an error directing users to use createRunAsync()
-   */
-  createRun(_options?: { runId?: string }): Run<TEngineType, TSteps, TState, TInput, TOutput> {
-    throw new Error(
-      'createRun() has been deprecated. ' +
-        'Please use createRunAsync() instead.\n\n' +
-        'Migration guide:\n' +
-        '  Before: const run = workflow.createRun();\n' +
-        '  After:  const run = await workflow.createRunAsync();\n\n' +
-        'Note: createRunAsync() is an async method, so make sure your calling function is async.',
-    );
-  }
-
-  async createRunAsync(options?: {
+  async createRun(options?: {
     runId?: string;
     resourceId?: string;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {

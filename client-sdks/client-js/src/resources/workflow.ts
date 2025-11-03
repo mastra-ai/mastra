@@ -125,7 +125,7 @@ export class Workflow extends BaseResource {
    * @param params - Optional object containing the optional runId
    * @returns Promise containing the runId of the created run with methods to control execution
    */
-  async createRunAsync(params?: { runId?: string }): Promise<{
+  async createRun(params?: { runId?: string }): Promise<{
     runId: string;
     start: (params: {
       inputData: Record<string, any>;

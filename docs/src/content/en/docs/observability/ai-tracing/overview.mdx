@@ -620,7 +620,7 @@ Workflow executions also return trace IDs:
 
 ```ts showLineNumbers copy
 // Create a workflow run
-const run = await mastra.getWorkflow("myWorkflow").createRunAsync();
+const run = await mastra.getWorkflow("myWorkflow").createRun();
 
 // Start the workflow
 const result = await run.start({
@@ -701,7 +701,7 @@ Workflows support the same pattern for trace propagation:
 
 ```ts showLineNumbers copy
 const workflow = mastra.getWorkflow("data-pipeline");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: { data: "..." },

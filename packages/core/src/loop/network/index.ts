@@ -716,7 +716,7 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
-      const run = await wf.createRunAsync({ runId });
+      const run = await wf.createRun({ runId });
       const toolData = {
         name: wf.name,
         args: inputData,
@@ -1205,7 +1205,7 @@ export async function networkLoop<
     .then(finalStep)
     .commit();
 
-  const run = await mainWorkflow.createRunAsync({
+  const run = await mainWorkflow.createRun({
     runId,
   });
 

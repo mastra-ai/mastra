@@ -377,7 +377,7 @@ class MastraScorer<
     const run = { ...input, runId };
 
     const workflow = this.toMastraWorkflow();
-    const workflowRun = await workflow.createRunAsync();
+    const workflowRun = await workflow.createRun();
     const workflowResult = await workflowRun.start({
       inputData: {
         run,

@@ -1791,7 +1791,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 resourceId,
               });
 
-              const run = await workflow.createRunAsync();
+              const run = await workflow.createRun();
 
               let result: any;
               if (methodType === 'generate' || methodType === 'generateLegacy') {
@@ -2359,7 +2359,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       toolCallId: options.toolCallId,
     });
 
-    const run = await executionWorkflow.createRunAsync();
+    const run = await executionWorkflow.createRun();
     const result = await run.start({ tracingContext: { currentSpan: agentAISpan } });
 
     return result;

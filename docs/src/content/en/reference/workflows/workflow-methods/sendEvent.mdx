@@ -49,7 +49,7 @@ run.sendEvent("event-name", { value: "data" });
 ```typescript showLineNumbers copy
 import { mastra } from "./mastra";
 
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+const run = await mastra.getWorkflow("testWorkflow").createRun();
 
 const result = run.start({
   inputData: {

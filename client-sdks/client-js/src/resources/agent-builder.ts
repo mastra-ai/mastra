@@ -105,7 +105,7 @@ export class AgentBuilder extends BaseResource {
    * Creates a new agent builder action run and returns the runId.
    * This calls `/api/agent-builder/:actionId/create-run`.
    */
-  async createRunAsync(params?: { runId?: string }): Promise<{ runId: string }> {
+  async createRun(params?: { runId?: string }): Promise<{ runId: string }> {
     const searchParams = new URLSearchParams();
 
     if (!!params?.runId) {
