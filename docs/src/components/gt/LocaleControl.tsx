@@ -18,7 +18,7 @@ export default function LocaleControl({
   className,
   size = "default",
 }: {
-  className: string;
+  className?: string;
   size?: "sm" | "default";
 }) {
   const { i18n } = useDocusaurusContext();
