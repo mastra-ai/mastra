@@ -52,11 +52,11 @@ export class Workflow extends BaseResource {
     if (params?.toDate) {
       searchParams.set('toDate', params.toDate.toISOString());
     }
-    if (params?.limit !== null && params?.limit !== undefined && !isNaN(Number(params?.limit))) {
-      searchParams.set('limit', String(params.limit));
+    if (params?.perPage !== null && params?.perPage !== undefined && !isNaN(Number(params?.perPage))) {
+      searchParams.set('perPage', String(params.perPage));
     }
-    if (params?.offset !== null && params?.offset !== undefined && !isNaN(Number(params?.offset))) {
-      searchParams.set('offset', String(params.offset));
+    if (params?.page !== null && params?.page !== undefined && !isNaN(Number(params?.page))) {
+      searchParams.set('page', String(params.page));
     }
     if (params?.resourceId) {
       searchParams.set('resourceId', params.resourceId);

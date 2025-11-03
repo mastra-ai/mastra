@@ -965,7 +965,8 @@ describe('Workflow', () => {
       });
 
       const agent = new Agent({
-        name: 'test-agent-with-options',
+        id: 'test-agent-with-options',
+        name: 'Test Agent With Options',
         instructions: 'original instructions',
         model: new MockLanguageModelV1({
           doStream: doStreamSpy,
@@ -11174,7 +11175,8 @@ describe('Workflow', () => {
       });
 
       const agent = new Agent({
-        name: 'test-agent-1',
+        id: 'test-agent-1',
+        name: 'Test Agent 1',
         instructions: 'test agent instructions',
         model: new MockLanguageModelV1({
           doStream: async () => ({
@@ -11195,7 +11197,8 @@ describe('Workflow', () => {
       });
 
       const agent2 = new Agent({
-        name: 'test-agent-2',
+        id: 'test-agent-2',
+        name: 'Test Agent 2',
         instructions: 'test agent instructions',
         model: new MockLanguageModelV1({
           doStream: async () => ({

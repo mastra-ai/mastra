@@ -497,7 +497,7 @@ export class AgentBuilder extends BaseResource {
    * Gets all runs for this agent builder action.
    * This calls `/api/agent-builder/:actionId/runs`.
    */
-  async runs(params?: { fromDate?: Date; toDate?: Date; limit?: number; offset?: number; resourceId?: string }) {
+  async runs(params?: { fromDate?: Date; toDate?: Date; perPage?: number; page?: number; resourceId?: string }) {
     const searchParams = new URLSearchParams();
     if (params?.fromDate) {
       searchParams.set('fromDate', params.fromDate.toISOString());
@@ -505,11 +505,11 @@ export class AgentBuilder extends BaseResource {
     if (params?.toDate) {
       searchParams.set('toDate', params.toDate.toISOString());
     }
-    if (params?.limit !== undefined) {
-      searchParams.set('limit', String(params.limit));
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
     }
-    if (params?.offset !== undefined) {
-      searchParams.set('offset', String(params.offset));
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
     }
     if (params?.resourceId) {
       searchParams.set('resourceId', params.resourceId);

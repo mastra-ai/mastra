@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { WorkflowsStorage } from '@mastra/core/storage';
+import { normalizePerPage, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
@@ -156,8 +156,23 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
     try {
       // Default values
-      const limit = args?.limit || 10;
-      const offset = args?.offset || 0;
+      const perPage = args?.perPage !== undefined ? args.perPage : 10;
+      const page = args?.page !== undefined ? args.page : 0;
+
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: 'DYNAMODB_STORE_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
+      const normalizedPerPage = normalizePerPage(perPage, 10);
+      const offset = page * normalizedPerPage;
 
       let query;
 
@@ -220,7 +235,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
       // Apply offset and limit to the accumulated filtered results
       const total = allMatchingSnapshots.length;
-      const paginatedData = allMatchingSnapshots.slice(offset, offset + limit);
+      const paginatedData = allMatchingSnapshots.slice(offset, offset + normalizedPerPage);
 
       // Format and return the results
       const runs = paginatedData.map((snapshot: WorkflowSnapshotDBItem) => formatWorkflowRun(snapshot));

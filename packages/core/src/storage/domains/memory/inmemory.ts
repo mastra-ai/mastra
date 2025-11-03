@@ -1,5 +1,6 @@
 import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
+import { normalizePerPage, preservePerPageForResponse } from '../../base';
 import type {
   PaginationInfo,
   StorageGetMessagesArg,
@@ -96,8 +97,8 @@ export class InMemoryMemory extends MemoryStorage {
     resourceId,
     include,
     filter,
-    limit,
-    offset = 0,
+    perPage: perPageInput,
+    page = 0,
     orderBy,
   }: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     this.logger.debug(`MockStore: listMessages called for thread ${threadId}`);
@@ -106,23 +107,21 @@ export class InMemoryMemory extends MemoryStorage {
 
     const { field, direction } = this.parseOrderBy(orderBy);
 
-    // Determine how many results to return
-    // Default pagination is always 40 unless explicitly specified
-    let perPage = 40;
+    // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 40)
+    const perPage = normalizePerPage(perPageInput, 40);
 
-    if (limit !== undefined) {
-      // Explicit limit provided
-      if (limit === false) {
-        // limit: false means get ALL messages
-        perPage = Number.MAX_SAFE_INTEGER;
-      } else if (typeof limit === 'number' && limit > 0) {
-        // limit: number means get that many messages
-        perPage = limit;
-      }
+    if (page < 0) {
+      throw new Error('page must be >= 0');
     }
 
-    // Calculate page from offset
-    const page = Math.floor(offset / perPage);
+    // Prevent unreasonably large page values that could cause performance issues
+    const maxOffset = Number.MAX_SAFE_INTEGER / 2;
+    if (page * perPage > maxOffset) {
+      throw new Error('page value too large');
+    }
+
+    // Calculate offset from page
+    const offset = page * perPage;
 
     // Step 1: Get regular paginated messages from the thread first
     let threadMessages = Array.from(this.collection.messages.values()).filter((msg: any) => {
@@ -291,7 +290,7 @@ export class InMemoryMemory extends MemoryStorage {
       messages,
       total: totalThreadMessages,
       page,
-      perPage,
+      perPage: preservePerPageForResponse(perPageInput, perPage),
       hasMore,
     };
   }
@@ -603,8 +602,20 @@ export class InMemoryMemory extends MemoryStorage {
   async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset, limit, orderBy } = args;
+    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    if (page < 0) {
+      throw new Error('page must be >= 0');
+    }
+
+    // Prevent unreasonably large page values that could cause performance issues
+    const maxOffset = Number.MAX_SAFE_INTEGER / 2;
+    if (page * perPage > maxOffset) {
+      throw new Error('page value too large');
+    }
+
     this.logger.debug(`MockStore: listThreadsByResourceId called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
     const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
@@ -613,12 +624,13 @@ export class InMemoryMemory extends MemoryStorage {
       ...thread,
       metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
     })) as StorageThreadType[];
+    const offset = page * perPage;
     return {
-      threads: clonedThreads.slice(offset, offset + limit),
+      threads: clonedThreads.slice(offset, offset + perPage),
       total: clonedThreads.length,
-      page: limit > 0 ? Math.floor(offset / limit) : 0,
-      perPage: limit,
-      hasMore: offset + limit < clonedThreads.length,
+      page,
+      perPage: preservePerPageForResponse(perPageInput, perPage),
+      hasMore: offset + perPage < clonedThreads.length,
     };
   }
 

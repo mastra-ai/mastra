@@ -1266,8 +1266,8 @@ export class Workflow<
   async listWorkflowRuns(args?: {
     fromDate?: Date;
     toDate?: Date;
-    limit?: number;
-    offset?: number;
+    perPage?: number;
+    page?: number;
     resourceId?: string;
   }) {
     const storage = this.#mastra?.getStorage();

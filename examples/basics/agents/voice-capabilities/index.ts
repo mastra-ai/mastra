@@ -9,7 +9,8 @@ import path from 'path';
 
 // Initialize Agent 1 with both listening and speaking capabilities
 const agent1 = new Agent({
-  name: 'Agent1',
+  id: 'agent-1',
+  name: 'Agent 1',
   instructions: `You are an agent with both STT and TTS capabilities.`,
   model: openai('gpt-4o'),
   voice: new CompositeVoice({
@@ -20,7 +21,8 @@ const agent1 = new Agent({
 
 // Initialize Agent 2 with just OpenAI for both listening and speaking capabilities
 const agent2 = new Agent({
-  name: 'Agent2',
+  id: 'agent-2',
+  name: 'Agent 2',
   instructions: `You are an agent with both STT and TTS capabilities.`,
   model: openai('gpt-4o'),
   voice: new OpenAIVoice(),

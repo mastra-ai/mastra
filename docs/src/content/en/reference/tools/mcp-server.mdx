@@ -24,6 +24,7 @@ import { z } from "zod";
 import { dataProcessingWorkflow } from "../workflows/dataProcessingWorkflow";
 
 const myAgent = new Agent({
+  id: "my-example-agent",
   name: "MyExampleAgent",
   description: "A generalist to help with basic questions."
   instructions: "You are a helpful assistant.",
