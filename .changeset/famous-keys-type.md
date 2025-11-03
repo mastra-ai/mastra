@@ -41,7 +41,7 @@ execute: async ({ context, tracingContext, runId, ... }) => {
 **After:**
 
 ```typescript
-inputParams: z.object({ something: z.string() }),
+inputSchema: z.object({ something: z.string() }),
 execute: async (inputData, context) => {
   const { agent, mcp, workflow, ...sharedContext } = context
 
