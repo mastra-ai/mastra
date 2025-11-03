@@ -191,12 +191,13 @@ Tools exposed through `MCPServer` can access MCP request context (authentication
 
 | Call Pattern | Access Method |
 |-------------|---------------|
-| Direct tool call | `options?.mcp?.extra` |
-| Agent tool call | `requestContext?.get("mcp.extra")` |
+| Direct tool call | `context?.mcp?.extra` |
+| Agent tool call | `context?.requestContext?.get("mcp.extra")` |
 
 **Universal pattern** (works in both contexts):
 ```typescript
-const authInfo = options?.mcp?.extra?.authInfo || requestContext?.get("mcp.extra")?.authInfo;
+const mcpExtra = context?.mcp?.extra ?? context?.requestContext?.get("mcp.extra");
+const authInfo = mcpExtra?.authInfo;
 ```
 
 #### Example: Tool that works in both contexts

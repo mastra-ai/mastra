@@ -770,7 +770,7 @@ export class MCPServer extends MCPServerBase {
             }
 
             const response = await agent.generate(inputData.message, {
-              ...context,
+              ...(context ?? {}),
               requestContext: proxiedContext,
             });
             return response;
