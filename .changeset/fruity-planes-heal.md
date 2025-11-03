@@ -3,4 +3,4 @@
 '@mastra/agent-builder': patch
 ---
 
-Remove format refrences from rag package
+Remove format references from rag package
