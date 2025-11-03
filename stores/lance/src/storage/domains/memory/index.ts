@@ -6,7 +6,7 @@ import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastr
 import {
   MemoryStorage,
   normalizePerPage,
-  preservePerPageForResponse,
+  calculatePagination,
   resolveMessageLimit,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -321,6 +321,8 @@ export class StoreMemoryLance extends MemoryStorage {
     }
 
     const perPage = normalizePerPage(perPageInput, 40);
+    // When perPage is false (get all), ignore page offset
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
       if (page < 0) {
@@ -334,8 +336,6 @@ export class StoreMemoryLance extends MemoryStorage {
           new Error('page must be >= 0'),
         );
       }
-
-      const offset = page * perPage;
 
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -399,7 +399,7 @@ export class StoreMemoryLance extends MemoryStorage {
           messages: [],
           total: 0,
           page,
-          perPage: preservePerPageForResponse(perPageInput, perPage),
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
@@ -466,12 +466,10 @@ export class StoreMemoryLance extends MemoryStorage {
         messages: finalMessages,
         total,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error: any) {
-      const perPage = normalizePerPage(perPageInput, 40);
-
       const mastraError = new MastraError(
         {
           id: 'LANCE_STORE_LIST_MESSAGES_FAILED',
@@ -486,12 +484,11 @@ export class StoreMemoryLance extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-
       return {
         messages: [],
         total: 0,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }
@@ -578,7 +575,8 @@ export class StoreMemoryLance extends MemoryStorage {
         );
       }
 
-      const offset = page * perPage;
+      // When perPage is false (get all), ignore page offset
+      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const { field, direction } = this.parseOrderBy(orderBy);
       const table = await this.client.openTable(TABLE_THREADS);
 
@@ -617,7 +615,7 @@ export class StoreMemoryLance extends MemoryStorage {
         threads,
         total,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore: offset + perPage < total,
       };
     } catch (error: any) {

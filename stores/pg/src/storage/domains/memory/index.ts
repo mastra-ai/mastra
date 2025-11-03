@@ -5,7 +5,7 @@ import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastr
 import {
   MemoryStorage,
   normalizePerPage,
-  preservePerPageForResponse,
+  calculatePagination,
   resolveMessageLimit,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -113,11 +113,12 @@ export class MemoryPG extends MemoryStorage {
     const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
     const perPage = normalizePerPage(perPageInput, 100);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
       const baseQuery = `FROM ${tableName} WHERE "resourceId" = $1`;
       const queryParams: any[] = [resourceId];
-      const offset = page * perPage;
+      // When perPage is false (get all), ignore page offset
 
       const countQuery = `SELECT COUNT(*) ${baseQuery}`;
       const countResult = await this.client.one(countQuery, queryParams);
@@ -128,7 +129,7 @@ export class MemoryPG extends MemoryStorage {
           threads: [],
           total: 0,
           page,
-          perPage: preservePerPageForResponse(perPageInput, perPage),
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
@@ -147,7 +148,7 @@ export class MemoryPG extends MemoryStorage {
         threads,
         total,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore: offset + perPage < total,
       };
     } catch (error) {
@@ -169,7 +170,7 @@ export class MemoryPG extends MemoryStorage {
         threads: [],
         total: 0,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }
@@ -545,12 +546,9 @@ export class MemoryPG extends MemoryStorage {
     }
 
     const perPage = normalizePerPage(perPageInput, 40);
-    const perPageForResponse = preservePerPageForResponse(perPageInput, perPage);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      // Calculate offset from page
-      const offset = page * perPage;
-
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy);
       const orderByStatement = `ORDER BY "${field}" ${direction}`;

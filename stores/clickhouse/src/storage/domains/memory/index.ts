@@ -15,7 +15,7 @@ import type {
 import {
   MemoryStorage,
   normalizePerPage,
-  preservePerPageForResponse,
+  calculatePagination,
   resolveMessageLimit,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -275,8 +275,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     }
 
     const perPageForQuery = normalizePerPage(perPageInput, 40);
-    const perPageForResponse = preservePerPageForResponse(perPageInput, perPageForQuery);
-    const offset: number = page * perPageForQuery;
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPageForQuery);
 
     try {
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
@@ -906,7 +905,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       );
     }
 
-    const offset = page * perPage;
+    // When perPage is false (get all), ignore page offset
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
@@ -929,7 +929,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           threads: [],
           total: 0,
           page,
-          perPage: preservePerPageForResponse(perPageInput, perPage),
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
@@ -969,7 +969,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         threads,
         total,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore: offset + perPage < total,
       };
     } catch (error) {
@@ -994,7 +994,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-      const offset = page * perPage;
+      // When perPage is false (get all), ignore page offset
+      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const dateRange = selectBy?.pagination?.dateRange;
       const fromDate = dateRange?.start;
       const toDate = dateRange?.end;

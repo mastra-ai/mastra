@@ -8,8 +8,8 @@ import {
   TABLE_THREADS,
   resolveMessageLimit,
   TABLE_MESSAGES,
-  preservePerPageForResponse,
   normalizePerPage,
+  calculatePagination,
 } from '@mastra/core/storage';
 import type {
   StorageGetMessagesArg,
@@ -93,6 +93,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
       );
     }
 
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
     try {
       let allThreads: StorageThreadType[] = [];
       const pattern = `${TABLE_THREADS}:*`;
@@ -118,16 +120,16 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const sortedThreads = this.sortThreads(allThreads, field, direction);
 
       const total = sortedThreads.length;
-      const offset = page * perPage;
-      const end = offset + perPage;
+      // When perPage is false (get all), ignore page offset
+      const end = perPageInput === false ? total : offset + perPage;
       const paginatedThreads = sortedThreads.slice(offset, end);
-      const hasMore = end < total;
+      const hasMore = perPageInput === false ? false : end < total;
 
       return {
         threads: paginatedThreads,
         total,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error) {
@@ -150,7 +152,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         threads: [],
         total: 0,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }
@@ -597,10 +599,11 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
 
     const threadMessagesKey = getThreadMessagesKey(threadId);
+    const perPage = normalizePerPage(perPageInput, 40);
+    // When perPage is false (get all), ignore page offset
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      const perPage = normalizePerPage(perPageInput, 40);
-
       if (page < 0) {
         throw new MastraError(
           {
@@ -612,8 +615,6 @@ export class StoreMemoryUpstash extends MemoryStorage {
           new Error('page must be >= 0'),
         );
       }
-
-      const offset = page * perPage;
 
       // Get included messages with context if specified
       let includedMessages: MastraDBMessage[] = [];
@@ -630,7 +631,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
           messages: [],
           total: 0,
           page,
-          perPage: preservePerPageForResponse(perPageInput, perPage),
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
@@ -767,7 +768,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         messages: finalMessages,
         total,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error) {
@@ -790,7 +791,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         messages: [],
         total: 0,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }

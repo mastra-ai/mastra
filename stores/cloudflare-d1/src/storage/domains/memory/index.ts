@@ -11,7 +11,7 @@ import {
   TABLE_THREADS,
   TABLE_RESOURCES,
   normalizePerPage,
-  preservePerPageForResponse,
+  calculatePagination,
 } from '@mastra/core/storage';
 import type {
   PaginationInfo,
@@ -229,7 +229,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       );
     }
 
-    const offset = page * perPage;
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
     const fullTableName = this.operations.getTableName(TABLE_THREADS);
 
@@ -265,7 +265,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         threads,
         total,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore: offset + perPage < total,
       };
     } catch (error) {
@@ -737,10 +737,9 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
 
     const perPage = normalizePerPage(perPageInput, 40);
+    const { perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      const offset = page * perPage;
-
       const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
@@ -828,7 +827,7 @@ export class MemoryStorageD1 extends MemoryStorage {
           messages: [],
           total: 0,
           page,
-          perPage: preservePerPageForResponse(perPageInput, perPage),
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
@@ -890,7 +889,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         messages: finalMessages,
         total,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error: any) {
@@ -911,12 +910,11 @@ export class MemoryStorageD1 extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      const perPage = normalizePerPage(perPageInput, 40);
       return {
         messages: [],
         total: 0,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }

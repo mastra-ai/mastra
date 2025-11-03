@@ -5,7 +5,7 @@ import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastr
 import {
   MemoryStorage,
   normalizePerPage,
-  preservePerPageForResponse,
+  calculatePagination,
   resolveMessageLimit,
   safelyParseJSON,
   TABLE_MESSAGES,
@@ -219,7 +219,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     const perPage = normalizePerPage(perPageInput, 40);
 
     try {
-      const offset = page * perPage;
+      // When perPage is false (get all), ignore page offset
+      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -245,29 +246,28 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Get total count
       const total = await collection.countDocuments(query);
 
-      // Step 1: Get paginated messages from the thread first (without excluding included ones)
-      const sortObj: any = { [field]: sortOrder };
-      let cursor = collection.find(query).sort(sortObj).skip(offset);
-
-      // Only apply limit if not unlimited and perPage > 0
-      // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
-      // So we skip limit when perPage === 0 and handle it by returning empty array
-      if (perPageInput !== false && perPage > 0) {
-        cursor = cursor.limit(perPage);
-      }
-
-      const dataResult = await cursor.toArray();
-
-      // If perPage is 0, return empty array regardless of query results
+      // If perPage is 0, return early to avoid fetching documents
       if (perPage === 0) {
         return {
           messages: [],
           total,
           page,
-          perPage: 0,
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
+
+      // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      const sortObj: any = { [field]: sortOrder };
+      let cursor = collection.find(query).sort(sortObj).skip(offset);
+
+      // Only apply limit if not unlimited
+      // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
+      if (perPageInput !== false) {
+        cursor = cursor.limit(perPage);
+      }
+
+      const dataResult = await cursor.toArray();
       const messages: any[] = dataResult.map((row: any) => this.parseRow(row));
 
       if (total === 0 && messages.length === 0) {
@@ -275,7 +275,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           messages: [],
           total: 0,
           page,
-          perPage: preservePerPageForResponse(perPageInput, perPage),
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
@@ -327,7 +327,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         messages: finalMessages,
         total,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error) {
@@ -350,7 +350,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         messages: [],
         total: 0,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }
@@ -779,7 +779,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       }
 
       const perPage = normalizePerPage(perPageInput, 100);
-      const offset = page * perPage;
+      // When perPage is false (get all), ignore page offset
+      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const { field, direction } = this.parseOrderBy(orderBy);
       const collection = await this.operations.getCollection(TABLE_THREADS);
 
@@ -817,7 +818,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         })),
         total,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore: offset + perPage < total,
       };
     } catch (error) {

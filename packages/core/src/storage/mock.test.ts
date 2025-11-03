@@ -202,11 +202,11 @@ describe('InMemoryStore - Message Fetching', () => {
     expect(result2.messages).toHaveLength(0);
   });
 
-  it('getMessagesPaginated should return empty array if threadId is an empty string or whitespace only', async () => {
-    const result = await store.getMessagesPaginated({ threadId: '' });
+  it('listMessages should return empty array if threadId is an empty string or whitespace only', async () => {
+    const result = await store.listMessages({ threadId: '' });
     expect(result.messages).toHaveLength(0);
 
-    const result2 = await store.getMessagesPaginated({ threadId: '   ' });
+    const result2 = await store.listMessages({ threadId: '   ' });
     expect(result2.messages).toHaveLength(0);
   });
 });

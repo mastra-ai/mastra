@@ -15,7 +15,7 @@ import type {
 import {
   MemoryStorage,
   normalizePerPage,
-  preservePerPageForResponse,
+  calculatePagination,
   resolveMessageLimit,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -235,7 +235,8 @@ export class MemoryLibSQL extends MemoryStorage {
     const perPage = normalizePerPage(perPageInput, 40);
 
     try {
-      const offset = page * perPage;
+      // When perPage is false (get all), ignore page offset
+      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -285,7 +286,7 @@ export class MemoryLibSQL extends MemoryStorage {
           messages: [],
           total: 0,
           page,
-          perPage: preservePerPageForResponse(perPageInput, perPage),
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
@@ -336,7 +337,7 @@ export class MemoryLibSQL extends MemoryStorage {
         messages: finalMessages,
         total,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error) {
@@ -866,7 +867,8 @@ export class MemoryLibSQL extends MemoryStorage {
     }
 
     const perPage = normalizePerPage(perPageInput, 100);
-    const offset = page * perPage;
+    // When perPage is false (get all), ignore page offset
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
@@ -893,7 +895,7 @@ export class MemoryLibSQL extends MemoryStorage {
           threads: [],
           total: 0,
           page,
-          perPage: preservePerPageForResponse(perPageInput, perPage),
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
@@ -909,7 +911,7 @@ export class MemoryLibSQL extends MemoryStorage {
         threads,
         total,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore: offset + perPage < total,
       };
     } catch (error) {
@@ -928,7 +930,7 @@ export class MemoryLibSQL extends MemoryStorage {
         threads: [],
         total: 0,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }

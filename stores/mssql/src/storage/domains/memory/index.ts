@@ -5,7 +5,7 @@ import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastr
 import {
   MemoryStorage,
   normalizePerPage,
-  preservePerPageForResponse,
+  calculatePagination,
   resolveMessageLimit,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -110,7 +110,8 @@ export class MemoryMSSQL extends MemoryStorage {
   ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
     const perPage = normalizePerPage(perPageInput, 100);
-    const offset = page * perPage;
+    // When perPage is false (get all), ignore page offset
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
     try {
       const baseQuery = `FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} WHERE [resourceId] = @resourceId`;
@@ -126,7 +127,7 @@ export class MemoryMSSQL extends MemoryStorage {
           threads: [],
           total: 0,
           page,
-          perPage: preservePerPageForResponse(perPageInput, perPage),
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
@@ -151,7 +152,7 @@ export class MemoryMSSQL extends MemoryStorage {
         threads,
         total,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
+        perPage: perPageForResponse,
         hasMore: offset + perPage < total,
       };
     } catch (error) {
@@ -173,7 +174,7 @@ export class MemoryMSSQL extends MemoryStorage {
         threads: [],
         total: 0,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }
@@ -570,11 +571,9 @@ export class MemoryMSSQL extends MemoryStorage {
     }
 
     const perPage = normalizePerPage(perPageInput, 40);
-    const responsePerPage = preservePerPageForResponse(perPageInput, perPage);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      const offset = page * perPage;
-
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy);
       const orderByStatement = `ORDER BY [${field}] ${direction}`;
@@ -671,7 +670,7 @@ export class MemoryMSSQL extends MemoryStorage {
         messages: finalMessages,
         total,
         page,
-        perPage: responsePerPage,
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error) {
@@ -693,7 +692,7 @@ export class MemoryMSSQL extends MemoryStorage {
         messages: [],
         total: 0,
         page,
-        perPage: responsePerPage,
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }

@@ -1,6 +1,6 @@
 import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
-import { normalizePerPage, preservePerPageForResponse } from '../../base';
+import { normalizePerPage, calculatePagination } from '../../base';
 import type {
   PaginationInfo,
   StorageGetMessagesArg,
@@ -121,7 +121,8 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     // Calculate offset from page
-    const offset = page * perPage;
+
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     // Step 1: Get regular paginated messages from the thread first
     let threadMessages = Array.from(this.collection.messages.values()).filter((msg: any) => {
@@ -290,7 +291,7 @@ export class InMemoryMemory extends MemoryStorage {
       messages,
       total: totalThreadMessages,
       page,
-      perPage: preservePerPageForResponse(perPageInput, perPage),
+      perPage: perPageForResponse,
       hasMore,
     };
   }
@@ -624,12 +625,12 @@ export class InMemoryMemory extends MemoryStorage {
       ...thread,
       metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
     })) as StorageThreadType[];
-    const offset = page * perPage;
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     return {
       threads: clonedThreads.slice(offset, offset + perPage),
       total: clonedThreads.length,
       page,
-      perPage: preservePerPageForResponse(perPageInput, perPage),
+      perPage: perPageForResponse,
       hasMore: offset + perPage < clonedThreads.length,
     };
   }
