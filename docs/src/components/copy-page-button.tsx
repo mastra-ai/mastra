@@ -98,20 +98,9 @@ export const CopyPageButton = () => {
 
         <DropdownMenu.Portal>
           <T>
-            className={cn(
-              "min-w-[280px] bg-(--ifm-background-color) dark:bg-(--mastra-surface-3) rounded-xl",
-              "border border-(--border)/50 dark:border-(--border)",
-              "p-1 z-50",
-              "animate-in fade-in-0 zoom-in-95",
-            )}
-            sideOffset={5}
-            align="end"
-          >
             <DropdownMenu.Content
               className={cn(
                 "min-w-[280px] bg-(--ifm-background-color) dark:bg-(--mastra-surface-3) rounded-xl",
-                "text-(--mastra-text-secondary) dark:text-white",
-                "rounded-lg cursor-pointer outline-none",
                 "border border-(--border)/50 dark:border-(--border)",
                 "p-1 z-50",
                 "animate-in fade-in-0 zoom-in-95",
@@ -131,8 +120,6 @@ export const CopyPageButton = () => {
                 onClick={handleCopyPage}
               >
                 <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-(--mastra-surface-2) dark:bg-(--mastra-surface-5) border border-(--border)/50   dark:border-(--border)">
-                <div className="font-medium">Copy page</div>
-                <div className="text-xs text-(--mastra-text-primary) dark:text-(--mastra-text-tertiary)">
                   <CopyPageIcon className="w-4 h-4" />
                 </div>
                 <div className="flex flex-col gap-0.5 flex-1">
@@ -156,11 +143,6 @@ export const CopyPageButton = () => {
               >
                 <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-(--mastra-surface-2) dark:bg-(--mastra-surface-5) border border-(--border)/50 dark:border-(--border)">
                   <ChatGPTIcon className="w-4 h-4" />
-              </div>
-              <div className="flex flex-col gap-0.5 flex-1">
-                <div className="font-medium flex items-center gap-1.5">
-                  Open in ChatGPT
-                  <ExternalLinkIcon className="w-3 h-3" />
                 </div>
                 <div className="flex flex-col gap-0.5 flex-1">
                   <div className="font-medium flex items-center gap-1.5">
@@ -171,7 +153,6 @@ export const CopyPageButton = () => {
                     Ask questions about this page
                   </div>
                 </div>
-              </div>
               </DropdownMenu.Item>
 
               <DropdownMenu.Item
@@ -187,11 +168,6 @@ export const CopyPageButton = () => {
               >
                 <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-(--mastra-surface-2) dark:bg-(--mastra-surface-5) border border-(--border)/50 dark:border-(--border)">
                   <ClaudeIcon className="w-4 h-4" />
-              </div>
-              <div className="flex flex-col gap-0.5 flex-1">
-                <div className="font-medium flex items-center gap-1.5">
-                  Open in Claude
-                  <ExternalLinkIcon className="w-3 h-3" />
                 </div>
                 <div className="flex flex-col gap-0.5 flex-1">
                   <div className="font-medium flex items-center gap-1.5">
