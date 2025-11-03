@@ -720,21 +720,3 @@ export class InternalMastraMCPClient extends MastraBase {
     return toolsRes;
   }
 }
-
-/**
- * @deprecated MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.
- */
-
-export class MastraMCPClient extends InternalMastraMCPClient {
-  constructor(args: InternalMastraMCPClientOptions) {
-    super(args);
-    throw new MastraError(
-      {
-        id: 'MASTRA_MCP_CLIENT_DEPRECATED',
-        domain: ErrorDomain.MCP,
-        category: ErrorCategory.USER,
-        text: '[DEPRECATION] MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.',
-      },
-    );
-  }
-}
