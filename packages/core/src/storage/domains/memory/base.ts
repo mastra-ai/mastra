@@ -3,7 +3,6 @@ import { MastraBase } from '../../../base';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import type {
   StorageGetMessagesArg,
-  PaginationInfo,
   StorageResourceType,
   ThreadOrderBy,
   ThreadSortDirection,

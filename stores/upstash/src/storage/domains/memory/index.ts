@@ -13,7 +13,6 @@ import {
 } from '@mastra/core/storage';
 import type {
   StorageGetMessagesArg,
-  PaginationInfo,
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,

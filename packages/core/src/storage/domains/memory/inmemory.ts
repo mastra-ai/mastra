@@ -2,7 +2,6 @@ import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import { normalizePerPage, calculatePagination } from '../../base';
 import type {
-  PaginationInfo,
   StorageGetMessagesArg,
   StorageMessageType,
   StorageResourceType,

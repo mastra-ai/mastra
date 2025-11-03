@@ -9,7 +9,6 @@ import type {
   StorageResourceType,
   WorkflowRun,
   WorkflowRuns,
-  PaginationInfo,
   StorageListWorkflowRunsInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
