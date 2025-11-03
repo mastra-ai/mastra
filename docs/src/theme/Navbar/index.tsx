@@ -38,7 +38,7 @@ function NavbarContentDesktop() {
             {/* Adding locale control to header for ease of access in GT implementation*/}
 
             <div className="hidden lg:flex items-center gap-2">
-              <LocaleControl size="sm" className="py-3" />
+              <LocaleControl size="sm" className="px-[13px] bg-white border-transparent rounded-full transition-colors cursor-pointer" />
               <ThemeSwitcher />
             </div>
           </div>
