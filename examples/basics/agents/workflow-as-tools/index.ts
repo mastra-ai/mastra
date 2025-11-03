@@ -144,7 +144,8 @@ export const resumeWeatherTool = createTool({
 });
 
 export const weatherAgentWithWorkflow = new Agent({
-  name: 'Weather Agent with Workflow',
+  id: 'weather-agent-with-workflow',
+  name: 'Weather Agent With Workflow',
   instructions: `You are a helpful weather assistant that provides accurate weather information.
 
 Your primary function is to help users get weather details for specific locations. When responding:

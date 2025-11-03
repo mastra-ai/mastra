@@ -33,7 +33,8 @@ const catFact = createTool({
 });
 
 const catOne = new Agent({
-  name: 'cat-one',
+  id: 'cat-one',
+  name: 'Cat Expert',
   instructions: instructions,
   model: openai('gpt-4o-mini'),
   tools: {

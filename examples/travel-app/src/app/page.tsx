@@ -34,7 +34,8 @@ export default function Page() {
 import { anthropic } from '@ai-sdk/anthropic';
 
 export const travelAgent = new Agent({
-  name: 'travelAgent',
+  id: 'travel-agent',
+  name: 'Travel Agent',
   instructions:
     'You are an expert travel agent responsible for finding a flight, hotel,
     and three attractions for a user. You will be given a set of user

@@ -6,6 +6,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 const copywriterAgent = new Agent({
+  id: 'copywriter',
   name: 'Copywriter',
   instructions: 'You are a copywriter agent that writes blog post copy.',
   model: anthropic('claude-3-5-sonnet-20241022'),
@@ -30,6 +31,7 @@ const copywriterTool = createTool({
 });
 
 const editorAgent = new Agent({
+  id: 'editor',
   name: 'Editor',
   instructions: 'You are an editor agent that edits blog post copy.',
   model: openai('gpt-4o-mini'),
@@ -56,7 +58,8 @@ const editorTool = createTool({
 });
 
 const publisherAgent = new Agent({
-  name: 'publisherAgent',
+  id: 'publisher-agent',
+  name: 'Publisher Agent',
   instructions:
     'You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.',
   model: anthropic('claude-3-5-sonnet-20241022'),
