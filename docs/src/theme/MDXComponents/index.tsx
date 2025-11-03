@@ -37,7 +37,7 @@ const MDXComponents: MDXComponentsObject = {
       <MDXHeading as="h1" {...props} />
       <BrowserOnly fallback={<div />}>
         {() => (
-          <div className="relative hidden @[600px]:block">
+          <div className="relative">
             <CopyPageButton />
           </div>
         )}
