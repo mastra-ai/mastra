@@ -2439,7 +2439,7 @@ export const mastraClient = new MastraClient({
 Once `MastraClient` is configured, you can send authenticated requests from your frontend application, or use `curl` for quick local testing:
 
 <Tabs>
-  <TabItem value="curl" label="cURL">
+  <TabItem value="react" label="React">
     ```tsx title="src/components/test-agent.tsx" showLineNumbers copy
     import { mastraClient } from "../../lib/mastra-client";
 
@@ -2459,7 +2459,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
     ```
 
   </TabItem>
-  <TabItem value="react" label="React">
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -2584,7 +2584,7 @@ export const mastraClient = new MastraClient({
 Once `MastraClient` is configured with the Supabase access token, you can send authenticated requests:
 
 <Tabs>
-  <TabItem value="curl" label="cURL">
+    <TabItem value="react" label="React">
     ```tsx title="src/components/test-agent.tsx" showLineNumbers copy
     import { mastraClient } from "../../lib/mastra-client";
 
@@ -2604,7 +2604,7 @@ Once `MastraClient` is configured with the Supabase access token, you can send a
     ```
 
   </TabItem>
-  <TabItem value="react" label="React">
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -2779,7 +2779,7 @@ export const createMastraClient = (accessToken: string) => {
 Once `MastraClient` is configured with the WorkOS access token, you can send authenticated requests:
 
 <Tabs>
-  <TabItem value="curl" label="cURL">
+  <TabItem value="react" label="React">
     ```typescript title="src/api/agents.ts" showLineNumbers copy
     import { WorkOS } from '@workos-inc/node';
     import { MastraClient } from '@mastra/client-js';
@@ -2811,7 +2811,7 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
     ```
 
   </TabItem>
-  <TabItem value="react" label="React">
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -8203,28 +8203,28 @@ The wizard will guide you through setup, create a new directory for your project
 <TabItem value="npm" label="npm">
 
 ```bash copy
-npm create mastra@latest -y
+npm create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash copy
-pnpm create mastra@latest -y
+pnpm create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
 ```bash copy
-yarn create mastra@latest -y
+yarn create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
 ```bash copy
-bun create mastra@latest -y
+bun create mastra@latest
 ```
 
 </TabItem>
@@ -17976,6 +17976,12 @@ export const testMcpServer = new MCPServer({
 
 > See [MCPServer](/reference/tools/mcp-server) for a full list of configuration options.
 
+### Serverless deployments
+
+`MCPServer` can be deployed in serverless environments (Cloudflare Workers, Vercel Edge Functions, AWS Lambda, etc.) by enabling the `serverless: true` option in `startHTTP()`. This runs the server in stateless mode, where each request is handled independently without session management.
+
+**Note:** Some MCP features require persistent connections and won't work in serverless mode, including elicitation, resource subscriptions, and update notifications. See the [serverless section](/reference/tools/mcp-server#starthttp) in the API reference for full details and limitations.
+
 ## Registering an `MCPServer`
 
 To make an MCP server available to other systems or agents that support the protocol, register it in the main `Mastra` instance using `mcpServers`.
@@ -19771,263 +19777,306 @@ description: "Control flow in Mastra workflows allows you to manage branching, m
 # Control Flow
 [EN] Source: https://mastra.ai/en/docs/workflows/control-flow
 
-When you build a workflow, you typically break down operations into smaller tasks that can be linked and reused. **Steps** provide a structured way to manage these tasks by defining inputs, outputs, and execution logic.
+Workflows run a sequence of predefined tasks, and you can control how that flow is executed. Tasks are divided into **steps**, which can be executed in different ways depending on your requirements. They can run sequentially, in parallel, or follow different paths based on conditions.
 
-- If the schemas match, the `outputSchema` from each step is automatically passed to the `inputSchema` of the next step.
-- If the schemas don't match, use [Input data mapping](./input-data-mapping) to transform the `outputSchema` into the expected `inputSchema`.
+Each step connects to the next in the workflow through defined schemas that keep data controlled and consistent.
+
+## Core principles
+
+- The first step’s `inputSchema` must match the workflow’s `inputSchema`.
+- The final step’s `outputSchema` must match the workflow’s `outputSchema`.
+- Each step’s `outputSchema` must match the next step’s `inputSchema`.
+  - If it doesn’t, use [Input data mapping](#input-data-mapping) to transform the data into the required shape.
 
 ## Chaining steps with `.then()`
 
-Chain steps to execute sequentially using `.then()`:
+Use `.then()` to run steps in order, allowing each step to access the result of the step before it.
 
 ![Chaining steps with .then()](/img/workflows/workflows-control-flow-then.jpg)
 
-```typescript {8-9,4-5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+```typescript {30-31} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  //...
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    formatted: z.string()
+  })
+});
 
-const step1 = createStep({...});
-const step2 = createStep({...});
+const step2 = createStep({
+  // ...
+  inputSchema: z.object({
+    formatted: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+});
 
-export const testWorkflow = createWorkflow({...})
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
   .then(step1)
   .then(step2)
   .commit();
 ```
 
-This does what you'd expect: it executes `step1`, then it executes `step2`.
-
 ## Simultaneous steps with `.parallel()`
 
-Execute steps simultaneously using `.parallel()`:
+Use `.parallel()` to run steps at the same time. Each step's `id` is used when defining a following step's `inputSchema` and becomes the key on the `inputData` object used to access the previous step's values. The outputs of parallel steps can then be referenced or combined by a following step.
 
 ![Concurrent steps with .parallel()](/img/workflows/workflows-control-flow-parallel.jpg)
 
-```typescript {9,4-5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+```typescript {42} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  id: "step-1",
+  // ...
+});
 
-const step1 = createStep({...});
-const step2 = createStep({...});
-const step3 = createStep({...});
+const step2 = createStep({
+  id: "step-2",
+  // ...
+});
 
-export const testWorkflow = createWorkflow({...})
+const step3 = createStep({
+  id: "step-3",
+  inputSchema: z.object({
+    "step-1": z.object({
+      formatted: z.string()
+    }),
+    "step-2": z.object({
+      emphasized: z.string()
+    })
+  }),
+  outputSchema: z.object({
+    combined: z.string()
+  }),
+  execute: async ({ inputData }) => {
+    const { formatted } = inputData["step-1"];
+    const { emphasized } = inputData["step-2"];
+    return {
+      combined: `${formatted} | ${emphasized}`
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    combined: z.string()
+  })
+})
   .parallel([step1, step2])
   .then(step3)
   .commit();
 ```
 
-This executes `step1` and `step2` concurrently, then continues to `step3` after both complete.
-
-> See [Parallel Execution with Steps](/docs/workflows/control-flow#simultaneous-steps-with-parallel) for more information.
-
 > 📹 Watch: How to run steps in parallel and optimize your Mastra workflow → [YouTube (3 minutes)](https://youtu.be/GQJxve5Hki4)
 
 ## Conditional logic with `.branch()`
 
-Execute steps conditionally using `.branch()`:
+Use `.branch()` to choose which step to run based on a condition. All steps in a branch need the same `inputSchema` and `outputSchema` because branching requires consistent schemas so workflows can follow different paths.
 
 ![Conditional branching with .branch()](/img/workflows/workflows-control-flow-branch.jpg)
 
-```typescript {8-11,4-5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+```typescript {33-36} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...})
 
-const lessThanStep = createStep({...});
-const greaterThanStep = createStep({...});
+const stepA = createStep({
+  // ...
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  })
+});
 
-export const testWorkflow = createWorkflow({...})
+const stepB = createStep({
+  // ...
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  })
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  })
+})
+  .then(step1)
   .branch([
-    [async ({ inputData: { value } }) => value <= 10, lessThanStep],
-    [async ({ inputData: { value } }) => value > 10, greaterThanStep]
+    [async ({ inputData: { value } }) => value > 10, stepA],
+    [async ({ inputData: { value } }) => value <= 10, stepB]
   ])
   .commit();
 ```
 
-Branch conditions are evaluated sequentially, but steps with matching conditions are executed in parallel.
+## Input data mapping
 
-> See [Conditional Branching](/docs/workflows/control-flow#conditional-logic-with-branch) for more information.
+When using `.then()`, `.parallel()`, or `.branch()`, it is sometimes necessary to transform the output of a previous step to match the input of the next. In these cases you can use `.map()` to access the `inputData` and transform it to create a suitable data shape for the next step.
 
-## Looping steps
+![Mapping with .map()](/img/workflows/workflows-data-mapping-map.jpg)
 
-Workflows support two types of loops. When looping a step, or any step-compatible construct like a nested workflow, the initial `inputData` is sourced from the output of the previous step.
-
-To ensure compatibility, the loop’s initial input must either match the shape of the previous step’s output, or be explicitly transformed using the `map` function.
-
-- Match the shape of the previous step’s output, or
-- Be explicitly transformed using the `map` function.
-
-### Repeating with `.dowhile()`
-
-Executes step repeatedly while a condition is true.
-
-![Repeating with .dowhile()](/img/workflows/workflows-control-flow-dowhile.jpg)
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const counterStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-  .dowhile(counterStep, async ({ inputData: { number } }) => number < 10)
-  .commit();
-```
-
-### Repeating with `.dountil()`
-
-Executes step repeatedly until a condition becomes true.
-
-![Repeating with .dountil()](/img/workflows/workflows-control-flow-dountil.jpg)
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const counterStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-  .dountil(counterStep, async ({ inputData: { number } }) => number > 10)
-  .commit();
-```
-
-### Loop management
-
-Loop conditions can be implemented in different ways depending on how you want the loop to end. Common patterns include checking values returned in `inputData`, setting a maximum number of iterations, or aborting execution when a limit is reached.
-
-#### Conditional loops
-
-The `inputData` for a loop step is the output of a previous step. Use the values in `inputData` to determine whether the loop should continue or stop.
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const counterStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-.dountil(nestedWorkflowStep, async ({ inputData: { userResponse } }) => userResponse === "yes")
-.commit();
-```
-
-#### Limiting loops
-
-The `iterationCount` tracks how many times the loop step has run. You can use this to limit the number of iterations and prevent infinite loops. Combine it with `inputData` values to stop the loop after a set number of attempts.
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const counterStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-.dountil(nestedWorkflowStep, async ({ inputData: { userResponse, iterationCount } }) => userResponse === "yes" || iterationCount >= 10)
-.commit();
-```
-
-#### Aborting loops
-
-Use `iterationCount` to limit how many times a loop runs. If the count exceeds your threshold, throw an error to fail the step and stop the workflow.
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const counterStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-.dountil(nestedWorkflowStep, async ({ inputData: { userResponse, iterationCount } }) => {
-  if (iterationCount >= 10) {
-    throw new Error("Maximum iterations reached");
-  }
-  return userResponse === "yes";
-})
-.commit();
-```
-
-### Repeating with `.foreach()`
-
-Sequentially executes the same step for each item from the `inputSchema`.
-
-![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const mapStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-  .foreach(mapStep)
-  .commit();
-```
-
-#### Setting concurrency limits
-
-Use `concurrency` to execute steps in parallel with a limit on the number of concurrent executions.
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const mapStep = createStep({...})
-
-export const testWorkflow = createWorkflow({...})
-  .foreach(mapStep, { concurrency: 2 })
-  .commit();
-```
-
-## Using a nested workflow
-
-Use a nested workflow as a step by passing it to `.then()`. This runs each of its steps in sequence as part of the parent workflow.
-
-```typescript {4,7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-export const nestedWorkflow = createWorkflow({...})
-
-export const testWorkflow = createWorkflow({...})
-  .then(nestedWorkflow)
-  .commit();
-```
-
-## Cloning a workflow
-
-Use `cloneWorkflow` to duplicate an existing workflow. This lets you reuse its structure while overriding parameters like `id`.
-
-```typescript {6,10} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep, cloneWorkflow } from "@mastra/core/workflows";
-import { z } from "zod";
-
+```typescript {9} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({...});
-const parentWorkflow = createWorkflow({...})
-const clonedWorkflow = cloneWorkflow(parentWorkflow, { id: "cloned-workflow" });
+const step2 = createStep({...});
 
 export const testWorkflow = createWorkflow({...})
   .then(step1)
-  .then(clonedWorkflow)
+  .map(async ({ inputData }) => {
+    const { foo } = inputData;
+    return {
+      bar: `new ${foo}`,
+    };
+  })
+  .then(step2)
   .commit();
 ```
 
-## Example Run Instance
+The `.map()` method provides additional helper functions for more complex mapping scenarios.
 
-The following example demonstrates how to start a run with multiple inputs. Each input will pass through the `mapStep` sequentially.
+**Available helper functions:**
 
-```typescript {6} title="src/test-workflow.ts" showLineNumbers copy
-import { mastra } from "./mastra";
+- [`getStepResult()`](/reference/workflows/workflow-methods/map#using-getstepresult): Access a specific step's full output
+- [`getInitData()`](/reference/workflows/workflow-methods/map#using-getinitdata): Access the workflow's initial input data
+- [`mapVariable()`](/reference/workflows/workflow-methods/map#using-mapvariable): Use declarative object syntax to extract and rename fields
 
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+## Looping steps
 
-const result = await run.start({
-  inputData: [{ number: 10 }, { number: 100 }, { number: 200 }],
+Workflows support different looping methods that let you repeat steps until or while a condition is met, or iterate over arrays. Loops can be combined with other control methods like `.then()`.
+
+### Looping with `.dountil()`
+
+Use `.dountil()` to run a step repeatedly until a condition becomes true.
+
+![Repeating with .dountil()](/img/workflows/workflows-control-flow-dountil.jpg)
+
+```typescript {17} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+
+const step2 = createStep({
+  // ...
+  execute: async ({ inputData }) => {
+    const { number } = inputData;
+    return {
+      number: number + 1
+    };
+  }
 });
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .dountil(step2, async ({ inputData: { number } }) => number > 10)
+  .commit();
 ```
 
-To execute this run from your terminal:
+### Looping with `.dowhile()`
 
-```bash copy
-npx tsx src/test-workflow.ts
+Use `.dowhile()` to run a step repeatedly while a condition remains true.
+
+![Repeating with .dowhile()](/img/workflows/workflows-control-flow-dowhile.jpg)
+
+```typescript {17} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+
+const step2 = createStep({
+  // ...
+  execute: async ({ inputData }) => {
+    const { number } = inputData;
+    return {
+      number: number + 1
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .dowhile(step2, async ({ inputData: { number } }) => number < 10)
+  .commit();
+```
+
+### Looping with `.foreach()`
+
+Use `.foreach()` to run the same step for each item in an array. The input must be of type `array` so the loop can iterate over its values, applying the step’s logic to each one.
+
+![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
+
+```typescript {17} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  // ...
+  inputSchema: z.string(),
+  outputSchema: z.string(),
+  execute: async ({ inputData }) => {
+    return inputData.toUpperCase();
+  }
+});
+
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.array(z.string()),
+  outputSchema: z.array(z.string())
+})
+  .foreach(step1)
+  .then(step2)
+  .commit();
+```
+
+#### Concurrency limits
+
+Use `concurrency` to control the number of array items processed at the same time. The default is `1`, which runs steps sequentially. Increasing the value allows `.foreach()` to process multiple items simultaneously.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...})
+
+export const testWorkflow = createWorkflow({...})
+  .foreach(step1, { concurrency: 4 })
+  .commit();
+```
+
+## Loop management
+
+Loop conditions can be implemented in different ways depending on how you want the loop to end. Common patterns include checking values returned in `inputData`, setting a maximum number of iterations, or aborting execution when a limit is reached.
+
+### Aborting loops
+
+Use `iterationCount` to limit how many times a loop runs. If the count exceeds your threshold, throw an error to fail the step and stop the workflow.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .dountil(step1, async ({ inputData: { userResponse, iterationCount } }) => {
+    if (iterationCount >= 10) {
+      throw new Error("Maximum iterations reached");
+    }
+    return userResponse === "yes";
+  })
+  .commit();
 ```
 
 
@@ -20994,7 +21043,7 @@ Workflows let you define complex sequences of tasks using clear, structured step
 
 Use workflows for tasks that are clearly defined upfront and involve multiple steps with a specific execution order. They give you fine-grained control over how data flows and transforms between steps, and which primitives are called at each stage.
 
-> **📹 Watch**: → An introduction to workflows, and how they compare to agents [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
+> **📹 Watch**:  → An introduction to workflows, and how they compare to agents [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
 
 ## Core principles
 
@@ -21016,18 +21065,18 @@ import { createStep } from "@mastra/core/workflows";
 const step1 = createStep({
   id: "step-1",
   inputSchema: z.object({
-    message: z.string(),
+    message: z.string()
   }),
   outputSchema: z.object({
-    formatted: z.string(),
+    formatted: z.string()
   }),
   execute: async ({ inputData }) => {
     const { message } = inputData;
 
     return {
-      formatted: message.toUpperCase(),
+      formatted: message.toUpperCase()
     };
-  },
+  }
 });
 ```
 
@@ -21035,7 +21084,7 @@ const step1 = createStep({
 
 ### Using agents and tools
 
-Workflow steps can also call registered agents or import and execute tools directly, visit the [Agents and Tools](./agents-and-tools) page for more information.
+Workflow steps can also call registered agents or import and execute tools directly, visit the [Using Tools](/docs/agents/using-tools) page for more information.
 
 ## Creating a workflow
 
@@ -21058,47 +21107,63 @@ export const testWorkflow = createWorkflow({
 })
   .then(step1)
   .commit();
-
 ```
 
 > See the [Workflow Class](/reference/workflows/workflow) for a full list of configuration options.
 
 ### Understanding control flow
 
-Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](./control-flow) page for more information.
+Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](/docs/workflows/control-flow) page for more information.
 
-#### Composing workflow steps
+## Workflow state
 
-When using `.then()`, steps run sequentially. Each step’s `inputSchema` must match the `outputSchema` of the previous step. The final step’s `outputSchema` should match the workflow’s `outputSchema` to ensure end-to-end type safety.
+Workflow state lets you share values across steps without passing them through every step’s inputSchema and outputSchema. All state values are defined in the workflow’s stateSchema, but each step only declares the values it needs. To set initial values, use initialState when running the workflow.
 
-```typescript {4,7,14,17,24,27} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
-  //...
-  inputSchema: z.object({
-    message: z.string(),
+  // ...
+  stateSchema: z.object({
+    processedItems: z.array(z.string()),
   }),
-  outputSchema: z.object({
-    formatted: z.string(),
-  }),
+  execute: async ({ inputData, state, setState }) => {
+    const { message } = inputData;
+    const { processedItems } = state;
+
+    setState({
+      ...state,
+      processedItems: [...processedItems, "item-1", "item-2"],
+    });
+
+    return {
+      formatted: message.toUpperCase(),
+    };
+  },
 });
 
 const step2 = createStep({
   // ...
-  inputSchema: z.object({
-    formatted: z.string(),
+  stateSchema: z.object({
+    metadata: z.object({
+      processedBy: z.string(),
+    }),
   }),
-  outputSchema: z.object({
-    emphasized: z.string(),
-  }),
+  execute: async ({ inputData, state }) => {
+    const { formatted } = inputData;
+    const { metadata } = state;
+
+    return {
+      emphasized: `${formatted}!! ${metadata.processedBy}`,
+    };
+  },
 });
 
 export const testWorkflow = createWorkflow({
   // ...
-  inputSchema: z.object({
-    message: z.string(),
-  }),
-  outputSchema: z.object({
-    emphasized: z.string(),
+  stateSchema: z.object({
+    processedItems: z.array(z.string()),
+    metadata: z.object({
+      processedBy: z.string(),
+    }),
   }),
 })
   .then(step1)
@@ -21106,12 +21171,64 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-### Registering a workflow
+## Workflows as steps
+
+Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/workflows/control-flow).
+
+```typescript {26} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+const childWorkflow = createWorkflow({
+  id: "child-workflow",
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
+  .then(childWorkflow)
+  .commit();
+```
+
+### Cloning a workflow
+
+Clone a workflow using `cloneWorkflow()` when you want to reuse its logic but track it separately under a new ID. Each clone runs independently and appears as a distinct workflow in logs and observability tools.
+
+```typescript {6} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { cloneWorkflow } from "@mastra/core/workflows";
+
+const step1 = createStep({...});
+
+const parentWorkflow = createWorkflow({...})
+const clonedWorkflow = cloneWorkflow(parentWorkflow, { id: "cloned-workflow" });
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .then(clonedWorkflow)
+  .commit();
+```
+
+## Registering a workflow
 
 Register your workflow in the Mastra instance to make it available throughout your application. Once registered, it can be called from agents or tools and has access to shared resources such as logging and observability features:
 
 ```typescript {6} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core/mastra";
 import { testWorkflow } from "./workflows/test-workflow";
 
 export const mastra = new Mastra({
@@ -21127,14 +21244,9 @@ You can run workflows from agents, tools, the Mastra Client, or the command line
 ```typescript showLineNumbers copy
 const testWorkflow = mastra.getWorkflow("testWorkflow");
 ```
-
 :::info
-
 `mastra.getWorkflow()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
-
 :::
-
-> See [Running Workflows](/docs/workflows/overview) for more information.
 
 ## Running workflows
 
@@ -21142,7 +21254,6 @@ Workflows can be run in two modes: start waits for all steps to complete before 
 
 <Tabs>
   <TabItem value="start" label="Start">
-
 Create a workflow run instance using `createRunAsync()`, then call `.start()` with `inputData` matching the workflow's `inputSchema`. The workflow executes all steps and returns the final result.
 
 ```typescript showLineNumbers copy
@@ -21150,16 +21261,14 @@ const run = await testWorkflow.createRunAsync();
 
 const result = await run.start({
   inputData: {
-    message: "Hello world",
-  },
+    message: "Hello world"
+  }
 });
 
 console.log(result);
 ```
-
   </TabItem>
   <TabItem value="stream" label="Stream">
-
 Create a workflow run instance using `.createRunAsync()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as each step executes, which you can iterate over to track progress.
 
 ```typescript showLineNumbers copy
@@ -21167,15 +21276,14 @@ const run = await testWorkflow.createRunAsync();
 
 const result = await run.stream({
   inputData: {
-    message: "Hello world",
-  },
+    message: "Hello world"
+  }
 });
 
 for await (const chunk of result.stream) {
   console.log(chunk);
 }
 ```
-
   </TabItem>
 </Tabs>
 
@@ -21195,7 +21303,7 @@ The workflow output includes the full execution lifecycle, showing the input and
       },
       "output": {
         "formatted": "HELLO WORLD"
-      }
+      },
     },
     "step-2": {
       "status": "success",
@@ -21204,7 +21312,7 @@ The workflow output includes the full execution lifecycle, showing the input and
       },
       "output": {
         "emphasized": "HELLO WORLD!!!"
-      }
+      },
     }
   },
   "input": {
@@ -21230,10 +21338,12 @@ const step1 = createStep({
   execute: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
-    const maxResults = userTier === "enterprise" ? 1000 : 50;
+    const maxResults = userTier === "enterprise"
+      ? 1000
+      : 50;
 
     return { maxResults };
-  },
+  }
 });
 ```
 
@@ -21247,9 +21357,6 @@ Use the Mastra [Playground](/docs/getting-started/studio) to easily run workflow
 
 For a closer look at workflows, see our [Workflow Guide](/guides/guide/ai-recruiter), which walks through the core concepts with a practical example.
 
-- [Inngest workflow example](/examples/workflows/inngest-workflow)
-- [Control Flow](/docs/workflows/control-flow)
-- [Suspend and Resume](/docs/workflows/suspend-and-resume)
 
 
 ---
@@ -33770,7 +33877,7 @@ Gateway providers aggregate multiple model providers and add features like cachi
       logo={<NetlifyLogo />}
     />    <CardGridItem
       title="OpenRouter"
-      description="118 models"
+      description="119 models"
       href="/models/gateways/openrouter"
       logo="https://models.dev/logos/openrouter.svg"
 
@@ -33884,7 +33991,7 @@ description: "Use AI models through OpenRouter."
 # <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
 [EN] Source: https://mastra.ai/en/models/gateways/openrouter
 
-OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 118 models through Mastra's model router.
+OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 119 models through Mastra's model router.
 
 Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 
@@ -33984,6 +34091,7 @@ ANTHROPIC_API_KEY=ant-...
 | `nousresearch/deephermes-3-llama-3-8b-preview` |
 | `nousresearch/hermes-4-405b` |
 | `nousresearch/hermes-4-70b` |
+| `nvidia/nemotron-nano-9b-v2` |
 | `openai/gpt-4.1` |
 | `openai/gpt-4.1-mini` |
 | `openai/gpt-4o-mini` |
@@ -34184,7 +34292,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 48+ AI providers and 834+ models through Mastra's model router."
+description: "Access 49+ AI providers and 856+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -34197,7 +34305,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 834 models from 48 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 856 models from 49 providers through a single API.
 
 ## Features
 
@@ -34325,7 +34433,7 @@ Browse the directory of available models using the navigation on the left, or ex
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 42 more</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 43 more</div>
       </div>
     </CardGridItem>
 </CardGrid>
@@ -39886,6 +39994,303 @@ const agent = new Agent({
 
 
 ---
+title: "iFlow | Models | Mastra"
+description: "Use iFlow models with Mastra. 17 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
+
+# <img src="https://models.dev/logos/iflowcn.svg" alt="iFlow logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />iFlow
+[EN] Source: https://mastra.ai/en/models/providers/iflowcn
+
+Access 17 iFlow models through Mastra's model router. Authentication is handled automatically using the `IFLOW_API_KEY` environment variable.
+
+Learn more in the [iFlow documentation](https://platform.iflow.cn/en/docs).
+
+```bash
+IFLOW_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "iflowcn/deepseek-r1"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [iFlow documentation](https://platform.iflow.cn/en/docs) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "iflowcn/deepseek-r1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/deepseek-v3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/deepseek-v3.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/deepseek-v3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 128000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/kimi-k2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/kimi-k2-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-235b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-235b-a22b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-235b-a22b-thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-32b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-coder",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-coder-plus",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-max",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-max-preview",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-vl-plus",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/tstars2.0",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://apis.iflow.cn/v1",
+    id: "iflowcn/deepseek-r1",
+    apiKey: process.env.IFLOW_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "iflowcn/tstars2.0"
+      : "iflowcn/deepseek-r1";
+  }
+});
+```
+
+
+
+
+---
 title: "Inception | Models | Mastra"
 description: "Use Inception models with Mastra. 2 models available."
 ---
@@ -40108,6 +40513,11 @@ Direct access to individual AI model providers. Each provider offers unique mode
       href="/models/providers/huggingface"
       logo="https://models.dev/logos/huggingface.svg"
     />    <CardGridItem
+      title="iFlow"
+      description="17 models"
+      href="/models/providers/iflowcn"
+      logo="https://models.dev/logos/iflowcn.svg"
+    />    <CardGridItem
       title="Inception"
       description="2 models"
       href="/models/providers/inception"
@@ -40159,7 +40569,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/nebius.svg"
     />    <CardGridItem
       title="Nvidia"
-      description="16 models"
+      description="20 models"
       href="/models/providers/nvidia"
       logo="https://models.dev/logos/nvidia.svg"
     />    <CardGridItem
@@ -42040,7 +42450,7 @@ const agent = new Agent({
 
 ---
 title: "Nvidia | Models | Mastra"
-description: "Use Nvidia models with Mastra. 16 models available."
+description: "Use Nvidia models with Mastra. 20 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -42053,7 +42463,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 # <img src="https://models.dev/logos/nvidia.svg" alt="Nvidia logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Nvidia
 [EN] Source: https://mastra.ai/en/models/providers/nvidia
 
-Access 16 Nvidia models through Mastra's model router. Authentication is handled automatically using the `NVIDIA_API_KEY` environment variable.
+Access 20 Nvidia models through Mastra's model router. Authentication is handled automatically using the `NVIDIA_API_KEY` environment variable.
 
 Learn more in the [Nvidia documentation](https://docs.api.nvidia.com/nim/).
 
@@ -42152,6 +42562,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "nvidia/minimaxai/minimax-m2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "nvidia/moonshotai/kimi-k2-instruct",
     "imageInput": false,
     "audioInput": false,
@@ -42224,6 +42646,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "nvidia/nvidia/nvidia-nemotron-nano-9b-v2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "nvidia/nvidia/parakeet-tdt-0.6b-v2",
     "imageInput": false,
     "audioInput": true,
@@ -42282,6 +42716,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 66536,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "nvidia/qwen/qwen3-next-80b-a3b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/qwen/qwen3-next-80b-a3b-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -42314,7 +42772,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "nvidia/qwen/qwen3-coder-480b-a35b-instruct"
+      ? "nvidia/qwen/qwen3-next-80b-a3b-thinking"
       : "nvidia/black-forest-labs/flux.1-dev";
   }
 });
@@ -43085,7 +43543,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 204800,
     "maxOutput": 131072,
     "inputCost": 0.6,
-    "outputCost": 1.9
+    "outputCost": 2.2
   },
   {
     "model": "opencode/gpt-5",
@@ -75486,7 +75944,7 @@ const httpServer = http.createServer(async (req, res) => {
     req,
     res,
     options: {
-      sessionIdGenerator: undefined,
+      sessionIdGenerator: () => randomUUID(),
     },
   });
 });
@@ -75495,6 +75953,72 @@ httpServer.listen(PORT, () => {
   console.log(`HTTP server listening on port ${PORT}`);
 });
 ```
+
+For **serverless environments** (Supabase Edge Functions, Cloudflare Workers, Vercel Edge, etc.), use `serverless: true` to enable stateless operation:
+
+```typescript
+// Supabase Edge Function example
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { MCPServer } from "@mastra/mcp";
+// Note: You will need to convert req/res format from Deno to Node
+import { toReqRes, toFetchResponse } from "fetch-to-node";
+
+const server = new MCPServer({
+  name: "my-serverless-mcp",
+  version: "1.0.0",
+  tools: { /* your tools */ },
+});
+
+serve(async (req) => {
+  const url = new URL(req.url);
+  
+  if (url.pathname === "/mcp") {
+    // Convert Deno Request to Node.js-compatible format
+    const { req: nodeReq, res: nodeRes } = toReqRes(req);
+    
+    await server.startHTTP({
+      url,
+      httpPath: "/mcp",
+      req: nodeReq,
+      res: nodeRes,
+      options: {
+        serverless: true, // ← Enable stateless mode for serverless
+      },
+    });
+    
+    return toFetchResponse(nodeRes);
+  }
+  
+  return new Response("Not found", { status: 404 });
+});
+```
+
+<Callout type="info">
+**When to use `serverless: true`**
+
+Use `serverless: true` when deploying to environments where each request runs in a fresh, stateless execution context:
+- Supabase Edge Functions
+- Cloudflare Workers
+- Vercel Edge Functions
+- Netlify Edge Functions
+- AWS Lambda
+- Deno Deploy
+
+Use the default session-based mode (without `serverless: true`) for:
+- Long-lived Node.js servers
+- Docker containers
+- Traditional hosting (VPS, dedicated servers)
+
+The serverless mode disables session management and creates fresh server instances per request, which is necessary for stateless environments where memory doesn't persist between invocations.
+
+**Note:** The following MCP features require session state or persistent connections and will **not work** in serverless mode:
+- **Elicitation** - Interactive user input requests during tool execution require session management to route responses back to the correct client
+- **Resource subscriptions** - `resources/subscribe` and `resources/unsubscribe` need persistent connections to maintain subscription state
+- **Resource update notifications** - `resources.notifyUpdated()` requires active subscriptions and persistent connections to notify clients
+- **Prompt list change notifications** - `prompts.notifyListChanged()` requires persistent connections to push updates to clients
+
+These features work normally in long-lived server environments (Node.js servers, Docker containers, etc.).
+</Callout>
 
 Here are the details for the values needed by the `startHTTP` method:
 
@@ -75536,6 +76060,13 @@ The `StreamableHTTPServerTransportOptions` object allows you to customize the be
 
 <PropertiesTable
   content={[
+    {
+      name: "serverless",
+      type: "boolean",
+      description:
+        "If `true`, runs in stateless mode without session management. Each request is handled independently with a fresh server instance. Essential for serverless environments (Cloudflare Workers, Supabase Edge Functions, Vercel Edge, etc.) where sessions cannot persist between invocations. Defaults to `false`.",
+      optional: true,
+    },
     {
       name: "sessionIdGenerator",
       type: "(() => string) | undefined",
@@ -87757,7 +88288,7 @@ workflow.foreach(step1, { concurrency: 2 });
 
 ## Related
 
-- [Repeating with foreach](/docs/workflows/control-flow#repeating-with-foreach)
+- [Repeating with foreach](/docs/workflows/control-flow#looping-with-foreach)
 
 
 ---
@@ -87802,9 +88333,84 @@ workflow.map(async ({ inputData }) => `${inputData.value} - map`
   ]}
 />
 
+## Using `inputData`
+
+Use `inputData` to access the full output of the previous step.
+
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map(({ inputData }) => {
+    console.log(inputData);
+  })
+```
+
+## Using `getStepResult()`
+
+Use `getStepResult()` to access the full output of a specific step by referencing the step's instance.
+
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map(async ({ getStepResult }) => {
+    console.log(getStepResult(step1));
+  })
+```
+
+## Using `getInitData()`
+
+Use `getInitData()` to access the initial input data provided to the workflow.
+
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map(async ({ getInitData }) => {
+      console.log(getInitData());
+  })
+```
+
+## Using `mapVariable()`
+
+The object form of `.map()` provides an alternative declarative syntax for mapping fields. Instead of writing a function, you define an object where each key is a new field name and each value uses `mapVariable()` to extract data from previous steps or workflow input.
+Import `mapVariable()` from the workflows module:
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { mapVariable } from "@mastra/core/workflows";
+```
+
+### Extracting fields from step outputs
+
+Use `mapVariable()` with `step` to extract a specific field from a step's output and map it to a new field name. The `path` parameter specifies which field to extract.
+In this example, the `value` field from `step1`'s output is extracted and mapped to a new field called `details`:
+
+```typescript {3-6} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map({
+    details: mapVariable({
+      step: step1,
+      path: "value"
+    })
+  })
+```
+
+### Extracting fields from workflow input
+
+Use `mapVariable()` with `initData` to extract a specific field from the workflow's initial input data. This is useful when you need to pass the original workflow input to a later step.
+In this example, the `value` field from the workflow's input is extracted and mapped to a field called `details`:
+
+```typescript {6-9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+export const testWorkflow = createWorkflow({...});
+
+testWorkflow
+  .then(step1)
+  .map({
+    details: mapVariable({
+      initData: testWorkflow,
+      path: "value"
+    })
+  })
+```
+
 ## Related
 
-- [Input data mapping](/docs/workflows/input-data-mapping)
+- [Input Data Mapping](/docs/workflows/control-flow#input-data-mapping)
 
 
 ---
@@ -88289,20 +88895,6 @@ A workflow's `status` indicates its current execution state. The possible values
     },
   ]}
 />
-
-## Extended usage example
-
-```typescript title="src/test-run.ts" showLineNumbers copy
-import { mastra } from "./mastra";
-
-const run = await mastra.getWorkflow("workflow").createRunAsync();
-
-const result = await run.start({...});
-
-if (result.status === "suspended") {
-  const resumedResult = await run.resume({...});
-}
-```
 
 ## Related
 
