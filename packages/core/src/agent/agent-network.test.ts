@@ -87,6 +87,35 @@ describe('Agent - network', () => {
     .then(agentStep2)
     .commit();
 
+  const agentStep1WithStream = createStep(agent1);
+
+  const agentStep2WithStream = createStep(agent2);
+
+  const workflow1WithAgentStream = createWorkflow({
+    id: 'workflow1',
+    description: 'This workflow is perfect for researching a specific topic.',
+    steps: [],
+    inputSchema: z.object({
+      researchTopic: z.string(),
+    }),
+    outputSchema: z.object({
+      text: z.string(),
+    }),
+  })
+    .map(async ({ inputData }) => {
+      return {
+        prompt: inputData.researchTopic,
+      };
+    })
+    .then(agentStep1WithStream)
+    .map(async ({ inputData }) => {
+      return {
+        prompt: inputData.text,
+      };
+    })
+    .then(agentStep2WithStream)
+    .commit();
+
   const tool = createTool({
     id: 'tool1',
     description: 'This tool will tell you about "cool stuff"',
@@ -120,6 +149,25 @@ describe('Agent - network', () => {
     },
     workflows: {
       workflow1,
+    },
+    tools: {
+      tool,
+    },
+    memory,
+  });
+
+  const networkWithWflowAgentStream = new Agent({
+    id: 'test-network-with-workflow-agent-stream',
+    name: 'Test Network',
+    instructions:
+      'You can research anything. You can also synthesize research material. You can also write a full report based on the researched material.',
+    model: openai('gpt-4o-mini'),
+    agents: {
+      agent1,
+      agent2,
+    },
+    workflows: {
+      workflow1WithAgentStream,
     },
     tools: {
       tool,
@@ -189,6 +237,103 @@ describe('Agent - network', () => {
     expect(usage.inputTokens).toBeGreaterThan(0);
     expect(usage.outputTokens).toBeGreaterThan(0);
     expect(usage.totalTokens).toBeGreaterThan(0);
+  });
+
+  it('LOOP - should track usage data from workflow with agent stream agent.network()', async () => {
+    const anStream = await networkWithWflowAgentStream.network('Research dolphins', {
+      requestContext,
+    });
+
+    let networkUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      reasoningTokens: 0,
+      cachedInputTokens: 0,
+    };
+
+    // Consume the stream to trigger usage collection
+    for await (const _chunk of anStream) {
+      if (
+        _chunk.type === 'routing-agent-end' ||
+        _chunk.type === 'agent-execution-end' ||
+        _chunk.type === 'workflow-execution-end'
+      ) {
+        if (_chunk.payload?.usage) {
+          networkUsage.inputTokens += parseInt(_chunk.payload.usage?.inputTokens?.toString() ?? '0', 10);
+          networkUsage.outputTokens += parseInt(_chunk.payload.usage?.outputTokens?.toString() ?? '0', 10);
+          networkUsage.totalTokens += parseInt(_chunk.payload.usage?.totalTokens?.toString() ?? '0', 10);
+          networkUsage.reasoningTokens += parseInt(_chunk.payload.usage?.reasoningTokens?.toString() ?? '0', 10);
+          networkUsage.cachedInputTokens += parseInt(_chunk.payload.usage?.cachedInputTokens?.toString() ?? '0', 10);
+        }
+      }
+    }
+
+    // Check that usage data is available
+    const usage = await anStream.usage;
+    expect(usage).toBeDefined();
+    expect(usage.inputTokens).toBe(networkUsage.inputTokens);
+    expect(usage.outputTokens).toBe(networkUsage.outputTokens);
+    expect(usage.totalTokens).toBe(networkUsage.totalTokens);
+    expect(usage.reasoningTokens).toBe(networkUsage.reasoningTokens);
+    expect(usage.cachedInputTokens).toBe(networkUsage.cachedInputTokens);
+  });
+
+  it('LOOP - should track usage data from agent in agent.network()', async () => {
+    const anStream = await networkWithWflowAgentStream.network('Research dolphins using agent1', {
+      requestContext,
+    });
+
+    let networkUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      reasoningTokens: 0,
+      cachedInputTokens: 0,
+    };
+
+    let finishUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      reasoningTokens: 0,
+      cachedInputTokens: 0,
+    };
+
+    // Consume the stream to trigger usage collection
+    for await (const _chunk of anStream) {
+      if (
+        _chunk.type === 'routing-agent-end' ||
+        _chunk.type === 'agent-execution-end' ||
+        _chunk.type === 'workflow-execution-end'
+      ) {
+        if (_chunk.payload?.usage) {
+          networkUsage.inputTokens += parseInt(_chunk.payload.usage?.inputTokens?.toString() ?? '0', 10);
+          networkUsage.outputTokens += parseInt(_chunk.payload.usage?.outputTokens?.toString() ?? '0', 10);
+          networkUsage.totalTokens += parseInt(_chunk.payload.usage?.totalTokens?.toString() ?? '0', 10);
+          networkUsage.reasoningTokens += parseInt(_chunk.payload.usage?.reasoningTokens?.toString() ?? '0', 10);
+          networkUsage.cachedInputTokens += parseInt(_chunk.payload.usage?.cachedInputTokens?.toString() ?? '0', 10);
+        }
+      }
+
+      if (_chunk.type === 'network-execution-event-finish') {
+        finishUsage = _chunk.payload.usage as any;
+      }
+    }
+
+    // Check that usage data is available
+    const usage = await anStream.usage;
+    expect(usage).toBeDefined();
+    expect(usage.inputTokens).toBe(networkUsage.inputTokens);
+    expect(usage.outputTokens).toBe(networkUsage.outputTokens);
+    expect(usage.totalTokens).toBe(networkUsage.totalTokens);
+    expect(usage.reasoningTokens).toBe(networkUsage.reasoningTokens);
+    expect(usage.cachedInputTokens).toBe(networkUsage.cachedInputTokens);
+    expect(usage.inputTokens).toBe(finishUsage.inputTokens);
+    expect(usage.outputTokens).toBe(finishUsage.outputTokens);
+    expect(usage.totalTokens).toBe(finishUsage.totalTokens);
+    expect(usage.reasoningTokens).toBe(finishUsage.reasoningTokens);
+    expect(usage.cachedInputTokens).toBe(finishUsage.cachedInputTokens);
   });
 
   it('Should throw if memory is not configured', async () => {

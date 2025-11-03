@@ -1124,21 +1124,18 @@ export async function networkLoop<
     inputSchema: networkWorkflow.outputSchema,
     outputSchema: networkWorkflow.outputSchema,
     execute: async ({ inputData, writer }) => {
-      if (maxIterations && inputData.iteration >= maxIterations) {
-        await writer?.write({
-          type: 'network-execution-event-finish',
-          payload: {
-            ...inputData,
-            completionReason: `Max iterations reached: ${maxIterations}`,
-          },
-        });
-        return {
-          ...inputData,
-          completionReason: `Max iterations reached: ${maxIterations}`,
-        };
-      }
+      const finalData = {
+        ...inputData,
+        ...(maxIterations && inputData.iteration >= maxIterations
+          ? { completionReason: `Max iterations reached: ${maxIterations}` }
+          : {}),
+      };
+      await writer?.write({
+        type: 'network-execution-event-finish',
+        payload: finalData,
+      });
 
-      return inputData;
+      return finalData;
     },
   });
 
