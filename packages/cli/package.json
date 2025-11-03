@@ -64,6 +64,7 @@
     "picocolors": "^1.1.1",
     "posthog-node": "4.18.0",
     "prettier": "^3.6.2",
+    "serve": "^14.2.5",
     "shell-quote": "^1.8.3",
     "strip-json-comments": "^5.0.3",
     "tcp-port-used": "^1.0.2",

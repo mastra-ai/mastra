@@ -4,6 +4,9 @@
   "version": "0.0.5",
   "type": "module",
   "homepage": "https://mastra.ai",
+  "bin": {
+    "mastra-playground": "scripts/start.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -23,8 +26,8 @@
     "@lukeed/uuid": "^2.0.1",
     "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@mastra/react": "workspace:*",
     "@mastra/playground-ui": "workspace:^",
+    "@mastra/react": "workspace:*",
     "@tanstack/react-query": "^5.81.5",
     "clsx": "^2.1.1",
     "lucide-react": "^0.522.0",
