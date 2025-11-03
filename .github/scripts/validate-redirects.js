@@ -54,7 +54,7 @@ const checkRedirects = async () => {
     }
 
     const destinationUrl = `${baseUrl}${destination}`;
-    let destinationOk = true; 
+    let destinationOk = true;
 
     // WORKAROUND FOR NOW, WILL FOLLOW UP WITH A PROPER FIX
     // try {
