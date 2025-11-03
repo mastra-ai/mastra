@@ -17,6 +17,7 @@ const vectorQueryTool = createVectorQueryTool({
 });
 
 export const ragAgent = new Agent({
+  id: 'rag-agent',
   name: 'RAG Agent',
   instructions: `You are a helpful assistant`,
   model: openai('gpt-4o-mini'),
@@ -61,7 +62,7 @@ The agricultural sector must continue to innovate and adapt to ensure food secur
 
 const chunks = await doc.chunk({
   strategy: 'recursive',
-  size: 512,
+  maxSize: 512,
   overlap: 50,
   separator: '\n',
 });

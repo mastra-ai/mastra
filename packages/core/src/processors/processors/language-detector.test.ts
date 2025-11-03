@@ -1,11 +1,11 @@
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { LanguageDetectionResult, TranslationResult } from './language-detector';
 import { LanguageDetector } from './language-detector';
 
-function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraMessageV2 {
+function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraDBMessage {
   return {
     id,
     role,
@@ -83,7 +83,7 @@ describe('LanguageDetector', () => {
         targetLanguages: ['English'],
       });
 
-      expect(detector.name).toBe('language-detector');
+      expect(detector.id).toBe('language-detector');
     });
 
     it('should use default target languages when none specified', () => {
@@ -93,7 +93,7 @@ describe('LanguageDetector', () => {
         targetLanguages: ['English'],
       });
 
-      expect(detector.name).toBe('language-detector');
+      expect(detector.id).toBe('language-detector');
     });
 
     it('should accept custom target languages', () => {
@@ -103,7 +103,7 @@ describe('LanguageDetector', () => {
         targetLanguages: ['Spanish', 'French', 'German'],
       });
 
-      expect(detector.name).toBe('language-detector');
+      expect(detector.id).toBe('language-detector');
     });
 
     it('should accept custom configuration options', () => {
@@ -119,7 +119,7 @@ describe('LanguageDetector', () => {
         translationQuality: 'speed',
       });
 
-      expect(detector.name).toBe('language-detector');
+      expect(detector.id).toBe('language-detector');
     });
   });
 
@@ -488,7 +488,7 @@ describe('LanguageDetector', () => {
 
       const mockAbort = vi.fn();
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test',
         role: 'user',
         content: {
@@ -512,7 +512,7 @@ describe('LanguageDetector', () => {
 
       const mockAbort = vi.fn();
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test',
         role: 'user',
         content: {
@@ -652,7 +652,7 @@ describe('LanguageDetector', () => {
         targetLanguages: ['English'],
       });
 
-      expect(detector.name).toBe('language-detector');
+      expect(detector.id).toBe('language-detector');
     });
   });
 

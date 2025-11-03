@@ -9,6 +9,7 @@ import { MastraProvider } from '@composio/mastra';
 const MAX_STEPS = 1000;
 
 export const financialModelingAgent = new Agent({
+  id: 'financial-modeling-agent',
   name: 'Financial Modeling Agent',
   instructions: ({ requestContext }) => {
     const redirectUrl = requestContext.get<'redirectUrl', string | undefined>('redirectUrl');

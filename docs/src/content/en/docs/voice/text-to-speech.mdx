@@ -68,6 +68,7 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 const voice = new OpenAIVoice();
 
 const agent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
