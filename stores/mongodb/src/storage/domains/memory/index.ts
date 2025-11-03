@@ -106,7 +106,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   }
 
   /**
-   * @deprecated use getMessagesPaginated instead for paginated results.
+   * @deprecated use listMessages instead for paginated results.
    */
   public async getMessages({
     threadId,
@@ -350,103 +350,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         perPage: perPageForResponse,
         hasMore: false,
       };
-    }
-  }
-
-  public async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    const { threadId, resourceId, selectBy } = args;
-    const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
-    const perPage =
-      perPageInput !== undefined ? perPageInput : resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-    const fromDate = dateRange?.start;
-    const toDate = dateRange?.end;
-
-    const messages: MastraDBMessage[] = [];
-
-    if (selectBy?.include?.length) {
-      try {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
-        if (includeMessages) {
-          messages.push(...includeMessages);
-        }
-      } catch (error) {
-        throw new MastraError(
-          {
-            id: 'MONGODB_STORE_GET_MESSAGES_PAGINATED_GET_INCLUDE_MESSAGES_FAILED',
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-            details: { threadId, resourceId: resourceId ?? '' },
-          },
-          error,
-        );
-      }
-    }
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      const currentOffset = page * perPage;
-      const collection = await this.operations.getCollection(TABLE_MESSAGES);
-
-      const query: any = { thread_id: threadId };
-
-      if (fromDate) {
-        query.createdAt = { ...query.createdAt, $gte: fromDate };
-      }
-      if (toDate) {
-        query.createdAt = { ...query.createdAt, $lte: toDate };
-      }
-
-      const total = await collection.countDocuments(query);
-
-      if (total === 0 && messages.length === 0) {
-        return {
-          messages: [],
-          total: 0,
-          page,
-          perPage: preservePerPageForResponse(perPageInput, perPage),
-          hasMore: false,
-        };
-      }
-
-      const excludeIds = messages.map(m => m.id);
-      if (excludeIds.length > 0) {
-        query.id = { $nin: excludeIds };
-      }
-
-      const dataResult = await collection
-        .find(query)
-        .sort({ createdAt: -1 })
-        .skip(currentOffset)
-        .limit(perPage)
-        .toArray();
-
-      messages.push(...dataResult.map((row: any) => this.parseRow(row)));
-
-      const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
-
-      return {
-        messages: list.get.all.db(),
-        total,
-        page,
-        perPage,
-        hasMore: (page + 1) * perPage < total,
-      };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MONGODB_STORE_GET_MESSAGES_PAGINATED_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId, resourceId: resourceId ?? '' },
-        },
-        error,
-      );
-      this.logger?.trackException?.(mastraError);
-      this.logger?.error?.(mastraError.toString());
-      return { messages: [], total: 0, page, perPage, hasMore: false };
     }
   }
 

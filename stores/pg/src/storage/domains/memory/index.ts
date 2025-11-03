@@ -411,7 +411,7 @@ export class MemoryPG extends MemoryStorage {
   }
 
   /**
-   * @deprecated use getMessagesPaginated instead
+   * @deprecated use listMessages instead
    */
   public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     const { threadId, resourceId, selectBy } = args;
@@ -663,113 +663,6 @@ export class MemoryPG extends MemoryStorage {
         perPage: perPageForResponse,
         hasMore: false,
       };
-    }
-  }
-
-  public async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    const { threadId, resourceId, selectBy } = args;
-    const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
-    const fromDate = dateRange?.start;
-    const toDate = dateRange?.end;
-
-    const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
-    const orderByStatement = `ORDER BY "createdAt" DESC`;
-
-    const messages: MessageRowFromDB[] = [];
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      if (selectBy?.include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
-        if (includeMessages) {
-          messages.push(...includeMessages);
-        }
-      }
-
-      const perPage =
-        perPageInput !== undefined ? perPageInput : resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-      const currentOffset = page * perPage;
-
-      const conditions: string[] = [`thread_id = $1`];
-      const queryParams: any[] = [threadId];
-      let paramIndex = 2;
-
-      if (fromDate) {
-        conditions.push(`"createdAt" >= $${paramIndex++}`);
-        queryParams.push(fromDate);
-      }
-      if (toDate) {
-        conditions.push(`"createdAt" <= $${paramIndex++}`);
-        queryParams.push(toDate);
-      }
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-      const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
-      const countQuery = `SELECT COUNT(*) FROM ${tableName} ${whereClause}`;
-      const countResult = await this.client.one(countQuery, queryParams);
-      const total = parseInt(countResult.count, 10);
-
-      if (total === 0 && messages.length === 0) {
-        return {
-          messages: [],
-          total: 0,
-          page,
-          perPage: perPageForResponse,
-          hasMore: false,
-        };
-      }
-
-      const excludeIds = messages.map(m => m.id);
-      const excludeIdsParam = excludeIds.map((_, idx) => `$${idx + paramIndex}`).join(', ');
-      paramIndex += excludeIds.length;
-
-      const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${excludeIds.length ? `AND id NOT IN (${excludeIdsParam})` : ''}${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-      const rows = await this.client.manyOrNone(dataQuery, [...queryParams, ...excludeIds, perPage, currentOffset]);
-      messages.push(...(rows || []));
-
-      // Parse content back to objects if they were stringified during storage
-      const messagesWithParsedContent: MastraDBMessage[] = messages.map((row: MessageRowFromDB) => {
-        const message = this.normalizeMessageRow(row);
-        if (typeof message.content === 'string') {
-          try {
-            return { ...message, content: JSON.parse(message.content) } as MastraDBMessage;
-          } catch {
-            // If parsing fails, leave as string (V1 message)
-            return message as MastraDBMessage;
-          }
-        }
-        return message as MastraDBMessage;
-      });
-
-      const list = new MessageList().add(messagesWithParsedContent as (MastraMessageV1 | MastraDBMessage)[], 'memory');
-
-      return {
-        messages: list.get.all.db(),
-        total,
-        page,
-        perPage,
-        hasMore: currentOffset + rows.length < total,
-      };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_MESSAGES_PAGINATED_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            threadId,
-            resourceId: resourceId ?? '',
-            page,
-          },
-        },
-        error,
-      );
-      this.logger?.error?.(mastraError.toString());
-      this.logger?.trackException(mastraError);
-      return { messages: [], total: 0, page, perPage: perPageInput || 40, hasMore: false };
     }
   }
 

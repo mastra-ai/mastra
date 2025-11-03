@@ -436,7 +436,7 @@ export class MemoryMSSQL extends MemoryStorage {
   }
 
   /**
-   * @deprecated use getMessagesPaginated instead
+   * @deprecated use listMessages instead
    */
   public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     const { threadId, resourceId, selectBy } = args;
@@ -700,131 +700,6 @@ export class MemoryMSSQL extends MemoryStorage {
         perPage: perPageForResponse,
         hasMore: false,
       };
-    }
-  }
-
-  public async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    const { threadId, resourceId, selectBy } = args;
-    const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      const fromDate = dateRange?.start;
-      const toDate = dateRange?.end;
-
-      const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
-      const orderByStatement = `ORDER BY [seq_id] DESC`;
-
-      let messages: any[] = [];
-
-      if (selectBy?.include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
-        if (includeMessages) messages.push(...includeMessages);
-      }
-
-      const perPage =
-        perPageInput !== undefined ? perPageInput : resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-      const currentOffset = page * perPage;
-
-      const conditions: string[] = ['[thread_id] = @threadId'];
-      const request = this.pool.request();
-      request.input('threadId', threadId);
-
-      if (fromDate instanceof Date && !isNaN(fromDate.getTime())) {
-        conditions.push('[createdAt] >= @fromDate');
-        request.input('fromDate', fromDate.toISOString());
-      }
-      if (toDate instanceof Date && !isNaN(toDate.getTime())) {
-        conditions.push('[createdAt] <= @toDate');
-        request.input('toDate', toDate.toISOString());
-      }
-
-      const whereClause = `WHERE ${conditions.join(' AND ')}`;
-      const countQuery = `SELECT COUNT(*) as total FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })} ${whereClause}`;
-      const countResult = await request.query(countQuery);
-      const total = parseInt(countResult.recordset[0]?.total, 10) || 0;
-
-      if (total === 0 && messages.length > 0) {
-        const messagesWithParsedContent = messages.map(msg => {
-          if (typeof msg.content === 'string') {
-            try {
-              return { ...msg, content: JSON.parse(msg.content) };
-            } catch {
-              return msg;
-            }
-          }
-          return msg;
-        });
-        const cleanMessages = messagesWithParsedContent.map(({ seq_id, ...rest }) => rest);
-        const list = new MessageList().add(cleanMessages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
-        const parsedIncluded = list.get.all.db();
-        return {
-          messages: parsedIncluded,
-          total: parsedIncluded.length,
-          page,
-          perPage,
-          hasMore: false,
-        };
-      }
-
-      const excludeIds = messages.map(m => m.id);
-      if (excludeIds.length > 0) {
-        const excludeParams = excludeIds.map((_, idx) => `@id${idx}`);
-        conditions.push(`id NOT IN (${excludeParams.join(', ')})`);
-        excludeIds.forEach((id, idx) => request.input(`id${idx}`, id));
-      }
-
-      const finalWhereClause = `WHERE ${conditions.join(' AND ')}`;
-      const dataQuery = `${selectStatement} FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })} ${finalWhereClause} ${orderByStatement} OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
-
-      request.input('offset', currentOffset);
-      request.input('limit', perPage);
-
-      const rowsResult = await request.query(dataQuery);
-      const rows = rowsResult.recordset || [];
-      rows.sort((a, b) => a.seq_id - b.seq_id);
-      messages.push(...rows);
-
-      const messagesWithParsedContent = messages.map(msg => {
-        if (typeof msg.content === 'string') {
-          try {
-            return { ...msg, content: JSON.parse(msg.content) };
-          } catch {
-            return msg;
-          }
-        }
-        return msg;
-      });
-      const cleanMessages = messagesWithParsedContent.map(({ seq_id, ...rest }) => rest);
-      const list = new MessageList().add(cleanMessages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
-      const parsed = list.get.all.db();
-      return {
-        messages: parsed,
-        total,
-        page,
-        perPage,
-        hasMore: currentOffset + rows.length < total,
-      };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_MESSAGES_PAGINATED_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            threadId,
-            resourceId: resourceId ?? '',
-            page,
-          },
-        },
-        error,
-      );
-      this.logger?.error?.(mastraError.toString());
-      this.logger?.trackException?.(mastraError);
-      return { messages: [], total: 0, page, perPage: perPageInput || 40, hasMore: false };
     }
   }
 

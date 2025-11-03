@@ -183,29 +183,27 @@ export class Memory extends MastraMemory {
     // Use paginated method when pagination is requested
     let rawMessages;
     if (selectBy?.pagination) {
-      const paginatedResult = await this.storage.getMessagesPaginated({
+      const paginatedResult = await this.storage.listMessages({
         threadId,
         resourceId,
-        selectBy: {
-          ...selectBy,
-          ...(vectorResults?.length
-            ? {
-                include: vectorResults.map(r => ({
-                  id: r.metadata?.message_id,
-                  threadId: r.metadata?.thread_id,
-                  withNextMessages:
-                    typeof vectorConfig.messageRange === 'number'
-                      ? vectorConfig.messageRange
-                      : vectorConfig.messageRange.after,
-                  withPreviousMessages:
-                    typeof vectorConfig.messageRange === 'number'
-                      ? vectorConfig.messageRange
-                      : vectorConfig.messageRange.before,
-                })),
-              }
-            : {}),
-        },
-        threadConfig: config,
+        ...selectBy,
+        ...selectBy,
+        ...(vectorResults?.length
+          ? {
+              include: vectorResults.map(r => ({
+                id: r.metadata?.message_id,
+                threadId: r.metadata?.thread_id,
+                withNextMessages:
+                  typeof vectorConfig.messageRange === 'number'
+                    ? vectorConfig.messageRange
+                    : vectorConfig.messageRange.after,
+                withPreviousMessages:
+                  typeof vectorConfig.messageRange === 'number'
+                    ? vectorConfig.messageRange
+                    : vectorConfig.messageRange.before,
+              })),
+            }
+          : {}),
       });
       rawMessages = paginatedResult.messages;
     } else {

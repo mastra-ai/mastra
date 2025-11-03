@@ -6,7 +6,7 @@ import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { MessageList } from '@mastra/core/agent';
 
 export function createMessagesPaginatedTest({ storage }: { storage: MastraStorage }) {
-  describe('getMessagesPaginated', () => {
+  describe('listMessages', () => {
     it('should return paginated messages with total count', async () => {
       const thread = createSampleThread();
       await storage.saveThread({ thread });
@@ -21,9 +21,10 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
         await new Promise(r => setTimeout(r, 5));
       }
 
-      const page1 = await storage.getMessagesPaginated({
+      const page1 = await storage.listMessages({
         threadId: thread.id,
-        selectBy: { pagination: { page: 0, perPage: 5 } },
+        perPage: 5,
+        page: 0,
       });
       expect(page1.messages).toHaveLength(5);
       expect(page1.total).toBe(15);
@@ -31,9 +32,10 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       expect(page1.perPage).toBe(5);
       expect(page1.hasMore).toBe(true);
 
-      const page2 = await storage.getMessagesPaginated({
+      const page2 = await storage.listMessages({
         threadId: thread.id,
-        selectBy: { pagination: { page: 1, perPage: 5 } },
+        perPage: 5,
+        page: 1,
       });
       expect(page2.messages).toHaveLength(5);
       expect(page2.total).toBe(15);
@@ -99,9 +101,13 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       await storage.saveMessages({ messages: messagesToSave });
       // Total 6 messages: 2 now, 2 yesterday, 2 dayBeforeYesterday (oldest to newest)
 
-      const fromYesterday = await storage.getMessagesPaginated({
+      const fromYesterday = await storage.listMessages({
         threadId: thread.id,
-        selectBy: { pagination: { page: 0, perPage: 3, dateRange: { start: yesterday } } },
+        perPage: 3,
+        page: 0,
+        filter: {
+          dateRange: { start: yesterday },
+        },
       });
       expect(fromYesterday.total).toBe(4);
       expect(fromYesterday.messages).toHaveLength(3);
@@ -131,7 +137,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages
-      const retrievedMessages = await storage.getMessagesPaginated({ threadId: thread.id });
+      const retrievedMessages = await storage.listMessages({ threadId: thread.id });
 
       expect(retrievedMessages.messages).toHaveLength(2);
 
@@ -191,7 +197,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       await expect(storage.saveMessages({ messages })).rejects.toThrow();
 
       // Verify no messages were saved
-      const savedMessages = await storage.getMessagesPaginated({ threadId: thread.id });
+      const savedMessages = await storage.listMessages({ threadId: thread.id });
       expect(savedMessages.messages).toHaveLength(0);
     });
 
@@ -384,20 +390,16 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       await storage.saveMessages({ messages });
 
       // Use last: 2 and include a message from another thread with context
-      const { messages: result } = await storage.getMessagesPaginated({
+      const { messages: result } = await storage.listMessages({
         threadId: thread.id,
-
-        selectBy: {
-          last: 2,
-          include: [
-            {
-              id: messages[4]!.id, // 'E' from thread-bar
-              threadId: thread2.id,
-              withPreviousMessages: 1,
-              withNextMessages: 1,
-            },
-          ],
-        },
+        include: [
+          {
+            id: messages[4]!.id, // 'E' from thread-bar
+            threadId: thread2.id,
+            withPreviousMessages: 1,
+            withNextMessages: 1,
+          },
+        ],
       });
 
       // Should include last 2 from thread-one and 3 from thread-two (D, E, F)
@@ -524,10 +526,10 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
     });
 
     it('should return empty array if threadId is an empty string or whitespace only', async () => {
-      const result = await storage.getMessagesPaginated({ threadId: '' });
+      const result = await storage.listMessages({ threadId: '' });
       expect(result.messages).toHaveLength(0);
 
-      const result2 = await storage.getMessagesPaginated({ threadId: '   ' });
+      const result2 = await storage.listMessages({ threadId: '   ' });
       expect(result2.messages).toHaveLength(0);
     });
   });
