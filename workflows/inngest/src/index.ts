@@ -890,12 +890,12 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema>,
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
 >(
   tool: Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
     inputSchema: TSchemaIn;
     outputSchema: TSchemaOut;
-    execute: (context: TContext) => Promise<any>;
+    execute: (input: z.infer<TSchemaIn>, context: TContext) => Promise<z.infer<TSchemaOut>>;
   },
 ): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, InngestEngineType>;
 export function createStep<
@@ -1064,7 +1064,7 @@ export function createStep<
   }
 
   return {
-    id: params.id,
+    id: params.id as TStepId,
     description: params.description,
     inputSchema: params.inputSchema,
     outputSchema: params.outputSchema,

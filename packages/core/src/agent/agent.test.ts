@@ -389,8 +389,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               name: z.string(),
             }),
             // requireApproval: true,
-            execute: async ({ context }) => {
-              return mockFindUser(context) as Promise<Record<string, any>>;
+            execute: async input => {
+              return mockFindUser(input) as Promise<Record<string, any>>;
             },
           });
 
@@ -437,8 +437,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             inputSchema: z.object({
               name: z.string(),
             }),
-            execute: async ({ context }) => {
-              return mockFindUser(context) as Promise<Record<string, any>>;
+            execute: async input => {
+              return mockFindUser(input) as Promise<Record<string, any>>;
             },
           });
 
@@ -499,8 +499,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               name: z.string(),
             }),
             requireApproval: true,
-            execute: async ({ context }) => {
-              return mockFindUser(context) as Promise<Record<string, any>>;
+            execute: async input => {
+              return mockFindUser(input) as Promise<Record<string, any>>;
             },
           });
 
@@ -566,13 +566,14 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resumeSchema: z.object({
               name: z.string(),
             }),
-            execute: async ({ suspend, resumeData }) => {
-              if (!resumeData) {
-                return await suspend({ message: 'Please provide the name of the user' });
+            execute: async (inputData, context) => {
+              console.log('context', context);
+              if (!context?.agent?.resumeData) {
+                return await context?.agent?.suspend({ message: 'Please provide the name of the user' });
               }
 
               return {
-                name: resumeData?.name,
+                name: context?.agent?.resumeData?.name,
                 email: 'test@test.com',
               };
             },
@@ -611,7 +612,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
           expect(name).toBe('Dero Israel');
           expect(email).toBe('test@test.com');
-        }, 500000);
+        }, 10000);
       });
 
       describe.skipIf(version === 'v1')('persist model output stream state', () => {
@@ -622,8 +623,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             inputSchema: z.object({
               name: z.string(),
             }),
-            execute: async ({ context }) => {
-              return mockFindUser(context) as Promise<Record<string, any>>;
+            execute: async input => {
+              return mockFindUser(input) as Promise<Record<string, any>>;
             },
           });
 
@@ -704,8 +705,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         inputSchema: z.object({
           name: z.string(),
         }),
-        execute: ({ context }) => {
-          return mockFindUser(context) as Promise<Record<string, any>>;
+        execute: (input, _context) => {
+          return mockFindUser(input) as Promise<Record<string, any>>;
         },
       });
 
@@ -834,8 +835,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         inputSchema: z.object({
           name: z.string(),
         }),
-        execute: async ({ context }) => {
-          return mockFindUser(context) as Promise<Record<string, any>>;
+        execute: async input => {
+          return mockFindUser(input) as Promise<Record<string, any>>;
         },
       });
 
@@ -937,12 +938,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         description: 'A tool that fails initially but eventually succeeds',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
-        execute: async ({ context }) => {
+        execute: async input => {
           toolCallCount++;
           if (toolCallCount <= failuresBeforeSuccess) {
             throw new Error(`Tool failed! Attempt ${toolCallCount}. Please try again.`);
           }
-          return { output: `Success on attempt ${toolCallCount}: ${context.input}` };
+          return { output: `Success on attempt ${toolCallCount}: ${input.input}` };
         },
       });
 
@@ -4195,7 +4196,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           description: 'Echoes the input string.',
           inputSchema: z.object({ input: z.string() }),
           outputSchema: z.object({ output: z.string() }),
-          execute: async ({ context }) => ({ output: context.input }),
+          execute: async input => ({ output: input.input }),
         });
 
         const agent = new Agent({
@@ -4295,7 +4296,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           description: 'Echoes the input string.',
           inputSchema: z.object({ input: z.string() }),
           outputSchema: z.object({ output: z.string() }),
-          execute: async ({ context }) => ({ output: context.input }),
+          execute: async input => ({ output: input.input }),
         });
 
         const agent = new Agent({
@@ -4353,7 +4354,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           description: 'Echoes the input string.',
           inputSchema: z.object({ input: z.string() }),
           outputSchema: z.object({ output: z.string() }),
-          execute: async ({ context }) => ({ output: context.input }),
+          execute: async input => ({ output: input.input }),
         });
 
         const uppercaseTool = createTool({
@@ -4361,7 +4362,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           description: 'Converts input to uppercase.',
           inputSchema: z.object({ input: z.string() }),
           outputSchema: z.object({ output: z.string() }),
-          execute: async ({ context }) => ({ output: context.input.toUpperCase() }),
+          execute: async input => ({ output: input.input.toUpperCase() }),
         });
 
         const agent = new Agent({

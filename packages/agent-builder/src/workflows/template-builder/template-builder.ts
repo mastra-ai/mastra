@@ -971,9 +971,9 @@ const intelligentMergeStep = createStep({
           message: z.string(),
           error: z.string().optional(),
         }),
-        execute: async ({ context }) => {
+        execute: async input => {
           try {
-            const { sourcePath, destinationPath } = context;
+            const { sourcePath, destinationPath } = input;
 
             // Use templateDir directly from input
             const resolvedSourcePath = resolve(templateDir, sourcePath);

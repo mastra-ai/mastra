@@ -14,7 +14,6 @@ import { JSDOM } from 'jsdom';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { memory, weatherAgent } from './mastra/agents/weather';
 import { weatherTool } from './mastra/tools/weather';
-
 // Helper to find an available port
 async function getAvailablePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -87,6 +86,7 @@ describe('Memory Streaming Tests', () => {
 
     // Collect second stream
     const chunks2: string[] = [];
+
     for await (const chunk of stream2) {
       if (chunk.type === `text-delta`) {
         chunks2.push(chunk.delta);

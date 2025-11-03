@@ -107,7 +107,7 @@ export const startWeatherTool = createTool({
   outputSchema: z.object({
     runId: z.string(),
   }),
-  execute: async ({ context }) => {
+  execute: async () => {
     const workflow = mastra.getWorkflow('weatherWorkflowWithSuspend');
     const run = await workflow.createRunAsync();
     await run.start({
@@ -128,15 +128,15 @@ export const resumeWeatherTool = createTool({
     city: z.string().describe('City name'),
   }),
   outputSchema: forecastSchema,
-  execute: async ({ context }) => {
+  execute: async input => {
     const workflow = mastra.getWorkflow('weatherWorkflowWithSuspend');
     const run = await workflow.createRunAsync({
-      runId: context.runId,
+      runId: inputData.runId,
     });
     const result = await run.resume({
       step: 'fetch-weather',
       resumeData: {
-        city: context.city,
+        city: inputData.city,
       },
     });
     return result.result;
