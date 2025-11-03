@@ -198,8 +198,8 @@ export default function ChatbotSidebar({
                                       }
                                       className={`p-1 cursor-pointer ${
                                         reaction === "upvote"
-                                          ? "dark:text-accent-green text-[--light-green-accent]"
-                                          : "dark:text-icons-3 text-[--light-color-text-4]"
+                                          ? "dark:text-(--mastra-green-accent) text-(--mastra-green-accent)"
+                                          : "dark:text-icons-3 text-(--mastra-text-tertiary)"
                                       }`}
                                     >
                                       <ThumbsUp className="w-3.5 h-3.5" />
@@ -213,7 +213,7 @@ export default function ChatbotSidebar({
                                       className={`p-1 cursor-pointer ${
                                         reaction === "downvote"
                                           ? "dark:text-red-500 text-red-600"
-                                          : "dark:text-icons-3 text-[--light-color-text-4]"
+                                          : "dark:text-icons-3 text-(--mastra-text-tertiary)"
                                       }`}
                                     >
                                       <ThumbsDown className="w-3.5 h-3.5" />
