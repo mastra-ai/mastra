@@ -14,7 +14,7 @@ The `.streamVNext()` method enables real-time streaming of responses from a work
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const stream = run.streamVNext({
   inputData: {
@@ -125,7 +125,7 @@ const stream = run.streamVNext({
 ## Extended usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const stream = run.streamVNext({
   inputData: {
@@ -149,5 +149,5 @@ The stream emits various event types during workflow execution. Each event has a
 ## Related
 
 - [Workflows overview](/docs/workflows/overview#running-workflows)
-- [Workflow.createRunAsync()](/reference/workflows/workflow-methods/create-run)
+- [Workflow.createRun()](/reference/workflows/workflow-methods/create-run)
 - [Run.resumeStreamVNext()](./resumeStreamVNext)

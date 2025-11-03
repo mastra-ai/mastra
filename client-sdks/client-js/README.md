@@ -81,8 +81,7 @@ const client = new MastraClient({
 - `listWorkflows()`: Get all workflows
 - `getWorkflow(workflowId)`: Get a workflow instance
   - `workflow.details()`: Get workflow details
-  - `workflow.createRunAsync()`: Create workflow run
-  - `workflow.createRun()`: Deprecated - use createRunAsync() instead
+  - `workflow.createRun()`: Create workflow run
   - `workflow.startAsync(params)`: Execute the workflow and wait for execution results
   - `workflow.resumeAsync(params)`: Resume suspended workflow step async
   - `workflow.start({runId, triggerData})`: Start a workflow run sync
