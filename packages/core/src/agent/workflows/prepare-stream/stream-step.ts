@@ -6,7 +6,7 @@ import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { AgentCapabilities } from './schema';
 
-interface StreamStepOptions<FORMAT extends 'aisdk' | 'mastra' | undefined = undefined> {
+interface StreamStepOptions {
   capabilities: AgentCapabilities;
   runId: string;
   returnScorerData?: boolean;
@@ -19,10 +19,7 @@ interface StreamStepOptions<FORMAT extends 'aisdk' | 'mastra' | undefined = unde
   toolCallId?: string;
 }
 
-export function createStreamStep<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export function createStreamStep<OUTPUT extends OutputSchema | undefined = undefined>({
   capabilities,
   runId,
   returnScorerData,
@@ -30,7 +27,7 @@ export function createStreamStep<
   resumeContext,
   agentId,
   toolCallId,
-}: StreamStepOptions<FORMAT>) {
+}: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
     inputSchema: z.any(), // tried to type this in various ways but it's too complex
