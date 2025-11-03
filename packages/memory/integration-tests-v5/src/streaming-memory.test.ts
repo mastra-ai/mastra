@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { useChat } from '@ai-sdk/react';
+import { toAISdkStream } from '@mastra/ai-sdk';
 import { Agent, MessageList } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { renderHook, act, waitFor } from '@testing-library/react';
@@ -76,17 +77,19 @@ describe('Memory Streaming Tests', () => {
     expect(response1).toContain('70 degrees');
 
     // Second weather check
-    const stream2 = await agent.stream('what is the weather in Seattle?', {
-      threadId,
-      resourceId,
-      format: 'aisdk', // use aisdk output type this time just for fun
-    });
+    const stream2 = toAISdkStream(
+      await agent.stream('what is the weather in Seattle?', {
+        threadId,
+        resourceId,
+      }),
+      { from: 'agent' },
+    );
 
     // Collect second stream
     const chunks2: string[] = [];
-    for await (const chunk of stream2.fullStream) {
+    for await (const chunk of stream2) {
       if (chunk.type === `text-delta`) {
-        chunks2.push(chunk.text);
+        chunks2.push(chunk.delta);
       }
     }
     const response2 = chunks2.join('');
@@ -197,7 +200,7 @@ describe('Memory Streaming Tests', () => {
       const { result } = renderHook(() => {
         const chat = useChat({
           transport: new DefaultChatTransport({
-            api: `http://localhost:${port}/api/agents/test/stream/ui`,
+            api: `http://localhost:${port}/chat`,
             prepareSendMessagesRequest({ messages }) {
               return {
                 body: {

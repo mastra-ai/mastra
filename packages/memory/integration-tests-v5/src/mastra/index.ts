@@ -1,6 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 import { memoryProcessorAgent, weatherAgent } from './agents/weather';
+import { chatRoute } from '@mastra/ai-sdk';
 
 export const mastra = new Mastra({
   agents: {
@@ -10,4 +11,12 @@ export const mastra = new Mastra({
   storage: new LibSQLStore({
     url: 'file:mastra.db',
   }),
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat',
+        agent: 'weatherAgent',
+      }),
+    ],
+  },
 });
