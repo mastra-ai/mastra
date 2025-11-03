@@ -944,6 +944,47 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       expect(page3Result.page).toBe(2);
       expect(page3Result.hasMore).toBe(false);
     });
+
+    it('should reject negative page values', async () => {
+      await memory.saveThread({
+        thread: createTestThread('Validation Test Thread'),
+      });
+
+      await expect(
+        memory.listThreadsByResourceId({
+          resourceId,
+          page: -1,
+          perPage: 10,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('should handle perPage edge cases', async () => {
+      await memory.saveThread({
+        thread: createTestThread('perPage Edge Case Thread'),
+      });
+
+      // Test perPage = 0 (should return zero results)
+      const zeroResult = await memory.listThreadsByResourceId({
+        resourceId,
+        page: 0,
+        perPage: 0,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
+      expect(zeroResult.threads).toHaveLength(0);
+      expect(zeroResult.perPage).toBe(0);
+
+      // Test negative perPage (should fall back to default)
+      const negativeResult = await memory.listThreadsByResourceId({
+        resourceId,
+        page: 0,
+        perPage: -5,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
+      expect(negativeResult.threads.length).toBeGreaterThan(0);
+      expect(negativeResult.perPage).toBe(100); // Default for listThreadsByResourceId
+    });
   });
 
   if (workerTestConfig) {

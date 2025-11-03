@@ -98,12 +98,14 @@ export type StorageListWorkflowRunsInput = {
   toDate?: Date;
   /**
    * Number of items per page, or `false` to fetch all records without pagination limit.
-   * Defaults to 10 if not specified.
+   * When undefined, returns all workflow runs without pagination.
+   * When both perPage and page are provided, pagination is applied.
    */
   perPage?: number | false;
   /**
    * Zero-indexed page number for pagination.
-   * Defaults to 0 if not specified.
+   * When both perPage and page are provided, pagination is applied.
+   * When either is undefined, all results are returned.
    */
   page?: number;
   resourceId?: string;

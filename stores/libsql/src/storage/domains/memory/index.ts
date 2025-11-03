@@ -220,6 +220,18 @@ export class MemoryLibSQL extends MemoryStorage {
       );
     }
 
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_LIST_MESSAGES_INVALID_PAGE',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
     try {
       // Determine how many results to return
       // Default pagination is always 40 unless explicitly specified
@@ -359,7 +371,7 @@ export class MemoryLibSQL extends MemoryStorage {
         messages: [],
         total: 0,
         page,
-        perPage: perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput || 40,
+        perPage: perPageInput === false ? Number.MAX_SAFE_INTEGER : (perPageInput ?? 40),
         hasMore: false,
       };
     }
@@ -853,6 +865,19 @@ export class MemoryLibSQL extends MemoryStorage {
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
     const perPage = normalizePerPage(perPageInput, 100);
     const offset = page * perPage;
     const { field, direction } = this.parseOrderBy(orderBy);

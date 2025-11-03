@@ -216,6 +216,19 @@ export class MemoryStorageD1 extends MemoryStorage {
   ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
     const perPage = normalizePerPage(perPageInput, 100);
+
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_CLOUDFLARE_D1_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
     const offset = page * perPage;
     const { field, direction } = this.parseOrderBy(orderBy);
     const fullTableName = this.operations.getTableName(TABLE_THREADS);
@@ -711,6 +724,18 @@ export class MemoryStorageD1 extends MemoryStorage {
       );
     }
 
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_CLOUDFLARE_D1_LIST_MESSAGES_INVALID_PAGE',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
     try {
       // Determine how many results to return
       // Default pagination is always 40 unless explicitly specified
@@ -903,7 +928,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         messages: [],
         total: 0,
         page,
-        perPage: perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput || 40,
+        perPage: perPageInput === false ? Number.MAX_SAFE_INTEGER : (perPageInput ?? 40),
         hasMore: false,
       };
     }

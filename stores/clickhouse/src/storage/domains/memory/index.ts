@@ -274,17 +274,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       );
     }
 
-    // Determine the perPage value for the response (preserve false)
-    const resolvePerPage = (): number | false => {
-      if (perPageInput === false) return false;
-      if (perPageInput === 0) return 0;
-      if (typeof perPageInput === 'number' && perPageInput > 0) return perPageInput;
-      return 40;
-    };
-
-    const perPageForResponse = resolvePerPage();
-    const perPageForQuery: number = perPageForResponse === false ? Number.MAX_SAFE_INTEGER : perPageForResponse;
-    const offset: number = perPageForResponse === false ? 0 : page * perPageForQuery;
+    const perPageForQuery = normalizePerPage(perPageInput, 40);
+    const perPageForResponse = preservePerPageForResponse(perPageInput, perPageForQuery);
+    const offset: number = page * perPageForQuery;
 
     try {
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
@@ -1203,7 +1195,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       );
       this.logger?.trackException?.(mastraError);
       this.logger?.error?.(mastraError.toString());
-      return { messages: [], total: 0, page, perPage: perPageInput || 40, hasMore: false };
+      return { messages: [], total: 0, page, perPage: perPageInput ?? 40, hasMore: false };
     }
   }
 

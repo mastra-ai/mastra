@@ -204,6 +204,18 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       );
     }
 
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_LIST_MESSAGES_INVALID_PAGE',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
     try {
       // Determine how many results to return
       // Default pagination is always 40 unless explicitly specified
@@ -767,6 +779,19 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
       const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_MONGODB_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
       const perPage = normalizePerPage(perPageInput, 100);
       const offset = page * perPage;
       const { field, direction } = this.parseOrderBy(orderBy);

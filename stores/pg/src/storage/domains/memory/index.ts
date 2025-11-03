@@ -148,7 +148,7 @@ export class MemoryPG extends MemoryStorage {
         total,
         page,
         perPage: preservePerPageForResponse(perPageInput, perPage),
-        hasMore: offset + threads.length < total,
+        hasMore: offset + perPage < total,
       };
     } catch (error) {
       const mastraError = new MastraError(
@@ -544,22 +544,10 @@ export class MemoryPG extends MemoryStorage {
       );
     }
 
-    try {
-      // Determine how many results to return
-      // Default pagination is always 40 unless explicitly specified
-      let perPage = 40;
-      if (perPageInput !== undefined) {
-        if (perPageInput === false) {
-          // perPage: false means fetch all messages without pagination
-          perPage = Number.MAX_SAFE_INTEGER;
-        } else if (perPageInput === 0) {
-          // perPage: 0 means return zero results
-          perPage = 0;
-        } else if (typeof perPageInput === 'number' && perPageInput > 0) {
-          perPage = perPageInput;
-        }
-      }
+    const perPage = normalizePerPage(perPageInput, 40);
+    const perPageForResponse = preservePerPageForResponse(perPageInput, perPage);
 
+    try {
       // Calculate offset from page
       const offset = page * perPage;
 
@@ -652,7 +640,7 @@ export class MemoryPG extends MemoryStorage {
         messages: finalMessages,
         total,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error) {
@@ -674,7 +662,7 @@ export class MemoryPG extends MemoryStorage {
         messages: [],
         total: 0,
         page,
-        perPage: perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput || 40,
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }
