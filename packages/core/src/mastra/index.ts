@@ -144,16 +144,6 @@ export interface Config<
    */
   scorers?: TScorers;
 
-  /**
-   * Server middleware functions to be applied to API routes
-   * Each middleware can specify a path pattern (defaults to '/api/*')
-   * @deprecated use server.middleware instead
-   */
-  serverMiddleware?: Array<{
-    handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
-    path?: string;
-  }>;
-
   // @deprecated add memory to your Agent directly instead
   memory?: never;
 
@@ -238,13 +228,6 @@ export class Mastra<
   #internalMastraWorkflows: Record<string, Workflow> = {};
   // This is only used internally for server handlers that require temporary persistence
   #serverCache: MastraServerCache;
-
-  /**
-   * @deprecated use getStorage() instead
-   */
-  get storage() {
-    return this.#storage;
-  }
 
   get pubsub() {
     return this.#pubsub;
@@ -344,14 +327,6 @@ export class Mastra<
    * ```
    */
   constructor(config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers>) {
-    // Store server middleware with default path
-    if (config?.serverMiddleware) {
-      this.#serverMiddleware = config.serverMiddleware.map(m => ({
-        handler: m.handler,
-        path: m.path || '/api/*',
-      }));
-    }
-
     /*
     Server Cache
     */
@@ -479,7 +454,7 @@ export class Mastra<
 
         agent.__registerPrimitives({
           logger: this.getLogger(),
-          storage: this.storage,
+          storage: this.getStorage(),
           agents: agents,
           tts: this.#tts,
           vectors: this.#vectors,
@@ -509,7 +484,7 @@ export class Mastra<
         workflow.__registerMastra(this);
         workflow.__registerPrimitives({
           logger: this.getLogger(),
-          storage: this.storage,
+          storage: this.getStorage(),
           agents: agents,
           tts: this.#tts,
           vectors: this.#vectors,
@@ -866,7 +841,7 @@ export class Mastra<
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
       logger: this.getLogger(),
-      storage: this.storage,
+      storage: this.getStorage(),
     });
     this.#internalMastraWorkflows[workflow.id] = workflow;
   }

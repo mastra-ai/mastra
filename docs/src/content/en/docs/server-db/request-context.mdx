@@ -48,7 +48,7 @@ routingAgent.network("What's the weather in London?", {
   requestContext,
 });
 
-const run = await mastra.getWorkflow("weatherWorkflow").createRunAsync();
+const run = await mastra.getWorkflow("weatherWorkflow").createRun();
 await run.start({
   inputData: {
     location: "London",

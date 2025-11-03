@@ -104,7 +104,7 @@ const questions = await generateQuestions(summary); // Much better!
 ```typescript
 import { mastra } from './src/mastra/index';
 
-const run = await mastra.getWorkflow('pdfToQuestionsWorkflow').createRunAsync();
+const run = await mastra.getWorkflow('pdfToQuestionsWorkflow').createRun();
 
 // Using a PDF URL
 const result = await run.start({

@@ -5,7 +5,7 @@ description: "Store traces locally for development and debugging"
 
 # Default Exporter
 
-The `DefaultExporter` persists traces to your configured storage backend, making them accessible through the Mastra Playground. It's automatically enabled when using the default observability configuration and requires no external services.
+The `DefaultExporter` persists traces to your configured storage backend, making them accessible through Studio. It's automatically enabled when using the default observability configuration and requires no external services.
 
 ## When to Use DefaultExporter
 
@@ -14,14 +14,14 @@ DefaultExporter is ideal for:
 - **Local development** - Debug and analyze traces offline
 - **Data ownership** - Complete control over your trace data
 - **Zero dependencies** - No external services required
-- **Playground integration** - View traces in Mastra Playground UI
+- **Studio integration** - View traces in Studio
 
 ## Configuration
 
 ### Prerequisites
 
 1. **Storage Backend**: Configure a storage provider (LibSQL, PostgreSQL, etc.)
-2. **Mastra Playground**: Install for viewing traces locally
+2. **Studio**: Install for viewing traces locally
 
 ### Basic Setup
 
@@ -62,11 +62,11 @@ export const mastra = new Mastra({
 
 ## Viewing Traces
 
-### Mastra Playground
+### Studio
 
-Access your traces through the local Playground:
+Access your traces through Studio:
 
-1. Start the Playground
+1. Start Studio
 2. Navigate to Observability
 3. Filter and search your local traces
 4. Inspect detailed span information
