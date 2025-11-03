@@ -337,9 +337,9 @@ export async function writeToolSample(destPath: string) {
 export async function writeScorersSample(llmProvider: LLMProvider, destPath: string) {
   const modelString = getModelIdentifier(llmProvider);
   const content = `import { z } from 'zod';
-import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/code';
-import { createCompletenessScorer } from '@mastra/evals/scorers/code';
-import { createScorer } from '@mastra/core/scores';
+import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt';
+import { createCompletenessScorer } from '@mastra/evals/scorers/prebuilt';
+import { createScorer } from '@mastra/core/evals';
 
 export const toolCallAppropriatenessScorer = createToolCallAccuracyScorerCode({
   expectedTool: 'weatherTool',
@@ -350,6 +350,7 @@ export const completenessScorer = createCompletenessScorer();
 
 // Custom LLM-judged scorer: evaluates if non-English locations are translated appropriately
 export const translationScorer = createScorer({
+  id: 'translation-quality-scorer',
   name: 'Translation Quality',
   description: 'Checks that non-English location names are translated and used correctly',
   type: 'agent',
@@ -480,7 +481,7 @@ export const writeIndexFile = async ({
       await fs.writeFile(
         destPath,
         `
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 
 export const mastra = new Mastra()
         `,

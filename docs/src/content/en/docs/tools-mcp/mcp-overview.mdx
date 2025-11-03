@@ -61,6 +61,7 @@ import { Agent } from "@mastra/core/agent";
 import { testMcpClient } from "../mcp/test-mcp-client";
 
 export const testAgent = new Agent({
+  id: "test-agent",
   name: "Test Agent",
   description: "You are a helpful AI assistant",
   instructions: `
@@ -89,7 +90,7 @@ import { testTool } from "../tools/test-tool";
 
 export const testMcpServer = new MCPServer({
   id: "test-mcp-server",
-  name: "Test Server",
+  name: "Test MCP Server",
   version: "1.0.0",
   agents: { testAgent },
   tools: { testTool },
@@ -104,7 +105,7 @@ export const testMcpServer = new MCPServer({
 To make an MCP server available to other systems or agents that support the protocol, register it in the main `Mastra` instance using `mcpServers`.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 import { testMcpServer } from "./mcp/test-mcp-server";
 

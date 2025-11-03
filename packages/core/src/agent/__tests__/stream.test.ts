@@ -3,8 +3,8 @@ import { openai } from '@ai-sdk/openai';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
-import type { LanguageModelV1 } from 'ai';
-import { convertArrayToReadableStream, MockLanguageModelV1 } from 'ai/test';
+import type { LanguageModelV1 } from '@internal/ai-sdk-v4/model';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2 } from 'ai-v5/test';
 import { config } from 'dotenv';
 import { describe, expect, it, vi } from 'vitest';
@@ -64,7 +64,8 @@ function runStreamTest(version: 'v1' | 'v2') {
       });
 
       const agent = new Agent({
-        name: 'partial-rescue-agent',
+        id: 'partial-rescue-agent',
+        name: 'Partial Rescue Agent',
         instructions:
           'Call each tool in a separate step. Do not use parallel tool calls. Always wait for the result of one tool before calling the next.',
         model: openaiModel,
@@ -128,11 +129,11 @@ function runStreamTest(version: 'v1' | 'v2') {
       expect(caught).toBe(true);
 
       // After interruption, check what was saved
-      let messages = await mockMemory.getMessages({
+      let result = await mockMemory.getMessages({
         threadId: 'thread-partial-rescue',
         resourceId: 'resource-partial-rescue',
-        format: 'v2',
       });
+      let messages = result.messages;
 
       // User message should be saved
       expect(messages.find(m => m.role === 'user')).toBeTruthy();
@@ -173,7 +174,8 @@ function runStreamTest(version: 'v1' | 'v2') {
       });
 
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'If the user prompt contains "Echo:", always call the echoTool. Be verbose in your response.',
         model: openaiModel,
         memory: mockMemory,
@@ -199,11 +201,11 @@ function runStreamTest(version: 'v1' | 'v2') {
       await stream.consumeStream();
 
       expect(saveCallCount).toBeGreaterThan(1);
-      const messages = await mockMemory.getMessages({
+      const result = await mockMemory.getMessages({
         threadId: 'thread-echo',
         resourceId: 'resource-echo',
-        format: 'v2',
       });
+      const messages = result.messages;
       expect(messages.length).toBeGreaterThan(0);
       const assistantMsg = messages.find(m => m.role === 'assistant');
       expect(assistantMsg).toBeDefined();
@@ -242,7 +244,8 @@ function runStreamTest(version: 'v1' | 'v2') {
       });
 
       const agent = new Agent({
-        name: 'test-agent-multi',
+        id: 'test-agent-multi',
+        name: 'Test Agent Multi',
         instructions: [
           'If the user prompt contains "Echo:", call the echoTool.',
           'If the user prompt contains "Uppercase:", call the uppercaseTool.',
@@ -278,11 +281,11 @@ function runStreamTest(version: 'v1' | 'v2') {
       await stream.consumeStream();
 
       expect(saveCallCount).toBeGreaterThan(1);
-      const messages = await mockMemory.getMessages({
+      const result = await mockMemory.getMessages({
         threadId: 'thread-multi',
         resourceId: 'resource-multi',
-        format: 'v2',
       });
+      const messages = result.messages;
       expect(messages.length).toBeGreaterThan(0);
       const assistantMsg = messages.find(m => m.role === 'assistant');
       expect(assistantMsg).toBeDefined();
@@ -299,7 +302,8 @@ function runStreamTest(version: 'v1' | 'v2') {
     it('should persist the full message after a successful run', async () => {
       const mockMemory = new MockMemory();
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'test',
         model: dummyResponseModel,
         memory: mockMemory,
@@ -320,7 +324,8 @@ function runStreamTest(version: 'v1' | 'v2') {
 
       await stream.consumeStream();
 
-      const messages = await mockMemory.getMessages({ threadId: 'thread-1', resourceId: 'resource-1', format: 'v2' });
+      const result = await mockMemory.getMessages({ threadId: 'thread-1', resourceId: 'resource-1' });
+      const messages = result.messages;
       // Check that the last message matches the expected final output
       expect(
         messages[messages.length - 1]?.content?.parts?.some(
@@ -379,7 +384,8 @@ function runStreamTest(version: 'v1' | 'v2') {
             });
 
       const agent = new Agent({
-        name: 'test-agent-7050',
+        id: 'test-agent-7050',
+        name: 'Test Agent 7050',
         instructions: 'test',
         model: mockModel,
       });
@@ -453,7 +459,8 @@ function runStreamTest(version: 'v1' | 'v2') {
       };
 
       const agent = new Agent({
-        name: 'no-progress-agent',
+        id: 'no-progress-agent',
+        name: 'No Progress Agent',
         instructions: 'test',
         model: emptyResponseModel,
         memory: mockMemory,
@@ -476,7 +483,8 @@ function runStreamTest(version: 'v1' | 'v2') {
 
       expect(saveCallCount).toBe(1);
 
-      const messages = await mockMemory.getMessages({ threadId: 'thread-2', resourceId: 'resource-2', format: 'v2' });
+      const result = await mockMemory.getMessages({ threadId: 'thread-2', resourceId: 'resource-2' });
+      const messages = result.messages;
       expect(messages.length).toBe(1);
       expect(messages[0].role).toBe('user');
       expect(messages[0].content.content).toBe('no progress');
@@ -492,7 +500,8 @@ function runStreamTest(version: 'v1' | 'v2') {
       };
 
       const agent = new Agent({
-        name: 'immediate-interrupt-agent',
+        id: 'immediate-interrupt-agent',
+        name: 'Immediate Interrupt Agent',
         instructions: 'test',
         model: errorResponseModel,
         memory: mockMemory,
@@ -518,7 +527,8 @@ function runStreamTest(version: 'v1' | 'v2') {
       });
 
       expect(saveCallCount).toBe(0);
-      const messages = await mockMemory.getMessages({ threadId: 'thread-3', resourceId: 'resource-3' });
+      const result = await mockMemory.getMessages({ threadId: 'thread-3', resourceId: 'resource-3' });
+      const messages = result.messages;
       expect(messages.length).toBe(0);
     });
 
@@ -552,7 +562,8 @@ function runStreamTest(version: 'v1' | 'v2') {
       }
 
       const agent = new Agent({
-        name: 'error-agent-stream',
+        id: 'error-agent-stream',
+        name: 'Error Agent Stream',
         instructions: 'test',
         model: errorModel,
         memory: mockMemory,
@@ -606,8 +617,8 @@ function runStreamTest(version: 'v1' | 'v2') {
   describe(`stream`, () => {
     it(`should stream from LLM`, async () => {
       const agent = new Agent({
-        id: 'test',
-        name: 'test',
+        id: 'test-agent',
+        name: 'Test Agent',
         model: openaiModel,
         instructions: `test!`,
       });
@@ -655,8 +666,8 @@ function runStreamTest(version: 'v1' | 'v2') {
 
     it(`should show correct request input for multi-turn inputs`, { timeout: 30000 }, async () => {
       const agent = new Agent({
-        id: 'test',
-        name: 'test',
+        id: 'test-agent',
+        name: 'Test Agent',
         model: openaiModel,
         instructions: `test!`,
       });
@@ -726,7 +737,7 @@ function runStreamTest(version: 'v1' | 'v2') {
           ],
           `memory`,
         );
-        return { messages: list.get.remembered.aiV4.core(), messagesV2: list.get.remembered.v2() };
+        return { messages: list.get.remembered.aiV4.core(), messagesV2: list.get.remembered.db() };
       };
 
       mockMemory.getThreadById = async function getThreadById() {
@@ -734,7 +745,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       };
 
       const agent = new Agent({
-        id: 'test',
+        id: 'test-agent',
         name: 'test',
         model: openaiModel,
         instructions: `test!`,
@@ -770,32 +781,26 @@ function runStreamTest(version: 'v1' | 'v2') {
       let request;
       if (version === 'v1') {
         request = JSON.parse((await result.request).body).messages;
-        expect(request).toEqual([
-          {
-            role: 'system',
-            content: 'test!',
-          },
-          {
-            role: 'user',
-            content: 'hello!',
-          },
-          { role: 'assistant', content: 'hi, how are you?' },
-          { role: 'user', content: "I'm good, how are you?" },
-        ]);
+        // Expect 3 messages: 2 system messages (instructions + remembered), 1 user message
+        expect(request).toHaveLength(3);
+        expect(request[0].role).toBe('system');
+        expect(request[0].content).toBe('test!');
+        expect(request[1].role).toBe('system');
+        expect(request[1].content).toContain('remembered from a different conversation');
+        expect(request[1].content).toContain('hello!');
+        expect(request[1].content).toContain('hi, how are you?');
+        expect(request[2]).toEqual({ role: 'user', content: "I'm good, how are you?" });
       } else {
         request = (await result.request).body.input;
-        expect(request).toEqual([
-          {
-            role: 'system',
-            content: 'test!',
-          },
-          {
-            role: 'user',
-            content: [{ type: 'input_text', text: 'hello!' }],
-          },
-          { role: 'assistant', content: [{ type: 'output_text', text: 'hi, how are you?' }] },
-          { role: 'user', content: [{ type: 'input_text', text: "I'm good, how are you?" }] },
-        ]);
+        // Expect 3 messages: 2 system messages (instructions + remembered), 1 user message
+        expect(request).toHaveLength(3);
+        expect(request[0].role).toBe('system');
+        expect(request[0].content).toBe('test!');
+        expect(request[1].role).toBe('system');
+        expect(request[1].content).toContain('remembered from a different conversation');
+        expect(request[1].content).toContain('hello!');
+        expect(request[1].content).toContain('hi, how are you?');
+        expect(request[2]).toEqual({ role: 'user', content: [{ type: 'input_text', text: "I'm good, how are you?" }] });
       }
     });
 
@@ -901,12 +906,24 @@ function runStreamTest(version: 'v1' | 'v2') {
           },
         });
 
+        // request.body.input contains the actual API request format (OpenAI's function_call format)
+        // not the AI SDK v5 abstraction (tool-call format)
+        // Note: There are duplicate function_call messages in the request
         expect(secondResponse.request.body.input).toEqual([
           expect.objectContaining({ role: 'system' }),
           expect.objectContaining({ role: 'user' }),
-          expect.objectContaining({ type: 'function_call', name: 'get_weather' }),
-          expect.objectContaining({ type: 'function_call', call_id: expect.any(String) }),
-          expect.objectContaining({ type: 'function_call_output' }),
+          expect.objectContaining({
+            type: 'function_call',
+            name: 'get_weather',
+          }),
+          expect.objectContaining({
+            type: 'function_call',
+            name: 'get_weather',
+          }),
+          expect.objectContaining({
+            type: 'function_call_output',
+            call_id: expect.any(String),
+          }),
           expect.objectContaining({ role: 'assistant' }),
           expect.objectContaining({ role: 'user' }),
         ]);

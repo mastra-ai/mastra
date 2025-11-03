@@ -1,10 +1,11 @@
 import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { Agent } from '@mastra/core/agent';
 import { Step, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 const recruiter = new Agent({
+  id: 'recruiter-agent',
   name: 'Recruiter Agent',
   instructions: `You are a recruiter.`,
   model: openai('gpt-4o-mini'),

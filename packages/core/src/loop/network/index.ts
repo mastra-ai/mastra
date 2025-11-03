@@ -3,7 +3,7 @@ import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
 import { Agent, tryGenerateWithJsonFallback, tryStreamWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
-import type { MastraMessageV2, MessageListInput } from '../../agent/message-list';
+import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
 import type { TracingContext } from '../../ai-tracing/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { RequestContext } from '../../request-context';
@@ -152,8 +152,7 @@ export async function prepareMemoryStep({
               threadId: thread?.id,
               resourceId: thread?.resourceId,
             },
-          ] as MastraMessageV2[],
-          format: 'v2',
+          ] as MastraDBMessage[],
         }),
       );
     }
@@ -163,13 +162,12 @@ export async function prepareMemoryStep({
       resourceId: thread?.resourceId,
     });
     messageList.add(messages, 'user');
-    const messagesToSave = messageList.get.all.v2();
+    const messagesToSave = messageList.get.all.db();
 
     if (memory) {
       promises.push(
         memory.saveMessages({
           messages: messagesToSave,
-          format: 'v2',
         }),
       );
     }
@@ -271,7 +269,7 @@ export async function createNetworkLoop({
 
       let completionResult;
 
-      let iterationCount = (inputData.iteration ?? -1) + 1;
+      let iterationCount = (inputData.iteration ? inputData.iteration : -1) + 1;
 
       await writer.write({
         type: 'routing-agent-start',
@@ -396,8 +394,7 @@ export async function createNetworkLoop({
                 threadId: initData?.threadId || runId,
                 resourceId: initData?.threadResourceId || networkName,
               },
-            ] as MastraMessageV2[],
-            format: 'v2',
+            ] as MastraDBMessage[],
           });
 
           return endPayload;
@@ -587,8 +584,7 @@ export async function createNetworkLoop({
             threadId: initData?.threadId || runId,
             resourceId: initData?.threadResourceId || networkName,
           },
-        ] as MastraMessageV2[],
-        format: 'v2',
+        ] as MastraDBMessage[],
       });
 
       const endPayload = {
@@ -692,11 +688,6 @@ export async function createNetworkLoop({
         runId,
       });
 
-      // await emitter.emit('watch-v2', {
-      //     type: 'tool-call-streaming-start',
-      //     ...toolData,
-      // });
-
       const stream = run.streamVNext({
         inputData: input,
         requestContext: requestContext,
@@ -750,8 +741,7 @@ export async function createNetworkLoop({
             threadId: initData?.threadId || runId,
             resourceId: initData?.threadResourceId || networkName,
           },
-        ] as MastraMessageV2[],
-        format: 'v2',
+        ] as MastraDBMessage[],
       });
 
       const endPayload = {
@@ -911,8 +901,7 @@ export async function createNetworkLoop({
             threadId: initData.threadId || runId,
             resourceId: initData.threadResourceId || networkName,
           },
-        ] as MastraMessageV2[],
-        format: 'v2',
+        ] as MastraDBMessage[],
       });
 
       const endPayload = {

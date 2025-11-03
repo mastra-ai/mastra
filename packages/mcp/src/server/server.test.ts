@@ -88,6 +88,7 @@ const createMockAgent = (
   description?: string,
 ) => {
   return new Agent({
+    id: name,
     name,
     instructions: instructionsFn,
     description,

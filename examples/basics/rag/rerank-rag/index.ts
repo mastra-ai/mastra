@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { Agent } from '@mastra/core/agent';
 import { PgVector } from '@mastra/pg';
 import { MDocument, createVectorQueryTool } from '@mastra/rag';
@@ -56,7 +56,7 @@ rare cards appreciate yearly.
 
 const chunks = await doc1.chunk({
   strategy: 'recursive',
-  size: 150,
+  maxSize: 150,
   overlap: 20,
   separator: '\n',
 });

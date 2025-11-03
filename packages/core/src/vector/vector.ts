@@ -1,5 +1,5 @@
 import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
-import type { EmbeddingModel as EmbeddingModelV1 } from 'ai';
+import type { EmbeddingModel as EmbeddingModelV1 } from '@internal/ai-sdk-v4/embed';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { VectorFilter } from './filter';

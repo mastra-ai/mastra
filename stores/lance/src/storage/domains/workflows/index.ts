@@ -1,8 +1,8 @@
 import type { Connection } from '@lancedb/lancedb';
-import type { StepResult, WorkflowRunState, WorkflowRuns } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { WorkflowRun, StorageListWorkflowRunsInput } from '@mastra/core/storage';
+import type { WorkflowRun, StorageListWorkflowRunsInput, WorkflowRuns } from '@mastra/core/storage';
 import { ensureDate, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 function parseWorkflowRun(row: any): WorkflowRun {
   let parsedSnapshot: WorkflowRunState | string = row.snapshot;
@@ -228,7 +228,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'LANCE_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId: args?.resourceId ?? '', workflowName: args?.workflowName ?? '' },

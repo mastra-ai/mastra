@@ -1,7 +1,7 @@
-import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
-import type { StorageListWorkflowRunsInput } from '@mastra/core/storage';
+import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Redis } from '@upstash/redis';
 import type { StoreOperationsUpstash } from '../operations';
 import { ensureDate, getKey } from '../utils';
@@ -260,7 +260,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'STORAGE_UPSTASH_STORAGE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

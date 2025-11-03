@@ -40,6 +40,8 @@ import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 
 export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
   // ...
   memory: new Memory({
     options: {
@@ -62,7 +64,7 @@ See the [Memory Class](/reference/memory/memory-class) docs for a full list of c
 Add a storage provider to your main Mastra instance to enable memory across all configured agents.
 
 ```typescript {6-8} title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
@@ -90,6 +92,8 @@ import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
   // ...
   memory: new Memory({
     storage: new LibSQLStore({
@@ -151,6 +155,8 @@ const standardMemory = new Memory({
 });
 
 export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
   // ...
   memory: ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];

@@ -9,18 +9,18 @@ import type {
   AgentInstructions,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type {
   AiMessageType,
   MastraMessageV1,
-  MastraMessageV2,
+  MastraDBMessage,
   MemoryConfig,
   StorageThreadType,
 } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 
 import type {
   AITraceRecord,
@@ -31,10 +31,10 @@ import type {
   WorkflowRuns,
 } from '@mastra/core/storage';
 import type { OutputSchema } from '@mastra/core/stream';
-import type { QueryResult } from '@mastra/core/vector';
-import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
 
-import type { UIMessage } from 'ai';
+import type { QueryResult } from '@mastra/core/vector';
+import type { Workflow, WorkflowResult, WorkflowState } from '@mastra/core/workflows';
+
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -171,7 +171,7 @@ export type ListWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowRun;
 
-export type GetWorkflowRunExecutionResultResponse = WatchEvent['payload']['workflowState'];
+export type GetWorkflowRunExecutionResultResponse = WorkflowState;
 
 export interface GetWorkflowResponse {
   name: string;
@@ -201,8 +201,6 @@ export interface GetWorkflowResponse {
   inputSchema: string;
   outputSchema: string;
 }
-
-export type WorkflowWatchResult = WatchEvent & { runId: string };
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
 export interface UpsertVectorParams {
@@ -236,12 +234,17 @@ export interface GetVectorIndexResponse {
 }
 
 export interface SaveMessageToMemoryParams {
-  messages: (MastraMessageV1 | MastraMessageV2)[];
+  messages: (MastraMessageV1 | MastraDBMessage)[];
   agentId: string;
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type SaveMessageToMemoryResponse = (MastraMessageV1 | MastraMessageV2)[];
+export interface SaveNetworkMessageToMemoryParams {
+  messages: (MastraMessageV1 | MastraDBMessage)[];
+  networkId: string;
+}
+
+export type SaveMessageToMemoryResponse = (MastraMessageV1 | MastraDBMessage)[];
 
 export interface CreateMemoryThreadParams {
   title?: string;
@@ -292,13 +295,11 @@ export interface GetMemoryThreadMessagesParams {
 export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg, 'threadConfig' | 'threadId'>;
 
 export interface GetMemoryThreadMessagesResponse {
-  messages: CoreMessage[];
-  legacyMessages: AiMessageType[];
-  uiMessages: UIMessage[];
+  messages: MastraDBMessage[];
 }
 
 export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
-  messages: MastraMessageV1[] | MastraMessageV2[];
+  messages: MastraDBMessage[];
 };
 
 export interface GetLogsParams {
@@ -421,13 +422,13 @@ export type ClientScoreRowData = Omit<ScoreRowData, 'createdAt' | 'updatedAt'> &
 } & { spanId?: string };
 
 // Scores-related types
-export interface GetScoresByRunIdParams {
+export interface ListScoresByRunIdParams {
   runId: string;
   page?: number;
   perPage?: number;
 }
 
-export interface GetScoresByScorerIdParams {
+export interface ListScoresByScorerIdParams {
   scorerId: string;
   entityId?: string;
   entityType?: string;
@@ -435,14 +436,14 @@ export interface GetScoresByScorerIdParams {
   perPage?: number;
 }
 
-export interface GetScoresByEntityIdParams {
+export interface ListScoresByEntityIdParams {
   entityId: string;
   entityType: string;
   page?: number;
   perPage?: number;
 }
 
-export interface GetScoresBySpanParams {
+export interface ListScoresBySpanParams {
   traceId: string;
   spanId: string;
   page?: number;
@@ -453,7 +454,7 @@ export interface SaveScoreParams {
   score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>;
 }
 
-export interface GetScoresResponse {
+export interface ListScoresResponse {
   pagination: {
     total: number;
     page: number;

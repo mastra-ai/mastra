@@ -1,5 +1,5 @@
-import type { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import type { Mastra } from '@mastra/core/mastra';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
@@ -76,6 +76,7 @@ export async function generateSystemPromptHandler(c: Context) {
         `;
 
     const systemPromptAgent = new Agent({
+      id: 'system-prompt-enhancer',
       name: 'system-prompt-enhancer',
       instructions: ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS,
       model: await agent.getModel(),

@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { Agent } from '@mastra/core/agent';
 import { PgVector } from '@mastra/pg';
 import { MDocument, createVectorQueryTool, createDocumentChunkerTool } from '@mastra/rag';
@@ -64,7 +64,7 @@ const documentChunkerTool = createDocumentChunkerTool({
   doc,
   params: {
     strategy: 'recursive',
-    size: 512,
+    maxSize: 512,
     overlap: 25,
     separator: '\n',
   },
@@ -96,7 +96,7 @@ const agent = mastra.getAgent('ragAgent');
 // Set to 256 to get more chunks
 const chunks = await doc.chunk({
   strategy: 'recursive',
-  size: 256,
+  maxSize: 256,
   overlap: 50,
   separator: '\n',
 });
@@ -132,7 +132,7 @@ const updatedDoc = MDocument.fromText(newChunks.text);
 
 const updatedChunks = await updatedDoc.chunk({
   strategy: 'recursive',
-  size: 256,
+  maxSize: 256,
   overlap: 50,
   separator: '\n',
 });

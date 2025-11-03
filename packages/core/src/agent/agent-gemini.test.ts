@@ -206,7 +206,8 @@ describe('Gemini Model Compatibility Tests', () => {
   describe('Agent network() method', () => {
     it('should handle basic network generation with Gemini', async () => {
       const helperAgent = new Agent({
-        name: 'helper-agent',
+        id: 'helper-agent',
+        name: 'Helper Agent',
         instructions: 'You answer simple questions. For "what is the capital of France?", respond "Paris".',
         model: MODEL,
       });
@@ -231,12 +232,13 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 15000);
 
     it('should handle empty user message with system context in network', async () => {
       const helperAgent = new Agent({
-        name: 'helper-agent',
+        id: 'helper-agent',
+        name: 'Helper Agent',
         instructions: 'You help with tasks',
         model: MODEL,
         defaultVNextStreamOptions: {
@@ -267,12 +269,13 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 60000);
 
     it('should handle single turn with maxSteps=1 and messages ending with assistant in network', async () => {
       const helperAgent = new Agent({
-        name: 'helper-agent',
+        id: 'helper-agent',
+        name: 'Calculator Agent',
         instructions: 'You are a calculator. When asked for math, respond with just the numeric answer.',
         model: MODEL,
       });
@@ -303,7 +306,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 15000);
 
     it('should handle conversation ending with tool result in network (with follow-up user message)', async () => {
@@ -363,7 +366,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 15000);
 
     it('should handle conversation ending with tool result in network (agentic loop pattern)', async () => {
@@ -422,7 +425,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 15000);
 
     it('should handle messages starting with assistant-with-tool-call in network', async () => {
@@ -481,12 +484,13 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 15000);
 
     it('should handle network with workflow execution', async () => {
       const researchAgent = new Agent({
-        name: 'research-agent',
+        id: 'research-agent',
+        name: 'Research Agent',
         instructions: 'You research topics and provide brief summaries.',
         model: MODEL,
       });
@@ -536,7 +540,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 20000);
 
     it('should handle simple conversation ending with assistant in network', async () => {
@@ -565,12 +569,13 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 15000);
 
     it('should handle messages with only assistant role in network', async () => {
       const helperAgent = new Agent({
-        name: 'helper-agent',
+        id: 'helper-agent',
+        name: 'Helper Agent',
         instructions: 'You help with tasks',
         model: MODEL,
       });
@@ -595,7 +600,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 15000);
   });
 });

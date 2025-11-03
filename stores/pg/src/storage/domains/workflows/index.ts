@@ -1,7 +1,7 @@
-import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
-import type { StorageListWorkflowRunsInput } from '@mastra/core/storage';
+import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
 import { getTableName } from '../utils';
@@ -273,7 +273,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'MASTRA_STORAGE_PG_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

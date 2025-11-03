@@ -1,4 +1,4 @@
-import type { LanguageModelV1StreamPart } from 'ai';
+import type { LanguageModelV1StreamPart } from '@internal/ai-sdk-v4/model';
 import type { RegisteredLogger } from '../../../logger';
 import { MastraModelInput } from '../../base';
 import type { ChunkType } from '../../types';

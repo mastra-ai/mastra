@@ -15,8 +15,10 @@ const memory = new Memory({
   storage: new LibSQLStore({
     url: 'file:../mastra.db',
   }),
-  generateTitle: true, // Explicitly enable title generation for E2E tests
-  // ...
+
+  options: {
+    generateTitle: true,
+  },
 });
 
 let count = 0;

@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { Agent } from '@mastra/core/agent';
 import { PgVector } from '@mastra/pg';
 import { MDocument, createGraphRAGTool } from '@mastra/rag';
@@ -76,7 +76,7 @@ The Nakamura Group recently announced plans to fund a "Heritage Innovation Hub" 
 
 const chunks = await doc.chunk({
   strategy: 'recursive',
-  size: 512,
+  maxSize: 512,
   overlap: 50,
   separator: '\n',
 });

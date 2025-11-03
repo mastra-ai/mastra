@@ -1,32 +1,30 @@
+import type { UIMessage, CoreMessage } from '@internal/ai-sdk-v4/message';
 import type {
-  CoreMessage,
   GenerateTextResult as OriginalGenerateTextResult,
   GenerateObjectResult as OriginalGenerateObjectResult,
   StreamTextResult as OriginalStreamTextResult,
   StreamObjectResult as OriginalStreamObjectResult,
-  UIMessage,
-  Tool,
   generateText,
-  ToolSet,
   generateObject,
   streamText,
   streamObject,
-  DeepPartial,
   StreamObjectOnFinishCallback as OriginalStreamObjectOnFinishCallback,
   StreamTextOnFinishCallback as OriginalStreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback as OriginalStreamTextOnStepFinishCallback,
   GenerateTextOnStepFinishCallback as OriginalGenerateTextOnStepFinishCallback,
-} from 'ai';
+} from '@internal/ai-sdk-v4/model';
+import type { Tool, ToolSet } from '@internal/ai-sdk-v4/tool';
+import type { DeepPartial } from '@internal/ai-sdk-v4/util';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MessageList } from '../../agent/types';
 import type { TracingContext, TracingProperties } from '../../ai-tracing';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
 import type { OutputProcessor } from '../../processors';
 import type { RequestContext } from '../../request-context';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
 import type { inferOutput, ScoringProperties, TripwireProperties } from './shared.types';
 
-export type { ToolSet } from 'ai';
+export type { ToolSet } from '@internal/ai-sdk-v4/tool';
 
 type MastraCustomLLMOptions = {
   tools?: Record<string, Tool>;

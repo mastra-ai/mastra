@@ -1,8 +1,8 @@
 import 'dotenv/config';
 
 import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import { Client } from 'langsmith';
 import { it } from 'vitest';
@@ -20,6 +20,7 @@ it.skip('should initialize with correct configuration', async () => {
   });
 
   const agent = new Agent({
+    id: 'agent',
     name: 'Agent',
     instructions: 'Use tools when helpful.',
     model: openai('gpt-5-nano'),

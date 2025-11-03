@@ -23,7 +23,7 @@ First, set up your Mastra agent with memory and tools:
 
 ```typescript showLineNumbers copy title="src/mastra/index.ts"
 import { ConsoleLogger } from "@mastra/core/logger";
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { weatherAgent } from "./agents";
 
 export const mastra = new Mastra({
@@ -54,6 +54,7 @@ export const memory = new Memory({
 });
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   name: "Weather Agent",
   instructions: `
     You are a helpful weather assistant that provides accurate weather information.

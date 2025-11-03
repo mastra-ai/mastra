@@ -2,7 +2,7 @@ import { NetworkChunkType } from '@mastra/core/stream';
 import { mapWorkflowStreamChunkToWatchResult } from '../utils/toUIMessage';
 import { Transformer, TransformerArgs } from './types';
 import { MastraUIMessage, MastraUIMessageMetadata } from '../types';
-import { WorkflowStreamResult } from '@mastra/core';
+import { WorkflowStreamResult } from '@mastra/core/workflows';
 
 export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
   transform({ chunk, conversation, metadata }: TransformerArgs<NetworkChunkType>): MastraUIMessage[] {

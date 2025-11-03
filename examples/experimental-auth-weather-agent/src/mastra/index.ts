@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 
 import { weatherAgent } from './agents';
 import { weatherWorkflow as legacyWeatherWorkflow } from './workflows';

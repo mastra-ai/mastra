@@ -44,7 +44,7 @@ Each LLM provider uses a different env var. See [Model Capabilities](https://sdk
 Create a Mastra configuration file at `src/mastra/index.ts`:
 
 ```ts title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({});
 ```
@@ -80,6 +80,7 @@ import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   name: "Weather Agent",
   instructions: `
       You are a helpful weather assistant that provides accurate weather information.
@@ -101,7 +102,7 @@ export const weatherAgent = new Agent({
 Lastly, add the `weatherAgent` to `src/mastra/index.ts`:
 
 ```ts title="src/mastra/index.ts" copy {2, 5}
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { weatherAgent } from "./agents/weather-agent";
 
 export const mastra = new Mastra({
