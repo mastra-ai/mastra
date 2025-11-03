@@ -53,6 +53,7 @@ export interface MCPClientOptions {
  * });
  *
  * const agent = new Agent({
+ *   id: 'multi-tool-agent',
  *   name: 'Multi-tool Agent',
  *   instructions: 'You have access to multiple tools.',
  *   model: 'openai/gpt-4o',
@@ -683,6 +684,7 @@ To fix this you have three different options:
    * @example
    * ```typescript
    * const agent = new Agent({
+   *   id: 'multi-tool-agent',
    *   name: 'Multi-tool Agent',
    *   instructions: 'You have access to weather and stock tools.',
    *   model: 'openai/gpt-4',
@@ -726,6 +728,7 @@ To fix this you have three different options:
    * @example
    * ```typescript
    * const agent = new Agent({
+   *   id: 'dynamic-agent',
    *   name: 'Dynamic Agent',
    *   instructions: 'You can use tools dynamically.',
    *   model: 'openai/gpt-4',

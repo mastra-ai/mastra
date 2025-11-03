@@ -1,8 +1,9 @@
-import { createScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
 import { SequenceMatcher } from 'difflib';
 
 export function createTextualDifferenceScorer() {
   return createScorer({
+    id: 'textual-difference-scorer',
     name: 'Textual Difference Scorer',
     description: 'Calculate textual difference between input and output using sequence matching algorithms.',
     type: 'agent',

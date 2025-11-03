@@ -45,6 +45,7 @@ import { LibSQLStore } from "@mastra/libsql";
 import { z } from "zod";
 
 export const workingMemorySchemaAgent = new Agent({
+  id: "working-memory-schema-agent",
   name: "working-memory-schema-agent",
   instructions: `
     You are a todo list AI agent.

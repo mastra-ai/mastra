@@ -96,6 +96,7 @@ const vectorQueryTool = createVectorQueryTool({
 });
 
 export const researchAgent = new Agent({
+  id: "research-agent",
   name: "Research Assistant",
   instructions: `You are a helpful research assistant that analyzes academic papers and technical documents.
     Use the provided vector query tool to find relevant information from your knowledge base,

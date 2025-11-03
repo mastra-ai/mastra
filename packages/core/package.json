@@ -131,14 +131,14 @@
         "default": "./dist/processors/index.cjs"
       }
     },
-    "./scores/scoreTraces": {
+    "./evals/scoreTraces": {
       "import": {
-        "types": "./dist/scores/scoreTraces/index.d.ts",
-        "default": "./dist/scores/scoreTraces/index.js"
+        "types": "./dist/evals/scoreTraces/index.d.ts",
+        "default": "./dist/evals/scoreTraces/index.js"
       },
       "require": {
-        "types": "./dist/scores/scoreTraces/index.d.ts",
-        "default": "./dist/scores/scoreTraces/index.cjs"
+        "types": "./dist/evals/scoreTraces/index.d.ts",
+        "default": "./dist/evals/scoreTraces/index.cjs"
       }
     },
     "./utils/zod-to-json": {
@@ -149,6 +149,26 @@
       "require": {
         "types": "./dist/zod-to-json.d.ts",
         "default": "./dist/zod-to-json.cjs"
+      }
+    },
+    "./features": {
+      "import": {
+        "types": "./dist/features/index.d.ts",
+        "default": "./dist/features/index.js"
+      },
+      "require": {
+        "types": "./dist/features/index.d.ts",
+        "default": "./dist/features/index.cjs"
+      }
+    },
+    "./agent/message-list": {
+      "import": {
+        "types": "./dist/agent/message-list/index.d.ts",
+        "default": "./dist/agent/message-list/index.js"
+      },
+      "require": {
+        "types": "./dist/agent/message-list/index.d.ts",
+        "default": "./dist/agent/message-list/index.cjs"
       }
     },
     "./package.json": "./package.json"
@@ -174,18 +194,16 @@
     "@ai-sdk/google-v5": "npm:@ai-sdk/google@2.0.23",
     "@ai-sdk/openai-compatible-v5": "npm:@ai-sdk/openai-compatible@1.0.22",
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.53",
-    "@ai-sdk/provider": "^1.1.3",
-    "@ai-sdk/provider-utils": "^2.2.8",
     "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.12",
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.0",
     "@ai-sdk/ui-utils": "^1.2.11",
     "@ai-sdk/xai-v5": "npm:@ai-sdk/xai@2.0.26",
     "@isaacs/ttlcache": "^1.4.1",
+    "@lukeed/uuid": "^2.0.1",
     "@mastra/schema-compat": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.17.5",
     "@openrouter/ai-sdk-provider-v5": "npm:@openrouter/ai-sdk-provider@1.2.0",
     "@sindresorhus/slugify": "^2.2.1",
-    "ai": "^4.3.19",
     "ai-v5": "npm:ai@5.0.76",
     "date-fns": "^3.6.0",
     "dotenv": "^16.6.1",
@@ -212,6 +230,7 @@
     "@internal/external-types": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/ai-sdk-v4": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@openrouter/ai-sdk-provider": "^0.4.6",
     "@types/babel__core": "^7.20.5",

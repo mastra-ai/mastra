@@ -5,7 +5,6 @@ import {
   startAsyncWorkflowHandler as getOriginalStartAsyncWorkflowHandler,
   createWorkflowRunHandler as getOriginalCreateWorkflowRunHandler,
   startWorkflowRunHandler as getOriginalStartWorkflowRunHandler,
-  watchWorkflowHandler as getOriginalWatchWorkflowHandler,
   streamLegacyWorkflowHandler as getOriginalStreamLegacyWorkflowHandler,
   streamVNextWorkflowHandler as getOriginalStreamVNextWorkflowHandler,
   resumeAsyncWorkflowHandler as getOriginalResumeAsyncWorkflowHandler,
@@ -115,52 +114,6 @@ export async function startWorkflowRunHandler(c: Context) {
     return c.json({ message: 'Workflow run started' });
   } catch (e) {
     return handleError(e, 'Error starting workflow run');
-  }
-}
-
-export function watchWorkflowHandler(c: Context) {
-  try {
-    const mastra: Mastra = c.get('mastra');
-    const logger = mastra.getLogger();
-    const workflowId = c.req.param('workflowId');
-    const runId = c.req.query('runId');
-
-    if (!runId) {
-      throw new HTTPException(400, { message: 'runId required to watch workflow' });
-    }
-
-    c.header('Transfer-Encoding', 'chunked');
-
-    return stream(
-      c,
-      async stream => {
-        try {
-          const result = await getOriginalWatchWorkflowHandler({
-            mastra,
-            workflowId,
-            runId,
-          });
-
-          const reader = result.getReader();
-
-          stream.onAbort(() => {
-            void reader.cancel('request aborted');
-          });
-
-          let chunkResult;
-          while ((chunkResult = await reader.read()) && !chunkResult.done) {
-            await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
-          }
-        } catch (err) {
-          logger.error('Error in watch stream: ' + ((err as Error)?.message ?? 'Unknown error'));
-        }
-      },
-      async err => {
-        logger.error('Error in watch stream: ' + err?.message);
-      },
-    );
-  } catch (error) {
-    return handleError(error, 'Error watching workflow');
   }
 }
 

@@ -235,6 +235,7 @@ import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({
+  id: 'cli-assistant',
   name: 'CLI Assistant',
   instructions: 'You help users with CLI tasks',
   model: openai('gpt-4'),

@@ -361,40 +361,6 @@ export class AgentBuilder extends BaseResource {
   }
 
   /**
-   * Watches an existing agent builder action run by runId.
-   * This is used for hot reload recovery - it loads the existing run state
-   * and streams any remaining progress.
-   * This calls `/api/agent-builder/:actionId/watch`.
-   */
-  async watch(
-    { runId, eventType }: { runId: string; eventType?: 'watch' | 'watch-v2' },
-    onRecord: (record: { type: string; payload: any }) => void,
-  ) {
-    const url = `/api/agent-builder/${this.actionId}/watch?runId=${runId}${eventType ? `&eventType=${eventType}` : ''}`;
-    const response: Response = await this.request(url, {
-      method: 'GET',
-      stream: true,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to watch agent builder action: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    // Use the exact same stream processing as workflows
-    for await (const record of this.streamProcessor(response.body)) {
-      if (typeof record === 'string') {
-        onRecord(JSON.parse(record));
-      } else {
-        onRecord(record);
-      }
-    }
-  }
-
-  /**
    * Observes an existing agent builder action run stream.
    * Replays cached execution from the beginning, then continues with live stream.
    * This is the recommended method for recovery after page refresh/hot reload.

@@ -6,7 +6,6 @@ import type {
   ListWorkflowRunsResponse,
   ListWorkflowRunsParams,
   WorkflowRunResult,
-  WorkflowWatchResult,
   GetWorkflowRunByIdResponse,
   GetWorkflowRunExecutionResultResponse,
   StreamVNextChunkType,
@@ -23,77 +22,6 @@ export class Workflow extends BaseResource {
     private workflowId: string,
   ) {
     super(options);
-  }
-
-  /**
-   * Creates an async generator that processes a readable stream and yields workflow records
-   * separated by the Record Separator character (\x1E)
-   *
-   * @param stream - The readable stream to process
-   * @returns An async generator that yields parsed records
-   */
-  private async *streamProcessor(stream: ReadableStream): AsyncGenerator<WorkflowWatchResult, void, unknown> {
-    const reader = stream.getReader();
-
-    // Track if we've finished reading from the stream
-    let doneReading = false;
-    // Buffer to accumulate partial chunks
-    let buffer = '';
-
-    try {
-      while (!doneReading) {
-        // Read the next chunk from the stream
-        const { done, value } = await reader.read();
-        doneReading = done;
-
-        // Skip processing if we're done and there's no value
-        if (done && !value) continue;
-
-        try {
-          // Decode binary data to text
-          const decoded = value ? new TextDecoder().decode(value) : '';
-
-          // Split the combined buffer and new data by record separator
-          const chunks = (buffer + decoded).split(RECORD_SEPARATOR);
-
-          // The last chunk might be incomplete, so save it for the next iteration
-          buffer = chunks.pop() || '';
-
-          // Process complete chunks
-          for (const chunk of chunks) {
-            if (chunk) {
-              // Only process non-empty chunks
-              if (typeof chunk === 'string') {
-                try {
-                  const parsedChunk = JSON.parse(chunk);
-                  yield parsedChunk;
-                } catch {
-                  // Silently ignore parsing errors to maintain stream processing
-                  // This allows the stream to continue even if one record is malformed
-                }
-              }
-            }
-          }
-        } catch {
-          // Silently ignore parsing errors to maintain stream processing
-          // This allows the stream to continue even if one record is malformed
-        }
-      }
-
-      // Process any remaining data in the buffer after stream is done
-      if (buffer) {
-        try {
-          yield JSON.parse(buffer);
-        } catch {
-          // Ignore parsing error for final chunk
-        }
-      }
-    } finally {
-      // Always ensure we clean up the reader
-      reader.cancel().catch(() => {
-        // Ignore cancel errors
-      });
-    }
   }
 
   /**
@@ -190,7 +118,6 @@ export class Workflow extends BaseResource {
       inputData: Record<string, any>;
       requestContext?: RequestContext | Record<string, any>;
     }) => Promise<{ message: string }>;
-    watch: (onRecord: (record: WorkflowWatchResult) => void) => Promise<void>;
     resume: (params: {
       step: string | string[];
       resumeData?: Record<string, any>;
@@ -232,7 +159,6 @@ export class Workflow extends BaseResource {
       requestContext?: RequestContext | Record<string, any>;
       tracingOptions?: TracingOptions;
     }) => Promise<{ message: string }>;
-    watch: (onRecord: (record: WorkflowWatchResult) => void) => Promise<void>;
     resume: (params: {
       step?: string | string[];
       resumeData?: Record<string, any>;
@@ -300,9 +226,6 @@ export class Workflow extends BaseResource {
           requestContext: p.requestContext,
           tracingOptions: p.tracingOptions,
         });
-      },
-      watch: async (onRecord: (record: WorkflowWatchResult) => void) => {
-        return this.watch({ runId }, onRecord);
       },
       stream: async (p: { inputData: Record<string, any>; requestContext?: RequestContext | Record<string, any> }) => {
         return this.stream({ runId, inputData: p.inputData, requestContext: p.requestContext });
@@ -792,32 +715,6 @@ export class Workflow extends BaseResource {
 
     // Pipe the response body through the transform stream
     return response.body.pipeThrough(transformStream);
-  }
-  /**
-   * Watches workflow transitions in real-time
-   * @param runId - Optional run ID to filter the watch stream
-   * @returns AsyncGenerator that yields parsed records from the workflow watch stream
-   */
-  async watch({ runId }: { runId?: string }, onRecord: (record: WorkflowWatchResult) => void) {
-    const response: Response = await this.request(`/api/workflows/${this.workflowId}/watch?runId=${runId}`, {
-      stream: true,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to watch workflow: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    for await (const record of this.streamProcessor(response.body)) {
-      if (typeof record === 'string') {
-        onRecord(JSON.parse(record));
-      } else {
-        onRecord(record);
-      }
-    }
   }
 
   /**

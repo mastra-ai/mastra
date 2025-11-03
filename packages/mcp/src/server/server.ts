@@ -211,7 +211,8 @@ export class MCPServer extends MCPServerBase {
    * import { z } from 'zod';
    *
    * const myAgent = new Agent({
-   *   name: 'Helper',
+   *   id: 'helper',
+   *   name: 'Helper Agent',
    *   description: 'A helpful assistant',
    *   instructions: 'You are helpful.',
    *   model: 'openai/gpt-4o-mini',

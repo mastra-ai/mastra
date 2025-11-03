@@ -1,4 +1,4 @@
-import type { TextStreamPart } from 'ai';
+import type { TextStreamPart } from '@internal/ai-sdk-v4/model';
 import type { z } from 'zod';
 import type { TracingPolicy, TracingProperties } from '../ai-tracing';
 import type { Mastra } from '../mastra';
@@ -149,41 +149,6 @@ export type StreamEvent =
 
 export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending' | 'canceled';
 
-export type WatchEvent = {
-  type: 'watch';
-  payload: {
-    currentStep?: {
-      id: string;
-      status: WorkflowRunStatus;
-      output?: Record<string, any>;
-      resumePayload?: Record<string, any>;
-      payload?: Record<string, any>;
-      error?: string | Error;
-    };
-    workflowState: {
-      status: WorkflowRunStatus;
-      steps: Record<
-        string,
-        {
-          status: WorkflowRunStatus;
-          output?: Record<string, any>;
-          payload?: Record<string, any>;
-          resumePayload?: Record<string, any>;
-          error?: string | Error;
-          startedAt: number;
-          endedAt: number;
-          suspendedAt?: number;
-          resumedAt?: number;
-        }
-      >;
-      result?: Record<string, any>;
-      payload?: Record<string, any>;
-      error?: string | Error;
-    };
-  };
-  eventTimestamp: Date;
-};
-
 // Type to get the inferred type at a specific path in a Zod schema
 export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
   T extends z.ZodObject<infer Shape>
@@ -197,6 +162,27 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
         ? Shape[P]
         : never
     : never;
+
+export interface WorkflowState {
+  status: WorkflowRunStatus;
+  steps: Record<
+    string,
+    {
+      status: WorkflowRunStatus;
+      output?: Record<string, any>;
+      payload?: Record<string, any>;
+      resumePayload?: Record<string, any>;
+      error?: string | Error;
+      startedAt: number;
+      endedAt: number;
+      suspendedAt?: number;
+      resumedAt?: number;
+    }
+  >;
+  result?: Record<string, any>;
+  payload?: Record<string, any>;
+  error?: string | Error;
+}
 
 export interface WorkflowRunState {
   // Core state info

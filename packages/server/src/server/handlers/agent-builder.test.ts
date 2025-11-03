@@ -26,7 +26,6 @@ import {
   observeStreamAgentBuilderActionHandler,
   observeStreamVNextAgentBuilderActionHandler,
   resumeStreamAgentBuilderActionHandler,
-  watchAgentBuilderActionHandler,
 } from './agent-builder';
 
 vi.mock('@mastra/agent-builder', () => ({
@@ -757,33 +756,6 @@ describe('Agent Builder Handlers', () => {
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Streaming VNext agent builder action',
-        expect.objectContaining({
-          actionId: 'merge-template',
-        }),
-      );
-    });
-  });
-
-  describe('watchAgentBuilderActionHandler', () => {
-    it('should handle workflow registry correctly on watch', async () => {
-      await expect(
-        watchAgentBuilderActionHandler({
-          mastra: mockMastra,
-          actionId: 'merge-template',
-          runId: 'test-run',
-        }),
-      ).rejects.toThrow(); // Will throw because watching is complex to mock
-
-      expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        {
-          'merge-template': expect.anything(),
-          'workflow-builder': expect.anything(),
-        },
-        mockMastra,
-      );
-      expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Watching agent builder action',
         expect.objectContaining({
           actionId: 'merge-template',
         }),

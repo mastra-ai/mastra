@@ -17,13 +17,6 @@ describe('Workflow (fetch-mocked)', () => {
       if (url.includes('/start-async')) return Promise.resolve(createJsonResponse({ result: 'started-async' }));
       if (url.includes('/resume?runId=')) return Promise.resolve(createJsonResponse({ message: 'resumed' }));
       if (url.includes('/resume-async')) return Promise.resolve(createJsonResponse({ result: 'resumed-async' }));
-      if (url.includes('/watch?')) {
-        const body = Workflow.createRecordStream([
-          { type: 'transition', payload: { step: 's1' } },
-          { type: 'transition', payload: { step: 's2' } },
-        ]);
-        return Promise.resolve(new Response(body as unknown as ReadableStream, { status: 200 }));
-      }
       if (url.includes('/stream?')) {
         const body = Workflow.createRecordStream([
           { type: 'log', payload: { msg: 'hello' } },
@@ -70,18 +63,6 @@ describe('Workflow (fetch-mocked)', () => {
     const run = await wf.createRunAsync();
     const resumeAsyncRes = await run.resumeAsync({ step: 's1' });
     expect(resumeAsyncRes).toEqual({ result: 'resumed-async' });
-  });
-
-  it('watches workflow transitions and yields parsed records', async () => {
-    const run = await wf.createRunAsync();
-    const seen: any[] = [];
-    await run.watch(rec => {
-      seen.push(rec);
-    });
-    expect(seen).toEqual([
-      { type: 'transition', payload: { step: 's1' } },
-      { type: 'transition', payload: { step: 's2' } },
-    ]);
   });
 
   it('streams workflow execution as parsed objects', async () => {

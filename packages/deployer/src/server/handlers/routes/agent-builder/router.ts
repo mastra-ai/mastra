@@ -13,7 +13,6 @@ import {
   resumeAsyncAgentBuilderActionHandler,
   resumeStreamAgentBuilderActionHandler,
   startAgentBuilderActionRunHandler,
-  watchAgentBuilderActionHandler,
   startAsyncAgentBuilderActionHandler,
   streamAgentBuilderActionHandler,
   streamLegacyAgentBuilderActionHandler,
@@ -740,40 +739,6 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     startAgentBuilderActionRunHandler,
-  );
-
-  router.get(
-    '/:actionId/watch',
-    describeRoute({
-      description: 'Watch agent builder action transitions in real-time',
-      parameters: [
-        {
-          name: 'actionId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'query',
-          required: false,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'eventType',
-          in: 'query',
-          required: false,
-          schema: { type: 'string', enum: ['watch', 'watch-v2'] },
-        },
-      ],
-      tags: ['agent-builder'],
-      responses: {
-        200: {
-          description: 'agent builder action transitions in real-time',
-        },
-      },
-    }),
-    watchAgentBuilderActionHandler,
   );
 
   router.post(

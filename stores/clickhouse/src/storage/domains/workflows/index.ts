@@ -249,7 +249,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'CLICKHOUSE_STORAGE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName: workflowName ?? '', resourceId: resourceId ?? '' },

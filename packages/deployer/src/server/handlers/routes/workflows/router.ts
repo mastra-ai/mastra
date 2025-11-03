@@ -15,7 +15,6 @@ import {
   startAsyncWorkflowHandler,
   startWorkflowRunHandler,
   streamVNextWorkflowHandler,
-  watchWorkflowHandler,
   resumeStreamWorkflowHandler,
   observeStreamVNextWorkflowHandler,
   streamLegacyWorkflowHandler,
@@ -719,34 +718,6 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     startWorkflowRunHandler,
-  );
-
-  router.get(
-    '/:workflowId/watch',
-    describeRoute({
-      description: 'Watch workflow transitions in real-time',
-      parameters: [
-        {
-          name: 'workflowId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'query',
-          required: false,
-          schema: { type: 'string' },
-        },
-      ],
-      tags: ['workflows'],
-      responses: {
-        200: {
-          description: 'workflow transitions in real-time',
-        },
-      },
-    }),
-    watchWorkflowHandler,
   );
 
   router.post(

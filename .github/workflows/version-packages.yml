@@ -7,6 +7,7 @@ permissions:
 on:
   push:
     branches:
+      - main
       - 0.x
 
 jobs:
@@ -42,6 +43,17 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
+      - name: Determine prerelease tag
+        id: determine-tag
+        run: |
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            echo "tag=beta" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref_name }}" == "0.x" ]]; then
+            echo "tag=alpha" >> $GITHUB_OUTPUT
+          else
+            echo "tag=alpha" >> $GITHUB_OUTPUT
+          fi
+
       - name: Bump mcp-docs-server prerelease version
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
@@ -49,7 +61,7 @@ jobs:
           HUSKY: 0
         run: |
           cd packages/mcp-docs-server
-          pnpm version prerelease --preid alpha --no-git-tag-version
+          pnpm version prerelease --preid ${{ steps.determine-tag.outputs.tag }} --no-git-tag-version
           cd ../..
           git add packages/mcp-docs-server/package.json
           git commit -m "chore: bump @mastra/mcp-docs-server prerelease version"
