@@ -5,7 +5,7 @@ import process from 'process';
 const baseUrl = process.env.MASTRA_DEPLOYMENT_URL || 'https://mastra.ai'; //'localhost:3000';
 
 // Strip locale pattern from URL for validation
-const stripLocalePattern = (url) => {
+const stripLocalePattern = url => {
   return url.replace(/^\/:[^/]+\//, '/');
 };
 
