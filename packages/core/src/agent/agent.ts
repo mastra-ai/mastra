@@ -3084,7 +3084,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   async #execute<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-  >({ methodType, format = 'mastra', resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
+  >({ methodType, resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
     const existingSnapshot = resumeContext?.snapshot;
     let snapshotMemoryInfo;
     if (existingSnapshot) {
@@ -3178,7 +3178,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext,
       agentAISpan: agentAISpan!,
       methodType,
-      format: format as FORMAT,
       instructions,
       memoryConfig,
       memory,
@@ -3424,14 +3423,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     });
   }
 
-  async generate<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
+  async generate<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    options?: AgentExecutionOptions<OUTPUT, FORMAT>,
-  ): Promise<
-    FORMAT extends 'aisdk'
-      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
-      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
-  > {
+    options?: AgentExecutionOptions<OUTPUT>,
+  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
     const result = await this.stream(messages, options);
     const fullOutput = await result.getFullOutput();
 
@@ -3441,17 +3436,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       throw error;
     }
 
-    // Warning already logged in stream() method
-
-    return fullOutput as FORMAT extends 'aisdk'
-      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
-      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
+    return fullOutput as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
   }
 
-  async stream<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
+  async stream<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
-  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+    streamOptions?: AgentExecutionOptions<OUTPUT>,
+  ): Promise<MastraModelOutput<OUTPUT>> {
     const defaultOptions = await this.getDefaultOptions<OUTPUT>({
       requestContext: streamOptions?.requestContext,
     });
@@ -3488,7 +3479,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       ...mergedOptions,
       messages,
       methodType: 'stream',
-    } as InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+    } as InnerAgentExecutionOptions<OUTPUT>;
 
     const result = await this.#execute(executeOptions);
 
@@ -3512,12 +3503,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       });
     }
 
-    if (streamOptions?.format === 'aisdk') {
-      this.logger.warn(
-        'The `format: "aisdk"` is deprecated in stream/generate options. Use the @mastra/ai-sdk package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming',
-      );
-    }
-    return result.result as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
+    return result.result as MastraModelOutput<OUTPUT>;
   }
 
   /**
@@ -3533,13 +3519,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * );
    * ```
    */
-  async resumeStream<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
-  >(
+  async resumeStream<OUTPUT extends OutputSchema | undefined = undefined>(
     resumeData: any,
-    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT> & { toolCallId?: string },
-  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+    streamOptions?: AgentExecutionOptions<OUTPUT> & { toolCallId?: string },
+  ): Promise<MastraModelOutput<OUTPUT>> {
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });
@@ -3575,7 +3558,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         snapshot: existingSnapshot,
       },
       methodType: 'stream',
-    } as InnerAgentExecutionOptions<OUTPUT, FORMAT>);
+    } as InnerAgentExecutionOptions<OUTPUT>);
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
@@ -3597,7 +3580,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       });
     }
 
-    return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
+    return result.result as unknown as MastraModelOutput<OUTPUT>;
   }
 
   /**
@@ -3615,12 +3598,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * }
    * ```
    */
-  async approveToolCall<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
-  >(
-    options: AgentExecutionOptions<OUTPUT, FORMAT> & { runId: string; toolCallId?: string },
-  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+  async approveToolCall<OUTPUT extends OutputSchema | undefined = undefined>(
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+  ): Promise<MastraModelOutput<OUTPUT>> {
     return this.resumeStream({ approved: true }, options);
   }
 
@@ -3639,12 +3619,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * }
    * ```
    */
-  async declineToolCall<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
-  >(
-    options: AgentExecutionOptions<OUTPUT, FORMAT> & { runId: string; toolCallId?: string },
-  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+  async declineToolCall<OUTPUT extends OutputSchema | undefined = undefined>(
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+  ): Promise<MastraModelOutput<OUTPUT>> {
     return this.resumeStream({ approved: false }, options);
   }
 
