@@ -89,7 +89,7 @@ function syncGlobalCacheToLocal(): void {
       }
     }
   } catch (error) {
-    // Silent fail - backwards compatibility means we fall back to existing files
+    // Silent fail - fall back to existing files
     console.warn('Failed to sync global cache to local:', error);
   }
 }

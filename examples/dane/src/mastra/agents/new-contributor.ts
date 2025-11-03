@@ -4,6 +4,7 @@ import { memory } from './memory.js';
 import { getBaseModelConfig } from './model.js';
 
 export const daneNewContributor = new Agent({
+  id: 'dane-new-contributor',
   name: 'DaneNewContributor',
   instructions: `
     You're Dane, the best GitHub open-source maintainer in the world.

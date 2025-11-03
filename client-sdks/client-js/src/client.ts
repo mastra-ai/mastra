@@ -1,6 +1,7 @@
-import type { AITraceRecord, AITracesPaginatedArg, WorkflowInfo } from '@mastra/core';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { AITraceRecord, AITracesPaginatedArg } from '@mastra/core/storage';
+import type { WorkflowInfo } from '@mastra/core/workflows';
 import {
   Agent,
   MemoryThread,
@@ -28,11 +29,11 @@ import type {
   McpServerListResponse,
   McpServerToolListResponse,
   GetScorerResponse,
-  GetScoresByScorerIdParams,
-  GetScoresResponse,
-  GetScoresByRunIdParams,
-  GetScoresByEntityIdParams,
-  GetScoresBySpanParams,
+  ListScoresByScorerIdParams,
+  ListScoresResponse,
+  ListScoresByRunIdParams,
+  ListScoresByEntityIdParams,
+  ListScoresBySpanParams,
   SaveScoreParams,
   SaveScoreResponse,
   GetAITracesResponse,
@@ -539,7 +540,7 @@ export class MastraClient extends BaseResource {
     return this.request(`/api/scores/scorers/${encodeURIComponent(scorerId)}`);
   }
 
-  public getScoresByScorerId(params: GetScoresByScorerIdParams): Promise<GetScoresResponse> {
+  public listScoresByScorerId(params: ListScoresByScorerIdParams): Promise<ListScoresResponse> {
     const { page, perPage, scorerId, entityId, entityType } = params;
     const searchParams = new URLSearchParams();
 
@@ -565,7 +566,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing run ID and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public getScoresByRunId(params: GetScoresByRunIdParams): Promise<GetScoresResponse> {
+  public listScoresByRunId(params: ListScoresByRunIdParams): Promise<ListScoresResponse> {
     const { runId, page, perPage } = params;
     const searchParams = new URLSearchParams();
 
@@ -585,7 +586,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing entity ID, type, and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public getScoresByEntityId(params: GetScoresByEntityIdParams): Promise<GetScoresResponse> {
+  public listScoresByEntityId(params: ListScoresByEntityIdParams): Promise<ListScoresResponse> {
     const { entityId, entityType, page, perPage } = params;
     const searchParams = new URLSearchParams();
 
@@ -614,14 +615,6 @@ export class MastraClient extends BaseResource {
     });
   }
 
-  /**
-   * Retrieves model providers with available keys
-   * @returns Promise containing model providers with available keys
-   */
-  getModelProviders(): Promise<string[]> {
-    return this.request(`/api/model-providers`);
-  }
-
   getAITrace(traceId: string): Promise<AITraceRecord> {
     return this.observability.getTrace(traceId);
   }
@@ -630,8 +623,8 @@ export class MastraClient extends BaseResource {
     return this.observability.getTraces(params);
   }
 
-  getScoresBySpan(params: GetScoresBySpanParams): Promise<GetScoresResponse> {
-    return this.observability.getScoresBySpan(params);
+  listScoresBySpan(params: ListScoresBySpanParams): Promise<ListScoresResponse> {
+    return this.observability.listScoresBySpan(params);
   }
 
   score(params: {

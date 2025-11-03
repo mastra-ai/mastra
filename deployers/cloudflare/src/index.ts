@@ -96,7 +96,7 @@ export class CloudflareDeployer extends Deployer {
   private getEntry(): string {
     return `
     import '#polyfills';
-    import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces';
+    import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
 
     export default {
       fetch: async (request, env, context) => {

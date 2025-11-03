@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import type { WritableStream } from 'stream/web';
-import type { CoreMessage } from 'ai';
+import type { CoreMessage } from '@internal/ai-sdk-v4/message';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
@@ -233,6 +233,11 @@ export interface ToolOptions {
   model?: MastraLanguageModel;
   writableStream?: WritableStream<ChunkType>;
   requireApproval?: boolean;
+  // Workflow-specific properties
+  workflow?: any;
+  workflowId?: string;
+  state?: any;
+  setState?: (state: any) => void;
 }
 
 /**

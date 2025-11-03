@@ -5,16 +5,15 @@ import { createServer } from 'node:net';
 import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { useChat } from '@ai-sdk/react';
-import { Mastra } from '@mastra/core';
-import { Agent } from '@mastra/core/agent';
+import { toAISdkStream } from '@mastra/ai-sdk';
+import { Agent, MessageList } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import type { UIMessage } from 'ai';
 import { DefaultChatTransport, isToolUIPart } from 'ai';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { memory, weatherAgent } from './mastra/agents/weather';
 import { weatherTool } from './mastra/tools/weather';
-
 // Helper to find an available port
 async function getAvailablePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -46,6 +45,7 @@ describe('Memory Streaming Tests', () => {
   it('should handle multiple tool calls in memory thread history', async () => {
     // Create agent with memory and tools
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test',
       instructions:
         'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. Respond in a pirate accent and dont use the degrees symbol, print the word degrees when needed.',
@@ -76,17 +76,20 @@ describe('Memory Streaming Tests', () => {
     expect(response1).toContain('70 degrees');
 
     // Second weather check
-    const stream2 = await agent.stream('what is the weather in Seattle?', {
-      threadId,
-      resourceId,
-      format: 'aisdk', // use aisdk output type this time just for fun
-    });
+    const stream2 = toAISdkStream(
+      await agent.stream('what is the weather in Seattle?', {
+        threadId,
+        resourceId,
+      }),
+      { from: 'agent' },
+    );
 
     // Collect second stream
     const chunks2: string[] = [];
-    for await (const chunk of stream2.fullStream) {
+
+    for await (const chunk of stream2) {
       if (chunk.type === `text-delta`) {
-        chunks2.push(chunk.text);
+        chunks2.push(chunk.delta);
       }
     }
     const response2 = chunks2.join('');
@@ -98,6 +101,7 @@ describe('Memory Streaming Tests', () => {
 
   it('should use custom mastra ID generator for messages in memory', async () => {
     const agent = new Agent({
+      id: 'test-msg-id-agent',
       name: 'test-msg-id',
       instructions: 'you are a helpful assistant.',
       model: openai('gpt-4o'),
@@ -264,7 +268,8 @@ describe('Memory Streaming Tests', () => {
       await weatherAgent.generate(`LA weather`, { threadId, resourceId });
 
       const agentMemory = (await weatherAgent.getMemory())!;
-      const initialMessages = (await agentMemory.query({ threadId })).uiMessages;
+      const dbMessages = (await agentMemory.query({ threadId })).messages;
+      const initialMessages = dbMessages.map(m => MessageList.mastraDBMessageToAIV5UIMessage(m));
       const state = { clipboard: '' };
       const { result } = renderHook(() => {
         const chat = useChat({
@@ -280,7 +285,7 @@ describe('Memory Streaming Tests', () => {
               };
             },
           }),
-          messages: initialMessages as UIMessage[],
+          messages: initialMessages,
           onFinish(message) {
             console.log('useChat finished', message);
           },

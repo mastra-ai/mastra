@@ -17,13 +17,7 @@ All Mastra packages have a peer dependency on `@mastra/core` so your package man
 
 :::
 
-## Migrate to v0.23 (unreleased)
-
-:::note
-
-This version isn't released yet but we're adding changes as we make them.
-
-:::
+## Migrate to v1.0.0-beta
 
 ### Changed: Thread Title Generation Location and Default
 
@@ -130,6 +124,59 @@ const agent = new Agent({
 
 If you're not using semantic recall (it's disabled by default), no changes are needed.
 
+### Removed: Legacy Watch Events (Client SDK)
+
+**Breaking Changes:**
+
+- The `.watch()` method has been removed from the client-js SDK's `Workflow` and `AgentBuilder` classes
+- The `/api/workflows/:workflowId/watch` and `/api/agent-builder/:actionId/watch` HTTP endpoints have been removed
+- Server-side code using `watch-v2` event types should update to the simplified `watch` API
+
+**Why this change?**
+
+- Simplify the workflow streaming API by consolidating on one implementation
+- Remove legacy v1 event system that was superseded by v2
+- Improve performance by eliminating duplicate event handling code
+- Reduce API surface area and maintenance burden
+
+**Migration:**
+
+If you were using `run.watch()` from `@mastra/client-js`, switch to using `run.stream()`:
+
+```typescript
+// Before (v0.22 and earlier)
+const workflow = mastraClient.getWorkflow('my-workflow');
+const run = await workflow.createRunAsync();
+
+await run.watch((event) => {
+  console.log('Step completed:', event);
+});
+
+// After (v0.23+)
+const workflow = mastraClient.getWorkflow('my-workflow');
+const run = await workflow.createRunAsync();
+
+const stream = await run.stream({
+  inputData: { /* your input */ }
+});
+
+for await (const chunk of stream) {
+  console.log('Step completed:', chunk);
+}
+```
+
+### Changed: Message Format
+
+An internal intermediary format has been removed. Messages now convert directly between `MastraMessageV2` (storage format) and AI SDK v5 `UIMessage`, simplifying the architecture and improving accuracy.
+
+**Action required only if** you have messages stored in the old `MastraMessageV1` format **and** you:
+
+1. **Directly inspect message metadata** - `__originalContent` is no longer present
+2. **Rely on exact V1 message shape preservation** - Shape may differ after conversion (content is still preserved)
+3. **Have custom message processing logic** - Verify it works with the new direct conversion flow
+
+The storage format (`MastraMessageV2`) and all public APIs remain unchanged.
+
 ### Agent class
 
 - Removed `generateVNext()` method. Use `generate()` instead.
@@ -144,7 +191,7 @@ If you're not using semantic recall (it's disabled by default), no changes are n
 - `agent.toStep` → Add agent directly to the step, workflows handle the transformation
 - `getDefaultGenerateOptions()` → `getDefaultGenerateOptionsLegacy()`
 - `getDefaultStreamOptions()` → `getDefaultStreamOptionsLegacy()`
-- `getDefaultVNextStreamOptions()` → `getDefaultStreamOptions()`
+- `getDefaultVNextStreamOptions()` → `getDefaultOptions()`
 
 #### Output Options
 
@@ -190,9 +237,102 @@ const result = await agent.stream(messages, {
 });
 ```
 
-#### MCP tools
+#### Tool execute signature
 
-- Removed `elicitation` and `extra` from top level arguments. Use the `mcp` property instead.
+**Breaking Change:**
+
+The tool `execute` function signature has been updated to use separate `input` and `context` parameters instead of a single destructured object.
+
+```typescript
+// Before
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async ({ context }) => {
+    return getWeather(context.location);
+  },
+});
+
+// After
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async (inputData) => {
+    return getWeather(inputData.location);
+  },
+});
+```
+
+**Accessing execution context:**
+
+Context properties like `mastra`, `requestContext`, `agent`, `workflow`, and `mcp` are now passed as the second parameter:
+
+```typescript
+// Before
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async ({ context, requestContext, mastra }) => {
+    const userTier = requestContext.get("userTier");
+    const location = context.location;
+    return getWeather(location, userTier);
+  },
+});
+
+// After
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async (inputData, context) => {
+    const userTier = context?.requestContext?.get("userTier");
+    return getWeather(inputData.location, userTier);
+  },
+});
+```
+
+**Agent-specific context:**
+
+Agent-specific properties like `toolCallId`, `messages`, `suspend`, and `resumeData` are nested under `context.agent`:
+
+```typescript
+// After
+export const suspendableTool = createTool({
+  id: "suspendable-tool",
+  suspendSchema: z.object({
+    message: z.string(),
+  }),
+  resumeSchema: z.object({
+    approval: z.boolean(),
+  }),
+  execute: async (inputData, context) => {
+    if (!context?.agent?.resumeData) {
+      return await context?.agent?.suspend({
+        message: "Waiting for approval",
+      });
+    }
+
+    if (context.agent.resumeData.approval) {
+      return { success: true };
+    }
+  },
+});
+```
+
+**Workflow-specific context:**
+
+Workflow-specific properties like `workflowId`, `runId`, `state`, and `setState` are nested under `context.workflow`:
+
+```typescript
+// After
+export const workflowTool = createTool({
+  id: "workflow-tool",
+  execute: async (inputData, context) => {
+    const currentState = context?.workflow?.state;
+    context?.workflow?.setState({ step: "completed" });
+    return { result: "done" };
+  },
+});
+```
+
+**MCP tools:**
+
+MCP-specific properties `elicitation` and `extra` are nested under `context.mcp`:
 
 ```typescript
 export const accountBalance = createTool({
@@ -204,12 +344,12 @@ export const accountBalance = createTool({
   outputSchema: z.object({
     balance: z.number(),
   }),
-  execute: async ({ context, mcp }) => {
-    if (mcp) {
-      await checkAuth(mcp.extra.authInfo);
+  execute: async (inputData, context) => {
+    if (context?.mcp) {
+      await checkAuth(context.mcp.extra.authInfo);
 
-      const result = await mcp.elicitation.sendRequest({
-        message: `Is it ok to fetch the account balance for account ${context.accountId}?`,
+      const result = await context.mcp.elicitation.sendRequest({
+        message: `Is it ok to fetch the account balance for account ${inputData.accountId}?`,
         requestedSchema: {
           type: "object",
           properties: {
@@ -221,7 +361,7 @@ export const accountBalance = createTool({
 
       if (result.action === "accept") {
         return {
-          balance: getAccountBalance(context.accountId),
+          balance: getAccountBalance(inputData.accountId),
         };
       }
     }
@@ -276,29 +416,29 @@ await agent.generate(messages, {
 });
 ```
 
-**Tools:**
+**Note**: This also affects workflow steps, dynamic configuration functions (memory, model, etc.), and anywhere else you pass or receive `runtimeContext`/`requestContext` as a parameter. See the "Tool execute signature" section above for the updated tool signature pattern.
+
+### Changed: `@mastra/core` subpath imports
+
+The `@mastra/core` package no longer allows top-level imports except for `Mastra` and `type Config`. You must use subpath imports for all other imports.
+
+Here are some examples of how to migrate your imports:
 
 ```typescript
 // Before
-export const weatherTool = createTool({
-  id: "weather-tool",
-  execute: async ({ context, runtimeContext }) => {
-    // ❌
-    const userTier = runtimeContext.get("userTier");
-  },
-});
+import { Mastra, type Config } from "@mastra/core"; // ✅
+import { Agent } from "@mastra/core"; // ❌
+import { createTool } from "@mastra/core"; // ❌
+import { createStep } from "@mastra/core"; // ❌
 
 // After
-export const weatherTool = createTool({
-  id: "weather-tool",
-  execute: async ({ context, requestContext }) => {
-    // ✅
-    const userTier = requestContext.get("userTier");
-  },
-});
+import { Mastra, type Config } from "@mastra/core"; // ✅
+import { Agent } from "@mastra/core/agent"; // ✅
+import { createTool } from "@mastra/core/tools"; // ✅
+import { createStep } from "@mastra/core/workflows"; // ✅
 ```
 
-This change also affects workflow steps, dynamic configuration functions (memory, model, etc.), and anywhere else you pass or receive `runtimeContext` as a parameter.
+Read the [package README](https://github.com/mastra-ai/mastra/blob/main/packages/core/README.md) or the [package.json](https://github.com/mastra-ai/mastra/blob/main/packages/core/package.json) for a full list of available subpath imports.
 
 ## Migrate to v0.22
 
@@ -353,6 +493,86 @@ const memory = new Memory({
 ```
 
 If you want to adopt the new default behavior, you can optionally remove explicit `scope: 'resource'` declarations as they're now redundant.
+
+### Changed: Message Format Unification
+
+**Breaking Changes:**
+
+1. `MastraMessageV2` type renamed to `MastraDBMessage`
+2. `format` parameter removed from all get methods, `MastraDBMessage` is always the returned format, which can then be converted as needed via helper utils in `@mastra/ai-sdk`
+3. MessageList `.v2()` methods renamed to `.db()`
+4. AI SDK format conversion moved to `@mastra/ai-sdk/ui`
+
+**Why these changes?**
+
+- Provide a consistent and predictable API across all memory methods
+- Clarify the purpose of message types with better naming
+- Simplify the API by removing unnecessary format parameters
+- Enable better tree-shaking by separating UI conversion utilities
+
+**Migration:**
+
+#### 1. Update Type Imports
+
+Replace all instances of `MastraMessageV2` with `MastraDBMessage`:
+
+```typescript
+// Before
+import { MastraMessageV2 } from "@mastra/core";
+function yourCustomFunction(input: MastraMessageV2) {}
+// After
+import { MastraDBMessage } from "@mastra/core";
+function yourCustomFunction(input: MastraDBMessage) {}
+```
+
+#### 2. Update Memory Method Return Types
+
+The `rememberMessages` method now returns an object wrapper for consistency between all methods:
+
+```typescript
+// Before
+const messages = await memory.rememberMessages({ threadId, resourceId });
+
+// After
+const { messages } = await memory.rememberMessages({ threadId, resourceId });
+```
+
+#### 4. Update AI SDK Format Conversion
+
+Message format conversion for AI SDK compatibility has moved to dedicated utility functions:
+
+```typescript
+// Before
+import { convertMessages } from '@mastra/core';
+const uiMessages = convertMessages(messages).to('AI.V5');
+
+// After
+import { toAISdkV5Messages, toAISdkV4Messages } from '@mastra/ai-sdk/ui';
+
+// For AI SDK v5
+const v5Messages = toAISdkV5Messages(messages);
+
+// For AI SDK v4
+const v4Messages = toAISdkV4Messages(messages);
+```
+
+#### 5. Remove Format Parameters
+
+The `format` parameter has been removed from all get methods. `MastraDBMessage` is now the default return format everywhere:
+
+```typescript
+// Before
+const messages = await memory.getMessages({ threadId, format: "v2" });
+const uiMessages = await memory.getMessages({ threadId, format: "ui" });
+
+// After
+const result = await memory.query({ threadId });
+const messages = result.messages; // Always MastraDBMessage[]
+
+// Use conversion functions for AI SDK formats
+import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
+const uiMessages = toAISdkV5Messages(messages);
+```
 
 ### Deprecated: `format: "aisdk"`
 

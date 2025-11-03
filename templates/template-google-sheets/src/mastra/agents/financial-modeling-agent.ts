@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { anthropic } from '@ai-sdk/anthropic';
 import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
@@ -10,6 +9,7 @@ import { MastraProvider } from '@composio/mastra';
 const MAX_STEPS = 1000;
 
 export const financialModelingAgent = new Agent({
+  id: 'financial-modeling-agent',
   name: 'Financial Modeling Agent',
   instructions: ({ requestContext }) => {
     const redirectUrl = requestContext.get<'redirectUrl', string | undefined>('redirectUrl');
@@ -26,7 +26,7 @@ ${getFinancialModelingAgentPrompt(true)}
 
     return getFinancialModelingAgentPrompt(false);
   },
-  model: anthropic('claude-3-7-sonnet-20250219'),
+  model: 'anthropic/claude-3-7-sonnet-20250219',
   memory: new Memory({
     storage: new LibSQLStore({
       url: 'file:../../mastra.db',
@@ -72,8 +72,7 @@ ${getFinancialModelingAgentPrompt(true)}
 
     return composioTools;
   },
-  defaultGenerateOptions: { maxSteps: MAX_STEPS },
-  defaultStreamOptions: { maxSteps: MAX_STEPS },
+  defaultOptions: { maxSteps: MAX_STEPS },
 });
 
 const getFinancialModelingAgentPrompt = (needsAuth: boolean) => `

@@ -171,6 +171,7 @@ const discoverUnitsStep = createStep({
 
     try {
       const agent = new Agent({
+        id: 'mastra-project-discoverer',
         model,
         instructions: `You are an expert at analyzing Mastra projects.
 
@@ -971,9 +972,9 @@ const intelligentMergeStep = createStep({
           message: z.string(),
           error: z.string().optional(),
         }),
-        execute: async ({ context }) => {
+        execute: async input => {
           try {
-            const { sourcePath, destinationPath } = context;
+            const { sourcePath, destinationPath } = input;
 
             // Use templateDir directly from input
             const resolvedSourcePath = resolve(templateDir, sourcePath);
@@ -1297,7 +1298,8 @@ const validationAndFixStep = createStep({
       const allTools = await AgentBuilderDefaults.listToolsForMode(targetPath, 'template');
 
       const validationAgent = new Agent({
-        name: 'code-validator-fixer',
+        id: 'code-validator-fixer',
+        name: 'Code Validator Fixer',
         description: 'Specialized agent for validating and fixing template integration issues',
         instructions: `You are a code validation and fixing specialist. Your job is to:
 

@@ -345,21 +345,14 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
       const args: InValue[] = [];
@@ -414,16 +407,12 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'LIBSQL_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
         error,
       );
     }
-  }
-
-  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
-    return this.getWorkflowRuns(args);
   }
 }

@@ -7,6 +7,8 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
     inputTokens: 0,
     outputTokens: 0,
     totalTokens: 0,
+    cachedInputTokens: 0,
+    reasoningTokens: 0,
   };
   #streamPromise: {
     promise: Promise<void>;
@@ -40,10 +42,14 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
       inputTokens?: `${number}` | number;
       outputTokens?: `${number}` | number;
       totalTokens?: `${number}` | number;
+      reasoningTokens?: `${number}` | number;
+      cachedInputTokens?: `${number}` | number;
     }) => {
       this.#usageCount.inputTokens += parseInt(usage?.inputTokens?.toString() ?? '0', 10);
       this.#usageCount.outputTokens += parseInt(usage?.outputTokens?.toString() ?? '0', 10);
       this.#usageCount.totalTokens += parseInt(usage?.totalTokens?.toString() ?? '0', 10);
+      this.#usageCount.reasoningTokens += parseInt(usage?.reasoningTokens?.toString() ?? '0', 10);
+      this.#usageCount.cachedInputTokens += parseInt(usage?.cachedInputTokens?.toString() ?? '0', 10);
     };
 
     super({
@@ -63,6 +69,11 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
                 const finishPayload = output.payload;
                 if ('usage' in finishPayload && finishPayload.usage) {
                   updateUsageCount(finishPayload.usage);
+                } else if ('output' in finishPayload && finishPayload.output) {
+                  const outputPayload = finishPayload.output;
+                  if ('usage' in outputPayload && outputPayload.usage) {
+                    updateUsageCount(outputPayload.usage);
+                  }
                 }
               }
             }
@@ -92,7 +103,7 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
                 updateUsageCount(innerChunk.payload.usage);
               }
             }
-            if (innerChunk.type === 'network-execution-event-step-finish') {
+            if (innerChunk.type === 'network-execution-event-finish') {
               const finishPayload = {
                 ...innerChunk.payload,
                 usage: this.#usageCount,

@@ -165,21 +165,14 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     };
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
       const values: Record<string, any> = {};
@@ -256,7 +249,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'CLICKHOUSE_STORAGE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName: workflowName ?? '', resourceId: resourceId ?? '' },
@@ -323,9 +316,5 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
         error,
       );
     }
-  }
-
-  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
-    return this.getWorkflowRuns(args);
   }
 }

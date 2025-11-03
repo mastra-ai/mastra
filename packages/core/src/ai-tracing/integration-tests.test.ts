@@ -1,4 +1,4 @@
-import { MockLanguageModelV1, simulateReadableStream } from 'ai/test';
+import { MockLanguageModelV1, simulateReadableStream } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -6,7 +6,7 @@ import { z } from 'zod';
 // Core Mastra imports
 import { Agent } from '../agent';
 import type { StructuredOutputOptions } from '../agent';
-import type { MastraMessageV2 } from '../agent/message-list';
+import type { MastraDBMessage } from '../agent/message-list';
 import { Mastra } from '../mastra';
 import type { Processor } from '../processors';
 import { MockStore } from '../storage/mock';
@@ -247,8 +247,8 @@ const calculatorTool = createTool({
   outputSchema: z.object({
     result: z.number(),
   }),
-  execute: async ({ context }) => {
-    const { operation, a, b } = context;
+  execute: async inputData => {
+    const { operation, a, b } = inputData;
     const operations = {
       add: a + b,
       multiply: a * b,
@@ -277,10 +277,10 @@ const apiTool = createTool({
     status: z.number(),
     data: z.any(),
   }),
-  execute: async ({ context, tracingContext }: ToolExecutionContext<typeof apiToolInputSchema>) => {
-    const { endpoint, method } = context;
+  execute: async (inputData, context?: ToolExecutionContext<typeof apiToolInputSchema>) => {
+    const { endpoint, method } = inputData;
     // Example of adding custom metadata
-    tracingContext?.currentSpan?.update({
+    context?.tracingContext?.currentSpan?.update({
       metadata: {
         apiEndpoint: endpoint,
         httpMethod: method,
@@ -309,13 +309,13 @@ const workflowExecutorTool = createTool({
   outputSchema: z.object({
     result: z.any(),
   }),
-  execute: async ({ context, mastra }: ToolExecutionContext<typeof workflowToolInputSchema>) => {
-    const { workflowId, input } = context;
-    expect(mastra, 'Mastra instance should be available in tool execution context').toBeTruthy();
+  execute: async (inputData, context?: ToolExecutionContext<typeof workflowToolInputSchema>) => {
+    const { workflowId, input: workflowInput } = inputData;
+    expect(context?.mastra, 'Mastra instance should be available in tool execution context').toBeTruthy();
 
-    const workflow = mastra?.getWorkflow(workflowId);
+    const workflow = context?.mastra?.getWorkflow(workflowId);
     const run = await workflow?.createRunAsync();
-    const result = await run?.start({ inputData: input });
+    const result = await run?.start({ inputData: workflowInput });
 
     return { result: result?.status === 'success' ? result.result : null };
   },
@@ -1108,6 +1108,7 @@ describe('AI Tracing Integration Tests', () => {
     ({ name, method, model }) => {
       it(`should trace spans correctly`, async () => {
         const testAgent = new Agent({
+          id: 'test-agent',
           name: 'Test Agent',
           instructions: 'You are a test agent',
           model,
@@ -1213,6 +1214,7 @@ describe('AI Tracing Integration Tests', () => {
     ({ name, method, model }) => {
       it(`should trace spans correctly`, async () => {
         const testAgent = new Agent({
+          id: 'test-agent',
           name: 'Test Agent',
           instructions: 'You are a test agent',
           model,
@@ -1310,6 +1312,7 @@ describe('AI Tracing Integration Tests', () => {
     ({ name, method, model }) => {
       it(`should trace spans correctly`, async () => {
         const testAgent = new Agent({
+          id: 'test-agent',
           name: 'Test Agent',
           instructions: 'You are a test agent',
           model,
@@ -1391,6 +1394,7 @@ describe('AI Tracing Integration Tests', () => {
     ({ method, model }) => {
       it(`should trace spans correctly`, async () => {
         const testAgent = new Agent({
+          id: 'test-agent',
           name: 'Test Agent',
           instructions: 'Return a simple response',
           model,
@@ -1443,7 +1447,7 @@ describe('AI Tracing Integration Tests', () => {
         expect(hasObjectChunks).toBe(true);
 
         // Identify the Test Agent spans vs processor agent spans
-        const testAgentSpan = agentRunSpans.find(span => span.name?.includes('Test Agent'));
+        const testAgentSpan = agentRunSpans.find(span => span.name?.includes('test-agent'));
         const processorAgentSpan = agentRunSpans.find(span => span !== testAgentSpan);
         const processorRunSpan = processorRunSpans[0];
 
@@ -1503,11 +1507,13 @@ describe('AI Tracing Integration Tests', () => {
       it('should trace all processor spans including internal agent spans', async () => {
         // Create a custom input processor that uses an agent internally
         class ValidatorProcessor implements Processor {
-          readonly name = 'validator';
+          readonly id = 'validator';
+          readonly name = 'Validator';
           private agent: Agent;
 
           constructor(model: any) {
             this.agent = new Agent({
+              id: 'validator-agent',
               name: 'validator-agent',
               instructions: 'You validate input messages',
               model,
@@ -1515,10 +1521,10 @@ describe('AI Tracing Integration Tests', () => {
           }
 
           async processInput(args: {
-            messages: MastraMessageV2[];
+            messages: MastraDBMessage[];
             abort: (reason?: string) => never;
             tracingContext?: TracingContext;
-          }): Promise<MastraMessageV2[]> {
+          }): Promise<MastraDBMessage[]> {
             // Call the internal agent to validate
             const lastMessage = args.messages[args.messages.length - 1];
             const text = lastMessage?.content?.content || '';
@@ -1534,11 +1540,13 @@ describe('AI Tracing Integration Tests', () => {
 
         // Create a custom output processor that uses an agent internally
         class SummarizerProcessor implements Processor {
-          readonly name = 'summarizer';
+          readonly id = 'summarizer';
+          readonly name = 'Summarizer';
           private agent: Agent;
 
           constructor(model: any) {
             this.agent = new Agent({
+              id: 'summarizer-agent',
               name: 'summarizer-agent',
               instructions: 'You summarize text concisely',
               model,
@@ -1546,10 +1554,10 @@ describe('AI Tracing Integration Tests', () => {
           }
 
           async processOutputResult(args: {
-            messages: MastraMessageV2[];
+            messages: MastraDBMessage[];
             abort: (reason?: string) => never;
             tracingContext?: TracingContext;
-          }): Promise<MastraMessageV2[]> {
+          }): Promise<MastraDBMessage[]> {
             // Call the internal agent to summarize
             const lastMessage = args.messages[args.messages.length - 1];
             const text = lastMessage?.content?.content || '';
@@ -1564,6 +1572,7 @@ describe('AI Tracing Integration Tests', () => {
         }
 
         const testAgent = new Agent({
+          id: 'test-agent',
           name: 'Test Agent',
           instructions: 'You are a helpful assistant',
           model,
@@ -1604,8 +1613,10 @@ describe('AI Tracing Integration Tests', () => {
         expect(llmGenerationSpans.length).toBe(3); // Test Agent LLM + validator LLM + summarizer LLM
         expect(processorRunSpans.length).toBe(2); // validator + summarizer
 
+        console.log(agentRunSpans);
+
         // Find specific spans
-        const testAgentSpan = agentRunSpans.find(s => s.name === "agent run: 'Test Agent'");
+        const testAgentSpan = agentRunSpans.find(s => s.name === "agent run: 'test-agent'");
         const inputProcessorSpan = processorRunSpans.find(s => s.name === 'input processor: validator');
         const summarizerProcessorSpan = processorRunSpans.find(s => s.name === 'output processor: summarizer');
         const validatorAgentSpan = agentRunSpans.find(s => s.name?.includes('validator-agent'));
@@ -1633,6 +1644,7 @@ describe('AI Tracing Integration Tests', () => {
   describe.each(agentMethods)('agent launched inside workflow step using $name', ({ method, model }) => {
     it(`should trace spans correctly`, async () => {
       const testAgent = new Agent({
+        id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test agent',
         model,
@@ -1691,6 +1703,7 @@ describe('AI Tracing Integration Tests', () => {
       const simpleWorkflow = createSimpleWorkflow();
 
       const workflowAgent = new Agent({
+        id: 'workflow-agent',
         name: 'Workflow Agent',
         instructions: 'You can execute workflows using the workflow executor tool',
         model,
@@ -1745,6 +1758,7 @@ describe('AI Tracing Integration Tests', () => {
       const simpleWorkflow = createSimpleWorkflow();
 
       const workflowAgent = new Agent({
+        id: 'workflow-agent',
         name: 'Workflow Agent',
         instructions: 'You can execute workflows that exist in your config',
         model,
@@ -1792,22 +1806,23 @@ describe('AI Tracing Integration Tests', () => {
         description: 'A tool that adds custom metadata',
         inputSchema,
         outputSchema: z.object({ output: z.string() }),
-        execute: async ({ context, tracingContext }: ToolExecutionContext<typeof inputSchema>) => {
+        execute: async (inputData, context?: ToolExecutionContext<typeof inputSchema>) => {
           // Add custom metadata to the current span
-          tracingContext?.currentSpan?.update({
+          context?.tracingContext?.currentSpan?.update({
             metadata: {
               toolOperation: 'metadata-processing',
-              inputValue: context.input,
+              inputValue: inputData.input,
               customFlag: true,
               timestamp: Date.now(),
             },
           });
 
-          return { output: `Processed: ${context.input}` };
+          return { output: `Processed: ${inputData.input}` };
         },
       });
 
       const testAgent = new Agent({
+        id: 'metadata-agent',
         name: 'Metadata Agent',
         instructions: 'You use tools and add metadata',
         model,
@@ -1851,15 +1866,15 @@ describe('AI Tracing Integration Tests', () => {
         description: 'A tool that creates child spans',
         inputSchema,
         outputSchema: z.object({ output: z.string() }),
-        execute: async ({ context, tracingContext }: ToolExecutionContext<typeof inputSchema>) => {
+        execute: async (inputData, context?: ToolExecutionContext<typeof inputSchema>) => {
           // Create a child span for sub-operation
-          const childSpan = tracingContext?.currentSpan?.createChildSpan({
+          const childSpan = context?.tracingContext?.currentSpan?.createChildSpan({
             type: AISpanType.GENERIC,
             name: 'tool-child-operation',
-            input: context.input,
+            input: inputData.input,
             metadata: {
               childOperation: 'data-processing',
-              inputValue: context.input,
+              inputValue: inputData.input,
             },
           });
 
@@ -1870,17 +1885,18 @@ describe('AI Tracing Integration Tests', () => {
           childSpan?.update({
             metadata: {
               ...childSpan.metadata,
-              processedValue: `processed-${context.input}`,
+              processedValue: `processed-${inputData.input}`,
             },
           });
 
-          childSpan?.end({ output: `child-result-${context.input}` });
+          childSpan?.end({ output: `child-result-${inputData.input}` });
 
-          return { output: `Tool processed: ${context.input}` };
+          return { output: `Tool processed: ${inputData.input}` };
         },
       });
 
       const testAgent = new Agent({
+        id: 'child-span-agent',
         name: 'Child Span Agent',
         instructions: 'You use tools that create child spans',
         model,
@@ -1937,6 +1953,7 @@ describe('AI Tracing Integration Tests', () => {
     });
 
     const structuredAgent = new Agent({
+      id: 'structured-agent',
       name: 'Structured Agent',
       instructions: 'You generate structured data',
       model: structuredMock,
@@ -1989,6 +2006,7 @@ describe('AI Tracing Integration Tests', () => {
     });
 
     const testAgent = new Agent({
+      id: 'workflow-agent',
       name: 'Workflow Agent',
       instructions: 'You are an agent in a workflow',
       model: mockModel,

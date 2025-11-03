@@ -3,7 +3,7 @@ import { afterEach } from 'node:test';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { openai } from '@ai-sdk/openai';
-import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { Agent, MessageList } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { MemoryProcessorOpts } from '@mastra/core/memory';
@@ -18,8 +18,25 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { filterToolCallsByName, filterToolResultsByName, generateConversationHistory } from './test-utils';
 
-function v2ToCoreMessages(messages: MastraMessageV2[] | UIMessage[]): CoreMessage[] {
+function v2ToCoreMessages(messages: MastraDBMessage[] | UIMessage[]): CoreMessage[] {
   return new MessageList().add(messages, 'memory').get.all.core();
+}
+
+// Helper function to extract text content from MastraDBMessage
+function getTextContent(message: any): string {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+  if (message.content?.parts && Array.isArray(message.content.parts)) {
+    return message.content.parts.map((p: any) => p.text || '').join('');
+  }
+  if (message.content?.text) {
+    return message.content.text;
+  }
+  if (typeof message.content?.content === 'string') {
+    return message.content.content;
+  }
+  return '';
 }
 
 let memory: Memory;
@@ -73,17 +90,19 @@ describe('Memory with Processors', () => {
     });
 
     // Save messages
-    await memory.saveMessages({ messages: messagesV2, format: 'v2' });
+    await memory.saveMessages({ messages: messagesV2 });
 
     // Get messages with a token limit of 250 (should get ~2.5 messages)
     const queryResult = await memory.query({
       threadId: thread.id,
       selectBy: { last: 20 },
     });
+    console.log('DEBUG queryResult.messages.length:', queryResult.messages.length);
+    const messageList = new MessageList({ threadId: thread.id, resourceId }).add(queryResult.messages, 'memory');
+    const coreMessages = messageList.get.all.core();
+    console.log('DEBUG coreMessages.length:', coreMessages.length);
     const result = await memory.processMessages({
-      messages: new MessageList({ threadId: thread.id, resourceId })
-        .add(queryResult.uiMessages, 'memory')
-        .get.all.core(),
+      messages: coreMessages,
       processors: [new TokenLimiter(250)], // Limit to 250 tokens
     });
 
@@ -112,7 +131,7 @@ describe('Memory with Processors', () => {
 
     const allMessagesResult = await memory.processMessages({
       messages: new MessageList({ threadId: thread.id, resourceId })
-        .add(allMessagesQuery.uiMessages, 'memory')
+        .add(allMessagesQuery.messages, 'memory')
         .get.all.core(),
       processors: [new TokenLimiter(3000)], // High limit that should exceed total tokens
     });
@@ -120,9 +139,9 @@ describe('Memory with Processors', () => {
     // create response message list to add to memory
     const messages = new MessageList({ threadId: thread.id, resourceId })
       .add(allMessagesResult, 'response')
-      .get.all.v2();
+      .get.all.db();
 
-    const listed = new MessageList({ threadId: thread.id, resourceId }).add(messages, 'memory').get.all.v2();
+    const listed = new MessageList({ threadId: thread.id, resourceId }).add(messages, 'memory').get.all.db();
 
     // We should get all 20 messages
     expect(listed.length).toBe(20);
@@ -147,7 +166,7 @@ describe('Memory with Processors', () => {
     });
 
     // Save messages
-    await memory.saveMessages({ messages: messagesV2, format: 'v2' });
+    await memory.saveMessages({ messages: messagesV2 });
 
     // filter weather tool calls
     const queryResult = await memory.query({
@@ -155,11 +174,11 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult.uiMessages),
+      messages: v2ToCoreMessages(queryResult.messages),
       processors: [new ToolCallFilter({ exclude: ['weather'] })],
     });
-    const messages = new MessageList({ threadId: thread.id, resourceId }).add(result, 'response').get.all.v2();
-    expect(new MessageList().add(messages, 'memory').get.all.v2().length).toBeLessThan(messagesV2.length);
+    const messages = new MessageList({ threadId: thread.id, resourceId }).add(result, 'response').get.all.db();
+    expect(new MessageList().add(messages, 'memory').get.all.db().length).toBeLessThan(messagesV2.length);
     expect(filterToolCallsByName(result, 'weather')).toHaveLength(0);
     expect(filterToolResultsByName(result, 'weather')).toHaveLength(0);
     expect(filterToolCallsByName(result, 'calculator')).toHaveLength(1);
@@ -171,11 +190,11 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result2 = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult2.uiMessages),
+      messages: v2ToCoreMessages(queryResult2.messages),
       processors: [],
     });
-    const messages2 = new MessageList({ threadId: thread.id, resourceId }).add(result2, 'response').get.all.v2();
-    expect(new MessageList().add(messages2, 'memory').get.all.v2()).toHaveLength(messagesV2.length);
+    const messages2 = new MessageList({ threadId: thread.id, resourceId }).add(result2, 'response').get.all.db();
+    expect(new MessageList().add(messages2, 'memory').get.all.db()).toHaveLength(messagesV2.length);
     expect(filterToolCallsByName(result2, 'weather')).toHaveLength(1);
     expect(filterToolResultsByName(result2, 'weather')).toHaveLength(1);
     expect(filterToolCallsByName(result2, 'calculator')).toHaveLength(1);
@@ -187,7 +206,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result3 = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult3.uiMessages),
+      messages: v2ToCoreMessages(queryResult3.messages),
       processors: [new ToolCallFilter({ exclude: ['weather', 'calculator'] })],
     });
     expect(result3.length).toBeLessThan(messagesV2.length);
@@ -202,7 +221,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result4 = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult4.uiMessages),
+      messages: v2ToCoreMessages(queryResult4.messages),
       processors: [new ToolCallFilter()],
     });
     expect(result4.length).toBeLessThan(messagesV2.length);
@@ -220,7 +239,7 @@ describe('Memory with Processors', () => {
     });
 
     // Generate conversation with tool calls
-    const { messages } = generateConversationHistory({
+    const { messagesV2: messages } = generateConversationHistory({
       threadId: thread.id,
       resourceId,
       messageCount: 8,
@@ -237,7 +256,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult.uiMessages),
+      messages: v2ToCoreMessages(queryResult.messages),
       processors: [new ToolCallFilter({ exclude: ['weather'] }), new TokenLimiter(250)],
     });
 
@@ -278,6 +297,7 @@ describe('Memory with Processors', () => {
     });
     const instructions = 'You are a helpful assistant';
     const agent = new Agent({
+      id: 'processor-test-agent',
       name: 'processor-test-agent',
       instructions,
       model: openai('gpt-4o'),
@@ -304,9 +324,10 @@ describe('Memory with Processors', () => {
       throw new Error(`responseMessages should be an array`);
     }
 
-    const userMessagesByContent = responseMessages.filter(m => m.content === userMessage);
-    expect(userMessagesByContent).toEqual([expect.objectContaining({ role: 'user', content: userMessage })]); // should only be one
+    const userMessagesByContent = responseMessages.filter(m => getTextContent(m) === userMessage);
     expect(userMessagesByContent.length).toBe(1); // if there's more than one we have duplicate messages
+    expect(userMessagesByContent[0].role).toBe('user');
+    expect(getTextContent(userMessagesByContent[0])).toBe(userMessage);
 
     const userMessage2 = 'Tell me something else interesting about space';
 
@@ -328,9 +349,10 @@ describe('Memory with Processors', () => {
       throw new Error(`responseMessages should be an array`);
     }
 
-    const userMessagesByContent2 = responseMessages2.filter((m: CoreMessage) => m.content === userMessage2);
-    expect(userMessagesByContent2).toEqual([expect.objectContaining({ role: 'user', content: userMessage2 })]); // should only be one
+    const userMessagesByContent2 = responseMessages2.filter((m: CoreMessage) => getTextContent(m) === userMessage2);
     expect(userMessagesByContent2.length).toBe(1); // if there's more than one we have duplicate messages
+    expect(userMessagesByContent2[0].role).toBe('user');
+    expect(getTextContent(userMessagesByContent2[0])).toBe(userMessage2);
 
     // make sure all user messages are there
     const allUserMessages = responseMessages2.filter((m: CoreMessage) => m.role === 'user');
@@ -363,8 +385,8 @@ describe('Memory with Processors', () => {
       inputSchema: z.object({
         location: z.string().describe('The location to get the weather for'),
       }),
-      execute: async ({ context: { location } }) => {
-        return `The weather in ${location} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
+      execute: async input => {
+        return `The weather in ${input.location} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
       },
     });
 
@@ -374,8 +396,8 @@ describe('Memory with Processors', () => {
       inputSchema: z.object({
         expression: z.string().describe('The mathematical expression to calculate'),
       }),
-      execute: async ({ context: { expression } }) => {
-        return `The result of ${expression} is ${eval(expression)}`;
+      execute: async input => {
+        return `The result of ${input.expression} is ${eval(input.expression)}`;
       },
     });
 
@@ -383,6 +405,7 @@ describe('Memory with Processors', () => {
       'You are a helpful assistant with access to weather and calculator tools. Use them when appropriate.';
     // Create agent with memory and tools
     const agent = new Agent({
+      id: 'processor-test-agent',
       name: 'processor-test-agent',
       instructions,
       model: openai('gpt-4o'),
@@ -415,7 +438,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
 
-    const list = new MessageList({ threadId }).add(queryResult.messagesV2, 'memory');
+    const list = new MessageList({ threadId }).add(queryResult.messages, 'memory');
 
     const baselineResult = await memory.processMessages({
       messages: list.get.remembered.core(),
@@ -437,7 +460,7 @@ describe('Memory with Processors', () => {
       threadId,
       selectBy: { last: 20 },
     });
-    const list2 = new MessageList({ threadId }).add(weatherQueryResult.messagesV2, 'memory');
+    const list2 = new MessageList({ threadId }).add(weatherQueryResult.messages, 'memory');
     const weatherFilteredResult = await memory.processMessages({
       messages: list2.get.all.core(),
       processors: [new ToolCallFilter({ exclude: ['get_weather'] })],
@@ -527,7 +550,7 @@ describe('Memory with Processors', () => {
 
     // Retrieve the message (no TokenLimiter, just get the message back)
     const result = await memory.processMessages({
-      messages: v2ToCoreMessages(queryResult.uiMessages),
+      messages: v2ToCoreMessages(queryResult.messages),
     });
 
     // Should have retrieved the message

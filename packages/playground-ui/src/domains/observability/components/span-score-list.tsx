@@ -7,7 +7,7 @@ import {
 } from '@/components/ui/elements';
 import { ScoreDialog } from '@/domains/scores';
 import { useLinkComponent } from '@/lib/framework';
-import { ClientScoreRowData, GetScoresResponse } from '@mastra/client-js';
+import { ClientScoreRowData, ListScoresResponse } from '@mastra/client-js';
 import { isToday, format } from 'date-fns';
 import { useEffect, useState } from 'react';
 
@@ -20,7 +20,7 @@ export const traceScoresListColumns = [
 ];
 
 type SpanScoreListProps = {
-  scoresData?: GetScoresResponse | null;
+  scoresData?: ListScoresResponse | null;
   isLoadingScoresData?: boolean;
   initialScoreId?: string;
   traceId?: string;
@@ -94,7 +94,7 @@ export function SpanScoreList({
                   date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
                   time: format(createdAtDate, 'h:mm:ss aaa'),
                   score: score?.score,
-                  scorer: score?.scorer?.name,
+                  scorer: score?.scorer?.name || score?.scorer?.id,
                 };
 
                 return (
@@ -126,7 +126,7 @@ export function SpanScoreList({
         />
       </EntryList>
       <ScoreDialog
-        scorerName={selectedScore?.scorer?.name || ''}
+        scorerName={selectedScore?.scorer?.name || selectedScore?.scorer?.id || ''}
         score={selectedScore as ClientScoreRowData}
         isOpen={dialogIsOpen}
         onClose={() => {

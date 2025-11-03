@@ -58,7 +58,7 @@
   },
   "peerDependencies": {
     "@grpc/grpc-js": "^1.13.4",
-    "@mastra/core": ">=0.21.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.205.0",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.205.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.205.0",

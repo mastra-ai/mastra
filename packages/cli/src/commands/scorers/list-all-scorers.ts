@@ -34,7 +34,7 @@ function formatTable(scorers: ScorerTemplate[]): string {
   // Create rows
   const rows = scorers.map(
     scorer =>
-      `${scorer.name.padEnd(nameWidth)} │ ${color.dim(scorer.id.padEnd(idWidth))} │ ${scorer.type.padEnd(typeWidth)} │ ${color.dim(scorer.description.padEnd(descWidth))}`,
+      `${(scorer?.name ?? scorer?.id).padEnd(nameWidth)} │ ${color.dim(scorer.id.padEnd(idWidth))} │ ${scorer.type.padEnd(typeWidth)} │ ${color.dim(scorer.description.padEnd(descWidth))}`,
   );
 
   return [header, separator, ...rows].join('\n');

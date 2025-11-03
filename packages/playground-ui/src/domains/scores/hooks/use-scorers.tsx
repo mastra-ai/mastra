@@ -1,19 +1,19 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { GetScorerResponse, GetScoresResponse } from '@mastra/client-js';
+import { GetScorerResponse, ListScoresResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
 export const useScoresByEntityId = (entityId: string, entityType: string, page: number = 0) => {
   const client = useMastraClient();
-  const [scores, setScores] = useState<GetScoresResponse | null>(null);
+  const [scores, setScores] = useState<ListScoresResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchScores = async () => {
       setIsLoading(true);
       try {
-        const res = await client.getScoresByEntityId({
+        const res = await client.listScoresByEntityId({
           entityId,
           entityType,
           page: page || 0,
@@ -45,7 +45,7 @@ export const useScoresByScorerId = ({ scorerId, page = 0, entityId, entityType }
 
   return useQuery({
     queryKey: ['scores', scorerId, page, entityId, entityType],
-    queryFn: () => client.getScoresByScorerId({ scorerId, page, entityId, entityType, perPage: 10 }),
+    queryFn: () => client.listScoresByScorerId({ scorerId, page, entityId, entityType, perPage: 10 }),
     refetchInterval: 5000,
   });
 };

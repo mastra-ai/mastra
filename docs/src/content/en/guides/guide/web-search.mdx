@@ -57,6 +57,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
+        id: "search-agent",
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
@@ -71,6 +72,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
+        id: "search-agent",
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
@@ -96,6 +98,7 @@ Setup the tool:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
+        id: "search-agent",
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
@@ -114,6 +117,7 @@ Setup the tool:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
+        id: "search-agent",
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
@@ -183,6 +187,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
 import { Agent } from "@mastra/core/agent";
 
 export const searchAgent = new Agent({
+  id: "search-agent",
   name: "Search Agent",
   instructions:
     "You are a search agent that can search the web for information.",
@@ -217,8 +222,8 @@ export const webSearch = createTool({
       publishedDate: z.string().optional(),
     }),
   ),
-  execute: async ({ context }) => {
-    const { results } = await exa.searchAndContents(context.query, {
+  execute: async (inputData) => {
+    const { results } = await exa.searchAndContents(inputData.query, {
       livecrawl: "always",
       numResults: 2,
     });
@@ -243,6 +248,7 @@ Add to your Agent
 import { webSearch } from "./tools/searchTool";
 
 export const searchAgent = new Agent({
+  id: "search-agent",
   name: "Search Agent",
   instructions:
     "You are a search agent that can search the web for information.",

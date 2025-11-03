@@ -42,7 +42,7 @@ function HomeInner() {
 
   const handleSubmit = (message: PromptInputMessage, event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (input.trim()) {
+    if (inputData.trim()) {
       setMessages(state => [
         ...state,
         {
@@ -146,7 +146,7 @@ function HomeInner() {
           />
           <PromptInputSubmit
             status={isRunning ? 'streaming' : 'ready'}
-            disabled={!input.trim()}
+            disabled={!inputData.trim()}
             className="absolute bottom-1 right-1"
           />
         </PromptInput>

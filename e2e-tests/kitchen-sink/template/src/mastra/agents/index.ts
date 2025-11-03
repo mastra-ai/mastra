@@ -15,19 +15,23 @@ const memory = new Memory({
   storage: new LibSQLStore({
     url: 'file:../mastra.db',
   }),
-  generateTitle: true, // Explicitly enable title generation for E2E tests
-  // ...
+
+  options: {
+    generateTitle: true,
+  },
 });
 
 let count = 0;
 
 export const subAgent = new Agent({
+  id: 'sub-agent',
   name: 'Sub Agent',
   instructions: `You are a helpful sub agent that provides accurate weather information.`,
   model: 'google/gemini-2.5-pro',
 });
 
 export const weatherAgent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   instructions: `
       You are a helpful weather assistant that provides accurate weather information.

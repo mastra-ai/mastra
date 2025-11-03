@@ -2,7 +2,7 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   PaginationInfo,
   StorageGetMessagesArg,
@@ -31,14 +31,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     this.operations = operations;
   }
 
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
   public async getMessages({
     threadId,
     resourceId,
     selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
@@ -117,6 +114,18 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       }
 
       // Then get the remaining messages, excluding the ids we just fetched
+      let whereClause = 'WHERE thread_id = {threadId:String}';
+      const queryParams: any = {
+        threadId,
+        exclude: messages.map(m => m.id),
+        limit,
+      };
+
+      if (resourceId) {
+        whereClause += ' AND "resourceId" = {resourceId:String}';
+        queryParams.resourceId = resourceId;
+      }
+
       const result = await this.client.query({
         query: `
         SELECT 
@@ -127,16 +136,12 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             toDateTime64(createdAt, 3) as createdAt,
             thread_id AS "threadId"
         FROM "${TABLE_MESSAGES}"
-        WHERE thread_id = {threadId:String}
+        ${whereClause}
         AND id NOT IN ({exclude:Array(String)})
         ORDER BY "createdAt" DESC
         LIMIT {limit:Int64}
         `,
-        query_params: {
-          threadId,
-          exclude: messages.map(m => m.id),
-          limit,
-        },
+        query_params: queryParams,
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
@@ -163,9 +168,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         }
       });
 
-      const list = new MessageList({ threadId, resourceId }).add(messages, 'memory');
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
+      const list = new MessageList({ threadId, resourceId }).add(
+        messages as MastraMessageV1[] | MastraDBMessage[],
+        'memory',
+      );
+      return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
         {
@@ -179,28 +186,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     }
   }
 
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    if (messageIds.length === 0) return [];
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    if (messageIds.length === 0) return { messages: [] };
 
     try {
       const result = await this.client.query({
@@ -243,13 +230,12 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         }
       });
 
-      const list = new MessageList().add(messages, 'memory');
-      if (format === `v1`) return list.get.all.v1();
-      return list.get.all.v2();
+      const list = new MessageList().add(messages as MastraMessageV1[] | MastraDBMessage[], 'memory');
+      return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_MESSAGES_BY_ID_FAILED',
+          id: 'CLICKHOUSE_STORAGE_LIST_MESSAGES_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: JSON.stringify(messageIds) },
@@ -259,25 +245,292 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     }
   }
 
-  public async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    throw new Error(
-      `listMessages is not yet implemented by this storage adapter (${this.constructor.name}). ` +
-        `This method is currently being rolled out across all storage adapters. ` +
-        `Please use getMessages or getMessagesPaginated as an alternative, or wait for the implementation.`,
-    );
+  public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+
+    if (!threadId.trim()) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_CLICKHOUSE_LIST_MESSAGES_INVALID_THREAD_ID',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        new Error('threadId must be a non-empty string'),
+      );
+    }
+
+    try {
+      // Determine how many results to return
+      // Default pagination is always 40 unless explicitly specified
+      let perPage = 40;
+      if (limit !== undefined) {
+        if (limit === false) {
+          // limit: false means get ALL messages
+          perPage = Number.MAX_SAFE_INTEGER;
+        } else if (limit === 0) {
+          // limit: 0 means return zero results
+          perPage = 0;
+        } else if (typeof limit === 'number' && limit > 0) {
+          perPage = limit;
+        }
+      }
+
+      // Convert offset to page for pagination metadata
+      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
+
+      // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      let dataQuery = `
+        SELECT 
+          id,
+          content,
+          role,
+          type,
+          toDateTime64(createdAt, 3) as createdAt,
+          thread_id AS "threadId",
+          resourceId
+        FROM ${TABLE_MESSAGES}
+        WHERE thread_id = {threadId:String}
+      `;
+      const dataParams: any = { threadId };
+
+      if (resourceId) {
+        dataQuery += ` AND resourceId = {resourceId:String}`;
+        dataParams.resourceId = resourceId;
+      }
+
+      if (filter?.dateRange?.start) {
+        const startDate =
+          filter.dateRange.start instanceof Date
+            ? filter.dateRange.start.toISOString()
+            : new Date(filter.dateRange.start).toISOString();
+        dataQuery += ` AND createdAt >= parseDateTime64BestEffort({fromDate:String}, 3)`;
+        dataParams.fromDate = startDate;
+      }
+
+      if (filter?.dateRange?.end) {
+        const endDate =
+          filter.dateRange.end instanceof Date
+            ? filter.dateRange.end.toISOString()
+            : new Date(filter.dateRange.end).toISOString();
+        dataQuery += ` AND createdAt <= parseDateTime64BestEffort({toDate:String}, 3)`;
+        dataParams.toDate = endDate;
+      }
+
+      // Build ORDER BY clause
+      const { field, direction } = this.parseOrderBy(orderBy);
+      dataQuery += ` ORDER BY "${field}" ${direction}`;
+
+      // Apply pagination
+      if (perPage === Number.MAX_SAFE_INTEGER) {
+        // Get all messages
+      } else {
+        dataQuery += ` LIMIT {limit:Int64} OFFSET {offset:Int64}`;
+        dataParams.limit = perPage;
+        dataParams.offset = offset;
+      }
+
+      const result = await this.client.query({
+        query: dataQuery,
+        query_params: dataParams,
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+
+      const rows = await result.json();
+      const paginatedMessages = transformRows<MastraDBMessage>(rows.data);
+      const paginatedCount = paginatedMessages.length;
+
+      // Get total count
+      let countQuery = `SELECT count() as total FROM ${TABLE_MESSAGES} WHERE thread_id = {threadId:String}`;
+      const countParams: any = { threadId };
+
+      if (resourceId) {
+        countQuery += ` AND resourceId = {resourceId:String}`;
+        countParams.resourceId = resourceId;
+      }
+
+      if (filter?.dateRange?.start) {
+        const startDate =
+          filter.dateRange.start instanceof Date
+            ? filter.dateRange.start.toISOString()
+            : new Date(filter.dateRange.start).toISOString();
+        countQuery += ` AND createdAt >= parseDateTime64BestEffort({fromDate:String}, 3)`;
+        countParams.fromDate = startDate;
+      }
+
+      if (filter?.dateRange?.end) {
+        const endDate =
+          filter.dateRange.end instanceof Date
+            ? filter.dateRange.end.toISOString()
+            : new Date(filter.dateRange.end).toISOString();
+        countQuery += ` AND createdAt <= parseDateTime64BestEffort({toDate:String}, 3)`;
+        countParams.toDate = endDate;
+      }
+
+      const countResult = await this.client.query({
+        query: countQuery,
+        query_params: countParams,
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+      const countData = await countResult.json();
+      const total = (countData as any).data[0].total;
+
+      if (total === 0 && paginatedCount === 0) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      // Step 2: Add included messages with context (if any), excluding duplicates
+      const messageIds = new Set(paginatedMessages.map((m: MastraDBMessage) => m.id));
+      let includeMessages: MastraDBMessage[] = [];
+
+      if (include && include.length > 0) {
+        const unionQueries: string[] = [];
+        const params: any[] = [];
+        let paramIdx = 1;
+
+        for (const inc of include) {
+          const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+          const searchId = inc.threadId || threadId;
+
+          unionQueries.push(`
+            SELECT * FROM (
+              WITH numbered_messages AS (
+                SELECT
+                  id, content, role, type, "createdAt", thread_id, "resourceId",
+                  ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
+                FROM "${TABLE_MESSAGES}"
+                WHERE thread_id = {var_thread_id_${paramIdx}:String}
+              ),
+              target_positions AS (
+                SELECT row_num as target_pos
+                FROM numbered_messages
+                WHERE id = {var_include_id_${paramIdx}:String}
+              )
+              SELECT DISTINCT m.id, m.content, m.role, m.type, m."createdAt", m.thread_id AS "threadId", m."resourceId"
+              FROM numbered_messages m
+              CROSS JOIN target_positions t
+              WHERE m.row_num BETWEEN (t.target_pos - {var_withPreviousMessages_${paramIdx}:Int64}) AND (t.target_pos + {var_withNextMessages_${paramIdx}:Int64})
+            ) AS query_${paramIdx}
+          `);
+
+          params.push(
+            { [`var_thread_id_${paramIdx}`]: searchId },
+            { [`var_include_id_${paramIdx}`]: id },
+            { [`var_withPreviousMessages_${paramIdx}`]: withPreviousMessages },
+            { [`var_withNextMessages_${paramIdx}`]: withNextMessages },
+          );
+          paramIdx++;
+        }
+
+        const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
+        const mergedParams = params.reduce((acc, paramObj) => ({ ...acc, ...paramObj }), {});
+
+        const includeResult = await this.client.query({
+          query: finalQuery,
+          query_params: mergedParams,
+          clickhouse_settings: {
+            date_time_input_format: 'best_effort',
+            date_time_output_format: 'iso',
+            use_client_time_zone: 1,
+            output_format_json_quote_64bit_integers: 0,
+          },
+        });
+
+        const includeRows = await includeResult.json();
+        includeMessages = transformRows<MastraDBMessage>(includeRows.data);
+
+        // Deduplicate: only add messages that aren't already in the paginated results
+        for (const includeMsg of includeMessages) {
+          if (!messageIds.has(includeMsg.id)) {
+            paginatedMessages.push(includeMsg);
+            messageIds.add(includeMsg.id);
+          }
+        }
+      }
+
+      // Use MessageList for proper deduplication and format conversion to V2
+      const list = new MessageList().add(paginatedMessages, 'memory');
+      let finalMessages = list.get.all.db();
+
+      // Sort all messages (paginated + included) for final output
+      finalMessages = finalMessages.sort((a, b) => {
+        const isDateField = field === 'createdAt' || field === 'updatedAt';
+        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+
+        // Handle tiebreaker for stable sorting
+        if (aValue === bValue) {
+          return a.id.localeCompare(b.id);
+        }
+
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        }
+        // Fallback to string comparison for non-numeric fields
+        return direction === 'ASC'
+          ? String(aValue).localeCompare(String(bValue))
+          : String(bValue).localeCompare(String(aValue));
+      });
+
+      // Calculate hasMore based on pagination window
+      // If all thread messages have been returned (through pagination or include), hasMore = false
+      // Otherwise, check if there are more pages in the pagination window
+      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
+      const hasMore = limit === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage,
+        hasMore,
+      };
+    } catch (error: any) {
+      const errorPerPage = limit === false ? Number.MAX_SAFE_INTEGER : limit === 0 ? 0 : limit || 40;
+      const mastraError = new MastraError(
+        {
+          id: 'STORAGE_CLICKHOUSE_STORE_LIST_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+            resourceId: resourceId ?? '',
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      return {
+        messages: [],
+        total: 0,
+        page: errorPerPage === 0 ? 0 : Math.floor(offset / errorPerPage),
+        perPage: errorPerPage,
+        hasMore: false,
+      };
+    }
   }
 
-  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
-    return this.getMessagesById({ messageIds, format: 'v2' });
-  }
-
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
-    const { messages, format = 'v1' } = args;
-    if (messages.length === 0) return messages;
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+    const { messages } = args;
+    if (messages.length === 0) return { messages };
 
     for (const message of messages) {
       const resourceId = message.resourceId;
@@ -442,10 +695,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         }),
       ]);
 
-      const list = new MessageList().add(messages, 'memory');
+      const list = new MessageList().add(messages as MastraMessageV1[] | MastraDBMessage[], 'memory');
 
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
+      return { messages: list.get.all.db() };
     } catch (error: any) {
       throw new MastraError(
         {
@@ -501,50 +753,6 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
-        },
-        error,
-      );
-    }
-  }
-
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    try {
-      const result = await this.client.query({
-        query: `SELECT 
-          id,
-          "resourceId",
-          title,
-          metadata,
-          toDateTime64(createdAt, 3) as createdAt,
-          toDateTime64(updatedAt, 3) as updatedAt
-        FROM "${TABLE_THREADS}"
-        WHERE "resourceId" = {var_resourceId:String}`,
-        query_params: { var_resourceId: resourceId },
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-
-      const rows = await result.json();
-      const threads = transformRows(rows.data) as StorageThreadType[];
-
-      return threads.map((thread: StorageThreadType) => ({
-        ...thread,
-        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-        createdAt: thread.createdAt,
-        updatedAt: thread.updatedAt,
-      }));
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId },
         },
         error,
       );
@@ -680,16 +888,13 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page?: number;
-    perPage?: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page = 0, perPage = 100 } = args;
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    const { resourceId, offset = 0, limit = 100, orderBy } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
-      const currentOffset = page * perPage;
-
       // Get total count
       const countResult = await this.client.query({
         query: `SELECT count() as total FROM ${TABLE_THREADS} WHERE resourceId = {resourceId:String}`,
@@ -708,16 +913,16 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         return {
           threads: [],
           total: 0,
-          page,
-          perPage,
+          page: 0,
+          perPage: limit,
           hasMore: false,
         };
       }
 
-      // Get paginated threads
+      // Get paginated threads with dynamic sorting
       const dataResult = await this.client.query({
         query: `
-              SELECT 
+              SELECT
                 id,
                 resourceId,
                 title,
@@ -726,13 +931,13 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 toDateTime64(updatedAt, 3) as updatedAt
               FROM ${TABLE_THREADS}
               WHERE resourceId = {resourceId:String}
-              ORDER BY createdAt DESC
+              ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}
               LIMIT {limit:Int64} OFFSET {offset:Int64}
             `,
         query_params: {
           resourceId,
-          limit: perPage,
-          offset: currentOffset,
+          limit: limit,
+          offset: offset,
         },
         clickhouse_settings: {
           date_time_input_format: 'best_effort',
@@ -748,40 +953,25 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       return {
         threads,
         total,
-        page,
-        perPage,
-        hasMore: currentOffset + threads.length < total,
+        page: limit > 0 ? Math.floor(offset / limit) : 0,
+        perPage: limit,
+        hasMore: offset + threads.length < total,
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+          id: 'CLICKHOUSE_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId, page },
+          details: { resourceId, page: limit > 0 ? Math.floor(offset / limit) : 0 },
         },
         error,
       );
     }
   }
 
-  /**
-   * @todo When migrating from getThreadsByResourceIdPaginated to this method,
-   * implement orderBy and sortDirection support for full sorting capabilities
-   */
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, limit, offset } = args;
-    const page = Math.floor(offset / limit);
-    const perPage = limit;
-    return this.getThreadsByResourceIdPaginated({ resourceId, page, perPage });
-  }
-
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, resourceId, selectBy, format = 'v1' } = args;
+  async getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
+    const { threadId, resourceId, selectBy } = args;
     const page = selectBy?.pagination?.page || 0;
     const perPageInput = selectBy?.pagination?.perPage;
     const perPage =
@@ -794,7 +984,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       const fromDate = dateRange?.start;
       const toDate = dateRange?.end;
 
-      const messages: MastraMessageV2[] = [];
+      const messages: MastraDBMessage[] = [];
 
       // Get include messages first (like libsql)
       if (selectBy?.include?.length) {
@@ -852,11 +1042,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         });
 
         const rows = await includeResult.json();
-        const includedMessages = transformRows<MastraMessageV2>(rows.data);
+        const includedMessages = transformRows<MastraDBMessage>(rows.data);
 
         // Deduplicate messages
         const seen = new Set<string>();
-        const dedupedMessages = includedMessages.filter((message: MastraMessageV2) => {
+        const dedupedMessages = includedMessages.filter((message: MastraDBMessage) => {
           if (seen.has(message.id)) return false;
           seen.add(message.id);
           return true;
@@ -960,7 +1150,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       });
 
       const rows = await result.json();
-      const paginatedMessages = transformRows<MastraMessageV2>(rows.data);
+      const paginatedMessages = transformRows<MastraDBMessage>(rows.data);
       messages.push(...paginatedMessages);
 
       // For last N functionality, sort messages chronologically
@@ -969,7 +1159,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       }
 
       return {
-        messages: format === 'v2' ? messages : (messages as unknown as MastraMessageV1[]),
+        messages,
         total,
         page,
         perPage,
@@ -995,12 +1185,12 @@ export class MemoryStorageClickhouse extends MemoryStorage {
   }
 
   async updateMessages(args: {
-    messages: (Partial<Omit<MastraMessageV2, 'createdAt'>> & {
+    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
       threadId?: string;
       content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
     })[];
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     const { messages } = args;
 
     if (messages.length === 0) {
@@ -1023,7 +1213,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       });
 
       const existingRows = await existingResult.json();
-      const existingMessages = transformRows<MastraMessageV2>(existingRows.data);
+      const existingMessages = transformRows<MastraDBMessage>(existingRows.data);
 
       if (existingMessages.length === 0) {
         return [];
@@ -1159,7 +1349,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
         const verifyRows = await verifyResult.json();
         if (verifyRows.data.length > 0) {
-          const updatedMessage = transformRows<MastraMessageV2>(verifyRows.data)[0];
+          const updatedMessage = transformRows<MastraDBMessage>(verifyRows.data)[0];
 
           if (updatedMessage) {
             // Check if the update was applied correctly
@@ -1176,7 +1366,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                   needsRetry = true;
                   break;
                 }
-              } else if (updatedMessage[key as keyof MastraMessageV2] !== value) {
+              } else if (updatedMessage[key as keyof MastraDBMessage] !== value) {
                 needsRetry = true;
                 break;
               }
@@ -1310,7 +1500,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       }
 
       // Re-fetch to return the fully updated messages
-      const updatedMessages: MastraMessageV2[] = [];
+      const updatedMessages: MastraDBMessage[] = [];
       for (const messageId of messageIds) {
         const updatedResult = await this.client.query({
           query: `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId" FROM ${TABLE_MESSAGES} WHERE id = {messageId:String}`,
@@ -1324,7 +1514,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         });
         const updatedRows = await updatedResult.json();
         if (updatedRows.data.length > 0) {
-          const message = transformRows<MastraMessageV2>(updatedRows.data)[0];
+          const message = transformRows<MastraDBMessage>(updatedRows.data)[0];
           if (message) {
             updatedMessages.push(message);
           }

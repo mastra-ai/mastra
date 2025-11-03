@@ -94,6 +94,7 @@ import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const chatAgent = new Agent({
+  id: "chat-agent",
   name: "Chat Agent",
   instructions: `
     You are a helpful, friendly, and knowledgeable AI assistant that loves to chat with users via WhatsApp.
@@ -142,6 +143,7 @@ import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const textMessageAgent = new Agent({
+  id: "text-message-agent",
   name: "Text Message Agent",
   instructions: `
     You are a text message converter that takes formal or lengthy text and breaks it down into natural, casual text messages.
@@ -299,7 +301,7 @@ chatWorkflow.commit();
 Configure your Mastra instance with the agents, workflow, and WhatsApp webhook endpoints.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { registerApiRoute } from "@mastra/core/server";
 import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";

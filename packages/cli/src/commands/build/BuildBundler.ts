@@ -36,7 +36,7 @@ export class BuildBundler extends Bundler {
   protected getEntry(): string {
     return `
     // @ts-ignore
-    import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces';
+    import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
     import { mastra } from '#mastra';
     import { createNodeServer, getToolExports } from '#server';
     import { tools } from '#tools';

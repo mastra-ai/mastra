@@ -123,14 +123,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns(args?: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns> {
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     const options = args || {};
     try {
       const query: any = {};
@@ -173,7 +166,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'STORAGE_MONGODB_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName: options.workflowName || 'unknown' },
@@ -232,9 +225,5 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       updatedAt: new Date(row.updatedAt as string),
       resourceId: row.resourceId,
     };
-  }
-
-  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
-    return this.getWorkflowRuns(args);
   }
 }

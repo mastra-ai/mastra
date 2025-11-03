@@ -561,7 +561,7 @@ const scorer = createContextRelevanceScorerLLM({
   options: {
     contextExtractor: (input, output) => {
       // Extract from RAG retrieval results
-      const ragResults = input.metadata?.ragResults || [];
+      const ragResults = inputData.metadata?.ragResults || [];
 
       // Return the text content of retrieved documents
       return ragResults
@@ -584,7 +584,7 @@ const evaluateRAG = async (testCases) => {
   for (const testCase of testCases) {
     const score = await scorer.run(testCase);
     results.push({
-      query: testCase.input.inputMessages[0].content,
+      query: testCase.inputData.inputMessages[0].content,
       relevanceScore: score.score,
       feedback: score.reason,
       unusedContext: score.reason.includes("unused"),

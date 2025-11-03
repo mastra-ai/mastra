@@ -5,7 +5,7 @@ import { serve } from '@hono/node-server';
 import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo } from '@mastra/core/mcp';
-import type { InternalCoreTool } from '@mastra/core/tools';
+import type { InternalCoreTool, Tool } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { createStep, Workflow } from '@mastra/core/workflows';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -89,6 +89,7 @@ const createMockAgent = (
   description?: string,
 ) => {
   return new Agent({
+    id: name,
     name,
     instructions: instructionsFn,
     description,
@@ -1004,11 +1005,11 @@ describe('MCPServer', () => {
             parameters: z.object({
               message: z.string().describe('Message to show to user'),
             }),
-            execute: async (context, options) => {
-              const extra = options.extra as MCPRequestHandlerExtra;
+            execute: async (inputData, context) => {
+              const extra = context?.mcp?.extra as MCPRequestHandlerExtra;
 
               return {
-                message: context.message,
+                message: inputData.message,
                 sessionId: extra?.sessionId || null,
                 authInfo: extra?.authInfo || null,
                 requestId: extra?.requestId || null,
@@ -1067,7 +1068,7 @@ describe('MCPServer', () => {
       expect(tool).toBeDefined();
 
       // Call the tool
-      const result = await tool.execute({ context: { location: 'Austin' } });
+      const result = await tool.execute!({ location: 'Austin' });
 
       // Check the result
       expect(result).toBeDefined();
@@ -1202,7 +1203,7 @@ describe('MCPServer', () => {
       expect(tool).toBeDefined();
 
       // Call the tool using the MCPClient (SSE transport)
-      const result = await tool.execute({ context: { location: 'Austin' } });
+      const result = await tool.execute!({ location: 'Austin' });
 
       expect(result).toBeDefined();
       expect(result.content).toBeInstanceOf(Array);
@@ -1428,10 +1429,10 @@ describe('MCPServer - Agent to Tool Conversion', () => {
       id: 'authCheck',
       description: 'Tool that checks for auth context',
       inputSchema: z.object({ query: z.string().optional() }),
-      execute: async (contextObj, execOptions) => {
-        agentContextObj = contextObj;
-        agentExecOptions = execOptions;
-        const mcpExtra = contextObj.requestContext?.get('mcp.extra');
+      execute: async (inputData, context) => {
+        agentContextObj = context;
+        agentExecOptions = context;
+        const mcpExtra = context?.requestContext?.get('mcp.extra');
         return {
           source: 'agent-request-context',
           authInfo: mcpExtra?.authInfo,
@@ -1675,12 +1676,12 @@ describe('MCPServer - Elicitation', () => {
           parameters: z.object({
             message: z.string().describe('Message to show to user'),
           }),
-          execute: async (context, options) => {
+          execute: async (inputData, context) => {
             // Use the session-aware elicitation functionality
             try {
-              const elicitation = options.elicitation;
+              const elicitation = context?.mcp?.elicitation;
               const result = await elicitation.sendRequest({
-                message: context.message,
+                message: inputData.message,
                 requestedSchema: {
                   type: 'object',
                   properties: {
@@ -1779,10 +1780,8 @@ describe('MCPServer - Elicitation', () => {
     const tool = tools['testElicitationTool'];
     expect(tool).toBeDefined();
 
-    const result = await tool.execute({
-      context: {
-        message: 'Please provide your information',
-      },
+    const result = await tool.execute!({
+      message: 'Please provide your information',
     });
 
     expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
@@ -1813,10 +1812,8 @@ describe('MCPServer - Elicitation', () => {
     const tools = await elicitationClient.tools();
     const tool = tools['testElicitationTool'];
 
-    const result = await tool.execute({
-      context: {
-        message: 'Please provide sensitive data',
-      },
+    const result = await tool.execute!({
+      message: 'Please provide sensitive data',
     });
 
     expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
@@ -1840,10 +1837,8 @@ describe('MCPServer - Elicitation', () => {
     const tools = await elicitationClient.tools();
     const tool = tools['testElicitationTool'];
 
-    const result = await tool.execute({
-      context: {
-        message: 'Please provide optional data',
-      },
+    const result = await tool.execute!({
+      message: 'Please provide optional data',
     });
 
     expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
@@ -1867,10 +1862,8 @@ describe('MCPServer - Elicitation', () => {
     const tools = await elicitationClient.tools();
     const tool = tools['testElicitationTool'];
 
-    const result = await tool.execute({
-      context: {
-        message: 'This will cause an error',
-      },
+    const result = await tool.execute!({
+      message: 'This will cause an error',
     });
 
     expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
@@ -1890,10 +1883,8 @@ describe('MCPServer - Elicitation', () => {
     const tools = await elicitationClient.tools();
     const tool = tools['testElicitationTool'];
 
-    const result = await tool.execute({
-      context: {
-        message: 'This should fail gracefully',
-      },
+    const result = await tool.execute!({
+      message: 'This should fail gracefully',
     });
 
     // When no elicitation handler is provided, the server's elicitInput should fail
@@ -1928,10 +1919,8 @@ describe('MCPServer - Elicitation', () => {
     const tool = tools['testElicitationTool'];
     expect(tool).toBeDefined();
 
-    const result = await tool.execute({
-      context: {
-        message: 'Please provide your information',
-      },
+    const result = await tool.execute!({
+      message: 'Please provide your information',
     });
 
     expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
@@ -1992,10 +1981,8 @@ describe('MCPServer - Elicitation', () => {
     const tools = await elicitationClient1.listTools();
     const tool = tools['elicitation1_testElicitationTool'];
     expect(tool).toBeDefined();
-    await tool.execute({
-      context: {
-        message: 'Please provide your information',
-      },
+    await tool.execute!({
+      message: 'Please provide your information',
     });
 
     const tools2 = await elicitationClient2.listTools();
@@ -2077,7 +2064,7 @@ describe('MCPServer with Tool Output Schema', () => {
   it('should call tool and receive structuredContent', async () => {
     const tools = await clientWithOutputSchema.listTools();
     const tool = tools['local_structuredTool'];
-    const result = await tool.execute({ context: { input: 'hello' } });
+    const result = await tool.execute!({ input: 'hello' });
 
     expect(result).toBeDefined();
     expect(result.structuredContent).toBeDefined();
@@ -2094,7 +2081,7 @@ describe('MCPServer - Tool Input Validation', () => {
   let validationServer: MCPServer;
   let validationClient: InternalMastraMCPClient;
   let httpValidationServer: ServerType;
-  let tools: Record<string, any>;
+  let tools: Record<string, Tool<any, any, any, any>>;
   const VALIDATION_PORT = 9700 + Math.floor(Math.random() * 100);
 
   const toolsWithValidation: ToolsInput = {
@@ -2186,11 +2173,9 @@ describe('MCPServer - Tool Input Validation', () => {
     const stringTool = tools['stringTool'];
     expect(stringTool).toBeDefined();
 
-    const result = await stringTool.execute({
-      context: {
-        message: 'Hello world',
-        optional: 'optional value',
-      },
+    const result = await stringTool.execute!({
+      message: 'Hello world',
+      optional: 'optional value',
     });
 
     expect(result).toBeDefined();
@@ -2199,9 +2184,7 @@ describe('MCPServer - Tool Input Validation', () => {
 
   it('should return validation error for missing required parameters', async () => {
     const stringTool = tools['stringTool'];
-    const result = await stringTool.execute({
-      context: {},
-    });
+    const result = await stringTool.execute!({});
 
     expect(result).toBeDefined();
     // Handle both client-side and server-side error formats
@@ -2218,10 +2201,8 @@ describe('MCPServer - Tool Input Validation', () => {
 
   it('should return validation error for invalid string length', async () => {
     const stringTool = tools['stringTool'];
-    const result = await stringTool.execute({
-      context: {
-        message: 'Hi', // Too short, min is 3
-      },
+    const result = await stringTool.execute!({
+      message: 'Hi', // Too short, min is 3
     });
 
     expect(result).toBeDefined();
@@ -2239,10 +2220,8 @@ describe('MCPServer - Tool Input Validation', () => {
 
   it('should return validation error for invalid number range', async () => {
     const numberTool = tools['numberTool'];
-    const result = await numberTool.execute({
-      context: {
-        age: -5, // Negative age not allowed
-      },
+    const result = await numberTool.execute!({
+      age: -5, // Negative age not allowed
     });
 
     expect(result).toBeDefined();
@@ -2258,13 +2237,11 @@ describe('MCPServer - Tool Input Validation', () => {
 
   it('should return validation error for invalid email format', async () => {
     const complexTool = tools['complexTool'];
-    const result = await complexTool.execute({
-      context: {
-        email: 'not-an-email',
-        tags: ['tag1'],
-        metadata: {
-          priority: 'medium',
-        },
+    const result = await complexTool.execute!({
+      email: 'not-an-email',
+      tags: ['tag1'],
+      metadata: {
+        priority: 'medium',
       },
     });
 
@@ -2276,13 +2253,11 @@ describe('MCPServer - Tool Input Validation', () => {
 
   it('should return validation error for empty array when minimum required', async () => {
     const complexTool = tools['complexTool'];
-    const result = await complexTool.execute({
-      context: {
-        email: 'test@example.com',
-        tags: [], // Empty array, min 1 required
-        metadata: {
-          priority: 'low',
-        },
+    const result = await complexTool.execute!({
+      email: 'test@example.com',
+      tags: [], // Empty array, min 1 required
+      metadata: {
+        priority: 'low',
       },
     });
 
@@ -2301,13 +2276,11 @@ describe('MCPServer - Tool Input Validation', () => {
 
   it('should return validation error for invalid enum value', async () => {
     const complexTool = tools['complexTool'];
-    const result = await complexTool.execute({
-      context: {
-        email: 'test@example.com',
-        tags: ['tag1'],
-        metadata: {
-          priority: 'urgent', // Not in enum ['low', 'medium', 'high']
-        },
+    const result = await complexTool.execute!({
+      email: 'test@example.com',
+      tags: ['tag1'],
+      metadata: {
+        priority: 'urgent', // Not in enum ['low', 'medium', 'high']
       },
     });
 
@@ -2324,13 +2297,11 @@ describe('MCPServer - Tool Input Validation', () => {
 
   it('should handle multiple validation errors', async () => {
     const complexTool = tools['complexTool'];
-    const result = await complexTool.execute({
-      context: {
-        email: 'invalid-email',
-        tags: [],
-        metadata: {
-          priority: 'invalid',
-        },
+    const result = await complexTool.execute!({
+      email: 'invalid-email',
+      tags: [],
+      metadata: {
+        priority: 'invalid',
       },
     });
 

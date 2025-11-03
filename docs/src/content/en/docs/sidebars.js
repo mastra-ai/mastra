@@ -29,7 +29,7 @@ const sidebars = {
         {
           type: "doc",
           id: "getting-started/studio",
-          label: "Playground",
+          label: "Studio",
         },
         {
           type: "doc",
@@ -112,11 +112,6 @@ const sidebars = {
           type: "doc",
           id: "workflows/error-handling",
           label: "Error Handling",
-        },
-        {
-          type: "doc",
-          id: "workflows/input-data-mapping",
-          label: "Input Data Mapping",
         },
         {
           type: "doc",
@@ -521,30 +516,9 @@ const sidebars = {
           label: "Custom Scorers",
         },
         {
-          type: "category",
-          label: "Evals (old API)",
-          items: [
-            {
-              type: "doc",
-              id: "scorers/evals-old-api/overview",
-              label: "Overview",
-            },
-            {
-              type: "doc",
-              id: "scorers/evals-old-api/textual-evals",
-              label: "Textual Evals",
-            },
-            {
-              type: "doc",
-              id: "scorers/evals-old-api/custom-eval",
-              label: "Custom Evals",
-            },
-            {
-              type: "doc",
-              id: "scorers/evals-old-api/running-in-ci",
-              label: "Running in CI",
-            },
-          ],
+          type: "doc",
+          id: "scorers/running-in-ci",
+          label: "Running in CI",
         },
       ],
     },

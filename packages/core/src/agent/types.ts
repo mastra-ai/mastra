@@ -1,8 +1,10 @@
+import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4/model';
+import type { ToolSet } from '@internal/ai-sdk-v4/tool';
 import type { ProviderDefinedTool } from '@internal/external-types';
-import type { GenerateTextOnStepFinishCallback, ToolSet } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
+import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -26,7 +28,6 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import type { RequestContext } from '../request-context';
-import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
 import type { OutputSchema } from '../stream';
 import type { InferSchemaOutput } from '../stream/base/schema';
 import type { ModelManagerModelConfig } from '../stream/types';
@@ -39,8 +40,8 @@ import type { AgentExecutionOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
 import type { SaveQueueManager } from './save-queue';
 
-export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
-export type { Message as AiMessageType } from 'ai';
+export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
+export type { Message as AiMessageType } from '@internal/ai-sdk-v4/message';
 export type { LLMStepResult } from '../stream/types';
 
 /**
@@ -145,15 +146,15 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
   /**
    * Default options used when calling `generate()`.
    */
-  defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
+  defaultGenerateOptionsLegacy?: DynamicArgument<AgentGenerateOptions>;
   /**
    * Default options used when calling `stream()`.
    */
-  defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
+  defaultStreamOptionsLegacy?: DynamicArgument<AgentStreamOptions>;
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
-  defaultVNextStreamOptions?: DynamicArgument<AgentExecutionOptions>;
+  defaultOptions?: DynamicArgument<AgentExecutionOptions>;
   /**
    * Reference to the Mastra runtime instance (injected automatically).
    */
