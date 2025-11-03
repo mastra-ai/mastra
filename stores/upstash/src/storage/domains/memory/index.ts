@@ -785,7 +785,6 @@ export class StoreMemoryUpstash extends MemoryStorage {
       );
       this.logger.error(mastraError.toString());
       this.logger?.trackException(mastraError);
-      const perPage = normalizePerPage(perPageInput, 40);
       return {
         messages: [],
         total: 0,
