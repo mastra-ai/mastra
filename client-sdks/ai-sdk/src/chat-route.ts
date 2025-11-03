@@ -154,7 +154,7 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
         throw new Error(`Agent ${agentToUse} not found`);
       }
 
-      const result = await agentObj.stream<OUTPUT, 'mastra'>(messages, {
+      const result = await agentObj.stream<OUTPUT>(messages, {
         ...defaultOptions,
         ...rest,
         requestContext: requestContext || defaultOptions?.requestContext,
