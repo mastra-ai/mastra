@@ -15,6 +15,7 @@
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",
     "serve": "docusaurus serve",
+    "regenerate-translations": "docusaurus write-translations",
     "write-translations": "docusaurus write-translations && gtx-cli translate"
   },
   "dependencies": {

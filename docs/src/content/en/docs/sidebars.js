@@ -408,16 +408,19 @@ const sidebars = {
         {
           type: "doc",
           id: "mastra-cloud/setting-up",
+          key: "mastra.cloud.setting-up",
           label: "Setup & Deploy",
         },
         {
           type: "doc",
           id: "mastra-cloud/dashboard",
+          key: "mastra.cloud.dashboard",
           label: "Dashboard",
         },
         {
           type: "doc",
           id: "mastra-cloud/observability",
+          key: "mastra.cloud.observability",
           label: "Observability",
         },
       ],
@@ -454,7 +457,7 @@ const sidebars = {
             {
               type: "doc",
               id: "observability/ai-tracing/overview",
-              key: "observaibility.ai-tracing.overview",
+              key: "observability.ai-tracing.overview",
               label: "Overview",
             },
             {
@@ -520,6 +523,7 @@ const sidebars = {
         {
           type: "doc",
           id: "scorers/overview",
+          key: "scorers.overview",
           label: "Overview",
         },
         {
