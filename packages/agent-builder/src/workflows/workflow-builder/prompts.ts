@@ -222,7 +222,7 @@ export const mastra = new Mastra({
 **Running Workflows:**
 \`\`\`typescript
 // Create and start run
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 const result = await run.start({ inputData: {...} });
 
 // Stream execution for real-time monitoring

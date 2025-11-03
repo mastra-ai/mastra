@@ -367,7 +367,7 @@ export class PostgresPerformanceTest {
     results.push(
       await this.measureOperation(
         'listThreadsByResourceId',
-        () => this.store.listThreadsByResourceId({ resourceId, offset: 0, limit: 20 }),
+        () => this.store.listThreadsByResourceId({ resourceId, page: 0, perPage: 20 }),
         scenario,
       ),
     );

@@ -226,7 +226,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should get workflow run successfully', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
 
@@ -272,7 +272,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should get workflow run execution result successfully', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
       await run.start({ inputData: {} });
@@ -361,7 +361,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should start workflow run successfully', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
 
@@ -382,7 +382,7 @@ describe('vNext Workflow Handlers', () => {
       const resourceId = 'user-start-test';
 
       // Create run with resourceId
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run-start-resource',
         resourceId,
       });
@@ -451,7 +451,7 @@ describe('vNext Workflow Handlers', () => {
       const resourceId = 'user-async-resume-test';
 
       // Start a workflow with resourceId and let it suspend (using the shared instance)
-      const run = await reusableWorkflow.createRunAsync({
+      const run = await reusableWorkflow.createRun({
         runId: 'test-run-async-resume',
         resourceId,
       });
@@ -514,7 +514,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should resume workflow run successfully', async () => {
-      const run = await reusableWorkflow.createRunAsync({
+      const run = await reusableWorkflow.createRun({
         runId: 'test-run',
       });
 
@@ -537,7 +537,7 @@ describe('vNext Workflow Handlers', () => {
       const resourceId = 'user-test-123';
 
       // Start a workflow with resourceId and let it suspend
-      const run = await reusableWorkflow.createRunAsync({
+      const run = await reusableWorkflow.createRun({
         runId: 'test-run-with-resource',
         resourceId,
       });
@@ -575,7 +575,7 @@ describe('vNext Workflow Handlers', () => {
       const resourceId = 'user-stream-resume-test';
 
       // Start a workflow with resourceId and let it suspend
-      const run = await reusableWorkflow.createRunAsync({
+      const run = await reusableWorkflow.createRun({
         runId: 'test-run-stream-resume',
         resourceId,
       });
@@ -630,7 +630,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should get workflow runs successfully (not empty)', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
       await run.start({ inputData: {} });
@@ -648,7 +648,7 @@ describe('vNext Workflow Handlers', () => {
       const resourceId = 'user-observe-test';
 
       // Create run with resourceId
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run-observe-resource',
         resourceId,
       });
@@ -688,7 +688,7 @@ describe('vNext Workflow Handlers', () => {
       const resourceId = 'user-cancel-test';
 
       // Create run with resourceId
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run-cancel-resource',
         resourceId,
       });
@@ -723,7 +723,7 @@ describe('vNext Workflow Handlers', () => {
       const resourceId = 'user-event-test';
 
       // Create run with resourceId
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run-event-resource',
         resourceId,
       });

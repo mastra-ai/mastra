@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, ensureDate, WorkflowsStorage } from '@mastra/core/storage';
+import { TABLE_WORKFLOW_SNAPSHOT, ensureDate, WorkflowsStorage, normalizePerPage } from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { StoreOperationsCloudflare } from '../operations';
@@ -168,13 +168,27 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
 
   async listWorkflowRuns({
     workflowName,
-    limit = 20,
-    offset = 0,
+    page = 0,
+    perPage = 20,
     resourceId,
     fromDate,
     toDate,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
+      if (page < 0 || !Number.isInteger(page)) {
+        throw new MastraError(
+          {
+            id: 'CLOUDFLARE_STORE_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be a non-negative integer'),
+        );
+      }
+
+      const normalizedPerPage = normalizePerPage(perPage, 20);
+      const offset = page * normalizedPerPage;
       // List all keys in the workflow snapshot table
       const prefix = this.buildWorkflowSnapshotPrefix({ workflowName });
       const keyObjs = await this.operations.listKV(TABLE_WORKFLOW_SNAPSHOT, { prefix });
@@ -223,7 +237,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
         return bDate - aDate;
       });
       // Apply pagination
-      const pagedRuns = runs.slice(offset, offset + limit);
+      const pagedRuns = runs.slice(offset, offset + normalizedPerPage);
       return {
         runs: pagedRuns,
         total: runs.length,
