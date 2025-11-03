@@ -40,7 +40,7 @@ function NavbarContentDesktop() {
             <div className="hidden lg:flex items-center gap-2">
               <LocaleControl
                 size="sm"
-                className="px-[13px] bg-white border-transparent rounded-full transition-colors cursor-pointer"
+                className="px-[13px] bg-white dark:bg-(--mastra-primary) border-transparent rounded-full transition-colors cursor-pointer"
               />
               <ThemeSwitcher />
             </div>
