@@ -344,8 +344,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
-      const errorPerPage =
-        perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput === 0 ? 0 : perPageInput || 40;
+      const errorPerPage = perPageInput === false ? Number.MAX_SAFE_INTEGER : (perPageInput ?? 40);
       const mastraError = new MastraError(
         {
           id: 'MONGODB_STORE_LIST_MESSAGES_FAILED',

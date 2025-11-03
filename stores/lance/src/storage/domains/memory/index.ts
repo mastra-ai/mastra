@@ -483,8 +483,7 @@ export class StoreMemoryLance extends MemoryStorage {
         hasMore,
       };
     } catch (error: any) {
-      const errorPerPage =
-        perPageInput === false ? Number.MAX_SAFE_INTEGER : perPageInput === 0 ? 0 : perPageInput || 40;
+      const errorPerPage = perPageInput === false ? Number.MAX_SAFE_INTEGER : (perPageInput ?? 40);
 
       const mastraError = new MastraError(
         {
