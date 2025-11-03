@@ -241,7 +241,7 @@ export async function listMessagesHandler(c: Context) {
     if (orderByArgs) {
       try {
         orderBy = JSON.parse(orderByArgs);
-      } catch (_error) {
+      } catch {
         // swallow
       }
     }
@@ -250,7 +250,7 @@ export async function listMessagesHandler(c: Context) {
     if (includeArgs) {
       try {
         include = JSON.parse(includeArgs);
-      } catch (_error) {
+      } catch {
         // swallow
       }
     }
@@ -259,7 +259,7 @@ export async function listMessagesHandler(c: Context) {
     if (filterArgs) {
       try {
         filter = JSON.parse(filterArgs);
-      } catch (_error) {
+      } catch {
         // swallow
       }
     }
