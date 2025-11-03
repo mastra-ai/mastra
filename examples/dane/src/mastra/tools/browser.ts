@@ -27,7 +27,7 @@ export const browserTool = createTool({
 
       await docs.chunk({
         strategy: 'html',
-        size: 300,
+        maxSize: 300,
         sections: [
           ['h1', 'Header 1'],
           ['h2', 'Header 2'],

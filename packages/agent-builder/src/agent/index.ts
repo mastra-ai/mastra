@@ -7,7 +7,7 @@ import type {
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreMessage } from '@mastra/core/llm';
-import type { AISDKV5OutputStream, MastraModelOutput, OutputSchema } from '@mastra/core/stream';
+import type { MastraModelOutput, OutputSchema } from '@mastra/core/stream';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter } from '@mastra/memory/processors';
 import { AgentBuilderDefaults } from '../defaults';
@@ -154,10 +154,10 @@ export class AgentBuilder extends Agent {
    * Enhanced stream method with AgentBuilder-specific configuration
    * Overrides the base Agent stream method to provide additional project context
    */
-  async stream<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
+  async stream<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
-  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+    streamOptions?: AgentExecutionOptions<OUTPUT>,
+  ): Promise<MastraModelOutput<OUTPUT>> {
     const { ...baseOptions } = streamOptions || {};
 
     const originalInstructions = await this.getInstructions({ requestContext: streamOptions?.requestContext });
@@ -184,14 +184,10 @@ export class AgentBuilder extends Agent {
     return super.stream(messages, enhancedOptions);
   }
 
-  async generate<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
+  async generate<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    options?: AgentExecutionOptions<OUTPUT, FORMAT>,
-  ): Promise<
-    FORMAT extends 'aisdk'
-      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
-      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
-  > {
+    options?: AgentExecutionOptions<OUTPUT>,
+  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
     const { ...baseOptions } = options || {};
 
     const originalInstructions = await this.getInstructions({ requestContext: options?.requestContext });

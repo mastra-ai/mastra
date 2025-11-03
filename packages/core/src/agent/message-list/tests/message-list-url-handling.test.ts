@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { MastraMessageV2 } from '../../types';
+import type { MastraDBMessage } from '../../types';
 import { MessageList } from '../index';
 
 describe('MessageList - File URL Handling', () => {
@@ -8,7 +8,7 @@ describe('MessageList - File URL Handling', () => {
     const imageUrl = 'https://httpbin.org/image/png';
 
     // Create a V2 message with a file part containing a URL
-    const v2Message: MastraMessageV2 = {
+    const v2Message: MastraDBMessage = {
       id: 'test-msg-1',
       role: 'user',
       content: {
@@ -38,7 +38,7 @@ describe('MessageList - File URL Handling', () => {
     expect((v5FilePart as any)?.url).not.toContain('data:image/png;base64,https://');
 
     // Get V2 messages back (used by InputProcessors)
-    const v2MessagesBack = messageList.get.all.v2();
+    const v2MessagesBack = messageList.get.all.db();
     const v2FilePartBack = v2MessagesBack[0].content.parts?.find((p: any) => p.type === 'file');
 
     // V2 should maintain the original URL
@@ -54,7 +54,7 @@ describe('MessageList - File URL Handling', () => {
     const imageUrl = 'https://httpbin.org/image/png';
 
     // Simulate what happens when stream receives messages with file parts
-    const inputMessage: MastraMessageV2 = {
+    const inputMessage: MastraDBMessage = {
       id: 'input-msg',
       role: 'user',
       content: {
@@ -73,7 +73,7 @@ describe('MessageList - File URL Handling', () => {
     messageList.add(inputMessage, 'user');
 
     // This is what InputProcessors would receive
-    const v2Messages = messageList.get.all.v2();
+    const v2Messages = messageList.get.all.db();
     const filePart = v2Messages[0].content.parts?.find(p => p.type === 'file');
 
     // The file part's data should be the original URL, not corrupted
@@ -96,7 +96,7 @@ describe('MessageList - File URL Handling', () => {
     const dataUri = `data:image/png;base64,${base64Data}`;
 
     // Test with different data formats
-    const messages: MastraMessageV2[] = [
+    const messages: MastraDBMessage[] = [
       {
         id: 'url-msg',
         role: 'user',
@@ -139,7 +139,7 @@ describe('MessageList - File URL Handling', () => {
       const v5Messages = list.get.all.aiV5.ui();
       const v5FilePart = v5Messages[0].parts.find((p: any) => p.type === 'file');
 
-      const v2Messages = list.get.all.v2();
+      const v2Messages = list.get.all.db();
       const v2FilePart = v2Messages[0].content.parts?.find((p: any) => p.type === 'file');
 
       if (msg.id === 'url-msg') {

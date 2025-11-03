@@ -115,6 +115,7 @@ import { vercelWeatherTool } from "../tools/vercelWeatherTool"; // Vercel AI SDK
 import { mastraTool } from "../tools/mastraTool"; // Mastra createTool tool
 
 export const mixedToolsAgent = new Agent({
+  id: "mixed-tools-agent",
   name: "Mixed Tools Agent",
   instructions: "You can use tools defined in different formats.",
   model: openai("gpt-4o-mini"),

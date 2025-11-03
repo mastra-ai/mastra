@@ -2,9 +2,9 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
-import type { CoreMessage, LanguageModelV1, CoreSystemMessage } from 'ai';
-import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import type { CoreMessage, CoreSystemMessage } from '@internal/ai-sdk-v4/message';
+import type { LanguageModelV1 } from '@internal/ai-sdk-v4/model';
+import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { APICallError, stepCountIs } from 'ai-v5';
 import type { SystemModelMessage } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
@@ -15,7 +15,7 @@ import { z } from 'zod';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
-import type { MastraMessageV2, StorageThreadType } from '../memory';
+import type { MastraDBMessage, StorageThreadType } from '../memory';
 import { MockMemory } from '../memory/mock';
 import { RequestContext } from '../request-context';
 import { MockStore } from '../storage';
@@ -1331,7 +1331,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
-        name: 'dynamic-title-agent',
+        id: 'dynamic-title-agent',
+        name: 'Dynamic Title Agent',
         instructions: 'test agent',
         model: dummyModel,
         memory: mockMemory,
@@ -1527,7 +1528,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const agent = new Agent({
-        name: 'update-model-agent',
+        id: 'update-model-agent',
+        name: 'Update Model Agent',
         instructions: 'test agent',
         model: standardModel,
       });
@@ -1697,7 +1699,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const agent = new Agent({
-        name: 'boolean-title-agent',
+        id: 'boolean-title-agent',
+        name: 'Boolean Title Agent',
         instructions: 'test agent',
         model: testModel,
         memory: mockMemory,
@@ -1807,7 +1810,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
-        name: 'error-title-agent',
+        id: 'error-title-agent',
+        name: 'Error Title Agent',
         instructions: 'test agent',
         model: dummyModel,
         memory: mockMemory,
@@ -3159,7 +3163,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should create a new thread with metadata using generate', async () => {
       const mockMemory = new MockMemory();
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'test',
         model: dummyModel,
         memory: mockMemory,
@@ -3328,7 +3333,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('generate - should still work with deprecated threadId and resourceId', async () => {
       const mockMemory = new MockMemory();
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'test',
         model: dummyModel,
         memory: mockMemory,
@@ -4249,11 +4255,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(caught).toBe(true);
 
         // After interruption, check what was saved
-        const messages = await mockMemory.getMessages({
+        const result = await mockMemory.getMessages({
           threadId: 'thread-partial-rescue-generate',
           resourceId: 'resource-partial-rescue-generate',
-          format: 'v2',
         });
+        const messages = result.messages;
 
         // User message should be saved
         expect(messages.find(m => m.role === 'user')).toBeTruthy();
@@ -4316,11 +4322,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }
 
         expect(saveCallCount).toBeGreaterThan(1);
-        const messages = await mockMemory.getMessages({
+        const result = await mockMemory.getMessages({
           threadId: 'thread-echo-generate',
           resourceId: 'resource-echo-generate',
-          format: 'v2',
         });
+        const messages = result.messages;
         expect(messages.length).toBeGreaterThan(0);
 
         const assistantMsg = messages.find(m => m.role === 'assistant');
@@ -4392,11 +4398,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           );
         }
         expect(saveCallCount).toBeGreaterThan(1);
-        const messages = await mockMemory.getMessages({
+        const result = await mockMemory.getMessages({
           threadId: 'thread-multi-generate',
           resourceId: 'resource-multi-generate',
-          format: 'v2',
         });
+        const messages = result.messages;
         expect(messages.length).toBeGreaterThan(0);
         const assistantMsg = messages.find(m => m.role === 'assistant');
         expect(assistantMsg).toBeDefined();
@@ -4430,11 +4436,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
         }
 
-        const messages = await mockMemory.getMessages({
+        const result = await mockMemory.getMessages({
           threadId: 'thread-1-generate',
           resourceId: 'resource-1-generate',
-          format: 'v2',
         });
+        const messages = result.messages;
         // Check that the last message matches the expected final output
         expect(
           messages[messages.length - 1]?.content?.parts?.some(
@@ -4480,11 +4486,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         expect(saveCallCount).toBe(1);
 
-        messages = await mockMemory.getMessages({
+        const result = await mockMemory.getMessages({
           threadId: `thread-2-${version}-generate`,
           resourceId: `resource-2-${version}-generate`,
-          format: 'v2',
         });
+        messages = result?.messages || [];
 
         expect(messages.length).toBe(1);
         expect(messages[0].role).toBe('user');
@@ -4524,12 +4530,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(err.message).toBe('Immediate interruption');
       }
 
-      const messages = await mockMemory.getMessages({
+      const result = await mockMemory.getMessages({
         threadId: 'thread-3-generate',
         resourceId: 'resource-3-generate',
       });
 
-      expect(messages.length).toBe(0);
+      expect(result.messages.length).toBe(0);
 
       expect(saveCallCount).toBe(0);
     });
@@ -4975,8 +4981,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
   describe(`${version} - Input Processors`, () => {
     let mockModel: MockLanguageModelV1 | MockLanguageModelV2;
 
-    // Helper function to create a MastraMessageV2
-    const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): MastraMessageV2 => ({
+    // Helper function to create a MastraDBMessage
+    const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage => ({
       id: crypto.randomUUID(),
       role,
       content: {
@@ -5088,7 +5094,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('basic functionality', () => {
       it('should run input processors before generation', async () => {
         const processor = {
-          name: 'test-processor',
+          id: 'test-processor',
+          name: 'Test Processor',
           processInput: async ({ messages }) => {
             messages.push(createMessage('Processor was here!'));
             return messages;
@@ -5116,7 +5123,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should run multiple processors in order', async () => {
         const processor1 = {
-          name: 'processor-1',
+          id: 'processor-1',
+          name: 'Processor 1',
           processInput: async ({ messages }) => {
             messages.push(createMessage('First processor'));
             return messages;
@@ -5124,7 +5132,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const processor2 = {
-          name: 'processor-2',
+          id: 'processor-2',
+          name: 'Processor 2',
           processInput: async ({ messages }) => {
             messages.push(createMessage('Second processor'));
             return messages;
@@ -5151,7 +5160,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should support async processors running in sequence', async () => {
         const processor1 = {
-          name: 'async-processor-1',
+          id: 'async-processor-1',
+          name: 'Async Processor 1',
           processInput: async ({ messages }) => {
             messages.push(createMessage('First processor'));
             return messages;
@@ -5159,7 +5169,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const processor2 = {
-          name: 'async-processor-2',
+          id: 'async-processor-2',
+          name: 'Async Processor 2',
           processInput: async ({ messages }) => {
             await new Promise(resolve => setTimeout(resolve, 10));
             messages.push(createMessage('Second processor'));
@@ -5190,7 +5201,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('tripwire functionality', () => {
       it('should handle processor abort with default message', async () => {
         const abortProcessor = {
-          name: 'abort-processor',
+          id: 'abort-processor',
+          name: 'Abort Processor',
           processInput: async ({ abort, messages }) => {
             abort();
             return messages;
@@ -5219,7 +5231,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should handle processor abort with custom message', async () => {
         const customAbortProcessor = {
-          name: 'custom-abort',
+          id: 'custom-abort',
+          name: 'Custom Abort',
           processInput: async ({ abort, messages }) => {
             abort('Custom abort reason');
             return messages;
@@ -5249,7 +5262,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let secondProcessorExecuted = false;
 
         const abortProcessor = {
-          name: 'abort-first',
+          id: 'abort-first',
+          name: 'Abort First',
           processInput: async ({ abort, messages }) => {
             abort('Stop here');
             return messages;
@@ -5257,7 +5271,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const shouldNotRunProcessor = {
-          name: 'should-not-run',
+          id: 'should-not-run',
+          name: 'Should Not Run',
           processInput: async ({ messages }) => {
             secondProcessorExecuted = true;
             messages.push(createMessage('This should not be added'));
@@ -5287,7 +5302,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('streaming with input processors', () => {
       it('should handle input processors with streaming', async () => {
         const streamProcessor = {
-          name: 'stream-processor',
+          id: 'stream-processor',
+          name: 'Stream Processor',
           processInput: async ({ messages }) => {
             messages.push(createMessage('Stream processor active'));
             return messages;
@@ -5318,7 +5334,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should handle abort in streaming with tripwire response', async () => {
         const streamAbortProcessor = {
-          name: 'stream-abort',
+          id: 'stream-abort',
+          name: 'Stream Abort',
           processInput: async ({ abort, messages }) => {
             abort('Stream aborted');
             return messages;
@@ -5359,7 +5376,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should include deployer methods when tripwire is triggered in streaming', async () => {
         const deployerAbortProcessor = {
-          name: 'deployer-abort',
+          id: 'deployer-abort',
+          name: 'Deployer Abort',
           processInput: async ({ abort, messages }) => {
             abort('Deployer test abort');
             return messages;
@@ -5421,7 +5439,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             const message: string = requestContext.get('processorMessage') || 'Default message';
             return [
               {
-                name: 'dynamic-processor',
+                id: 'dynamic-processor',
+                name: 'Dynamic Processor',
                 processInput: async ({ messages }) => {
                   messages.push(createMessage(message));
                   return messages;
@@ -5468,7 +5487,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     describe('message manipulation', () => {
       it('should allow processors to modify message content', async () => {
         const messageModifierProcessor = {
-          name: 'message-modifier',
+          id: 'message-modifier',
+          name: 'Message Modifier',
           processInput: async ({ messages }) => {
             // Access existing messages and modify them
             const lastMessage = messages[messages.length - 1];
@@ -5501,7 +5521,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should allow processors to filter or validate messages', async () => {
         const validationProcessor = {
-          name: 'validator',
+          id: 'validator',
+          name: 'Validator',
           processInput: async ({ messages, abort }) => {
             // Extract text content from all messages
             const textContent = messages
@@ -5550,6 +5571,294 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(invalidResult.tripwire).toBe(true);
         expect(invalidResult.tripwireReason).toBe('Content validation failed');
       });
+    });
+  });
+
+  describe(`${version} - UIMessageWithMetadata support`, () => {
+    let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+    const mockMemory = new MockMemory();
+
+    beforeEach(() => {
+      if (version === 'v1') {
+        dummyModel = new MockLanguageModelV1({
+          doGenerate: async () => ({
+            finishReason: 'stop',
+            usage: { completionTokens: 10, promptTokens: 3 },
+            text: 'Response acknowledging metadata',
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'Response' },
+                { type: 'text-delta', textDelta: ' acknowledging' },
+                { type: 'text-delta', textDelta: ' metadata' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
+                },
+              ],
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        });
+      } else {
+        dummyModel = new MockLanguageModelV2({
+          doStream: async () => ({
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'Response' },
+              { type: 'text-delta', id: '1', delta: ' acknowledging' },
+              { type: 'text-delta', id: '1', delta: ' metadata' },
+              { type: 'text-end', id: '1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          }),
+        });
+      }
+    });
+
+    it('should preserve metadata in generate method', async () => {
+      const agent = new Agent({
+        name: 'metadata-test-agent',
+        instructions: 'You are a helpful assistant',
+        model: dummyModel,
+        memory: mockMemory,
+      });
+
+      const messagesWithMetadata = [
+        {
+          role: 'user' as const,
+          content: 'Hello with metadata',
+          parts: [{ type: 'text' as const, text: 'Hello with metadata' }],
+          metadata: {
+            source: 'web-ui',
+            customerId: '12345',
+            context: { orderId: 'ORDER-789', status: 'pending' },
+          },
+        },
+      ];
+
+      if (version === 'v1') {
+        await agent.generateLegacy(messagesWithMetadata, {
+          memory: {
+            resource: 'customer-12345',
+            thread: {
+              id: 'support-thread',
+            },
+          },
+        });
+      } else {
+        await agent.generate(messagesWithMetadata, {
+          memory: {
+            resource: 'customer-12345',
+            thread: {
+              id: 'support-thread',
+            },
+          },
+        });
+      }
+      // Verify messages were saved with metadata
+      const result = await mockMemory.getMessages({
+        threadId: 'support-thread',
+        resourceId: 'customer-12345',
+        selectBy: {
+          last: 10,
+        },
+      });
+      const savedMessages = result.messages;
+
+      expect(savedMessages.length).toBeGreaterThan(0);
+
+      // Find the user message
+      const userMessage = savedMessages.find(m => m.role === 'user');
+      expect(userMessage).toBeDefined();
+
+      // Check that metadata was preserved in v2 format
+      if (
+        userMessage &&
+        'content' in userMessage &&
+        typeof userMessage.content === 'object' &&
+        'metadata' in userMessage.content
+      ) {
+        expect(userMessage.content.metadata).toEqual({
+          source: 'web-ui',
+          customerId: '12345',
+          context: { orderId: 'ORDER-789', status: 'pending' },
+        });
+      }
+    });
+
+    it('should preserve metadata in stream method', async () => {
+      const agent = new Agent({
+        name: 'metadata-stream-agent',
+        instructions: 'You are a helpful assistant',
+        model: dummyModel,
+        memory: mockMemory,
+      });
+
+      const messagesWithMetadata = [
+        {
+          role: 'user' as const,
+          content: 'Stream with metadata',
+          parts: [{ type: 'text' as const, text: 'Stream with metadata' }],
+          metadata: {
+            source: 'mobile-app',
+            sessionId: 'session-123',
+            deviceInfo: { platform: 'iOS', version: '17.0' },
+          },
+        },
+      ];
+
+      let stream;
+      if (version === 'v1') {
+        stream = await agent.streamLegacy(messagesWithMetadata, {
+          memory: {
+            resource: 'user-mobile',
+            thread: {
+              id: 'mobile-thread',
+            },
+          },
+        });
+      } else {
+        stream = await agent.stream(messagesWithMetadata, {
+          memory: {
+            resource: 'user-mobile',
+            thread: {
+              id: 'mobile-thread',
+            },
+          },
+        });
+      }
+
+      // Consume the stream
+      let finalText = '';
+      for await (const textPart of stream.textStream) {
+        finalText += textPart;
+      }
+
+      expect(finalText).toBe('Response acknowledging metadata');
+
+      // Verify messages were saved with metadata
+      const result = await mockMemory.getMessages({
+        threadId: 'mobile-thread',
+        resourceId: 'user-mobile',
+        selectBy: {
+          last: 10,
+        },
+      });
+      const savedMessages = result.messages;
+
+      expect(savedMessages.length).toBeGreaterThan(0);
+
+      // Find the user message
+      const userMessage = savedMessages.find(m => m.role === 'user');
+      expect(userMessage).toBeDefined();
+
+      // Check that metadata was preserved
+      if (
+        userMessage &&
+        'content' in userMessage &&
+        typeof userMessage.content === 'object' &&
+        'metadata' in userMessage.content
+      ) {
+        expect(userMessage.content.metadata).toEqual({
+          source: 'mobile-app',
+          sessionId: 'session-123',
+          deviceInfo: { platform: 'iOS', version: '17.0' },
+        });
+      }
+    });
+
+    it('should handle mixed messages with and without metadata', async () => {
+      const agent = new Agent({
+        name: 'mixed-metadata-agent',
+        instructions: 'You are a helpful assistant',
+        model: dummyModel,
+        memory: mockMemory,
+      });
+
+      const mixedMessages = [
+        {
+          role: 'user' as const,
+          content: 'First message with metadata',
+          parts: [{ type: 'text' as const, text: 'First message with metadata' }],
+          metadata: {
+            messageType: 'initial',
+            priority: 'high',
+          },
+        },
+        {
+          role: 'assistant' as const,
+          content: 'Response without metadata',
+          parts: [{ type: 'text' as const, text: 'Response without metadata' }],
+        },
+        {
+          role: 'user' as const,
+          content: 'Second user message',
+          parts: [{ type: 'text' as const, text: 'Second user message' }],
+          // No metadata on this message
+        },
+      ];
+
+      if (version === 'v1') {
+        await agent.generateLegacy(mixedMessages, {
+          memory: {
+            resource: 'mixed-user',
+            thread: {
+              id: 'mixed-thread',
+            },
+          },
+        });
+      } else {
+        await agent.generate(mixedMessages, {
+          memory: {
+            resource: 'mixed-user',
+            thread: {
+              id: 'mixed-thread',
+            },
+          },
+        });
+      }
+      // Verify messages were saved correctly
+      const result = await mockMemory.getMessages({
+        threadId: 'mixed-thread',
+        resourceId: 'mixed-user',
+        selectBy: {
+          last: 10,
+        },
+      });
+      const savedMessages = result?.messages || [];
+
+      expect(savedMessages.length).toBeGreaterThan(0);
+
+      // Find messages and check metadata
+      const messagesAsV2 = savedMessages as MastraDBMessage[];
+      const firstUserMessage = messagesAsV2.find(
+        m =>
+          m.role === 'user' &&
+          m.content.parts?.[0]?.type === 'text' &&
+          m.content.parts[0].text.includes('First message'),
+      );
+      const secondUserMessage = messagesAsV2.find(
+        m =>
+          m.role === 'user' && m.content.parts?.[0]?.type === 'text' && m.content.parts[0].text.includes('Second user'),
+      );
+
+      // First message should have metadata
+      expect(firstUserMessage?.content.metadata).toEqual({
+        messageType: 'initial',
+        priority: 'high',
+      });
+
+      // Second message should not have metadata
+      expect(secondUserMessage?.content.metadata).toBeUndefined();
     });
   });
 

@@ -88,6 +88,7 @@ export type ProviderModelsMap = {
     'deepseek-ai/deepseek-v3.1-terminus',
     'google/gemma-3-27b-it',
     'microsoft/phi-4-mini-instruct',
+    'minimaxai/minimax-m2',
     'moonshotai/kimi-k2-instruct',
     'moonshotai/kimi-k2-instruct-0905',
     'nvidia/cosmos-nemotron-34b',
@@ -324,6 +325,7 @@ export type ProviderModelsMap = {
     'venice-uncensored',
   ];
   readonly chutes: readonly [
+    'MiniMaxAI/MiniMax-M2',
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
     'Qwen/Qwen3-30B-A3B',
@@ -342,7 +344,6 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V3.1:THINKING',
     'deepseek-ai/DeepSeek-V3.2-Exp',
     'meituan-longcat/LongCat-Flash-Chat-FP8',
-    'minimaxai/MiniMax-M2',
     'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Instruct-75k',
     'moonshotai/Kimi-VL-A3B-Thinking',
@@ -623,6 +624,7 @@ export type ProviderModelsMap = {
     'nousresearch/deephermes-3-llama-3-8b-preview',
     'nousresearch/hermes-4-405b',
     'nousresearch/hermes-4-70b',
+    'nvidia/nemotron-nano-9b-v2',
     'openai/gpt-4.1',
     'openai/gpt-4.1-mini',
     'openai/gpt-4o-mini',
@@ -700,6 +702,25 @@ export type ProviderModelsMap = {
     'x-ai/grok-code-fast-1',
     'z-ai/glm-4.5-air',
     'z-ai/glm-4.6',
+  ];
+  readonly iflowcn: readonly [
+    'deepseek-r1',
+    'deepseek-v3',
+    'deepseek-v3.1',
+    'deepseek-v3.2',
+    'glm-4.6',
+    'kimi-k2',
+    'kimi-k2-0905',
+    'qwen3-235b',
+    'qwen3-235b-a22b-instruct',
+    'qwen3-235b-a22b-thinking-2507',
+    'qwen3-32b',
+    'qwen3-coder',
+    'qwen3-coder-plus',
+    'qwen3-max',
+    'qwen3-max-preview',
+    'qwen3-vl-plus',
+    'tstars2.0',
   ];
   readonly synthetic: readonly [
     'hf:MiniMaxAI/MiniMax-M2',
@@ -802,6 +823,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/gpt-oss-120b',
     'accounts/fireworks/models/gpt-oss-20b',
     'accounts/fireworks/models/kimi-k2-instruct',
+    'accounts/fireworks/models/minimax-m2',
     'accounts/fireworks/models/qwen3-235b-a22b',
     'accounts/fireworks/models/qwen3-coder-480b-a35b-instruct',
   ];

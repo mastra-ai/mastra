@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { MastraMessageV1 } from '../../../memory/types';
-import type { MastraMessageV2 } from '../../message-list';
+import type { MastraDBMessage } from '../../message-list';
 import { MessageList } from '../../message-list';
 import { convertToV1Messages } from './convert-to-mastra-v1';
 
@@ -16,7 +16,7 @@ describe('convertToV1Messages', () => {
     // which made them inaccessible to the AI. The fix ensures proper message
     // separation so the AI can cleanly reference previous tool interactions.
     // The additional tests below verify this separation more explicitly.
-    const messages: MastraMessageV2[] = [
+    const messages: MastraDBMessage[] = [
       {
         id: 'msg-1',
         role: 'assistant',
@@ -108,7 +108,7 @@ describe('convertToV1Messages', () => {
 
   it('should handle toolInvocations array even when parts array exists', () => {
     // Test that toolInvocations array is processed when message has parts
-    const messages: MastraMessageV2[] = [
+    const messages: MastraDBMessage[] = [
       {
         id: 'msg-2',
         role: 'assistant',
@@ -148,7 +148,7 @@ describe('convertToV1Messages', () => {
   });
 
   it('should handle mixed content with text, tool invocation, and more text', () => {
-    const testMessage: MastraMessageV2 = {
+    const testMessage: MastraDBMessage = {
       id: 'test-mixed-1',
       createdAt: new Date(),
       resourceId: 'resource-1',
@@ -221,7 +221,7 @@ describe('convertToV1Messages', () => {
   });
 
   it('should handle the exact message structure from issue #6087', () => {
-    const testMessage: MastraMessageV2 = {
+    const testMessage: MastraDBMessage = {
       id: 'test-issue-6087',
       createdAt: new Date(),
       resourceId: 'resource-1',
@@ -309,7 +309,7 @@ describe('convertToV1Messages', () => {
   });
 
   it('should handle multiple tool calls in a single message', () => {
-    const testMessage: MastraMessageV2 = {
+    const testMessage: MastraDBMessage = {
       id: 'test-multiple-tools',
       createdAt: new Date(),
       resourceId: 'resource-1',
@@ -446,7 +446,7 @@ describe('convertToV1Messages', () => {
   });
 
   it('should handle multiple tool calls with mixed toolInvocations array and parts', () => {
-    const testMessage: MastraMessageV2 = {
+    const testMessage: MastraDBMessage = {
       id: 'test-mixed-multiple',
       createdAt: new Date(),
       resourceId: 'resource-1',
@@ -620,7 +620,7 @@ describe('convertToV1Messages', () => {
 
   it('should handle weather tool message with text before and after tool invocation', () => {
     // Test case from actual log output
-    const testMessage: MastraMessageV2 = {
+    const testMessage: MastraDBMessage = {
       id: 'weather-paris-msg',
       createdAt: new Date(),
       resourceId: 'resource-1',
@@ -742,7 +742,7 @@ describe('convertToV1Messages', () => {
 
   it('should handle conversation with user asking about data from previous tool call', () => {
     // Test case showing user asking about humidity after weather check
-    const messages: MastraMessageV2[] = [
+    const messages: MastraDBMessage[] = [
       // Assistant's weather check
       {
         id: 'weather-msg',
@@ -860,7 +860,7 @@ describe('convertToV1Messages', () => {
   });
   it('should handle message starting with tool-invocation only (Rouen case)', () => {
     // Case that SHOULD work: tool call with NO text before or after
-    const testMessage: MastraMessageV2 = {
+    const testMessage: MastraDBMessage = {
       id: 'rouen-weather',
       createdAt: new Date(),
       resourceId: 'resource-1',
@@ -946,7 +946,7 @@ describe('convertToV1Messages', () => {
 
   it('should handle message with tool-invocation followed by text (Rungis case)', () => {
     // Case that SHOULD work but might not: tool call WITH text after
-    const testMessage: MastraMessageV2 = {
+    const testMessage: MastraDBMessage = {
       id: 'rungis-weather',
       createdAt: new Date(),
       resourceId: 'resource-1',
@@ -1049,7 +1049,7 @@ describe('convertToV1Messages', () => {
   it('should combine consecutive assistant text messages after tool calls (fixes #6087)', () => {
     // This test verifies that assistant text messages are properly combined
     // even when they come after tool invocations
-    const messages: MastraMessageV2[] = [
+    const messages: MastraDBMessage[] = [
       // First assistant message with tool call and text
       {
         id: 'msg-1',
@@ -1140,7 +1140,7 @@ describe('convertToV1Messages', () => {
 
   it('should preserve tool invocations when no toolInvocations array is present', () => {
     // Test case: message with only parts array, no toolInvocations array
-    const messages: MastraMessageV2[] = [
+    const messages: MastraDBMessage[] = [
       {
         id: 'msg-with-parts-only',
         role: 'assistant',
@@ -1185,7 +1185,7 @@ describe('convertToV1Messages', () => {
   it('should not combine tool invocation message with following assistant text message', () => {
     // This test reproduces the exact issue: tool invocation followed by assistant message
     // The tool invocation should not be lost when followed by a text-only assistant message
-    const messages: MastraMessageV2[] = [
+    const messages: MastraDBMessage[] = [
       // First message: tool invocation only (no text)
       {
         id: 'msg-tool',
@@ -1267,7 +1267,7 @@ describe('convertToV1Messages', () => {
 
   it('should handle structure that works (text + tool, no text after)', () => {
     // Structure that user says WORKS
-    const messages: MastraMessageV2[] = [
+    const messages: MastraDBMessage[] = [
       {
         id: 'working-msg',
         role: 'assistant',
@@ -1335,7 +1335,7 @@ describe('convertToV1Messages', () => {
 
   it('should handle exact structure from user report', () => {
     // Exact structure from user report
-    const messages: MastraMessageV2[] = [
+    const messages: MastraDBMessage[] = [
       {
         id: 'user-report-msg',
         role: 'assistant',
@@ -1433,7 +1433,7 @@ describe('convertToV1Messages', () => {
     // This test reproduces the exact scenario from the database where tool history
     // becomes inaccessible in later conversation turns
 
-    const messages: MastraMessageV2[] = [
+    const messages: MastraDBMessage[] = [
       // Message 1: User asks for weather
       {
         id: 'fbd2f506-90e6-4f52-8ba4-633abe9e8442',
@@ -1701,7 +1701,7 @@ describe('convertToV1Messages', () => {
     const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'weatherAgent' });
 
     // Add the exact v2 messages from the database
-    const v2Messages: MastraMessageV2[] = [
+    const v2Messages: MastraDBMessage[] = [
       {
         id: '17949558-8a2b-4841-990d-ce05d29a8afb',
         role: 'assistant',
@@ -1766,7 +1766,7 @@ describe('convertToV1Messages', () => {
     messageList.addSystem('You are a helpful weather assistant that provides accurate weather information.', 'agent');
 
     // Simulate loading previous messages from memory (database)
-    const memoryMessages: MastraMessageV2[] = [
+    const memoryMessages: MastraDBMessage[] = [
       // First user message
       {
         id: 'user-1',
@@ -1828,7 +1828,7 @@ describe('convertToV1Messages', () => {
     messageList.add(memoryMessages, 'memory');
 
     // Add new user message (like when user asks follow-up)
-    const newUserMessage: MastraMessageV2 = {
+    const newUserMessage: MastraDBMessage = {
       id: 'user-2',
       role: 'user',
       createdAt: new Date('2025-08-05T22:58:38.656Z'),
@@ -1881,7 +1881,7 @@ describe('convertToV1Messages - Content Duplication Bug (Issue #7271)', () => {
     // Where multiple split messages were created with identical content
     // instead of properly distributing different parts
 
-    const complexMessage: MastraMessageV2 = {
+    const complexMessage: MastraDBMessage = {
       id: 'msg-complex',
       role: 'assistant',
       createdAt: new Date('2024-01-01'),
@@ -1980,7 +1980,7 @@ describe('convertToV1Messages - Content Duplication Bug (Issue #7271)', () => {
 
   it('should handle large complex message with multiple tool invocations and text parts', () => {
     // Simulating the 24,624 character message from the bug report
-    const largeMessage: MastraMessageV2 = {
+    const largeMessage: MastraDBMessage = {
       id: 'large-msg',
       role: 'assistant',
       createdAt: new Date('2024-01-01'),
@@ -2056,7 +2056,7 @@ describe('convertToV1Messages - Content Duplication Bug (Issue #7271)', () => {
 
   it('should properly split messages even when content field is undefined', () => {
     // From the bug report, content can be undefined in V2 messages
-    const messageWithUndefinedContent: MastraMessageV2 = {
+    const messageWithUndefinedContent: MastraDBMessage = {
       id: 'undefined-content-msg',
       role: 'assistant',
       createdAt: new Date('2024-01-01'),

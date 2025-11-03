@@ -163,6 +163,7 @@ describe('Tools Handlers', () => {
 
   describe('executeAgentToolHandler', () => {
     const mockAgent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions: 'You are a helpful assistant',
       tools: mockTools,
@@ -199,6 +200,7 @@ describe('Tools Handlers', () => {
     it('should throw error when tool is not executable', async () => {
       const nonExecutableTool = { ...mockTool, execute: undefined };
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: `You're a helpful assistant`,
         tools: { [nonExecutableTool.id]: nonExecutableTool },
@@ -281,6 +283,7 @@ describe('Tools Handlers', () => {
 
   describe('getAgentToolHandler', () => {
     const mockAgent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions: 'You are a helpful assistant',
       tools: mockTools,

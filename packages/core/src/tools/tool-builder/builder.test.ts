@@ -1,9 +1,9 @@
 import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV1 as LanguageModel } from '@internal/ai-sdk-v4/model';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
-import type { LanguageModel } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';
@@ -12,7 +12,6 @@ import type { AnyAISpan } from '../../ai-tracing';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { CoreToolBuilder } from './builder';
-import 'dotenv/config';
 
 export const isOpenAIModel = (model: LanguageModel | LanguageModelV2) =>
   model.provider.includes('openai') || model.modelId.includes('openai');
@@ -152,6 +151,7 @@ async function runStructuredOutputSchemaTest(
         : 'I am testing that I can generate structured outputs from your response. Your sole purpose is to give me any type of response but make sure that you have the requested input somewhere in there.';
 
     const agent = new Agent({
+      id: `test-agent-${model.modelId}`,
       name: `test-agent-${model.modelId}`,
       instructions,
       model: model,
@@ -233,6 +233,7 @@ async function runSingleToolSchemaTest(
 ): Promise<Result> {
   try {
     const agent = new Agent({
+      id: `test-agent-${model.modelId}`,
       name: `test-agent-${model.modelId}`,
       instructions: `You are a test agent. Your task is to call the tool named '${toolName}' with any valid arguments. This is very important as it's your primary purpose`,
       model: model,

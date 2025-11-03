@@ -494,6 +494,86 @@ const memory = new Memory({
 
 If you want to adopt the new default behavior, you can optionally remove explicit `scope: 'resource'` declarations as they're now redundant.
 
+### Changed: Message Format Unification
+
+**Breaking Changes:**
+
+1. `MastraMessageV2` type renamed to `MastraDBMessage`
+2. `format` parameter removed from all get methods, `MastraDBMessage` is always the returned format, which can then be converted as needed via helper utils in `@mastra/ai-sdk`
+3. MessageList `.v2()` methods renamed to `.db()`
+4. AI SDK format conversion moved to `@mastra/ai-sdk/ui`
+
+**Why these changes?**
+
+- Provide a consistent and predictable API across all memory methods
+- Clarify the purpose of message types with better naming
+- Simplify the API by removing unnecessary format parameters
+- Enable better tree-shaking by separating UI conversion utilities
+
+**Migration:**
+
+#### 1. Update Type Imports
+
+Replace all instances of `MastraMessageV2` with `MastraDBMessage`:
+
+```typescript
+// Before
+import { MastraMessageV2 } from "@mastra/core";
+function yourCustomFunction(input: MastraMessageV2) {}
+// After
+import { MastraDBMessage } from "@mastra/core";
+function yourCustomFunction(input: MastraDBMessage) {}
+```
+
+#### 2. Update Memory Method Return Types
+
+The `rememberMessages` method now returns an object wrapper for consistency between all methods:
+
+```typescript
+// Before
+const messages = await memory.rememberMessages({ threadId, resourceId });
+
+// After
+const { messages } = await memory.rememberMessages({ threadId, resourceId });
+```
+
+#### 4. Update AI SDK Format Conversion
+
+Message format conversion for AI SDK compatibility has moved to dedicated utility functions:
+
+```typescript
+// Before
+import { convertMessages } from '@mastra/core';
+const uiMessages = convertMessages(messages).to('AI.V5');
+
+// After
+import { toAISdkV5Messages, toAISdkV4Messages } from '@mastra/ai-sdk/ui';
+
+// For AI SDK v5
+const v5Messages = toAISdkV5Messages(messages);
+
+// For AI SDK v4
+const v4Messages = toAISdkV4Messages(messages);
+```
+
+#### 5. Remove Format Parameters
+
+The `format` parameter has been removed from all get methods. `MastraDBMessage` is now the default return format everywhere:
+
+```typescript
+// Before
+const messages = await memory.getMessages({ threadId, format: "v2" });
+const uiMessages = await memory.getMessages({ threadId, format: "ui" });
+
+// After
+const result = await memory.query({ threadId });
+const messages = result.messages; // Always MastraDBMessage[]
+
+// Use conversion functions for AI SDK formats
+import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
+const uiMessages = toAISdkV5Messages(messages);
+```
+
 ### Deprecated: `format: "aisdk"`
 
 The `format: "aisdk"` option in `stream()`/`generate()` methods is deprecated. Use the `@mastra/ai-sdk` package instead. Learn more in the [Using Vercel AI SDK documentation](/docs/frameworks/agentic-uis/ai-sdk).
