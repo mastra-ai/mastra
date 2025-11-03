@@ -14,6 +14,8 @@ import type {
 import {
   ensureDate,
   MemoryStorage,
+  normalizePerPage,
+  preservePerPageForResponse,
   resolveMessageLimit,
   serializeDate,
   TABLE_MESSAGES,
@@ -68,7 +70,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
       const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-      const perPage = this.normalizePerPage(perPageInput, 100);
+      const perPage = normalizePerPage(perPageInput, 100);
 
       if (page < 0) {
         throw new MastraError(
@@ -114,7 +116,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       return {
         page,
-        perPage: this.preservePerPageForResponse(perPageInput, perPage),
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         total: threads.length,
         hasMore: offset + perPage < threads.length,
         threads: paginatedThreads,
@@ -812,7 +814,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
 
     try {
-      const perPage = this.normalizePerPage(perPageInput, 40);
+      const perPage = normalizePerPage(perPageInput, 40);
 
       if (page < 0) {
         throw new MastraError(
@@ -928,7 +930,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           messages: [],
           total,
           page,
-          perPage: this.preservePerPageForResponse(perPageInput, perPage),
+          perPage: preservePerPageForResponse(perPageInput, perPage),
           hasMore: false,
         };
       }
@@ -1048,7 +1050,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         messages: finalMessages,
         total,
         page,
-        perPage: this.preservePerPageForResponse(perPageInput, perPage),
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         hasMore,
       };
     } catch (error: any) {
@@ -1069,12 +1071,12 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      const perPage = this.normalizePerPage(perPageInput, 40);
+      const perPage = normalizePerPage(perPageInput, 40);
       return {
         messages: [],
         total: 0,
         page,
-        perPage: this.preservePerPageForResponse(perPageInput, perPage),
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         hasMore: false,
       };
     }

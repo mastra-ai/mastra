@@ -1,5 +1,6 @@
 import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
+import { normalizePerPage, preservePerPageForResponse } from '../../base';
 import type {
   PaginationInfo,
   StorageGetMessagesArg,
@@ -107,7 +108,7 @@ export class InMemoryMemory extends MemoryStorage {
     const { field, direction } = this.parseOrderBy(orderBy);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 40)
-    const perPage = this.normalizePerPage(perPageInput, 40);
+    const perPage = normalizePerPage(perPageInput, 40);
 
     if (page < 0) {
       throw new Error('page must be >= 0');
@@ -289,7 +290,7 @@ export class InMemoryMemory extends MemoryStorage {
       messages,
       total: totalThreadMessages,
       page,
-      perPage: this.preservePerPageForResponse(perPageInput, perPage),
+      perPage: preservePerPageForResponse(perPageInput, perPage),
       hasMore,
     };
   }
@@ -603,7 +604,7 @@ export class InMemoryMemory extends MemoryStorage {
   ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
-    const perPage = this.normalizePerPage(perPageInput, 100);
+    const perPage = normalizePerPage(perPageInput, 100);
 
     if (page < 0) {
       throw new Error('page must be >= 0');
@@ -628,7 +629,7 @@ export class InMemoryMemory extends MemoryStorage {
       threads: clonedThreads.slice(offset, offset + perPage),
       total: clonedThreads.length,
       page,
-      perPage: this.preservePerPageForResponse(perPageInput, perPage),
+      perPage: preservePerPageForResponse(perPageInput, perPage),
       hasMore: offset + perPage < clonedThreads.length,
     };
   }

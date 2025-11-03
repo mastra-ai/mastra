@@ -8,6 +8,8 @@ import {
   TABLE_THREADS,
   resolveMessageLimit,
   TABLE_MESSAGES,
+  preservePerPageForResponse,
+  normalizePerPage,
 } from '@mastra/core/storage';
 import type {
   StorageGetMessagesArg,
@@ -77,7 +79,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
   ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
-    const perPage = this.normalizePerPage(perPageInput, 100);
+    const perPage = normalizePerPage(perPageInput, 100);
 
     if (page < 0) {
       throw new MastraError(
@@ -125,7 +127,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         threads: paginatedThreads,
         total,
         page,
-        perPage: this.preservePerPageForResponse(perPageInput, perPage),
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         hasMore,
       };
     } catch (error) {
@@ -148,7 +150,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         threads: [],
         total: 0,
         page,
-        perPage: this.preservePerPageForResponse(perPageInput, perPage),
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         hasMore: false,
       };
     }
@@ -597,7 +599,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     const threadMessagesKey = getThreadMessagesKey(threadId);
 
     try {
-      const perPage = this.normalizePerPage(perPageInput, 40);
+      const perPage = normalizePerPage(perPageInput, 40);
 
       if (page < 0) {
         throw new MastraError(
@@ -628,7 +630,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
           messages: [],
           total: 0,
           page,
-          perPage: this.preservePerPageForResponse(perPageInput, perPage),
+          perPage: preservePerPageForResponse(perPageInput, perPage),
           hasMore: false,
         };
       }
@@ -765,7 +767,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         messages: finalMessages,
         total,
         page,
-        perPage: this.preservePerPageForResponse(perPageInput, perPage),
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         hasMore,
       };
     } catch (error) {
@@ -783,12 +785,12 @@ export class StoreMemoryUpstash extends MemoryStorage {
       );
       this.logger.error(mastraError.toString());
       this.logger?.trackException(mastraError);
-      const perPage = this.normalizePerPage(perPageInput, 40);
+      const perPage = normalizePerPage(perPageInput, 40);
       return {
         messages: [],
         total: 0,
         page,
-        perPage: this.preservePerPageForResponse(perPageInput, perPage),
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         hasMore: false,
       };
     }

@@ -10,6 +10,8 @@ import {
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_RESOURCES,
+  normalizePerPage,
+  preservePerPageForResponse,
 } from '@mastra/core/storage';
 import type {
   PaginationInfo,
@@ -213,7 +215,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-    const perPage = this.normalizePerPage(perPageInput, 100);
+    const perPage = normalizePerPage(perPageInput, 100);
     const offset = page * perPage;
     const { field, direction } = this.parseOrderBy(orderBy);
     const fullTableName = this.operations.getTableName(TABLE_THREADS);
@@ -250,7 +252,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         threads,
         total,
         page,
-        perPage: this.preservePerPageForResponse(perPageInput, perPage),
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         hasMore: offset + perPage < total,
       };
     } catch (error) {

@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT, normalizePerPage } from '@mastra/core/storage';
 import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
@@ -420,7 +420,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
 
       let query = `SELECT * FROM ${tableName} ${whereClause} ORDER BY [seq_id] DESC`;
       if (perPage !== undefined && page !== undefined) {
-        const normalizedPerPage = this.normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
+        const normalizedPerPage = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
         const offset = page * normalizedPerPage;
         query += ` OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
         request.input('perPage', normalizedPerPage);

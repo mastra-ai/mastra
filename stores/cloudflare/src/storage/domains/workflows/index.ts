@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, ensureDate, WorkflowsStorage } from '@mastra/core/storage';
+import { TABLE_WORKFLOW_SNAPSHOT, ensureDate, WorkflowsStorage, normalizePerPage } from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { StoreOperationsCloudflare } from '../operations';
@@ -187,7 +187,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
         );
       }
 
-      const normalizedPerPage = this.normalizePerPage(perPage, 20);
+      const normalizedPerPage = normalizePerPage(perPage, 20);
       const offset = page * normalizedPerPage;
       // List all keys in the workflow snapshot table
       const prefix = this.buildWorkflowSnapshotPrefix({ workflowName });

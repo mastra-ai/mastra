@@ -1,5 +1,5 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT, safelyParseJSON } from '@mastra/core/storage';
+import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT, safelyParseJSON, normalizePerPage } from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { StoreOperationsMongoDB } from '../operations';
@@ -150,7 +150,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       let cursor = collection.find(query).sort({ createdAt: -1 });
       if (options.page !== undefined && options.perPage !== undefined) {
         total = await collection.countDocuments(query);
-        const normalizedPerPage = this.normalizePerPage(options.perPage, Number.MAX_SAFE_INTEGER);
+        const normalizedPerPage = normalizePerPage(options.perPage, Number.MAX_SAFE_INTEGER);
         const offset = options.page * normalizedPerPage;
         cursor = cursor.skip(offset);
         cursor = cursor.limit(normalizedPerPage);

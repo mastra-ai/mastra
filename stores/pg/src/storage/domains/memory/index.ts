@@ -4,6 +4,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
   MemoryStorage,
+  normalizePerPage,
+  preservePerPageForResponse,
   resolveMessageLimit,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -110,7 +112,7 @@ export class MemoryPG extends MemoryStorage {
   ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
-    const perPage = this.normalizePerPage(perPageInput, 100);
+    const perPage = normalizePerPage(perPageInput, 100);
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
       const baseQuery = `FROM ${tableName} WHERE "resourceId" = $1`;
@@ -126,7 +128,7 @@ export class MemoryPG extends MemoryStorage {
           threads: [],
           total: 0,
           page,
-          perPage: this.preservePerPageForResponse(perPageInput, perPage),
+          perPage: preservePerPageForResponse(perPageInput, perPage),
           hasMore: false,
         };
       }
@@ -145,7 +147,7 @@ export class MemoryPG extends MemoryStorage {
         threads,
         total,
         page,
-        perPage: this.preservePerPageForResponse(perPageInput, perPage),
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         hasMore: offset + threads.length < total,
       };
     } catch (error) {
@@ -167,7 +169,7 @@ export class MemoryPG extends MemoryStorage {
         threads: [],
         total: 0,
         page,
-        perPage: this.preservePerPageForResponse(perPageInput, perPage),
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         hasMore: false,
       };
     }

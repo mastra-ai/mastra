@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { WorkflowsStorage } from '@mastra/core/storage';
+import { normalizePerPage, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
@@ -171,7 +171,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
         );
       }
 
-      const normalizedPerPage = this.normalizePerPage(perPage, 10);
+      const normalizedPerPage = normalizePerPage(perPage, 10);
       const offset = page * normalizedPerPage;
 
       let query;

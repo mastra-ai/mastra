@@ -1,7 +1,7 @@
 import type { Connection } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { WorkflowRun, StorageListWorkflowRunsInput, WorkflowRuns } from '@mastra/core/storage';
-import { ensureDate, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import { ensureDate, normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 function parseWorkflowRun(row: any): WorkflowRun {
@@ -212,7 +212,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       }
 
       if (args?.perPage !== undefined && args?.page !== undefined) {
-        const normalizedPerPage = this.normalizePerPage(args.perPage, Number.MAX_SAFE_INTEGER);
+        const normalizedPerPage = normalizePerPage(args.perPage, Number.MAX_SAFE_INTEGER);
 
         if (args.page < 0 || !Number.isInteger(args.page)) {
           throw new MastraError(

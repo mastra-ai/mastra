@@ -2,7 +2,7 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
-import { MemoryStorage, resolveMessageLimit } from '@mastra/core/storage';
+import { MemoryStorage, normalizePerPage, preservePerPageForResponse, resolveMessageLimit } from '@mastra/core/storage';
 import type {
   PaginationInfo,
   StorageGetMessagesArg,
@@ -373,7 +373,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
 
     try {
-      const perPage = this.normalizePerPage(perPageInput, 40);
+      const perPage = normalizePerPage(perPageInput, 40);
 
       if (page < 0) {
         throw new MastraError(
@@ -459,7 +459,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           messages: [],
           total: 0,
           page,
-          perPage: this.preservePerPageForResponse(perPageInput, perPage),
+          perPage: preservePerPageForResponse(perPageInput, perPage),
           hasMore: false,
         };
       }
@@ -513,7 +513,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         messages: finalMessages,
         total,
         page,
-        perPage: this.preservePerPageForResponse(perPageInput, perPage),
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         hasMore,
       };
     } catch (error: any) {
@@ -531,12 +531,12 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      const perPage = this.normalizePerPage(perPageInput, 40);
+      const perPage = normalizePerPage(perPageInput, 40);
       return {
         messages: [],
         total: 0,
         page,
-        perPage: this.preservePerPageForResponse(perPageInput, perPage),
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         hasMore: false,
       };
     }
@@ -632,7 +632,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-    const perPage = this.normalizePerPage(perPageInput, 100);
+    const perPage = normalizePerPage(perPageInput, 100);
 
     if (page < 0) {
       throw new MastraError(
@@ -679,7 +679,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         threads: paginatedThreads,
         total,
         page,
-        perPage: this.preservePerPageForResponse(perPageInput, perPage),
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         hasMore,
       };
     } catch (error) {

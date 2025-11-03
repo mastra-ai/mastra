@@ -1,6 +1,6 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { StoreOperationsClickhouse } from '../operations';
@@ -204,7 +204,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
       const usePagination = perPage !== undefined && page !== undefined;
-      const normalizedPerPage = usePagination ? this.normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
+      const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
       const offset = usePagination ? page * normalizedPerPage : 0;
       const limitClause = usePagination ? `LIMIT ${normalizedPerPage}` : '';
       const offsetClause = usePagination ? `OFFSET ${offset}` : '';

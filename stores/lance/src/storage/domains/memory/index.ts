@@ -5,6 +5,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
   MemoryStorage,
+  normalizePerPage,
+  preservePerPageForResponse,
   resolveMessageLimit,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -576,7 +578,7 @@ export class StoreMemoryLance extends MemoryStorage {
   ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
       const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-      const perPage = this.normalizePerPage(perPageInput, 100);
+      const perPage = normalizePerPage(perPageInput, 100);
 
       if (page < 0) {
         throw new MastraError(
@@ -629,7 +631,7 @@ export class StoreMemoryLance extends MemoryStorage {
         threads,
         total,
         page,
-        perPage: this.preservePerPageForResponse(perPageInput, perPage),
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         hasMore: offset + perPage < total,
       };
     } catch (error: any) {

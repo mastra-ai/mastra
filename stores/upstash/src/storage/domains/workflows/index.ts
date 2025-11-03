@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Redis } from '@upstash/redis';
@@ -265,7 +265,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
 
       // Apply pagination if requested
       if (perPage !== undefined && page !== undefined) {
-        const normalizedPerPage = this.normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
+        const normalizedPerPage = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
         const offset = page * normalizedPerPage;
         runs = runs.slice(offset, offset + normalizedPerPage);
       }

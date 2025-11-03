@@ -1,4 +1,5 @@
 import type { StepResult, WorkflowRunState } from '../../../workflows';
+import { normalizePerPage } from '../../base';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../constants';
 import type { StorageWorkflowRun, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
 import type { StoreOperations } from '../operations';
@@ -210,7 +211,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     // Apply pagination
     if (perPage !== undefined && page !== undefined) {
       // Use MAX_SAFE_INTEGER as default to maintain "no pagination" behavior when undefined
-      const normalizedPerPage = this.normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
+      const normalizedPerPage = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
       const offset = page * normalizedPerPage;
       const start = offset;
       const end = start + normalizedPerPage;

@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { IDatabase } from 'pg-promise';
@@ -253,7 +253,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         total = Number(countResult.count);
       }
 
-      const normalizedPerPage = usePagination ? this.normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
+      const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
       const offset = usePagination ? page * normalizedPerPage : undefined;
 
       // Get results
