@@ -36,7 +36,7 @@ function NavbarContentDesktop() {
           <div className="flex gap-4 items-center">
             <GithubStarCount />
             {/* Adding locale control to header for ease of access in GT implementation*/}
-          
+
             <div className="hidden lg:flex items-center gap-2">
               <LocaleControl size="sm" className="py-3" />
               <ThemeSwitcher />

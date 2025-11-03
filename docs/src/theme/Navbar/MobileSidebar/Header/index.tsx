@@ -73,7 +73,7 @@ export default function NavbarMobileSidebarHeader(): ReactNode {
         <CloseButton />
       </div>
       <div className="px-4 flex items-center gap-2 flex-col">
-        <LocaleControl/>
+        <LocaleControl />
         <MobileDocsDropdown />
       </div>
     </div>
