@@ -1,5 +1,10 @@
 import type { Mastra } from '@mastra/core/mastra';
-import type { ThreadOrderBy, ThreadSortDirection } from '@mastra/core/storage';
+import type {
+  ThreadOrderBy,
+  ThreadSortDirection,
+  StorageOrderBy,
+  StorageListMessagesInput,
+} from '@mastra/core/storage';
 import {
   getMemoryStatusHandler as getOriginalMemoryStatusHandler,
   getMemoryConfigHandler as getOriginalMemoryConfigHandler,
@@ -247,9 +252,9 @@ export async function listMessagesHandler(c: Context) {
     const resourceId = c.req.query('resourceId');
     const page = parsePage(c.req.query('page'));
     const perPage = parsePerPage(c.req.query('perPage'));
-    const orderBy = parseJsonParam(c.req.query('orderBy'));
-    const include = parseJsonParam(c.req.query('include'));
-    const filter = parseJsonParam(c.req.query('filter'));
+    const orderBy = parseJsonParam<StorageOrderBy>(c.req.query('orderBy'));
+    const include = parseJsonParam<StorageListMessagesInput['include']>(c.req.query('include'));
+    const filter = parseJsonParam<StorageListMessagesInput['filter']>(c.req.query('filter'));
 
     const result = await getOriginalListMessagesHandler({
       mastra,
