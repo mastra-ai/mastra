@@ -111,10 +111,6 @@
     "message": "Installation",
     "description": "The label for the doc item 'Installation' in sidebar 'docsSidebar', linking to the doc getting-started/installation"
   },
-  "sidebar.docsSidebar.doc.Playground": {
-    "message": "Playground",
-    "description": "The label for the doc item 'Playground' in sidebar 'docsSidebar', linking to the doc getting-started/studio"
-  },
   "sidebar.docsSidebar.doc.Project Structure": {
     "message": "Project Structure",
     "description": "The label for the doc item 'Project Structure' in sidebar 'docsSidebar', linking to the doc getting-started/project-structure"
@@ -343,22 +339,6 @@
     "message": "Azure App Services",
     "description": "The label for the doc item 'Azure App Services' in sidebar 'docsSidebar', linking to the doc deployment/cloud-providers/azure-app-services"
   },
-  "sidebar.docsSidebar.doc.mastra-cloud.overview": {
-    "message": "Overview",
-    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc mastra-cloud/overview"
-  },
-  "sidebar.docsSidebar.doc.Setup & Deploy": {
-    "message": "Setup & Deploy",
-    "description": "The label for the doc item 'Setup & Deploy' in sidebar 'docsSidebar', linking to the doc mastra-cloud/setting-up"
-  },
-  "sidebar.docsSidebar.doc.Dashboard": {
-    "message": "Dashboard",
-    "description": "The label for the doc item 'Dashboard' in sidebar 'docsSidebar', linking to the doc mastra-cloud/dashboard"
-  },
-  "sidebar.docsSidebar.doc.Observability": {
-    "message": "Observability",
-    "description": "The label for the doc item 'Observability' in sidebar 'docsSidebar', linking to the doc mastra-cloud/observability"
-  },
   "sidebar.docsSidebar.doc.observability.overview": {
     "message": "Overview",
     "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc observability/overview"
@@ -534,5 +514,25 @@
   "sidebar.docsSidebar.doc.Discord": {
     "message": "Discord",
     "description": "The label for the doc item 'Discord' in sidebar 'docsSidebar', linking to the doc community/discord"
+  },
+  "sidebar.docsSidebar.doc.Studio": {
+    "message": "Studio",
+    "description": "The label for the doc item 'Studio' in sidebar 'docsSidebar', linking to the doc getting-started/studio"
+  },
+  "sidebar.docsSidebar.doc.mastra.cloud.overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docsSidebar', linking to the doc mastra-cloud/overview"
+  },
+  "sidebar.docsSidebar.doc.mastra.cloud.setting-up": {
+    "message": "Setup & Deploy",
+    "description": "The label for the doc item 'Setup & Deploy' in sidebar 'docsSidebar', linking to the doc mastra-cloud/setting-up"
+  },
+  "sidebar.docsSidebar.doc.mastra.cloud.dashboard": {
+    "message": "Dashboard",
+    "description": "The label for the doc item 'Dashboard' in sidebar 'docsSidebar', linking to the doc mastra-cloud/dashboard"
+  },
+  "sidebar.docsSidebar.doc.mastra.cloud.observability": {
+    "message": "Observability",
+    "description": "The label for the doc item 'Observability' in sidebar 'docsSidebar', linking to the doc mastra-cloud/observability"
   }
 }
