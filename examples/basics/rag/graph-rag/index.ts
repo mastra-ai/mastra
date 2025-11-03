@@ -16,7 +16,8 @@ const graphRagTool = createGraphRAGTool({
 });
 
 export const ragAgent = new Agent({
-  name: 'GraphRAG Agent',
+  id: 'graph-rag-agent',
+  name: 'Graph RAG Agent',
   instructions: `You are a helpful assistant that answers questions based on the provided context. Format your answers as follows:
 
 1. DIRECT FACTS: List only the directly stated facts from the text relevant to the question (2-3 bullet points)

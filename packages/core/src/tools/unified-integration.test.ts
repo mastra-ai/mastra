@@ -87,7 +87,8 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
 
       // Create agent with the tool
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'You are a test agent',
         model: mockModel as any,
         tools: {
@@ -152,7 +153,8 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
       });
 
       const agent = new Agent({
-        name: 'multi-tool-agent',
+        id: 'multi-tool-agent',
+        name: 'Multi Tool Agent',
         instructions: 'Test multiple tool calls',
         model: mockModel as any,
         tools: { 'test-tool': tool as any },
@@ -205,7 +207,7 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
       workflow.then(prepareStep).then(toolStep).commit();
 
       // Create and run the workflow
-      const run = await workflow.createRunAsync({
+      const run = await workflow.createRun({
         runId: 'workflow-run-123',
       });
 
@@ -250,7 +252,7 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
 
       workflow.parallel([createStep(tool1 as any), createStep(tool2 as any)]).commit();
 
-      const run = await workflow.createRunAsync({
+      const run = await workflow.createRun({
         runId: 'parallel-run-456',
       });
 

@@ -10,7 +10,7 @@ The `.resume()` method resumes a suspended workflow run with new data, allowing 
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({ inputData: { value: "initial data" } });
 
@@ -147,6 +147,6 @@ if (result.status === "suspended") {
 ## Related
 
 - [Workflows overview](/docs/workflows/overview#running-workflows)
-- [Workflow.createRunAsync()](../workflow-methods/create-run)
+- [Workflow.createRun()](../workflow-methods/create-run)
 - [Suspend and resume](/docs/workflows/suspend-and-resume)
 - [Human in the loop](/docs/workflows/human-in-the-loop)

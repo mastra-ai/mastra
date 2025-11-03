@@ -300,7 +300,7 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveThread({ thread: thread2 });
 
       const { threads } = await retryUntil(
-        async () => await store.listThreadsByResourceId({ resourceId: thread1.resourceId, limit: 10, offset: 0 }),
+        async () => await store.listThreadsByResourceId({ resourceId: thread1.resourceId, perPage: 10, page: 0 }),
         result => result?.threads?.length === 2,
       );
       expect(threads).toHaveLength(2);
@@ -1192,8 +1192,8 @@ describe.skip('CloudflareStore REST API', () => {
       // Get first page
       const page1 = await store.listWorkflowRuns({
         namespace: testNamespace,
-        limit: 2,
-        offset: 0,
+        perPage: 2,
+        page: 0,
       });
       expect(page1.runs).toHaveLength(2);
       expect(page1.total).toBe(3); // Total count of all records
@@ -1207,8 +1207,8 @@ describe.skip('CloudflareStore REST API', () => {
       // Get second page
       const page2 = await store.listWorkflowRuns({
         namespace: testNamespace,
-        limit: 2,
-        offset: 2,
+        perPage: 2,
+        page: 1,
       });
       expect(page2.runs).toHaveLength(1);
       expect(page2.total).toBe(3);
@@ -1340,7 +1340,7 @@ describe.skip('CloudflareStore REST API', () => {
 
       // Should be able to retrieve thread
       const { threads } = await retryUntil(
-        async () => await store.listThreadsByResourceId({ resourceId: thread.resourceId, limit: 10, offset: 0 }),
+        async () => await store.listThreadsByResourceId({ resourceId: thread.resourceId, perPage: 10, page: 0 }),
         result => result?.threads?.length === 1,
       );
       expect(threads).toHaveLength(1);
@@ -1541,7 +1541,7 @@ describe.skip('CloudflareStore REST API', () => {
       expect(finalOrder).toHaveLength(0);
 
       // Verify thread is gone
-      const { threads } = await store.listThreadsByResourceId({ resourceId: thread.resourceId, limit: 10, offset: 0 });
+      const { threads } = await store.listThreadsByResourceId({ resourceId: thread.resourceId, perPage: 10, page: 0 });
       expect(threads?.length).toBe(0);
     });
 
@@ -1587,7 +1587,7 @@ describe.skip('CloudflareStore REST API', () => {
 
       // Verify thread is gone
       const { threads } = await retryUntil(
-        async () => await store.listThreadsByResourceId({ resourceId: thread.resourceId, limit: 10, offset: 0 }),
+        async () => await store.listThreadsByResourceId({ resourceId: thread.resourceId, perPage: 10, page: 0 }),
         result => result?.threads?.length === 0,
       );
       expect(threads?.length).toBe(0);

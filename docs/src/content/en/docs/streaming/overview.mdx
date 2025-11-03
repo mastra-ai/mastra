@@ -119,14 +119,14 @@ console.log("Token usage:", await networkStream.usage);
 
 ## Streaming with workflows
 
-Streaming from a workflow returns a sequence of structured events describing the run lifecycle, rather than incremental text chunks. This event-based format makes it possible to track and respond to workflow progress in real time once a run is created using `.createRunAsync()`.
+Streaming from a workflow returns a sequence of structured events describing the run lifecycle, rather than incremental text chunks. This event-based format makes it possible to track and respond to workflow progress in real time once a run is created using `.createRun()`.
 
 ### Using `Run.streamVNext()`
 
 This is the experimental API. It returns a `ReadableStream` of events directly.
 
 ```typescript {3,9} showLineNumbers copy
-const run = await testWorkflow.createRunAsync();
+const run = await testWorkflow.createRun();
 
 const stream = await run.streamVNext({
   inputData: {

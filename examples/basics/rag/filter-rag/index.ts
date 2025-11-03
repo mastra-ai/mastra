@@ -56,6 +56,7 @@ const chunkMetadata = chunks?.map((chunk: any, index: number) => ({
 }));
 
 export const ragAgent = new Agent({
+  id: 'rag-agent',
   name: 'RAG Agent',
   model: openai('gpt-4o-mini'),
   instructions: `

@@ -146,7 +146,7 @@ If you were using `run.watch()` from `@mastra/client-js`, switch to using `run.s
 ```typescript
 // Before (v0.22 and earlier)
 const workflow = mastraClient.getWorkflow('my-workflow');
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 await run.watch((event) => {
   console.log('Step completed:', event);
@@ -154,7 +154,7 @@ await run.watch((event) => {
 
 // After (v0.23+)
 const workflow = mastraClient.getWorkflow('my-workflow');
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const stream = await run.stream({
   inputData: { /* your input */ }

@@ -89,7 +89,7 @@ describe.skip('Workflow Builder Integration Tests', () => {
 
     const requestContext = new RequestContext();
 
-    const run = await workflowBuilderWorkflow.createRunAsync();
+    const run = await workflowBuilderWorkflow.createRun();
 
     const inputData = {
       workflowName: 'send_email_workflow',

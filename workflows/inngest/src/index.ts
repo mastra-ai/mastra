@@ -156,13 +156,14 @@ export class InngestRun<
 
   async getRunOutput(eventId: string) {
     let runs = await this.getRuns(eventId);
+    const storage = this.#mastra?.getStorage();
 
     while (runs?.[0]?.status !== 'Completed' || runs?.[0]?.event_id !== eventId) {
       await new Promise(resolve => setTimeout(resolve, 1000));
       runs = await this.getRuns(eventId);
 
       if (runs?.[0]?.status === 'Failed') {
-        const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
+        const snapshot = await storage?.loadWorkflowSnapshot({
           workflowName: this.workflowId,
           runId: this.runId,
         });
@@ -172,7 +173,7 @@ export class InngestRun<
       }
 
       if (runs?.[0]?.status === 'Cancelled') {
-        const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
+        const snapshot = await storage?.loadWorkflowSnapshot({
           workflowName: this.workflowId,
           runId: this.runId,
         });
@@ -190,6 +191,8 @@ export class InngestRun<
   }
 
   async cancel() {
+    const storage = this.#mastra?.getStorage();
+
     await this.inngest.send({
       name: `cancel.workflow.${this.workflowId}`,
       data: {
@@ -197,12 +200,12 @@ export class InngestRun<
       },
     });
 
-    const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
+    const snapshot = await storage?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
     if (snapshot) {
-      await this.#mastra?.storage?.persistWorkflowSnapshot({
+      await storage?.persistWorkflowSnapshot({
         workflowName: this.workflowId,
         runId: this.runId,
         resourceId: this.resourceId,
@@ -324,10 +327,12 @@ export class InngestRun<
       | string[];
     requestContext?: RequestContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    const storage = this.#mastra?.getStorage();
+
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
     );
-    const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
+    const snapshot = await storage?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
@@ -598,8 +603,8 @@ export class InngestWorkflow<
   async listWorkflowRuns(args?: {
     fromDate?: Date;
     toDate?: Date;
-    limit?: number;
-    offset?: number;
+    perPage?: number;
+    page?: number;
     resourceId?: string;
   }) {
     const storage = this.#mastra?.getStorage();
@@ -651,22 +656,7 @@ export class InngestWorkflow<
     }
   }
 
-  /**
-   * @deprecated Use createRunAsync() instead.
-   * @throws {Error} Always throws an error directing users to use createRunAsync()
-   */
-  createRun(_options?: { runId?: string }): Run<TEngineType, TSteps, TState, TInput, TOutput> {
-    throw new Error(
-      'createRun() has been deprecated. ' +
-        'Please use createRunAsync() instead.\n\n' +
-        'Migration guide:\n' +
-        '  Before: const run = workflow.createRun();\n' +
-        '  After:  const run = await workflow.createRunAsync();\n\n' +
-        'Note: createRunAsync() is an async method, so make sure your calling function is async.',
-    );
-  }
-
-  async createRunAsync(options?: {
+  async createRun(options?: {
     runId?: string;
     resourceId?: string;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
