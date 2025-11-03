@@ -8,6 +8,24 @@ export interface ValidationError<T = any> {
 }
 
 /**
+ * Safely truncates data for error messages to avoid exposing sensitive information.
+ * @param data The data to truncate
+ * @param maxLength Maximum length of the truncated string (default: 200)
+ * @returns Truncated string representation
+ */
+function truncateForLogging(data: unknown, maxLength: number = 200): string {
+  try {
+    const stringified = JSON.stringify(data, null, 2);
+    if (stringified.length <= maxLength) {
+      return stringified;
+    }
+    return stringified.slice(0, maxLength) + '... (truncated)';
+  } catch {
+    return '[Unable to serialize data]';
+  }
+}
+
+/**
  * Validates raw input data against a Zod schema.
  *
  * @param schema The Zod schema to validate against
@@ -39,7 +57,7 @@ export function validateToolInput<T = any>(
 
   const error: ValidationError<T> = {
     error: true,
-    message: `Tool validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(input, null, 2)}`,
+    message: `Tool validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
     validationErrors: validation.error.format() as z.ZodFormattedError<T>,
   };
 
@@ -78,7 +96,7 @@ export function validateToolOutput<T = any>(
 
   const error: ValidationError<T> = {
     error: true,
-    message: `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned invalid output:\n${errorMessages}\n\nReturned output: ${JSON.stringify(output, null, 2)}`,
+    message: `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned invalid output:\n${errorMessages}\n\nReturned output: ${truncateForLogging(output)}`,
     validationErrors: validation.error.format() as z.ZodFormattedError<T>,
   };
 

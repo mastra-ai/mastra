@@ -794,4 +794,69 @@ describe('Tool Output Validation Tests', () => {
       throw new Error('Result is not a validation error');
     }
   });
+
+  it('should truncate large output in error messages to prevent PII exposure', async () => {
+    // Create a large object that would exceed 200 characters when stringified
+    const largeData = {
+      users: Array.from({ length: 50 }, (_, i) => ({
+        id: i,
+        name: `User ${i}`,
+        email: `user${i}@example.com`,
+        sensitiveData: 'This could contain PII',
+      })),
+    };
+
+    const tool = createTool({
+      id: 'large-output',
+      description: 'Test output truncation',
+      outputSchema: z.object({
+        status: z.literal('success'),
+      }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => {
+        return largeData; // Return large invalid output
+      },
+    });
+
+    const result = await tool.execute({});
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toContain('... (truncated)');
+      // Ensure the full large data is NOT in the error message
+      expect(result.message.length).toBeLessThan(500); // Should be much smaller than full output
+      // Ensure sensitive data is not exposed
+      expect(result.message).not.toContain('user49@example.com');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
+
+  it('should handle non-serializable output gracefully', async () => {
+    const tool = createTool({
+      id: 'non-serializable',
+      description: 'Test non-serializable output',
+      outputSchema: z.object({
+        value: z.string(),
+      }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => {
+        // Create circular reference
+        const obj: any = { name: 'test' };
+        obj.self = obj;
+        return obj;
+      },
+    });
+
+    const result = await tool.execute({});
+
+    if ('error' in result) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toContain('[Unable to serialize data]');
+    } else {
+      throw new Error('Result is not a validation error');
+    }
+  });
 });
