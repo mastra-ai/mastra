@@ -28,13 +28,21 @@ export function parsePage(value: string | undefined, defaultValue: number = 0): 
 }
 
 /**
- * Parse a perPage query parameter value to a valid positive number with a maximum cap
+ * Parse a perPage query parameter value to a valid positive number with a maximum cap, or false to fetch all
  * @param value - The raw perPage value from query parameters
  * @param defaultValue - The default value to use if parsing fails (default: 100)
  * @param max - The maximum allowed value (default: 1000)
- * @returns A valid positive integer between 1 and max
+ * @returns A valid positive integer between 1 and max, or false to bypass pagination
  */
-export function parsePerPage(value: string | undefined, defaultValue: number = 100, max: number = 1000): number {
+export function parsePerPage(
+  value: string | undefined,
+  defaultValue: number = 100,
+  max: number = 1000,
+): number | false {
+  // Handle explicit false to bypass pagination
+  if (value?.toLowerCase() === 'false') {
+    return false;
+  }
   const parsed = parseInt(value || String(defaultValue), 10);
   if (isNaN(parsed)) return defaultValue;
   return Math.min(max, Math.max(1, parsed));

@@ -111,7 +111,7 @@ export async function listThreadsHandler({
   orderBy,
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'requestContext'> & {
   page: number;
-  perPage: number;
+  perPage: number | false;
   orderBy?: StorageOrderBy;
 }) {
   try {

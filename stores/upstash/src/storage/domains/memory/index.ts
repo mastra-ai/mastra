@@ -682,27 +682,12 @@ export class StoreMemoryUpstash extends MemoryStorage {
         return 0;
       };
 
-      // Sort messages by their position in the sorted set (or by orderBy if specified)
-      if (orderBy) {
-        messagesData.sort((a, b) => {
-          const aValue = getFieldValue(a);
-          const bValue = getFieldValue(b);
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        });
-      } else {
-        // Default: sort by position in sorted set
-        // Build Map for O(1) lookups instead of O(n) indexOf
-        const messageIdToPosition = new Map<string, number>();
-        allMessageIds.forEach((id, index) => {
-          messageIdToPosition.set(id as string, index);
-        });
-
-        messagesData.sort((a, b) => {
-          const aPos = messageIdToPosition.get(a.id) ?? Number.MAX_SAFE_INTEGER;
-          const bPos = messageIdToPosition.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-          return aPos - bPos;
-        });
-      }
+      // Sort messages by orderBy field and direction (defaults to createdAt DESC)
+      messagesData.sort((a, b) => {
+        const aValue = getFieldValue(a);
+        const bValue = getFieldValue(b);
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
 
       const total = messagesData.length;
 
@@ -761,7 +746,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput === false ? false : allThreadMessagesReturned ? false : end < total;
+      const hasMore = perPageInput !== false && !allThreadMessagesReturned && end < total;
 
       return {
         messages: finalMessages,
