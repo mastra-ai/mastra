@@ -1,11 +1,10 @@
-import type { Mastra } from '@mastra/core';
+import type { Mastra } from '@mastra/core/mastra';
 import {
   getAgentBuilderActionsHandler as getOriginalAgentBuilderActionsHandler,
   getAgentBuilderActionByIdHandler as getOriginalAgentBuilderActionByIdHandler,
   startAsyncAgentBuilderActionHandler as getOriginalStartAsyncAgentBuilderActionHandler,
   createAgentBuilderActionRunHandler as getOriginalCreateAgentBuilderActionRunHandler,
   startAgentBuilderActionRunHandler as getOriginalStartAgentBuilderActionRunHandler,
-  watchAgentBuilderActionHandler as getOriginalWatchAgentBuilderActionHandler,
   streamAgentBuilderActionHandler as getOriginalStreamAgentBuilderActionHandler,
   streamLegacyAgentBuilderActionHandler as getOriginalStreamLegacyAgentBuilderActionHandler,
   streamVNextAgentBuilderActionHandler as getOriginalStreamVNextAgentBuilderActionHandler,
@@ -122,52 +121,6 @@ export async function startAgentBuilderActionRunHandler(c: Context) {
     return c.json({ message: 'Agent builder action run started' });
   } catch (error) {
     return handleError(error, 'Error starting agent builder action run');
-  }
-}
-
-export async function watchAgentBuilderActionHandler(c: Context) {
-  try {
-    const mastra: Mastra = c.get('mastra');
-    const logger = mastra.getLogger();
-    const actionId = c.req.param('actionId');
-    const runId = c.req.query('runId');
-    const eventType = c.req.query('eventType') as 'watch' | 'watch-v2' | undefined;
-
-    if (!runId) {
-      throw new HTTPException(400, { message: 'runId required to watch action' });
-    }
-
-    c.header('Transfer-Encoding', 'chunked');
-
-    return stream(c, async stream => {
-      try {
-        disableHotReload();
-        const result = await getOriginalWatchAgentBuilderActionHandler({
-          mastra,
-          actionId,
-          runId,
-          eventType,
-        });
-
-        const reader = result.getReader();
-
-        stream.onAbort(() => {
-          void reader.cancel('request aborted');
-        });
-
-        let chunkResult;
-        while ((chunkResult = await reader.read()) && !chunkResult.done) {
-          await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
-        }
-        enableHotReload();
-      } catch (err) {
-        enableHotReload();
-        logger.error('Error in watch stream: ' + ((err as Error)?.message ?? 'Unknown error'));
-      }
-    });
-  } catch (error) {
-    enableHotReload();
-    return handleError(error, 'Error watching agent builder action');
   }
 }
 
@@ -336,15 +289,16 @@ export async function getAgentBuilderActionRunsHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const actionId = c.req.param('actionId');
-    const { fromDate, toDate, limit, offset, resourceId } = c.req.query();
+    const queryParams = c.req.query();
+    const { fromDate, toDate, perPage, page, resourceId } = queryParams;
 
     const runs = await getOriginalGetAgentBuilderActionRunsHandler({
       mastra,
       actionId,
       fromDate: fromDate ? new Date(fromDate) : undefined,
       toDate: toDate ? new Date(toDate) : undefined,
-      limit: limit ? Number(limit) : undefined,
-      offset: offset ? Number(offset) : undefined,
+      perPage: perPage !== null && perPage !== undefined && !isNaN(Number(perPage)) ? Number(perPage) : undefined,
+      page: page !== null && page !== undefined && !isNaN(Number(page)) ? Number(page) : undefined,
       resourceId,
     });
 

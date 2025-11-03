@@ -36,6 +36,7 @@ import { Memory } from "@mastra/memory";
 import { LibSQLVector } from "@mastra/libsql";
 
 export const famousPersonAgent = new Agent({
+  id: "famous-person-generator",
   name: "Famous Person Generator",
   instructions: `You are a famous person generator for a "Heads Up" guessing game.
 
@@ -78,6 +79,7 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const gameAgent = new Agent({
+  id: "game-agent",
   name: "Game Agent",
   instructions: `You are a helpful game assistant for a "Heads Up" guessing game.
 
@@ -245,7 +247,7 @@ export const headsUpWorkflow = createWorkflow({
 To use a workflow or an agent, register them in your main Mastra instance.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 import { headsUpWorkflow } from "./workflows/example-heads-up-workflow";
 import { famousPersonAgent } from "./agents/example-famous-person-agent";

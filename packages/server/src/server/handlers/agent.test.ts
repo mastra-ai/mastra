@@ -105,8 +105,9 @@ describe('Agent Handlers', () => {
           provider: 'openai.chat',
           modelId: 'gpt-4o',
           modelVersion: 'v1',
-          defaultGenerateOptions: {},
-          defaultStreamOptions: {},
+          defaultOptions: {},
+          defaultGenerateOptionsLegacy: {},
+          defaultStreamOptionsLegacy: {},
           modelList: undefined,
         },
         'test-multi-model-agent': {
@@ -120,8 +121,9 @@ describe('Agent Handlers', () => {
           provider: 'openai.responses',
           modelId: 'gpt-4o-mini',
           modelVersion: 'v2',
-          defaultGenerateOptions: {},
-          defaultStreamOptions: {},
+          defaultOptions: {},
+          defaultGenerateOptionsLegacy: {},
+          defaultStreamOptionsLegacy: {},
           modelList: [
             {
               id: expect.any(String),
@@ -168,12 +170,14 @@ describe('Agent Handlers', () => {
         name: 'agent-with-core-processors',
         inputProcessors: [
           {
-            name: 'unicode-normalizer',
+            id: 'unicode-normalizer',
+            name: 'Unicode Normalizer',
           },
         ],
         outputProcessors: [
           {
-            name: 'token-limiter',
+            id: 'token-limiter',
+            name: 'Token Limiter',
           },
         ],
       });
@@ -243,8 +247,9 @@ describe('Agent Handlers', () => {
         provider: 'openai.chat',
         modelId: 'gpt-4o',
         modelVersion: 'v1',
-        defaultGenerateOptions: {},
-        defaultStreamOptions: {},
+        defaultOptions: {},
+        defaultGenerateOptionsLegacy: {},
+        defaultStreamOptionsLegacy: {},
         modelList: undefined,
       });
     });

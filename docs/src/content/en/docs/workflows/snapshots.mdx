@@ -132,7 +132,7 @@ Snapshots are persisted using a `storage` instance configured on the `Mastra` cl
 This example demonstrates how to use snapshots with LibSQL.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
@@ -148,7 +148,7 @@ export const mastra = new Mastra({
 This example demonstrates how to use snapshots with Upstash.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { UpstashStore } from "@mastra/upstash";
 
 export const mastra = new Mastra({
@@ -165,7 +165,7 @@ export const mastra = new Mastra({
 This example demonstrates how to use snapshots with PostgreSQL.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { PostgresStore } from "@mastra/pg";
 
 export const mastra = new Mastra({
@@ -240,7 +240,7 @@ Use `resumeData` to pass structured input when resuming a suspended step. It mus
 ```typescript {14-20} showLineNumbers copy
 const workflow = mastra.getWorkflow("approvalWorkflow");
 
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: {
@@ -263,6 +263,5 @@ if (result.status === "suspended") {
 
 ## Related
 
-- [Suspend and resume](/docs/workflows/suspend-and-resume)
-- [Human in the loop](/docs/workflows/human-in-the-loop)
-- [WorkflowRun.watch()](/reference/workflows/run-methods/watch)
+- [Suspend and resume](../../docs/workflows/suspend-and-resume.mdx)
+- [Human in the loop example](../../docs/workflows/human-in-the-loop.mdx)

@@ -1,4 +1,4 @@
-import type { ToolCallOptions, ProviderDefinedTool } from '@internal/external-types';
+import type { ProviderDefinedTool, ToolExecutionOptions } from '@internal/external-types';
 import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
@@ -9,7 +9,6 @@ import {
   applyCompatLayer,
   convertZodSchemaToAISDKSchema,
 } from '@mastra/schema-compat';
-import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
 import { AISpanType, wrapMastra } from '../../ai-tracing';
 import { MastraBase } from '../../base';
@@ -212,30 +211,86 @@ export class CoreToolBuilder extends MastraBase {
           // Wrap mastra with tracing context - wrapMastra will handle whether it's a full instance or primitives
           const wrappedMastra = options.mastra ? wrapMastra(options.mastra, { currentSpan: toolSpan }) : options.mastra;
 
-          result = await tool?.execute?.(
-            {
-              context: args,
-              threadId: options.threadId,
-              resourceId: options.resourceId,
-              mastra: wrappedMastra,
-              memory: options.memory,
-              runId: options.runId,
-              requestContext: options.requestContext ?? new RequestContext(),
-              writer: new ToolStream(
-                {
-                  prefix: 'tool',
-                  callId: execOptions.toolCallId,
-                  name: options.name,
-                  runId: options.runId!,
-                },
-                options.writableStream || execOptions.writableStream,
-              ),
-              tracingContext: { currentSpan: toolSpan },
-              // Pass MCP context if available (when executed in MCP server context)
+          // Pass raw args as first parameter, context as second
+          // Properly structure context based on execution source
+          const baseContext = {
+            threadId: options.threadId,
+            resourceId: options.resourceId,
+            mastra: wrappedMastra,
+            memory: options.memory,
+            runId: options.runId,
+            requestContext: options.requestContext ?? new RequestContext(),
+            writer: new ToolStream(
+              {
+                prefix: 'tool',
+                callId: execOptions.toolCallId,
+                name: options.name,
+                runId: options.runId!,
+              },
+              options.writableStream || execOptions.writableStream,
+            ),
+            tracingContext: { currentSpan: toolSpan },
+            abortSignal: execOptions.abortSignal,
+            suspend: execOptions.suspend,
+            resumeData: execOptions.resumeData,
+          };
+
+          // Check if this is agent execution
+          // Agent execution takes precedence over workflow execution because agents may
+          // use workflows internally for their agentic loop
+          // Note: AI SDK v4 doesn't pass toolCallId/messages, so we also check for agentName and threadId
+          const isAgentExecution =
+            (execOptions.toolCallId && execOptions.messages) ||
+            (options.agentName && options.threadId && !options.workflowId);
+
+          // Check if this is workflow execution (has workflow properties in options)
+          // Only consider it workflow execution if it's NOT agent execution
+          const isWorkflowExecution = !isAgentExecution && (options.workflow || options.workflowId);
+
+          let toolContext;
+          if (isAgentExecution) {
+            // Nest agent-specific properties under 'agent' key
+            // Do NOT include workflow context even if workflow properties exist
+            // (agents use workflows internally but tools should see agent context)
+            const { suspend, resumeData, threadId, resourceId, ...restBaseContext } = baseContext;
+            toolContext = {
+              ...restBaseContext,
+              agent: {
+                toolCallId: execOptions.toolCallId || '',
+                messages: execOptions.messages || [],
+                suspend,
+                resumeData,
+                threadId,
+                resourceId,
+                writableStream: execOptions.writableStream,
+              },
+            };
+          } else if (isWorkflowExecution) {
+            // Nest workflow-specific properties under 'workflow' key
+            const { suspend, resumeData, ...restBaseContext } = baseContext;
+            toolContext = {
+              ...restBaseContext,
+              workflow: options.workflow || {
+                runId: options.runId,
+                workflowId: options.workflowId,
+                state: options.state,
+                setState: options.setState,
+                suspend,
+                resumeData,
+              },
+            };
+          } else if (execOptions.mcp) {
+            // MCP execution context
+            toolContext = {
+              ...baseContext,
               mcp: execOptions.mcp,
-            },
-            execOptions as ToolExecutionOptions & ToolCallOptions,
-          );
+            };
+          } else {
+            // Direct execution or unknown context
+            toolContext = baseContext;
+          }
+
+          result = await tool?.execute?.(args, toolContext);
         }
 
         toolSpan?.end({ output: result });

@@ -176,8 +176,8 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    page,
+    perPage,
     resourceId,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     const fullTableName = this.operations.getTableName(TABLE_WORKFLOW_SNAPSHOT);
@@ -205,14 +205,17 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
       }
 
       builder.orderBy('createdAt', 'DESC');
-      if (typeof limit === 'number') builder.limit(limit);
-      if (typeof offset === 'number') builder.offset(offset);
+      if (typeof perPage === 'number' && typeof page === 'number') {
+        const offset = page * perPage;
+        builder.limit(perPage);
+        builder.offset(offset);
+      }
 
       const { sql, params } = builder.build();
 
       let total = 0;
 
-      if (limit !== undefined && offset !== undefined) {
+      if (perPage !== undefined && page !== undefined) {
         const { sql: countSql, params: countParams } = countBuilder.build();
         const countResult = await this.operations.executeQuery({
           sql: countSql,
@@ -228,7 +231,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_WORKFLOW_RUNS_ERROR',
+          id: 'CLOUDFLARE_D1_STORAGE_LIST_WORKFLOW_RUNS_ERROR',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to retrieve workflow runs: ${error instanceof Error ? error.message : String(error)}`,

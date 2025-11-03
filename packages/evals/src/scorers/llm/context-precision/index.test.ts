@@ -35,6 +35,7 @@ describe('createContextPrecisionScorer', () => {
     });
 
     expect(scorer).toBeDefined();
+    expect(scorer.id).toBe('context-precision-scorer');
     expect(scorer.name).toBe('Context Precision Scorer');
     expect(scorer.description).toBe(
       'A scorer that evaluates the relevance and precision of retrieved context nodes for generating expected outputs',
@@ -53,6 +54,7 @@ describe('createContextPrecisionScorer', () => {
     });
 
     expect(scorer).toBeDefined();
+    expect(scorer.id).toBe('context-precision-scorer');
     expect(scorer.name).toBe('Context Precision Scorer');
   });
 

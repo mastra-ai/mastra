@@ -41,7 +41,7 @@ import { openai } from "@ai-sdk/openai";
 import {
   createAnswerRelevancyScorer,
   createToxicityScorer,
-} from "@mastra/evals/scorers/llm";
+} from "@mastra/evals/scorers/prebuilt";
 
 export const evaluatedAgent = new Agent({
   // ...
@@ -110,7 +110,7 @@ To score traces, you must first configure observability in your Mastra instance 
 
 :::
 
-### Scoring traces with the playground
+### Scoring traces with Studio
 
 To score traces, you first need to register your scorers with your Mastra instance:
 
@@ -124,16 +124,16 @@ const mastra = new Mastra({
 });
 ```
 
-Once registered, you can score traces interactively within the Mastra playground under the Observability section. This provides a user-friendly interface for running scorers against historical traces.
+Once registered, you can score traces interactively within Studio under the Observability section. This provides a user-friendly interface for running scorers against historical traces.
 
 ## Testing scorers locally
 
-Mastra provides a CLI command `mastra dev` to test your scorers. The playground includes a scorers section where you can run individual scorers against test inputs and view detailed results.
+Mastra provides a CLI command `mastra dev` to test your scorers. Studio includes a scorers section where you can run individual scorers against test inputs and view detailed results.
 
-For more details, see the [Local Dev Playground](/docs/getting-started/studio) docs.
+For more details, see [Studio](/docs/getting-started/studio) docs.
 
 ## Next steps
 
 - Learn how to create your own scorers in the [Creating Custom Scorers](/docs/scorers/custom-scorers) guide
 - Explore built-in scorers in the [Off-the-shelf Scorers](/docs/scorers/off-the-shelf-scorers) section
-- Test scorers with the [Local Dev Playground](/docs/getting-started/studio)
+- Test scorers with [Studio](/docs/getting-started/studio)

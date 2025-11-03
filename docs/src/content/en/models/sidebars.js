@@ -163,6 +163,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/iflowcn",
+          label: "iFlow",
+        },
+        {
+          type: "doc",
           id: "providers/inception",
           label: "Inception",
         },

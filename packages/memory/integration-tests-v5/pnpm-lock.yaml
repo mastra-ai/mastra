@@ -5,6 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  '@mastra/ai-sdk': link:../../../client-sdks/ai-sdk
   '@mastra/core': link:../../core
   mastra: link:../../cli
   '@mastra/memory': link:../../memory
@@ -15,6 +16,9 @@ importers:
 
   .:
     dependencies:
+      '@mastra/ai-sdk':
+        specifier: link:../../../client-sdks/ai-sdk
+        version: link:../../../client-sdks/ai-sdk
       '@mastra/fastembed':
         specifier: link:../../fastembed
         version: link:../../fastembed

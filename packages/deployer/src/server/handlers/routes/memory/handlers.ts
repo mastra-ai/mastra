@@ -1,4 +1,4 @@
-import type { Mastra } from '@mastra/core';
+import type { Mastra } from '@mastra/core/mastra';
 import type {
   StorageGetMessagesArg,
   MastraMessageFormat,
@@ -24,7 +24,7 @@ import {
 import type { Context } from 'hono';
 
 import { handleError } from '../../error';
-import { parseLimit } from '../../utils/query-parsers';
+import { parseLimit, parsePage, parsePerPage } from '../../utils/query-parsers';
 
 // Memory handlers
 export async function getMemoryStatusHandler(c: Context) {
@@ -68,20 +68,36 @@ export async function listThreadsHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
     const resourceId = c.req.query('resourceId');
-    const offset = parseInt(c.req.query('offset') || '0', 10);
-    const limit = parseInt(c.req.query('limit') || '100', 10);
-    const orderBy = c.req.query('orderBy') as ThreadOrderBy | undefined;
-    const sortDirection = c.req.query('sortDirection') as ThreadSortDirection | undefined;
+    const page = parsePage(c.req.query('page'));
+    const perPage = parsePerPage(c.req.query('perPage'));
+    const field = c.req.query('orderBy') as ThreadOrderBy | undefined;
+    const direction = c.req.query('sortDirection') as ThreadSortDirection | undefined;
     const requestContext = c.get('requestContext');
+
+    // Validate query parameters
+    const validFields: ThreadOrderBy[] = ['createdAt', 'updatedAt'];
+    const validDirections: ThreadSortDirection[] = ['ASC', 'DESC'];
+
+    if (field && !validFields.includes(field)) {
+      return c.json({ error: `Invalid orderBy field: ${field}. Must be one of: ${validFields.join(', ')}` }, 400);
+    }
+    if (direction && !validDirections.includes(direction)) {
+      return c.json(
+        { error: `Invalid sortDirection: ${direction}. Must be one of: ${validDirections.join(', ')}` },
+        400,
+      );
+    }
+
+    // Transform to nested structure
+    const orderBy = field || direction ? { field: field || 'createdAt', direction: direction || 'DESC' } : undefined;
 
     const result = await getOriginalListThreadsHandler({
       mastra,
       agentId,
       resourceId,
-      offset,
-      limit,
+      page,
+      perPage,
       orderBy,
-      sortDirection,
       requestContext,
     });
 

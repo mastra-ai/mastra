@@ -7,6 +7,7 @@ import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
@@ -14,8 +15,6 @@ import { AvailableHooks, registerHook } from '../hooks';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
-import type { MastraMemory } from '../memory/memory';
-import type { MastraScorer } from '../scores';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -46,7 +45,8 @@ import { createOnScorerHook } from './hooks';
  * const mastra = new Mastra({
  *   agents: {
  *     weatherAgent: new Agent({
- *       name: 'weather-agent',
+ *       id: 'weather-agent',
+ *       name: 'Weather Agent',
  *       instructions: 'You help with weather information',
  *       model: 'openai/gpt-5'
  *     })
@@ -144,16 +144,6 @@ export interface Config<
    */
   scorers?: TScorers;
 
-  /**
-   * Server middleware functions to be applied to API routes
-   * Each middleware can specify a path pattern (defaults to '/api/*')
-   * @deprecated use server.middleware instead
-   */
-  serverMiddleware?: Array<{
-    handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
-    path?: string;
-  }>;
-
   // @deprecated add memory to your Agent directly instead
   memory?: never;
 
@@ -189,7 +179,8 @@ export interface Config<
  * const mastra = new Mastra({
  *   agents: {
  *     weatherAgent: new Agent({
- *       name: 'weather-agent',
+ *       id: 'weather-agent',
+ *       name: 'Weather Agent',
  *       instructions: 'You provide weather information',
  *       model: 'openai/gpt-5',
  *       tools: [getWeatherTool]
@@ -225,7 +216,6 @@ export class Mastra<
   }> = [];
 
   #storage?: MastraStorage;
-  #memory?: MastraMemory;
   #scorers?: TScorers;
   #server?: ServerConfig;
   #mcpServers?: TMCPServers;
@@ -238,20 +228,6 @@ export class Mastra<
   #internalMastraWorkflows: Record<string, Workflow> = {};
   // This is only used internally for server handlers that require temporary persistence
   #serverCache: MastraServerCache;
-
-  /**
-   * @deprecated use getStorage() instead
-   */
-  get storage() {
-    return this.#storage;
-  }
-
-  /**
-   * @deprecated use getMemory() instead
-   */
-  get memory() {
-    return this.#memory;
-  }
 
   get pubsub() {
     return this.#pubsub;
@@ -336,7 +312,8 @@ export class Mastra<
    * const mastra = new Mastra({
    *   agents: {
    *     assistant: new Agent({
-   *       name: 'assistant',
+   *       id: 'assistant',
+   *       name: 'Assistant',
    *       instructions: 'You are a helpful assistant',
    *       model: 'openai/gpt-5'
    *     })
@@ -350,14 +327,6 @@ export class Mastra<
    * ```
    */
   constructor(config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers>) {
-    // Store server middleware with default path
-    if (config?.serverMiddleware) {
-      this.#serverMiddleware = config.serverMiddleware.map(m => ({
-        handler: m.handler,
-        path: m.path || '/api/*',
-      }));
-    }
-
     /*
     Server Cache
     */
@@ -458,25 +427,6 @@ export class Mastra<
       });
     }
 
-    if (config && `memory` in config) {
-      const error = new MastraError({
-        id: 'MASTRA_CONSTRUCTOR_INVALID_MEMORY_CONFIG',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `
-  Memory should be added to Agents, not to Mastra.
-
-Instead of:
-  new Mastra({ memory: new Memory() })
-
-do:
-  new Agent({ memory: new Memory() })
-`,
-      });
-      this.#logger?.trackException(error);
-      throw error;
-    }
-
     if (config?.tts) {
       this.#tts = config.tts;
     }
@@ -504,8 +454,7 @@ do:
 
         agent.__registerPrimitives({
           logger: this.getLogger(),
-          storage: this.storage,
-          memory: this.memory,
+          storage: this.getStorage(),
           agents: agents,
           tts: this.#tts,
           vectors: this.#vectors,
@@ -535,8 +484,7 @@ do:
         workflow.__registerMastra(this);
         workflow.__registerPrimitives({
           logger: this.getLogger(),
-          storage: this.storage,
-          memory: this.memory,
+          storage: this.getStorage(),
           agents: agents,
           tts: this.#tts,
           vectors: this.#vectors,
@@ -615,6 +563,7 @@ do:
    * const mastra = new Mastra({
    *   agents: {
    *     weatherAgent: new Agent({
+   *       id: 'weather-agent',
    *       name: 'weather-agent',
    *       instructions: 'You provide weather information',
    *       model: 'openai/gpt-5'
@@ -650,7 +599,7 @@ do:
    *
    * This method searches for an agent using its internal ID property. If no agent
    * is found with the given ID, it also attempts to find an agent using the ID as
-   * a name (for backward compatibility).
+   * a name.
    *
    * @throws {MastraError} When no agent is found with the specified ID
    *
@@ -659,6 +608,7 @@ do:
    * const mastra = new Mastra({
    *   agents: {
    *     assistant: new Agent({
+   *       id: 'assistant',
    *       name: 'assistant',
    *       instructions: 'You are a helpful assistant',
    *       model: 'openai/gpt-5'
@@ -710,8 +660,8 @@ do:
    * ```typescript
    * const mastra = new Mastra({
    *   agents: {
-   *     weatherAgent: new Agent({ name: 'weather', model: openai('gpt-4o') }),
-   *     supportAgent: new Agent({ name: 'support', model: openai('gpt-4o') })
+   *     weatherAgent: new Agent({ id: 'weather-agent', name: 'weather', model: openai('gpt-4o') }),
+   *     supportAgent: new Agent({ id: 'support-agent', name: 'support', model: openai('gpt-4o') })
    *   }
    * });
    *
@@ -891,7 +841,7 @@ do:
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
       logger: this.getLogger(),
-      storage: this.storage,
+      storage: this.getStorage(),
     });
     this.#internalMastraWorkflows[workflow.id] = workflow;
   }
@@ -923,7 +873,7 @@ do:
    *
    * This method searches for a workflow using its internal ID property. If no workflow
    * is found with the given ID, it also attempts to find a workflow using the ID as
-   * a name (for backward compatibility).
+   * a name.
    *
    * @throws {MastraError} When no workflow is found with the specified ID
    *
@@ -997,7 +947,7 @@ do:
    *
    * // Check scorer configurations
    * for (const [id, scorer] of Object.entries(allScorers)) {
-   *   console.log(`Scorer ${id}:`, scorer.name, scorer.description);
+   *   console.log(`Scorer ${id}:`, scorer.id, scorer.name, scorer.description);
    * }
    * ```
    */
@@ -1076,25 +1026,25 @@ do:
    * });
    *
    * // Find scorer by its internal name, not the registration key
-   * const scorer = mastra.getScorerByName('helpfulness-evaluator');
+   * const scorer = mastra.getScorerById('helpfulness-evaluator');
    * const score = await scorer.score({
    *   input: 'question',
    *   output: 'answer'
    * });
    * ```
    */
-  public getScorerByName(name: string): MastraScorer<any, any, any, any> {
+  public getScorerById(id: string): MastraScorer<any, any, any, any> {
     for (const [_key, value] of Object.entries(this.#scorers ?? {})) {
-      if (value.name === name) {
+      if (value.id === id || value?.name === id) {
         return value;
       }
     }
 
     const error = new MastraError({
-      id: 'MASTRA_GET_SCORER_BY_NAME_NOT_FOUND',
+      id: 'MASTRA_GET_SCORER_BY_ID_NOT_FOUND',
       domain: ErrorDomain.MASTRA,
       category: ErrorCategory.USER,
-      text: `Scorer with name ${String(name)} not found`,
+      text: `Scorer with id ${String(id)} not found`,
     });
     this.#logger?.trackException(error);
     throw error;
@@ -1149,6 +1099,7 @@ do:
    *
    * // Now agents can use memory with the storage
    * const agent = new Agent({
+   *   id: 'assistant',
    *   name: 'assistant',
    *   memory: new Memory({ storage: mastra.getStorage() })
    * });
@@ -1165,10 +1116,6 @@ do:
       Object.keys(this.#agents).forEach(key => {
         this.#agents?.[key]?.__setLogger(this.#logger);
       });
-    }
-
-    if (this.#memory) {
-      this.#memory.__setLogger(this.#logger);
     }
 
     if (this.#deployer) {
@@ -1251,32 +1198,6 @@ do:
   }
 
   /**
-   * Gets the currently configured memory instance.
-   *
-   * @deprecated Memory should be configured directly on agents instead of on the Mastra instance.
-   * Use `new Agent({ memory: new Memory() })` instead.
-   *
-   * @example Legacy memory usage (deprecated)
-   * ```typescript
-   * // This approach is deprecated
-   * const mastra = new Mastra({
-   *   // memory: new Memory() // This is no longer supported
-   * });
-   *
-   * // Use this instead:
-   * const agent = new Agent({
-   *   name: 'assistant',
-   *   memory: new Memory({
-   *     storage: new LibSQLStore({ url: ':memory:' })
-   *   })
-   * });
-   * ```
-   */
-  public getMemory() {
-    return this.#memory;
-  }
-
-  /**
    * Gets the currently configured storage provider.
    *
    * @example
@@ -1287,6 +1208,7 @@ do:
    *
    * // Use the storage in agent memory
    * const agent = new Agent({
+   *   id: 'assistant',
    *   name: 'assistant',
    *   memory: new Memory({
    *     storage: mastra.getStorage()

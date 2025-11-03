@@ -1,5 +1,5 @@
-import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
 import type { MastraVoice } from '@mastra/core/voice';
 import { CompositeVoice } from '@mastra/core/voice';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -19,6 +19,7 @@ function createAgentWithVoice({
   instructions?: string | (() => string);
 } = {}) {
   return new Agent({
+    id: name ?? 'test-agent',
     name: name ?? 'test-agent',
     instructions: instructions ?? 'You are a helpful assistant',
     model: model ?? ('openai' as any),

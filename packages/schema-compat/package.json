@@ -54,15 +54,14 @@
     "zod-to-json-schema": "^3.24.6"
   },
   "peerDependencies": {
-    "ai": "^4.0.0 || ^5.0.0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/ai-sdk-v4": "workspace:*",
     "@types/json-schema": "^7.0.15",
     "@types/node": "^20.19.0",
-    "ai": "4.3.16",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
