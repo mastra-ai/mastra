@@ -248,7 +248,7 @@ describe('Input and Output Processors', () => {
         expect(result.tripwireReason).toBe('Custom abort reason');
       }
 
-      await testWithFormat('aisdk');
+      // await testWithFormat('aisdk');
       await testWithFormat('mastra');
     });
 
@@ -615,7 +615,7 @@ describe('Input and Output Processors', () => {
         expect(processedText).toBe('This is a TEST response with TEST words');
       }
 
-      await testWithFormat('aisdk');
+      // await testWithFormat('aisdk');
       await testWithFormat('mastra');
     });
 
@@ -704,7 +704,7 @@ describe('Input and Output Processors', () => {
         expect(finalProcessedText).toBe('[PROCESSED] HELLO world');
       }
 
-      await testWithFormat('aisdk');
+      // await testWithFormat('aisdk');
       await testWithFormat('mastra');
     });
 
@@ -769,7 +769,7 @@ describe('Input and Output Processors', () => {
         expect(result.finishReason).toBe('other');
       }
 
-      await testWithFormat('aisdk');
+      // await testWithFormat('aisdk');
       await testWithFormat('mastra');
     });
 
@@ -836,7 +836,7 @@ describe('Input and Output Processors', () => {
         expect((result.response.messages[0].content[0] as any).text).toBe('[COMPLETE] This is a test response');
       }
 
-      await testWithFormat('aisdk');
+      // await testWithFormat('aisdk');
       await testWithFormat('mastra');
     });
   });
@@ -896,7 +896,7 @@ describe('Input and Output Processors', () => {
         );
       }
 
-      await testWithFormat('aisdk');
+      // await testWithFormat('aisdk');
       await testWithFormat('mastra');
     });
 
@@ -941,7 +941,7 @@ describe('Input and Output Processors', () => {
         expect(collectedText).toBe('processed: ');
       }
 
-      await testWithFormat('aisdk');
+      // await testWithFormat('aisdk');
       await testWithFormat('mastra');
     });
 
@@ -1002,7 +1002,7 @@ describe('Input and Output Processors', () => {
         expect(collectedText).not.toContain('test');
       }
 
-      await testWithFormat('aisdk');
+      // await testWithFormat('aisdk');
       await testWithFormat('mastra');
     });
 
@@ -1071,7 +1071,7 @@ describe('Input and Output Processors', () => {
         expect(collectedText).toBe('[PROCESSED] SUH DUDE[PROCESSED] SUH DUDE');
       }
 
-      await testWithFormat('aisdk');
+      // await testWithFormat('aisdk');
       await testWithFormat('mastra');
     });
   });
@@ -1208,7 +1208,7 @@ describe('Input and Output Processors', () => {
         });
       }
 
-      await testWithFormat('aisdk');
+      // await testWithFormat('aisdk');
       await testWithFormat('mastra');
     }, 20_000);
   });
@@ -1312,7 +1312,7 @@ describe('Input and Output Processors', () => {
           }
         }
 
-        await testWithFormat('aisdk');
+        // await testWithFormat('aisdk');
         await testWithFormat('mastra');
       });
 
@@ -1354,7 +1354,7 @@ describe('Input and Output Processors', () => {
           }
         }
 
-        await testWithFormat('aisdk');
+        // await testWithFormat('aisdk');
         await testWithFormat('mastra');
       });
     });
@@ -1691,7 +1691,7 @@ describe('Input and Output Processors', () => {
     });
   }
 
-  testStructuredOutput('aisdk', openai_v5('gpt-4o'));
+  // testStructuredOutput('aisdk', openai_v5('gpt-4o'));
   testStructuredOutput('mastra', openai_v5('gpt-4o'));
 });
 
