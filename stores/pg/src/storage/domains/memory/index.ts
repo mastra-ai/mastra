@@ -719,7 +719,7 @@ export class MemoryPG extends MemoryStorage {
           messages: [],
           total: 0,
           page,
-          perPage,
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }

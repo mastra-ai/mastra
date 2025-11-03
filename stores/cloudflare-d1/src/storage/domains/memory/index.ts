@@ -736,22 +736,9 @@ export class MemoryStorageD1 extends MemoryStorage {
       );
     }
 
-    try {
-      // Determine how many results to return
-      // Default pagination is always 40 unless explicitly specified
-      let perPage = 40;
-      if (perPageInput !== undefined) {
-        if (perPageInput === false) {
-          // perPageInput: false means get ALL messages
-          perPage = Number.MAX_SAFE_INTEGER;
-        } else if (perPageInput === 0) {
-          // perPageInput: 0 means return zero results
-          perPage = 0;
-        } else if (typeof perPageInput === 'number' && perPageInput > 0) {
-          perPage = perPageInput;
-        }
-      }
+    const perPage = normalizePerPage(perPageInput, 40);
 
+    try {
       const offset = page * perPage;
 
       const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
@@ -841,7 +828,7 @@ export class MemoryStorageD1 extends MemoryStorage {
           messages: [],
           total: 0,
           page,
-          perPage,
+          perPage: preservePerPageForResponse(perPageInput, perPage),
           hasMore: false,
         };
       }
@@ -903,7 +890,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         messages: finalMessages,
         total,
         page,
-        perPage,
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         hasMore,
       };
     } catch (error: any) {
@@ -924,11 +911,12 @@ export class MemoryStorageD1 extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
+      const perPage = normalizePerPage(perPageInput, 40);
       return {
         messages: [],
         total: 0,
         page,
-        perPage: perPageInput === false ? Number.MAX_SAFE_INTEGER : (perPageInput ?? 40),
+        perPage: preservePerPageForResponse(perPageInput, perPage),
         hasMore: false,
       };
     }
