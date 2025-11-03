@@ -5,7 +5,7 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4/model';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
-import { MockLanguageModelV2 } from 'ai-v5/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { config } from 'dotenv';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
@@ -334,65 +334,43 @@ function runStreamTest(version: 'v1' | 'v2') {
       ).toBe(true);
     });
 
-    it('should format messages correctly in onStepFinish when provider sends multiple response-metadata chunks (Issue #7050)', async () => {
-      // This test reproduces the bug where real LLM providers (like OpenRouter)
-      // send multiple response-metadata chunks (after each text-delta)
-      // which causes the message to have multiple text parts, one for each chunks
-      // [{ type: 'text', text: 'Hello' }, { type: 'text', text: ' world' }]
-      // instead of properly formatted messages like:
-      // [{ role: 'assistant', content: [{ type: 'text', text: 'Hello world' }] }]
-      const mockModel =
-        version === 'v1'
-          ? new MockLanguageModelV1({
-              doStream: async () => ({
-                rawCall: { rawPrompt: null, rawSettings: {} },
+    it.skipIf(version === 'v2')(
+      'should format messages correctly in onStepFinish when provider sends multiple response-metadata chunks (Issue #7050)',
+      async () => {
+        // This test reproduces the bug where real LLM providers (like OpenRouter)
+        // send multiple response-metadata chunks (after each text-delta)
+        // which causes the message to have multiple text parts, one for each chunks
+        // [{ type: 'text', text: 'Hello' }, { type: 'text', text: ' world' }]
+        // instead of properly formatted messages like:
+        // [{ role: 'assistant', content: [{ type: 'text', text: 'Hello world' }] }]
+
+        // NOTE: This test is skipped for v2 because it requires format: 'aisdk' which has been removed
+        const mockModel = new MockLanguageModelV1({
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+            stream: convertArrayToReadableStream([
+              { type: 'text-delta', textDelta: 'Hello' },
+              { type: 'text-delta', textDelta: ' world' },
+              {
+                type: 'finish',
                 finishReason: 'stop',
                 usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
-                stream: convertArrayToReadableStream([
-                  { type: 'text-delta', textDelta: 'Hello' },
-                  { type: 'text-delta', textDelta: ' world' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
-                  },
-                ]),
-              }),
-            })
-          : new MockLanguageModelV2({
-              doStream: async () => ({
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                stream: convertArrayToReadableStream([
-                  { type: 'stream-start', warnings: [] },
-                  { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: 'Hello' },
-                  // add response-metadata in the middle to trigger bug where response metadata is added after each text-delta, splitting text into multiple parts, one per text delta chunk
-                  { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-                  { type: 'text-delta', id: '1', delta: ' world' },
-                  { type: 'text-end', id: '1' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                    // Real providers DON'T include formatted messages here
-                  },
-                ]),
-              }),
-            });
+              },
+            ]),
+          }),
+        });
 
-      const agent = new Agent({
-        id: 'test-agent-7050',
-        name: 'Test Agent 7050',
-        instructions: 'test',
-        model: mockModel,
-      });
+        const agent = new Agent({
+          id: 'test-agent-7050',
+          name: 'Test Agent 7050',
+          instructions: 'test',
+          model: mockModel,
+        });
 
-      let capturedStep: any = null;
+        let capturedStep: any = null;
 
-      if (version === 'v1') {
         const stream = await agent.streamLegacy('test message', {
           threadId: 'test-thread-7050',
           resourceId: 'test-resource-7050',
@@ -406,48 +384,22 @@ function runStreamTest(version: 'v1' | 'v2') {
         for await (const _chunk of stream.textStream) {
           // Just consume the stream
         }
-      } else {
-        const result = await agent.stream('test message', {
-          format: 'aisdk',
-          memory: {
-            thread: 'test-thread-7050',
-            resource: 'test-resource-7050',
-          },
-          onStepFinish: async step => {
-            capturedStep = step;
-          },
-        });
 
-        // Consume the v2 stream
-        const reader = result.textStream.getReader();
-        while (true) {
-          const { done } = await reader.read();
-          if (done) break;
-        }
-      }
+        // Verify that onStepFinish was called with properly formatted messages
+        expect(capturedStep).toBeDefined();
+        expect(capturedStep.response).toBeDefined();
+        expect(capturedStep.response.messages).toBeDefined();
+        expect(Array.isArray(capturedStep.response.messages)).toBe(true);
+        expect(capturedStep.response.messages.length).toBeGreaterThan(0);
 
-      // Verify that onStepFinish was called with properly formatted messages
-      expect(capturedStep).toBeDefined();
-      expect(capturedStep.response).toBeDefined();
-      expect(capturedStep.response.messages).toBeDefined();
-      expect(Array.isArray(capturedStep.response.messages)).toBe(true);
-      expect(capturedStep.response.messages.length).toBeGreaterThan(0);
-
-      // Check that messages have the correct CoreMessage structure
-      const firstMessage = capturedStep.response.messages[0];
-      expect(firstMessage).toHaveProperty('role');
-      expect(firstMessage).toHaveProperty('content');
-      expect(typeof firstMessage.role).toBe('string');
-      expect(['assistant', 'system', 'user'].includes(firstMessage.role)).toBe(true);
-
-      if (version === `v2`) {
-        // The bug would cause messages to be multiple text parts for each chunk like;
-        // [{ type: 'text', text: 'Hello' }, { type: 'text', text: ' world' }]
-        // Instead of: [{ role: 'assistant', content: [{ type: 'text', text: 'Hello world' }] }]
-        // should only have a single text part of combined text delta chunks
-        expect(firstMessage.content?.filter(p => p.type === `text`)).toHaveLength(1);
-      }
-    });
+        // Check that messages have the correct CoreMessage structure
+        const firstMessage = capturedStep.response.messages[0];
+        expect(firstMessage).toHaveProperty('role');
+        expect(firstMessage).toHaveProperty('content');
+        expect(typeof firstMessage.role).toBe('string');
+        expect(['assistant', 'system', 'user'].includes(firstMessage.role)).toBe(true);
+      },
+    );
 
     it('should only call saveMessages for the user message when no assistant parts are generated', async () => {
       const mockMemory = new MockMemory();
@@ -932,7 +884,8 @@ function runStreamTest(version: 'v1' | 'v2') {
       expect(secondResponse.response.messages).toEqual([expect.objectContaining({ role: 'assistant' })]);
     }, 30_000);
 
-    it('should include assistant messages in onFinish callback with aisdk format', async () => {
+    it.skip('should include assistant messages in onFinish callback with aisdk format', async () => {
+      // NOTE: This test is skipped because format: 'aisdk' has been removed
       const mockModel = new MockLanguageModelV2({
         doStream: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
