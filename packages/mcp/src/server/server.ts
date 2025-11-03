@@ -1437,7 +1437,7 @@ export class MCPServer extends MCPServerBase {
                 try {
                   resolve(JSON.parse(data));
                 } catch (e) {
-                  reject(new Error('Invalid JSON in request body'));
+                  reject(new Error(`Invalid JSON in request body: ${e instanceof Error ? e.message : String(e)}`));
                 }
               });
               req.on('error', reject);
