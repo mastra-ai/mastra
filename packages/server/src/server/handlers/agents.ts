@@ -788,20 +788,19 @@ export async function streamNetworkHandler({
   }
 }
 
-export async function streamUIMessageHandler(_params: Context & {
-  requestContext: RequestContext;
-  agentId: string;
-  body: GetBody<'stream'> & {
-  requestContext: RequestContext;
-  agentId: string;
-  body: GetBody<'stream'> & {
-    requestContext?: string;
-    onStepFinish?: StreamTextOnStepFinishCallback<any>;
-    onFinish?: StreamTextOnFinishCallback<any>;
-    output?: undefined;
-  };
-  abortSignal?: AbortSignal;
-}): Promise<Response | undefined> {
+export async function streamUIMessageHandler(
+  _params: Context & {
+    requestContext: RequestContext;
+    agentId: string;
+    body: GetBody<'stream'> & {
+      requestContext?: string;
+      onStepFinish?: StreamTextOnStepFinishCallback<any>;
+      onFinish?: StreamTextOnFinishCallback<any>;
+      output?: undefined;
+    };
+    abortSignal?: AbortSignal;
+  },
+): Promise<Response | undefined> {
   try {
     throw new MastraError({
       category: ErrorCategory.USER,
