@@ -788,13 +788,7 @@ export async function streamNetworkHandler({
   }
 }
 
-export async function streamUIMessageHandler({
-  mastra,
-  requestContext,
-  agentId,
-  body,
-  abortSignal,
-}: Context & {
+export async function streamUIMessageHandler({}: Context & {
   requestContext: RequestContext;
   agentId: string;
   body: GetBody<'stream'> & {
@@ -806,20 +800,6 @@ export async function streamUIMessageHandler({
   abortSignal?: AbortSignal;
 }): Promise<Response | undefined> {
   try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    // UI Frameworks may send "client tools" in the body,
-    // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(body, ['tools']);
-
-    const { messages, requestContext: agentRequestContext, ...rest } = body;
-    const finalRequestContext = new RequestContext<Record<string, unknown>>([
-      ...Array.from(requestContext.entries()),
-      ...Array.from(Object.entries(agentRequestContext ?? {})),
-    ]);
-
-    validateBody({ messages });
-
     throw new MastraError({
       category: ErrorCategory.USER,
       domain: ErrorDomain.MASTRA_SERVER,
