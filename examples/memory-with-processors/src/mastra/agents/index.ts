@@ -58,9 +58,9 @@ const searchTool = createTool({
   inputSchema: z.object({
     query: z.string().describe('The search query'),
   }),
-  execute: async ({ context: { query } }) => {
+  execute: async input => {
     // Simulate web search results
-    return `Search results for "${query}": 
+    return `Search results for "${inputData.query}":
     1. Top result with important information
     2. Secondary information related to the query
     3. Additional context that might be helpful`;

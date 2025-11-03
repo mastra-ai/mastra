@@ -228,8 +228,8 @@ function toolsTest(version: 'v1' | 'v2') {
         inputSchema: z.object({
           name: z.string(),
         }),
-        execute: ({ context }) => {
-          return mockFindUser(context) as Promise<Record<string, any>>;
+        execute: (input, _context) => {
+          return mockFindUser(input) as Promise<Record<string, any>>;
         },
       });
 
@@ -604,12 +604,12 @@ function toolsTest(version: 'v1' | 'v2') {
         inputSchema: z.object({
           query: z.string(),
         }),
-        execute: ({ requestContext }) => {
-          capturedValue = requestContext.get('test-value')!;
+        execute: (input, context) => {
+          capturedValue = context.requestContext.get('test-value')!;
 
           return Promise.resolve({
             success: true,
-            requestContextAvailable: !!requestContext,
+            requestContextAvailable: !!context.requestContext,
             requestContextValue: capturedValue,
           });
         },
@@ -741,12 +741,12 @@ function toolsTest(version: 'v1' | 'v2') {
         inputSchema: z.object({
           query: z.string(),
         }),
-        execute: ({ requestContext }) => {
-          capturedValue = requestContext.get('test-value')!;
+        execute: (_input, context) => {
+          capturedValue = context.requestContext.get('test-value')!;
 
           return Promise.resolve({
             success: true,
-            requestContextAvailable: !!requestContext,
+            requestContextAvailable: !!context.requestContext,
             requestContextValue: capturedValue,
           });
         },

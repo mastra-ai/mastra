@@ -247,8 +247,8 @@ const calculatorTool = createTool({
   outputSchema: z.object({
     result: z.number(),
   }),
-  execute: async ({ context }) => {
-    const { operation, a, b } = context;
+  execute: async inputData => {
+    const { operation, a, b } = inputData;
     const operations = {
       add: a + b,
       multiply: a * b,
@@ -277,10 +277,10 @@ const apiTool = createTool({
     status: z.number(),
     data: z.any(),
   }),
-  execute: async ({ context, tracingContext }: ToolExecutionContext<typeof apiToolInputSchema>) => {
-    const { endpoint, method } = context;
+  execute: async (inputData, context?: ToolExecutionContext<typeof apiToolInputSchema>) => {
+    const { endpoint, method } = inputData;
     // Example of adding custom metadata
-    tracingContext?.currentSpan?.update({
+    context?.tracingContext?.currentSpan?.update({
       metadata: {
         apiEndpoint: endpoint,
         httpMethod: method,
@@ -309,13 +309,13 @@ const workflowExecutorTool = createTool({
   outputSchema: z.object({
     result: z.any(),
   }),
-  execute: async ({ context, mastra }: ToolExecutionContext<typeof workflowToolInputSchema>) => {
-    const { workflowId, input } = context;
-    expect(mastra, 'Mastra instance should be available in tool execution context').toBeTruthy();
+  execute: async (inputData, context?: ToolExecutionContext<typeof workflowToolInputSchema>) => {
+    const { workflowId, input: workflowInput } = inputData;
+    expect(context?.mastra, 'Mastra instance should be available in tool execution context').toBeTruthy();
 
-    const workflow = mastra?.getWorkflow(workflowId);
+    const workflow = context?.mastra?.getWorkflow(workflowId);
     const run = await workflow?.createRunAsync();
-    const result = await run?.start({ inputData: input });
+    const result = await run?.start({ inputData: workflowInput });
 
     return { result: result?.status === 'success' ? result.result : null };
   },
@@ -1806,18 +1806,18 @@ describe('AI Tracing Integration Tests', () => {
         description: 'A tool that adds custom metadata',
         inputSchema,
         outputSchema: z.object({ output: z.string() }),
-        execute: async ({ context, tracingContext }: ToolExecutionContext<typeof inputSchema>) => {
+        execute: async (inputData, context?: ToolExecutionContext<typeof inputSchema>) => {
           // Add custom metadata to the current span
-          tracingContext?.currentSpan?.update({
+          context?.tracingContext?.currentSpan?.update({
             metadata: {
               toolOperation: 'metadata-processing',
-              inputValue: context.input,
+              inputValue: inputData.input,
               customFlag: true,
               timestamp: Date.now(),
             },
           });
 
-          return { output: `Processed: ${context.input}` };
+          return { output: `Processed: ${inputData.input}` };
         },
       });
 
@@ -1866,15 +1866,15 @@ describe('AI Tracing Integration Tests', () => {
         description: 'A tool that creates child spans',
         inputSchema,
         outputSchema: z.object({ output: z.string() }),
-        execute: async ({ context, tracingContext }: ToolExecutionContext<typeof inputSchema>) => {
+        execute: async (inputData, context?: ToolExecutionContext<typeof inputSchema>) => {
           // Create a child span for sub-operation
-          const childSpan = tracingContext?.currentSpan?.createChildSpan({
+          const childSpan = context?.tracingContext?.currentSpan?.createChildSpan({
             type: AISpanType.GENERIC,
             name: 'tool-child-operation',
-            input: context.input,
+            input: inputData.input,
             metadata: {
               childOperation: 'data-processing',
-              inputValue: context.input,
+              inputValue: inputData.input,
             },
           });
 
@@ -1885,13 +1885,13 @@ describe('AI Tracing Integration Tests', () => {
           childSpan?.update({
             metadata: {
               ...childSpan.metadata,
-              processedValue: `processed-${context.input}`,
+              processedValue: `processed-${inputData.input}`,
             },
           });
 
-          childSpan?.end({ output: `child-result-${context.input}` });
+          childSpan?.end({ output: `child-result-${inputData.input}` });
 
-          return { output: `Tool processed: ${context.input}` };
+          return { output: `Tool processed: ${inputData.input}` };
         },
       });
 

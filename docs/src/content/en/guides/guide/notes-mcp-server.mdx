@@ -251,9 +251,9 @@ export const writeNoteTool = createTool({
       .describe("The markdown content of the note."),
   }),
   outputSchema: z.string().nonempty(),
-  execute: async ({ context }) => {
+  execute: async (inputData) => {
     try {
-      const { title, content } = context;
+      const { title, content } = inputData;
       const filePath = path.join(NOTES_DIR, `${title}.md`);
       await fs.mkdir(NOTES_DIR, { recursive: true });
       await fs.writeFile(filePath, content, "utf-8");

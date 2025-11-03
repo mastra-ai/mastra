@@ -127,15 +127,15 @@ describe('Agent - network', () => {
     outputSchema: z.object({
       text: z.string(),
     }),
-    execute: async ({ context, ...rest }) => {
-      await rest.writer?.write({
+    execute: async (inputData, context) => {
+      await context?.writer?.write({
         type: 'my-custom-tool-payload',
         payload: {
-          context,
+          context: inputData,
         },
       });
 
-      return { text: `This is a test tool. How cool is the stuff? ${context.howCool}` };
+      return { text: `This is a test tool. How cool is the stuff? ${inputData.howCool}` };
     },
   });
 

@@ -367,8 +367,8 @@ describe('Memory with Processors', () => {
       inputSchema: z.object({
         location: z.string().describe('The location to get the weather for'),
       }),
-      execute: async ({ context: { location } }) => {
-        return `The weather in ${location} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
+      execute: async input => {
+        return `The weather in ${input.location} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
       },
     });
 
@@ -378,8 +378,14 @@ describe('Memory with Processors', () => {
       inputSchema: z.object({
         expression: z.string().describe('The mathematical expression to calculate'),
       }),
-      execute: async ({ context: { expression } }) => {
-        return `The result of ${expression} is ${eval(expression)}`;
+      execute: async input => {
+        // Safe calculation for test purposes - only handles simple multiplication
+        const match = input.expression.match(/^(\d+)\s*\*\s*(\d+)$/);
+        if (match) {
+          const result = parseInt(match[1]) * parseInt(match[2]);
+          return `The result of ${input.expression} is ${result}`;
+        }
+        return `Cannot calculate: ${input.expression}`;
       },
     });
 
