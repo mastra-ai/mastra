@@ -88,17 +88,21 @@ export type ProviderModelsMap = {
     'deepseek-ai/deepseek-v3.1-terminus',
     'google/gemma-3-27b-it',
     'microsoft/phi-4-mini-instruct',
+    'minimaxai/minimax-m2',
     'moonshotai/kimi-k2-instruct',
     'moonshotai/kimi-k2-instruct-0905',
     'nvidia/cosmos-nemotron-34b',
     'nvidia/llama-3.1-nemotron-ultra-253b-v1',
     'nvidia/llama-embed-nemotron-8b',
     'nvidia/nemoretriever-ocr-v1',
+    'nvidia/nvidia-nemotron-nano-9b-v2',
     'nvidia/parakeet-tdt-0.6b-v2',
     'openai/gpt-oss-120b',
     'openai/whisper-large-v3',
     'qwen/qwen3-235b-a22b',
     'qwen/qwen3-coder-480b-a35b-instruct',
+    'qwen/qwen3-next-80b-a3b-instruct',
+    'qwen/qwen3-next-80b-a3b-thinking',
   ];
   readonly upstage: readonly ['solar-mini', 'solar-pro2'];
   readonly groq: readonly [
@@ -623,6 +627,7 @@ export type ProviderModelsMap = {
     'nousresearch/deephermes-3-llama-3-8b-preview',
     'nousresearch/hermes-4-405b',
     'nousresearch/hermes-4-70b',
+    'nvidia/nemotron-nano-9b-v2',
     'openai/gpt-4.1',
     'openai/gpt-4.1-mini',
     'openai/gpt-4o-mini',
@@ -700,6 +705,25 @@ export type ProviderModelsMap = {
     'x-ai/grok-code-fast-1',
     'z-ai/glm-4.5-air',
     'z-ai/glm-4.6',
+  ];
+  readonly iflowcn: readonly [
+    'deepseek-r1',
+    'deepseek-v3',
+    'deepseek-v3.1',
+    'deepseek-v3.2',
+    'glm-4.6',
+    'kimi-k2',
+    'kimi-k2-0905',
+    'qwen3-235b',
+    'qwen3-235b-a22b-instruct',
+    'qwen3-235b-a22b-thinking-2507',
+    'qwen3-32b',
+    'qwen3-coder',
+    'qwen3-coder-plus',
+    'qwen3-max',
+    'qwen3-max-preview',
+    'qwen3-vl-plus',
+    'tstars2.0',
   ];
   readonly synthetic: readonly [
     'hf:MiniMaxAI/MiniMax-M2',
@@ -802,6 +826,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/gpt-oss-120b',
     'accounts/fireworks/models/gpt-oss-20b',
     'accounts/fireworks/models/kimi-k2-instruct',
+    'accounts/fireworks/models/minimax-m2',
     'accounts/fireworks/models/qwen3-235b-a22b',
     'accounts/fireworks/models/qwen3-coder-480b-a35b-instruct',
   ];

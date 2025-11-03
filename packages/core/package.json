@@ -151,6 +151,16 @@
         "default": "./dist/zod-to-json.cjs"
       }
     },
+    "./features": {
+      "import": {
+        "types": "./dist/features/index.d.ts",
+        "default": "./dist/features/index.js"
+      },
+      "require": {
+        "types": "./dist/features/index.d.ts",
+        "default": "./dist/features/index.cjs"
+      }
+    },
     "./agent/message-list": {
       "import": {
         "types": "./dist/agent/message-list/index.d.ts",

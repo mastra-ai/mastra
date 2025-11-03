@@ -23,7 +23,8 @@ const voice = new OpenAIVoice();
 
 // Create an agent with voice capabilities
 export const agent = new Agent({
-  name: "Agent",
+  id: "voice-agent",
+  name: "Voice Agent",
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
   model: openai("gpt-4o"),
   voice,
@@ -111,7 +112,8 @@ const voice = new OpenAIRealtimeVoice({
 
 // Create an agent with speech-to-speech voice capabilities
 export const agent = new Agent({
-  name: "Agent",
+  id: "speech-to-speech-agent",
+  name: "Speech-to-Speech Agent",
   instructions: `You are a helpful assistant with speech-to-speech capabilities.`,
   model: openai("gpt-4o"),
   tools: {
@@ -214,7 +216,8 @@ export const convertToText = async (
 };
 
 export const hybridVoiceAgent = new Agent({
-  name: "hybrid-voice-agent",
+  id: "hybrid-voice-agent",
+  name: "Hybrid Voice Agent",
   model: openai("gpt-4o"),
   instructions: "You can speak and listen using different providers.",
   voice: new CompositeVoice({
@@ -224,7 +227,8 @@ export const hybridVoiceAgent = new Agent({
 });
 
 export const unifiedVoiceAgent = new Agent({
-  name: "unified-voice-agent",
+  id: "unified-voice-agent",
+  name: "Unified Voice Agent",
   instructions: "You are an agent with both STT and TTS capabilities.",
   model: openai("gpt-4o"),
   voice: new OpenAIVoice(),
@@ -269,7 +273,8 @@ import { PlayAIVoice } from "@mastra/voice-playai";
 import { openai } from "@ai-sdk/openai";
 
 export const agent = new Agent({
-  name: "Agent",
+  id: "voice-agent",
+  name: "Voice Agent",
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
   model: openai("gpt-4o"),
 
@@ -345,6 +350,8 @@ import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 
 export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
   // ...
   memory: new Memory({
     options: {
@@ -395,6 +402,8 @@ import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
   // ...
   memory: new Memory({
     storage: new LibSQLStore({
@@ -456,6 +465,8 @@ const standardMemory = new Memory({
 });
 
 export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
   // ...
   memory: ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
@@ -510,7 +521,8 @@ import { Agent } from "@mastra/core/agent";
 import { ModerationProcessor } from "@mastra/core/processors";
 
 export const moderatedAgent = new Agent({
-  name: "moderated-agent",
+  id: "moderated-agent",
+  name: "Moderated Agent",
   instructions: "You are a helpful assistant",
   model: openai("gpt-4o-mini"),
   inputProcessors: [
@@ -537,6 +549,8 @@ The `UnicodeNormalizer` is an input processor that cleans and normalizes user in
 import { UnicodeNormalizer } from "@mastra/core/processors";
 
 export const normalizedAgent = new Agent({
+  id: "normalized-agent",
+  name: "Normalized Agent",
   // ...
   inputProcessors: [
     new UnicodeNormalizer({
@@ -557,6 +571,8 @@ The `PromptInjectionDetector` is an input processor that scans user messages for
 import { PromptInjectionDetector } from "@mastra/core/processors";
 
 export const secureAgent = new Agent({
+  id: "secure-agent",
+  name: "Secure Agent",
   // ...
   inputProcessors: [
     new PromptInjectionDetector({
@@ -579,6 +595,8 @@ The `LanguageDetector` is an input processor that detects and translates user me
 import { LanguageDetector } from "@mastra/core/processors";
 
 export const multilingualAgent = new Agent({
+  id: "multilingual-agent",
+  name: "Multilingual Agent",
   // ...
   inputProcessors: [
     new LanguageDetector({
@@ -605,6 +623,8 @@ The `BatchPartsProcessor` is an output processor that combines multiple stream p
 import { BatchPartsProcessor } from "@mastra/core/processors";
 
 export const batchedAgent = new Agent({
+  id: "batched-agent",
+  name: "Batched Agent",
   // ...
   outputProcessors: [
     new BatchPartsProcessor({
@@ -626,6 +646,8 @@ The `TokenLimiterProcessor` is an output processor that limits the number of tok
 import { TokenLimiterProcessor } from "@mastra/core/processors";
 
 export const limitedAgent = new Agent({
+  id: "limited-agent",
+  name: "Limited Agent",
   // ...
   outputProcessors: [
     new TokenLimiterProcessor({
@@ -647,6 +669,8 @@ The `SystemPromptScrubber` is an output processor that detects and redacts syste
 import { SystemPromptScrubber } from "@mastra/core/processors";
 
 const scrubbedAgent = new Agent({
+  id: "scrubbed-agent",
+  name: "Scrubbed Agent",
   outputProcessors: [
     new SystemPromptScrubber({
       model: openai("gpt-4.1-nano"),
@@ -676,6 +700,8 @@ The `ModerationProcessor` is a hybrid processor that detects inappropriate or ha
 import { ModerationProcessor } from "@mastra/core/processors";
 
 export const moderatedAgent = new Agent({
+  id: "moderated-agent",
+  name: "Moderated Agent",
   // ...
   inputProcessors: [
     new ModerationProcessor({
@@ -703,6 +729,8 @@ The `PIIDetector` is a hybrid processor that detects and removes personally iden
 import { PIIDetector } from "@mastra/core/processors";
 
 export const privateAgent = new Agent({
+  id: "private-agent",
+  name: "Private Agent",
   // ...
   inputProcessors: [
     new PIIDetector({
@@ -745,6 +773,8 @@ import {
 } from "@mastra/core/processors";
 
 export const testAgent = new Agent({
+  id: "test-agent",
+  name: "Test Agent",
   // ...
   inputProcessors: [
     new UnicodeNormalizer({
@@ -773,6 +803,8 @@ Most strategies allow the request to continue without interruption. When `block`
 import { PIIDetector } from "@mastra/core/processors";
 
 export const privateAgent = new Agent({
+  id: "private-agent",
+  name: "Private Agent",
   // ...
   inputProcessors: [
     new PIIDetector({
@@ -870,7 +902,8 @@ import { cityWorkflow } from "../workflows/city-workflow";
 import { weatherTool } from "../tools/weather-tool";
 
 export const routingAgent = new Agent({
-  name: "routing-agent",
+  id: "routing-agent",
+  name: "Routing Agent",
   instructions: `
       You are a network of writers and researchers.
       The user will ask you to research a topic.
@@ -906,7 +939,8 @@ Each agent in a network should include a clear `description` that explains what 
 
 ```typescript title="src/mastra/agents/research-agent.ts" showLineNumbers
 export const researchAgent = new Agent({
-  name: "research-agent",
+  id: "research-agent",
+  name: "Research Agent",
   description: `This agent gathers concise research insights in bullet-point form.
     It's designed to extract key facts without generating full
     responses or narrative content.`,
@@ -916,7 +950,8 @@ export const researchAgent = new Agent({
 
 ```typescript title="src/mastra/agents/writing-agent.ts" showLineNumbers
 export const writingAgent = new Agent({
-  name: "writing-agent",
+  id: "writing-agent",
+  name: "Writing Agent",
   description: `This agent turns researched material into well-structured
     written content. It produces full-paragraph reports with no bullet points,
     suitable for use in articles, summaries, or blog posts.`,
@@ -1136,7 +1171,8 @@ Create an agent by instantiating the `Agent` class with system `instructions` an
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
-  name: "test-agent",
+  id: "test-agent",
+  name: "Test Agent",
   instructions: "You are a helpful assistant.",
   model: "openai/gpt-4o-mini",
 });
@@ -1184,7 +1220,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
-  name: "test-agent",
+  id: "test-agent",
+  name: "Test Agent",
   instructions: "You are a helpful assistant.",
   model: openai("gpt-4o-mini"),
 });
@@ -1496,6 +1533,8 @@ Agents can use tools to go beyond language generation, enabling structured inter
 
 ```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
 export const testAgent = new Agent({
+  id: "test-agent",
+  name: "Test Agent",
   // ...
   tools: { testTool },
 });
@@ -1513,6 +1552,8 @@ export type UserTier = {
 };
 
 export const testAgent = new Agent({
+  id: "test-agent",
+  name: "Test Agent",
   // ...
   model: ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
@@ -1590,7 +1631,8 @@ import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
 
 export const weatherAgent = new Agent({
-  name: "weather-agent",
+  id: "weather-agent",
+  name: "Weather Agent",
   instructions: `
       You are a helpful weather assistant.
       Use the weatherTool to fetch current weather data.`,
@@ -1622,6 +1664,8 @@ import { weatherTool } from "../tools/weather-tool";
 import { activitiesTool } from "../tools/activities-tool";
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
+  name: "Weather Agent",
   // ..
   tools: { weatherTool, activitiesTool },
 });
@@ -2395,7 +2439,7 @@ export const mastraClient = new MastraClient({
 Once `MastraClient` is configured, you can send authenticated requests from your frontend application, or use `curl` for quick local testing:
 
 <Tabs>
-  <TabItem value="curl" label="cURL">
+  <TabItem value="react" label="React">
     ```tsx title="src/components/test-agent.tsx" showLineNumbers copy
     import { mastraClient } from "../../lib/mastra-client";
 
@@ -2415,7 +2459,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
     ```
 
   </TabItem>
-  <TabItem value="react" label="React">
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -2540,7 +2584,7 @@ export const mastraClient = new MastraClient({
 Once `MastraClient` is configured with the Supabase access token, you can send authenticated requests:
 
 <Tabs>
-  <TabItem value="curl" label="cURL">
+    <TabItem value="react" label="React">
     ```tsx title="src/components/test-agent.tsx" showLineNumbers copy
     import { mastraClient } from "../../lib/mastra-client";
 
@@ -2560,7 +2604,7 @@ Once `MastraClient` is configured with the Supabase access token, you can send a
     ```
 
   </TabItem>
-  <TabItem value="react" label="React">
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -2735,7 +2779,7 @@ export const createMastraClient = (accessToken: string) => {
 Once `MastraClient` is configured with the WorkOS access token, you can send authenticated requests:
 
 <Tabs>
-  <TabItem value="curl" label="cURL">
+  <TabItem value="react" label="React">
     ```typescript title="src/api/agents.ts" showLineNumbers copy
     import { WorkOS } from '@workos-inc/node';
     import { MastraClient } from '@mastra/client-js';
@@ -2767,7 +2811,7 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
     ```
 
   </TabItem>
-  <TabItem value="react" label="React">
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -3951,6 +3995,7 @@ export const mastra = new Mastra({
 
 ```typescript title="src/mastra/agents/weather-agent.ts" showLineNumbers
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   // ..
   memory: new Memory({
     // [!code --]
@@ -4367,6 +4412,7 @@ export const mastra = new Mastra({
 
 ```typescript title="src/mastra/agents/weather-agent.ts" showLineNumbers
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   // ..
   memory: new Memory({
     // [!code --]
@@ -4659,6 +4705,7 @@ When creating agents in Mastra, you can specify any AI SDK-supported model.
 import { Agent } from "@mastra/core/agent";
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   name: "Weather Agent",
   instructions: "Instructions for the agent...",
   model: "openai/gpt-4-turbo",
@@ -6046,6 +6093,7 @@ const openrouter = createOpenRouter({
 });
 
 export const assistant = new Agent({
+  id: "assistant",
   name: "assistant",
   instructions: "You are a helpful assistant.",
   model: openrouter("anthropic/claude-sonnet-4"),
@@ -6100,6 +6148,7 @@ const openrouter = createOpenRouter({
 });
 
 export const assistant = new Agent({
+  id: "assistant",
   name: "assistant",
   instructions: "You are a helpful assistant.",
   model: openrouter("anthropic/claude-sonnet-4"),
@@ -6119,6 +6168,7 @@ const openrouter = createOpenRouter({
 });
 
 export const assistant = new Agent({
+  id: "assistant",
   name: "assistant",
   instructions: "You are a helpful assistant.",
   model: openrouter("anthropic/claude-sonnet-4", {
@@ -6240,6 +6290,7 @@ import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   name: "Weather Agent",
   instructions: `
       You are a helpful weather assistant that provides accurate weather information.
@@ -8152,28 +8203,28 @@ The wizard will guide you through setup, create a new directory for your project
 <TabItem value="npm" label="npm">
 
 ```bash copy
-npm create mastra@latest -y
+npm create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash copy
-pnpm create mastra@latest -y
+pnpm create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
 ```bash copy
-yarn create mastra@latest -y
+yarn create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
 ```bash copy
-bun create mastra@latest -y
+bun create mastra@latest
 ```
 
 </TabItem>
@@ -8388,6 +8439,7 @@ import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   name: "Weather Agent",
   instructions: `
       You are a helpful weather assistant that provides accurate weather information.
@@ -9361,6 +9413,7 @@ You can increase this limit by passing the `lastMessages` parameter to the `Memo
 
 ```typescript {3-7} showLineNumbers
 export const testAgent = new Agent({
+  id: "test-agent",
   // ...
   memory: new Memory({
     options: {
@@ -9398,6 +9451,8 @@ import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
+  id: "test-agent",
+  name: "Test Agent",
   model: openai("gpt-4o"),
   memory: new Memory({
     processors: [
@@ -9552,6 +9607,7 @@ import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
+  id: "test-agent",
   // ...
   memory: new Memory(),
 });
@@ -9597,6 +9653,7 @@ import { Agent } from "@mastra/core/agent";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const testAgent = new Agent({
+  id: "test-agent",
   // ...
   memory: new Memory({
     // ...
@@ -9668,6 +9725,7 @@ import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
+  id: "support-agent",
   name: "SupportAgent",
   instructions: "You are a helpful support agent.",
   model: openai("gpt-4o"),
@@ -9893,7 +9951,8 @@ import { openai } from "@ai-sdk/openai";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const libsqlAgent = new Agent({
-  name: "libsql-agent",
+  id: "libsql-agent", 
+  name: "LibSQL Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
@@ -9928,7 +9987,8 @@ import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 import { fastembed } from "@mastra/fastembed";
 
 export const libsqlAgent = new Agent({
-  name: "libsql-agent",
+  id: "libsql-agent",
+  name: "LibSQL Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
@@ -10037,7 +10097,8 @@ import { openai } from "@ai-sdk/openai";
 import { PostgresStore } from "@mastra/pg";
 
 export const pgAgent = new Agent({
-  name: "pg-agent",
+  id: "pg-agent",
+  name: "PG Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
@@ -10072,7 +10133,8 @@ import { PostgresStore, PgVector } from "@mastra/pg";
 import { fastembed } from "@mastra/fastembed";
 
 export const pgAgent = new Agent({
-  name: "pg-agent",
+  id: "pg-agent",
+  name: "PG Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
@@ -10183,7 +10245,8 @@ import { openai } from "@ai-sdk/openai";
 import { UpstashStore } from "@mastra/upstash";
 
 export const upstashAgent = new Agent({
-  name: "upstash-agent",
+  id: "upstash-agent",
+  name: "Upstash Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
@@ -10219,7 +10282,8 @@ import { UpstashStore, UpstashVector } from "@mastra/upstash";
 import { fastembed } from "@mastra/fastembed";
 
 export const upstashAgent = new Agent({
-  name: "upstash-agent",
+  id: "upstash-agent",
+  name: "Upstash Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
@@ -10423,6 +10487,7 @@ import { openai } from "@ai-sdk/openai";
 
 // Create agent with working memory enabled
 const agent = new Agent({
+  id: "personal-assistant",
   name: "PersonalAssistant",
   instructions: "You are a helpful personal assistant.",
   model: openai("gpt-4o"),
@@ -14022,6 +14087,7 @@ import { openai } from "@ai-sdk/openai";
 import { PGVECTOR_PROMPT } from "@mastra/pg";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14041,6 +14107,7 @@ import { openai } from "@ai-sdk/openai";
 import { PINECONE_PROMPT } from "@mastra/pinecone";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14060,6 +14127,7 @@ import { openai } from "@ai-sdk/openai";
 import { QDRANT_PROMPT } from "@mastra/qdrant";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14079,6 +14147,7 @@ import { openai } from "@ai-sdk/openai";
 import { CHROMA_PROMPT } from "@mastra/chroma";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14098,6 +14167,7 @@ import { openai } from "@ai-sdk/openai";
 import { ASTRA_PROMPT } from "@mastra/astra";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14117,6 +14187,7 @@ import { openai } from "@ai-sdk/openai";
 import { LIBSQL_PROMPT } from "@mastra/libsql";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14136,6 +14207,7 @@ import { openai } from "@ai-sdk/openai";
 import { UPSTASH_PROMPT } from "@mastra/upstash";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14155,6 +14227,7 @@ import { openai } from "@ai-sdk/openai";
 import { VECTORIZE_PROMPT } from "@mastra/vectorize";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14174,6 +14247,7 @@ import { openai } from "@ai-sdk/openai";
 import { MONGODB_PROMPT } from "@mastra/mongodb";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14193,6 +14267,7 @@ import { openai } from "@ai-sdk/openai";
 import { OPENSEARCH_PROMPT } from "@mastra/opensearch";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -14212,6 +14287,7 @@ import { openai } from "@ai-sdk/openai";
 import { S3VECTORS_PROMPT } from "@mastra/s3vectors";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -15963,7 +16039,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const colorAgent = new Agent({
-  name: "test-agent",
+  id: "color-agent",
+  name: "Color Agent",
   instructions: `You are a helpful CSS assistant.
   You can change the background color of web pages.
   Respond with a hex reference for the color requested by the user`,
@@ -16381,7 +16458,8 @@ export type UserTier = {
 };
 
 export const weatherAgent = new Agent({
-  name: "weather-agent",
+  id: "weather-agent",
+  name: "Weather Agent",
   instructions: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
@@ -16938,26 +17016,31 @@ Captures OpenTelemetry traces for monitoring and debugging.
 
 ### Querying Messages
 
-Messages are stored in a V2 format internally, which is roughly equivalent to the AI SDK's `UIMessage` format. When querying messages using `getMessages`, you can specify the desired output format, defaulting to `v1` for backwards compatibility:
+Messages are stored in the `MastraDBMessage` format, which provides a consistent structure across the entire Mastra system:
 
 ```typescript copy
-// Get messages in the default V1 format (roughly equivalent to AI SDK's CoreMessage format)
-const messagesV1 = await mastra
+// Get messages for a thread
+const messages = await mastra
   .getStorage()
   .getMessages({ threadId: "your-thread-id" });
 
-// Get messages in the V2 format (roughly equivalent to AI SDK's UIMessage format)
-const messagesV2 = await mastra
-  .getStorage()
-  .getMessages({ threadId: "your-thread-id", format: "v2" });
-```
-
-You can also retrieve messages using an array of message IDs:
-
-```typescript copy
+// Get messages by their IDs
 const messages = await mastra
   .getStorage()
   .listMessagesById({ messageIds: messageIdArr });
+```
+
+All message queries return `MastraDBMessage[]` format. If you need to convert messages to AI SDK formats for UI rendering, use the conversion utilities from `@mastra/ai-sdk/ui`:
+
+```typescript copy
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+
+const messages = await mastra
+  .getStorage()
+  .getMessages({ threadId: "your-thread-id" });
+
+// Convert to AI SDK v5 UIMessage format for UI rendering
+const uiMessages = toAISdkV5Messages(messages);
 ```
 
 ## Storage Providers
@@ -17411,7 +17494,8 @@ import { Agent } from "@mastra/core/agent";
 import { testTool } from "../tools/test-tool";
 
 export const testAgent = new Agent({
-  name: "test-agent",
+  id: "test-agent",
+  name: "Test Agent",
   instructions: "You are a weather agent.",
   model: openai("gpt-4o-mini"),
   tools: { testTool },
@@ -17775,6 +17859,7 @@ import { vercelWeatherTool } from "../tools/vercelWeatherTool"; // Vercel AI SDK
 import { mastraTool } from "../tools/mastraTool"; // Mastra createTool tool
 
 export const mixedToolsAgent = new Agent({
+  id: "mixed-tools-agent",
   name: "Mixed Tools Agent",
   instructions: "You can use tools defined in different formats.",
   model: openai("gpt-4o-mini"),
@@ -17852,6 +17937,7 @@ import { Agent } from "@mastra/core/agent";
 import { testMcpClient } from "../mcp/test-mcp-client";
 
 export const testAgent = new Agent({
+  id: "test-agent",
   name: "Test Agent",
   description: "You are a helpful AI assistant",
   instructions: `
@@ -17880,7 +17966,7 @@ import { testTool } from "../tools/test-tool";
 
 export const testMcpServer = new MCPServer({
   id: "test-mcp-server",
-  name: "Test Server",
+  name: "Test MCP Server",
   version: "1.0.0",
   agents: { testAgent },
   tools: { testTool },
@@ -17889,6 +17975,12 @@ export const testMcpServer = new MCPServer({
 ```
 
 > See [MCPServer](/reference/tools/mcp-server) for a full list of configuration options.
+
+### Serverless deployments
+
+`MCPServer` can be deployed in serverless environments (Cloudflare Workers, Vercel Edge Functions, AWS Lambda, etc.) by enabling the `serverless: true` option in `startHTTP()`. This runs the server in stateless mode, where each request is handled independently without session management.
+
+**Note:** Some MCP features require persistent connections and won't work in serverless mode, including elicitation, resource subscriptions, and update notifications. See the [serverless section](/reference/tools/mcp-server#starthttp) in the API reference for full details and limitations.
 
 ## Registering an `MCPServer`
 
@@ -18268,6 +18360,7 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 // Initialize OpenAI voice for TTS
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18295,6 +18388,7 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18325,6 +18419,7 @@ import { AzureVoice } from "@mastra/voice-azure";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18354,6 +18449,7 @@ import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18383,6 +18479,7 @@ import { PlayAIVoice } from "@mastra/voice-playai";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18412,6 +18509,7 @@ import { GoogleVoice } from "@mastra/voice-google";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18441,6 +18539,7 @@ import { CloudflareVoice } from "@mastra/voice-cloudflare";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18470,6 +18569,7 @@ import { DeepgramVoice } from "@mastra/voice-deepgram";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18499,6 +18599,7 @@ import { SpeechifyVoice } from "@mastra/voice-speechify";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18528,6 +18629,7 @@ import { SarvamVoice } from "@mastra/voice-sarvam";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18557,6 +18659,7 @@ import { MurfVoice } from "@mastra/voice-murf";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18598,6 +18701,7 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18629,6 +18733,7 @@ import { AzureVoice } from "@mastra/voice-azure";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18659,6 +18764,7 @@ import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18689,6 +18795,7 @@ import { GoogleVoice } from "@mastra/voice-google";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18719,6 +18826,7 @@ import { CloudflareVoice } from "@mastra/voice-cloudflare";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18749,6 +18857,7 @@ import { DeepgramVoice } from "@mastra/voice-deepgram";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18779,6 +18888,7 @@ import { SarvamVoice } from "@mastra/voice-sarvam";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18817,6 +18927,7 @@ import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -18849,6 +18960,7 @@ import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -19250,7 +19362,8 @@ import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 
 const agent = new Agent({
-  name: "Agent",
+  id: "agent",
+  name: "OpenAI Realtime Agent",
   instructions: `You are a helpful assistant with real-time voice capabilities.`,
   model: openai("gpt-4o"),
   voice: new OpenAIRealtimeVoice(),
@@ -19282,7 +19395,8 @@ import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
 import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 
 const agent = new Agent({
-  name: "Agent",
+  id: "agent",
+  name: "Gemini Live Agent",
   instructions:
     "You are a helpful assistant with real-time voice capabilities.",
   // Model used for text generation; voice provider handles realtime audio
@@ -19386,6 +19500,7 @@ import { getMicrophoneStream } from "@mastra/node-audio";
 const voice = new OpenAIVoice();
 
 const agent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that provides recommendations based on user input.",
@@ -19482,6 +19597,7 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 const voice = new OpenAIVoice();
 
 const agent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -19661,263 +19777,306 @@ description: "Control flow in Mastra workflows allows you to manage branching, m
 # Control Flow
 [EN] Source: https://mastra.ai/en/docs/workflows/control-flow
 
-When you build a workflow, you typically break down operations into smaller tasks that can be linked and reused. **Steps** provide a structured way to manage these tasks by defining inputs, outputs, and execution logic.
+Workflows run a sequence of predefined tasks, and you can control how that flow is executed. Tasks are divided into **steps**, which can be executed in different ways depending on your requirements. They can run sequentially, in parallel, or follow different paths based on conditions.
 
-- If the schemas match, the `outputSchema` from each step is automatically passed to the `inputSchema` of the next step.
-- If the schemas don't match, use [Input data mapping](./input-data-mapping) to transform the `outputSchema` into the expected `inputSchema`.
+Each step connects to the next in the workflow through defined schemas that keep data controlled and consistent.
+
+## Core principles
+
+- The first step’s `inputSchema` must match the workflow’s `inputSchema`.
+- The final step’s `outputSchema` must match the workflow’s `outputSchema`.
+- Each step’s `outputSchema` must match the next step’s `inputSchema`.
+  - If it doesn’t, use [Input data mapping](#input-data-mapping) to transform the data into the required shape.
 
 ## Chaining steps with `.then()`
 
-Chain steps to execute sequentially using `.then()`:
+Use `.then()` to run steps in order, allowing each step to access the result of the step before it.
 
 ![Chaining steps with .then()](/img/workflows/workflows-control-flow-then.jpg)
 
-```typescript {8-9,4-5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+```typescript {30-31} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  //...
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    formatted: z.string()
+  })
+});
 
-const step1 = createStep({...});
-const step2 = createStep({...});
+const step2 = createStep({
+  // ...
+  inputSchema: z.object({
+    formatted: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+});
 
-export const testWorkflow = createWorkflow({...})
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
   .then(step1)
   .then(step2)
   .commit();
 ```
 
-This does what you'd expect: it executes `step1`, then it executes `step2`.
-
 ## Simultaneous steps with `.parallel()`
 
-Execute steps simultaneously using `.parallel()`:
+Use `.parallel()` to run steps at the same time. Each step's `id` is used when defining a following step's `inputSchema` and becomes the key on the `inputData` object used to access the previous step's values. The outputs of parallel steps can then be referenced or combined by a following step.
 
 ![Concurrent steps with .parallel()](/img/workflows/workflows-control-flow-parallel.jpg)
 
-```typescript {9,4-5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+```typescript {42} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  id: "step-1",
+  // ...
+});
 
-const step1 = createStep({...});
-const step2 = createStep({...});
-const step3 = createStep({...});
+const step2 = createStep({
+  id: "step-2",
+  // ...
+});
 
-export const testWorkflow = createWorkflow({...})
+const step3 = createStep({
+  id: "step-3",
+  inputSchema: z.object({
+    "step-1": z.object({
+      formatted: z.string()
+    }),
+    "step-2": z.object({
+      emphasized: z.string()
+    })
+  }),
+  outputSchema: z.object({
+    combined: z.string()
+  }),
+  execute: async ({ inputData }) => {
+    const { formatted } = inputData["step-1"];
+    const { emphasized } = inputData["step-2"];
+    return {
+      combined: `${formatted} | ${emphasized}`
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    combined: z.string()
+  })
+})
   .parallel([step1, step2])
   .then(step3)
   .commit();
 ```
 
-This executes `step1` and `step2` concurrently, then continues to `step3` after both complete.
-
-> See [Parallel Execution with Steps](/docs/workflows/control-flow#simultaneous-steps-with-parallel) for more information.
-
 > 📹 Watch: How to run steps in parallel and optimize your Mastra workflow → [YouTube (3 minutes)](https://youtu.be/GQJxve5Hki4)
 
 ## Conditional logic with `.branch()`
 
-Execute steps conditionally using `.branch()`:
+Use `.branch()` to choose which step to run based on a condition. All steps in a branch need the same `inputSchema` and `outputSchema` because branching requires consistent schemas so workflows can follow different paths.
 
 ![Conditional branching with .branch()](/img/workflows/workflows-control-flow-branch.jpg)
 
-```typescript {8-11,4-5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+```typescript {33-36} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...})
 
-const lessThanStep = createStep({...});
-const greaterThanStep = createStep({...});
+const stepA = createStep({
+  // ...
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  })
+});
 
-export const testWorkflow = createWorkflow({...})
+const stepB = createStep({
+  // ...
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  })
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  })
+})
+  .then(step1)
   .branch([
-    [async ({ inputData: { value } }) => value <= 10, lessThanStep],
-    [async ({ inputData: { value } }) => value > 10, greaterThanStep]
+    [async ({ inputData: { value } }) => value > 10, stepA],
+    [async ({ inputData: { value } }) => value <= 10, stepB]
   ])
   .commit();
 ```
 
-Branch conditions are evaluated sequentially, but steps with matching conditions are executed in parallel.
+## Input data mapping
 
-> See [Conditional Branching](/docs/workflows/control-flow#conditional-logic-with-branch) for more information.
+When using `.then()`, `.parallel()`, or `.branch()`, it is sometimes necessary to transform the output of a previous step to match the input of the next. In these cases you can use `.map()` to access the `inputData` and transform it to create a suitable data shape for the next step.
 
-## Looping steps
+![Mapping with .map()](/img/workflows/workflows-data-mapping-map.jpg)
 
-Workflows support two types of loops. When looping a step, or any step-compatible construct like a nested workflow, the initial `inputData` is sourced from the output of the previous step.
-
-To ensure compatibility, the loop’s initial input must either match the shape of the previous step’s output, or be explicitly transformed using the `map` function.
-
-- Match the shape of the previous step’s output, or
-- Be explicitly transformed using the `map` function.
-
-### Repeating with `.dowhile()`
-
-Executes step repeatedly while a condition is true.
-
-![Repeating with .dowhile()](/img/workflows/workflows-control-flow-dowhile.jpg)
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const counterStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-  .dowhile(counterStep, async ({ inputData: { number } }) => number < 10)
-  .commit();
-```
-
-### Repeating with `.dountil()`
-
-Executes step repeatedly until a condition becomes true.
-
-![Repeating with .dountil()](/img/workflows/workflows-control-flow-dountil.jpg)
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const counterStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-  .dountil(counterStep, async ({ inputData: { number } }) => number > 10)
-  .commit();
-```
-
-### Loop management
-
-Loop conditions can be implemented in different ways depending on how you want the loop to end. Common patterns include checking values returned in `inputData`, setting a maximum number of iterations, or aborting execution when a limit is reached.
-
-#### Conditional loops
-
-The `inputData` for a loop step is the output of a previous step. Use the values in `inputData` to determine whether the loop should continue or stop.
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const counterStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-.dountil(nestedWorkflowStep, async ({ inputData: { userResponse } }) => userResponse === "yes")
-.commit();
-```
-
-#### Limiting loops
-
-The `iterationCount` tracks how many times the loop step has run. You can use this to limit the number of iterations and prevent infinite loops. Combine it with `inputData` values to stop the loop after a set number of attempts.
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const counterStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-.dountil(nestedWorkflowStep, async ({ inputData: { userResponse, iterationCount } }) => userResponse === "yes" || iterationCount >= 10)
-.commit();
-```
-
-#### Aborting loops
-
-Use `iterationCount` to limit how many times a loop runs. If the count exceeds your threshold, throw an error to fail the step and stop the workflow.
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const counterStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-.dountil(nestedWorkflowStep, async ({ inputData: { userResponse, iterationCount } }) => {
-  if (iterationCount >= 10) {
-    throw new Error("Maximum iterations reached");
-  }
-  return userResponse === "yes";
-})
-.commit();
-```
-
-### Repeating with `.foreach()`
-
-Sequentially executes the same step for each item from the `inputSchema`.
-
-![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const mapStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-  .foreach(mapStep)
-  .commit();
-```
-
-#### Setting concurrency limits
-
-Use `concurrency` to execute steps in parallel with a limit on the number of concurrent executions.
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const mapStep = createStep({...})
-
-export const testWorkflow = createWorkflow({...})
-  .foreach(mapStep, { concurrency: 2 })
-  .commit();
-```
-
-## Using a nested workflow
-
-Use a nested workflow as a step by passing it to `.then()`. This runs each of its steps in sequence as part of the parent workflow.
-
-```typescript {4,7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-export const nestedWorkflow = createWorkflow({...})
-
-export const testWorkflow = createWorkflow({...})
-  .then(nestedWorkflow)
-  .commit();
-```
-
-## Cloning a workflow
-
-Use `cloneWorkflow` to duplicate an existing workflow. This lets you reuse its structure while overriding parameters like `id`.
-
-```typescript {6,10} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep, cloneWorkflow } from "@mastra/core/workflows";
-import { z } from "zod";
-
+```typescript {9} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({...});
-const parentWorkflow = createWorkflow({...})
-const clonedWorkflow = cloneWorkflow(parentWorkflow, { id: "cloned-workflow" });
+const step2 = createStep({...});
 
 export const testWorkflow = createWorkflow({...})
   .then(step1)
-  .then(clonedWorkflow)
+  .map(async ({ inputData }) => {
+    const { foo } = inputData;
+    return {
+      bar: `new ${foo}`,
+    };
+  })
+  .then(step2)
   .commit();
 ```
 
-## Example Run Instance
+The `.map()` method provides additional helper functions for more complex mapping scenarios.
 
-The following example demonstrates how to start a run with multiple inputs. Each input will pass through the `mapStep` sequentially.
+**Available helper functions:**
 
-```typescript {6} title="src/test-workflow.ts" showLineNumbers copy
-import { mastra } from "./mastra";
+- [`getStepResult()`](/reference/workflows/workflow-methods/map#using-getstepresult): Access a specific step's full output
+- [`getInitData()`](/reference/workflows/workflow-methods/map#using-getinitdata): Access the workflow's initial input data
+- [`mapVariable()`](/reference/workflows/workflow-methods/map#using-mapvariable): Use declarative object syntax to extract and rename fields
 
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+## Looping steps
 
-const result = await run.start({
-  inputData: [{ number: 10 }, { number: 100 }, { number: 200 }],
+Workflows support different looping methods that let you repeat steps until or while a condition is met, or iterate over arrays. Loops can be combined with other control methods like `.then()`.
+
+### Looping with `.dountil()`
+
+Use `.dountil()` to run a step repeatedly until a condition becomes true.
+
+![Repeating with .dountil()](/img/workflows/workflows-control-flow-dountil.jpg)
+
+```typescript {17} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+
+const step2 = createStep({
+  // ...
+  execute: async ({ inputData }) => {
+    const { number } = inputData;
+    return {
+      number: number + 1
+    };
+  }
 });
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .dountil(step2, async ({ inputData: { number } }) => number > 10)
+  .commit();
 ```
 
-To execute this run from your terminal:
+### Looping with `.dowhile()`
 
-```bash copy
-npx tsx src/test-workflow.ts
+Use `.dowhile()` to run a step repeatedly while a condition remains true.
+
+![Repeating with .dowhile()](/img/workflows/workflows-control-flow-dowhile.jpg)
+
+```typescript {17} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+
+const step2 = createStep({
+  // ...
+  execute: async ({ inputData }) => {
+    const { number } = inputData;
+    return {
+      number: number + 1
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .dowhile(step2, async ({ inputData: { number } }) => number < 10)
+  .commit();
+```
+
+### Looping with `.foreach()`
+
+Use `.foreach()` to run the same step for each item in an array. The input must be of type `array` so the loop can iterate over its values, applying the step’s logic to each one.
+
+![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
+
+```typescript {17} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  // ...
+  inputSchema: z.string(),
+  outputSchema: z.string(),
+  execute: async ({ inputData }) => {
+    return inputData.toUpperCase();
+  }
+});
+
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.array(z.string()),
+  outputSchema: z.array(z.string())
+})
+  .foreach(step1)
+  .then(step2)
+  .commit();
+```
+
+#### Concurrency limits
+
+Use `concurrency` to control the number of array items processed at the same time. The default is `1`, which runs steps sequentially. Increasing the value allows `.foreach()` to process multiple items simultaneously.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...})
+
+export const testWorkflow = createWorkflow({...})
+  .foreach(step1, { concurrency: 4 })
+  .commit();
+```
+
+## Loop management
+
+Loop conditions can be implemented in different ways depending on how you want the loop to end. Common patterns include checking values returned in `inputData`, setting a maximum number of iterations, or aborting execution when a limit is reached.
+
+### Aborting loops
+
+Use `iterationCount` to limit how many times a loop runs. If the count exceeds your threshold, throw an error to fail the step and stop the workflow.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .dountil(step1, async ({ inputData: { userResponse, iterationCount } }) => {
+    if (iterationCount >= 10) {
+      throw new Error("Maximum iterations reached");
+    }
+    return userResponse === "yes";
+  })
+  .commit();
 ```
 
 
@@ -20155,6 +20314,7 @@ import { Memory } from "@mastra/memory";
 import { LibSQLVector } from "@mastra/libsql";
 
 export const famousPersonAgent = new Agent({
+  id: "famous-person-generator",
   name: "Famous Person Generator",
   instructions: `You are a famous person generator for a "Heads Up" guessing game.
 
@@ -20197,6 +20357,7 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const gameAgent = new Agent({
+  id: "game-agent",
   name: "Game Agent",
   instructions: `You are a helpful game assistant for a "Heads Up" guessing game.
 
@@ -20882,7 +21043,7 @@ Workflows let you define complex sequences of tasks using clear, structured step
 
 Use workflows for tasks that are clearly defined upfront and involve multiple steps with a specific execution order. They give you fine-grained control over how data flows and transforms between steps, and which primitives are called at each stage.
 
-> **📹 Watch**: → An introduction to workflows, and how they compare to agents [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
+> **📹 Watch**:  → An introduction to workflows, and how they compare to agents [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
 
 ## Core principles
 
@@ -20904,18 +21065,18 @@ import { createStep } from "@mastra/core/workflows";
 const step1 = createStep({
   id: "step-1",
   inputSchema: z.object({
-    message: z.string(),
+    message: z.string()
   }),
   outputSchema: z.object({
-    formatted: z.string(),
+    formatted: z.string()
   }),
   execute: async ({ inputData }) => {
     const { message } = inputData;
 
     return {
-      formatted: message.toUpperCase(),
+      formatted: message.toUpperCase()
     };
-  },
+  }
 });
 ```
 
@@ -20923,7 +21084,7 @@ const step1 = createStep({
 
 ### Using agents and tools
 
-Workflow steps can also call registered agents or import and execute tools directly, visit the [Agents and Tools](./agents-and-tools) page for more information.
+Workflow steps can also call registered agents or import and execute tools directly, visit the [Using Tools](/docs/agents/using-tools) page for more information.
 
 ## Creating a workflow
 
@@ -20946,47 +21107,63 @@ export const testWorkflow = createWorkflow({
 })
   .then(step1)
   .commit();
-
 ```
 
 > See the [Workflow Class](/reference/workflows/workflow) for a full list of configuration options.
 
 ### Understanding control flow
 
-Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](./control-flow) page for more information.
+Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](/docs/workflows/control-flow) page for more information.
 
-#### Composing workflow steps
+## Workflow state
 
-When using `.then()`, steps run sequentially. Each step’s `inputSchema` must match the `outputSchema` of the previous step. The final step’s `outputSchema` should match the workflow’s `outputSchema` to ensure end-to-end type safety.
+Workflow state lets you share values across steps without passing them through every step’s inputSchema and outputSchema. All state values are defined in the workflow’s stateSchema, but each step only declares the values it needs. To set initial values, use initialState when running the workflow.
 
-```typescript {4,7,14,17,24,27} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
-  //...
-  inputSchema: z.object({
-    message: z.string(),
+  // ...
+  stateSchema: z.object({
+    processedItems: z.array(z.string()),
   }),
-  outputSchema: z.object({
-    formatted: z.string(),
-  }),
+  execute: async ({ inputData, state, setState }) => {
+    const { message } = inputData;
+    const { processedItems } = state;
+
+    setState({
+      ...state,
+      processedItems: [...processedItems, "item-1", "item-2"],
+    });
+
+    return {
+      formatted: message.toUpperCase(),
+    };
+  },
 });
 
 const step2 = createStep({
   // ...
-  inputSchema: z.object({
-    formatted: z.string(),
+  stateSchema: z.object({
+    metadata: z.object({
+      processedBy: z.string(),
+    }),
   }),
-  outputSchema: z.object({
-    emphasized: z.string(),
-  }),
+  execute: async ({ inputData, state }) => {
+    const { formatted } = inputData;
+    const { metadata } = state;
+
+    return {
+      emphasized: `${formatted}!! ${metadata.processedBy}`,
+    };
+  },
 });
 
 export const testWorkflow = createWorkflow({
   // ...
-  inputSchema: z.object({
-    message: z.string(),
-  }),
-  outputSchema: z.object({
-    emphasized: z.string(),
+  stateSchema: z.object({
+    processedItems: z.array(z.string()),
+    metadata: z.object({
+      processedBy: z.string(),
+    }),
   }),
 })
   .then(step1)
@@ -20994,12 +21171,64 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-### Registering a workflow
+## Workflows as steps
+
+Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/workflows/control-flow).
+
+```typescript {26} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+const childWorkflow = createWorkflow({
+  id: "child-workflow",
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
+  .then(childWorkflow)
+  .commit();
+```
+
+### Cloning a workflow
+
+Clone a workflow using `cloneWorkflow()` when you want to reuse its logic but track it separately under a new ID. Each clone runs independently and appears as a distinct workflow in logs and observability tools.
+
+```typescript {6} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { cloneWorkflow } from "@mastra/core/workflows";
+
+const step1 = createStep({...});
+
+const parentWorkflow = createWorkflow({...})
+const clonedWorkflow = cloneWorkflow(parentWorkflow, { id: "cloned-workflow" });
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .then(clonedWorkflow)
+  .commit();
+```
+
+## Registering a workflow
 
 Register your workflow in the Mastra instance to make it available throughout your application. Once registered, it can be called from agents or tools and has access to shared resources such as logging and observability features:
 
 ```typescript {6} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core/mastra";
 import { testWorkflow } from "./workflows/test-workflow";
 
 export const mastra = new Mastra({
@@ -21015,14 +21244,9 @@ You can run workflows from agents, tools, the Mastra Client, or the command line
 ```typescript showLineNumbers copy
 const testWorkflow = mastra.getWorkflow("testWorkflow");
 ```
-
 :::info
-
 `mastra.getWorkflow()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
-
 :::
-
-> See [Running Workflows](/docs/workflows/overview) for more information.
 
 ## Running workflows
 
@@ -21030,7 +21254,6 @@ Workflows can be run in two modes: start waits for all steps to complete before 
 
 <Tabs>
   <TabItem value="start" label="Start">
-
 Create a workflow run instance using `createRunAsync()`, then call `.start()` with `inputData` matching the workflow's `inputSchema`. The workflow executes all steps and returns the final result.
 
 ```typescript showLineNumbers copy
@@ -21038,16 +21261,14 @@ const run = await testWorkflow.createRunAsync();
 
 const result = await run.start({
   inputData: {
-    message: "Hello world",
-  },
+    message: "Hello world"
+  }
 });
 
 console.log(result);
 ```
-
   </TabItem>
   <TabItem value="stream" label="Stream">
-
 Create a workflow run instance using `.createRunAsync()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as each step executes, which you can iterate over to track progress.
 
 ```typescript showLineNumbers copy
@@ -21055,15 +21276,14 @@ const run = await testWorkflow.createRunAsync();
 
 const result = await run.stream({
   inputData: {
-    message: "Hello world",
-  },
+    message: "Hello world"
+  }
 });
 
 for await (const chunk of result.stream) {
   console.log(chunk);
 }
 ```
-
   </TabItem>
 </Tabs>
 
@@ -21083,7 +21303,7 @@ The workflow output includes the full execution lifecycle, showing the input and
       },
       "output": {
         "formatted": "HELLO WORLD"
-      }
+      },
     },
     "step-2": {
       "status": "success",
@@ -21092,7 +21312,7 @@ The workflow output includes the full execution lifecycle, showing the input and
       },
       "output": {
         "emphasized": "HELLO WORLD!!!"
-      }
+      },
     }
   },
   "input": {
@@ -21118,10 +21338,12 @@ const step1 = createStep({
   execute: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
-    const maxResults = userTier === "enterprise" ? 1000 : 50;
+    const maxResults = userTier === "enterprise"
+      ? 1000
+      : 50;
 
     return { maxResults };
-  },
+  }
 });
 ```
 
@@ -21135,9 +21357,6 @@ Use the Mastra [Playground](/docs/getting-started/studio) to easily run workflow
 
 For a closer look at workflows, see our [Workflow Guide](/guides/guide/ai-recruiter), which walks through the core concepts with a practical example.
 
-- [Inngest workflow example](/examples/workflows/inngest-workflow)
-- [Control Flow](/docs/workflows/control-flow)
-- [Suspend and Resume](/docs/workflows/suspend-and-resume)
 
 
 ---
@@ -21763,6 +21982,7 @@ export const memory = new Memory({
 });
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   name: "Weather Agent",
   instructions: `
     You are a helpful weather assistant that provides accurate weather information.
@@ -22284,7 +22504,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const imageAnalysisAgent = new Agent({
-  name: "image-analysis",
+  id: "image-analysis-agent",
+  name: "Image Analysis Agent",
   description: "Analyzes images to identify objects and describe scenes",
   instructions: `
     You can view an image and identify objects, describe scenes, and answer questions about the content.
@@ -22426,7 +22647,8 @@ export type SupportRequestContext = {
 };
 
 export const supportAgent = new Agent({
-  name: "dynamic-support-agent",
+  id: "support-agent",
+  name: "Support Agent",
   description: "AI support agent that adapts to user subscription tiers",
 
   instructions: async ({
@@ -22711,7 +22933,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const copywriterAgent = new Agent({
-  name: "copywriter-agent",
+  id: "copywriter-agent",
+  name: "Copywriter Agent",
   instructions: "You are a copywriter agent that writes blog post copy.",
   model: openai("gpt-4o"),
 });
@@ -22756,7 +22979,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const editorAgent = new Agent({
-  name: "Editor",
+  id: "editor-agent",
+  name: "Editor Agent",
   instructions: "You are an editor agent that edits blog post copy.",
   model: openai("gpt-4o-mini"),
 });
@@ -22806,7 +23030,8 @@ import { copywriterTool } from "../tools/example-copywriter-tool";
 import { editorTool } from "../tools/example-editor-tool";
 
 export const publisherAgent = new Agent({
-  name: "publisherAgent",
+  id: "publisher-agent",
+  name: "Publisher Agent",
   instructions:
     "You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.",
   model: openai("gpt-4o-mini"),
@@ -22890,7 +23115,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const harryPotterAgent = new Agent({
-  name: "harry-potter-agent",
+  id: "harry-potter-agent",
+  name: "Harry Potter Agent",
   description:
     "Provides character-style responses from the Harry Potter universe.",
   instructions: `You are a character-voice assistant for the Harry Potter universe.
@@ -23068,6 +23294,7 @@ import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const chatAgent = new Agent({
+  id: "chat-agent",
   name: "Chat Agent",
   instructions: `
     You are a helpful, friendly, and knowledgeable AI assistant that loves to chat with users via WhatsApp.
@@ -23116,6 +23343,7 @@ import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const textMessageAgent = new Agent({
+  id: "text-message-agent",
   name: "Text Message Agent",
   instructions: `
     You are a text message converter that takes formal or lengthy text and breaks it down into natural, casual text messages.
@@ -23621,6 +23849,7 @@ import { openai } from "@ai-sdk/openai";
 import { MongoDBStore } from "@mastra/mongodb";
 
 export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
   name: "mongodb-agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
@@ -23662,6 +23891,7 @@ import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
 import { fastembed } from "@mastra/fastembed";
 
 export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
   name: "mongodb-agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
@@ -23785,6 +24015,7 @@ import { LibSQLStore } from "@mastra/libsql";
 import { z } from "zod";
 
 export const workingMemorySchemaAgent = new Agent({
+  id: "working-memory-schema-agent",
   name: "working-memory-schema-agent",
   instructions: `
     You are a todo list AI agent.
@@ -23981,7 +24212,8 @@ import { openai } from "@ai-sdk/openai";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const workingMemoryTemplateAgent = new Agent({
-  name: "working-memory-template-agent",
+  id: "working-memory-template-agent",
+  name: "Working Memory Template Agent",
   instructions: `
     You are a todo list AI agent.
     Always show the current list when starting a conversation.
@@ -24197,7 +24429,8 @@ const getCurrentTime = createTool({
 });
 
 export const exampleAgent = new Agent({
-  name: "example-agent",
+  id: "example-agent",
+  name: "Example Agent",
   instructions: "You are a helpful AI assistant.",
   model: openai("gpt-4"),
   tools: {
@@ -24429,7 +24662,8 @@ import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "../processors/message-length-limiter";
 
 export const blockingAgent = new Agent({
-  name: "blocking-agent",
+  id: "blocking-agent",
+  name: "Blocking Agent",
   instructions: "You are a helpful assistant with input length limits",
   model: "openai/gpt-4o",
   inputProcessors: [
@@ -24445,7 +24679,8 @@ import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "../processors/message-length-limiter";
 
 export const simpleAgent = new Agent({
-  name: "simple-agent",
+  id: "simple-agent",
+  name: "Simple Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   inputProcessors: [new MessageLengthLimiter(500)],
@@ -24462,7 +24697,8 @@ import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter
 
 // Create agent with generous character limit
 export const agent = new Agent({
-  name: "length-limited-agent",
+  id: "length-limited-agent",
+  name: "Length Limited Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   inputProcessors: [
@@ -24494,7 +24730,8 @@ import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter
 
 // Reuse same agent but with tighter character limit
 export const agent = new Agent({
-  name: "length-limited-agent",
+  id: "length-limited-agent",
+  name: "Length Limited Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   inputProcessors: [
@@ -24527,7 +24764,8 @@ import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter
 
 // Reuse same agent but with very strict character limit
 export const agent = new Agent({
-  name: "length-limited-agent",
+  id: "length-limited-agent",
+  name: "Length Limited Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   inputProcessors: [
@@ -24708,7 +24946,8 @@ import { Agent } from "@mastra/core/agent";
 import { ResponseLengthLimiter } from "../processors/response-length-limiter";
 
 export const blockingAgent = new Agent({
-  name: "blocking-agent",
+  id: "blocking-agent",
+  name: "Blocking Agent",
   instructions: "You are a helpful assistant with response length limits",
   model: "openai/gpt-4o",
   outputProcessors: [
@@ -24724,7 +24963,8 @@ import { Agent } from "@mastra/core/agent";
 import { ResponseLengthLimiter } from "../processors/response-length-limiter";
 
 export const simpleAgent = new Agent({
-  name: "simple-agent",
+  id: "simple-agent",
+  name: "Simple Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   outputProcessors: [new ResponseLengthLimiter(300)],
@@ -24741,7 +24981,8 @@ import { ResponseLengthLimiter } from "./mastra/processors/response-length-limit
 
 // Create agent with generous response limit
 export const agent = new Agent({
-  name: "response-limited-agent",
+  id: "response-limited-agent",
+  name: "Response Limited Agent",
   instructions: "You are a helpful assistant. Keep responses concise.",
   model: "openai/gpt-4o",
   outputProcessors: [
@@ -24774,7 +25015,8 @@ import { ResponseLengthLimiter } from "./mastra/processors/response-length-limit
 
 // Reuse same agent but with stricter response limit
 export const agent = new Agent({
-  name: "response-limited-agent",
+  id: "response-limited-agent",
+  name: "Response Limited Agent",
   instructions: "You are a helpful assistant.",
   model: "openai/gpt-4o",
   outputProcessors: [
@@ -24813,7 +25055,8 @@ import { ResponseLengthLimiter } from "./mastra/processors/response-length-limit
 
 // Reuse same agent but with very strict response limit
 export const agent = new Agent({
-  name: "response-limited-agent",
+  id: "response-limited-agent",
+  name: "Response Limited Agent",
   instructions:
     "You are a verbose assistant who provides detailed explanations.",
   model: "openai/gpt-4o",
@@ -24974,7 +25217,8 @@ import { openai } from "@ai-sdk/openai";
 import { ResponseValidator } from "../processors/response-validator";
 
 export const validatedAgent = new Agent({
-  name: "validated-agent",
+  id: "validated-agent",
+  name: "Validated Agent",
   instructions:
     "You are a helpful assistant. Always mention the key concepts in your responses.",
   model: openai("gpt-4o"),
@@ -24995,7 +25239,8 @@ import { ResponseValidator } from "./mastra/processors/response-validator";
 
 // Create agent that requires AI-related keywords
 export const agent = new Agent({
-  name: "validated-agent",
+  id: "validated-agent",
+  name: "Validated Agent",
   instructions:
     "You are an AI expert. Always mention artificial intelligence and machine learning when discussing AI topics.",
   model: openai("gpt-4o"),
@@ -25029,7 +25274,8 @@ import { ResponseValidator } from "./mastra/processors/response-validator";
 
 // Reuse same agent but require security-related keywords
 export const agent = new Agent({
-  name: "validated-agent",
+  id: "validated-agent",
+  name: "Validated Agent",
   instructions: "You are a helpful assistant.",
   model: openai("gpt-4o"),
   outputProcessors: [
@@ -25070,7 +25316,8 @@ import { ResponseValidator } from "./mastra/processors/response-validator";
 
 // Reuse same agent but require financial keywords
 export const agent = new Agent({
-  name: "validated-agent",
+  id: "validated-agent",
+  name: "Validated Agent",
   instructions: "You are a general assistant.",
   model: openai("gpt-4o"),
   outputProcessors: [
@@ -25189,7 +25436,8 @@ export class AdvancedResponseValidator implements Processor {
 
 // Usage example
 export const advancedAgent = new Agent({
-  name: "advanced-validated-agent",
+  id: "advanced-validated-agent",
+  name: "Advanced Validated Agent",
   instructions: "You are a technical writer.",
   model: openai("gpt-4o"),
   outputProcessors: [
@@ -25956,6 +26204,7 @@ Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{17} title="index.ts"
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
     Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
@@ -26909,6 +27158,7 @@ Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{13} title="src/index.ts"
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   instructions:
     "You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.",
@@ -27057,6 +27307,7 @@ Set up a single Mastra agent that can handle both querying and cleaning:
 
 ```typescript copy showLineNumbers{26} title="index.ts"
 const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   instructions: `You are a helpful assistant that handles both querying and cleaning documents.
     When cleaning: Process, clean, and label data, remove irrelevant information and deduplicate content while preserving key facts.
@@ -27255,6 +27506,7 @@ Set up the Mastra agent with chain-of-thought prompting instructions:
 
 ```typescript copy showLineNumbers{14} title="index.ts"
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context.
 Follow these steps for each response:
@@ -27457,6 +27709,7 @@ Set up the Mastra agent:
 
 ```typescript copy showLineNumbers{23} title="index.ts"
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context.`,
   model: openai("gpt-4o-mini"),
@@ -28321,6 +28574,7 @@ The agent requires both the vector query tool and a system prompt containing:
 
 ```typescript copy showLineNumbers{43} title="index.ts"
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -28506,6 +28760,7 @@ Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{19} title="index.ts"
 const ragAgent = new Agent({
+  id: "rag-agent",
   name: "GraphRAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context. Format your answers as follows:
 
@@ -28804,6 +29059,7 @@ import { openai } from '@ai-sdk/openai';
 import { weatherTool } from '../tools/weather-tool';
 
 export const weatherAgent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   instructions: 'You are a helpful weather assistant that provides accurate weather information.',
   model: openai('gpt-4o-mini'),
@@ -29045,6 +29301,7 @@ import { z } from "zod";
 
 // Have the agent do something
 export const speechToSpeechServer = new Agent({
+  id: "speech-to-speech-agent",
   name: "mastra",
   instructions: "You are a helpful assistant.",
   voice: new OpenAIRealtimeVoice(),
@@ -29247,6 +29504,7 @@ You are an AI note assistant tasked with providing concise, structured summaries
 `;
 
 export const noteTakerAgent = new Agent({
+  id: "note-taker-agent",
   name: "Note Taker Agent",
   instructions: instructions,
   model: openai("gpt-4o"),
@@ -29343,6 +29601,7 @@ const instructions = `
 `;
 
 export const storyTellerAgent = new Agent({
+  id: "story-teller-agent",
   name: "Story Teller Agent",
   instructions: instructions,
   model: openai("gpt-4o"),
@@ -29499,6 +29758,7 @@ import { Agent } from "@mastra/core/agent";
 import { OpenAIVoice } from "@mastra/voice-openai";
 
 export const optimistAgent = new Agent({
+  id: "optimist-agent",
   name: "Optimist",
   instructions:
     "You are an optimistic debater who sees the positive side of every topic. Keep your responses concise and engaging, about 2-3 sentences.",
@@ -29509,6 +29769,7 @@ export const optimistAgent = new Agent({
 });
 
 export const skepticAgent = new Agent({
+  id: "skeptic-agent",
   name: "Skeptic",
   instructions:
     "You are a RUDE skeptical debater who questions assumptions and points out potential issues. Keep your responses concise and engaging, about 2-3 sentences.",
@@ -29984,6 +30245,7 @@ import { openai } from "@ai-sdk/openai";
 
 // Create a new planning agent that uses the OpenAI model
 const planningAgent = new Agent({
+  id: "planning-agent",
   name: "planningAgent",
   model: openai("gpt-4o"),
   instructions: `
@@ -30548,6 +30810,7 @@ import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
 const recruiter = new Agent({
+  id: "recruiter-agent",
   name: "Recruiter Agent",
   instructions: `You are a recruiter.`,
   model: openai("gpt-4o-mini"),
@@ -30789,6 +31052,7 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const chefAgent = new Agent({
+  id: "chef-agent",
   name: "chef-agent",
   instructions:
     "You are Michel, a practical and experienced home chef" +
@@ -31569,6 +31833,7 @@ const vectorQueryTool = createVectorQueryTool({
 });
 
 export const researchAgent = new Agent({
+  id: "research-agent",
   name: "Research Assistant",
   instructions: `You are a helpful research assistant that analyzes academic papers and technical documents.
     Use the provided vector query tool to find relevant information from your knowledge base,
@@ -31896,6 +32161,7 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const stockAgent = new Agent({
+  id: "stock-agent",
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
@@ -31971,6 +32237,7 @@ import { Agent } from "@mastra/core/agent";
 import { stockPrices } from "../tools/stockPrices";
 
 export const stockAgent = new Agent({
+  id: "stock-agent",
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
@@ -32105,6 +32372,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
+        id: "search-agent",
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
@@ -32119,6 +32387,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
+        id: "search-agent",
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
@@ -32144,6 +32413,7 @@ Setup the tool:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
+        id: "search-agent",
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
@@ -32162,6 +32432,7 @@ Setup the tool:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
+        id: "search-agent",
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
@@ -32231,6 +32502,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
 import { Agent } from "@mastra/core/agent";
 
 export const searchAgent = new Agent({
+  id: "search-agent",
   name: "Search Agent",
   instructions:
     "You are a search agent that can search the web for information.",
@@ -32291,6 +32563,7 @@ Add to your Agent
 import { webSearch } from "./tools/searchTool";
 
 export const searchAgent = new Agent({
+  id: "search-agent",
   name: "Search Agent",
   instructions:
     "You are a search agent that can search the web for information.",
@@ -32439,6 +32712,7 @@ import { Memory } from "@mastra/memory";
 const memory = new Memory();
 
 const agent = new Agent({
+  id: "agent-network",
   name: "agent-network",
   agents: { agent1, agent2 },
   tools: { tool1, tool2 },
@@ -32459,6 +32733,7 @@ Before:
 import { NewAgentNetwork } from "@mastra/core/network/vnext";
 
 const agent = new NewAgentNetwork({
+  id: "agent-network",
   name: "agent-network",
   agents: { agent1, agent2 },
   workflows: { workflow1 },
@@ -32919,6 +33194,86 @@ const memory = new Memory({
 ```
 
 If you want to adopt the new default behavior, you can optionally remove explicit `scope: 'resource'` declarations as they're now redundant.
+
+### Changed: Message Format Unification
+
+**Breaking Changes:**
+
+1. `MastraMessageV2` type renamed to `MastraDBMessage`
+2. `format` parameter removed from all get methods, `MastraDBMessage` is always the returned format, which can then be converted as needed via helper utils in `@mastra/ai-sdk`
+3. MessageList `.v2()` methods renamed to `.db()`
+4. AI SDK format conversion moved to `@mastra/ai-sdk/ui`
+
+**Why these changes?**
+
+- Provide a consistent and predictable API across all memory methods
+- Clarify the purpose of message types with better naming
+- Simplify the API by removing unnecessary format parameters
+- Enable better tree-shaking by separating UI conversion utilities
+
+**Migration:**
+
+#### 1. Update Type Imports
+
+Replace all instances of `MastraMessageV2` with `MastraDBMessage`:
+
+```typescript
+// Before
+import { MastraMessageV2 } from "@mastra/core";
+function yourCustomFunction(input: MastraMessageV2) {}
+// After
+import { MastraDBMessage } from "@mastra/core";
+function yourCustomFunction(input: MastraDBMessage) {}
+```
+
+#### 2. Update Memory Method Return Types
+
+The `rememberMessages` method now returns an object wrapper for consistency between all methods:
+
+```typescript
+// Before
+const messages = await memory.rememberMessages({ threadId, resourceId });
+
+// After
+const { messages } = await memory.rememberMessages({ threadId, resourceId });
+```
+
+#### 4. Update AI SDK Format Conversion
+
+Message format conversion for AI SDK compatibility has moved to dedicated utility functions:
+
+```typescript
+// Before
+import { convertMessages } from '@mastra/core';
+const uiMessages = convertMessages(messages).to('AI.V5');
+
+// After
+import { toAISdkV5Messages, toAISdkV4Messages } from '@mastra/ai-sdk/ui';
+
+// For AI SDK v5
+const v5Messages = toAISdkV5Messages(messages);
+
+// For AI SDK v4
+const v4Messages = toAISdkV4Messages(messages);
+```
+
+#### 5. Remove Format Parameters
+
+The `format` parameter has been removed from all get methods. `MastraDBMessage` is now the default return format everywhere:
+
+```typescript
+// Before
+const messages = await memory.getMessages({ threadId, format: "v2" });
+const uiMessages = await memory.getMessages({ threadId, format: "ui" });
+
+// After
+const result = await memory.query({ threadId });
+const messages = result.messages; // Always MastraDBMessage[]
+
+// Use conversion functions for AI SDK formats
+import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
+const uiMessages = toAISdkV5Messages(messages);
+```
 
 ### Deprecated: `format: "aisdk"`
 
@@ -33406,6 +33761,7 @@ import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
+  id: "my-agent",
   name: "my-agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
@@ -33521,7 +33877,7 @@ Gateway providers aggregate multiple model providers and add features like cachi
       logo={<NetlifyLogo />}
     />    <CardGridItem
       title="OpenRouter"
-      description="118 models"
+      description="119 models"
       href="/models/gateways/openrouter"
       logo="https://models.dev/logos/openrouter.svg"
 
@@ -33557,7 +33913,8 @@ Learn more in the [Netlify documentation](https://docs.netlify.com/build/ai-gate
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "netlify/anthropic/claude-3-5-haiku-20241022"
 });
@@ -33634,7 +33991,7 @@ description: "Use AI models through OpenRouter."
 # <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
 [EN] Source: https://mastra.ai/en/models/gateways/openrouter
 
-OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 118 models through Mastra's model router.
+OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 119 models through Mastra's model router.
 
 Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 
@@ -33644,7 +34001,8 @@ Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "openrouter/anthropic/claude-3.5-haiku"
 });
@@ -33733,6 +34091,7 @@ ANTHROPIC_API_KEY=ant-...
 | `nousresearch/deephermes-3-llama-3-8b-preview` |
 | `nousresearch/hermes-4-405b` |
 | `nousresearch/hermes-4-70b` |
+| `nvidia/nemotron-nano-9b-v2` |
 | `openai/gpt-4.1` |
 | `openai/gpt-4.1-mini` |
 | `openai/gpt-4o-mini` |
@@ -33815,7 +34174,8 @@ Learn more in the [Vercel documentation](https://ai-sdk.dev/providers/ai-sdk-pro
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "vercel/alibaba/qwen3-coder-plus"
 });
@@ -33932,7 +34292,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 48+ AI providers and 833+ models through Mastra's model router."
+description: "Access 49+ AI providers and 856+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -33945,7 +34305,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 833 models from 48 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 856 models from 49 providers through a single API.
 
 ## Features
 
@@ -33969,7 +34329,8 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "openai/gpt-5"
     })
@@ -33980,7 +34341,8 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "anthropic/claude-4-5-sonnet"
     })
@@ -33991,7 +34353,8 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "google/gemini-2.5-flash"
     })
@@ -34002,7 +34365,8 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "xai/grok-4"
     })
@@ -34013,7 +34377,8 @@ Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and ro
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "openrouter/anthropic/claude-haiku-4-5"
     })
@@ -34068,7 +34433,7 @@ Browse the directory of available models using the navigation on the left, or ex
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 42 more</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 43 more</div>
       </div>
     </CardGridItem>
 </CardGrid>
@@ -34093,14 +34458,16 @@ import { Agent } from "@mastra/core/agent";
 
 // Use a cost-effective model for document processing
 const documentProcessor = new Agent({
-  name: "document-processor",
+  id: "document-processor",
+  name: "Document Processor",
   instructions: "Extract and summarize key information from documents",
   model: "openai/gpt-4o-mini"
 })
 
 // Use a powerful reasoning model for complex analysis
 const reasoningAgent = new Agent({
-  name: "reasoning-agent",
+  id: "reasoning-agent",
+  name: "Reasoning Agent",
   instructions: "Analyze data and provide strategic recommendations",
   model: "anthropic/claude-opus-4-1"
 })
@@ -34111,7 +34478,8 @@ Since models are just strings, you can select them dynamically based on [request
 
 ```typescript showLineNumbers
 const agent = new Agent({
-  name: "dynamic-assistant",
+  id: "dynamic-assistant",
+  name: "Dynamic Assistant",
   model: ({ requestContext }) => {
     const provider = requestContext.get("provider-id");
     const model = requestContext.get("model-id");
@@ -34133,6 +34501,8 @@ Different model providers expose their own configuration options. With OpenAI, y
 ```typescript showLineNumbers
 // Agent level (apply to all future messages)
 const planner = new Agent({
+  id: "planner",
+  name: "Planner",
   instructions: {
     role: "system",
     content: "You are a helpful assistant.",
@@ -34165,7 +34535,8 @@ If you need to specify custom headers, such as an organization ID or other provi
 
 ```typescript showLineNumbers
 const agent = new Agent({
-  name: "custom-agent",
+  id: "custom-agent",
+  name: "Custom Agent",
   model: {
     id: "openai/gpt-4-turbo",
     apiKey: process.env.OPENAI_API_KEY,
@@ -34191,7 +34562,8 @@ Relying on a single model creates a single point of failure for your application
 import { Agent } from '@mastra/core/agent';
 
 const agent = new Agent({
-  name: 'resilient-assistant',
+  id: 'resilient-assistant',
+  name: 'Resilient Assistant',
   instructions: 'You are a helpful assistant.',
   model: [
     {
@@ -34223,7 +34595,8 @@ import { groq } from '@ai-sdk/groq';
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   model: groq('gemma2-9b-it')
 })
 ```
@@ -34279,7 +34652,8 @@ DASHSCOPE_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "alibaba-cn/deepseek-r1"
 });
@@ -35045,6 +35419,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -35061,7 +35436,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -35101,7 +35477,8 @@ DASHSCOPE_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "alibaba/qvq-max"
 });
@@ -35603,6 +35980,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
@@ -35619,7 +35997,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -35683,7 +36062,8 @@ ANTHROPIC_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "anthropic/claude-3-5-haiku-20241022"
 });
@@ -35939,6 +36319,7 @@ for await (const chunk of stream) {
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     id: "anthropic/claude-3-5-haiku-20241022",
@@ -35954,7 +36335,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -36078,7 +36460,8 @@ BASETEN_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct"
 });
@@ -36148,6 +36531,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://inference.baseten.co/v1",
@@ -36164,7 +36548,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -36205,7 +36590,8 @@ CEREBRAS_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "cerebras/gpt-oss-120b"
 });
@@ -36287,6 +36673,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.cerebras.ai/v1",
@@ -36303,7 +36690,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -36353,7 +36741,8 @@ CHUTES_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "chutes/MiniMaxAI/MiniMax-M2"
 });
@@ -36759,6 +37148,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://llm.chutes.ai/v1",
@@ -36775,7 +37165,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -36838,7 +37229,8 @@ CORTECS_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "cortecs/claude-4-5-sonnet"
 });
@@ -37004,6 +37396,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.cortecs.ai/v1",
@@ -37020,7 +37413,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -37061,7 +37455,8 @@ DEEPINFRA_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct"
 });
@@ -37143,6 +37538,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.deepinfra.com/v1/openai",
@@ -37159,7 +37555,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -37209,7 +37606,8 @@ DEEPSEEK_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "deepseek/deepseek-chat"
 });
@@ -37267,6 +37665,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.deepseek.com",
@@ -37283,7 +37682,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -37323,7 +37723,8 @@ FASTROUTER_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "fastrouter/anthropic/claude-opus-4.1"
 });
@@ -37525,6 +37926,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://go.fastrouter.ai/api/v1",
@@ -37541,7 +37943,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -37556,7 +37959,7 @@ const agent = new Agent({
 
 ---
 title: "Fireworks AI | Models | Mastra"
-description: "Use Fireworks AI models with Mastra. 10 models available."
+description: "Use Fireworks AI models with Mastra. 11 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -37569,7 +37972,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 # <img src="https://models.dev/logos/fireworks-ai.svg" alt="Fireworks AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Fireworks AI
 [EN] Source: https://mastra.ai/en/models/providers/fireworks-ai
 
-Access 10 Fireworks AI models through Mastra's model router. Authentication is handled automatically using the `FIREWORKS_API_KEY` environment variable.
+Access 11 Fireworks AI models through Mastra's model router. Authentication is handled automatically using the `FIREWORKS_API_KEY` environment variable.
 
 Learn more in the [Fireworks AI documentation](https://fireworks.ai/docs/).
 
@@ -37581,7 +37984,8 @@ FIREWORKS_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "fireworks-ai/accounts/fireworks/models/deepseek-r1-0528"
 });
@@ -37703,6 +38107,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3
   },
   {
+    "model": "fireworks-ai/accounts/fireworks/models/minimax-m2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
     "model": "fireworks-ai/accounts/fireworks/models/qwen3-235b-a22b",
     "imageInput": false,
     "audioInput": false,
@@ -37735,6 +38151,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.fireworks.ai/inference/v1/",
@@ -37751,7 +38168,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -37791,7 +38209,8 @@ GITHUB_TOKEN=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "github-models/ai21-labs/ai21-jamba-1.5-large"
 });
@@ -38485,6 +38904,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://models.github.ai/inference",
@@ -38501,7 +38921,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -38565,7 +38986,8 @@ GOOGLE_GENERATIVE_AI_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "google/gemini-1.5-flash"
 });
@@ -38881,6 +39303,7 @@ for await (const chunk of stream) {
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     id: "google/gemini-1.5-flash",
@@ -38896,7 +39319,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -39028,7 +39452,8 @@ GROQ_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "groq/deepseek-r1-distill-llama-70b"
 });
@@ -39266,6 +39691,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.groq.com/openai/v1",
@@ -39282,7 +39708,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -39332,7 +39759,8 @@ HF_TOKEN=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "huggingface/MiniMaxAI/MiniMax-M2"
 });
@@ -39534,6 +39962,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://router.huggingface.co/v1",
@@ -39550,12 +39979,310 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "huggingface/zai-org/GLM-4.6"
       : "huggingface/MiniMaxAI/MiniMax-M2";
+  }
+});
+```
+
+
+
+
+---
+title: "iFlow | Models | Mastra"
+description: "Use iFlow models with Mastra. 17 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
+
+# <img src="https://models.dev/logos/iflowcn.svg" alt="iFlow logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />iFlow
+[EN] Source: https://mastra.ai/en/models/providers/iflowcn
+
+Access 17 iFlow models through Mastra's model router. Authentication is handled automatically using the `IFLOW_API_KEY` environment variable.
+
+Learn more in the [iFlow documentation](https://platform.iflow.cn/en/docs).
+
+```bash
+IFLOW_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "iflowcn/deepseek-r1"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [iFlow documentation](https://platform.iflow.cn/en/docs) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "iflowcn/deepseek-r1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/deepseek-v3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/deepseek-v3.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/deepseek-v3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 128000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/kimi-k2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/kimi-k2-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-235b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-235b-a22b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-235b-a22b-thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-32b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-coder",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-coder-plus",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-max",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-max-preview",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-vl-plus",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/tstars2.0",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://apis.iflow.cn/v1",
+    id: "iflowcn/deepseek-r1",
+    apiKey: process.env.IFLOW_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "iflowcn/tstars2.0"
+      : "iflowcn/deepseek-r1";
   }
 });
 ```
@@ -39590,7 +40317,8 @@ INCEPTION_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "inception/mercury"
 });
@@ -39648,6 +40376,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.inceptionlabs.ai/v1/",
@@ -39664,7 +40393,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -39769,7 +40499,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/fastrouter.svg"
     />    <CardGridItem
       title="Fireworks AI"
-      description="10 models"
+      description="11 models"
       href="/models/providers/fireworks-ai"
       logo="https://models.dev/logos/fireworks-ai.svg"
     />    <CardGridItem
@@ -39782,6 +40512,11 @@ Direct access to individual AI model providers. Each provider offers unique mode
       description="14 models"
       href="/models/providers/huggingface"
       logo="https://models.dev/logos/huggingface.svg"
+    />    <CardGridItem
+      title="iFlow"
+      description="17 models"
+      href="/models/providers/iflowcn"
+      logo="https://models.dev/logos/iflowcn.svg"
     />    <CardGridItem
       title="Inception"
       description="2 models"
@@ -39834,7 +40569,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/nebius.svg"
     />    <CardGridItem
       title="Nvidia"
-      description="16 models"
+      description="20 models"
       href="/models/providers/nvidia"
       logo="https://models.dev/logos/nvidia.svg"
     />    <CardGridItem
@@ -39947,7 +40682,8 @@ INFERENCE_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "inference/google/gemma-3"
 });
@@ -40089,6 +40825,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://inference.net/v1",
@@ -40105,7 +40842,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -40145,7 +40883,8 @@ LLAMA_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "llama/cerebras-llama-4-maverick-17b-128e-instruct"
 });
@@ -40263,6 +41002,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.llama.com/compat/v1/",
@@ -40279,7 +41019,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -40319,7 +41060,8 @@ LMSTUDIO_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "lmstudio/openai/gpt-oss-20b"
 });
@@ -40389,6 +41131,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "http://127.0.0.1:1234/v1",
@@ -40405,7 +41148,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -40445,7 +41189,8 @@ LUCIDQUERY_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "lucidquery/lucidnova-rf1-100b"
 });
@@ -40503,6 +41248,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://lucidquery.com/api/v1",
@@ -40519,7 +41265,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -40560,7 +41307,8 @@ MISTRAL_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "mistral/codestral-latest"
 });
@@ -40822,6 +41570,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.mistral.ai/v1",
@@ -40838,7 +41587,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -40888,7 +41638,8 @@ MODELSCOPE_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "modelscope/Qwen/Qwen3-235B-A22B-Instruct-2507"
 });
@@ -41006,6 +41757,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api-inference.modelscope.cn/v1",
@@ -41022,7 +41774,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -41062,7 +41815,8 @@ MOONSHOT_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "moonshotai-cn/kimi-k2-0711-preview"
 });
@@ -41132,6 +41886,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.moonshot.cn/v1",
@@ -41148,7 +41903,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -41188,7 +41944,8 @@ MOONSHOT_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "moonshotai/kimi-k2-0711-preview"
 });
@@ -41258,6 +42015,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.moonshot.ai/v1",
@@ -41274,7 +42032,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -41314,7 +42073,8 @@ MORPH_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "morph/auto"
 });
@@ -41384,6 +42144,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.morphllm.com/v1",
@@ -41400,7 +42161,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -41440,7 +42202,8 @@ NEBIUS_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "nebius/NousResearch/hermes-4-405b"
 });
@@ -41654,6 +42417,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.studio.nebius.com/v1/",
@@ -41670,7 +42434,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -41685,7 +42450,7 @@ const agent = new Agent({
 
 ---
 title: "Nvidia | Models | Mastra"
-description: "Use Nvidia models with Mastra. 16 models available."
+description: "Use Nvidia models with Mastra. 20 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -41698,7 +42463,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 # <img src="https://models.dev/logos/nvidia.svg" alt="Nvidia logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Nvidia
 [EN] Source: https://mastra.ai/en/models/providers/nvidia
 
-Access 16 Nvidia models through Mastra's model router. Authentication is handled automatically using the `NVIDIA_API_KEY` environment variable.
+Access 20 Nvidia models through Mastra's model router. Authentication is handled automatically using the `NVIDIA_API_KEY` environment variable.
 
 Learn more in the [Nvidia documentation](https://docs.api.nvidia.com/nim/).
 
@@ -41710,7 +42475,8 @@ NVIDIA_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "nvidia/black-forest-labs/flux.1-dev"
 });
@@ -41796,6 +42562,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "nvidia/minimaxai/minimax-m2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "nvidia/moonshotai/kimi-k2-instruct",
     "imageInput": false,
     "audioInput": false,
@@ -41868,6 +42646,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "nvidia/nvidia/nvidia-nemotron-nano-9b-v2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "nvidia/nvidia/parakeet-tdt-0.6b-v2",
     "imageInput": false,
     "audioInput": true,
@@ -41926,6 +42716,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 66536,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "nvidia/qwen/qwen3-next-80b-a3b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/qwen/qwen3-next-80b-a3b-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -41936,6 +42750,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://integrate.api.nvidia.com/v1",
@@ -41952,11 +42767,12 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "nvidia/qwen/qwen3-coder-480b-a35b-instruct"
+      ? "nvidia/qwen/qwen3-next-80b-a3b-thinking"
       : "nvidia/black-forest-labs/flux.1-dev";
   }
 });
@@ -42016,7 +42832,8 @@ OPENAI_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "openai/codex-mini-latest"
 });
@@ -42416,6 +43233,7 @@ for await (const chunk of stream) {
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     id: "openai/codex-mini-latest",
@@ -42431,7 +43249,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -42604,7 +43423,8 @@ OPENCODE_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "opencode/an-gbt"
 });
@@ -42723,7 +43543,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 204800,
     "maxOutput": 131072,
     "inputCost": 0.6,
-    "outputCost": 1.9
+    "outputCost": 2.2
   },
   {
     "model": "opencode/gpt-5",
@@ -42806,6 +43626,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://opencode.ai/zen/v1",
@@ -42822,7 +43643,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -42863,7 +43685,8 @@ PERPLEXITY_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "perplexity/sonar"
 });
@@ -42945,6 +43768,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.perplexity.ai",
@@ -42961,7 +43785,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -43011,7 +43836,8 @@ REQUESTY_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "requesty/anthropic/claude-3-7-sonnet"
 });
@@ -43201,6 +44027,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://router.requesty.ai/v1",
@@ -43217,7 +44044,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -43257,7 +44085,8 @@ SCALEWAY_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "scaleway/bge-multilingual-gemma2"
 });
@@ -43447,6 +44276,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.scaleway.ai/v1",
@@ -43463,7 +44293,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -43503,7 +44334,8 @@ SUBMODEL_INSTAGEN_ACCESS_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "submodel/Qwen/Qwen3-235B-A22B-Instruct-2507"
 });
@@ -43645,6 +44477,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://llm.submodel.ai/v1",
@@ -43661,7 +44494,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -43701,7 +44535,8 @@ SYNTHETIC_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "synthetic/hf:MiniMaxAI/MiniMax-M2"
 });
@@ -43999,6 +44834,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.synthetic.new/v1",
@@ -44015,7 +44851,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -44056,7 +44893,8 @@ TOGETHER_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "togetherai/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8"
 });
@@ -44162,6 +45000,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.together.xyz/v1",
@@ -44178,7 +45017,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -44228,7 +45068,8 @@ UPSTAGE_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "upstage/solar-mini"
 });
@@ -44286,6 +45127,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.upstage.ai",
@@ -44302,7 +45144,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -44342,7 +45185,8 @@ VENICE_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "venice/deepseek-coder-v2-lite"
 });
@@ -44532,6 +45376,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.venice.ai/api/v1",
@@ -44548,7 +45393,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -44588,7 +45434,8 @@ VULTR_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "vultr/deepseek-r1-distill-llama-70b"
 });
@@ -44682,6 +45529,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.vultrinference.com/v1",
@@ -44698,7 +45546,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -44738,7 +45587,8 @@ WANDB_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "wandb/Qwen/Qwen3-235B-A22B-Instruct-2507"
 });
@@ -44892,6 +45742,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.inference.wandb.ai/v1",
@@ -44908,7 +45759,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -44949,7 +45801,8 @@ XAI_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "xai/grok-2"
 });
@@ -45217,6 +46070,7 @@ for await (const chunk of stream) {
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     id: "xai/grok-2",
@@ -45232,7 +46086,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -45315,7 +46170,8 @@ ZHIPU_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "zai-coding-plan/glm-4.5"
 });
@@ -45409,6 +46265,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.z.ai/api/coding/paas/v4",
@@ -45425,7 +46282,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -45465,7 +46323,8 @@ ZHIPU_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "zai/glm-4.5"
 });
@@ -45559,6 +46418,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.z.ai/api/paas/v4",
@@ -45575,7 +46435,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -45615,7 +46476,8 @@ ZENMUX_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "zenmux/anthropic/claude-haiku-4.5"
 });
@@ -45865,6 +46727,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://zenmux.ai/api/v1",
@@ -45881,7 +46744,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -45921,7 +46785,8 @@ ZHIPU_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "zhipuai-coding-plan/glm-4.5"
 });
@@ -46015,6 +46880,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://open.bigmodel.cn/api/coding/paas/v4",
@@ -46031,7 +46897,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -46071,7 +46938,8 @@ ZHIPU_API_KEY=your-api-key
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "zhipuai/glm-4.5"
 });
@@ -46165,6 +47033,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://open.bigmodel.cn/api/paas/v4",
@@ -46181,7 +47050,8 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -46214,14 +47084,16 @@ import { Agent } from "@mastra/core/agent";
 
 // String instructions
 export const agent = new Agent({
-  name: "test-agent",
+  id: "test-agent",
+  name: "Test Agent",
   instructions: "You are a helpful assistant that provides concise answers.",
   model: openai("gpt-4o"),
 });
 
 // System message object
 export const agent2 = new Agent({
-  name: "test-agent-2",
+  id: "test-agent-2",
+  name: "Test Agent 2",
   instructions: {
     role: "system",
     content: "You are an expert programmer",
@@ -46231,7 +47103,8 @@ export const agent2 = new Agent({
 
 // Array of system messages
 export const agent3 = new Agent({
-  name: "test-agent-3",
+  id: "test-agent-3",
+  name: "Test Agent 3",
   instructions: [
     { role: "system", content: "You are a helpful assistant" },
     { role: "system", content: "You have expertise in TypeScript" },
@@ -46249,7 +47122,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const agent = new Agent({
-  name: "core-message-agent",
+  id: "core-message-agent",
+  name: "Core Message Agent",
   instructions: {
     role: "system",
     content:
@@ -46277,7 +47151,8 @@ const preferredTone = {
 };
 
 export const agent = new Agent({
-  name: "multi-message-agent",
+  id: "multi-message-agent",
+  name: "Multi Message Agent",
   instructions: [
     { role: "system", content: "You are a customer service representative." },
     preferredTone,
@@ -48687,7 +49562,8 @@ import { workflow1 } from "./workflows";
 import { tool1, tool2 } from "./tools";
 
 const agent = new Agent({
-  name: "network-agent",
+  id: "network-agent",
+  name: "Network Agent",
   instructions:
     "You are a network agent that can help users with a variety of tasks.",
   model: openai("gpt-4o"),
@@ -50588,8 +51464,9 @@ const savedMessages = await mastraClient.saveMessageToMemory({
       content: "Hello!",
       id: "1",
       threadId: "thread-1",
+      resourceId: "resource-1",
       createdAt: new Date(),
-      type: "text",
+      format: 2,
     },
   ],
   agentId: "agent-1",
@@ -51300,45 +52177,6 @@ This method does not accept any parameters.
 
 - [MCP overview](/docs/tools-mcp/mcp-overview)
 - [MCP server reference](/reference/tools/mcp-server)
-
-
----
-title: "Reference: Mastra.getMemory() | Core | Mastra Docs"
-description: "Documentation for the `Mastra.getMemory()` method in Mastra, which retrieves the configured memory instance."
----
-
-# Mastra.getMemory()
-[EN] Source: https://mastra.ai/en/reference/core/getMemory
-
-The `.getMemory()` method is used to retrieve the memory instance that has been configured in the Mastra instance.
-
-## Usage example
-
-```typescript copy
-mastra.getMemory();
-```
-
-## Parameters
-
-This method does not accept any parameters.
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "memory",
-      type: "MastraMemory | undefined",
-      description:
-        "The configured memory instance, or undefined if no memory has been configured.",
-    },
-  ]}
-/>
-
-## Related
-
-- [Memory overview](/docs/memory/overview)
-- [Memory reference](/reference/memory/memory-class)
 
 
 ---
@@ -52883,15 +53721,15 @@ await memory?.deleteMessages(["671ae63f-3a91-4082-a907-fe7de78e10ec"]);
 
 ```typescript title="src/test-memory.ts" showLineNumbers copy
 import { mastra } from "./mastra";
-import { UIMessageWithMetadata } from "@mastra/core/agent";
+import { MastraDBMessage } from "@mastra/core";
 
 const agent = mastra.getAgent("agent");
 const memory = await agent.getMemory();
 
-const { uiMessages } = await memory!.query({ threadId: "thread-123" });
+const { messages } = await memory!.query({ threadId: "thread-123" });
 
-const messageIds = uiMessages.map(
-  (message: UIMessageWithMetadata) => message.id,
+const messageIds = messages.map(
+  (message: MastraDBMessage) => message.id,
 );
 await memory?.deleteMessages([...messageIds]);
 ```
@@ -53330,13 +54168,7 @@ await memory?.query({ threadId: "user-123" });
         "Configuration options for message retrieval and semantic search",
       isOptional: true,
     },
-    {
-      name: "format",
-      type: "'v1' | 'v2'",
-      description:
-        "Message format to return. Defaults to 'v2' for current format, 'v1' for backwards compatibility",
-      isOptional: true,
-    },
+
   ]}
 />
 
@@ -53421,14 +54253,8 @@ await memory?.query({ threadId: "user-123" });
   content={[
     {
       name: "messages",
-      type: "CoreMessage[]",
-      description: "Array of retrieved messages in their core format",
-    },
-    {
-      name: "uiMessages",
-      type: "UIMessageWithMetadata[]",
-      description:
-        "Array of messages formatted for UI display, including proper threading of tool calls and results",
+      type: "MastraDBMessage[]",
+      description: "Array of retrieved messages in the database format",
     },
   ]}
 />
@@ -53441,7 +54267,7 @@ import { mastra } from "./mastra";
 const agent = mastra.getAgent("agent");
 const memory = await agent.getMemory();
 
-const { messages, uiMessages } = await memory!.query({
+const { messages } = await memory!.query({
   threadId: "thread-123",
   selectBy: {
     last: 50,
@@ -53462,8 +54288,11 @@ const { messages, uiMessages } = await memory!.query({
   },
 });
 
-console.log(messages);
-console.log(uiMessages);
+console.log(messages); // MastraDBMessage[]
+
+// Convert to AI SDK format if needed
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+const uiMessages = toAISdkV5Messages(messages);
 ```
 
 ### Related
@@ -58832,13 +59661,6 @@ The following parameters are available for all chunking strategies.
       defaultValue: "4000",
       description:
         "Maximum size of each chunk. **Note:** Some strategy configurations (markdown with headers, HTML with headers) ignore this parameter.",
-    },
-    {
-      name: "size",
-      type: "number",
-      isOptional: true,
-      description:
-        "**Deprecated:** Use `maxSize` instead. This parameter will be removed in the next major version.",
     },
     {
       name: "overlap",
@@ -75122,7 +75944,7 @@ const httpServer = http.createServer(async (req, res) => {
     req,
     res,
     options: {
-      sessionIdGenerator: undefined,
+      sessionIdGenerator: () => randomUUID(),
     },
   });
 });
@@ -75131,6 +75953,72 @@ httpServer.listen(PORT, () => {
   console.log(`HTTP server listening on port ${PORT}`);
 });
 ```
+
+For **serverless environments** (Supabase Edge Functions, Cloudflare Workers, Vercel Edge, etc.), use `serverless: true` to enable stateless operation:
+
+```typescript
+// Supabase Edge Function example
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { MCPServer } from "@mastra/mcp";
+// Note: You will need to convert req/res format from Deno to Node
+import { toReqRes, toFetchResponse } from "fetch-to-node";
+
+const server = new MCPServer({
+  name: "my-serverless-mcp",
+  version: "1.0.0",
+  tools: { /* your tools */ },
+});
+
+serve(async (req) => {
+  const url = new URL(req.url);
+  
+  if (url.pathname === "/mcp") {
+    // Convert Deno Request to Node.js-compatible format
+    const { req: nodeReq, res: nodeRes } = toReqRes(req);
+    
+    await server.startHTTP({
+      url,
+      httpPath: "/mcp",
+      req: nodeReq,
+      res: nodeRes,
+      options: {
+        serverless: true, // ← Enable stateless mode for serverless
+      },
+    });
+    
+    return toFetchResponse(nodeRes);
+  }
+  
+  return new Response("Not found", { status: 404 });
+});
+```
+
+<Callout type="info">
+**When to use `serverless: true`**
+
+Use `serverless: true` when deploying to environments where each request runs in a fresh, stateless execution context:
+- Supabase Edge Functions
+- Cloudflare Workers
+- Vercel Edge Functions
+- Netlify Edge Functions
+- AWS Lambda
+- Deno Deploy
+
+Use the default session-based mode (without `serverless: true`) for:
+- Long-lived Node.js servers
+- Docker containers
+- Traditional hosting (VPS, dedicated servers)
+
+The serverless mode disables session management and creates fresh server instances per request, which is necessary for stateless environments where memory doesn't persist between invocations.
+
+**Note:** The following MCP features require session state or persistent connections and will **not work** in serverless mode:
+- **Elicitation** - Interactive user input requests during tool execution require session management to route responses back to the correct client
+- **Resource subscriptions** - `resources/subscribe` and `resources/unsubscribe` need persistent connections to maintain subscription state
+- **Resource update notifications** - `resources.notifyUpdated()` requires active subscriptions and persistent connections to notify clients
+- **Prompt list change notifications** - `prompts.notifyListChanged()` requires persistent connections to push updates to clients
+
+These features work normally in long-lived server environments (Node.js servers, Docker containers, etc.).
+</Callout>
 
 Here are the details for the values needed by the `startHTTP` method:
 
@@ -75172,6 +76060,13 @@ The `StreamableHTTPServerTransportOptions` object allows you to customize the be
 
 <PropertiesTable
   content={[
+    {
+      name: "serverless",
+      type: "boolean",
+      description:
+        "If `true`, runs in stateless mode without session management. Each request is handled independently with a fresh server instance. Essential for serverless environments (Cloudflare Workers, Supabase Edge Functions, Vercel Edge, etc.) where sessions cannot persist between invocations. Defaults to `false`.",
+      optional: true,
+    },
     {
       name: "sessionIdGenerator",
       type: "(() => string) | undefined",
@@ -87393,7 +88288,7 @@ workflow.foreach(step1, { concurrency: 2 });
 
 ## Related
 
-- [Repeating with foreach](/docs/workflows/control-flow#repeating-with-foreach)
+- [Repeating with foreach](/docs/workflows/control-flow#looping-with-foreach)
 
 
 ---
@@ -87438,9 +88333,84 @@ workflow.map(async ({ inputData }) => `${inputData.value} - map`
   ]}
 />
 
+## Using `inputData`
+
+Use `inputData` to access the full output of the previous step.
+
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map(({ inputData }) => {
+    console.log(inputData);
+  })
+```
+
+## Using `getStepResult()`
+
+Use `getStepResult()` to access the full output of a specific step by referencing the step's instance.
+
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map(async ({ getStepResult }) => {
+    console.log(getStepResult(step1));
+  })
+```
+
+## Using `getInitData()`
+
+Use `getInitData()` to access the initial input data provided to the workflow.
+
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map(async ({ getInitData }) => {
+      console.log(getInitData());
+  })
+```
+
+## Using `mapVariable()`
+
+The object form of `.map()` provides an alternative declarative syntax for mapping fields. Instead of writing a function, you define an object where each key is a new field name and each value uses `mapVariable()` to extract data from previous steps or workflow input.
+Import `mapVariable()` from the workflows module:
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { mapVariable } from "@mastra/core/workflows";
+```
+
+### Extracting fields from step outputs
+
+Use `mapVariable()` with `step` to extract a specific field from a step's output and map it to a new field name. The `path` parameter specifies which field to extract.
+In this example, the `value` field from `step1`'s output is extracted and mapped to a new field called `details`:
+
+```typescript {3-6} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map({
+    details: mapVariable({
+      step: step1,
+      path: "value"
+    })
+  })
+```
+
+### Extracting fields from workflow input
+
+Use `mapVariable()` with `initData` to extract a specific field from the workflow's initial input data. This is useful when you need to pass the original workflow input to a later step.
+In this example, the `value` field from the workflow's input is extracted and mapped to a field called `details`:
+
+```typescript {6-9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+export const testWorkflow = createWorkflow({...});
+
+testWorkflow
+  .then(step1)
+  .map({
+    details: mapVariable({
+      initData: testWorkflow,
+      path: "value"
+    })
+  })
+```
+
 ## Related
 
-- [Input data mapping](/docs/workflows/input-data-mapping)
+- [Input Data Mapping](/docs/workflows/control-flow#input-data-mapping)
 
 
 ---
@@ -87925,20 +88895,6 @@ A workflow's `status` indicates its current execution state. The possible values
     },
   ]}
 />
-
-## Extended usage example
-
-```typescript title="src/test-run.ts" showLineNumbers copy
-import { mastra } from "./mastra";
-
-const run = await mastra.getWorkflow("workflow").createRunAsync();
-
-const result = await run.start({...});
-
-if (result.status === "suspended") {
-  const resumedResult = await run.resume({...});
-}
-```
 
 ## Related
 

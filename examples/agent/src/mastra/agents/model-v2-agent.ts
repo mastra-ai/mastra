@@ -16,9 +16,9 @@ export const weatherInfo = createTool({
   inputSchema: z.object({
     city: z.string(),
   }),
-  execute: async ({ context }) => {
+  execute: async input => {
     return {
-      city: context.city,
+      city: inputData.city,
       weather: 'sunny',
       temperature_celsius: 19,
       temperature_fahrenheit: 66,

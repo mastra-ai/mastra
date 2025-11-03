@@ -116,12 +116,12 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema>,
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
 >(
   tool: Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
     inputSchema: TSchemaIn;
     outputSchema: TSchemaOut;
-    execute: (context: TContext) => Promise<any>;
+    execute: (input: z.infer<TSchemaIn>, context?: TContext) => Promise<any>;
   },
 ): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, EventedEngineType>;
 
@@ -151,10 +151,13 @@ export function createStep<
         >;
       }
     | Agent<any, any>
-    | (Tool<TStepInput, TStepOutput, any> & {
+    | (Tool<TStepInput, TStepOutput, TSuspendSchema, TResumeSchema, any> & {
         inputSchema: TStepInput;
         outputSchema: TStepOutput;
-        execute: (context: ToolExecutionContext<TStepInput>) => Promise<any>;
+        execute: (
+          input: z.infer<TStepInput>,
+          context?: ToolExecutionContext<TSuspendSchema, TResumeSchema>,
+        ) => Promise<any>;
       }),
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType> {
   if (isAgent(params)) {
@@ -235,31 +238,52 @@ export function createStep<
     }
 
     return {
-      // TODO: tool probably should have strong id type
-      // @ts-ignore
-      id: params.id,
+      id: params.id as TStepId,
       description: params.description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
       suspendSchema: params.suspendSchema,
       resumeSchema: params.resumeSchema,
-      execute: async ({ inputData, mastra, requestContext, suspend, resumeData }) => {
-        return params.execute({
-          context: inputData,
+      execute: async ({
+        inputData,
+        mastra,
+        requestContext,
+        suspend,
+        resumeData,
+        runId,
+        workflowId,
+        state,
+        setState,
+      }) => {
+        // Tools receive (input, context) - just call the tool's execute
+        if (!params.execute) {
+          throw new Error(`Tool ${params.id} does not have an execute function`);
+        }
+
+        // Build context matching ToolExecutionContext structure
+        const context = {
           mastra,
           requestContext,
-          // TODO: Pass proper tracing context when evented workflows support tracing
-          tracingContext: { currentSpan: undefined },
-          suspend,
-          resumeData,
-        });
+          tracingContext: { currentSpan: undefined }, // TODO: Pass proper tracing context when evented workflows support tracing
+          workflow: {
+            runId,
+            workflowId,
+            state,
+            setState,
+            suspend,
+            resumeData,
+          },
+        };
+
+        // Tool.execute already handles the v1.0 signature properly
+        return params.execute(inputData, context);
       },
       component: 'TOOL',
     };
   }
 
   return {
-    id: params.id,
+    id: params.id as TStepId,
     description: params.description,
     inputSchema: params.inputSchema,
     outputSchema: params.outputSchema,

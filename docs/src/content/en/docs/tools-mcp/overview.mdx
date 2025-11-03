@@ -39,9 +39,9 @@ export const weatherTool = createTool({
     temperature: z.number(),
     conditions: z.string(),
   }),
-  execute: async ({ context: { city } }) => {
-    console.log("Using tool to fetch weather information for", city);
-    return await getWeatherInfo(city);
+  execute: async (inputData) => {
+    console.log("Using tool to fetch weather information for", inputData.city);
+    return await getWeatherInfo(inputData.city);
   },
 });
 ```
