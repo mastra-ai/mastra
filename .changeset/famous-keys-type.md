@@ -32,7 +32,7 @@ tool.execute(data, context);
 **Before:**
 
 ```typescript
-inputParams: z.object({ something: z.string() }),
+inputSchema: z.object({ something: z.string() }),
 execute: async ({ context, tracingContext, runId, ... }) => {
   return doSomething(context.string);
 }
