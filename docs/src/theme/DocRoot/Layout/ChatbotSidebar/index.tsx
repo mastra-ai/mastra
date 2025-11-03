@@ -170,7 +170,6 @@ export default function ChatbotSidebar({
                 {conversation.length > 0
                   ? conversation.map(
                       ({ answer: a, question: q, id, reaction }) => {
-                        console.log({reaction});
                         return (
                           <div
                             key={id}
