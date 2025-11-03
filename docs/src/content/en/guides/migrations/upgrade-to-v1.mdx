@@ -369,6 +369,60 @@ export const accountBalance = createTool({
 });
 ```
 
+#### Tool output validation
+
+Tools with an `outputSchema` now validate their return values. Previously, `outputSchema` was only used for type inference - the output was never validated at runtime.
+
+If your tool returns data that doesn't match its `outputSchema`, it will now return a `ValidationError` instead of the invalid data.
+
+**Fix the output to match the schema:**
+
+```typescript
+// Before - missing 'email' field would silently pass through
+const getUserTool = createTool({
+  id: "get-user",
+  outputSchema: z.object({
+    id: z.string(),
+    name: z.string(),
+    email: z.string().email(),
+  }),
+  execute: async (inputData) => {
+    return { id: "123", name: "John" }; // Missing email
+  },
+});
+
+// After - return all required fields
+const getUserTool = createTool({
+  id: "get-user",
+  outputSchema: z.object({
+    id: z.string(),
+    name: z.string(),
+    email: z.string().email(),
+  }),
+  execute: async (inputData) => {
+    return { id: "123", name: "John", email: "john@example.com" };
+  },
+});
+```
+
+When validation fails, the tool returns a `ValidationError`:
+
+```typescript
+// Before v1 - invalid output would silently pass through
+await getUserTool.execute({});
+// { id: "123", name: "John" } - missing email
+
+// After v1 - validation error is returned
+await getUserTool.execute({});
+// {
+//   error: true,
+//   message: "Tool output validation failed for get-user. The tool returned invalid output:\n- email: Required\n\nReturned output: {...}",
+//   validationErrors: { ... }
+// }
+```
+
+Alternatively, update the `outputSchema` to match your actual output, or remove `outputSchema` entirely if you don't need validation.
+
 #### Input processors
 
 - Removed the `@mastra/core/agent/input-processors` exports. They can found at `@mastra/core/processors` now.
