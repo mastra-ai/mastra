@@ -616,11 +616,11 @@ const aiSdkStream = await agent.stream("message for agent", {
         "Unique ID for this generation run. Useful for tracking and debugging purposes.",
     },
     {
-      name: "requestContext",
-      type: "RequestContext",
+      name: "runtimeContext",
+      type: "RuntimeContext",
       isOptional: true,
       description:
-        "Request Context for dependency injection and contextual information.",
+        "Runtime context for dependency injection and contextual information.",
     },
     {
       name: "tracingContext",

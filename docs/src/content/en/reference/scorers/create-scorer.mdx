@@ -203,11 +203,11 @@ Function: `({ run, results }) => any`
       description: "Unique identifier for this scoring run.",
     },
     {
-      name: "run.requestContext",
+      name: "run.runtimeContext",
       type: "object",
       required: false,
       description:
-        "Request Context from the agent or workflow step being evaluated (optional).",
+        "Runtime context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results",
@@ -284,11 +284,11 @@ Function: `({ run, results }) => any`
       description: "Unique identifier for this scoring run.",
     },
     {
-      name: "run.requestContext",
+      name: "run.runtimeContext",
       type: "object",
       required: false,
       description:
-        "Request Context from the agent or workflow step being evaluated (optional).",
+        "Runtime context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results.preprocessStepResult",
@@ -365,11 +365,11 @@ Function: `({ run, results }) => number`
       description: "Unique identifier for this scoring run.",
     },
     {
-      name: "run.requestContext",
+      name: "run.runtimeContext",
       type: "object",
       required: false,
       description:
-        "Request Context from the agent or workflow step being evaluated (optional).",
+        "Runtime context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results.preprocessStepResult",
@@ -467,11 +467,11 @@ Function: `({ run, results, score }) => string`
       description: "Unique identifier for this scoring run.",
     },
     {
-      name: "run.requestContext",
+      name: "run.runtimeContext",
       type: "object",
       required: false,
       description:
-        "Request Context from the agent or workflow step being evaluated (optional).",
+        "Runtime context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results.preprocessStepResult",

@@ -195,8 +195,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === "complex";
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced
       ? "fireworks-ai/accounts/fireworks/models/qwen3-coder-480b-a35b-instruct"
       : "fireworks-ai/accounts/fireworks/models/deepseek-r1-0528";

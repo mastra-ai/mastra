@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cloudflare",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "Cloudflare provider for Mastra - includes db storage capabilities",
   "type": "module",
   "files": [
@@ -58,5 +58,12 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }

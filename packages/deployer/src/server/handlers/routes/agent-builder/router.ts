@@ -312,7 +312,6 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   },
                 },
               },
-              required: ['step'],
             },
           },
         },

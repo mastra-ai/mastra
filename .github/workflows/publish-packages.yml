@@ -31,6 +31,6 @@ jobs:
         run: pnpm build
 
       - name: Publish packages
-        run: pnpm publish -r --tag alpha --access public
+        run: pnpm publish -r --tag alpha --access public --publish-branch 0.x
         env:
           NPM_CONFIG_PROVENANCE: true

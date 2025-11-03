@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.15.8",
+  "version": "0.15.10",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -86,5 +86,12 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }

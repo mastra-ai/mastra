@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-cloudflare",
-  "version": "0.11.10",
+  "version": "0.11.11",
   "description": "Mastra Cloudflare AI voice integration",
   "type": "module",
   "files": [
@@ -68,5 +68,12 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }

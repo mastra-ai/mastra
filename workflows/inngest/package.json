@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "0.17.0",
+  "version": "0.18.3",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
@@ -65,5 +65,12 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }

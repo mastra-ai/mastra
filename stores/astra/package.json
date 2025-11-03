@@ -1,6 +1,6 @@
 {
   "name": "@mastra/astra",
-  "version": "0.11.14",
+  "version": "0.11.15",
   "description": "Astra DB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -54,5 +54,12 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }

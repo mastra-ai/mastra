@@ -18,11 +18,11 @@ await agent.getModel();
 <PropertiesTable
   content={[
     {
-      name: "{ requestContext = new RequestContext() }",
-      type: "{ requestContext?: RequestContext }",
+      name: "{ runtimeContext = new RuntimeContext() }",
+      type: "{ runtimeContext?: RuntimeContext }",
       isOptional: true,
-      defaultValue: "new RequestContext()",
-      description: "Optional configuration object containing request context.",
+      defaultValue: "new RuntimeContext()",
+      description: "Optional configuration object containing runtime context.",
     },
   ]}
 />
@@ -44,7 +44,7 @@ await agent.getModel();
 
 ```typescript copy
 await agent.getModel({
-  requestContext: new RequestContext(),
+  runtimeContext: new RuntimeContext(),
 });
 ```
 
@@ -53,12 +53,12 @@ await agent.getModel({
 <PropertiesTable
   content={[
     {
-      name: "requestContext",
-      type: "RequestContext",
+      name: "runtimeContext",
+      type: "RuntimeContext",
       isOptional: true,
       defaultValue: "undefined",
       description:
-        "Request Context for dependency injection and contextual information.",
+        "Runtime context for dependency injection and contextual information.",
     },
   ]}
 />
@@ -66,4 +66,4 @@ await agent.getModel({
 ## Related
 
 - [Agents overview](/docs/agents/overview)
-- [Request Context](/docs/server-db/request-context)
+- [Runtime Context](/docs/server-db/runtime-context)

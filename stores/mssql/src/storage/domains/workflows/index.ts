@@ -1,7 +1,6 @@
 import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import type { StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import sql from 'mssql';
 import type { StoreOperationsMSSQL } from '../operations';
 import { getSchemaName, getTableName } from '../utils';
@@ -50,13 +49,13 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     runId,
     stepId,
     result,
-    requestContext,
+    runtimeContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    requestContext: Record<string, any>;
+    runtimeContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
     const transaction = this.pool.transaction();
@@ -87,7 +86,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           waitingPaths: {},
           status: 'pending',
           runId: runId,
-          requestContext: {},
+          runtimeContext: {},
         } as WorkflowRunState;
       } else {
         // Parse existing snapshot
@@ -95,9 +94,9 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
       }
 
-      // Merge the new step result and request context
+      // Merge the new step result and runtime context
       snapshot.context[stepId] = result;
-      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+      snapshot.runtimeContext = { ...snapshot.runtimeContext, ...runtimeContext };
 
       // Upsert within the same transaction to handle both insert and update
       const upsertReq = new sql.Request(transaction);
@@ -447,9 +446,5 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         error,
       );
     }
-  }
-
-  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
-    return this.getWorkflowRuns(args);
   }
 }

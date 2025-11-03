@@ -1,19 +1,19 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
-import { MockMemory } from '../memory/mock';
-import { RequestContext } from '../request-context';
+import { RuntimeContext } from '../runtime-context';
 import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
+import { MockMemory } from './test-utils';
 import { Agent } from './index';
 
 describe('Gemini Model Compatibility Tests', () => {
   let memory: MockMemory;
-  let requestContext: RequestContext;
+  let runtimeContext: RuntimeContext;
 
   beforeEach(() => {
     memory = new MockMemory();
-    requestContext = new RequestContext();
+    runtimeContext = new RuntimeContext();
   });
 
   const MODEL = 'google/gemini-2.0-flash-lite';
@@ -41,11 +41,9 @@ describe('Gemini Model Compatibility Tests', () => {
       });
 
       const result = await agent.generate('List 3 benefits of exercise', {
-        structuredOutput: {
-          schema: z.object({
-            benefits: z.array(z.string()),
-          }),
-        },
+        output: z.object({
+          benefits: z.array(z.string()),
+        }),
       });
 
       expect(result.object).toBeDefined();
@@ -84,12 +82,10 @@ describe('Gemini Model Compatibility Tests', () => {
         ],
         {
           maxSteps: 1,
-          structuredOutput: {
-            schema: z.object({
-              selection: z.string(),
-              reason: z.string(),
-            }),
-          },
+          output: z.object({
+            selection: z.string(),
+            reason: z.string(),
+          }),
         },
       );
 
@@ -221,7 +217,7 @@ describe('Gemini Model Compatibility Tests', () => {
       });
 
       const stream = await agent.network('What is the capital of France?', {
-        requestContext,
+        runtimeContext,
         maxSteps: 2,
       });
 
@@ -257,7 +253,7 @@ describe('Gemini Model Compatibility Tests', () => {
       });
 
       const stream = await agent.network('', {
-        requestContext,
+        runtimeContext,
         maxSteps: 1,
       });
 
@@ -292,7 +288,7 @@ describe('Gemini Model Compatibility Tests', () => {
           { role: 'assistant', content: 'Let me calculate that for you.' },
         ],
         {
-          requestContext,
+          runtimeContext,
           maxSteps: 1,
         },
       );
@@ -352,7 +348,7 @@ describe('Gemini Model Compatibility Tests', () => {
           { role: 'user', content: 'Is that good weather for a picnic?' },
         ],
         {
-          requestContext,
+          runtimeContext,
           maxSteps: 1,
         },
       );
@@ -411,7 +407,7 @@ describe('Gemini Model Compatibility Tests', () => {
           },
         ],
         {
-          requestContext,
+          runtimeContext,
           maxSteps: 1,
         },
       );
@@ -470,7 +466,7 @@ describe('Gemini Model Compatibility Tests', () => {
           { role: 'user', content: 'Explain what this result means.' },
         ],
         {
-          requestContext,
+          runtimeContext,
           maxSteps: 1,
         },
       );
@@ -498,9 +494,7 @@ describe('Gemini Model Compatibility Tests', () => {
         outputSchema: z.object({ summary: z.string() }),
         execute: async ({ inputData }) => {
           const resp = await researchAgent.generate(`Research: ${inputData.topic}`, {
-            structuredOutput: {
-              schema: z.object({ summary: z.string() }),
-            },
+            output: z.object({ summary: z.string() }),
           });
           return { summary: resp.object.summary };
         },
@@ -526,7 +520,7 @@ describe('Gemini Model Compatibility Tests', () => {
       });
 
       const stream = await agent.network('Execute research-workflow on machine learning', {
-        requestContext,
+        runtimeContext,
         maxSteps: 2,
       });
 
@@ -554,7 +548,7 @@ describe('Gemini Model Compatibility Tests', () => {
           { role: 'assistant', content: 'I am doing well, thank you!' },
         ],
         {
-          requestContext,
+          runtimeContext,
           maxSteps: 1,
         },
       );
@@ -585,7 +579,7 @@ describe('Gemini Model Compatibility Tests', () => {
       });
 
       const stream = await agent.network([{ role: 'assistant', content: 'This is a system message' }], {
-        requestContext,
+        runtimeContext,
         maxSteps: 1,
       });
 

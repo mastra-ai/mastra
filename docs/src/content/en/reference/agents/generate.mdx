@@ -607,11 +607,11 @@ const aiSdkResult = await agent.generate("message for agent", {
       description: "Unique identifier for this execution run.",
     },
     {
-      name: "requestContext",
-      type: "RequestContext",
+      name: "runtimeContext",
+      type: "RuntimeContext",
       isOptional: true,
       description:
-        "Request Context containing dynamic configuration and state.",
+        "Runtime context containing dynamic configuration and state.",
     },
     {
       name: "tracingContext",

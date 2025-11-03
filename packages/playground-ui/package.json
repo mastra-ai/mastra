@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "6.6.2",
+  "version": "6.8.0",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -55,8 +55,6 @@
     "@autoform/react": "^4.0.0",
     "@autoform/zod": "^4.0.0",
     "@codemirror/lang-json": "^6.0.2",
-    "@codemirror/lang-markdown": "^6.5.0",
-    "@codemirror/language-data": "^6.5.2",
     "@dagrejs/dagre": "^1.1.5",
     "@hello-pangea/dnd": "^18.0.1",
     "@hookform/resolvers": "^3.10.0",
@@ -84,7 +82,6 @@
     "@tanstack/react-table": "^8.21.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@uiw/codemirror-theme-dracula": "^4.23.14",
-    "@uiw/codemirror-theme-github": "^4.25.2",
     "@uiw/react-codemirror": "^4.23.14",
     "@xyflow/react": "^12.8.6",
     "cmdk": "^1.1.1",
@@ -113,22 +110,21 @@
     "zustand": "^5.0.8"
   },
   "peerDependencies": {
-    "@mastra/client-js": "workspace:^",
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
-    "@mastra/react": "workspace:*",
-    "@tanstack/react-query": "^5.81.5",
+    "@mastra/core": ">=0.23.4-0 <0.24.0-0",
     "lucide-react": "^0.474.0",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
-    "tailwindcss": "^3.0.0"
+    "tailwindcss": "^3.0.0",
+    "@mastra/client-js": "workspace:^",
+    "@mastra/react": "workspace:*",
+    "@tanstack/react-query": "^5.81.5"
   },
   "devDependencies": {
     "@mastra/client-js": "workspace:^",
-    "@mastra/core": "workspace:*",
     "@mastra/react": "workspace:*",
+    "@mastra/core": "workspace:*",
     "@storybook/addon-docs": "^9.1.10",
     "@storybook/react-vite": "^9.1.10",
-    "@tanstack/react-query": "^5.81.5",
     "@types/node": "^20.19.0",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
@@ -145,7 +141,8 @@
     "vite": "^7.1.9",
     "vite-plugin-dts": "^4.5.4",
     "vite-plugin-lib-inject-css": "^2.2.2",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@tanstack/react-query": "^5.81.5"
   },
   "homepage": "https://mastra.ai",
   "repository": {
@@ -155,5 +152,12 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }

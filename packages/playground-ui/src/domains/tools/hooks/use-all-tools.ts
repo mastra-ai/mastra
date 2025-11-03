@@ -3,20 +3,20 @@ import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
 
 export const useTools = () => {
-  const { requestContext } = usePlaygroundStore();
+  const { runtimeContext } = usePlaygroundStore();
   const client = useMastraClient();
   return useQuery({
     queryKey: ['tools'],
-    queryFn: () => client.listTools(requestContext),
+    queryFn: () => client.getTools(runtimeContext),
   });
 };
 
 export const useTool = (toolId: string) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
+  const { runtimeContext } = usePlaygroundStore();
 
   return useQuery({
     queryKey: ['tool', toolId],
-    queryFn: () => client.getTool(toolId).details(requestContext),
+    queryFn: () => client.getTool(toolId).details(runtimeContext),
   });
 };

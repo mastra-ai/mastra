@@ -5,12 +5,12 @@ import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useMCPServers = () => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
+  const { runtimeContext } = usePlaygroundStore();
 
   return useQuery({
     queryKey: ['mcp-servers'],
     queryFn: async () => {
-      const mcpServers: McpServerListResponse['servers'] = (await client.getMcpServers(requestContext)).servers;
+      const mcpServers: McpServerListResponse['servers'] = (await client.getMcpServers(runtimeContext)).servers;
       return mcpServers;
     },
   });

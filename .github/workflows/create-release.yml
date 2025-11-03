@@ -102,7 +102,7 @@ jobs:
 
       - name: Publish packages
         if: ${{ !inputs.dry_run }}
-        run: pnpm publish -r --access public
+        run: pnpm publish -r --access public --publish-branch 0.x
         env:
           NPM_CONFIG_PROVENANCE: true
 
@@ -112,7 +112,7 @@ jobs:
 
       - name: Publish packages - dry run
         if: ${{ inputs.dry_run }}
-        run: pnpm publish -r --dry-run --access public
+        run: pnpm publish -r --dry-run --access public --publish-branch 0.x
 
       - name: Add tags
         run: |

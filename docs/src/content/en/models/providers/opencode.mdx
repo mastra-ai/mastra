@@ -243,8 +243,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === "complex";
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced
       ? "opencode/qwen3-coder"
       : "opencode/an-gbt";

@@ -1,4 +1,4 @@
-import { RequestContext } from '@mastra/core/di';
+import { RuntimeContext } from '@mastra/core/di';
 
 import { useMutation } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
@@ -10,21 +10,21 @@ export const useExecuteTool = () => {
     mutationFn: async ({
       toolId,
       input,
-      requestContext: playgroundRequestContext,
+      runtimeContext: playgroundRuntimeContext,
     }: {
       toolId: string;
       input: any;
-      requestContext?: Record<string, any>;
+      runtimeContext?: Record<string, any>;
     }) => {
-      const requestContext = new RequestContext();
-      Object.entries(playgroundRequestContext ?? {}).forEach(([key, value]) => {
-        requestContext.set(key, value);
+      const runtimeContext = new RuntimeContext();
+      Object.entries(playgroundRuntimeContext ?? {}).forEach(([key, value]) => {
+        runtimeContext.set(key, value);
       });
 
       try {
         const tool = client.getTool(toolId);
 
-        const response = await tool.execute({ data: input, requestContext });
+        const response = await tool.execute({ data: input, runtimeContext });
 
         return response;
       } catch (error) {

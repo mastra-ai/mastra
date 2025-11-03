@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agent-builder",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -88,5 +88,12 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }

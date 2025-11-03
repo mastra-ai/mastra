@@ -188,7 +188,7 @@ whereDocument: { "$contains": "API documentation" }
     ### Runtime Configuration Override
 
     ```typescript
-    import { RequestContext } from '@mastra/core/request-context';
+    import { RuntimeContext } from '@mastra/core/runtime-context';
 
     // Initial configuration
     const vectorTool = createVectorQueryTool({
@@ -203,8 +203,8 @@ whereDocument: { "$contains": "API documentation" }
     });
 
     // Override at runtime
-    const requestContext = new RequestContext();
-    requestContext.set('databaseConfig', {
+    const runtimeContext = new RuntimeContext();
+    runtimeContext.set('databaseConfig', {
       pinecone: {
         namespace: 'production'
       }
@@ -213,7 +213,7 @@ whereDocument: { "$contains": "API documentation" }
     await vectorTool.execute({
       context: { queryText: 'search query' },
       mastra,
-      requestContext
+      runtimeContext
     });
     ```
 

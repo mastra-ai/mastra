@@ -182,12 +182,12 @@
     },
     {
       "source": "/examples/memory",
-      "destination": "/examples/memory/memory-with-libsql",
+      "destination": "/docs/memory/storage/memory-with-libsql",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank",
-      "destination": "/examples/rag/rerank/rerank",
+      "destination": "/examples/rag/rerank/rerank-rag",
       "permanent": true
     },
     {
@@ -232,7 +232,7 @@
     },
     {
       "source": "/examples/memory/short-term-working-memory",
-      "destination": "/examples/memory/memory-with-libsql",
+      "destination": "/docs/memory/storage/memory-with-libsql",
       "permanent": true
     },
     {
@@ -287,7 +287,7 @@
     },
     {
       "source": "/docs/guide/local-dev/integrations",
-      "destination": "/docs/server-db/local-dev-playground",
+      "destination": "/docs/getting-started/studio",
       "permanent": true
     },
     {
@@ -422,7 +422,7 @@
     },
     {
       "source": "/docs/local-dev/mastra-dev",
-      "destination": "/docs/server-db/local-dev-playground",
+      "destination": "/docs/getting-started/studio",
       "permanent": true
     },
     {
@@ -532,7 +532,7 @@
     },
     {
       "source": "/examples/rag/rerank-rag",
-      "destination": "/examples/rag/rerank/rerank",
+      "destination": "/examples/rag/rerank/rerank-rag",
       "permanent": true
     },
     {
@@ -542,7 +542,7 @@
     },
     {
       "source": "/examples/rag/usage/rerank-rag",
-      "destination": "/examples/rag/rerank/rerank",
+      "destination": "/examples/rag/rerank/rerank-rag",
       "permanent": true
     },
     {
@@ -557,7 +557,7 @@
     },
     {
       "source": "/examples/workflows/subscribed-steps",
-      "destination": "/examples/workflows/agent-and-tool-interop",
+      "destination": "/docs/workflows/agents-and-tools",
       "permanent": true
     },
     {
@@ -602,7 +602,7 @@
     },
     {
       "source": "/examples/workflows/agent-and-tool-interop",
-      "destination": "/examples/workflows/agent-as-step",
+      "destination": "/docs/workflows/agents-and-tools",
       "permanent": true
     },
     {
@@ -782,7 +782,7 @@
     },
     {
       "source": "/reference/observability/ai-tracing",
-      "destination": "/reference/observability/ai-tracing/ai-tracing",
+      "destination": "/docs/observability/ai-tracing/overview",
       "permanent": true
     },
     {
@@ -1132,7 +1132,7 @@
     },
     {
       "source": "/docs/evals",
-      "destination": "/docs/scorers/evals-old-api",
+      "destination": "/docs/scorers/evals-old-api/overview",
       "permanent": true
     },
     {
@@ -1171,68 +1171,93 @@
       "permanent": true
     },
     {
-      "source": "/reference/core/getAgents",
-      "destination": "/reference/core/listAgents",
+      "source": "/docs/agents",
+      "destination": "/docs/agents/overview",
       "permanent": true
     },
     {
-      "source": "/reference/core/getScorers",
-      "destination": "/reference/core/listScorers",
+      "source": "/docs/memory",
+      "destination": "/docs/memory/overview",
       "permanent": true
     },
     {
-      "source": "/reference/core/getLogs",
-      "destination": "/reference/core/listLogs",
+      "source": "/docs/memory/agents/calling-agents",
+      "destination": "/docs/agents/overview",
       "permanent": true
     },
     {
-      "source": "/reference/core/getLogsByRunId",
-      "destination": "/reference/core/listLogsByRunId",
+      "source": "/docs/networks-vnext/overview",
+      "destination": "/docs/agents/networks",
       "permanent": true
     },
     {
-      "source": "/reference/core/getWorkflows",
-      "destination": "/reference/core/listWorkflows",
+      "source": "/docs/quickstart",
+      "destination": "/docs/getting-started/installation",
       "permanent": true
     },
     {
-      "source": "/reference/agents/getTools",
-      "destination": "/reference/agents/listTools",
+      "source": "/docs/tools",
+      "destination": "/docs/tools-mcp/overview",
       "permanent": true
     },
     {
-      "source": "/reference/agents/getWorkflows",
-      "destination": "/reference/agents/listWorkflows",
-      "permanent": true
-    },
-    {
-      "source": "/reference/agents/getScorers",
-      "destination": "/reference/agents/listScorers",
-      "permanent": true
-    },
-    {
-      "source": "/reference/client-js/workflows-legacy",
-      "destination": "/reference/client-js/workflows",
-      "permanent": true
-    },
-    {
-      "source": "/examples/workflows_legacy/:path*",
+      "source": "/docs/workflows/00-overview",
       "destination": "/docs/workflows/overview",
       "permanent": true
     },
     {
-      "source": "/examples/workflows-legacy/:path*",
+      "source": "/docs/workflows/nested-workflows",
       "destination": "/docs/workflows/overview",
       "permanent": true
     },
     {
-      "source": "/docs/server-db/runtime-context",
-      "destination": "/docs/server-db/request-context",
+      "source": "/docs/workflows/running-workflows",
+      "destination": "/docs/workflows/overview",
       "permanent": true
     },
     {
-      "source": "/examples/agents/runtime-context",
-      "destination": "/examples/agents/request-context",
+      "source": "/examples/agents/dynamic-agents",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rocessors/response-length-limiter",
+      "destination": "/examples/processors/message-length-limiter",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/02-stock-agent",
+      "destination": "/guides/guide/stock-agent",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core",
+      "destination": "/reference/core/mastra-class",
+      "permanent": true
+    },
+    {
+      "source": "/templates/CONTRIBUTING.md",
+      "destination": "/docs/community/contributing-templates",
+      "permanent": true
+    },
+    {
+      "source": "/templates/EVALS.md",
+      "destination": "/docs/community/contributing-templates",
+      "permanent": true
+    },
+    {
+      "source": "/templates/LICENSE",
+      "destination": "/docs/community/licensing",
+      "permanent": true
+    },
+    {
+      "source": "/templates/docs",
+      "destination": "/docs/getting-started/templates",
+      "permanent": true
+    },
+    {
+      "source": "/templates/olde-maps-ai-directions-assistant",
+      "destination": "/docs/getting-started/templates",
       "permanent": true
     }
   ]

@@ -1,5 +1,11 @@
 # @mastra/auth-firebase
 
+## 0.10.5
+
+### Patch Changes
+
+- Fix peerdependencies ([`eb7c1c8`](https://github.com/mastra-ai/mastra/commit/eb7c1c8c592d8fb16dfd250e337d9cdc73c8d5de))
+
 ## 0.10.4
 
 ### Patch Changes

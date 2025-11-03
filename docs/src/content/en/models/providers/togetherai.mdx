@@ -148,8 +148,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === "complex";
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced
       ? "togetherai/openai/gpt-oss-120b"
       : "togetherai/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8";

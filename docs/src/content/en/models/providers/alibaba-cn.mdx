@@ -807,8 +807,8 @@ const agent = new Agent({
 ```typescript
 const agent = new Agent({
   name: "dynamic-agent",
-  model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === "complex";
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced
       ? "alibaba-cn/tongyi-intent-detect-v3"
       : "alibaba-cn/deepseek-r1";

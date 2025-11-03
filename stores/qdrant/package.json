@@ -1,6 +1,6 @@
 {
   "name": "@mastra/qdrant",
-  "version": "0.11.17",
+  "version": "0.11.18",
   "description": "Qdrant vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -55,5 +55,12 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }

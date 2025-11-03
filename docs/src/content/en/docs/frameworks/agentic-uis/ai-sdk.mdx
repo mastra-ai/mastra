@@ -473,7 +473,7 @@ export async function POST(req: Request) {
 
 ### Passing additional data
 
-`sendMessage()` allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as `RequestContext`.
+`sendMessage()` allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as `RuntimeContext`.
 
 ```typescript {16-26} title="app/test/chat-extra.tsx" copy
 "use client";
@@ -518,31 +518,31 @@ export function ChatExtra() {
 
 ```typescript {8,12} title="app/api/chat-extra/route.ts" copy
 import { mastra } from "../../../mastra";
-import { RequestContext } from "@mastra/core/request-context";
+import { RuntimeContext } from "@mastra/core/runtime-context";
 
 export async function POST(req: Request) {
   const { messages, data } = await req.json();
   const myAgent = mastra.getAgent("weatherAgent");
 
-  const requestContext = new RequestContext();
+  const runtimeContext = new RuntimeContext();
 
   if (data) {
     for (const [key, value] of Object.entries(data)) {
-      requestContext.set(key, value);
+      runtimeContext.set(key, value);
     }
   }
 
   const stream = await myAgent.stream(messages, {
-    requestContext,
+    runtimeContext,
     format: "aisdk",
   });
   return stream.toUIMessageStreamResponse();
 }
 ```
 
-### Handling `requestContext` with `server.middleware`
+### Handling `runtimeContext` with `server.middleware`
 
-You can also populate the `RequestContext` by reading custom data in a server middleware:
+You can also populate the `RuntimeContext` by reading custom data in a server middleware:
 
 ```typescript {8,17} title="mastra/index.ts" copy
 import { Mastra } from "@mastra/core/mastra";
@@ -552,7 +552,7 @@ export const mastra = new Mastra({
   server: {
     middleware: [
       async (c, next) => {
-        const requestContext = c.get("requestContext");
+        const runtimeContext = c.get("runtimeContext");
 
         if (c.req.method === "POST") {
           try {
@@ -561,7 +561,7 @@ export const mastra = new Mastra({
 
             if (body?.data) {
               for (const [key, value] of Object.entries(body.data)) {
-                requestContext.set(key, value);
+                runtimeContext.set(key, value);
               }
             }
           } catch {}
@@ -573,7 +573,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> You can then access this data in your tools via the `requestContext` parameter. See the [Request Context documentation](/docs/server-db/request-context) for more details.
+> You can then access this data in your tools via the `runtimeContext` parameter. See the [Runtime Context documentation](/docs/server-db/runtime-context) for more details.
 
 ## Migrating from AI SDK v4 to v5
 

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/turbopuffer",
-  "version": "0.11.14",
+  "version": "0.11.15",
   "description": "Turbopuffer vector store provider for Mastra",
   "type": "module",
   "files": [
@@ -55,5 +55,12 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -73,5 +73,12 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }

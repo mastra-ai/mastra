@@ -1,5 +1,35 @@
 # @mastra/schema-compat
 
+## 0.11.6
+
+### Patch Changes
+
+- Fix Zod v4 toJSONSchema bug with z.record() single-argument form ([#9355](https://github.com/mastra-ai/mastra/pull/9355))
+
+  Zod v4 has a bug in the single-argument form of `z.record(valueSchema)` where it incorrectly assigns the value schema to `keyType` instead of `valueType`, leaving `valueType` undefined. This causes `toJSONSchema()` to throw "Cannot read properties of undefined (reading '\_zod')" when processing schemas containing `z.record()` fields.
+
+  This fix patches affected schemas before conversion by detecting records with missing `valueType` and correctly assigning the schema to `valueType` while setting `keyType` to `z.string()` (the default). The patch recursively handles nested schemas including those wrapped in `.optional()`, `.nullable()`, arrays, unions, and objects.
+
+- Improved reliability of string field types in tool schema compatibility ([#9362](https://github.com/mastra-ai/mastra/pull/9362))
+
+## 0.11.6-alpha.0
+
+### Patch Changes
+
+- Fix Zod v4 toJSONSchema bug with z.record() single-argument form ([#9355](https://github.com/mastra-ai/mastra/pull/9355))
+
+  Zod v4 has a bug in the single-argument form of `z.record(valueSchema)` where it incorrectly assigns the value schema to `keyType` instead of `valueType`, leaving `valueType` undefined. This causes `toJSONSchema()` to throw "Cannot read properties of undefined (reading '\_zod')" when processing schemas containing `z.record()` fields.
+
+  This fix patches affected schemas before conversion by detecting records with missing `valueType` and correctly assigning the schema to `valueType` while setting `keyType` to `z.string()` (the default). The patch recursively handles nested schemas including those wrapped in `.optional()`, `.nullable()`, arrays, unions, and objects.
+
+- Improved reliability of string field types in tool schema compatibility ([#9362](https://github.com/mastra-ai/mastra/pull/9362))
+
+## 0.11.5
+
+### Patch Changes
+
+- Fix peerdependencies ([`eb7c1c8`](https://github.com/mastra-ai/mastra/commit/eb7c1c8c592d8fb16dfd250e337d9cdc73c8d5de))
+
 ## 0.11.4
 
 ### Patch Changes

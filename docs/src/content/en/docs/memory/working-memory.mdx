@@ -15,8 +15,8 @@ This is useful for maintaining ongoing state that's always relevant and should a
 
 Working memory can persist at two different scopes:
 
-- **Resource-scoped** (default): Memory persists across all conversation threads for the same user
-- **Thread-scoped**: Memory is isolated per conversation thread
+- **Thread-scoped** (default): Memory is isolated per conversation thread
+- **Resource-scoped**: Memory persists across all conversation threads for the same user
 
 **Important:** Switching between scopes means the agent won't see memory from the other scope - thread-scoped memory is completely separate from resource-scoped memory.
 
@@ -54,9 +54,9 @@ Working memory is a block of Markdown text that the agent is able to update over
 
 Working memory can operate in two different scopes, allowing you to choose how memory persists across conversations:
 
-### Resource-Scoped Memory (Default)
+### Thread-Scoped Memory (Default)
 
-By default, working memory persists across all conversation threads for the same user (resourceId), enabling persistent user memory:
+By default, working memory is scoped to individual conversation threads. Each thread maintains its own isolated memory:
 
 ```typescript
 const memory = new Memory({
@@ -64,13 +64,11 @@ const memory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
-      scope: "resource", // Memory persists across all user threads
+      scope: 'thread', // Default - memory is isolated per thread
       template: `# User Profile
 - **Name**:
-- **Location**:
 - **Interests**:
-- **Preferences**:
-- **Long-term Goals**:
+- **Current Goal**:
 `,
     },
   },
@@ -78,26 +76,13 @@ const memory = new Memory({
 ```
 
 **Use cases:**
+- Different conversations about separate topics
+- Temporary or session-specific information
+- Workflows where each thread needs working memory but threads are ephemeral and not related to each other
 
-- Personal assistants that remember user preferences
-- Customer service bots that maintain customer context
-- Educational applications that track student progress
+### Resource-Scoped Memory
 
-### Usage with Agents
-
-When using resource-scoped memory, make sure to pass the `resourceId` parameter:
-
-```typescript
-// Resource-scoped memory requires resourceId
-const response = await agent.generate("Hello!", {
-  threadId: "conversation-123",
-  resourceId: "user-alice-456", // Same user across different threads
-});
-```
-
-### Thread-Scoped Memory
-
-Thread-scoped memory isolates working memory to individual conversation threads. Each thread maintains its own isolated memory:
+Resource-scoped memory persists across all conversation threads for the same user (resourceId), enabling persistent user memory:
 
 ```typescript
 const memory = new Memory({

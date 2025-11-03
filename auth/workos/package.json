@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-workos",
-  "version": "0.10.7",
+  "version": "0.10.8",
   "description": "Mastra WorkOS Auth integration",
   "type": "module",
   "main": "dist/index.js",
@@ -51,5 +51,12 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }

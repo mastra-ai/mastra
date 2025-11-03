@@ -1,7 +1,7 @@
 import { AnthropicSchemaCompatLayer } from '@mastra/schema-compat';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { RequestContext } from '../../request-context';
+import { RuntimeContext } from '../../runtime-context';
 import type { ToolAction } from '../types';
 import { CoreToolBuilder } from './builder';
 
@@ -36,7 +36,7 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       options: {
         name: 'test-tool',
         model: modelConfig as any,
-        requestContext: new RequestContext(),
+        runtimeContext: new RuntimeContext(),
       },
     });
 
@@ -113,7 +113,7 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       options: {
         name: 'number-tool',
         model: modelConfig as any,
-        requestContext: new RequestContext(),
+        runtimeContext: new RuntimeContext(),
       },
     });
 
@@ -166,7 +166,7 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       options: {
         name: 'bug-demo-tool',
         model: modelConfig as any,
-        requestContext: new RequestContext(),
+        runtimeContext: new RuntimeContext(),
       },
     });
 
@@ -234,7 +234,7 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       options: {
         name: 'updateWorkingMemory',
         model: modelConfig as any,
-        requestContext: new RequestContext(),
+        runtimeContext: new RuntimeContext(),
       },
     });
 

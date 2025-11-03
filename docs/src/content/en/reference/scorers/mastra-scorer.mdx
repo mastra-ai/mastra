@@ -34,7 +34,7 @@ const result = await scorer.run({
   input: "What is machine learning?",
   output: "Machine learning is a subset of artificial intelligence...",
   runId: "optional-run-id",
-  requestContext: {
+  runtimeContext: {
     /* optional context */
   },
 });
@@ -65,11 +65,11 @@ const result = await scorer.run({
       description: "Optional unique identifier for this scoring run.",
     },
     {
-      name: "requestContext",
+      name: "runtimeContext",
       type: "any",
       required: false,
       description:
-        "Optional request context from the agent or workflow step being evaluated.",
+        "Optional runtime context from the agent or workflow step being evaluated.",
     },
     {
       name: "groundTruth",

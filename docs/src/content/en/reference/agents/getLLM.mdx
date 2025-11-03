@@ -19,11 +19,11 @@ await agent.getLLM();
   content={[
     {
       name: "options",
-      type: "{ requestContext?: RequestContext; model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel> }",
+      type: "{ runtimeContext?: RuntimeContext; model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel> }",
       isOptional: true,
       defaultValue: "{}",
       description:
-        "Optional configuration object containing request context and optional model override.",
+        "Optional configuration object containing runtime context and optional model override.",
     },
   ]}
 />
@@ -45,7 +45,7 @@ await agent.getLLM();
 
 ```typescript copy
 await agent.getLLM({
-  requestContext: new RequestContext(),
+  runtimeContext: new RuntimeContext(),
   model: openai("gpt-4"),
 });
 ```
@@ -55,12 +55,12 @@ await agent.getLLM({
 <PropertiesTable
   content={[
     {
-      name: "requestContext",
-      type: "RequestContext",
+      name: "runtimeContext",
+      type: "RuntimeContext",
       isOptional: true,
-      defaultValue: "new RequestContext()",
+      defaultValue: "new RuntimeContext()",
       description:
-        "Request Context for dependency injection and contextual information.",
+        "Runtime context for dependency injection and contextual information.",
     },
     {
       name: "model",
@@ -75,4 +75,4 @@ await agent.getLLM({
 ## Related
 
 - [Agents overview](/docs/agents/overview)
-- [Request Context](/docs/server-db/request-context)
+- [Runtime Context](/docs/server-db/runtime-context)

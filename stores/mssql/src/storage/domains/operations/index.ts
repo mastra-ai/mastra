@@ -6,6 +6,7 @@ import {
   TABLE_THREADS,
   TABLE_MESSAGES,
   TABLE_TRACES,
+  TABLE_EVALS,
   TABLE_SCORERS,
   TABLE_AI_SPANS,
 } from '@mastra/core/storage';
@@ -1050,6 +1051,11 @@ export class StoreOperationsMSSQL extends StoreOperations {
         name: `${schemaPrefix}mastra_traces_name_seqid_idx`,
         table: TABLE_TRACES,
         columns: ['name', 'seq_id DESC'],
+      },
+      {
+        name: `${schemaPrefix}mastra_evals_agent_name_seqid_idx`,
+        table: TABLE_EVALS,
+        columns: ['agent_name', 'seq_id DESC'],
       },
       {
         name: `${schemaPrefix}mastra_scores_trace_id_span_id_seqid_idx`,

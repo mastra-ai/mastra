@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-azure",
-  "version": "0.10.17",
+  "version": "0.10.18",
   "description": "Mastra Azure speech integration",
   "type": "module",
   "main": "dist/index.js",
@@ -54,5 +54,12 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }

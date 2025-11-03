@@ -1,36 +1,36 @@
-import { RequestContext } from '@mastra/core/request-context';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 
-export function parseClientRequestContext(requestContext?: RequestContext | Record<string, any>) {
-  if (requestContext) {
-    if (requestContext instanceof RequestContext) {
-      return Object.fromEntries(requestContext.entries());
+export function parseClientRuntimeContext(runtimeContext?: RuntimeContext | Record<string, any>) {
+  if (runtimeContext) {
+    if (runtimeContext instanceof RuntimeContext) {
+      return Object.fromEntries(runtimeContext.entries());
     }
-    return requestContext;
+    return runtimeContext;
   }
   return undefined;
 }
 
-export function base64RequestContext(requestContext?: Record<string, any>): string | undefined {
-  if (requestContext) {
-    return btoa(JSON.stringify(requestContext));
+export function base64RuntimeContext(runtimeContext?: Record<string, any>): string | undefined {
+  if (runtimeContext) {
+    return btoa(JSON.stringify(runtimeContext));
   }
   return undefined;
 }
 
 /**
- * Converts a request context to a query string
- * @param requestContext - The request context to convert
+ * Converts a runtime context to a query string
+ * @param runtimeContext - The runtime context to convert
  * @param delimiter - The delimiter to use in the query string
  * @returns The query string
  */
-export function requestContextQueryString(
-  requestContext?: RequestContext | Record<string, any>,
+export function runtimeContextQueryString(
+  runtimeContext?: RuntimeContext | Record<string, any>,
   delimiter: string = '?',
 ): string {
-  const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
-  if (!requestContextParam) return '';
+  const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
+  if (!runtimeContextParam) return '';
   const searchParams = new URLSearchParams();
-  searchParams.set('requestContext', requestContextParam);
+  searchParams.set('runtimeContext', runtimeContextParam);
   const queryString = searchParams.toString();
   return queryString ? `${delimiter}${queryString}` : '';
 }

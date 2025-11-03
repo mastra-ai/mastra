@@ -133,9 +133,9 @@ const response = await memoryAgent.generate("What's my favorite color?", {
 
 To learn more about memory see the [Memory](../memory/overview) documentation.
 
-## Using `RequestContext`
+## Using `RuntimeContext`
 
-Use [RequestContext](/docs/server-db/request-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
+Use [RuntimeContext](/docs/server-db/runtime-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
 
 ```typescript title="src/mastra/agents/memory-agent.ts" showLineNumbers
 export type UserTier = {
@@ -152,8 +152,8 @@ const standardMemory = new Memory({
 
 export const memoryAgent = new Agent({
   // ...
-  memory: ({ requestContext }) => {
-    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
+  memory: ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
 
     return userTier === "enterprise" ? premiumMemory : standardMemory;
   },
@@ -162,7 +162,7 @@ export const memoryAgent = new Agent({
 
 :::note
 
-See [Request Context](/docs/server-db/request-context) docs for more information.
+See [Runtime Context](/docs/server-db/runtime-context) docs for more information.
 
 :::
 
@@ -171,4 +171,4 @@ See [Request Context](/docs/server-db/request-context) docs for more information
 - [Working Memory](../memory/working-memory)
 - [Semantic Recall](../memory/semantic-recall)
 - [Threads and Resources](../memory/threads-and-resources)
-- [Request Context](/docs/server-db/request-context)
+- [Runtime Context](/docs/server-db/runtime-context)

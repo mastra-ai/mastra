@@ -5,6 +5,7 @@ export * from './domains/scores/index';
 export * from './domains/tools/index';
 export * from './domains/workflows/index';
 export * from './domains/templates/index';
+export * from './domains/traces/index';
 export * from './domains/observability/index';
 export * from './domains/resizable-panel';
 export * from './components/dynamic-form/index';
@@ -34,6 +35,8 @@ export * from './hooks';
 export * from './lib/tanstack-query';
 export * from './domains/memory/hooks';
 
+export type { TraceContextType } from './domains/traces/context/trace-context';
+
 export * from './store/playground-store';
 export * from './lib/framework';
 export { MemorySearch } from './components/assistant-ui/memory-search';
@@ -47,4 +50,5 @@ export * from './lib/errors';
 export * from './components/assistant-ui/tools/tool-fallback';
 export * from './domains/workflows/runs/workflow-run-list';
 export * from './domains/mcps/index';
+export * from './domains/evals/index';
 export * from './lib/toast';

@@ -1,5 +1,33 @@
 # create-mastra
 
+## 0.17.7
+
+## 0.17.7-alpha.0
+
+## 0.17.6
+
+### Patch Changes
+
+- Update MainSidebar component to fit required changes in Cloud CTA link ([#9364](https://github.com/mastra-ai/mastra/pull/9364))
+
+## 0.17.6-alpha.1
+
+## 0.17.6-alpha.0
+
+### Patch Changes
+
+- Update MainSidebar component to fit required changes in Cloud CTA link ([#9364](https://github.com/mastra-ai/mastra/pull/9364))
+
+## 0.17.5
+
+### Patch Changes
+
+- Fix peerdependencies ([`eb7c1c8`](https://github.com/mastra-ai/mastra/commit/eb7c1c8c592d8fb16dfd250e337d9cdc73c8d5de))
+
+## 0.17.4
+
+## 0.17.4-alpha.0
+
 ## 0.17.3
 
 ## 0.17.3-alpha.0

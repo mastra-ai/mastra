@@ -121,8 +121,8 @@ export function CookieBanner({
           >
             Decline cookies
           </Button>
-        </div>
       </div>
+    </div>
     </T>
   );
 }

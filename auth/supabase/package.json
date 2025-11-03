@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-supabase",
-  "version": "0.10.6",
+  "version": "0.10.7",
   "description": "Mastra Supabase Auth integration",
   "type": "module",
   "main": "dist/index.js",
@@ -50,5 +50,12 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }

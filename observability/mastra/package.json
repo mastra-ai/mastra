@@ -1,6 +1,6 @@
 {
   "name": "@mastra/observability",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "description": "Core observability package for Mastra - includes AI tracing and scoring features",
   "type": "module",
   "main": "dist/index.js",
@@ -53,5 +53,12 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-netlify",
-  "version": "0.13.12",
+  "version": "0.13.16",
   "description": "",
   "type": "module",
   "files": [
@@ -62,5 +62,12 @@
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }

@@ -19,10 +19,10 @@ await agent.getDefaultGenerateOptions();
   content={[
     {
       name: "options",
-      type: "{ requestContext?: RequestContext }",
+      type: "{ runtimeContext?: RuntimeContext }",
       isOptional: true,
       defaultValue: "{}",
-      description: "Optional configuration object containing request context.",
+      description: "Optional configuration object containing runtime context.",
     },
   ]}
 />
@@ -44,7 +44,7 @@ await agent.getDefaultGenerateOptions();
 
 ```typescript copy
 await agent.getDefaultGenerateOptions({
-  requestContext: new RequestContext(),
+  runtimeContext: new RuntimeContext(),
 });
 ```
 
@@ -53,12 +53,12 @@ await agent.getDefaultGenerateOptions({
 <PropertiesTable
   content={[
     {
-      name: "requestContext",
-      type: "RequestContext",
+      name: "runtimeContext",
+      type: "RuntimeContext",
       isOptional: true,
-      defaultValue: "new RequestContext()",
+      defaultValue: "new RuntimeContext()",
       description:
-        "Request Context for dependency injection and contextual information.",
+        "Runtime context for dependency injection and contextual information.",
     },
   ]}
 />
@@ -66,4 +66,4 @@ await agent.getDefaultGenerateOptions({
 ## Related
 
 - [Agent generation](/docs/agents/overview#generating-responses)
-- [Request Context](/docs/server-db/request-context)
+- [Runtime Context](/docs/server-db/runtime-context)

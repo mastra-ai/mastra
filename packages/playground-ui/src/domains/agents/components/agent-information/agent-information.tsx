@@ -2,12 +2,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 import { AgentMemory } from './agent-memory';
 import { useState, useEffect } from 'react';
+import { AgentPromptEnhancer } from './agent-instructions-enhancer';
 import { AgentEntityHeader } from '../agent-entity-header';
 import { PlaygroundTabs, Tab, TabContent, TabList } from '@/components/ui/playground-tabs';
 import { AgentMetadata } from '../agent-metadata';
 import { useAgent } from '../../hooks/use-agent';
 import {
-  useModelProviders,
   useReorderModelList,
   useResetAgentModel,
   useUpdateAgentModel,
@@ -24,7 +24,6 @@ export interface AgentInformationProps {
 
 export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
   const { data: agent, isLoading } = useAgent(agentId);
-  const { data: modelProviders } = useModelProviders();
   const { mutateAsync: updateModel } = useUpdateAgentModel(agentId);
   const { mutateAsync: resetModel } = useResetAgentModel(agentId);
   const { mutate: reorderModelList } = useReorderModelList(agentId);
@@ -84,8 +83,8 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
                 resetModel={resetModel}
                 updateModelInModelList={updateModelInModelList}
                 reorderModelList={reorderModelList}
-                modelProviders={modelProviders || []}
                 hasMemoryEnabled={Boolean(memory?.result)}
+                promptSlot={<AgentPromptEnhancer agentId={agentId} />}
                 modelVersion={agent.modelVersion}
               />
             )}

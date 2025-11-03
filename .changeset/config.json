@@ -8,7 +8,7 @@
   "fixed": [["@mastra/core", "@mastra/server", "@mastra/deployer", "@mastra/deployer-cloud"], ["mastra", "create-mastra"]],
   "linked": [],
   "access": "public",
-  "baseBranch": "main",
+  "baseBranch": "0.x",
   "updateInternalDependencies": "patch",
   "bumpVersionsWithWorkspaceProtocolOnly": true,
   "ignore": [

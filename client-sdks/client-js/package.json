@@ -1,6 +1,6 @@
 {
   "name": "@mastra/client-js",
-  "version": "0.16.4",
+  "version": "0.16.8",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
@@ -66,5 +66,12 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }

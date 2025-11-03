@@ -65,7 +65,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> For more details, check out the [Suspend & Resume documentation](/docs/workflows/suspend-and-resume).
+> For more details, check out the [Suspend workflow example](/examples/workflows_legacy/suspend-and-resume).
 
 ### Identifying suspended steps
 
@@ -210,19 +210,19 @@ const resumedResult = await run.resume({
 });
 ```
 
-You can pass `requestContext` as an argument to both the `start` and `resume` commands.
+You can pass `runtimeContext` as an argument to both the `start` and `resume` commands.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
-import { RequestContext } from "@mastra/core/request-context";
+import { RuntimeContext } from "@mastra/core/runtime-context";
 
-const requestContext = new RequestContext();
+const runtimeContext = new RuntimeContext();
 
 const result = await run.start({
   step: "step-1",
   inputData: {
     city: "London",
   },
-  requestContext,
+  runtimeContext,
 });
 
 const resumedResult = await run.resume({
@@ -230,11 +230,11 @@ const resumedResult = await run.resume({
   resumeData: {
     city: "New York",
   },
-  requestContext,
+  runtimeContext,
 });
 ```
 
-> See [Request Context](/docs/server-db/request-context) for more information.
+> See [Runtime Context](/docs/server-db/runtime-context) for more information.
 
 ### Resuming nested workflows
 
