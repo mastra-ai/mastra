@@ -14,6 +14,7 @@ const memory = new Memory({
 });
 
 export const pdfToAudioAgent = new Agent({
+  id: 'pdf-to-audio-agent',
   name: 'pdfToAudioAgent',
   description: 'An agent that can download PDFs, generate summaries, and create audio from PDF content',
   instructions: `

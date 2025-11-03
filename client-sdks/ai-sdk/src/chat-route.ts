@@ -3,7 +3,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import type { OutputSchema } from '@mastra/core/stream';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
-import { toAISdkFormat } from './to-ai-sdk-format';
+import { toAISdkV5Stream } from './convert-streams';
 
 export type chatRouteOptions<OUTPUT extends OutputSchema = undefined> = {
   defaultOptions?: AgentExecutionOptions<OUTPUT, 'aisdk'>;
@@ -154,16 +154,21 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
         throw new Error(`Agent ${agentToUse} not found`);
       }
 
-      const result = await agentObj.stream<OUTPUT, 'mastra'>(messages, {
+      const result = await agentObj.stream<OUTPUT>(messages, {
         ...defaultOptions,
         ...rest,
         requestContext: requestContext || defaultOptions?.requestContext,
       });
 
+      let lastMessageId: string | undefined;
+      if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
+        lastMessageId = messages[messages.length - 1].id;
+      }
+
       const uiMessageStream = createUIMessageStream({
         originalMessages: messages,
         execute: async ({ writer }) => {
-          for await (const part of toAISdkFormat(result, { from: 'agent' })!) {
+          for await (const part of toAISdkV5Stream(result, { from: 'agent', lastMessageId })!) {
             writer.write(part);
           }
         },

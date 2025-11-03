@@ -34,7 +34,7 @@ const weatherTool = createTool({
   id: "getWeather",
   description: "Gets the current weather for a location.",
   inputSchema: z.object({ location: z.string() }),
-  execute: async ({ context }) => `Weather in ${context.location} is sunny.`,
+  execute: async (inputData) => `Weather in ${inputData.location} is sunny.`,
 });
 
 const server = new MCPServer({
@@ -387,7 +387,7 @@ const httpServer = http.createServer(async (req, res) => {
     req,
     res,
     options: {
-      sessionIdGenerator: undefined,
+      sessionIdGenerator: () => randomUUID(),
     },
   });
 });
@@ -396,6 +396,72 @@ httpServer.listen(PORT, () => {
   console.log(`HTTP server listening on port ${PORT}`);
 });
 ```
+
+For **serverless environments** (Supabase Edge Functions, Cloudflare Workers, Vercel Edge, etc.), use `serverless: true` to enable stateless operation:
+
+```typescript
+// Supabase Edge Function example
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { MCPServer } from "@mastra/mcp";
+// Note: You will need to convert req/res format from Deno to Node
+import { toReqRes, toFetchResponse } from "fetch-to-node";
+
+const server = new MCPServer({
+  name: "my-serverless-mcp",
+  version: "1.0.0",
+  tools: { /* your tools */ },
+});
+
+serve(async (req) => {
+  const url = new URL(req.url);
+  
+  if (url.pathname === "/mcp") {
+    // Convert Deno Request to Node.js-compatible format
+    const { req: nodeReq, res: nodeRes } = toReqRes(req);
+    
+    await server.startHTTP({
+      url,
+      httpPath: "/mcp",
+      req: nodeReq,
+      res: nodeRes,
+      options: {
+        serverless: true, // ← Enable stateless mode for serverless
+      },
+    });
+    
+    return toFetchResponse(nodeRes);
+  }
+  
+  return new Response("Not found", { status: 404 });
+});
+```
+
+<Callout type="info">
+**When to use `serverless: true`**
+
+Use `serverless: true` when deploying to environments where each request runs in a fresh, stateless execution context:
+- Supabase Edge Functions
+- Cloudflare Workers
+- Vercel Edge Functions
+- Netlify Edge Functions
+- AWS Lambda
+- Deno Deploy
+
+Use the default session-based mode (without `serverless: true`) for:
+- Long-lived Node.js servers
+- Docker containers
+- Traditional hosting (VPS, dedicated servers)
+
+The serverless mode disables session management and creates fresh server instances per request, which is necessary for stateless environments where memory doesn't persist between invocations.
+
+**Note:** The following MCP features require session state or persistent connections and will **not work** in serverless mode:
+- **Elicitation** - Interactive user input requests during tool execution require session management to route responses back to the correct client
+- **Resource subscriptions** - `resources/subscribe` and `resources/unsubscribe` need persistent connections to maintain subscription state
+- **Resource update notifications** - `resources.notifyUpdated()` requires active subscriptions and persistent connections to notify clients
+- **Prompt list change notifications** - `prompts.notifyListChanged()` requires persistent connections to push updates to clients
+
+These features work normally in long-lived server environments (Node.js servers, Docker containers, etc.).
+</Callout>
 
 Here are the details for the values needed by the `startHTTP` method:
 
@@ -437,6 +503,13 @@ The `StreamableHTTPServerTransportOptions` object allows you to customize the be
 
 <PropertiesTable
   content={[
+    {
+      name: "serverless",
+      type: "boolean",
+      description:
+        "If `true`, runs in stateless mode without session management. Each request is handled independently with a fresh server instance. Essential for serverless environments (Cloudflare Workers, Supabase Edge Functions, Vercel Edge, etc.) where sessions cannot persist between invocations. Defaults to `false`.",
+      optional: true,
+    },
     {
       name: "sessionIdGenerator",
       type: "(() => string) | undefined",
@@ -845,24 +918,24 @@ The example at the beginning of this page also demonstrates how to instantiate `
 
 Elicitation is a feature in the Model Context Protocol (MCP) that allows servers to request structured information from users. This enables interactive workflows where servers can collect additional data dynamically.
 
-The `MCPServer` class automatically includes elicitation capabilities. Tools receive an `options` parameter in their `execute` function that includes an `elicitation.sendRequest()` method for requesting user input.
+The `MCPServer` class automatically includes elicitation capabilities. Tools receive a `context.mcp` object in their `execute` function that includes an `elicitation.sendRequest()` method for requesting user input.
 
 ### Tool Execution Signature
 
-When tools are executed within an MCP server context, they receive an additional `options` parameter:
+When tools are executed within an MCP server context, they receive MCP-specific capabilities via the `context.mcp` object:
 
 ```typescript
-execute: async ({ context }, options) => {
-  // context contains the tool's input parameters
-  // options contains server capabilities like elicitation and authentication info
+execute: async (inputData, context) => {
+  // input contains the tool's inputData parameters
+  // context.mcp contains server capabilities like elicitation and authentication info
 
   // Access authentication information (when available)
-  if (options.extra?.authInfo) {
-    console.log("Authenticated request from:", options.extra.authInfo.clientId);
+  if (context.mcp?.extra?.authInfo) {
+    console.log("Authenticated request from:", context.mcp.extra.authInfo.clientId);
   }
 
   // Use elicitation capabilities
-  const result = await options.elicitation.sendRequest({
+  const result = await context.mcp.elicitation.sendRequest({
     message: "Please provide information",
     requestedSchema: {
       /* schema */
@@ -875,9 +948,9 @@ execute: async ({ context }, options) => {
 
 ### How Elicitation Works
 
-A common use case is during tool execution. When a tool needs user input, it can use the elicitation functionality provided through the tool's execution options:
+A common use case is during tool execution. When a tool needs user input, it can use the elicitation functionality provided through the context parameter:
 
-1. The tool calls `options.elicitation.sendRequest()` with a message and schema
+1. The tool calls `context.mcp.elicitation.sendRequest()` with a message and schema
 2. The request is sent to the connected MCP client
 3. The client presents the request to the user (via UI, command line, etc.)
 4. The user provides input, declines, or cancels the request
@@ -906,15 +979,15 @@ const server = new MCPServer({
           .optional()
           .describe("Reason for collecting contact info"),
       }),
-      execute: async ({ context }, options) => {
-        const { reason } = context;
+      execute: async (inputData, context) => {
+        const { reason } = inputData;
 
         // Log session info if available
-        console.log("Request from session:", options.extra?.sessionId);
+        console.log("Request from session:", context.mcp?.extra?.sessionId);
 
         try {
           // Request user input via elicitation
-          const result = await options.elicitation.sendRequest({
+          const result = await context.mcp.elicitation.sendRequest({
             message: reason
               ? `Please provide your contact information. ${reason}`
               : "Please provide your contact information",
@@ -1022,16 +1095,16 @@ The elicitation functionality is available through the `options` parameter in to
 
 ```typescript
 // Within a tool's execute function
-execute: async ({ context }, options) => {
+execute: async (inputData, context) => {
   // Use elicitation for user input
-  const result = await options.elicitation.sendRequest({
+  const result = await context.mcp.elicitation.sendRequest({
     message: string,           // Message to display to user
     requestedSchema: object    // JSON schema defining expected response structure
   }): Promise<ElicitResult>
 
   // Access authentication info if needed
-  if (options.extra?.authInfo) {
-    // Use options.extra.authInfo.token, etc.
+  if (context.mcp?.extra?.authInfo) {
+    // Use context.mcp.extra.authInfo.token, etc.
   }
 }
 ```
@@ -1049,18 +1122,18 @@ type ElicitResult = {
 
 ## Authentication Context
 
-Tools can access request metadata via `options.extra` when using HTTP-based transports:
+Tools can access request metadata via `context.mcp.extra` when using HTTP-based transports:
 
 ```typescript
-execute: async ({ context }, options) => {
-  if (!options.extra?.authInfo?.token) {
+execute: async (inputData, context) => {
+  if (!context.mcp?.extra?.authInfo?.token) {
     return "Authentication required";
   }
 
   // Use the auth token
   const response = await fetch("/api/data", {
-    headers: { Authorization: `Bearer ${options.extra.authInfo.token}` },
-    signal: options.extra.signal,
+    headers: { Authorization: `Bearer ${context.mcp.extra.authInfo.token}` },
+    signal: context.mcp.extra.signal,
   });
 
   return response.json();

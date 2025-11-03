@@ -119,7 +119,7 @@ A relevancy score between 0 and 1:
 In this example, the response accurately addresses the input query with specific and relevant information.
 
 ```typescript title="src/example-high-answer-relevancy.ts" showLineNumbers copy
-import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o-mini" });
 
@@ -157,7 +157,7 @@ The output receives a high score because it accurately answers the query without
 In this example, the response addresses the query in part but includes additional information that isn’t directly relevant.
 
 ```typescript title="src/example-partial-answer-relevancy.ts" showLineNumbers copy
-import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o-mini" });
 
@@ -192,7 +192,7 @@ The output receives a lower score because it partially answers the query. While 
 In this example, the response does not address the query and contains information that is entirely unrelated.
 
 ```typescript title="src/example-low-answer-relevancy.ts" showLineNumbers copy
-import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o-mini" });
 

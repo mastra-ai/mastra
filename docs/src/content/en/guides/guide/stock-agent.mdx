@@ -34,6 +34,7 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const stockAgent = new Agent({
+  id: "stock-agent",
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
@@ -87,11 +88,11 @@ export const stockPrices = createTool({
     symbol: z.string(),
   }),
   description: `Fetches the last day's closing stock price for a given symbol`,
-  execute: async ({ context: { symbol } }) => {
-    console.log("Using tool to fetch stock price for", symbol);
+  execute: async (inputData) => {
+    console.log("Using tool to fetch stock price for", inputData.symbol);
     return {
-      symbol,
-      currentPrice: await getStockPrice(symbol),
+      symbol: inputData.symbol,
+      currentPrice: await getStockPrice(inputData.symbol),
     };
   },
 });
@@ -109,6 +110,7 @@ import { Agent } from "@mastra/core/agent";
 import { stockPrices } from "../tools/stockPrices";
 
 export const stockAgent = new Agent({
+  id: "stock-agent",
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",

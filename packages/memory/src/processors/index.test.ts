@@ -85,7 +85,7 @@ describe('TokenLimiter', () => {
     const { messages, fakeCore, counts } = generateConversationHistory(config);
 
     const estimate = estimateTokens(messages);
-    const used = (await agent.generate(fakeCore)).usage.promptTokens;
+    const used = (await agent.generateLegacy(fakeCore)).usage.promptTokens;
 
     console.log(`Estimated ${estimate} tokens, used ${used} tokens.\n`, counts);
 
@@ -99,9 +99,9 @@ describe('TokenLimiter', () => {
     inputSchema: z.object({
       expression: z.string().describe('The mathematical expression to calculate'),
     }),
-    execute: async ({ context: { expression } }) => {
+    execute: async input => {
       // Don't actually eval the expression. The model is dumb and sometimes passes "banana" as the expression because that's one of the sample tokens we're using in input messages lmao
-      return `The result of ${expression} is 10`;
+      return `The result of ${input.expression} is 10`;
     },
   });
 

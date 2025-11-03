@@ -231,7 +231,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'CLOUDFLARE_STORAGE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

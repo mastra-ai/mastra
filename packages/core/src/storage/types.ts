@@ -1,5 +1,5 @@
 import type { AISpanType } from '../ai-tracing';
-import type { MemoryConfig, MastraMessageV2, StorageThreadType } from '../memory/types';
+import type { MemoryConfig, MastraDBMessage, StorageThreadType } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
 
 export type StoragePagination = {
@@ -73,14 +73,11 @@ export type StorageListMessagesInput = {
       end?: Date;
     };
   };
-  orderBy?: {
-    field: 'createdAt';
-    direction: 'ASC' | 'DESC';
-  };
+  orderBy?: StorageOrderBy;
 };
 
 export type StorageListMessagesOutput = PaginationInfo & {
-  messages: MastraMessageV2[];
+  messages: MastraDBMessage[];
 };
 
 export type StorageListWorkflowRunsInput = {
@@ -96,7 +93,8 @@ export type StorageListThreadsByResourceIdInput = {
   resourceId: string;
   limit: number;
   offset: number;
-} & ThreadSortOptions;
+  orderBy?: StorageOrderBy;
+};
 
 export type StorageListThreadsByResourceIdOutput = PaginationInfo & {
   threads: StorageThreadType[];
@@ -137,6 +135,11 @@ export type StorageMessageType = {
   createdAt: Date;
   resourceId: string | null;
 };
+
+export interface StorageOrderBy {
+  field?: ThreadOrderBy;
+  direction?: ThreadSortDirection;
+}
 
 export interface ThreadSortOptions {
   orderBy?: ThreadOrderBy;

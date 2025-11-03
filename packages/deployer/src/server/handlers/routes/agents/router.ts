@@ -584,7 +584,8 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
     '/:agentId/stream/vnext/ui',
     bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: '[DEPRECATED] This endpoint is deprecated. Please use /stream/ui instead.',
+      description:
+        '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package to for uiMessage transformations',
       tags: ['agents'],
       deprecated: true,
       parameters: [
@@ -623,8 +624,10 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
     '/:agentId/stream/ui',
     bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: 'Stream a response from an agent',
+      description:
+        '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package to for uiMessage transformations',
       tags: ['agents'],
+      deprecated: true,
       parameters: [
         {
           name: 'agentId',

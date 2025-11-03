@@ -18,6 +18,7 @@ When creating agents in Mastra, you can specify any AI SDK-supported model.
 import { Agent } from "@mastra/core/agent";
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   name: "Weather Agent",
   instructions: "Instructions for the agent...",
   model: "openai/gpt-4-turbo",
@@ -629,7 +630,7 @@ const weatherTool = createTool({
     temperature: z.number(),
     conditions: z.string(),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData) => {
     return {
       temperature: 72,
       conditions: "sunny",
@@ -668,7 +669,7 @@ const tools = {
     outputSchema: z.object({
       result: z.number(),
     }),
-    execute: async ({ context }) => {
+    execute: async (inputData) => {
       // implementation...
       return { result: 0 };
     },

@@ -76,7 +76,8 @@ describe.skip('Workflow Builder Integration Tests', () => {
 
     // Create an agent that will answer questions during the workflow
     const questionAnsweringAgent = new Agent({
-      name: 'question-answering-agent',
+      id: 'question-answering-agent',
+      name: 'Question Answering Agent',
       model: openai('gpt-4o-mini'),
       instructions: `You are an assistant that answers technical questions about workflow creation. 
       

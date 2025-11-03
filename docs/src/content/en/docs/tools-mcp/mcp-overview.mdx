@@ -61,6 +61,7 @@ import { Agent } from "@mastra/core/agent";
 import { testMcpClient } from "../mcp/test-mcp-client";
 
 export const testAgent = new Agent({
+  id: "test-agent",
   name: "Test Agent",
   description: "You are a helpful AI assistant",
   instructions: `
@@ -89,7 +90,7 @@ import { testTool } from "../tools/test-tool";
 
 export const testMcpServer = new MCPServer({
   id: "test-mcp-server",
-  name: "Test Server",
+  name: "Test MCP Server",
   version: "1.0.0",
   agents: { testAgent },
   tools: { testTool },
@@ -98,6 +99,12 @@ export const testMcpServer = new MCPServer({
 ```
 
 > See [MCPServer](/reference/tools/mcp-server) for a full list of configuration options.
+
+### Serverless deployments
+
+`MCPServer` can be deployed in serverless environments (Cloudflare Workers, Vercel Edge Functions, AWS Lambda, etc.) by enabling the `serverless: true` option in `startHTTP()`. This runs the server in stateless mode, where each request is handled independently without session management.
+
+**Note:** Some MCP features require persistent connections and won't work in serverless mode, including elicitation, resource subscriptions, and update notifications. See the [serverless section](/reference/tools/mcp-server#starthttp) in the API reference for full details and limitations.
 
 ## Registering an `MCPServer`
 
