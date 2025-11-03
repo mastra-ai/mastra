@@ -10,8 +10,9 @@ import {
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
+  Link2,
 } from 'lucide-react';
-import { useLocation } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 
 import {
   AgentIcon,
@@ -23,7 +24,12 @@ import {
   useMainSidebar,
   type NavSection,
   LogoWithoutText,
+  Tooltip,
+  Icon,
+  TooltipTrigger,
+  TooltipContent,
 } from '@mastra/playground-ui';
+import { useMastraInstanceUrl } from '@/domains/setup/MastraInstanceUrlContext';
 
 const mainNavigation: NavSection[] = [
   {
@@ -120,7 +126,9 @@ declare global {
 }
 
 export function AppSidebar() {
+  const navigate = useNavigate();
   const { state } = useMainSidebar();
+  const { url, setUrl } = useMastraInstanceUrl();
   const location = useLocation();
   const pathname = location.pathname;
 
@@ -135,6 +143,22 @@ export function AppSidebar() {
           <span className="flex items-center gap-2 pl-3">
             <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
             <span className="font-serif text-sm">Mastra Studio</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => {
+                    setUrl('');
+                    navigate('/', { replace: true });
+                  }}
+                  className="text-icon3 hover:text-icon6 ml-auto"
+                >
+                  <Icon>
+                    <Link2 />
+                  </Icon>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Change Mastra URL: {url}</TooltipContent>
+            </Tooltip>
           </span>
         )}
       </div>
