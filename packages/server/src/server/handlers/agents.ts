@@ -1,4 +1,5 @@
 import type { Agent, AgentModelManagerConfig } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { SystemMessage } from '@mastra/core/llm';
 import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
@@ -15,7 +16,6 @@ import type { Context } from '../types';
 
 import { handleError } from './error';
 import { sanitizeBody, validateBody } from './utils';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 type GetBody<
   T extends keyof Agent & { [K in keyof Agent]: Agent[K] extends (...args: any) => any ? K : never }[keyof Agent],
@@ -788,38 +788,20 @@ export async function streamNetworkHandler({
   }
 }
 
-export async function streamUIMessageHandler({
-  mastra,
-  requestContext,
-  agentId,
-  body,
-  abortSignal,
-}: Context & {
-  requestContext: RequestContext;
-  agentId: string;
-  body: GetBody<'stream'> & {
-    requestContext?: string;
-    onStepFinish?: StreamTextOnStepFinishCallback<any>;
-    onFinish?: StreamTextOnFinishCallback<any>;
-    output?: undefined;
-  };
-  abortSignal?: AbortSignal;
-}): Promise<Response | undefined> {
+export async function streamUIMessageHandler(
+  _params: Context & {
+    requestContext: RequestContext;
+    agentId: string;
+    body: GetBody<'stream'> & {
+      requestContext?: string;
+      onStepFinish?: StreamTextOnStepFinishCallback<any>;
+      onFinish?: StreamTextOnFinishCallback<any>;
+      output?: undefined;
+    };
+    abortSignal?: AbortSignal;
+  },
+): Promise<Response | undefined> {
   try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    // UI Frameworks may send "client tools" in the body,
-    // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(body, ['tools']);
-
-    const { messages, requestContext: agentRequestContext, ...rest } = body;
-    const finalRequestContext = new RequestContext<Record<string, unknown>>([
-      ...Array.from(requestContext.entries()),
-      ...Array.from(Object.entries(agentRequestContext ?? {})),
-    ]);
-
-    validateBody({ messages });
-
     throw new MastraError({
       category: ErrorCategory.USER,
       domain: ErrorDomain.MASTRA_SERVER,
