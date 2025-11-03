@@ -1,7 +1,7 @@
+import { chatRoute } from '@mastra/ai-sdk';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 import { memoryProcessorAgent, weatherAgent } from './agents/weather';
-import { chatRoute } from '@mastra/ai-sdk';
 
 export const mastra = new Mastra({
   agents: {
