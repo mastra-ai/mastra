@@ -7033,7 +7033,7 @@ describe.sequential(
         await run.start({ inputData: {} });
 
         expect(mockExec).toHaveBeenCalledTimes(1);
-        expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ runCount: 0 }));
+        expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 0 }));
         await mastra.stopEventEngine();
       });
     });

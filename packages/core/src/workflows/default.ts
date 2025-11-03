@@ -455,7 +455,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         setState: (state: any) => {
           executionContext.state = state;
         },
-        runCount: -1,
         retryCount: -1,
         tracingContext: {
           currentSpan: sleepSpan,
@@ -562,7 +561,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         setState: (state: any) => {
           executionContext.state = state;
         },
-        runCount: -1,
         retryCount: -1,
         tracingContext: {
           currentSpan: sleepUntilSpan,
@@ -800,7 +798,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           setState: (state: any) => {
             executionContext.state = state;
           },
-          runCount: retryCount,
           retryCount,
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: { currentSpan: stepAISpan },
@@ -1242,7 +1239,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                   setState: (state: any) => {
                     executionContext.state = state;
                   },
-                  runCount: -1,
                   retryCount: -1,
                   tracingContext: {
                     currentSpan: evalSpan,
@@ -1517,7 +1513,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             setState: (state: any) => {
               executionContext.state = state;
             },
-            runCount: -1,
             retryCount: -1,
             tracingContext: {
               currentSpan: evalSpan,

@@ -13945,7 +13945,6 @@ describe('Workflow', () => {
       await run.start({ inputData: {} });
 
       expect(mockExec).toHaveBeenCalledTimes(1);
-      expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ runCount: 0 }));
       expect(mockExecWithRetryCount).toHaveBeenCalledTimes(1);
       expect(mockExecWithRetryCount).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 0 }));
     });
