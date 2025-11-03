@@ -4,7 +4,6 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
 import { MemoryStorage, normalizePerPage, calculatePagination, resolveMessageLimit } from '@mastra/core/storage';
 import type {
-  PaginationInfo,
   StorageGetMessagesArg,
   StorageResourceType,
   StorageListMessagesInput,

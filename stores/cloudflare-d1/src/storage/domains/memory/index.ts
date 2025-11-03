@@ -14,7 +14,6 @@ import {
   calculatePagination,
 } from '@mastra/core/storage';
 import type {
-  PaginationInfo,
   StorageGetMessagesArg,
   StorageResourceType,
   StorageListMessagesInput,
@@ -737,7 +736,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
 
     const perPage = normalizePerPage(perPageInput, 40);
-    const { perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
       const fullTableName = this.operations.getTableName(TABLE_MESSAGES);

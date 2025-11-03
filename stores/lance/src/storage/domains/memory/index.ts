@@ -13,7 +13,6 @@ import {
   TABLE_THREADS,
 } from '@mastra/core/storage';
 import type {
-  PaginationInfo,
   StorageGetMessagesArg,
   StorageResourceType,
   StorageListMessagesInput,
