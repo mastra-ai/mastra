@@ -74,18 +74,15 @@ export class KeywordExtractor extends BaseExtractor {
       });
 
       if (this.llm.specificationVersion === 'v2') {
-        const result = await miniAgent.generate(
-          [
-            {
-              role: 'user',
-              content: this.promptTemplate.format({
-                context: node.getContent(),
-                maxKeywords: this.keywords.toString(),
-              }),
-            },
-          ],
-          { format: 'mastra' },
-        );
+        const result = await miniAgent.generate([
+          {
+            role: 'user',
+            content: this.promptTemplate.format({
+              context: node.getContent(),
+              maxKeywords: this.keywords.toString(),
+            }),
+          },
+        ]);
         keywords = result.text;
       } else {
         const result = await miniAgent.generateLegacy([
