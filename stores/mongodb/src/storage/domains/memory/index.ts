@@ -217,11 +217,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
 
     const perPage = normalizePerPage(perPageInput, 40);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      // When perPage is false (get all), ignore page offset
-      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy);
       const sortOrder = direction === 'ASC' ? 1 : -1;
@@ -320,8 +318,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore =
-        perPageInput === false ? false : allThreadMessagesReturned ? false : offset + dataResult.length < total;
+      const hasMore = perPageInput === false ? false : allThreadMessagesReturned ? false : offset + perPage < total;
 
       return {
         messages: finalMessages,
@@ -792,7 +789,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           threads: [],
           total,
           page,
-          perPage: 0,
+          perPage: perPageForResponse,
           hasMore: offset < total,
         };
       }

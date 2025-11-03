@@ -137,8 +137,13 @@ export class MemoryMSSQL extends MemoryStorage {
       const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
       const dataRequest = this.pool.request();
       dataRequest.input('resourceId', resourceId);
-      dataRequest.input('perPage', perPage);
       dataRequest.input('offset', offset);
+
+      if (perPage > 2147483647) {
+        dataRequest.input('perPage', sql.BigInt, perPage);
+      } else {
+        dataRequest.input('perPage', perPage);
+      }
       const rowsResult = await dataRequest.query(dataQuery);
       const rows = rowsResult.recordset || [];
       const threads = rows.map(thread => ({
@@ -664,7 +669,7 @@ export class MemoryMSSQL extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput === false ? false : allThreadMessagesReturned ? false : offset + rows.length < total;
+      const hasMore = perPageInput === false ? false : allThreadMessagesReturned ? false : offset + perPage < total;
 
       return {
         messages: finalMessages,

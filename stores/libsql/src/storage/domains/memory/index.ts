@@ -233,11 +233,9 @@ export class MemoryLibSQL extends MemoryStorage {
     }
 
     const perPage = normalizePerPage(perPageInput, 40);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      // When perPage is false (get all), ignore page offset
-      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy);
       const orderByStatement = `ORDER BY "${field}" ${direction}`;
@@ -330,8 +328,7 @@ export class MemoryLibSQL extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore =
-        perPageInput === false ? false : allThreadMessagesReturned ? false : offset + dataResult.rows.length < total;
+      const hasMore = perPageInput === false ? false : allThreadMessagesReturned ? false : offset + perPage < total;
 
       return {
         messages: finalMessages,
@@ -359,7 +356,7 @@ export class MemoryLibSQL extends MemoryStorage {
         messages: [],
         total: 0,
         page,
-        perPage: perPageInput === false ? Number.MAX_SAFE_INTEGER : (perPageInput ?? 40),
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }
