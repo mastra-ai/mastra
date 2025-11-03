@@ -1,4 +1,5 @@
 import type { Agent, AgentModelManagerConfig } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { SystemMessage } from '@mastra/core/llm';
 import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
@@ -27,7 +28,8 @@ type GetHITLBody<
 > = Parameters<Agent[T]>[0];
 
 export interface SerializedProcessor {
-  name: string;
+  id: string;
+  name?: string;
 }
 
 export interface SerializedTool {
@@ -137,6 +139,7 @@ export function getSerializedProcessors(processors: (InputProcessor | OutputProc
     // Processors are class instances or objects with a name property
     // Use the name property if available, otherwise fall back to constructor name
     return {
+      id: processor.id,
       name: processor.name || processor.constructor.name,
     };
   });
@@ -217,8 +220,8 @@ async function formatAgentList({
   const serializedAgentAgents = await getSerializedAgentDefinition({ agent, requestContext });
 
   // Get and serialize processors
-  const inputProcessors = await agent.getInputProcessors(requestContext);
-  const outputProcessors = await agent.getOutputProcessors(requestContext);
+  const inputProcessors = await agent.listInputProcessors(requestContext);
+  const outputProcessors = await agent.listOutputProcessors(requestContext);
   const serializedInputProcessors = getSerializedProcessors(inputProcessors);
   const serializedOutputProcessors = getSerializedProcessors(outputProcessors);
 
@@ -409,8 +412,8 @@ async function formatAgent({
   const serializedAgentAgents = await getSerializedAgentDefinition({ agent, requestContext: proxyRequestContext });
 
   // Get and serialize processors
-  const inputProcessors = await agent.getInputProcessors(proxyRequestContext);
-  const outputProcessors = await agent.getOutputProcessors(proxyRequestContext);
+  const inputProcessors = await agent.listInputProcessors(proxyRequestContext);
+  const outputProcessors = await agent.listOutputProcessors(proxyRequestContext);
   const serializedInputProcessors = getSerializedProcessors(inputProcessors);
   const serializedOutputProcessors = getSerializedProcessors(outputProcessors);
 
@@ -508,7 +511,6 @@ export async function generateHandler({
   agentId: string;
   body: GetBody<'generate'> & {
     requestContext?: Record<string, unknown>;
-    format?: 'mastra' | 'aisdk';
   };
   abortSignal?: AbortSignal;
 }): Promise<ReturnType<Agent['generate']>> {
@@ -531,7 +533,6 @@ export async function generateHandler({
     const result = await agent.generate(messages, {
       ...rest,
       requestContext: finalRequestContext,
-      format: rest.format || 'mastra',
       abortSignal,
     });
 
@@ -613,7 +614,6 @@ export async function streamGenerateHandler({
   agentId: string;
   body: GetBody<'stream'> & {
     requestContext?: string;
-    format?: 'aisdk' | 'mastra';
   };
   abortSignal?: AbortSignal;
 }): ReturnType<Agent['stream']> {
@@ -636,7 +636,6 @@ export async function streamGenerateHandler({
       ...rest,
       requestContext: finalRequestContext,
       abortSignal,
-      format: body.format ?? 'mastra',
     });
 
     return streamResult;
@@ -656,7 +655,6 @@ export async function approveToolCallHandler({
   agentId: string;
   body: GetHITLBody<'approveToolCall'> & {
     requestContext?: string;
-    format?: 'aisdk' | 'mastra';
   };
   abortSignal?: AbortSignal;
 }): ReturnType<Agent['approveToolCall']> {
@@ -687,7 +685,6 @@ export async function approveToolCallHandler({
       runId,
       requestContext: finalRequestContext,
       abortSignal,
-      format: body.format ?? 'mastra',
     });
 
     return streamResult;
@@ -707,7 +704,6 @@ export async function declineToolCallHandler({
   agentId: string;
   body: GetHITLBody<'declineToolCall'> & {
     requestContext?: string;
-    format?: 'aisdk' | 'mastra';
   };
   abortSignal?: AbortSignal;
 }): ReturnType<Agent['declineToolCall']> {
@@ -738,7 +734,6 @@ export async function declineToolCallHandler({
       runId,
       requestContext: finalRequestContext,
       abortSignal,
-      format: body.format ?? 'mastra',
     });
 
     return streamResult;
@@ -793,46 +788,26 @@ export async function streamNetworkHandler({
   }
 }
 
-export async function streamUIMessageHandler({
-  mastra,
-  requestContext,
-  agentId,
-  body,
-  abortSignal,
-}: Context & {
-  requestContext: RequestContext;
-  agentId: string;
-  body: GetBody<'stream'> & {
-    requestContext?: string;
-    onStepFinish?: StreamTextOnStepFinishCallback<any>;
-    onFinish?: StreamTextOnFinishCallback<any>;
-    output?: undefined;
-  };
-  abortSignal?: AbortSignal;
-}): Promise<Response | undefined> {
+export async function streamUIMessageHandler(
+  _params: Context & {
+    requestContext: RequestContext;
+    agentId: string;
+    body: GetBody<'stream'> & {
+      requestContext?: string;
+      onStepFinish?: StreamTextOnStepFinishCallback<any>;
+      onFinish?: StreamTextOnFinishCallback<any>;
+      output?: undefined;
+    };
+    abortSignal?: AbortSignal;
+  },
+): Promise<Response | undefined> {
   try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    // UI Frameworks may send "client tools" in the body,
-    // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(body, ['tools']);
-
-    const { messages, requestContext: agentRequestContext, ...rest } = body;
-    const finalRequestContext = new RequestContext<Record<string, unknown>>([
-      ...Array.from(requestContext.entries()),
-      ...Array.from(Object.entries(agentRequestContext ?? {})),
-    ]);
-
-    validateBody({ messages });
-
-    const streamResult = await agent.stream(messages, {
-      ...rest,
-      requestContext: finalRequestContext,
-      abortSignal,
-      format: 'aisdk',
+    throw new MastraError({
+      category: ErrorCategory.USER,
+      domain: ErrorDomain.MASTRA_SERVER,
+      id: 'DEPRECATED_ENDPOINT',
+      text: 'This endpoint is deprecated. Please use the @mastra/ai-sdk package to for uiMessage transformations',
     });
-
-    return streamResult.toUIMessageStreamResponse();
   } catch (error) {
     return handleError(error, 'error streaming agent response');
   }

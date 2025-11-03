@@ -9,6 +9,7 @@ export class MastraAgentRelevanceScorer implements RelevanceScoreProvider {
 
   constructor(name: string, model: MastraLanguageModel) {
     this.agent = new Agent({
+      id: `relevance-scorer-${name}`,
       name: `Relevance Scorer ${name}`,
       instructions: `You are a specialized agent for evaluating the relevance of text to queries.
 Your task is to rate how well a text passage answers a given query.

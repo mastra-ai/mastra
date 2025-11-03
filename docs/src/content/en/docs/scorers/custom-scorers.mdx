@@ -40,7 +40,7 @@ You can mix and match approaches within a single scorer - for example, use a fun
 Every scorer starts with the `createScorer` factory function, which requires a name and description, and optionally accepts a type specification and judge configuration.
 
 ```typescript
-import { createScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
 import { openai } from '@ai-sdk/openai';
 
 const glutenCheckerScorer = createScorer({
@@ -246,7 +246,7 @@ Together, these components allow you to define custom evaluation logic using LLM
 
 ```typescript title="src/mastra/scorers/gluten-checker.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
-import { createScorer } from "@mastra/core/scores";
+import { createScorer } from "@mastra/core/evals";
 import { z } from "zod";
 
 export const GLUTEN_INSTRUCTIONS = `You are a Chef that identifies if recipes contain gluten.`;

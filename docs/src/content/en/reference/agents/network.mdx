@@ -21,7 +21,8 @@ import { workflow1 } from "./workflows";
 import { tool1, tool2 } from "./tools";
 
 const agent = new Agent({
-  name: "network-agent",
+  id: "network-agent",
+  name: "Network Agent",
   instructions:
     "You are a network agent that can help users with a variety of tasks.",
   model: openai("gpt-4o"),

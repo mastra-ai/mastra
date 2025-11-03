@@ -232,7 +232,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'STORAGE_DYNAMODB_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName: args?.workflowName || '', resourceId: args?.resourceId || '' },

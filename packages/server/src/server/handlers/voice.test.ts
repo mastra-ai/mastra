@@ -19,6 +19,7 @@ function createAgentWithVoice({
   instructions?: string | (() => string);
 } = {}) {
   return new Agent({
+    id: name ?? 'test-agent',
     name: name ?? 'test-agent',
     instructions: instructions ?? 'You are a helpful assistant',
     model: model ?? ('openai' as any),

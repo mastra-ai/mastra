@@ -73,6 +73,7 @@ describe('Writable Stream from Tool', () => {
     });
 
     const electionAgent = new Agent({
+      id: 'us-election-agent',
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
       model: mockElectionModel,

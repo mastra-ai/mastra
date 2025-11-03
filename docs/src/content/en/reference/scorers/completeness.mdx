@@ -112,7 +112,7 @@ A completeness score between 0 and 1:
 In this example, the response comprehensively addresses all aspects of the query with detailed information covering multiple dimensions.
 
 ```typescript title="src/example-high-completeness.ts" showLineNumbers copy
-import { createCompletenessScorer } from "@mastra/evals/scorers/llm";
+import { createCompletenessScorer } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createCompletenessScorer({ model: "openai/gpt-4o-mini" });
 
@@ -145,7 +145,7 @@ The output receives a high score because it addresses all requested aspects: inp
 In this example, the response addresses some key points but misses important aspects or lacks sufficient detail.
 
 ```typescript title="src/example-partial-completeness.ts" showLineNumbers copy
-import { createCompletenessScorer } from "@mastra/evals/scorers/llm";
+import { createCompletenessScorer } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createCompletenessScorer({ model: "openai/gpt-4o-mini" });
 
@@ -178,7 +178,7 @@ The output receives a moderate score because it covers employee benefits and som
 In this example, the response only partially addresses the query and misses several important aspects.
 
 ```typescript title="src/example-low-completeness.ts" showLineNumbers copy
-import { createCompletenessScorer } from "@mastra/evals/scorers/llm";
+import { createCompletenessScorer } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createCompletenessScorer({ model: "openai/gpt-4o-mini" });
 
