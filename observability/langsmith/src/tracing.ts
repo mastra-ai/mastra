@@ -1,7 +1,7 @@
 /**
  * LangSmith Exporter for Mastra Tracing
  *
- * This exporter sends tracing data to LangSmith for AI observability.
+ * This exporter sends observability data to LangSmith
  * Root spans become top-level LangSmith RunTrees (no trace wrapper).
  * Events are handled as zero-duration RunTrees with matching start/end times.
  */

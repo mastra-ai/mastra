@@ -10,7 +10,7 @@ import type {
   TABLE_NAMES,
   StorageResourceType,
   TABLE_SCORERS,
-  TABLE_AI_SPANS,
+  TABLE_SPANS,
   SpanRecord,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -76,7 +76,7 @@ export type RecordTypes = {
   [TABLE_SCORERS]: ScoreRowData;
   [TABLE_TRACES]: any;
   [TABLE_RESOURCES]: StorageResourceType;
-  [TABLE_AI_SPANS]: SpanRecord;
+  [TABLE_SPANS]: SpanRecord;
 };
 
 export type ListOptions = {
