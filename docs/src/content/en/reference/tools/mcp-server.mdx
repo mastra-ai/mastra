@@ -184,6 +184,52 @@ The description for this generated tool will be: "Ask agent `<agent.name>` a que
 
 This allows you to quickly expose the generative capabilities of your agents through the MCP, enabling clients to "ask" your agents questions directly.
 
+### Accessing MCP Context in Tools
+
+Tools exposed through `MCPServer` can access MCP request context (authentication, session IDs, etc.) via two different properties depending on how the tool is invoked:
+
+| Call Pattern | Access Method |
+|-------------|---------------|
+| Direct tool call | `options?.mcp?.extra` |
+| Agent tool call | `requestContext?.get("mcp.extra")` |
+
+**Universal pattern** (works in both contexts):
+```typescript
+const authInfo = options?.mcp?.extra?.authInfo || requestContext?.get("mcp.extra")?.authInfo;
+```
+
+#### Example: Tool that works in both contexts
+
+```typescript
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const fetchUserData = createTool({
+  id: "fetchUserData",
+  description: "Fetches user data using authentication from MCP context",
+  inputSchema: z.object({
+    userId: z.string().describe("The ID of the user to fetch"),
+  }),
+  execute: async ({ context, requestContext }, options) => {
+    // Universal access pattern
+    const mcpExtra = options?.mcp?.extra || requestContext?.get("mcp.extra");
+    const authInfo = mcpExtra?.authInfo;
+
+    if (!authInfo?.token) {
+      throw new Error("Authentication required");
+    }
+
+    const response = await fetch(`https://api.example.com/users/${context.userId}`, {
+      headers: {
+        Authorization: `Bearer ${authInfo.token}`,
+      },
+    });
+
+    return response.json();
+  },
+});
+```
+
 ## Methods
 
 These are the functions you can call on an `MCPServer` instance to control its behavior and get information.

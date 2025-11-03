@@ -763,22 +763,13 @@ export class MCPServer extends MCPServerBase {
             `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${context.message}"`,
           );
           try {
-            // Clone RequestContext to prevent auth context leakage between concurrent invocations
-            // Create a new isolated context by copying entries from the base context
-            const isolatedContext = new RequestContext();
-            if (requestContext) {
-              for (const [key, value] of requestContext.entries()) {
-                isolatedContext.set(key, value);
-              }
-            }
-
-            // Store mcp.extra in RequestContext
+            const proxiedContext = requestContext || new RequestContext();
             if (mcp?.extra) {
-              isolatedContext.set('mcp.extra', mcp.extra);
+              proxiedContext.set('mcp.extra', mcp.extra);
             }
 
             const response = await agent.generate(context.message, {
-              requestContext: isolatedContext,
+              requestContext: proxiedContext,
               tracingContext,
             });
             return response;
