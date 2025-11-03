@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { toAISdkV4Messages, toAISdkV5Messages } from '../convert-messages';
 import { toAISdkV5Stream } from '../convert-streams';
-import { MastraModelOutput } from '@mastra/core/stream';
+import type { MastraModelOutput } from '@mastra/core/stream';
 
 describe('toAISdkFormat', () => {
   const sampleMessages: MastraDBMessage[] = [
