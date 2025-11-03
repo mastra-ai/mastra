@@ -276,11 +276,11 @@ export default function ChatbotSidebar({
                   <span className="text-xs font-medium text-(--mastra-text-muted)">
                     Powered by{" "}
                     <a
-                      href="https://kapaai.com"
+                      href="https://www.kapa.ai"
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      KapaAI
+                      kapa.ai
                     </a>
                   </span>
                 </div>
