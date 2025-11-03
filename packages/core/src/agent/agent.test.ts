@@ -3595,7 +3595,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       const instructionsArray = ['You are a helpful assistant.', 'Always be polite.', 'Provide detailed answers.'];
 
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: instructionsArray,
         model: dummyModel,
       });
@@ -3611,7 +3612,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       ];
 
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: instructionsArray,
         model: dummyModel,
       });
@@ -3636,7 +3638,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       ];
 
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: instructionsArray,
         model: dummyModel,
       });
@@ -3647,7 +3650,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should support dynamic instructions returning string', async () => {
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: ({ requestContext }) => {
           const role = requestContext?.get('role') || 'assistant';
           return `You are a helpful ${role}.`;
@@ -3664,7 +3668,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should support dynamic instructions returning CoreSystemMessage', async () => {
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: ({ requestContext }) => {
           const role = requestContext?.get('role') || 'assistant';
           return {
@@ -3687,7 +3692,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should support dynamic instructions returning array', async () => {
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: ({ requestContext }) => {
           const expertise = (requestContext?.get('expertise') as string[]) || [];
           const expertiseMessages: CoreSystemMessage[] = expertise.map((exp: string) => ({
@@ -3716,7 +3722,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should support async dynamic instructions', async () => {
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: async ({ requestContext }) => {
           // Simulate async operation
           await delay(10);
@@ -3784,7 +3791,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       ];
 
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: agentInstructions,
         model: dummyModel,
       });
@@ -3810,7 +3818,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should handle empty instructions gracefully', async () => {
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: '',
         model: dummyModel,
       });
@@ -3821,7 +3830,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should handle empty array instructions', async () => {
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: [],
         model: dummyModel,
       });
@@ -3832,7 +3842,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should allow override instructions in generate options', async () => {
       const agent = new Agent({
-        name: 'override-agent',
+        id: 'override-agent',
+        name: 'Override Agent',
         instructions: 'Default instructions',
         model: dummyModel,
       });
@@ -3864,7 +3875,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
-        name: 'voice-agent',
+        id: 'voice-agent',
+        name: 'Voice Agent',
         instructions: {
           role: 'system',
           content: 'You are a helpful voice assistant.',
@@ -3914,7 +3926,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       ];
 
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: instructionsArray,
         model: dummyModel,
       });
@@ -3951,7 +3964,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should allow override with array instructions in generate options', async () => {
       const agent = new Agent({
-        name: 'override-array-agent',
+        id: 'override-array-agent',
+        name: 'Override Array Agent',
         instructions: 'Default instructions',
         model: dummyModel,
       });
@@ -3972,7 +3986,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should support dynamic instructions returning SystemModelMessage', async () => {
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: ({ requestContext }) => {
           const mode = requestContext?.get('mode') || 'default';
           return {
@@ -4001,7 +4016,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // This test verifies that provider options (like Anthropic caching) are preserved
       // when instructions are added to the message list
       const agent = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: {
           role: 'system',
           content: 'You are a helpful assistant with caching.',
@@ -4236,7 +4252,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         const agent = new Agent({
-          name: 'partial-rescue-agent-generate',
+          id: 'partial-rescue-agent-generate',
+          name: 'Partial Rescue Agent Generate',
           instructions:
             'Call each tool in a separate step. Do not use parallel tool calls. Always wait for the result of one tool before calling the next.',
           model: openaiModel,
@@ -4336,7 +4353,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         const agent = new Agent({
-          name: 'test-agent-generate',
+          id: 'test-agent-generate',
+          name: 'Test Agent Generate',
           instructions: 'If the user prompt contains "Echo:", always call the echoTool. Be verbose in your response.',
           model: openaiModel,
           memory: mockMemory,
@@ -4402,7 +4420,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         const agent = new Agent({
-          name: 'test-agent-multi-generate',
+          id: 'test-agent-multi-generate',
+          name: 'Test Agent Multi Generate',
           instructions: [
             'If the user prompt contains "Echo:", call the echoTool.',
             'If the user prompt contains "Uppercase:", call the uppercaseTool.',
@@ -4455,7 +4474,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       it('should persist the full message after a successful run', async () => {
         const mockMemory = new MockMemory();
         const agent = new Agent({
-          name: 'test-agent-generate',
+          id: 'test-agent-generate',
+          name: 'Test Agent Generate',
           instructions: 'test',
           model: dummyResponseModel,
           memory: mockMemory,
@@ -4502,7 +4522,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
 
         const agent = new Agent({
-          name: 'no-progress-agent-generate',
+          id: 'no-progress-agent-generate',
+          name: 'No Progress Agent Generate',
           instructions: 'test',
           model: emptyResponseModel,
           memory: mockMemory,
@@ -4544,7 +4565,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       const agent = new Agent({
-        name: 'immediate-interrupt-agent-generate',
+        id: 'immediate-interrupt-agent-generate',
+        name: 'Immediate Interrupt Agent Generate',
         instructions: 'test',
         model: errorResponseModel,
         memory: mockMemory,
@@ -4599,7 +4621,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       const agent = new Agent({
-        name: 'error-agent',
+        id: 'error-agent',
+        name: 'Error Agent',
         instructions: 'test',
         model: errorModel,
         memory: mockMemory,
@@ -5675,7 +5698,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should preserve metadata in generate method', async () => {
       const agent = new Agent({
-        name: 'metadata-test-agent',
+        id: 'metadata-test-agent',
+        name: 'Metadata Test Agent',
         instructions: 'You are a helpful assistant',
         model: dummyModel,
         memory: mockMemory,

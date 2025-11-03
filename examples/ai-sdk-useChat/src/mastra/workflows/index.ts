@@ -6,6 +6,7 @@ import { z } from 'zod';
 const llm = anthropic('claude-3-5-sonnet-20241022');
 
 const agent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   model: llm,
   instructions: `
