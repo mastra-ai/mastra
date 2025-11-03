@@ -166,7 +166,7 @@ export function createPrepareMemoryStep<
       const hasResourceScopeSemanticRecall =
         (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== 'thread') ||
         config?.semanticRecall === true;
-      let [memoryMessages, memorySystemMessage] = await Promise.all([
+      let [memoryResult, memorySystemMessage] = await Promise.all([
         existingThread || hasResourceScopeSemanticRecall
           ? capabilities.getMemoryMessages({
               resourceId,
@@ -175,9 +175,11 @@ export function createPrepareMemoryStep<
               memoryConfig,
               requestContext,
             })
-          : [],
+          : { messages: [] },
         memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
       ]);
+
+      const memoryMessages = memoryResult.messages;
 
       capabilities.logger.debug('Fetched messages from memory', {
         threadId: threadObject.id,
@@ -269,7 +271,7 @@ export function createPrepareMemoryStep<
       // Add user-provided system message if present
       addSystemMessage(processedList, options.system, 'user-provided');
 
-      processedList.add(processedMemoryMessages, 'memory').add(messageList.get.input.v2(), 'user');
+      processedList.add(processedMemoryMessages, 'memory').add(messageList.get.input.db(), 'user');
 
       return {
         thread: threadObject,

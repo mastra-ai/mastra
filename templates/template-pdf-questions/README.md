@@ -247,6 +247,7 @@ You can customize the question generation by modifying the `textQuestionAgent`:
 
 ```typescript
 export const textQuestionAgent = new Agent({
+  id: 'generate-questions-agent',
   name: 'Generate questions from text agent',
   instructions: `
     You are an expert educational content creator...

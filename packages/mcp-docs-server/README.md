@@ -98,6 +98,7 @@ const mcp = new MCPClient({
 
 // Create an agent with access to all documentation tools
 const agent = new Agent({
+  id: 'doc-assistant',
   name: 'Documentation Assistant',
   instructions: 'You help users find and understand Mastra.ai documentation.',
   model: openai('gpt-4'),

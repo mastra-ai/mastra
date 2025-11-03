@@ -258,6 +258,7 @@ You can customize the question generation by modifying the agents:
 
 ```typescript
 export const textQuestionAgent = new Agent({
+  id: 'generate-questions-agent',
   name: 'Generate questions from text agent',
   instructions: `
     // Customize instructions here for different question types

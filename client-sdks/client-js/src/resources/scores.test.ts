@@ -1,4 +1,4 @@
-import type { ScoringEntityType, ScoringSource } from '@mastra/core/scores';
+import type { ScoringEntityType, ScoringSource } from '@mastra/core/evals';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
 
@@ -47,11 +47,11 @@ describe('Scores Methods', () => {
     });
   });
 
-  describe('getScoresByRunId()', () => {
+  describe('listScoresByRunId()', () => {
     it('should fetch scores by run ID without pagination', async () => {
       mockSuccessfulResponse();
 
-      await client.getScoresByRunId({ runId: 'run-123' });
+      await client.listScoresByRunId({ runId: 'run-123' });
 
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/scores/run/run-123`,
@@ -66,7 +66,7 @@ describe('Scores Methods', () => {
     it('should fetch scores by run ID with pagination', async () => {
       mockSuccessfulResponse();
 
-      await client.getScoresByRunId({
+      await client.listScoresByRunId({
         runId: 'run-123',
         page: 1,
         perPage: 5,
@@ -86,15 +86,15 @@ describe('Scores Methods', () => {
       const errorResponse = new Response('Not Found', { status: 404, statusText: 'Not Found' });
       (global.fetch as any).mockResolvedValueOnce(errorResponse);
 
-      await expect(client.getScoresByRunId({ runId: 'invalid-run' })).rejects.toThrow();
+      await expect(client.listScoresByRunId({ runId: 'invalid-run' })).rejects.toThrow();
     });
   });
 
-  describe('getScoresByEntityId()', () => {
+  describe('listScoresByEntityId()', () => {
     it('should fetch scores by entity ID and type without pagination', async () => {
       mockSuccessfulResponse();
 
-      await client.getScoresByEntityId({
+      await client.listScoresByEntityId({
         entityId: 'agent-456',
         entityType: 'AGENT',
       });
@@ -112,7 +112,7 @@ describe('Scores Methods', () => {
     it('should fetch scores by entity ID and type with pagination', async () => {
       mockSuccessfulResponse();
 
-      await client.getScoresByEntityId({
+      await client.listScoresByEntityId({
         entityId: 'workflow-789',
         entityType: 'WORKFLOW',
         page: 2,
@@ -133,7 +133,7 @@ describe('Scores Methods', () => {
       (global.fetch as any).mockResolvedValueOnce(errorResponse);
 
       await expect(
-        client.getScoresByEntityId({
+        client.listScoresByEntityId({
           entityId: 'invalid-entity',
           entityType: 'AGENT',
         }),

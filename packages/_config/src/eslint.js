@@ -86,6 +86,7 @@ export const createConfig = async () =>
             parser: hasTypeScript ? (await import('typescript-eslint')).parser : undefined,
             parserOptions: {
               jsx: true,
+              tsconfigRootDir: import.meta.dirname,
             },
           },
           rules: {
@@ -141,7 +142,7 @@ export const createConfig = async () =>
             parser: (await import('typescript-eslint')).parser,
             parserOptions: {
               projectService: true,
-              tsConfigRootDir: import.meta.dirname,
+              tsconfigRootDir: import.meta.dirname,
             },
           },
           plugins: {

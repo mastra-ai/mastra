@@ -116,6 +116,7 @@ export class TitleExtractor extends BaseExtractor {
 
       if (this.llm.specificationVersion === 'v2') {
         const miniAgent = new Agent({
+          id: 'title-extractor',
           model: this.llm,
           name: 'title-extractor',
           instructions:
@@ -128,6 +129,7 @@ export class TitleExtractor extends BaseExtractor {
         title = result.text;
       } else {
         const miniAgent = new Agent({
+          id: 'title-extractor-v1',
           model: this.llm,
           name: 'title-extractor',
           instructions:
@@ -151,6 +153,7 @@ export class TitleExtractor extends BaseExtractor {
 
   private async getTitlesCandidates(nodes: BaseNode[]): Promise<string[]> {
     const miniAgent = new Agent({
+      id: 'titles-candidates-extractor',
       model: this.llm,
       name: 'titles-candidates-extractor',
       instructions:

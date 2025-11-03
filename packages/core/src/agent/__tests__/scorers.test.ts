@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createScorer } from '../../evals';
+import { runScorer } from '../../evals/hooks';
 import { Mastra } from '../../mastra';
-import { createScorer } from '../../scores';
-import { runScorer } from '../../scores/hooks';
 import { Agent } from '../agent';
 import { getDummyResponseModel } from './mock-model';
 
-vi.mock('../../scores/hooks', () => ({
+vi.mock('../../evals/hooks', () => ({
   runScorer: vi.fn(),
 }));
 
@@ -15,6 +15,7 @@ function scorersTests(version: 'v1' | 'v2') {
   describe('scorer output data', () => {
     it(`${version} - should return scoring data from generate when returnScorerData is true`, async () => {
       const agent = new Agent({
+        id: 'scorer-test',
         name: 'Scorer Agent',
         instructions: 'You are an agent that can score things',
         model: dummyModel,
@@ -43,6 +44,7 @@ function scorersTests(version: 'v1' | 'v2') {
 
     it(`${version} - should not return scoring data from generate when returnScorerData is false`, async () => {
       const agent = new Agent({
+        id: 'scorer-test',
         name: 'Scorer Agent',
         instructions: 'You are an agent that can score things',
         model: dummyModel,
@@ -64,6 +66,7 @@ function scorersTests(version: 'v1' | 'v2') {
 
     it(`${version} - should not return scoring data from generate when returnScorerData is not specified`, async () => {
       const agent = new Agent({
+        id: 'scorer-test',
         name: 'Scorer Agent',
         instructions: 'You are an agent that can score things',
         model: dummyModel,
@@ -89,16 +92,19 @@ function scorersTests(version: 'v1' | 'v2') {
     beforeEach(() => {
       vi.clearAllMocks();
       scorerTest = createScorer({
+        id: 'scorer-test',
         name: 'scorerTest',
         description: 'Test Scorer',
       }).generateScore(() => 0.95);
 
       scorer1 = createScorer({
+        id: 'scorer-1',
         name: 'scorer1',
         description: 'Test Scorer 1',
       }).generateScore(() => 0.95);
 
       agent = new Agent({
+        id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test agent.',
         model: dummyModel,
@@ -125,7 +131,7 @@ function scorersTests(version: 'v1' | 'v2') {
 
       expect(runScorer).toHaveBeenCalledWith(
         expect.objectContaining({
-          scorerId: 'scorerTest',
+          scorerId: 'scorer-test',
           scorerObject: expect.objectContaining({
             scorer: scorerTest,
           }),
@@ -150,7 +156,7 @@ function scorersTests(version: 'v1' | 'v2') {
 
       expect(runScorer).toHaveBeenCalledWith(
         expect.objectContaining({
-          scorerId: 'scorer1',
+          scorerId: 'scorer-1',
           scorerObject: expect.objectContaining({
             scorer: expect.any(Object),
           }),
@@ -159,7 +165,7 @@ function scorersTests(version: 'v1' | 'v2') {
 
       expect(runScorer).not.toHaveBeenCalledWith(
         expect.objectContaining({
-          scorerId: 'scorerTest',
+          scorerId: 'scorer-test',
           scorerObject: expect.objectContaining({
             scorer: scorerTest,
           }),
@@ -188,7 +194,7 @@ function scorersTests(version: 'v1' | 'v2') {
 
       expect(runScorer).toHaveBeenCalledWith(
         expect.objectContaining({
-          scorerId: 'scorer1',
+          scorerId: 'scorer-1',
           scorerObject: expect.objectContaining({
             scorer: expect.any(Object),
           }),
@@ -213,7 +219,7 @@ function scorersTests(version: 'v1' | 'v2') {
 
       expect(runScorer).toHaveBeenCalledWith(
         expect.objectContaining({
-          scorerId: 'scorer1',
+          scorerId: 'scorer-1',
           scorerObject: expect.objectContaining({
             scorer: scorer1,
           }),
@@ -238,7 +244,7 @@ function scorersTests(version: 'v1' | 'v2') {
 
       // Verify the exact call parameters
       expect(runScorer).toHaveBeenCalledWith({
-        scorerId: 'scorer1',
+        scorerId: 'scorer-1',
         scorerObject: { scorer: scorer1 },
         runId: expect.any(String),
         input: expect.any(Object),

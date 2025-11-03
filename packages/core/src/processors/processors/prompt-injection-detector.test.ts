@@ -1,11 +1,11 @@
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import { PromptInjectionDetector } from './prompt-injection-detector';
 import type { PromptInjectionResult } from './prompt-injection-detector';
 
-function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraMessageV2 {
+function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraDBMessage {
   return {
     id,
     role,
@@ -70,7 +70,7 @@ describe('PromptInjectionDetector', () => {
         model,
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
 
     it('should use default detection types when none specified', () => {
@@ -79,7 +79,7 @@ describe('PromptInjectionDetector', () => {
         model,
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
 
     it('should accept custom detection types', () => {
@@ -89,7 +89,7 @@ describe('PromptInjectionDetector', () => {
         detectionTypes: ['custom-injection', 'custom-jailbreak'],
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
 
     it('should accept custom threshold and strategy', () => {
@@ -100,7 +100,7 @@ describe('PromptInjectionDetector', () => {
         strategy: 'rewrite',
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
   });
 
@@ -458,7 +458,7 @@ describe('PromptInjectionDetector', () => {
 
       const mockAbort = vi.fn();
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test',
         role: 'user',
         content: {
@@ -485,7 +485,7 @@ describe('PromptInjectionDetector', () => {
 
       const mockAbort = vi.fn();
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test',
         role: 'user',
         content: {
@@ -593,7 +593,7 @@ describe('PromptInjectionDetector', () => {
         instructions: customInstructions,
       });
 
-      expect(detector.name).toBe('prompt-injection-detector');
+      expect(detector.id).toBe('prompt-injection-detector');
     });
   });
 

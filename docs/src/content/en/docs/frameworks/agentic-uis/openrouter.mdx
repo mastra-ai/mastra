@@ -65,6 +65,7 @@ const openrouter = createOpenRouter({
 });
 
 export const assistant = new Agent({
+  id: "assistant",
   name: "assistant",
   instructions: "You are a helpful assistant.",
   model: openrouter("anthropic/claude-sonnet-4"),
@@ -119,6 +120,7 @@ const openrouter = createOpenRouter({
 });
 
 export const assistant = new Agent({
+  id: "assistant",
   name: "assistant",
   instructions: "You are a helpful assistant.",
   model: openrouter("anthropic/claude-sonnet-4"),
@@ -138,6 +140,7 @@ const openrouter = createOpenRouter({
 });
 
 export const assistant = new Agent({
+  id: "assistant",
   name: "assistant",
   instructions: "You are a helpful assistant.",
   model: openrouter("anthropic/claude-sonnet-4", {
