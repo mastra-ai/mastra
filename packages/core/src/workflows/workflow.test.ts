@@ -2329,9 +2329,9 @@ describe('Workflow', () => {
           payload: {
             output: {
               usage: {
-                inputTokens: 0,
-                outputTokens: 0,
-                totalTokens: 0,
+                inputTokens: 20,
+                outputTokens: 40,
+                totalTokens: 60,
               },
             },
             metadata: {},

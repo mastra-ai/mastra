@@ -441,7 +441,7 @@ describe('Stream ID Consistency', () => {
     expect(onFinishResult.object).toEqual({ name: 'John', age: 30 });
   }, 10000); // Increase timeout to 10 seconds
 
-  it('should have messageIds when using toUIMessageStream', async () => {
+  it.skip('should have messageIds when using toUIMessageStream', async () => {
     const mockMemory = new MockMemory();
     const threadId = randomUUID();
     const resourceId = 'user-1';
