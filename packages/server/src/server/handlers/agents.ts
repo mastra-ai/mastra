@@ -15,6 +15,7 @@ import type { Context } from '../types';
 
 import { handleError } from './error';
 import { sanitizeBody, validateBody } from './utils';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 type GetBody<
   T extends keyof Agent & { [K in keyof Agent]: Agent[K] extends (...args: any) => any ? K : never }[keyof Agent],
@@ -510,7 +511,6 @@ export async function generateHandler({
   agentId: string;
   body: GetBody<'generate'> & {
     requestContext?: Record<string, unknown>;
-    format?: 'mastra' | 'aisdk';
   };
   abortSignal?: AbortSignal;
 }): Promise<ReturnType<Agent['generate']>> {
@@ -533,7 +533,6 @@ export async function generateHandler({
     const result = await agent.generate(messages, {
       ...rest,
       requestContext: finalRequestContext,
-      format: rest.format || 'mastra',
       abortSignal,
     });
 
@@ -615,7 +614,6 @@ export async function streamGenerateHandler({
   agentId: string;
   body: GetBody<'stream'> & {
     requestContext?: string;
-    format?: 'aisdk' | 'mastra';
   };
   abortSignal?: AbortSignal;
 }): ReturnType<Agent['stream']> {
@@ -638,7 +636,6 @@ export async function streamGenerateHandler({
       ...rest,
       requestContext: finalRequestContext,
       abortSignal,
-      format: body.format ?? 'mastra',
     });
 
     return streamResult;
@@ -658,7 +655,6 @@ export async function approveToolCallHandler({
   agentId: string;
   body: GetHITLBody<'approveToolCall'> & {
     requestContext?: string;
-    format?: 'aisdk' | 'mastra';
   };
   abortSignal?: AbortSignal;
 }): ReturnType<Agent['approveToolCall']> {
@@ -689,7 +685,6 @@ export async function approveToolCallHandler({
       runId,
       requestContext: finalRequestContext,
       abortSignal,
-      format: body.format ?? 'mastra',
     });
 
     return streamResult;
@@ -709,7 +704,6 @@ export async function declineToolCallHandler({
   agentId: string;
   body: GetHITLBody<'declineToolCall'> & {
     requestContext?: string;
-    format?: 'aisdk' | 'mastra';
   };
   abortSignal?: AbortSignal;
 }): ReturnType<Agent['declineToolCall']> {
@@ -740,7 +734,6 @@ export async function declineToolCallHandler({
       runId,
       requestContext: finalRequestContext,
       abortSignal,
-      format: body.format ?? 'mastra',
     });
 
     return streamResult;
@@ -827,14 +820,12 @@ export async function streamUIMessageHandler({
 
     validateBody({ messages });
 
-    const streamResult = await agent.stream(messages, {
-      ...rest,
-      requestContext: finalRequestContext,
-      abortSignal,
-      format: 'aisdk',
+    throw new MastraError({
+      category: ErrorCategory.USER,
+      domain: ErrorDomain.MASTRA_SERVER,
+      id: 'DEPRECATED_ENDPOINT',
+      text: 'This endpoint is deprecated. Please use the @mastra/ai-sdk package to for uiMessage transformations',
     });
-
-    return streamResult.toUIMessageStreamResponse();
   } catch (error) {
     return handleError(error, 'error streaming agent response');
   }
