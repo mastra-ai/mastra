@@ -36,12 +36,6 @@ export type AgentExecutionOptions<
   OUTPUT extends OutputSchema = undefined,
   FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
 > = {
-  /**
-   * Determines the output stream format.
-   * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
-   */
-  format?: FORMAT;
-
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;
 

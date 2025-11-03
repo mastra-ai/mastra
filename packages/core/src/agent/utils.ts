@@ -4,10 +4,11 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
 
-export async function tryGenerateWithJsonFallback<
-  OUTPUT extends OutputSchema = undefined,
-  FORMAT extends 'aisdk' | 'mastra' = 'mastra',
->(agent: Agent, prompt: MessageListInput, options: AgentExecutionOptions<OUTPUT, FORMAT>) {
+export async function tryGenerateWithJsonFallback<OUTPUT extends OutputSchema = undefined>(
+  agent: Agent,
+  prompt: MessageListInput,
+  options: AgentExecutionOptions<OUTPUT>,
+) {
   if (!options.structuredOutput?.schema) {
     throw new MastraError({
       id: 'STRUCTURED_OUTPUT_OPTIONS_REQUIRED',
@@ -28,10 +29,11 @@ export async function tryGenerateWithJsonFallback<
   }
 }
 
-export async function tryStreamWithJsonFallback<
-  OUTPUT extends OutputSchema = undefined,
-  FORMAT extends 'aisdk' | 'mastra' = 'mastra',
->(agent: Agent, prompt: MessageListInput, options: AgentExecutionOptions<OUTPUT, FORMAT>) {
+export async function tryStreamWithJsonFallback<OUTPUT extends OutputSchema = undefined>(
+  agent: Agent,
+  prompt: MessageListInput,
+  options: AgentExecutionOptions<OUTPUT>,
+) {
   if (!options.structuredOutput?.schema) {
     throw new MastraError({
       id: 'STRUCTURED_OUTPUT_OPTIONS_REQUIRED',
