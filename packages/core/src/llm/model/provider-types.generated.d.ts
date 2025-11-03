@@ -624,6 +624,7 @@ export type ProviderModelsMap = {
     'nousresearch/deephermes-3-llama-3-8b-preview',
     'nousresearch/hermes-4-405b',
     'nousresearch/hermes-4-70b',
+    'nvidia/nemotron-nano-9b-v2',
     'openai/gpt-4.1',
     'openai/gpt-4.1-mini',
     'openai/gpt-4o-mini',
