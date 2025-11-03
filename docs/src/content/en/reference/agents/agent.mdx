@@ -122,7 +122,7 @@ export const agent = new Agent({
     },
     {
       name: "instructions",
-      type: "SystemMessage | ({ runtimeContext: RuntimeContext }) => SystemMessage | Promise<SystemMessage>",
+      type: "SystemMessage | ({ requestContext: RequestContext }) => SystemMessage | Promise<SystemMessage>",
       isOptional: false,
       description: `Instructions that guide the agent's behavior. Can be a string, array of strings, system message object, 
         array of system messages, or a function that returns any of these types dynamically. 
@@ -130,47 +130,47 @@ export const agent = new Agent({
     },
     {
       name: "model",
-      type: "MastraLanguageModel | ({ runtimeContext: RuntimeContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
+      type: "MastraLanguageModel | ({ requestContext: RequestContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
       isOptional: false,
       description:
         "The language model used by the agent. Can be provided statically or resolved at runtime.",
     },
     {
       name: "agents",
-      type: "Record<string, Agent> | ({ runtimeContext: RuntimeContext }) => Record<string, Agent> | Promise<Record<string, Agent>>",
+      type: "Record<string, Agent> | ({ requestContext: RequestContext }) => Record<string, Agent> | Promise<Record<string, Agent>>",
       isOptional: true,
       description:
         "Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.",
     },
     {
       name: "tools",
-      type: "ToolsInput | ({ runtimeContext: RuntimeContext }) => ToolsInput | Promise<ToolsInput>",
+      type: "ToolsInput | ({ requestContext: RequestContext }) => ToolsInput | Promise<ToolsInput>",
       isOptional: true,
       description:
         "Tools that the agent can access. Can be provided statically or resolved dynamically.",
     },
     {
       name: "workflows",
-      type: "Record<string, Workflow> | ({ runtimeContext: RuntimeContext }) => Record<string, Workflow> | Promise<Record<string, Workflow>>",
+      type: "Record<string, Workflow> | ({ requestContext: RequestContext }) => Record<string, Workflow> | Promise<Record<string, Workflow>>",
       isOptional: true,
       description:
         "Workflows that the agent can execute. Can be static or dynamically resolved.",
     },
     {
       name: "defaultGenerateOptions",
-      type: "AgentGenerateOptions | ({ runtimeContext: RuntimeContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>",
+      type: "AgentGenerateOptions | ({ requestContext: RequestContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>",
       isOptional: true,
       description: "Default options used when calling `generate()`.",
     },
     {
       name: "defaultStreamOptions",
-      type: "AgentStreamOptions | ({ runtimeContext: RuntimeContext }) => AgentStreamOptions | Promise<AgentStreamOptions>",
+      type: "AgentStreamOptions | ({ requestContext: RequestContext }) => AgentStreamOptions | Promise<AgentStreamOptions>",
       isOptional: true,
       description: "Default options used when calling `stream()`.",
     },
     {
       name: "defaultStreamOptions",
-      type: "AgentExecutionOptions | ({ runtimeContext: RuntimeContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>",
+      type: "AgentExecutionOptions | ({ requestContext: RequestContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>",
       isOptional: true,
       description:
         "Default options used when calling `stream()` in vNext mode.",
@@ -184,7 +184,7 @@ export const agent = new Agent({
     },
     {
       name: "scorers",
-      type: "MastraScorers | ({ runtimeContext: RuntimeContext }) => MastraScorers | Promise<MastraScorers>",
+      type: "MastraScorers | ({ requestContext: RequestContext }) => MastraScorers | Promise<MastraScorers>",
       isOptional: true,
       description:
         "Scoring configuration for runtime evaluation and telemetry. Can be static or dynamically provided.",
@@ -197,7 +197,7 @@ export const agent = new Agent({
     },
     {
       name: "memory",
-      type: "MastraMemory | ({ runtimeContext: RuntimeContext }) => MastraMemory | Promise<MastraMemory>",
+      type: "MastraMemory | ({ requestContext: RequestContext }) => MastraMemory | Promise<MastraMemory>",
       isOptional: true,
       description:
         "Memory module used for storing and retrieving stateful context.",
@@ -210,14 +210,14 @@ export const agent = new Agent({
     },
     {
       name: "inputProcessors",
-      type: "Processor[] | ({ runtimeContext: RuntimeContext }) => Processor[] | Promise<Processor[]>",
+      type: "Processor[] | ({ requestContext: RequestContext }) => Processor[] | Promise<Processor[]>",
       isOptional: true,
       description:
         "Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.",
     },
     {
       name: "outputProcessors",
-      type: "Processor[] | ({ runtimeContext: RuntimeContext }) => Processor[] | Promise<Processor[]>",
+      type: "Processor[] | ({ requestContext: RequestContext }) => Processor[] | Promise<Processor[]>",
       isOptional: true,
       description:
         "Output processors that can modify or validate messages from the agent, before it is sent to the client. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",

@@ -1,0 +1,316 @@
+---
+title: "例: ランタイムコンテキスト | エージェント | Mastra ドキュメント"
+description: ランタイムコンテキストを用いて、ユーザーのサブスクリプションプランに応じて挙動を適応させる動的エージェントの作成と設定方法を学びます。
+---
+
+<div id="runtime-context">
+  # ランタイムコンテキスト
+</div>
+
+この例では、ランタイムコンテキストを用いて、ユーザーのサブスクリプション層に応じて、挙動、機能、モデル選択、ツール、メモリ構成、入出力処理、品質評価を動的に適応させる単一のエージェントを作成する方法を示します。
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+この例では、Mastra のモデルルーター経由で OpenAI のモデルを使用します。`.env` ファイルに `OPENAI_API_KEY` を追加してください。
+
+```bash title=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
+
+<div id="creating-the-dynamic-agent">
+  ## 動的エージェントの作成
+</div>
+
+ユーザーのサブスクリプションの階層に応じて、すべてのプロパティを調整するエージェントを作成します。
+
+```typescript title="src/mastra/agents/support-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+import { TokenLimiterProcessor } from "@mastra/core/processors";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import {
+  knowledgeBase,
+  ticketSystem,
+  advancedAnalytics,
+  customIntegration,
+} from "../tools/support-tools";
+import { CharacterLimiterProcessor } from "../processors/character-limiter";
+import { responseQualityScorer } from "../scorers/response-quality";
+
+export type UserTier = "free" | "pro" | "enterprise";
+export type SupportRuntimeContext = {
+  "user-tier": UserTier;
+  language: "en" | "es" | "ja" | "fr";
+};
+
+export const supportAgent = new Agent({
+  name: "dynamic-support-agent",
+  description: "ユーザーのサブスクリプション階層に応じて対応するAIサポートエージェント",
+
+  instructions: async ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
+    const userTier = runtimeContext.get("user-tier");
+    const language = runtimeContext.get("language");
+
+    return `あなたは当社のSaaSプラットフォームのカスタマーサポートエージェントです。
+    現在のユーザーは${userTier}階層で、${language}言語での対応を希望しています。
+
+    階層に基づくサポート方針:
+    ${userTier === "free" ? "- 基本的なサポートとドキュメントリンクを提供" : ""}
+    ${userTier === "pro" ? "- 詳細な技術サポートとベストプラクティスを提供" : ""}
+    ${userTier === "enterprise" ? "- カスタムソリューションと専任担当者による優先サポートを提供" : ""}
+
+    必ず${language}言語で応答してください。
+    ${userTier === "enterprise" ? "カスタムインテグレーションと高度な分析機能を利用できます。" : ""}`;
+  },
+
+  model: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
+    const userTier = runtimeContext.get("user-tier");
+
+    if (userTier === "enterprise") return "openai/gpt-5";
+    if (userTier === "pro") return "openai/gpt-4o";
+    return "openai/gpt-4o-mini";
+  },
+
+  tools: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
+    const userTier = runtimeContext.get("user-tier");
+    const baseTools = [knowledgeBase, ticketSystem];
+
+    if (userTier === "pro" || userTier === "enterprise") {
+      baseTools.push(advancedAnalytics);
+    }
+
+    if (userTier === "enterprise") {
+      baseTools.push(customIntegration);
+    }
+
+    return baseTools;
+  },
+
+  memory: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
+    const userTier = runtimeContext.get("user-tier");
+
+    switch (userTier) {
+      case "enterprise":
+        return new Memory({
+          storage: new LibSQLStore({ url: "file:enterprise.db" }),
+          options: {
+            semanticRecall: { topK: 15, messageRange: 8 },
+            workingMemory: { enabled: true },
+          },
+        });
+      case "pro":
+        return new Memory({
+          storage: new LibSQLStore({ url: "file:pro.db" }),
+          options: {
+            semanticRecall: { topK: 8, messageRange: 4 },
+            workingMemory: { enabled: true },
+          },
+        });
+      case "free":
+      default:
+        return new Memory({
+          storage: new LibSQLStore({ url: "file:free.db" }),
+          options: {
+            semanticRecall: { topK: 3, messageRange: 2 },
+            workingMemory: { enabled: false },
+          },
+        });
+    }
+  },
+
+  inputProcessors: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
+    const userTier = runtimeContext.get("user-tier");
+
+    switch (userTier) {
+      case "enterprise":
+        return [];
+      case "pro":
+        return [new CharacterLimiterProcessor(2000)];
+      case "free":
+      default:
+        return [new CharacterLimiterProcessor(500)];
+    }
+  },
+
+  outputProcessors: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
+    const userTier = runtimeContext.get("user-tier");
+
+    switch (userTier) {
+      case "enterprise":
+        return [
+          new TokenLimiterProcessor({ limit: 2000, strategy: "truncate" }),
+        ];
+      case "pro":
+        return [
+          new TokenLimiterProcessor({ limit: 500, strategy: "truncate" }),
+        ];
+      case "free":
+      default:
+        return [
+          new TokenLimiterProcessor({ limit: 100, strategy: "truncate" }),
+        ];
+    }
+  },
+
+  scorers: ({
+    runtimeContext,
+  }: {
+    runtimeContext: RuntimeContext<SupportRuntimeContext>;
+  }) => {
+    const userTier = runtimeContext.get("user-tier");
+
+    if (userTier === "enterprise") {
+      return [responseQualityScorer];
+    }
+
+    return [];
+  },
+});
+```
+
+> 設定オプションの一覧については、[Agent](/reference/agents/agent) を参照してください。
+
+<div id="registering-the-agent">
+  ## エージェントの登録
+</div>
+
+メインの Mastra インスタンスにエージェントを登録します：
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { supportAgent } from "./agents/support-agent";
+
+export const mastra = new Mastra({
+  agents: { supportAgent },
+});
+```
+
+
+<div id="usage-examples">
+  ## 使用例
+</div>
+
+<div id="free-tier-user">
+  ### 無料プランユーザー
+</div>
+
+```typescript title="src/examples/free-tier-usage.ts" showLineNumbers copy
+import "dotenv/config";
+import { mastra } from "../mastra";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import type { SupportRuntimeContext } from "../mastra/agents/support-agent";
+
+const agent = mastra.getAgent("supportAgent");
+const runtimeContext = new RuntimeContext<SupportRuntimeContext>();
+
+runtimeContext.set("user-tier", "free");
+runtimeContext.set("language", "en");
+
+const response = await agent.generate(
+  "APIのレート制限で問題が発生しています。助けていただけますか?",
+  { runtimeContext },
+);
+
+console.log(response.text);
+```
+
+
+<div id="pro-tier-user">
+  ### Pro ティア ユーザー
+</div>
+
+```typescript title="src/examples/pro-tier-usage.ts" showLineNumbers copy
+import "dotenv/config";
+import { mastra } from "../mastra";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import type { SupportRuntimeContext } from "../mastra/agents/support-agent";
+
+const agent = mastra.getAgent("supportAgent");
+const runtimeContext = new RuntimeContext<SupportRuntimeContext>();
+
+runtimeContext.set("user-tier", "pro");
+runtimeContext.set("language", "es");
+
+const response = await agent.generate(
+  "APIの使用パターンに関する詳細な分析と最適化の推奨事項が必要です。",
+  { runtimeContext },
+);
+
+console.log(response.text);
+```
+
+
+<div id="enterprise-tier-user">
+  ### エンタープライズティアのユーザー
+</div>
+
+```typescript title="src/examples/enterprise-tier-usage.ts" showLineNumbers copy
+import "dotenv/config";
+import { mastra } from "../mastra";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import type { SupportRuntimeContext } from "../mastra/agents/support-agent";
+
+const agent = mastra.getAgent("supportAgent");
+const runtimeContext = new RuntimeContext<SupportRuntimeContext>();
+
+runtimeContext.set("user-tier", "enterprise");
+runtimeContext.set("language", "ja");
+
+const response = await agent.generate(
+  "カスタムWebhookシステムを御社のプラットフォームに統合し、複数環境での使用状況をリアルタイムで分析したいのですが。",
+  { runtimeContext },
+);
+
+console.log(response.text);
+```
+
+
+<div id="key-benefits">
+  ## 主要なメリット
+</div>
+
+このランタイムコンテキスト手法により、次のことが可能になります:
+
+- **コスト最適化**: エンタープライズユーザーにはプレミアムなモデルと機能を、無料ユーザーには基本機能を提供
+- **リソース管理**: 入出力の上限設定により、低価格プランでの不正利用を防止
+- **品質保証**: ビジネス価値が見込める場面（エンタープライズプラン）に限って応答品質のスコアリングを実施
+- **スケーラブルなアーキテクチャ**: 1つのエージェント定義で、コードの重複なく全ユーザーセグメントに対応
+- **パーソナライゼーション**: 言語設定やプラン別の指示により、ユーザーごとに最適化された体験を提供
+
+<div id="related">
+  ## 関連
+</div>
+
+- [ランタイムコンテキストのドキュメント](/docs/server-db/runtime-context)
+- [エージェント リファレンス](/reference/agents/agent)
+- [入力プロセッサー](/docs/agents/guardrails)
+- [出力プロセッサー](/docs/agents/guardrails)
+- [スコアラー](/docs/scorers/overview)

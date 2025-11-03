@@ -8,13 +8,14 @@
   "scripts": {
     "docusaurus": "docusaurus",
     "dev": "docusaurus start",
-    "build": "npm run build:llms-txt && docusaurus build",
+    "dev:ja": "docusaurus start --locale ja",
+    "build": "npm run build:llms-txt && npm run write-translations && docusaurus build",
     "build:llms-txt": "tsx scripts/build-llms-text-files.ts",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",
     "serve": "docusaurus serve",
-    "write-translations": "docusaurus write-translations"
+    "write-translations": "docusaurus write-translations && gtx-cli translate"
   },
   "dependencies": {
     "@copilotkit/react-ui": "1.8.10",
@@ -39,6 +40,8 @@
     "clsx": "^2.0.0",
     "cmdk": "^1.1.1",
     "dotenv": "^17.2.3",
+    "gt-react": "^10.6.12",
+    "gtx-cli": "^2.4.7",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "posthog-docusaurus": "^2.0.5",

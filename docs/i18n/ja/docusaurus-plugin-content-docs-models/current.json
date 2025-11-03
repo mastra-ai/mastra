@@ -1,0 +1,238 @@
+{
+  "version.label": {
+    "message": "次へ",
+    "description": "現在のバージョンのラベル"
+  },
+  "sidebar.modelsSidebar.category.Gateways": {
+    "message": "ゲートウェイ",
+    "description": "サイドバー「modelsSidebar」のカテゴリ「Gateways」のラベル"
+  },
+  "sidebar.modelsSidebar.category.Providers": {
+    "message": "プロバイダ",
+    "description": "サイドバー「modelsSidebar」のカテゴリ「Providers」のラベル"
+  },
+  "sidebar.modelsSidebar.doc.Gateways": {
+    "message": "ゲートウェイ",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Gateways」のラベルで、ドキュメント gateways/index へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.Netlify": {
+    "message": "Netlify",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Netlify」のラベルで、ドキュメント「gateways/netlify」へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.OpenRouter": {
+    "message": "OpenRouter",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「OpenRouter」のラベル。ドキュメント「gateways/openrouter」へのリンク。"
+  },
+  "sidebar.modelsSidebar.doc.Vercel": {
+    "message": "Vercel",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Vercel」のラベル。ドキュメント gateways/vercel へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.Providers": {
+    "message": "プロバイダ",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Providers」のラベルで、ドキュメント「providers/index」へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.OpenAI": {
+    "message": "OpenAI",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「OpenAI」のラベルで、ドキュメント「providers/openai」へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.Anthropic": {
+    "message": "Anthropic",
+    "description": "サイドバー「modelsSidebar」のドキュメント項目「Anthropic」のラベル。ドキュメント providers/anthropic へのリンク。"
+  },
+  "sidebar.modelsSidebar.doc.Google": {
+    "message": "Google",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Google」のラベル。ドキュメント「providers/google」へのリンク"
+  },
+  "sidebar.modelsSidebar.doc.DeepSeek": {
+    "message": "DeepSeek",
+    "description": "サイドバー「modelsSidebar」で、ドキュメント「providers/deepseek」へリンクするドキュメント項目「DeepSeek」のラベル"
+  },
+  "sidebar.modelsSidebar.doc.Groq": {
+    "message": "Groq",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Groq」のラベル。ドキュメント「providers/groq」へのリンク"
+  },
+  "sidebar.modelsSidebar.doc.Mistral": {
+    "message": "Mistral",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Mistral」のラベルで、ドキュメント providers/mistral へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.xAI": {
+    "message": "xAI",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「xAI」のラベルで、ドキュメント providers/xai へのリンク"
+  },
+  "sidebar.modelsSidebar.doc.AIHubMix": {
+    "message": "AIHubMix",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「AIHubMix」のラベル。ドキュメント providers/aihubmix へのリンク。"
+  },
+  "sidebar.modelsSidebar.doc.Alibaba": {
+    "message": "アリババ",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Alibaba」のラベルで、ドキュメント providers/alibaba へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.Alibaba (China)": {
+    "message": "アリババ（中国）",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Alibaba (China)」のラベル。ドキュメント providers/alibaba-cn へのリンク。"
+  },
+  "sidebar.modelsSidebar.doc.Amazon Bedrock": {
+    "message": "Amazon Bedrock",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Amazon Bedrock」のラベル。ドキュメント providers/amazon-bedrock へのリンク。"
+  },
+  "sidebar.modelsSidebar.doc.Azure": {
+    "message": "Azure",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Azure」のラベル（ドキュメント providers/azure へのリンク）"
+  },
+  "sidebar.modelsSidebar.doc.Baseten": {
+    "message": "Baseten",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Baseten」のラベル。ドキュメント providers/baseten へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.Cerebras": {
+    "message": "Cerebras",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Cerebras」のラベル。ドキュメント「providers/cerebras」へのリンク"
+  },
+  "sidebar.modelsSidebar.doc.Chutes": {
+    "message": "シュート",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Chutes」のラベル（ドキュメント providers/chutes へのリンク）"
+  },
+  "sidebar.modelsSidebar.doc.Cloudflare Workers AI": {
+    "message": "Cloudflare Workers AI",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Cloudflare Workers AI」のラベルで、ドキュメント providers/cloudflare-workers-ai へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.Cortecs": {
+    "message": "Cortecs",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Cortecs」のラベルで、ドキュメント providers/cortecs へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.Deep Infra": {
+    "message": "Deep Infra",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Deep Infra」のラベル。リンク先はドキュメント providers/deepinfra"
+  },
+  "sidebar.modelsSidebar.doc.FastRouter": {
+    "message": "FastRouter",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「FastRouter」のラベルで、ドキュメント providers/fastrouter へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.Fireworks AI": {
+    "message": "Fireworks AI",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Fireworks AI」のラベルで、ドキュメント「providers/fireworks-ai」へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.GitHub Models": {
+    "message": "GitHub Models",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「GitHub Models」のラベル。ドキュメント providers/github-models へリンクします。"
+  },
+  "sidebar.modelsSidebar.doc.Google Vertex AI": {
+    "message": "Google Vertex AI",
+    "description": "サイドバー「modelsSidebar」で、ドキュメント「providers/google-vertex」へリンクする、ドキュメント項目「Google Vertex AI」のラベル"
+  },
+  "sidebar.modelsSidebar.doc.Hugging Face": {
+    "message": "Hugging Face",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Hugging Face」のラベル。ドキュメント providers/huggingface へのリンク"
+  },
+  "sidebar.modelsSidebar.doc.Inception": {
+    "message": "インセプション",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Inception」のラベルで、ドキュメント「providers/inception」へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.Inference": {
+    "message": "推論",
+    "description": "サイドバー「modelsSidebar」にある、ドキュメント providers/inference へのリンクを持つドキュメント項目「Inference」のラベル"
+  },
+  "sidebar.modelsSidebar.doc.Llama": {
+    "message": "リャマ",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Llama」のラベルで、ドキュメント「providers/llama」へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.LMStudio": {
+    "message": "LMStudio",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「LMStudio」のラベルで、ドキュメント providers/lmstudio へリンクします"
+  },
+  "sidebar.modelsSidebar.doc.LucidQuery AI": {
+    "message": "LucidQuery AI",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「LucidQuery AI」のラベル。ドキュメント「providers/lucidquery」へのリンク。"
+  },
+  "sidebar.modelsSidebar.doc.ModelScope": {
+    "message": "ModelScope",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「ModelScope」のラベル（ドキュメント providers/modelscope へのリンク）"
+  },
+  "sidebar.modelsSidebar.doc.Moonshot AI": {
+    "message": "ムーンショットAI",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Moonshot AI」のラベルで、ドキュメント providers/moonshotai へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.Moonshot AI (China)": {
+    "message": "Moonshot AI（中国）",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Moonshot AI (China)」のラベル。ドキュメント providers/moonshotai-cn へのリンク。"
+  },
+  "sidebar.modelsSidebar.doc.Morph": {
+    "message": "モーフ",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Morph」のラベル。ドキュメント providers/morph へのリンクです。"
+  },
+  "sidebar.modelsSidebar.doc.Nebius AI Studio": {
+    "message": "Nebius AI Studio",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Nebius AI Studio」のラベル。ドキュメント「providers/nebius」へのリンク"
+  },
+  "sidebar.modelsSidebar.doc.Nvidia": {
+    "message": "NVIDIA",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Nvidia」のラベル。ドキュメント「providers/nvidia」へのリンク。"
+  },
+  "sidebar.modelsSidebar.doc.Ollama": {
+    "message": "Ollama",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Ollama」のラベル。ドキュメント providers/ollama へのリンク。"
+  },
+  "sidebar.modelsSidebar.doc.OpenCode Zen": {
+    "message": "OpenCode Zen",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「OpenCode Zen」のラベルで、ドキュメント providers/opencode へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.Perplexity": {
+    "message": "ペルプレキシティ",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Perplexity」のラベル。ドキュメント providers/perplexity へのリンク。"
+  },
+  "sidebar.modelsSidebar.doc.Requesty": {
+    "message": "Requesty",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Requesty」のラベルで、ドキュメント「providers/requesty」へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.Scaleway": {
+    "message": "Scaleway",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Scaleway」のラベルで、ドキュメント「providers/scaleway」へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.submodel": {
+    "message": "サブモデル",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「submodel」のラベル。リンク先はドキュメント「providers/submodel」。"
+  },
+  "sidebar.modelsSidebar.doc.Synthetic": {
+    "message": "人工",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Synthetic」のラベル。ドキュメント providers/synthetic へのリンクです。"
+  },
+  "sidebar.modelsSidebar.doc.Together AI": {
+    "message": "Together AI",
+    "description": "サイドバー「modelsSidebar」内で、ドキュメント providers/togetherai へのリンクとなるドキュメント項目「Together AI」のラベル"
+  },
+  "sidebar.modelsSidebar.doc.Upstage": {
+    "message": "Upstage",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Upstage」のラベル。ドキュメント providers/upstage にリンクします"
+  },
+  "sidebar.modelsSidebar.doc.Venice AI": {
+    "message": "ベニスAI",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Venice AI」のラベル。ドキュメント providers/venice へのリンク"
+  },
+  "sidebar.modelsSidebar.doc.Vultr": {
+    "message": "Vultr",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Vultr」のラベル。ドキュメント「providers/vultr」へのリンク。"
+  },
+  "sidebar.modelsSidebar.doc.Weights & Biases": {
+    "message": "Weights &amp; Biases",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Weights & Biases」のラベルで、ドキュメント providers/wandb へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.Z.AI": {
+    "message": "Z.AI",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Z.AI」のラベルで、ドキュメント providers/zai へのリンクです"
+  },
+  "sidebar.modelsSidebar.doc.Z.AI Coding Plan": {
+    "message": "Z.AI コーディング プラン",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Z.AI Coding Plan」で、ドキュメント providers/zai-coding-plan へのリンクとなるラベル"
+  },
+  "sidebar.modelsSidebar.doc.Zhipu AI": {
+    "message": "Zhipu AI",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Zhipu AI」のラベル。ドキュメント providers/zhipuai へのリンク。"
+  },
+  "sidebar.modelsSidebar.doc.Zhipu AI Coding Plan": {
+    "message": "Zhipu AI コーディングプラン",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「Zhipu AI Coding Plan」のラベル。ドキュメント providers/zhipuai-coding-plan へのリンク"
+  },
+  "sidebar.modelsSidebar.doc.ZenMux": {
+    "message": "ZenMux",
+    "description": "サイドバー「modelsSidebar」にあるドキュメント項目「ZenMux」のラベル。ドキュメント providers/zenmux へのリンクです"
+  }
+}

@@ -1,0 +1,50 @@
+---
+title: "リファレンス: Traceloop | Observability | Mastra ドキュメント"
+description: Traceloop と Mastra の統合に関するドキュメント。Mastra は LLM アプリケーション向けの OpenTelemetry ネイティブなオブザーバビリティプラットフォームです。
+---
+
+<div id="traceloop">
+  # Traceloop
+</div>
+
+Traceloopは、LLMアプリケーション向けに特化して設計された、OpenTelemetryネイティブの可観測性プラットフォームです。
+
+<div id="configuration">
+  ## 設定
+</div>
+
+Mastra で Traceloop を使用するには、次の環境変数を設定してください:
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.traceloop.com
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer your_api_key, x-traceloop-destination-id=your_destination_id"
+```
+
+
+<div id="implementation">
+  ## 実装
+</div>
+
+Mastra を Traceloop と連携して使うための設定方法は次のとおりです。
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "your-service-name",
+    enabled: true,
+    export: {
+      type: "otlp",
+    },
+  },
+});
+```
+
+
+<div id="dashboard">
+  ## ダッシュボード
+</div>
+
+[app.traceloop.com](https://app.traceloop.com) の Traceloop ダッシュボードで、トレースと分析情報にアクセスできます

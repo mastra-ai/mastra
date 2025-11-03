@@ -1,0 +1,392 @@
+---
+title: "入れ子ワークフロー（レガシー） | ワークフロー（レガシー） | Mastra Docs"
+sidebar_position: 4
+sidebar_label: "入れ子ワークフロー"
+---
+
+<div id="nested-workflows-legacy">
+  # ネストされたワークフロー（レガシー）
+</div>
+
+Mastra では、ワークフローを別のワークフロー内のステップとして利用でき、モジュール化され再利用可能なワークフローコンポーネントを作成できます。この機能により、複雑なワークフローを小さく扱いやすい単位に分割して整理でき、コードの再利用も促進されます。
+
+親ワークフローのステップとしてネストされたワークフローを可視化できるため、全体の流れを直感的に把握しやすくなります。
+
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
+
+`step()` メソッドを使うと、別のワークフロー内でワークフローをステップとして直接利用できます。
+
+```typescript
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+
+// 入れ子のワークフローを作成する
+const nestedWorkflow = new LegacyWorkflow({ name: "nested-workflow" })
+  .step(stepA)
+  .then(stepB)
+  .commit();
+
+// 親ワークフローで入れ子のワークフローを使用する
+const parentWorkflow = new LegacyWorkflow({ name: "parent-workflow" })
+  .step(nestedWorkflow, {
+    variables: {
+      city: {
+        step: "trigger",
+        path: "myTriggerInput",
+      },
+    },
+  })
+  .then(stepC)
+  .commit();
+```
+
+ワークフローをステップとして使用する場合:
+
+* ワークフロー名がステップIDとして使われ、自動的にステップに変換されます
+* そのワークフローの結果は、親ワークフローのコンテキストで利用できます
+* ネストされたワークフローの各ステップは、定義された順序で実行されます
+
+
+<div id="accessing-results">
+  ## 結果へのアクセス
+</div>
+
+ネストされたワークフローの結果は、親ワークフローのコンテキスト内で、ネストされたワークフロー名の下に格納されています。結果には、ネストされたワークフローのすべてのステップの出力が含まれます。
+
+```typescript
+const { results } = await parentWorkflow.start();
+// 入れ子のワークフローの結果にアクセスする
+const nestedWorkflowResult = results["nested-workflow"];
+if (nestedWorkflowResult.status === "success") {
+  const nestedResults = nestedWorkflowResult.output.results;
+}
+```
+
+
+<div id="control-flow-with-nested-workflows">
+  ## ネストされたワークフローによる制御フロー
+</div>
+
+ネストされたワークフローは、通常のステップで利用できる制御フロー機能をすべて備えています。
+
+<div id="parallel-execution">
+  ### 並列実行
+</div>
+
+複数のネストされたワークフローを並列に実行できます:
+
+```typescript
+parentWorkflow
+  .step(nestedWorkflowA)
+  .step(nestedWorkflowB)
+  .after([nestedWorkflowA, nestedWorkflowB])
+  .step(finalStep);
+```
+
+または、ワークフロー配列で `step()` を使う:
+
+```typescript
+parentWorkflow.step([nestedWorkflowA, nestedWorkflowB]).then(finalStep);
+```
+
+この場合、`then()` は最終ステップを実行する前に、すべてのワークフローが完了するまで暗黙に待機します。
+
+
+<div id="if-else-branching">
+  ### If-Else 分岐
+</div>
+
+ネストされたワークフローは、両方の分岐を引数として受け取る新しい構文を使って、if-else の分岐内で使用できます。
+
+```typescript
+// さまざまな分岐向けにネストしたワークフローを作成する
+const workflowA = new LegacyWorkflow({ name: "workflow-a" })
+  .step(stepA1)
+  .then(stepA2)
+  .commit();
+
+const workflowB = new LegacyWorkflow({ name: "workflow-b" })
+  .step(stepB1)
+  .then(stepB2)
+  .commit();
+
+// ネストしたワークフローで新しい if-else 構文を使う
+parentWorkflow
+  .step(initialStep)
+  .if(
+    async ({ context }) => {
+      // ここに条件を記述
+      return someCondition;
+    },
+    workflowA, // if 分岐
+    workflowB, // else 分岐
+  )
+  .then(finalStep)
+  .commit();
+```
+
+新しい構文は、ネストされたワークフローを扱う際に、より簡潔で分かりやすくなります。条件が次の場合:
+
+* `true`: 最初のワークフロー（if ブランチ）が実行されます
+* `false`: 2番目のワークフロー（else ブランチ）が実行されます
+
+スキップされたワークフローは、結果でステータスが `skipped` になります。
+
+if-else ブロックに続く `.then(finalStep)` の呼び出しは、if と else のブランチを単一の実行経路に再統合します。
+
+
+<div id="looping">
+  ### ループ
+</div>
+
+ネストしたワークフローは、他のステップと同様に `.until()` や `.while()` ループを使えます。興味深い新しいパターンとしては、ループバックの引数にワークフローを直接渡し、その結果に対してある条件が真になるまで、そのネストしたワークフローを実行し続けるという方法があります。
+
+```typescript
+parentWorkflow
+  .step(firstStep)
+  .while(
+    ({ context }) =>
+      context.getStepResult("nested-workflow").output.results.someField ===
+      "someValue",
+    nestedWorkflow,
+  )
+  .step(finalStep)
+  .commit();
+```
+
+
+<div id="watching-nested-workflows">
+  ## ネストされたワークフローの監視
+</div>
+
+親ワークフローの `watch` メソッドを使用して、ネストされたワークフローの状態変化を監視できます。これは、複雑なワークフローの進行状況や状態遷移を把握するのに役立ちます。
+
+```typescript
+const parentWorkflow = new LegacyWorkflow({ name: "parent-workflow" })
+  .step([nestedWorkflowA, nestedWorkflowB])
+  .then(finalStep)
+  .commit();
+
+const run = parentWorkflow.createRun();
+const unwatch = parentWorkflow.watch((state) => {
+  console.log("現在の状態:", state.value);
+  // state.context でネストされたワークフローの状態にアクセスできます
+});
+
+await run.start();
+unwatch(); // 完了したら監視を停止します
+```
+
+
+<div id="suspending-and-resuming">
+  ## 一時停止と再開
+</div>
+
+ネストされたワークフローは一時停止と再開に対応しており、特定の地点でワークフローの実行を中断・再開できます。ネスト全体、または内部の特定のステップを個別に一時停止することも可能です。
+
+```typescript
+// 中断が必要になる可能性のあるステップを定義
+const suspendableStep = new LegacyStep({
+  id: "other",
+  description: "中断が必要になる可能性のあるステップ",
+  execute: async ({ context, suspend }) => {
+    if (!wasSuspended) {
+      wasSuspended = true;
+      await suspend();
+    }
+    return { other: 26 };
+  },
+});
+
+// 中断可能なステップを含むネストされたワークフローを作成
+const nestedWorkflow = new LegacyWorkflow({ name: "nested-workflow-a" })
+  .step(startStep)
+  .then(suspendableStep)
+  .then(finalStep)
+  .commit();
+
+// 親ワークフローで利用
+const parentWorkflow = new LegacyWorkflow({ name: "parent-workflow" })
+  .step(beginStep)
+  .then(nestedWorkflow)
+  .then(lastStep)
+  .commit();
+
+// ワークフローを開始
+const run = parentWorkflow.createRun();
+const { runId, results } = await run.start({ triggerData: { startValue: 1 } });
+
+// ネストされたワークフロー内の特定のステップが中断されているか確認
+if (results["nested-workflow-a"].output.results.other.status === "suspended") {
+  // ドット記法を使って特定の中断中のステップを再開
+  const resumedResults = await run.resume({
+    stepId: "nested-workflow-a.other",
+    context: { startValue: 1 },
+  });
+
+  // 再開後の結果には完了したネストされたワークフローが含まれる
+  expect(resumedResults.results["nested-workflow-a"].output.results).toEqual({
+    start: { output: { newValue: 1 }, status: "success" },
+    other: { output: { other: 26 }, status: "success" },
+    final: { output: { finalValue: 27 }, status: "success" },
+  });
+}
+```
+
+ネストされたワークフローを再開する場合:
+
+* ワークフロー全体を再開するには、`resume()` 呼び出し時にネストされたワークフローの名前を `stepId` として指定する
+* ネスト内の特定のステップを再開するには、ドット記法（`nested-workflow.step-name`）を使用する
+* ネストされたワークフローは、指定されたコンテキストで一時停止していたステップから再開される
+* `results["nested-workflow"].output.results` を使って、ネストされたワークフローの結果内で特定のステップのステータスを確認できる
+
+
+<div id="result-schemas-and-mapping">
+  ## 結果スキーマとマッピング
+</div>
+
+ネストされたワークフローは結果スキーマとマッピングを定義でき、型安全性の確保やデータ変換に役立ちます。これは、ネストされたワークフローの出力を特定の構造に合わせたい場合や、親ワークフローで使用する前に結果を変換する必要がある場合に特に有用です。
+
+```typescript
+// 結果スキーマとマッピングを備えたネスト済みワークフローを作成
+const nestedWorkflow = new LegacyWorkflow({
+  name: "nested-workflow",
+  result: {
+    schema: z.object({
+      total: z.number(),
+      items: z.array(
+        z.object({
+          id: z.string(),
+          value: z.number(),
+        }),
+      ),
+    }),
+    mapping: {
+      // 変数構文を使ってステップ結果から値をマッピング
+      total: { step: "step-a", path: "count" },
+      items: { step: "step-b", path: "items" },
+    },
+  },
+})
+  .step(stepA)
+  .then(stepB)
+  .commit();
+
+// 型安全な結果を用いて親ワークフローで利用
+const parentWorkflow = new LegacyWorkflow({ name: "parent-workflow" })
+  .step(nestedWorkflow)
+  .then(async ({ context }) => {
+    const result = context.getStepResult("nested-workflow");
+    // TypeScript は result の構造を認識している
+    console.log(result.total); // number
+    console.log(result.items); // Array<{ id: string, value: number }>
+    return { success: true };
+  })
+  .commit();
+```
+
+
+<div id="best-practices">
+  ## ベストプラクティス
+</div>
+
+1. **モジュール化**: 関連する手順をまとめてカプセル化し、再利用可能なワークフロー部品を作るために、ネストされたワークフローを使用します。
+2. **命名**: ネストされたワークフローにはわかりやすい名前を付けます。これらは親ワークフローでステップIDとして使用されます。
+3. **エラー処理**: ネストされたワークフローで発生したエラーは親ワークフローに伝播するため、適切にハンドリングします。
+4. **状態管理**: 各ネストされたワークフローは独自の状態を保持しつつ、親ワークフローのコンテキストにアクセスできます。
+5. **サスペンド**: ネストされたワークフローでサスペンドを使用する場合は、ワークフロー全体の状態を考慮し、再開処理を適切に行います。
+
+<div id="example">
+  ## 例
+</div>
+
+ネストされたワークフローのさまざまな機能を示す、完全な例を次に示します。
+
+```typescript
+const workflowA = new LegacyWorkflow({
+  name: "workflow-a",
+  result: {
+    schema: z.object({
+      activities: z.string(),
+    }),
+    mapping: {
+      activities: {
+        step: planActivities,
+        path: "activities",
+      },
+    },
+  },
+})
+  .step(fetchWeather)
+  .then(planActivities)
+  .commit();
+
+const workflowB = new LegacyWorkflow({
+  name: "workflow-b",
+  result: {
+    schema: z.object({
+      activities: z.string(),
+    }),
+    mapping: {
+      activities: {
+        step: planActivities,
+        path: "activities",
+      },
+    },
+  },
+})
+  .step(fetchWeather)
+  .then(planActivities)
+  .commit();
+
+const weatherWorkflow = new LegacyWorkflow({
+  name: "weather-workflow",
+  triggerSchema: z.object({
+    cityA: z.string().describe("天気を取得する都市"),
+    cityB: z.string().describe("天気を取得する都市"),
+  }),
+  result: {
+    schema: z.object({
+      activitiesA: z.string(),
+      activitiesB: z.string(),
+    }),
+    mapping: {
+      activitiesA: {
+        step: workflowA,
+        path: "result.activities",
+      },
+      activitiesB: {
+        step: workflowB,
+        path: "result.activities",
+      },
+    },
+  },
+})
+  .step(workflowA, {
+    variables: {
+      city: {
+        step: "trigger",
+        path: "cityA",
+      },
+    },
+  })
+  .step(workflowB, {
+    variables: {
+      city: {
+        step: "trigger",
+        path: "cityB",
+      },
+    },
+  });
+
+weatherWorkflow.commit();
+```
+
+この例では：
+
+1. すべてのワークフローで型安全性を確保するためのスキーマを定義します
+2. 各ステップに適切な入力スキーマと出力スキーマを持たせます
+3. ネストされたワークフローには、それぞれ独自のトリガースキーマと結果マッピングがあります
+4. `.step()` 呼び出しで変数構文を使ってデータを受け渡します
+5. メインのワークフローは、両方のネストされたワークフローのデータを統合します

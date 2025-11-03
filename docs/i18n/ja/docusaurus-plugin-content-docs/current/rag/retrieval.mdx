@@ -1,0 +1,564 @@
+---
+title: "検索、セマンティック検索、再ランキング | RAG | Mastra ドキュメント"
+description: Mastra の RAG システムにおける検索（セマンティック検索、フィルタリング、再ランキング）に関するガイド。
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+
+<div id="retrieval-in-rag-systems">
+  # RAGシステムにおける検索（リトリーバル）
+</div>
+
+埋め込みを保存した後は、ユーザーのクエリに答えるために、関連するチャンクを取り出す必要があります。
+
+Mastraはセマンティック検索、フィルタリング、再ランキングに対応し、柔軟な検索（リトリーバル）オプションを提供します。
+
+<div id="how-retrieval-works">
+  ## 取得の仕組み
+</div>
+
+1. ユーザーのクエリは、ドキュメント埋め込みに使用したのと同じモデルで埋め込みに変換されます
+2. この埋め込みを、ベクトル類似度を用いて保存済みの埋め込みと比較します
+3. 最も類似したチャンクを取得し、必要に応じて次の処理を行えます:
+
+- メタデータによるフィルタリング
+- 関連性向上のための再ランク付け
+- ナレッジグラフを用いた処理
+
+<div id="basic-retrieval">
+  ## 基本的な検索（リトリーバル）
+</div>
+
+最も簡単な方法は、セマンティック検索をそのまま使うやり方です。この手法では、ベクトルの類似度を用いて、クエリと意味的に近いチャンクを見つけます。
+
+```ts showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { embed } from "ai";
+import { PgVector } from "@mastra/pg";
+
+// クエリを埋め込みに変換
+const { embedding } = await embed({
+  value: "記事の主なポイントは何ですか?",
+  model: openai.embedding("text-embedding-3-small"),
+});
+
+// ベクトルストアに問い合わせ
+const pgVector = new PgVector({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING,
+});
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+});
+
+// 結果を表示
+console.log(results);
+```
+
+結果にはテキスト内容と類似度スコアの両方が含まれます。
+
+```ts showLineNumbers copy
+[
+  {
+    text: "気候変動は深刻な課題をもたらします...",
+    score: 0.89,
+    metadata: { source: "article1.txt" },
+  },
+  {
+    text: "気温上昇は作物の収穫量に影響を及ぼします...",
+    score: 0.82,
+    metadata: { source: "article1.txt" },
+  },
+  // ... その他の結果
+];
+```
+
+基本的なリトリーバル手法の使い方については、[Retrieve Results](/examples/rag/query/retrieve-results) の例をご覧ください。
+
+
+<div id="advanced-retrieval-options">
+  ## 高度な検索オプション
+</div>
+
+<div id="metadata-filtering">
+  ### メタデータフィルタリング
+</div>
+
+メタデータフィールドに基づいて結果をフィルターし、検索範囲を絞り込みます。これは、異なるソースや時期、特定の属性を持つドキュメントがある場合に有用です。Mastra は、サポートされているすべてのベクトルストアで機能する、MongoDB 風の統一クエリ構文を提供します。
+
+利用可能な演算子や構文の詳細は、[メタデータフィルタ リファレンス](/reference/rag/metadata-filters)を参照してください。
+
+基本的なフィルタリングの例:
+
+```ts showLineNumbers copy
+// シンプルな等価フィルター
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    source: "article1.txt",
+  },
+});
+
+// 数値比較
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    price: { $gt: 100 },
+  },
+});
+
+// 複数の条件
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    category: "electronics",
+    price: { $lt: 1000 },
+    inStock: true,
+  },
+});
+
+// 配列操作
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    tags: { $in: ["sale", "new"] },
+  },
+});
+
+// 論理演算子
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    $or: [{ category: "electronics" }, { category: "accessories" }],
+    $and: [{ price: { $gt: 50 } }, { price: { $lt: 200 } }],
+  },
+});
+```
+
+メタデータフィルタリングの主な利用例:
+
+* ドキュメントの出所または種類でフィルタリング
+* 日付範囲でフィルタリング
+* 特定のカテゴリやタグでフィルタリング
+* 数値範囲（例：価格、評価）でフィルタリング
+* 複数の条件を組み合わせて精密に検索
+* ドキュメント属性（例：言語、著者）でフィルタリング
+
+メタデータフィルタリングの使用例は、[Hybrid Vector Search](/examples/rag/query/hybrid-vector-search) を参照してください。
+
+
+<div id="vector-query-tool">
+  ### ベクタークエリツール
+</div>
+
+エージェントにベクターデータベースへ直接クエリさせたい場合があります。ベクタークエリツールを使うと、エージェントが取得方針の判断を担い、ユーザーのニーズに対する理解に基づいて、セマンティック検索に加えて任意のフィルタリングやリランキングを組み合わせられます。
+
+```ts showLineNumbers copy
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
+});
+```
+
+ツールを作成する際は、ツールの名称と説明に特に注意してください。これらは、エージェントがいつどのように検索・取得機能を使うべきかを理解する助けになります。たとえば、名称を &quot;SearchKnowledgeBase&quot;、説明を &quot;ドキュメント全体を検索して、Xというトピックに関する関連情報を見つけます。&quot; とすることができます。
+
+これは次のような場合に特に有用です:
+
+* エージェントが取得すべき情報を動的に判断する必要があるとき
+* 取得プロセスに複雑な意思決定が伴うとき
+* 文脈に応じて複数の取得戦略を組み合わせたいとき
+
+
+<div id="database-specific-configurations">
+  #### データベース固有の設定
+</div>
+
+Vector Query Tool は、各種ベクターストアの独自機能や最適化を活用できるデータベース固有の設定をサポートしています。
+
+```ts showLineNumbers copy
+// 名前空間を使用したPinecone
+const pineconeQueryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
+  databaseConfig: {
+    pinecone: {
+      namespace: "production", // 環境ごとにデータを分離
+    },
+  },
+});
+
+// パフォーマンスチューニングを行ったpgVector
+const pgVectorQueryTool = createVectorQueryTool({
+  vectorStoreName: "postgres",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
+  databaseConfig: {
+    pgvector: {
+      minScore: 0.7, // 低品質な結果をフィルタリング
+      ef: 200, // HNSW検索パラメータ
+      probes: 10, // IVFFlat探索パラメータ
+    },
+  },
+});
+
+// 高度なフィルタリングを使用したChroma
+const chromaQueryTool = createVectorQueryTool({
+  vectorStoreName: "chroma",
+  indexName: "documents",
+  model: openai.embedding("text-embedding-3-small"),
+  databaseConfig: {
+    chroma: {
+      where: { category: "technical" },
+      whereDocument: { $contains: "API" },
+    },
+  },
+});
+
+// テーブル指定を使用したLanceDB
+const lanceQueryTool = createVectorQueryTool({
+  vectorStoreName: "lance",
+  indexName: "documents",
+  model: openai.embedding("text-embedding-3-small"),
+  databaseConfig: {
+    lance: {
+      tableName: "myVectors", // クエリ対象のテーブルを指定
+      includeAllColumns: true, // 結果にすべてのメタデータ列を含める
+    },
+  },
+});
+```
+
+**主な利点:**
+
+* **Pinecone の namespace**: テナント、環境、データタイプごとにベクターを整理
+* **pgVector の最適化**: ef/probes パラメータで検索の精度と速度を調整
+* **品質フィルタリング**: 最小類似度のしきい値を設定して結果の関連性を向上
+* **LanceDB のテーブル**: データをテーブルで分離して整理性とパフォーマンスを改善
+* **実行時の柔軟性**: コンテキストに応じて設定を動的に上書き
+
+**一般的なユースケース:**
+
+* Pinecone の namespace を用いたマルチテナントアプリケーション
+* 高負荷シナリオでのパフォーマンス最適化
+* 環境別の設定（dev/staging/prod）
+* 品質基準で制御された検索結果
+* エッジ展開シナリオ向けの LanceDB を使った埋め込み型・ファイルベースのベクター保存
+
+これらの設定は、ランタイムコンテキストを使用して実行時に上書きすることもできます:
+
+```ts showLineNumbers copy
+import { RuntimeContext } from "@mastra/core/runtime-context";
+
+const runtimeContext = new RuntimeContext();
+runtimeContext.set("databaseConfig", {
+  pinecone: {
+    namespace: "runtime-namespace",
+  },
+});
+
+await pineconeQueryTool.execute({
+  context: { queryText: "検索クエリ" },
+  mastra,
+  runtimeContext,
+});
+```
+
+詳細な設定オプションや高度な活用方法については、[Vector Query Tool リファレンス](/reference/tools/vector-query-tool)を参照してください。
+
+
+<div id="vector-store-prompts">
+  ### ベクターストアのプロンプト
+</div>
+
+ベクターストアのプロンプトは、各ベクターデータベース実装におけるクエリパターンとフィルタリング機能を定義します。
+フィルタリングを実装する際には、各ベクターストア実装で有効な演算子や構文を明示するために、これらのプロンプトをエージェントの指示に含める必要があります。
+
+<Tabs>
+  <TabItem value="pgvector" label="pgvector">
+    ```ts showLineNumbers copy
+    import { openai } from "@ai-sdk/openai";
+    import { PGVECTOR_PROMPT } from "@mastra/pg";
+
+    export const ragAgent = new Agent({
+      name: "RAGエージェント",
+      model: openai("gpt-4o-mini"),
+      instructions: `
+      提供されたコンテキストを使用してクエリを処理します。簡潔で関連性の高い応答を構成してください。
+      ${PGVECTOR_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </TabItem>
+
+  <TabItem value="松ぼっくり" label="Pinecone">
+    ```ts title="vector-store.ts" showLineNumbers copy
+    import { openai } from "@ai-sdk/openai";
+    import { PINECONE_PROMPT } from "@mastra/pinecone";
+
+    export const ragAgent = new Agent({
+      name: "RAGエージェント",
+      model: openai("gpt-4o-mini"),
+      instructions: `
+      提供されたコンテキストを使用してクエリを処理します。簡潔で関連性の高い応答を構成してください。
+      ${PINECONE_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </TabItem>
+
+  <TabItem value="qdrant" label="Qdrant">
+    ```ts title="vector-store.ts" showLineNumbers copy
+    import { openai } from "@ai-sdk/openai";
+    import { QDRANT_PROMPT } from "@mastra/qdrant";
+
+    export const ragAgent = new Agent({
+      name: "RAG Agent",
+      model: openai("gpt-4o-mini"),
+      instructions: `
+      提供されたコンテキストを使用してクエリを処理します。簡潔で関連性の高い応答を構成してください。
+      ${QDRANT_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </TabItem>
+
+  <TabItem value="クロマ" label="クロマ">
+    ```ts title="vector-store.ts" showLineNumbers copy
+    import { openai } from "@ai-sdk/openai";
+    import { CHROMA_PROMPT } from "@mastra/chroma";
+
+    export const ragAgent = new Agent({
+      name: "RAGエージェント",
+      model: openai("gpt-4o-mini"),
+      instructions: `
+      提供されたコンテキストを使用してクエリを処理してください。簡潔で関連性の高い応答を構成してください。
+      ${CHROMA_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </TabItem>
+
+  <TabItem value="アストラ" label="Astra">
+    ```ts title="vector-store.ts" showLineNumbers copy
+    import { openai } from "@ai-sdk/openai";
+    import { ASTRA_PROMPT } from "@mastra/astra";
+
+    export const ragAgent = new Agent({
+      name: "RAGエージェント",
+      model: openai("gpt-4o-mini"),
+      instructions: `
+      提供されたコンテキストを使用してクエリを処理します。簡潔で関連性の高い応答を構成します。
+      ${ASTRA_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </TabItem>
+
+  <TabItem value="libsql" label="LibSQL">
+    ```ts title="vector-store.ts" showLineNumbers copy
+    import { openai } from "@ai-sdk/openai";
+    import { LIBSQL_PROMPT } from "@mastra/libsql";
+
+    export const ragAgent = new Agent({
+      name: "RAG エージェント",
+      model: openai("gpt-4o-mini"),
+      instructions: `
+      提供されたコンテキストを使用してクエリを処理します。簡潔で関連性の高い応答を構成します。
+      ${LIBSQL_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </TabItem>
+
+  <TabItem value="Upstash" label="Upstash">
+    ```ts title="vector-store.ts" showLineNumbers copy
+    import { openai } from "@ai-sdk/openai";
+    import { UPSTASH_PROMPT } from "@mastra/upstash";
+
+    export const ragAgent = new Agent({
+      name: "RAGエージェント",
+      model: openai("gpt-4o-mini"),
+      instructions: `
+      提供されたコンテキストを使用してクエリを処理します。簡潔で関連性の高い応答を構成します。
+      ${UPSTASH_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </TabItem>
+
+  <TabItem value="ベクトル化" label="ベクトル化">
+    ```ts title="vector-store.ts" showLineNumbers copy
+    import { openai } from "@ai-sdk/openai";
+    import { VECTORIZE_PROMPT } from "@mastra/vectorize";
+
+    export const ragAgent = new Agent({
+      name: "RAGエージェント",
+      model: openai("gpt-4o-mini"),
+      instructions: `
+      提供されたコンテキストを使用してクエリを処理します。簡潔で関連性の高い応答を構成します。
+      ${VECTORIZE_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </TabItem>
+
+  <TabItem value="MongoDB" label="MongoDB">
+    ```ts title="vector-store.ts" showLineNumbers copy
+    import { openai } from "@ai-sdk/openai";
+    import { MONGODB_PROMPT } from "@mastra/mongodb";
+
+    export const ragAgent = new Agent({
+      name: "RAGエージェント",
+      model: openai("gpt-4o-mini"),
+      instructions: `
+      提供されたコンテキストを使用してクエリを処理します。簡潔で関連性の高い応答を構成します。
+      ${MONGODB_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </TabItem>
+
+  <TabItem value="OpenSearch" label="OpenSearch">
+    ```ts title="vector-store.ts" showLineNumbers copy
+    import { openai } from "@ai-sdk/openai";
+    import { OPENSEARCH_PROMPT } from "@mastra/opensearch";
+
+    export const ragAgent = new Agent({
+      name: "RAG エージェント",
+      model: openai("gpt-4o-mini"),
+      instructions: `
+      提供されたコンテキストを使用してクエリを処理してください。簡潔で関連性の高い応答を構成してください。
+      ${OPENSEARCH_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </TabItem>
+
+  <TabItem value="s3vectors" label="S3Vectors">
+    ```ts title="vector-store.ts" showLineNumbers copy
+    import { openai } from "@ai-sdk/openai";
+    import { S3VECTORS_PROMPT } from "@mastra/s3vectors";
+
+    export const ragAgent = new Agent({
+      name: "RAGエージェント",
+      model: openai("gpt-4o-mini"),
+      instructions: `
+      提供されたコンテキストを使用してクエリを処理します。応答は簡潔で関連性の高いものにしてください。
+      ${S3VECTORS_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </TabItem>
+</Tabs>
+
+<div id="re-ranking">
+  ### リランキング
+</div>
+
+初期のベクトル類似度検索では、微妙な関連性を見落とすことがあります。リランキングは計算コストは高いものの、より高精度なアルゴリズムで、次の点で結果を向上させます:
+
+* 語順や厳密な一致を考慮する
+* より洗練された関連度スコアリングを適用する
+* クエリとドキュメント間のクロスアテンションと呼ばれる手法を用いる
+
+リランキングの使い方は次のとおりです:
+
+```ts showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import {
+  rerankWithScorer as rerank,
+  MastraAgentRelevanceScorer
+} from "@mastra/rag";
+
+// ベクトル検索から初期結果を取得
+const initialResults = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: queryEmbedding,
+  topK: 10,
+});
+
+// 関連性スコアラーを作成
+const relevanceProvider = new MastraAgentRelevanceScorer('relevance-scorer', openai("gpt-4o-mini"));
+
+// 結果を再ランク付け
+const rerankedResults = await rerank({
+  results: initialResults,
+  query,
+  provider: relevanceProvider,
+  options: {
+    topK: 10,
+  },
+);
+```
+
+> **注記:** 再ランク付け時にセマンティック・スコアリングが正しく機能するには、各結果の `metadata.text` フィールドにテキスト本文を含める必要があります。
+
+Cohere や ZeroEntropy など、他の関連度スコアのプロバイダーも使用できます。
+
+```ts showLineNumbers copy
+const relevanceProvider = new CohereRelevanceScorer("rerank-v3.5");
+```
+
+```ts showLineNumbers copy
+const relevanceProvider = new ZeroEntropyRelevanceScorer("zerank-1");
+```
+
+再ランキング後の結果は、ベクトルの類似度と意味的な理解を組み合わせて、検索の精度を高めます。
+
+再ランキングの詳細は、[rerank()](/reference/rag/rerankWithScorer) メソッドを参照してください。
+
+再ランキングの使い方の例は、examples セクションの「Re-ranking Results」を参照してください。
+
+
+<div id="graph-based-retrieval">
+  ### グラフベースの検索
+</div>
+
+複雑な関係性を持つドキュメントでは、グラフベースの検索によってチャンク間の関連をたどれます。これは次のような場合に役立ちます:
+
+* 情報が複数のドキュメントにまたがっている
+* ドキュメント同士が互いに参照し合っている
+* 完全な回答を得るために関係をたどる必要がある
+
+セットアップ例:
+
+```ts showLineNumbers copy
+const graphQueryTool = createGraphQueryTool({
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
+  graphOptions: {
+    threshold: 0.7,
+  },
+});
+```
+
+グラフベースのリトリーバルの詳細については、[GraphRAG](/reference/rag/graph-rag) クラスと [createGraphQueryTool()](/reference/tools/graph-rag-tool) 関数を参照してください。
+
+グラフベースのリトリーバル手法の利用例については、[Graph-based Retrieval](/examples/rag/usage/graph-rag) の例を参照してください。

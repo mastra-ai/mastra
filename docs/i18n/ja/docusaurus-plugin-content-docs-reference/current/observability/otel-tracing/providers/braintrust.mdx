@@ -1,0 +1,50 @@
+---
+title: "リファレンス: Braintrust | 可観測性 | Mastra ドキュメント"
+description: LLM アプリ向けの評価・監視プラットフォームである Braintrust を Mastra に統合するためのドキュメント。
+---
+
+<div id="braintrust">
+  # Braintrust
+</div>
+
+Braintrust は、LLM アプリケーション向けの評価・モニタリングプラットフォームです。
+
+<div id="configuration">
+  ## 設定
+</div>
+
+Mastra で Braintrust を利用するには、以下の環境変数を設定してください:
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.braintrust.dev/otel
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <あなたのAPIキー>, x-bt-parent=project_id:<あなたのプロジェクトID>"
+```
+
+
+<div id="implementation">
+  ## 実装
+</div>
+
+Mastra を Braintrust で使用できるように設定する方法は次のとおりです：
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // ... その他の設定
+  telemetry: {
+    serviceName: "your-service-name",
+    enabled: true,
+    export: {
+      type: "otlp",
+    },
+  },
+});
+```
+
+
+<div id="dashboard">
+  ## ダッシュボード
+</div>
+
+Braintrust のダッシュボードには [braintrust.dev](https://www.braintrust.dev/) からアクセスできます

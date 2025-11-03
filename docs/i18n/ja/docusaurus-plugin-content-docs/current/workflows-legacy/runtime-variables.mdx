@@ -1,0 +1,174 @@
+---
+title: "ワークフローの実行時変数（レガシー） | Workflows（レガシー） | Mastra ドキュメント"
+sidebar_position: 6
+sidebar_label: "実行時／動的変数"
+description: Mastra の依存性注入システムを使って、ワークフローやステップに実行時の設定を提供する方法を学びます。
+---
+
+<div id="workflow-runtime-variables-legacy">
+  # ワークフロー実行時変数（レガシー）
+</div>
+
+Mastra には強力な依存性注入システムがあり、実行時変数を用いてワークフローやステップを構成できます。この機能は、ランタイムの設定に基づいて動作を調整できる、柔軟で再利用可能なワークフローを作成するうえで不可欠です。
+
+<div id="overview">
+  ## 概要
+</div>
+
+依存性注入システムを使用すると、次のことが可能になります:
+
+1. 型安全な runtimeContext を通じて、実行時の設定変数をワークフローに渡す
+2. ステップの実行コンテキスト内でこれらの変数にアクセスする
+3. 基盤となるコードを変更せずに、ワークフローの挙動を調整する
+4. 同一ワークフロー内の複数のステップ間で設定を共有する
+
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
+
+```typescript
+const myWorkflow = mastra.legacy_getWorkflow("myWorkflow");
+const { runId, start, resume } = myWorkflow.createRun();
+
+// runtimeContext の型定義を行います
+type WorkflowRuntimeContext = {
+  multiplier: number;
+};
+
+const runtimeContext = new RuntimeContext<WorkflowRuntimeContext>();
+runtimeContext.set("multiplier", 5);
+
+// runtimeContext を使ってワークフローの実行を開始します
+await start({
+  triggerData: { inputValue: 45 },
+  runtimeContext,
+});
+```
+
+
+<div id="using-with-rest-api">
+  ## REST API での使用
+</div>
+
+HTTP ヘッダーから乗数値を動的に設定する方法は次のとおりです。
+
+```typescript title="src/index.ts"
+import { Mastra } from "@mastra/core";
+import { RuntimeContext } from "@mastra/core/di";
+import { workflow as myWorkflow } from "./workflows";
+
+// runtimeContextの型を明確で説明的な型で定義
+type WorkflowRuntimeContext = {
+  multiplier: number;
+};
+
+export const mastra = new Mastra({
+  legacy_workflows: {
+    myWorkflow,
+  },
+  server: {
+    middleware: [
+      async (c, next) => {
+        const multiplier = c.req.header("x-multiplier");
+        const runtimeContext = c.get<WorkflowRuntimeContext>("runtimeContext");
+
+        // multiplierの値を解析して検証
+        const multiplierValue = parseInt(multiplier || "1", 10);
+        if (isNaN(multiplierValue)) {
+          throw new Error("multiplierの値が無効です");
+        }
+
+        runtimeContext.set("multiplier", multiplierValue);
+
+        await next(); // next()の呼び出しを忘れないこと
+      },
+    ],
+  },
+});
+```
+
+
+<div id="creating-steps-with-variables">
+  ## 変数を使ったステップの作成
+</div>
+
+ステップは runtimeContext の変数にアクセスでき、workflow の runtimeContext の型に従う必要があります。
+
+```typescript
+import { LegacyStep } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
+
+// ステップの入出力型を定義
+interface StepInput {
+  inputValue: number;
+}
+
+interface StepOutput {
+  incrementedValue: number;
+}
+
+const stepOne = new LegacyStep({
+  id: "stepOne",
+  description: "入力値に設定された乗数を掛ける",
+  execute: async ({ context, runtimeContext }) => {
+    try {
+      // 型安全に runtimeContext の変数へアクセスする
+      const multiplier = runtimeContext.get("multiplier");
+      if (multiplier === undefined) {
+        throw new Error("runtimeContext に乗数が設定されていません");
+      }
+
+      // 入力の取得と検証
+      const inputValue =
+        context.getStepResult<StepInput>("trigger")?.inputValue;
+      if (inputValue === undefined) {
+        throw new Error("入力値が指定されていません");
+      }
+
+      const result: StepOutput = {
+        incrementedValue: inputValue * multiplier,
+      };
+
+      return result;
+    } catch (error) {
+      console.error(`stepOne のエラー: ${error.message}`);
+      throw error;
+    }
+  },
+});
+```
+
+
+<div id="error-handling">
+  ## エラーハンドリング
+</div>
+
+ワークフローでランタイム変数を扱う際は、想定されるエラーへの対処が重要です:
+
+1. **変数の不足**: 必須の変数が runtimeContext に存在するか常に確認する
+2. **型の不一致**: TypeScript の型システムを用いてコンパイル時に型エラーを検出する
+3. **無効な値**: ステップで使用する前に変数の値を検証する
+
+```typescript
+// runtimeContext 変数を用いた防御的プログラミングの例
+const multiplier = runtimeContext.get("multiplier");
+if (multiplier === undefined) {
+  throw new Error("runtimeContext に multiplier が設定されていません");
+}
+
+// 型と値のバリデーション
+if (typeof multiplier !== "number" || multiplier <= 0) {
+  throw new Error(`無効な multiplier の値: ${multiplier}`);
+}
+```
+
+
+<div id="best-practices">
+  ## ベストプラクティス
+</div>
+
+1. **型の安全性**: runtimeContext とステップの入出力には、常に適切な型を定義する
+2. **バリデーション**: 使用前に、すべての入力と runtimeContext の変数を検証する
+3. **エラー処理**: 各ステップで適切なエラー処理を実装する
+4. **ドキュメント**: 各ワークフローで想定される runtimeContext の変数を明記する
+5. **デフォルト値**: 可能な場合は妥当なデフォルト値を用意する

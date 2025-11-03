@@ -159,7 +159,7 @@ export const createMastraClient = (accessToken: string) => {
 Once `MastraClient` is configured with the WorkOS access token, you can send authenticated requests:
 
 <Tabs>
-  <TabItem value="react" label="React">
+  <TabItem value="curl" label="cURL">
     ```typescript title="src/api/agents.ts" showLineNumbers copy
     import { WorkOS } from '@workos-inc/node';
     import { MastraClient } from '@mastra/client-js';
@@ -191,7 +191,7 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
     ```
 
   </TabItem>
-  <TabItem value="curl" label="cURL">
+  <TabItem value="react" label="React">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \

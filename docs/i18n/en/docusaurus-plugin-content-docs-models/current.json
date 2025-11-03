@@ -1,0 +1,238 @@
+{
+  "version.label": {
+    "message": "Next",
+    "description": "The label for version current"
+  },
+  "sidebar.modelsSidebar.category.Gateways": {
+    "message": "Gateways",
+    "description": "The label for category 'Gateways' in sidebar 'modelsSidebar'"
+  },
+  "sidebar.modelsSidebar.category.Providers": {
+    "message": "Providers",
+    "description": "The label for category 'Providers' in sidebar 'modelsSidebar'"
+  },
+  "sidebar.modelsSidebar.doc.Gateways": {
+    "message": "Gateways",
+    "description": "The label for the doc item 'Gateways' in sidebar 'modelsSidebar', linking to the doc gateways/index"
+  },
+  "sidebar.modelsSidebar.doc.Netlify": {
+    "message": "Netlify",
+    "description": "The label for the doc item 'Netlify' in sidebar 'modelsSidebar', linking to the doc gateways/netlify"
+  },
+  "sidebar.modelsSidebar.doc.OpenRouter": {
+    "message": "OpenRouter",
+    "description": "The label for the doc item 'OpenRouter' in sidebar 'modelsSidebar', linking to the doc gateways/openrouter"
+  },
+  "sidebar.modelsSidebar.doc.Vercel": {
+    "message": "Vercel",
+    "description": "The label for the doc item 'Vercel' in sidebar 'modelsSidebar', linking to the doc gateways/vercel"
+  },
+  "sidebar.modelsSidebar.doc.Providers": {
+    "message": "Providers",
+    "description": "The label for the doc item 'Providers' in sidebar 'modelsSidebar', linking to the doc providers/index"
+  },
+  "sidebar.modelsSidebar.doc.OpenAI": {
+    "message": "OpenAI",
+    "description": "The label for the doc item 'OpenAI' in sidebar 'modelsSidebar', linking to the doc providers/openai"
+  },
+  "sidebar.modelsSidebar.doc.Anthropic": {
+    "message": "Anthropic",
+    "description": "The label for the doc item 'Anthropic' in sidebar 'modelsSidebar', linking to the doc providers/anthropic"
+  },
+  "sidebar.modelsSidebar.doc.Google": {
+    "message": "Google",
+    "description": "The label for the doc item 'Google' in sidebar 'modelsSidebar', linking to the doc providers/google"
+  },
+  "sidebar.modelsSidebar.doc.DeepSeek": {
+    "message": "DeepSeek",
+    "description": "The label for the doc item 'DeepSeek' in sidebar 'modelsSidebar', linking to the doc providers/deepseek"
+  },
+  "sidebar.modelsSidebar.doc.Groq": {
+    "message": "Groq",
+    "description": "The label for the doc item 'Groq' in sidebar 'modelsSidebar', linking to the doc providers/groq"
+  },
+  "sidebar.modelsSidebar.doc.Mistral": {
+    "message": "Mistral",
+    "description": "The label for the doc item 'Mistral' in sidebar 'modelsSidebar', linking to the doc providers/mistral"
+  },
+  "sidebar.modelsSidebar.doc.xAI": {
+    "message": "xAI",
+    "description": "The label for the doc item 'xAI' in sidebar 'modelsSidebar', linking to the doc providers/xai"
+  },
+  "sidebar.modelsSidebar.doc.AIHubMix": {
+    "message": "AIHubMix",
+    "description": "The label for the doc item 'AIHubMix' in sidebar 'modelsSidebar', linking to the doc providers/aihubmix"
+  },
+  "sidebar.modelsSidebar.doc.Alibaba": {
+    "message": "Alibaba",
+    "description": "The label for the doc item 'Alibaba' in sidebar 'modelsSidebar', linking to the doc providers/alibaba"
+  },
+  "sidebar.modelsSidebar.doc.Alibaba (China)": {
+    "message": "Alibaba (China)",
+    "description": "The label for the doc item 'Alibaba (China)' in sidebar 'modelsSidebar', linking to the doc providers/alibaba-cn"
+  },
+  "sidebar.modelsSidebar.doc.Amazon Bedrock": {
+    "message": "Amazon Bedrock",
+    "description": "The label for the doc item 'Amazon Bedrock' in sidebar 'modelsSidebar', linking to the doc providers/amazon-bedrock"
+  },
+  "sidebar.modelsSidebar.doc.Azure": {
+    "message": "Azure",
+    "description": "The label for the doc item 'Azure' in sidebar 'modelsSidebar', linking to the doc providers/azure"
+  },
+  "sidebar.modelsSidebar.doc.Baseten": {
+    "message": "Baseten",
+    "description": "The label for the doc item 'Baseten' in sidebar 'modelsSidebar', linking to the doc providers/baseten"
+  },
+  "sidebar.modelsSidebar.doc.Cerebras": {
+    "message": "Cerebras",
+    "description": "The label for the doc item 'Cerebras' in sidebar 'modelsSidebar', linking to the doc providers/cerebras"
+  },
+  "sidebar.modelsSidebar.doc.Chutes": {
+    "message": "Chutes",
+    "description": "The label for the doc item 'Chutes' in sidebar 'modelsSidebar', linking to the doc providers/chutes"
+  },
+  "sidebar.modelsSidebar.doc.Cloudflare Workers AI": {
+    "message": "Cloudflare Workers AI",
+    "description": "The label for the doc item 'Cloudflare Workers AI' in sidebar 'modelsSidebar', linking to the doc providers/cloudflare-workers-ai"
+  },
+  "sidebar.modelsSidebar.doc.Cortecs": {
+    "message": "Cortecs",
+    "description": "The label for the doc item 'Cortecs' in sidebar 'modelsSidebar', linking to the doc providers/cortecs"
+  },
+  "sidebar.modelsSidebar.doc.Deep Infra": {
+    "message": "Deep Infra",
+    "description": "The label for the doc item 'Deep Infra' in sidebar 'modelsSidebar', linking to the doc providers/deepinfra"
+  },
+  "sidebar.modelsSidebar.doc.FastRouter": {
+    "message": "FastRouter",
+    "description": "The label for the doc item 'FastRouter' in sidebar 'modelsSidebar', linking to the doc providers/fastrouter"
+  },
+  "sidebar.modelsSidebar.doc.Fireworks AI": {
+    "message": "Fireworks AI",
+    "description": "The label for the doc item 'Fireworks AI' in sidebar 'modelsSidebar', linking to the doc providers/fireworks-ai"
+  },
+  "sidebar.modelsSidebar.doc.GitHub Models": {
+    "message": "GitHub Models",
+    "description": "The label for the doc item 'GitHub Models' in sidebar 'modelsSidebar', linking to the doc providers/github-models"
+  },
+  "sidebar.modelsSidebar.doc.Google Vertex AI": {
+    "message": "Google Vertex AI",
+    "description": "The label for the doc item 'Google Vertex AI' in sidebar 'modelsSidebar', linking to the doc providers/google-vertex"
+  },
+  "sidebar.modelsSidebar.doc.Hugging Face": {
+    "message": "Hugging Face",
+    "description": "The label for the doc item 'Hugging Face' in sidebar 'modelsSidebar', linking to the doc providers/huggingface"
+  },
+  "sidebar.modelsSidebar.doc.Inception": {
+    "message": "Inception",
+    "description": "The label for the doc item 'Inception' in sidebar 'modelsSidebar', linking to the doc providers/inception"
+  },
+  "sidebar.modelsSidebar.doc.Inference": {
+    "message": "Inference",
+    "description": "The label for the doc item 'Inference' in sidebar 'modelsSidebar', linking to the doc providers/inference"
+  },
+  "sidebar.modelsSidebar.doc.Llama": {
+    "message": "Llama",
+    "description": "The label for the doc item 'Llama' in sidebar 'modelsSidebar', linking to the doc providers/llama"
+  },
+  "sidebar.modelsSidebar.doc.LMStudio": {
+    "message": "LMStudio",
+    "description": "The label for the doc item 'LMStudio' in sidebar 'modelsSidebar', linking to the doc providers/lmstudio"
+  },
+  "sidebar.modelsSidebar.doc.LucidQuery AI": {
+    "message": "LucidQuery AI",
+    "description": "The label for the doc item 'LucidQuery AI' in sidebar 'modelsSidebar', linking to the doc providers/lucidquery"
+  },
+  "sidebar.modelsSidebar.doc.ModelScope": {
+    "message": "ModelScope",
+    "description": "The label for the doc item 'ModelScope' in sidebar 'modelsSidebar', linking to the doc providers/modelscope"
+  },
+  "sidebar.modelsSidebar.doc.Moonshot AI": {
+    "message": "Moonshot AI",
+    "description": "The label for the doc item 'Moonshot AI' in sidebar 'modelsSidebar', linking to the doc providers/moonshotai"
+  },
+  "sidebar.modelsSidebar.doc.Moonshot AI (China)": {
+    "message": "Moonshot AI (China)",
+    "description": "The label for the doc item 'Moonshot AI (China)' in sidebar 'modelsSidebar', linking to the doc providers/moonshotai-cn"
+  },
+  "sidebar.modelsSidebar.doc.Morph": {
+    "message": "Morph",
+    "description": "The label for the doc item 'Morph' in sidebar 'modelsSidebar', linking to the doc providers/morph"
+  },
+  "sidebar.modelsSidebar.doc.Nebius AI Studio": {
+    "message": "Nebius AI Studio",
+    "description": "The label for the doc item 'Nebius AI Studio' in sidebar 'modelsSidebar', linking to the doc providers/nebius"
+  },
+  "sidebar.modelsSidebar.doc.Nvidia": {
+    "message": "Nvidia",
+    "description": "The label for the doc item 'Nvidia' in sidebar 'modelsSidebar', linking to the doc providers/nvidia"
+  },
+  "sidebar.modelsSidebar.doc.Ollama": {
+    "message": "Ollama",
+    "description": "The label for the doc item 'Ollama' in sidebar 'modelsSidebar', linking to the doc providers/ollama"
+  },
+  "sidebar.modelsSidebar.doc.OpenCode Zen": {
+    "message": "OpenCode Zen",
+    "description": "The label for the doc item 'OpenCode Zen' in sidebar 'modelsSidebar', linking to the doc providers/opencode"
+  },
+  "sidebar.modelsSidebar.doc.Perplexity": {
+    "message": "Perplexity",
+    "description": "The label for the doc item 'Perplexity' in sidebar 'modelsSidebar', linking to the doc providers/perplexity"
+  },
+  "sidebar.modelsSidebar.doc.Requesty": {
+    "message": "Requesty",
+    "description": "The label for the doc item 'Requesty' in sidebar 'modelsSidebar', linking to the doc providers/requesty"
+  },
+  "sidebar.modelsSidebar.doc.Scaleway": {
+    "message": "Scaleway",
+    "description": "The label for the doc item 'Scaleway' in sidebar 'modelsSidebar', linking to the doc providers/scaleway"
+  },
+  "sidebar.modelsSidebar.doc.submodel": {
+    "message": "submodel",
+    "description": "The label for the doc item 'submodel' in sidebar 'modelsSidebar', linking to the doc providers/submodel"
+  },
+  "sidebar.modelsSidebar.doc.Synthetic": {
+    "message": "Synthetic",
+    "description": "The label for the doc item 'Synthetic' in sidebar 'modelsSidebar', linking to the doc providers/synthetic"
+  },
+  "sidebar.modelsSidebar.doc.Together AI": {
+    "message": "Together AI",
+    "description": "The label for the doc item 'Together AI' in sidebar 'modelsSidebar', linking to the doc providers/togetherai"
+  },
+  "sidebar.modelsSidebar.doc.Upstage": {
+    "message": "Upstage",
+    "description": "The label for the doc item 'Upstage' in sidebar 'modelsSidebar', linking to the doc providers/upstage"
+  },
+  "sidebar.modelsSidebar.doc.Venice AI": {
+    "message": "Venice AI",
+    "description": "The label for the doc item 'Venice AI' in sidebar 'modelsSidebar', linking to the doc providers/venice"
+  },
+  "sidebar.modelsSidebar.doc.Vultr": {
+    "message": "Vultr",
+    "description": "The label for the doc item 'Vultr' in sidebar 'modelsSidebar', linking to the doc providers/vultr"
+  },
+  "sidebar.modelsSidebar.doc.Weights & Biases": {
+    "message": "Weights & Biases",
+    "description": "The label for the doc item 'Weights & Biases' in sidebar 'modelsSidebar', linking to the doc providers/wandb"
+  },
+  "sidebar.modelsSidebar.doc.Z.AI": {
+    "message": "Z.AI",
+    "description": "The label for the doc item 'Z.AI' in sidebar 'modelsSidebar', linking to the doc providers/zai"
+  },
+  "sidebar.modelsSidebar.doc.Z.AI Coding Plan": {
+    "message": "Z.AI Coding Plan",
+    "description": "The label for the doc item 'Z.AI Coding Plan' in sidebar 'modelsSidebar', linking to the doc providers/zai-coding-plan"
+  },
+  "sidebar.modelsSidebar.doc.Zhipu AI": {
+    "message": "Zhipu AI",
+    "description": "The label for the doc item 'Zhipu AI' in sidebar 'modelsSidebar', linking to the doc providers/zhipuai"
+  },
+  "sidebar.modelsSidebar.doc.Zhipu AI Coding Plan": {
+    "message": "Zhipu AI Coding Plan",
+    "description": "The label for the doc item 'Zhipu AI Coding Plan' in sidebar 'modelsSidebar', linking to the doc providers/zhipuai-coding-plan"
+  },
+  "sidebar.modelsSidebar.doc.ZenMux": {
+    "message": "ZenMux",
+    "description": "The label for the doc item 'ZenMux' in sidebar 'modelsSidebar', linking to the doc providers/zenmux"
+  }
+}

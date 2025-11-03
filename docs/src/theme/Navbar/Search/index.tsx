@@ -10,6 +10,7 @@ import { CustomSearch } from "@site/src/components/custom-search";
 import { Button } from "@site/src/components/ui/button";
 import { useEffect, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
+import { T } from "gt-react";
 
 const SHORTCUT_OS_KEY = "shortcut-os-preference";
 
@@ -99,6 +100,7 @@ export default function SearchContainer({ locale }: { locale: string }) {
   };
 
   return (
+    <T>
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button
@@ -128,5 +130,6 @@ export default function SearchContainer({ locale }: { locale: string }) {
         </DialogContent>
       </DialogPortal>
     </Dialog>
+    </T>
   );
 }

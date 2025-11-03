@@ -1,0 +1,121 @@
+---
+title: "例: ハイブリッド・ベクター検索 | RAG | Mastra ドキュメント"
+description: Mastra でのベクター検索を強化するために、PGVector とメタデータフィルターを組み合わせて活用する例。
+---
+
+import GithubLink from "@site/src/components/GithubLink";
+
+
+<div id="hybrid-vector-search">
+  # ハイブリッドベクター検索
+</div>
+
+ベクトル類似検索とメタデータフィルタを組み合わせることで、より正確かつ効率的なハイブリッド検索を実現できます。
+この手法は次の要素を組み合わせます:
+
+- 最も関連性の高いドキュメントを見つけるためのベクトル類似検索
+- 追加の条件に基づいて検索結果を絞り込むためのメタデータフィルタ
+
+この例では、Mastra と PGVector を用いたハイブリッドベクター検索の使い方を示します。
+
+<div id="overview">
+  ## 概要
+</div>
+
+このシステムは、Mastra と PGVector を用いたフィルタ付きベクトル検索を実装しています。次のことを行います。
+
+1. メタデータのフィルターを使って PGVector 内の既存の埋め込みを照会する
+2. さまざまなメタデータフィールドでのフィルタリング方法を示す
+3. ベクトル類似度とメタデータフィルタリングの組み合わせを例示する
+
+> 注: ドキュメントからメタデータを抽出する方法の例は、[Metadata Extraction](../embedding/metadata-extraction) ガイドを参照してください。
+>
+> 埋め込みの作成と保存方法については、[Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) ガイドを参照してください。
+
+<div id="setup">
+  ## セットアップ
+</div>
+
+<div id="environment-setup">
+  ### 環境のセットアップ
+</div>
+
+環境変数が設定されていることを確認してください：
+
+```bash title=".env"
+OPENAI_API_KEY=your_openai_api_key_here
+POSTGRES_CONNECTION_STRING=your_connection_string_here
+```
+
+
+<div id="dependencies">
+  ### 依存関係
+</div>
+
+必要な依存関係をインポートします：
+
+```typescript copy showLineNumbers title="src/index.ts"
+import { embed } from "ai";
+import { PgVector } from "@mastra/pg";
+import { openai } from "@ai-sdk/openai";
+```
+
+
+<div id="vector-store-initialization">
+  ## ベクターストアの初期化
+</div>
+
+接続文字列を使って PgVector を初期化します:
+
+```typescript copy showLineNumbers{4} title="src/index.ts"
+const pgVector = new PgVector({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+});
+```
+
+
+<div id="example-usage">
+  ## 使い方の例
+</div>
+
+<div id="filter-by-metadata-value">
+  ### メタデータの値で絞り込む
+</div>
+
+```typescript copy showLineNumbers{6} title="src/index.ts"
+// クエリの埋め込みを作成
+const { embedding } = await embed({
+  model: openai.embedding("text-embedding-3-small"),
+  value: "[ドキュメントに基づいたクエリをここに挿入]",
+});
+
+// メタデータフィルターでクエリを実行
+const result = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 3,
+  filter: {
+    "path.to.metadata": {
+      $eq: "value",
+    },
+  },
+});
+
+console.log("結果:", result);
+```
+
+<br />
+
+<br />
+
+<hr className="dark:border-[#404040] border-gray-300" />
+
+<br />
+
+<br />
+
+<GithubLink
+  link={
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/hybrid-vector-search"
+}
+/>

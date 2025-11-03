@@ -1,0 +1,36 @@
+---
+title: "リファレンス: Logs API | クライアント SDK | Mastra ドキュメント"
+description: client-js SDK を使って、Mastra のシステムログやデバッグ情報へアクセスし、クエリする方法を学びます。
+---
+
+<div id="logs-api">
+  # Logs API
+</div>
+
+Logs API は、Mastra のシステムログやデバッグ情報にアクセスし、検索・照会するためのメソッドを提供します。
+
+<div id="getting-logs">
+  ## ログの取得
+</div>
+
+必要に応じてフィルタリングしてシステムログを取得します。
+
+```typescript
+const logs = await mastraClient.getLogs({
+  transportId: "transport-1",
+});
+```
+
+
+<div id="getting-logs-for-a-specific-run">
+  ## 特定の実行のログを取得する
+</div>
+
+特定の実行のログを取得します。
+
+```typescript
+const runLogs = await mastraClient.getLogForRun({
+  runId: "run-1",
+  transportId: "transport-1",
+});
+```

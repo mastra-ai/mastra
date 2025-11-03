@@ -19,6 +19,7 @@ import {
 import { useStickToBottom } from "use-stick-to-bottom";
 import styles from "./styles.module.css";
 import { cn } from "@site/src/lib/utils";
+import { useGT, T } from "gt-react";
 
 interface ChatbotSidebarProps {
   hiddenChatbotSidebar: boolean;
@@ -31,6 +32,7 @@ export default function ChatbotSidebar({
   hiddenChatbotSidebar,
   setHiddenChatbotSidebar,
 }: ChatbotSidebarProps): ReactNode {
+  const gt = useGT();
   const [hiddenSidebar, setHiddenSidebar] = useState(false);
 
   const toggleSidebar = useCallback(() => {
@@ -95,12 +97,16 @@ export default function ChatbotSidebar({
 
   return (
     <motion.aside
-      layout
-      initial={false}
       className={clsx(
         styles.chatbotSidebarContainer,
         hiddenChatbotSidebar && styles.chatbotSidebarContainerHidden,
       )}
+      initial={false}
+      animate={{
+        width: hiddenChatbotSidebar
+          ? "var(--chatbot-sidebar-hidden-width)"
+          : "var(--chatbot-sidebar-width)",
+      }}
       transition={{
         duration: 0.3,
         ease: [0.4, 0, 0.2, 1],
@@ -137,12 +143,12 @@ export default function ChatbotSidebar({
         <div className={styles.chatbotContent} ref={scrollRef}>
           <div
             className={cn(
-              "sticky top-0 backdrop-blur-md justify-start bg-(--mastra-surface-1)/50 z-10 flex items-center gap-2 px-3  py-2 pt-1 -mx-[10px]",
+              "sticky top-0 backdrop-blur-md bg-(--mastra-surface-1)/50 z-10 flex items-center gap-2 px-3  py-2 pt-1 -mx-[10px]",
               !hiddenChatbotSidebar && "border-b border-(--border)",
             )}
           >
             <button
-              className="hover:bg-(--mastra-surface-5) w-fit p-1.5 rounded-lg cursor-pointer"
+              className="hover:bg-(--mastra-surface-5) p-1.5 rounded-lg cursor-pointer"
               onClick={toggleSidebar}
             >
               {!hiddenChatbotSidebar ? (
@@ -152,9 +158,11 @@ export default function ChatbotSidebar({
               )}
             </button>
             {!hiddenChatbotSidebar && (
-              <span className="text-sm font-medium text-(--mastra-text-tertiary)">
-                Chat with Mastra docs
-              </span>
+              <T>
+                <span className="text-sm font-medium text-(--mastra-text-tertiary)">
+                  Chat with Mastra docs
+                </span>
+              </T>
             )}
           </div>
           {!hiddenChatbotSidebar && (
@@ -183,9 +191,11 @@ export default function ChatbotSidebar({
                                 {/* Feedback buttons - only show when answer is complete */}
                                 {id && (
                                   <div className="flex gap-2 items-center mt-3">
-                                    <span className="text-xs text-icons-2">
-                                      Was this helpful?
-                                    </span>
+                                    <T>
+                                      <span className="text-xs text-icons-2">
+                                        Was this helpful?
+                                      </span>
+                                    </T>
                                     <Button
                                       variant="ghost"
                                       size="icon-sm"
@@ -194,8 +204,8 @@ export default function ChatbotSidebar({
                                       }
                                       className={`p-1 cursor-pointer ${
                                         reaction === "upvote"
-                                          ? "dark:text-(--mastra-green-accent) text-(--mastra-green-accent)"
-                                          : "dark:text-icons-3 text-(--mastra-text-tertiary)"
+                                          ? "dark:text-accent-green text-[--light-green-accent]"
+                                          : "dark:text-icons-3 text-[--light-color-text-4]"
                                       }`}
                                     >
                                       <ThumbsUp className="w-3.5 h-3.5" />
@@ -209,7 +219,7 @@ export default function ChatbotSidebar({
                                       className={`p-1 cursor-pointer ${
                                         reaction === "downvote"
                                           ? "dark:text-red-500 text-red-600"
-                                          : "dark:text-icons-3 text-(--mastra-text-tertiary)"
+                                          : "dark:text-icons-3 text-[--light-color-text-4]"
                                       }`}
                                     >
                                       <ThumbsDown className="w-3.5 h-3.5" />
@@ -238,7 +248,7 @@ export default function ChatbotSidebar({
                   <Textarea
                     className="overflow-hidden font-medium placeholder:text-(--mastra-text-muted) placeholder:font-medium p-0 w-full text-sm border-none shadow-none outline-none resize-none text-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
                     rows={1}
-                    placeholder="Ask questions about Mastra..."
+                    placeholder={gt("Ask questions about Mastra...")}
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyDown={handleKeyDown}
@@ -269,16 +279,18 @@ export default function ChatbotSidebar({
                 </form>
 
                 <div className="flex items-center -mx-[10px] py-2 px-3 border-t border-(--border)">
-                  <span className="text-xs font-medium text-(--mastra-text-muted)">
-                    Powered by{" "}
-                    <a
-                      href="https://www.kapa.ai"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      kapa.ai
-                    </a>
-                  </span>
+                  <T>
+                    <span className="text-xs font-medium text-(--mastra-text-muted)">
+                      Powered by{" "}
+                      <a
+                        href="https://kapaai.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        KapaAI
+                      </a>
+                    </span>
+                  </T>
                 </div>
               </div>
             </>

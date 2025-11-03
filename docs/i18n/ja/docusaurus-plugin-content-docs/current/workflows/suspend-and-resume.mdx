@@ -1,0 +1,314 @@
+---
+title: "一時停止と再開 | ワークフロー | Mastra ドキュメント"
+description: "Mastra のワークフローでは、外部からの入力やリソースを待つ間、実行を一時停止し、後で再開できます。"
+---
+
+<div id="suspend-resume">
+  # 一時停止と再開
+</div>
+
+ワークフローは任意のステップで一時停止でき、その時点の状態はストレージ内に[スナップショット](./snapshots)として永続化されます。準備ができたら、この保存済みスナップショットから実行を再開できます。スナップショットを永続化することで、セッション、デプロイ、サーバー再起動をまたいでもワークフローの状態が維持され、外部入力やリソース待ちの間に長時間一時停止し得るワークフローにとって不可欠です。
+
+ワークフローを一時停止する一般的なユースケースには次のようなものがあります:
+
+- 人による承認や入力を待つ
+- 外部 API リソースが利用可能になるまで待機する
+- 後続ステップに必要な追加データを収集する
+- コストの高い処理をレート制限（スロットリング）する
+- 外部トリガーによるイベント駆動型プロセスを扱う
+
+> 一時停止と再開が初めての方へ: 公式動画チュートリアルをご覧ください
+>
+> - [Suspend & Resume で Human-in-the-Loop を極める](https://youtu.be/aORuNG8Tq_k) - ワークフローを一時停止し、ユーザー入力を受け付ける方法を解説
+> - [React でマルチターンのチャットインターフェースを構築](https://youtu.be/UMVm8YZwlxc) - React のチャットインターフェースで人が関与するマルチターン対話を実装
+
+<div id="workflow-status-types">
+  ## ワークフローのステータスタイプ
+</div>
+
+ワークフローを実行すると、`status` は次のいずれかになります:
+
+- `running` - ワークフローは現在実行中
+- `suspended` - ワークフローは一時停止中
+- `success` - ワークフローは完了
+- `failed` - ワークフローは失敗
+
+<div id="suspending-a-workflow-with-suspend">
+  ## `suspend()` を使ってワークフローを一時停止する
+</div>
+
+特定のステップでユーザー入力が得られるまで実行を一時停止するには、`⁠suspend` 関数でワークフローを一時的に停止し、必要なデータが提供されたときにのみ再開されるようにします。
+
+![suspend() を使ってワークフローを一時停止する](/img/workflows/workflows-suspend-resume-suspend.jpg)
+
+```typescript {16} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  id: "step-1",
+  inputSchema: z.object({
+    input: z.string(),
+  }),
+  outputSchema: z.object({
+    output: z.string(),
+  }),
+  resumeSchema: z.object({
+    city: z.string(),
+  }),
+  execute: async ({ resumeData, suspend }) => {
+    const { city } = resumeData ?? {};
+
+    if (!city) {
+      return await suspend({});
+    }
+
+    return { output: "" };
+  },
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .commit();
+```
+
+> 詳細は、[ワークフローの一時停止と再開の例](/examples/workflows_legacy/suspend-and-resume)をご覧ください。
+
+
+<div id="identifying-suspended-steps">
+  ### 一時停止されたステップの特定
+</div>
+
+一時停止されたワークフローを再開するには、結果の `suspended` 配列を確認し、どのステップが入力を必要としているかを特定します。
+
+```typescript {15} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+
+const result = await run.start({
+  inputData: {
+    city: "London",
+  },
+});
+
+console.log(JSON.stringify(result, null, 2));
+
+if (result.status === "suspended") {
+  const resumedResult = await run.resume({
+    step: result.suspended[0],
+    resumeData: {
+      city: "Berlin",
+    },
+  });
+}
+```
+
+この場合、ロジックは `suspended` 配列に列挙された最初のステップから再開します。`step` はその `id` で指定することもでき、たとえば「step-1」のように記述します。
+
+```json
+{
+  "status": "suspended",
+  "steps": {
+    // ...
+    "step-1": {
+      // ...
+      "status": "suspended"
+    }
+  },
+  "suspended": [["step-1"]]
+}
+```
+
+> 詳細は[Workflow Output](./overview#workflow-output)をご覧ください。
+
+
+<div id="providing-user-feedback-with-suspend">
+  ## suspend を用いたユーザーフィードバックの提供
+</div>
+
+ワークフローがサスペンドされると、`suspendSchema` を通じてユーザーにフィードバックを表示できます。ワークフローが一時停止した理由を説明するために、`suspend` のペイロードに理由（reason）を含めてください。
+
+```typescript {13,23} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  id: "step-1",
+  inputSchema: z.object({
+    value: z.string(),
+  }),
+  resumeSchema: z.object({
+    confirm: z.boolean(),
+  }),
+  suspendSchema: z.object({
+    reason: z.string(),
+  }),
+  outputSchema: z.object({
+    value: z.string(),
+  }),
+  execute: async ({ resumeData, suspend }) => {
+    const { confirm } = resumeData ?? {};
+
+    if (!confirm) {
+      return await suspend({
+        reason: "続行するには確認が必要です",
+      });
+    }
+
+    return { value: "" };
+  },
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .commit();
+```
+
+この場合、提示された理由は、続行するにはユーザーが確認する必要があることを示しています。
+
+```json
+{
+  "step-1": {
+    // ...
+    "status": "suspended",
+    "suspendPayload": {
+      "reason": "続行するには確認が必要です"
+    }
+  }
+}
+```
+
+> 詳細は[Workflow Output](./overview#workflow-output)をご覧ください。
+
+
+<div id="resuming-a-workflow-with-resume">
+  ## `resume()` を使ってワークフローを再開する
+</div>
+
+ワークフローは `resume` を呼び出し、必要な `resumeData` を渡すことで再開できます。どのステップから再開するかを明示的に指定することもできますし、ちょうど 1 つのステップだけが保留になっている場合は `step` パラメータを省略すると、そのステップが自動的に再開されます。
+
+```typescript {16-18} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+
+const result = await run.start({
+  inputData: {
+    city: "London",
+  },
+});
+
+console.log(JSON.stringify(result, null, 2));
+
+if (result.status === "suspended") {
+  const resumedResult = await run.resume({
+    step: "step-1",
+    resumeData: {
+      city: "Berlin",
+    },
+  });
+
+  console.log(JSON.stringify(resumedResult, null, 2));
+}
+```
+
+中断中のステップが1つだけの場合は、`step` パラメータを省略できます。
+
+```typescript {5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const resumedResult = await run.resume({
+  resumeData: {
+    city: "Berlin",
+  },
+  // step パラメータは省略 - 中断された単一のステップを自動的に再開します
+});
+```
+
+`runtimeContext` は、`start` と `resume` の両方のコマンドに引数として渡せます。
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+import { RuntimeContext } from "@mastra/core/runtime-context";
+
+const runtimeContext = new RuntimeContext();
+
+const result = await run.start({
+  step: "step-1",
+  inputData: {
+    city: "London",
+  },
+  runtimeContext,
+});
+
+const resumedResult = await run.resume({
+  step: "step-1",
+  resumeData: {
+    city: "New York",
+  },
+  runtimeContext,
+});
+```
+
+> 詳細は [Runtime Context](/docs/server-db/runtime-context) をご覧ください。
+
+
+<div id="resuming-nested-workflows">
+  ### ネストされたワークフローの再開
+</div>
+
+一時停止中のネストされたワークフローを再開するには、`resume` 関数の `step` パラメーターにワークフロー インスタンスを渡します。
+
+```typescript {33-34} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const dowhileWorkflow = createWorkflow({
+  id: "dowhile-workflow",
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ value: z.number() }),
+})
+  .dountil(
+    createWorkflow({
+      id: "simple-resume-workflow",
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+      steps: [incrementStep, resumeStep],
+    })
+      .then(incrementStep)
+      .then(resumeStep)
+      .commit(),
+    async ({ inputData }) => inputData.value >= 10,
+  )
+  .then(
+    createStep({
+      id: "final",
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+      execute: async ({ inputData }) => ({ value: inputData.value }),
+    }),
+  )
+  .commit();
+
+const run = await dowhileWorkflow.createRunAsync();
+const result = await run.start({ inputData: { value: 0 } });
+
+if (result.status === "suspended") {
+  const resumedResult = await run.resume({
+    resumeData: { value: 2 },
+    step: ["simple-resume-workflow", "resume"],
+  });
+
+  console.log(JSON.stringify(resumedResult, null, 2));
+}
+```
+
+
+<div id="sleep-events">
+  ## スリープとイベント
+</div>
+
+Workflows は、一定時間の遅延や外部イベントを待つために実行を一時停止することもできます。これらのメソッドはワークフローのステータスを `suspended` ではなく `waiting` に設定し、ポーリング、遅延リトライ、イベント駆動の処理に有用です。
+
+**利用可能なメソッド:**
+
+- [`.sleep()`](/reference/workflows/workflow-methods/sleep): 指定したミリ秒数だけ一時停止する
+- [`.sleepUntil()`](/reference/workflows/workflow-methods/sleepUntil): 特定の日付まで一時停止する
+- [`.waitForEvent()`](/reference/workflows/workflow-methods/waitForEvent): 外部イベントを受信するまで一時停止する
+- [`.sendEvent()`](/reference/workflows/workflow-methods/sendEvent): 待機中のワークフローを再開するイベントを送信する

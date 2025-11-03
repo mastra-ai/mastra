@@ -1,0 +1,85 @@
+---
+title: "リファレンス: Agent.getInstructions() | Agents | Mastra ドキュメント"
+description: "Mastra のエージェントにおける `Agent.getInstructions()` メソッドのドキュメント。エージェントの動作を指示するインストラクションを取得します。"
+---
+
+<div id="agentgetinstructions">
+  # Agent.getInstructions()
+</div>
+
+`.getInstructions()` メソッドは、エージェントに設定された指示を取得し、それが関数の場合は評価して解決します。これらの指示はエージェントの動作を導き、その能力と制約を定義します。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+await agent.getInstructions();
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ runtimeContext?: RuntimeContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "ランタイムコンテキストを含むオプションの設定オブジェクト。",
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "instructions",
+      type: "SystemMessage | Promise<SystemMessage>",
+      description:
+        "エージェントに設定された指示。SystemMessage は次のいずれかになります: string | string[] | CoreSystemMessage | CoreSystemMessage[] | SystemModelMessage | SystemModelMessage[]。指示は直接返されるか、または指示に解決される Promise として返されます。",
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 拡張的な使用例
+</div>
+
+```typescript copy
+await agent.getInstructions({
+  runtimeContext: new RuntimeContext(),
+});
+```
+
+
+<div id="options-parameters">
+  ### オプションパラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      defaultValue: "undefined",
+      description:
+        "依存性注入やコンテキスト情報のためのランタイムコンテキスト。",
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連情報
+</div>
+
+- [エージェントの概要](/docs/agents/overview)
+- [ランタイムコンテキスト](/docs/server-db/runtime-context)

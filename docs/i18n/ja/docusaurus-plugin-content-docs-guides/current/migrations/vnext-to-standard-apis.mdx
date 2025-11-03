@@ -1,0 +1,398 @@
+---
+title: "移行：VNext から標準 API へ | 移行ガイド"
+description: "Mastra の VNext メソッドから新しい標準エージェント API への移行方法を解説します。"
+---
+
+<div id="overview">
+  ## 概要
+</div>
+
+`@mastra/core` の `v0.20.0` 以降、以下の変更が適用されます。
+
+<div id="legacy-apis-ai-sdk-v4">
+  ## レガシー API（AI SDK v4）
+</div>
+
+元のメソッドは名称が変更されましたが、**AI SDK v4** および `v1` モデルとの後方互換性は維持されています。
+
+- `.stream()` → `.streamLegacy()`
+- `.generate()` → `.generateLegacy()`
+
+<div id="standard-apis-ai-sdk-v5">
+  ## 標準 API（AI SDK v5）
+</div>
+
+これらは現在の API で、**AI SDK v5** および `v2` モデルと完全互換です。
+
+- `.streamVNext()` → `.stream()`
+- `.generateVNext()` → `.generate()`
+
+<div id="migration-paths">
+  ## 移行パス
+</div>
+
+すでに `.streamVNext()` と `.generateVNext()` を使用している場合は、検索と置換でそれぞれ `.stream()` と `.generate()` に変更してください。
+
+旧来の `.stream()` と `.generate()` を使用している場合は、アップグレードするかどうかを検討してください。アップグレードしない場合は、検索と置換で `.streamLegacy()` と `.generateLegacy()` に変更してください。
+
+ニーズに合った移行パスを選択してください:
+
+<div id="keep-using-ai-sdk-v4-models">
+  ### AI SDK v4 モデルを引き続き使用する
+</div>
+
+- すべての `.stream()` および `.generate()` の呼び出しを、それぞれ `.streamLegacy()` および `.generateLegacy()` にリネームしてください。
+
+> それ以外の変更は必要ありません。
+
+<div id="keep-using-ai-sdk-v5-models">
+  ### AI SDK v5 のモデルを引き続き使用する
+</div>
+
+- すべての `.streamVNext()` と `.generateVNext()` の呼び出しを、それぞれ `.stream()` と `.generate()` にリネームしてください。
+
+> それ以外の変更は必要ありません。
+
+<div id="upgrade-from-ai-sdk-v4-to-v5">
+  ### AI SDK v4 から v5 へのアップグレード
+</div>
+
+- すべてのモデルプロバイダー用パッケージをメジャーバージョンに上げてください。
+
+> これにより、すべてが v5 のモデルになります。以下のガイドで主な違いを確認し、それに合わせてコードを更新してください。
+
+<div id="key-differences">
+  ## 主要な相違点
+</div>
+
+更新された `.stream()` と `.generate()` メソッドは、従来のメソッドに比べ、動作、互換性、戻り値の型、利用可能なオプションが異なります。本セクションでは、移行にあたって理解しておくべき最も重要な変更点を取り上げます。
+
+<div id="model-version-support">
+  ### モデルバージョンのサポート
+</div>
+
+**レガシー API**
+
+- `.generateLegacy()`
+- `.streamLegacy()`
+
+**AI SDK v4** のモデル（`specificationVersion: 'v1'`）のみをサポートします
+
+**標準 API**
+
+- `.generate()`
+- `.stream()`
+
+**AI SDK v5** のモデル（`specificationVersion: 'v2'`）のみをサポートします
+
+> 実行時に明確なエラーメッセージとともに強制されます。
+
+<div id="return-types">
+  ### 戻り値の型
+</div>
+
+**レガシー API**
+
+- `.generateLegacy()`
+  戻り値: `GenerateTextResult` または `GenerateObjectResult`
+
+- `.streamLegacy()`
+  戻り値: `StreamTextResult` または `StreamObjectResult`
+
+詳細は次の API リファレンスをご覧ください:
+
+- [Agent.generateLegacy()](/reference/agents/generateLegacy)
+- [Agent.streamLegacy()](/reference/streaming/agents/streamLegacy)
+
+**標準 API**
+
+- `.generate()`
+  - `format: 'mastra'`（デフォルト）: `MastraModelOutput.getFullOutput()` を返します
+  - `format: 'aisdk'`: `AISDKV5OutputStream.getFullOutput()` を返します
+  - 内部的に `.stream()` を呼び出し、`.getFullOutput()` の完了を待機します
+
+- `.stream()`
+  - `format: 'mastra'`（デフォルト）: `MastraModelOutput<OUTPUT>` を返します
+  - `format: 'aisdk'`: `AISDKV5OutputStream<OUTPUT>` を返します
+
+詳細は次の API リファレンスをご覧ください:
+
+- [Agent.generate()](/reference/agents/generate)
+- [Agent.stream()](/reference/streaming/agents/stream)
+
+<div id="format-control">
+  ### フォーマット制御
+</div>
+
+**レガシー API**
+
+`format` オプションなし: 常に AI SDK v4 の型を返す
+
+```typescript showLineNumbers copy
+// Mastra ネイティブ形式（デフォルト）
+const result = await agent.stream(messages);
+```
+
+**標準API**
+
+出力形式を選択するには `format` オプションを使用します:
+
+* `'mastra'`（デフォルト）
+* `'aisdk'`（AI SDK v5 互換）
+
+```typescript showLineNumbers copy
+// AI SDK v5 互換性
+const result = await agent.stream(messages, {
+  format: "aisdk",
+});
+```
+
+
+<div id="new-options-in-standard-apis">
+  ### 標準APIの新しいオプション
+</div>
+
+次のオプションは標準の `.stream()` と `generate()` で利用可能ですが、レガシー版では利用できません。
+
+- `format` - 出力形式を 'mastra' または 'aisdk' から選択:
+
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    format: "aisdk", // または 'mastra'（デフォルト）
+  });
+  ```
+
+- `system` - カスタムのシステムメッセージ（instructions とは別）。
+
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    system: "You are a helpful assistant",
+  });
+  ```
+
+- `structuredOutput` - モデルの上書きやカスタムオプションに対応した拡張構造化出力。
+  - `jsonPromptInjection` - モデルに `response_format` を渡す既定の挙動を上書きします。プロンプトにコンテキストを注入して、モデルが構造化出力を返すよう促します。
+  - `model` - モデルを指定すると、メインエージェントの応答を構造化するサブエージェントを作成します。メインエージェントはツールを呼び出してテキストを返し、サブエージェントは提供されたスキーマに準拠するオブジェクトを返します。これは `experimental_output` の代替です。
+  - `errorStrategy` - 出力がスキーマに一致しない場合の挙動:
+    - 'warn' - 警告をログに記録
+    - 'error' - エラーをスロー
+    - 'fallback' - 指定したフォールバック値を返す
+
+    ```typescript showLineNumbers copy
+    const result = await agent.generate(messages, {
+      structuredOutput: {
+        schema: z.object({
+          name: z.string(),
+          age: z.number(),
+        }),
+        model: "openai/gpt-4o-mini", // 構造化用のモデル上書き（任意）
+        errorStrategy: "fallback",
+        fallbackValue: { name: "unknown", age: 0 },
+        instructions: "Extract user information", // 既定の構造化指示を上書き
+      },
+    });
+    ```
+
+- `stopWhen` - 柔軟な停止条件（ステップ数、トークン上限など）。
+
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    stopWhen: ({ steps, totalTokens }) => steps >= 5 || totalTokens >= 10000,
+  });
+  ```
+
+- `providerOptions` - プロバイダー固有のオプション（例: OpenAI 固有の設定）
+
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    providerOptions: {
+      openai: {
+        store: true,
+        metadata: { userId: "123" },
+      },
+    },
+  });
+  ```
+
+- `onChunk` - ストリーミングの各チャンクに対するコールバック。
+
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    onChunk: (chunk) => {
+      console.log("Received chunk:", chunk);
+    },
+  });
+  ```
+
+- `onError` - エラー時のコールバック。
+
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    onError: (error) => {
+      console.error("Stream error:", error);
+    },
+  });
+  ```
+
+- `onAbort` - 中断時のコールバック。
+
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    onAbort: () => {
+      console.log("Stream aborted");
+    },
+  });
+  ```
+
+- `activeTools` - この実行で有効化するツールを指定。
+
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    activeTools: ["search", "calculator"], // これらのツールのみ利用可能
+  });
+  ```
+
+- `abortSignal` - キャンセル用の AbortSignal。
+
+  ```typescript showLineNumbers copy
+  const controller = new AbortController();
+  const result = await agent.stream(messages, {
+    abortSignal: controller.signal,
+  });
+
+  // 後で: controller.abort();
+  ```
+
+- `prepareStep` - マルチステップ実行の各ステップ前に呼ばれるコールバック。
+
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    prepareStep: ({ step, state }) => {
+      console.log("About to execute step:", step);
+      return {
+        /* modified state */
+      };
+    },
+  });
+  ```
+
+- `requireToolApproval` - すべてのツール呼び出しに承認を要求。
+
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    requireToolApproval: true,
+  });
+  ```
+
+<div id="legacy-options-that-moved">
+  ### 移動されたレガシーオプション
+</div>
+
+- `temperature` とその他の `modelSettings`
+
+  `modelSettings` に統合されました
+
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    modelSettings: {
+      temperature: 0.7,
+      maxTokens: 1000,
+      topP: 0.9,
+    },
+  });
+  ```
+
+- `resourceId` と `threadId`
+
+  memory オブジェクトに移動しました
+
+  ```typescript showLineNumbers copy
+  const result = await agent.stream(messages, {
+    memory: {
+      resource: "user-123",
+      thread: "thread-456",
+    },
+  });
+  ```
+
+<div id="deprecated-or-removed-options">
+  ### 非推奨または削除されたオプション
+</div>
+
+- `experimental_output`
+
+  ツール呼び出しとオブジェクトの返却を可能にするため、代わりに `structuredOutput` を使用してください。
+
+  ```typescript showLineNumbers copy
+  const result = await agent.generate(messages, {
+    structuredOutput: {
+      schema: z.object({
+        summary: z.string(),
+      }),
+      model: "openai/gpt-4o",
+    },
+  });
+  ```
+
+- `output`
+
+  `output` プロパティは `structuredOutput` に置き換えられました。同等の結果を得るには、`model` を省略し、`structuredOutput.schema` のみを渡してください。モデルが `response_format` をネイティブにサポートしていない場合は、必要に応じて `jsonPromptInjection: true` を追加してください。
+
+  ```typescript showLineNumbers copy
+  const result = await agent.generate(messages, {
+    structuredOutput: {
+      schema: {
+        z.object({
+          name: z.string()
+        })
+      }
+    },
+  });
+  ```
+
+- `memoryOptions`
+
+  代わりに `memory` を使用してください。
+
+  ```typescript showLineNumbers copy
+  const result = await agent.generate(messages, {
+    memory: {
+      // ...
+    },
+  });
+  ```
+
+<div id="type-changes">
+  ### 型の変更
+</div>
+
+**レガシー API**
+
+- `CoreMessage[]`
+
+詳細は次の API リファレンスをご覧ください：
+
+- [Agent.generateLegacy()](/reference/agents/generateLegacy)
+- [Agent.streamLegacy()](/reference/streaming/agents/streamLegacy)
+
+**標準 API**
+
+- `ModelMessage[]`
+
+  `toolChoice` は AI SDK v5 の `ToolChoice` 型を使用します。
+
+  ```typescript showLineNumbers copy
+  type ToolChoice<TOOLS extends Record<string, unknown>> =
+    | "auto"
+    | "none"
+    | "required"
+    | {
+        type: "tool";
+        toolName: Extract<keyof TOOLS, string>;
+      };
+  ```
+
+詳細は次の API リファレンスをご覧ください：
+
+- [Agent.generate()](/reference/agents/generate)
+- [Agent.stream()](/reference/streaming/agents/stream)
