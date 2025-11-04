@@ -32,9 +32,11 @@ beforeEach(async () => {
   const dbPath = join(await mkdtemp(join(tmpdir(), `memory-processor-test-`)), 'test.db');
 
   storage = new LibSQLStore({
+    id: 'processor-test-storage',
     url: `file:${dbPath}`,
   });
   vector = new LibSQLVector({
+    id: 'processor-test-vector',
     connectionUrl: `file:${dbPath}`,
   });
 

@@ -99,9 +99,11 @@ describe('Working Memory Tests', () => {
       console.log('dbPath', dbPath);
 
       storage = new LibSQLStore({
+        id: 'working-memory-template-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
+        id: 'working-memory-template-vector',
         connectionUrl: `file:${dbPath}`,
       });
 
@@ -213,9 +215,11 @@ describe('Working Memory Tests', () => {
       // Create memory instance with working memory disabled
       const disabledMemory = new Memory({
         storage: new LibSQLStore({
+          id: 'disabled-working-memory-storage',
           url: `file:${dbPath}`,
         }),
         vector: new LibSQLVector({
+          id: 'disabled-working-memory-vector',
           connectionUrl: `file:${dbPath}`,
         }),
         embedder: openai.embedding('text-embedding-3-small'),
@@ -502,6 +506,7 @@ describe('Working Memory Tests', () => {
     beforeEach(async () => {
       const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
       storage = new LibSQLStore({
+        id: 'agent-working-memory-storage',
         url: `file:${dbPath}`,
       });
 
@@ -573,9 +578,11 @@ describe('Working Memory Tests', () => {
       beforeEach(async () => {
         const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
         storage = new LibSQLStore({
+          id: 'schema-working-memory-storage',
           url: `file:${dbPath}`,
         });
         vector = new LibSQLVector({
+          id: 'schema-working-memory-vector',
           connectionUrl: `file:${dbPath}`,
         });
 
@@ -733,9 +740,11 @@ describe('Working Memory Tests', () => {
     beforeEach(async () => {
       const dbPath = join(await mkdtemp(join(tmpdir(), `memory-jsonschema-test-${Date.now()}`)), 'test.db');
       storage = new LibSQLStore({
+        id: 'jsonschema7-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
+        id: 'jsonschema7-vector',
         connectionUrl: `file:${dbPath}`,
       });
 
@@ -937,9 +946,11 @@ describe('Working Memory Tests', () => {
       console.log('dbPath', dbPath);
 
       storage = new LibSQLStore({
+        id: 'resource-scoped-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
+        id: 'resource-scoped-vector',
         connectionUrl: `file:${dbPath}`,
       });
 
@@ -1300,9 +1311,11 @@ describe('Working Memory Tests', () => {
       const dbPath = join(await mkdtemp(join(tmpdir(), `memory-thread-working-test-`)), 'test.db');
 
       storage = new LibSQLStore({
+        id: 'thread-scoped-metadata-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
+        id: 'thread-scoped-metadata-vector',
         connectionUrl: `file:${dbPath}`,
       });
 
@@ -1439,9 +1452,11 @@ describe('Working Memory Tests', () => {
       const dbPath = join(await mkdtemp(join(tmpdir(), `memory-network-test-${Date.now()}`)), 'test.db');
 
       storage = new LibSQLStore({
+        id: 'agent-network-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
+        id: 'agent-network-vector',
         connectionUrl: `file:${dbPath}`,
       });
     });

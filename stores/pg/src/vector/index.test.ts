@@ -14,13 +14,13 @@ describe('PgVector', () => {
 
   beforeAll(async () => {
     // Initialize PgVector
-    vectorDB = new PgVector({ connectionString });
+    vectorDB = new PgVector({ connectionString, id: 'pg-vector-test' });
   });
 
   describe('Public Fields Access', () => {
     let testDB: PgVector;
     beforeAll(async () => {
-      testDB = new PgVector({ connectionString });
+      testDB = new PgVector({ connectionString, id: 'pg-vector-public-fields-test' });
     });
     afterAll(async () => {
       try {
@@ -578,7 +578,7 @@ describe('PgVector', () => {
         // and ignore external tables with vector columns
 
         // Create a new PgVector instance to trigger initialization
-        const newVectorDB = new PgVector({ connectionString });
+        const newVectorDB = new PgVector({ connectionString, id: 'pg-vector-external-tables-test' });
 
         // Give initialization time to complete
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -2611,7 +2611,7 @@ describe('PgVector', () => {
 
     beforeAll(async () => {
       // Initialize default vectorDB first
-      vectorDB = new PgVector({ connectionString });
+      vectorDB = new PgVector({ connectionString, id: 'pg-vector-custom-schema-default' });
 
       // Create schema using the default vectorDB connection
       const client = await vectorDB['pool'].connect();
@@ -2642,6 +2642,7 @@ describe('PgVector', () => {
       customSchemaVectorDB = new PgVector({
         connectionString,
         schemaName: customSchema,
+        id: 'pg-vector-custom-schema-test',
       });
     });
 
@@ -2896,6 +2897,7 @@ describe('PgVector', () => {
         const localSchemaVectorDB = new PgVector({
           connectionString,
           schemaName: customSchema,
+          id: 'pg-vector-extension-same-schema-test',
         });
 
         try {
@@ -2940,6 +2942,7 @@ describe('PgVector', () => {
         const localSchemaVectorDB = new PgVector({
           connectionString,
           schemaName: customSchema,
+          id: 'pg-vector-extension-different-schema-test',
         });
 
         try {
@@ -3158,6 +3161,7 @@ describe('PgVector', () => {
         const restrictedDB = new PgVector({
           connectionString: getConnectionString(schemaRestrictedUser),
           schemaName: testSchema,
+          id: 'pg-vector-schema-restricted-test',
         });
 
         // Test schema creation directly by accessing private method
@@ -3189,6 +3193,7 @@ describe('PgVector', () => {
         const restrictedDB = new PgVector({
           connectionString: getConnectionString(schemaRestrictedUser),
           schemaName: testSchema,
+          id: 'pg-vector-schema-restricted-create-index-test',
         });
 
         // This should fail with the schema creation error
@@ -3270,6 +3275,7 @@ describe('PgVector', () => {
 
         const restrictedDB = new PgVector({
           connectionString: getConnectionString(vectorRestrictedUser),
+          id: 'pg-vector-no-superuser-test',
         });
 
         try {
@@ -3294,6 +3300,7 @@ describe('PgVector', () => {
       it('should continue if vector extension is already installed', async () => {
         const restrictedDB = new PgVector({
           connectionString: getConnectionString(vectorRestrictedUser),
+          id: 'pg-vector-extension-already-installed-test',
         });
 
         try {
@@ -3328,7 +3335,7 @@ describe('Validation', () => {
       );
     });
     it('does not throw on non-empty connection string', () => {
-      expect(() => new PgVector({ connectionString })).not.toThrow();
+      expect(() => new PgVector({ connectionString, id: 'pg-vector-validation-test' })).not.toThrow();
     });
   });
 
@@ -3370,7 +3377,7 @@ describe('Validation', () => {
     });
 
     it('does not throw on valid host config', () => {
-      expect(() => new PgVector(validConfig)).not.toThrow();
+      expect(() => new PgVector({ ...validConfig, id: 'pg-vector-host-config-validation-test' })).not.toThrow();
     });
   });
 
@@ -3381,6 +3388,7 @@ describe('Validation', () => {
         database: 'test-db',
         ssl: { rejectUnauthorized: false },
         stream: () => ({}),
+        id: 'pg-vector-cloud-sql-connector-test',
       };
       expect(() => new PgVector(connectorConfig as any)).not.toThrow();
     });
@@ -3393,6 +3401,7 @@ describe('Validation', () => {
         port: 5432,
         password: () => Promise.resolve('dynamic-token'),
         ssl: { rejectUnauthorized: false },
+        id: 'pg-vector-iam-auth-test',
       };
       expect(() => new PgVector(iamConfig as any)).not.toThrow();
     });
@@ -3404,6 +3413,7 @@ describe('Validation', () => {
         application_name: 'test-app',
         ssl: { rejectUnauthorized: false },
         stream: () => ({}),
+        id: 'pg-vector-client-config-test',
       };
       expect(() => new PgVector(clientConfig as any)).not.toThrow();
     });
@@ -3411,7 +3421,7 @@ describe('Validation', () => {
 
   describe('SSL Configuration', () => {
     it('accepts connectionString with ssl: true', () => {
-      expect(() => new PgVector({ connectionString, ssl: true })).not.toThrow();
+      expect(() => new PgVector({ connectionString, ssl: true, id: 'pg-vector-ssl-true-test' })).not.toThrow();
     });
 
     it('accepts connectionString with ssl object', () => {
@@ -3420,6 +3430,7 @@ describe('Validation', () => {
           new PgVector({
             connectionString,
             ssl: { rejectUnauthorized: false },
+            id: 'pg-vector-ssl-object-test',
           }),
       ).not.toThrow();
     });
@@ -3432,6 +3443,7 @@ describe('Validation', () => {
         user: 'postgres',
         password: 'postgres',
         ssl: true,
+        id: 'pg-vector-host-ssl-true-test',
       };
       expect(() => new PgVector(config)).not.toThrow();
     });
@@ -3444,6 +3456,7 @@ describe('Validation', () => {
         user: 'postgres',
         password: 'postgres',
         ssl: { rejectUnauthorized: false },
+        id: 'pg-vector-host-ssl-object-test',
       };
       expect(() => new PgVector(config)).not.toThrow();
     });
@@ -3458,6 +3471,7 @@ describe('Validation', () => {
           idleTimeoutMillis: 60000,
           connectionTimeoutMillis: 5000,
         },
+        id: 'pg-vector-pool-options-connection-string-test',
       };
       expect(() => new PgVector(config)).not.toThrow();
     });
@@ -3473,6 +3487,7 @@ describe('Validation', () => {
           max: 30,
           idleTimeoutMillis: 60000,
         },
+        id: 'pg-vector-pool-options-host-config-test',
       };
       expect(() => new PgVector(config)).not.toThrow();
     });
@@ -3482,6 +3497,7 @@ describe('Validation', () => {
         connectionString,
         max: 30,
         idleTimeoutMillis: 60000,
+        id: 'pg-vector-pool-options-direct-test',
       };
       expect(() => new PgVector(config)).not.toThrow();
     });
@@ -3496,6 +3512,7 @@ describe('Validation', () => {
           idleTimeoutMillis: 10000,
           connectionTimeoutMillis: 1000,
         },
+        id: 'pg-vector-pool-custom-values-test',
       });
 
       expect(db['pool'].options.max).toBe(5);
@@ -3509,6 +3526,7 @@ describe('Validation', () => {
         pgPoolOptions: {
           ssl: false,
         },
+        id: 'pg-vector-pool-no-defaults-test',
       });
 
       expect(db['pool'].options.ssl).toBe(false);
@@ -3519,6 +3537,7 @@ describe('Validation', () => {
         pgPoolOptions: {
           ssl: false,
         },
+        id: 'pg-vector-pool-keep-defaults-test',
       });
 
       expect(db['pool'].options.max).toBe(20);
@@ -3530,7 +3549,14 @@ describe('Validation', () => {
 
   describe('Schema Configuration', () => {
     it('accepts schemaName with connectionString', () => {
-      expect(() => new PgVector({ connectionString, schemaName: 'custom_schema' })).not.toThrow();
+      expect(
+        () =>
+          new PgVector({
+            connectionString,
+            schemaName: 'custom_schema',
+            id: 'pg-vector-schema-connection-string-test',
+          }),
+      ).not.toThrow();
     });
 
     it('accepts schemaName with host config', () => {
@@ -3541,6 +3567,7 @@ describe('Validation', () => {
         user: 'postgres',
         password: 'postgres',
         schemaName: 'custom_schema',
+        id: 'pg-vector-schema-host-config-test',
       };
       expect(() => new PgVector(config)).not.toThrow();
     });
@@ -3563,6 +3590,7 @@ describe('Validation', () => {
         schemaName: customSchema,
         max: 10,
         idleTimeoutMillis: 15000,
+        id: 'pg-vector-config-connection-string-test',
       };
       const db = new PgVector(config);
       expect(db).toBeInstanceOf(PgVector);
@@ -3578,6 +3606,7 @@ describe('Validation', () => {
         schemaName: customSchema,
         max: 15,
         idleTimeoutMillis: 20000,
+        id: 'pg-vector-config-individual-params-test',
       };
       const db = new PgVector(config);
       expect(db).toBeInstanceOf(PgVector);
@@ -3592,6 +3621,7 @@ describe('Validation', () => {
         password: 'postgres',
         ssl: true,
         schemaName: customSchema,
+        id: 'pg-vector-config-ssl-test',
       };
       const db = new PgVector(config);
       expect(db).toBeInstanceOf(PgVector);
@@ -3605,6 +3635,7 @@ describe('Validation', () => {
           max: 5,
           idleTimeoutMillis: 10000,
         },
+        id: 'pg-vector-legacy-config-test',
       };
       const db = new PgVector(legacyConfig);
       expect(db).toBeInstanceOf(PgVector);
@@ -3616,6 +3647,7 @@ describe('Validation', () => {
         schemaName: customSchema,
         max: 5,
         idleTimeoutMillis: 10000,
+        id: 'pg-vector-config-db-ops-test',
       };
       const db = new PgVector(config);
 

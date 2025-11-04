@@ -18,6 +18,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     dbPath = join(await mkdtemp(join(tmpdir(), 'output-processor-test-')), 'test.db');
 
     storage = new LibSQLStore({
+      id: 'output-processor-test-storage',
       url: `file:${dbPath}`,
     });
 
