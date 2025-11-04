@@ -2318,7 +2318,6 @@ export class MessageList {
     // Process parts to build V2 content
     const reasoningParts = parts.filter(p => p.type === 'reasoning');
     const fileParts = parts.filter(p => p.type === 'file');
-    const textParts = parts.filter(p => p.type === 'text');
 
     // Tool invocations are now stored directly in parts array
     // No need to build separate toolInvocations array

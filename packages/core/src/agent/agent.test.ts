@@ -4387,11 +4387,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(assistantMsg).toBeDefined();
         assertNoDuplicateParts(assistantMsg!.content.parts);
 
-        const toolResultIds = new Set(
-          assistantMsg!.content.parts
-            .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
-            .map(p => (p as ToolInvocationUIPart).toolInvocation.toolCallId),
-        );
         // Tool invocations are now stored in parts array
         const toolParts = assistantMsg!.content.parts.filter(p => p.type === 'tool-invocation');
         expect(toolParts.length).toBeGreaterThan(0);
@@ -4465,11 +4460,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(assistantMsg).toBeDefined();
         assertNoDuplicateParts(assistantMsg!.content.parts);
 
-        const toolResultIds = new Set(
-          assistantMsg!.content.parts
-            .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
-            .map(p => (p as ToolInvocationUIPart).toolInvocation.toolCallId),
-        );
         // Tool invocations are now stored in parts array
         const toolParts = assistantMsg!.content.parts.filter(p => p.type === 'tool-invocation');
         expect(toolParts.length).toBeGreaterThan(0);

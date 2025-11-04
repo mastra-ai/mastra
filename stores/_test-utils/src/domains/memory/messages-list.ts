@@ -178,9 +178,15 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       // Default pagination applies (perPage: 40), so we get all 5 messages from thread
       // No duplicates since Message 1, 2, 3 are already in the paginated set
       expect(result.messages).toHaveLength(5);
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 1');
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 2');
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 3');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 1');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 2');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 3');
     });
 
     it('should include specific messages with next context', async () => {
@@ -197,9 +203,15 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       // Default pagination applies (perPage: 40), so we get all 5 messages from thread
       // No duplicates since Message 2, 3, 4 are already in the paginated set
       expect(result.messages).toHaveLength(5);
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 2');
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 3');
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 4');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 2');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 3');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 4');
     });
 
     it('should include specific messages with both previous and next context', async () => {
@@ -217,9 +229,15 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       // Default pagination applies (perPage: 40), so we get all 5 messages from thread
       // No duplicates since Message 2, 3, 4 are already in the paginated set
       expect(result.messages).toHaveLength(5);
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 2');
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 3');
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 4');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 2');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 3');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 4');
     });
 
     it('should include multiple messages from different threads', async () => {
@@ -261,7 +279,9 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
       // Default pagination gets all 5 messages, include overlaps are deduplicated
       expect(result.messages).toHaveLength(5);
-      const contents = result.messages.map((m: any) => m.content.content);
+      const contents = result.messages.map(
+        (m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text,
+      );
       expect(contents).toContain('Message 2');
       expect(contents).toContain('Message 3');
       expect(contents).toContain('Message 4');
@@ -473,7 +493,9 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
         // Should get first 2 from pagination (Message 1, 2) + included Message 3 (Message 2 already in paginated set)
         expect(result.messages).toHaveLength(3);
-        expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 1', 'Message 2', 'Message 3']);
+        expect(
+          result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+        ).toEqual(['Message 1', 'Message 2', 'Message 3']);
       });
 
       it('should work with perPage and date range', async () => {
