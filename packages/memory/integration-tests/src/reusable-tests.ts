@@ -231,7 +231,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const weatherQuery = await memory.recall({
           threadId: thread.id,
           resourceId,
-          perPage: 0,
           vectorSearchString: "How's the temperature outside?",
           threadConfig: {
             lastMessages: 0,
@@ -248,7 +247,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const locationQuery = await memory.recall({
           threadId: thread.id,
           resourceId,
-          perPage: 0,
           vectorSearchString: 'Tell me about cities in France',
           threadConfig: {
             semanticRecall: {
@@ -268,7 +266,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const locationQuery2 = await memory.recall({
           threadId: thread.id,
           resourceId,
-          perPage: 0,
           vectorSearchString: 'Tell me about cities in France',
           threadConfig: {
             semanticRecall: {
@@ -288,7 +285,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const locationQuery3 = await memory.recall({
           threadId: thread.id,
           resourceId,
-          perPage: 0,
           vectorSearchString: 'Tell me about cities in France',
           threadConfig: {
             semanticRecall: {
@@ -322,7 +318,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const result = await memory.recall({
           threadId: thread.id,
           resourceId,
-          perPage: 0,
           vectorSearchString: 'topic X',
           threadConfig: {
             lastMessages: 0,
@@ -387,7 +382,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const resultProgramming = await memory.recall({
           threadId: thread.id,
           resourceId,
-          perPage: 0,
           vectorSearchString: 'JavaScript',
           threadConfig: {
             lastMessages: 0,
@@ -402,7 +396,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const resultWeather = await memory.recall({
           threadId: thread.id,
           resourceId,
-          perPage: 0,
           vectorSearchString: 'rainy',
           threadConfig: {
             lastMessages: 0,
@@ -430,7 +423,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const result = await memory.recall({
           threadId: thread.id,
           resourceId,
-          perPage: 0,
           vectorSearchString: 'world',
           threadConfig: { lastMessages: 0, semanticRecall: { messageRange: 0, topK: 1, scope: 'thread' } },
         });
@@ -455,7 +447,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const result = await memory.recall({
           threadId: thread.id,
           resourceId,
-          perPage: 0,
           vectorSearchString: 'assistant',
           threadConfig: { lastMessages: 0, semanticRecall: { messageRange: 0, topK: 1, scope: 'thread' } },
         });
@@ -492,7 +483,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const threadScopeResult = await memory.recall({
           threadId: thread1.id,
           resourceId, // resourceId is defined globally in this file
-          perPage: 0,
           vectorSearchString: searchQuery,
           threadConfig: {
             lastMessages: 0,
@@ -514,7 +504,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const resourceScopeResult = await memory.recall({
           threadId: thread1.id, // Still need a threadId, but scope overrides
           resourceId,
-          perPage: 0,
           vectorSearchString: searchQuery,
           threadConfig: {
             lastMessages: 0,
@@ -550,7 +539,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const defaultScopeResult = await memory.recall({
           threadId: thread1.id,
           resourceId,
-          perPage: 0,
           vectorSearchString: searchQuery,
           threadConfig: {
             lastMessages: 0,
