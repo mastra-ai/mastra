@@ -94,14 +94,14 @@ export const getMcpServerSseHandler = async (c: Context) => {
  */
 export const listMcpRegistryServersHandler = async (c: Context) => {
   const mastra = getMastra(c);
-  if (!mastra || typeof mastra.getMCPServers !== 'function') {
-    c.get('logger')?.error('Mastra instance or getMCPServers method not available in listMcpRegistryServersHandler');
-    return c.json({ error: 'Mastra instance or getMCPServers method not available' }, 500);
+  if (!mastra || typeof mastra.listMCPServers !== 'function') {
+    c.get('logger')?.error('Mastra instance or listMCPServers method not available in listMcpRegistryServersHandler');
+    return c.json({ error: 'Mastra instance or listMCPServers method not available' }, 500);
   }
 
-  const mcpServersMap = mastra.getMCPServers();
+  const mcpServersMap = mastra.listMCPServers();
   if (!mcpServersMap) {
-    c.get('logger')?.warn('getMCPServers returned undefined or null in listMcpRegistryServersHandler');
+    c.get('logger')?.warn('listMCPServers returned undefined or null in listMcpRegistryServersHandler');
     return c.json({ servers: [], next: null, total_count: 0 });
   }
 

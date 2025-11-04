@@ -17,8 +17,11 @@ import type {
 
 export type MastraEmbeddingModel<T> = EmbeddingModelV1<T> | EmbeddingModelV2<T>;
 export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
-  constructor() {
+  id: string;
+
+  constructor({ id }: { id: string }) {
     super({ name: 'MastraVector', component: 'VECTOR' });
+    this.id = id;
   }
 
   get indexSeparator(): string {
