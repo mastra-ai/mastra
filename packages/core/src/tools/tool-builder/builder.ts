@@ -110,9 +110,17 @@ export class CoreToolBuilder extends MastraBase {
         id: tool.id as `${string}.${string}`,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
-        parameters: parameters.jsonSchema ? parameters : convertZodSchemaToAISDKSchema(parameters),
+        parameters:
+          typeof parameters === 'object' && parameters !== null && 'jsonSchema' in parameters
+            ? parameters
+            : convertZodSchemaToAISDKSchema(parameters),
         ...(outputSchema
-          ? { outputSchema: outputSchema.jsonSchema ? outputSchema : convertZodSchemaToAISDKSchema(outputSchema) }
+          ? {
+              outputSchema:
+                typeof outputSchema === 'object' && 'jsonSchema' in outputSchema
+                  ? outputSchema
+                  : convertZodSchemaToAISDKSchema(outputSchema),
+            }
           : {}),
         execute: this.originalTool.execute
           ? this.createExecute(
@@ -446,7 +454,7 @@ export class CoreToolBuilder extends MastraBase {
         compatLayers: schemaCompatLayers,
         mode: 'aiSdkSchema',
       });
-    } else {
+    } else if (originalSchema) {
       // No compatibility layer applies, use original schema
       processedZodSchema = originalSchema;
       processedSchema = applyCompatLayer({
@@ -454,6 +462,10 @@ export class CoreToolBuilder extends MastraBase {
         compatLayers: schemaCompatLayers,
         mode: 'aiSdkSchema',
       });
+    } else {
+      // No schema defined
+      processedZodSchema = undefined;
+      processedSchema = undefined;
     }
 
     let processedOutputSchema;
@@ -485,7 +497,7 @@ export class CoreToolBuilder extends MastraBase {
     return {
       ...definition,
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
-      parameters: processedSchema,
+      parameters: processedSchema ?? z.object({}),
       outputSchema: processedOutputSchema,
     } as unknown as CoreTool;
   }

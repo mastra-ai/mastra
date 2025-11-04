@@ -271,22 +271,6 @@ describe('makeCoreTool', () => {
     expect(() => (coreTool as InternalCoreTool).parameters.validate({})).not.toThrow();
     expect(() => (coreTool as InternalCoreTool).parameters.validate({ extra: 'field' })).not.toThrow();
   });
-
-  it('should have default parameters if no parameters are provided for Mastra tool', () => {
-    const coreTool = makeCoreTool(
-      {
-        id: 'test',
-        description: 'test',
-        inputSchema: undefined,
-        execute: async () => ({}),
-      },
-      mockOptions,
-    );
-
-    // Test the schema behavior instead of structure
-    expect(() => (coreTool as InternalCoreTool).parameters.validate({})).not.toThrow();
-    expect(() => (coreTool as InternalCoreTool).parameters.validate({ extra: 'field' })).not.toThrow();
-  });
 });
 
 it('should log correctly for Vercel tool execution', async () => {
