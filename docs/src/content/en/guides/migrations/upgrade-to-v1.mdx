@@ -374,6 +374,66 @@ export const accountBalance = createTool({
 - Removed the `@mastra/core/agent/input-processors` exports. They can found at `@mastra/core/processors` now.
 - `InputProcessor` type removed in favour of `Processor` which implements a `processInput` function.
 
+### Removed: `format` Parameter from `agent.stream()`
+
+**Breaking Changes:**
+
+The `format` parameter has been removed from `agent.stream()`. AI SDK stream transformations are now handled by the `@mastra/ai-sdk` package.
+
+**Why this change?**
+
+- **Better separation of concerns**: AI SDK-specific formatting logic is now in a dedicated package
+- **Improved tree-shaking**: Applications that don't use AI SDK don't bundle conversion code
+- **Clearer API**: Stream methods focus on generation, while formatting is handled explicitly
+- **Framework flexibility**: Makes it easier to support different UI frameworks without bloating the core
+
+**Migration:**
+
+If you were using `format: "aisdk"` for streaming, update your code to use `toAISdkStream` from `@mastra/ai-sdk`:
+
+```typescript
+// Before
+const stream = await agent.stream(messages, {
+  format: "aisdk", // ❌ No longer supported
+});
+
+// After
+import { toAISdkStream } from "@mastra/ai-sdk";
+
+const stream = await agent.stream(messages);
+const aiSdkStream = toAISdkStream(stream, { from: "agent" }); // ✅ Explicit conversion
+```
+
+**Working with AI SDK UI components:**
+
+The `@mastra/ai-sdk` package provides utilities for seamless integration with Vercel AI SDK. For streaming responses in API routes:
+
+```typescript
+import { toAISdkStream } from "@mastra/ai-sdk";
+import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const agent = mastra.getAgent("weatherAgent");
+  const stream = await agent.stream(messages);
+
+  const uiMessageStream = createUIMessageStream({
+    execute: async ({ writer }) => {
+      for await (const part of toAISdkStream(stream, { from: "agent" })!) {
+        writer.write(part);
+      }
+    },
+  });
+
+  return createUIMessageStreamResponse({ stream: uiMessageStream });
+}
+```
+
+**Note:** The `/api/agents/:agentId/stream/ui` HTTP endpoint has also been deprecated. Use the standard `/api/agents/:agentId/stream` endpoint with `@mastra/ai-sdk` transformations instead.
+
+Learn more in the [Using Vercel AI SDK documentation](/docs/frameworks/agentic-uis/ai-sdk).
+
+
 ### Changed: `RuntimeContext` renamed to `RequestContext`
 
 The `RuntimeContext` class has been renamed to `RequestContext`, and all parameter names have been updated from `runtimeContext` to `requestContext` across all APIs.
@@ -573,10 +633,6 @@ const messages = result.messages; // Always MastraDBMessage[]
 import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
 const uiMessages = toAISdkV5Messages(messages);
 ```
-
-### Deprecated: `format: "aisdk"`
-
-The `format: "aisdk"` option in `stream()`/`generate()` methods is deprecated. Use the `@mastra/ai-sdk` package instead. Learn more in the [Using Vercel AI SDK documentation](/docs/frameworks/agentic-uis/ai-sdk).
 
 ### Removed: MCP Classes
 
