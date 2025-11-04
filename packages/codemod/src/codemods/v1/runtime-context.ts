@@ -14,7 +14,7 @@ export default createTransformer((fileInfo, api, options, context) => {
   root.find(j.ImportDeclaration).forEach(importPath => {
     const node = importPath.node;
 
-    // Only process imports from @mastra/core/runtime-context
+    // Early return: Only process imports from @mastra/core/runtime-context
     if (node.source.value !== '@mastra/core/runtime-context') return;
 
     // Update the import path
@@ -23,124 +23,199 @@ export default createTransformer((fileInfo, api, options, context) => {
 
     // Update RuntimeContext to RequestContext in import specifiers
     node.specifiers?.forEach(specifier => {
-      if (specifier.type === 'ImportSpecifier') {
-        const imported = specifier.imported;
-        if (imported.type === 'Identifier' && imported.name === 'RuntimeContext') {
-          hasRuntimeContextImport = true;
-          imported.name = 'RequestContext';
-          context.messages.push(`Updated import: RuntimeContext → RequestContext from '@mastra/core/request-context'`);
-        }
+      if (specifier.type !== 'ImportSpecifier') return;
+
+      const imported = specifier.imported;
+      if (imported.type === 'Identifier' && imported.name === 'RuntimeContext') {
+        hasRuntimeContextImport = true;
+        imported.name = 'RequestContext';
+        context.messages.push(`Updated import: RuntimeContext → RequestContext from '@mastra/core/request-context'`);
       }
     });
   });
 
-  // 2. Only rename RuntimeContext type/class references if it was imported from Mastra
-  if (hasRuntimeContextImport) {
-    const runtimeContextCount = root.find(j.Identifier, { name: 'RuntimeContext' }).length;
-    if (runtimeContextCount > 0) {
-      root.find(j.Identifier, { name: 'RuntimeContext' }).forEach(path => {
-        path.node.name = 'RequestContext';
-      });
-      context.hasChanges = true;
-      context.messages.push(`Renamed ${runtimeContextCount} RuntimeContext type references to RequestContext`);
-    }
+  // Early return: Only proceed if RuntimeContext was imported from Mastra
+  if (!hasRuntimeContextImport) return;
 
-    // 3. Only rename runtimeContext variable/parameter identifiers if RuntimeContext was imported from Mastra
-    const runtimeContextVarCount = root.find(j.Identifier, { name: 'runtimeContext' }).length;
-    if (runtimeContextVarCount > 0) {
-      root.find(j.Identifier, { name: 'runtimeContext' }).forEach(path => {
-        path.node.name = 'requestContext';
-      });
-      context.hasChanges = true;
-      context.messages.push(
-        `Renamed ${runtimeContextVarCount} runtimeContext variable/parameter references to requestContext`,
-      );
-    }
+  // 2. Rename RuntimeContext type/class references
+  renameIdentifiers(j, root, context, 'RuntimeContext', 'RequestContext', 'type');
 
-    // 4. Rename string literal 'runtimeContext' to 'requestContext' in context.get() calls within Mastra config
-    let stringLiteralCount = 0;
+  // 3. Rename runtimeContext variable/parameter identifiers
+  renameIdentifiers(j, root, context, 'runtimeContext', 'requestContext', 'variable/parameter');
 
-    // Helper function to recursively search for handler properties and rename context.get() calls
-    function processNode(node: any, contextParamNames: Set<string>) {
-      if (!node || typeof node !== 'object') return;
+  // 4. Rename string literal 'runtimeContext' to 'requestContext' in Mastra middleware
+  renameMiddlewareStringLiterals(j, root, context);
+});
 
-      // If this is a handler property, extract the first parameter name
-      if ((node.type === 'Property' || node.type === 'ObjectProperty') && node.key?.name === 'handler') {
-        const handlerValue = node.value;
-        if (
-          (handlerValue.type === 'ArrowFunctionExpression' || handlerValue.type === 'FunctionExpression') &&
-          handlerValue.params &&
-          handlerValue.params.length > 0
-        ) {
-          const firstParam = handlerValue.params[0];
-          if (firstParam && firstParam.type === 'Identifier') {
-            contextParamNames.add(firstParam.name);
-          }
-        }
-      }
+/**
+ * Helper to rename all occurrences of an identifier
+ */
+function renameIdentifiers(j: any, root: any, context: any, oldName: string, newName: string, description: string) {
+  const identifiers = root.find(j.Identifier, { name: oldName });
+  const count = identifiers.length;
 
-      // If this is a call expression to context.get('runtimeContext')
-      if (node.type === 'CallExpression') {
-        const callee = node.callee;
-        if (
-          callee &&
-          callee.type === 'MemberExpression' &&
-          callee.object &&
-          callee.object.type === 'Identifier' &&
-          contextParamNames.has(callee.object.name) &&
-          callee.property &&
-          callee.property.type === 'Identifier' &&
-          callee.property.name === 'get'
-        ) {
-          const firstArg = node.arguments?.[0];
-          if (
-            firstArg &&
-            ((firstArg.type === 'StringLiteral' && firstArg.value === 'runtimeContext') ||
-              (firstArg.type === 'Literal' && firstArg.value === 'runtimeContext'))
-          ) {
-            firstArg.value = 'requestContext';
-            // Update the raw value if it exists
-            if (firstArg.extra?.raw) {
-              const quote = firstArg.extra.raw.charAt(0);
-              firstArg.extra.raw = `${quote}requestContext${quote}`;
-            }
-            stringLiteralCount++;
-            context.hasChanges = true;
-          }
-        }
-      }
+  if (count === 0) return;
 
-      // Recursively process all object properties
-      for (const key in node) {
-        if (node.hasOwnProperty(key) && key !== 'loc' && key !== 'comments') {
-          const value = node[key];
-          if (Array.isArray(value)) {
-            value.forEach(item => processNode(item, contextParamNames));
-          } else if (value && typeof value === 'object') {
-            processNode(value, contextParamNames);
-          }
-        }
-      }
-    }
+  identifiers.forEach((path: any) => {
+    path.node.name = newName;
+  });
 
-    // Find all new Mastra({ ... }) expressions
-    root
-      .find(j.NewExpression, {
-        callee: { type: 'Identifier', name: 'Mastra' },
-      })
-      .forEach(mastraPath => {
-        const configArg = mastraPath.node.arguments[0];
-        if (!configArg || configArg.type !== 'ObjectExpression') return;
+  context.hasChanges = true;
+  context.messages.push(`Renamed ${count} ${oldName} ${description} references to ${newName}`);
+}
 
-        // Process this Mastra config to find and rename context.get() calls
-        const contextParamNames = new Set<string>();
-        processNode(configArg, contextParamNames);
-      });
+/**
+ * Helper to rename 'runtimeContext' string literals in Mastra middleware handlers
+ */
+function renameMiddlewareStringLiterals(j: any, root: any, context: any) {
+  let stringLiteralCount = 0;
 
-    if (stringLiteralCount > 0) {
-      context.messages.push(
-        `Renamed ${stringLiteralCount} string literal 'runtimeContext' to 'requestContext' in Mastra server.middleware`,
-      );
+  // Find all new Mastra({ ... }) expressions
+  root
+    .find(j.NewExpression, {
+      callee: { type: 'Identifier', name: 'Mastra' },
+    })
+    .forEach((mastraPath: any) => {
+      const configArg = mastraPath.node.arguments[0];
+      if (!configArg || configArg.type !== 'ObjectExpression') return;
+
+      // Process this Mastra config to find and rename context.get() calls
+      const contextParamNames = new Set<string>();
+      stringLiteralCount += processNode(configArg, contextParamNames, context);
+    });
+
+  if (stringLiteralCount > 0) {
+    context.messages.push(
+      `Renamed ${stringLiteralCount} string literal 'runtimeContext' to 'requestContext' in Mastra server.middleware`,
+    );
+  }
+}
+
+/**
+ * Recursively search for handler properties and rename context.get() calls
+ */
+function processNode(node: any, contextParamNames: Set<string>, context: any): number {
+  if (!node || typeof node !== 'object') return 0;
+
+  let count = 0;
+
+  // Check if this is a handler property
+  if (isHandlerProperty(node)) {
+    const paramName = extractFirstParamName(node.value);
+    if (paramName) {
+      contextParamNames.add(paramName);
     }
   }
-});
+
+  // Check if this is a context.get('runtimeContext') call
+  if (isContextGetCall(node, contextParamNames)) {
+    if (renameStringLiteralArg(node, context)) {
+      count++;
+    }
+  }
+
+  // Recursively process all object properties
+  for (const key in node) {
+    if (!shouldProcessKey(key, node)) continue;
+
+    const value = node[key];
+    if (Array.isArray(value)) {
+      value.forEach(item => {
+        count += processNode(item, contextParamNames, context);
+      });
+    } else if (value && typeof value === 'object') {
+      count += processNode(value, contextParamNames, context);
+    }
+  }
+
+  return count;
+}
+
+/**
+ * Check if a node is a handler property (Property or ObjectProperty with key 'handler')
+ */
+function isHandlerProperty(node: any): boolean {
+  return (node.type === 'Property' || node.type === 'ObjectProperty') && node.key?.name === 'handler';
+}
+
+/**
+ * Extract the first parameter name from a function expression
+ */
+function extractFirstParamName(handlerValue: any): string | null {
+  if (
+    !handlerValue ||
+    (handlerValue.type !== 'ArrowFunctionExpression' && handlerValue.type !== 'FunctionExpression')
+  ) {
+    return null;
+  }
+
+  if (!handlerValue.params || handlerValue.params.length === 0) {
+    return null;
+  }
+
+  const firstParam = handlerValue.params[0];
+  if (firstParam?.type === 'Identifier') {
+    return firstParam.name;
+  }
+
+  return null;
+}
+
+/**
+ * Check if a node is a context.get() call expression
+ */
+function isContextGetCall(node: any, contextParamNames: Set<string>): boolean {
+  if (node.type !== 'CallExpression') return false;
+
+  const callee = node.callee;
+  if (!callee || callee.type !== 'MemberExpression') return false;
+
+  const object = callee.object;
+  if (!object || object.type !== 'Identifier') return false;
+
+  if (!contextParamNames.has(object.name)) return false;
+
+  const property = callee.property;
+  if (!property || property.type !== 'Identifier' || property.name !== 'get') return false;
+
+  return true;
+}
+
+/**
+ * Rename the first string argument from 'runtimeContext' to 'requestContext'
+ */
+function renameStringLiteralArg(node: any, context: any): boolean {
+  const firstArg = node.arguments?.[0];
+  if (!firstArg) return false;
+
+  const isRuntimeContextLiteral =
+    (firstArg.type === 'StringLiteral' && firstArg.value === 'runtimeContext') ||
+    (firstArg.type === 'Literal' && firstArg.value === 'runtimeContext');
+
+  if (!isRuntimeContextLiteral) return false;
+
+  // Rename the value
+  firstArg.value = 'requestContext';
+
+  // Update the raw value if it exists
+  if (firstArg.extra?.raw) {
+    const quote = firstArg.extra.raw.charAt(0);
+    firstArg.extra.raw = `${quote}requestContext${quote}`;
+  }
+
+  context.hasChanges = true;
+  return true;
+}
+
+/**
+ * Check if we should process this object key during recursion
+ */
+function shouldProcessKey(key: string, node: any): boolean {
+  // Skip non-own properties
+  if (!node.hasOwnProperty(key)) return false;
+
+  // Skip metadata properties that don't contain code
+  if (key === 'loc' || key === 'comments') return false;
+
+  return true;
+}
