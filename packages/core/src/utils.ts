@@ -5,11 +5,11 @@ import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
-import type { TracingContext, TracingPolicy } from './ai-tracing';
 import type { MastraLanguageModel } from './llm/model/shared.types';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
+import type { TracingContext, TracingPolicy } from './observability';
 import type { RequestContext } from './request-context';
 import type { ChunkType } from './stream/types';
 import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
@@ -572,4 +572,73 @@ export async function fetchWithRetry(
   }
 
   throw lastError || new Error('Request failed after multiple retry attempts');
+}
+
+/**
+ * Removes specific keys from an object.
+ * @param obj - The original object
+ * @param keysToOmit - Keys to exclude from the returned object
+ * @returns A new object with the specified keys removed
+ */
+export function omitKeys<T extends Record<string, any>>(obj: T, keysToOmit: string[]): Partial<T> {
+  return Object.fromEntries(Object.entries(obj).filter(([key]) => !keysToOmit.includes(key))) as Partial<T>;
+}
+
+/**
+ * Selectively extracts specific fields from an object using dot notation.
+ * Does not error if fields don't exist - simply omits them from the result.
+ * @param obj - The source object to extract fields from
+ * @param fields - Array of field paths (supports dot notation like 'output.text')
+ * @returns New object containing only the specified fields
+ */
+export function selectFields(obj: any, fields: string[]): any {
+  if (!obj || typeof obj !== 'object') {
+    return obj;
+  }
+
+  const result: any = {};
+
+  for (const field of fields) {
+    const value = getNestedValue(obj, field);
+    if (value !== undefined) {
+      setNestedValue(result, field, value);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Gets a nested value from an object using dot notation
+ * @param obj - Source object
+ * @param path - Dot notation path (e.g., 'output.text')
+ * @returns The value at the path, or undefined if not found
+ */
+export function getNestedValue(obj: any, path: string): any {
+  return path.split('.').reduce((current, key) => {
+    return current && typeof current === 'object' ? current[key] : undefined;
+  }, obj);
+}
+
+/**
+ * Sets a nested value in an object using dot notation
+ * @param obj - Target object
+ * @param path - Dot notation path (e.g., 'output.text')
+ * @param value - Value to set
+ */
+export function setNestedValue(obj: any, path: string, value: any): void {
+  const keys = path.split('.');
+  const lastKey = keys.pop();
+  if (!lastKey) {
+    return;
+  }
+
+  const target = keys.reduce((current, key) => {
+    if (!current[key] || typeof current[key] !== 'object') {
+      current[key] = {};
+    }
+    return current[key];
+  }, obj);
+
+  target[lastKey] = value;
 }

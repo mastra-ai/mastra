@@ -2,10 +2,10 @@ import { randomUUID } from 'crypto';
 import { ReadableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
-import { AISpanType, wrapMastra } from '@mastra/core/ai-tracing';
-import type { TracingContext, TracingOptions } from '@mastra/core/ai-tracing';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
+import { AISpanType, wrapMastra } from '@mastra/core/observability';
+import type { TracingContext, TracingOptions } from '@mastra/core/observability';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import { ChunkFrom, WorkflowRunOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
@@ -603,7 +603,7 @@ export class InngestWorkflow<
   async listWorkflowRuns(args?: {
     fromDate?: Date;
     toDate?: Date;
-    perPage?: number;
+    perPage?: number | false;
     page?: number;
     resourceId?: string;
   }) {
@@ -1255,7 +1255,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               setState: (state: any) => {
                 executionContext.state = state;
               },
-              runCount: -1,
               retryCount: -1,
               tracingContext: {
                 currentSpan: sleepSpan,
@@ -1374,7 +1373,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               setState: (state: any) => {
                 executionContext.state = state;
               },
-              runCount: -1,
               retryCount: -1,
               tracingContext: {
                 currentSpan: sleepUntilSpan,
@@ -2027,7 +2025,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                     workflowId,
                     mastra: this.mastra!,
                     requestContext,
-                    runCount: -1,
                     retryCount: -1,
                     inputData: prevOutput,
                     state: executionContext.state,

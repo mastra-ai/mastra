@@ -1,8 +1,8 @@
 import type { MastraDBMessage, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
-import { AISpanType } from '../ai-tracing';
-import type { AISpan, TracingContext } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
+import { AISpanType } from '../observability';
+import type { AISpan, TracingContext } from '../observability';
 import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Processor } from './index';

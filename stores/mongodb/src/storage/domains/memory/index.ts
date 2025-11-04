@@ -5,7 +5,7 @@ import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastr
 import {
   MemoryStorage,
   normalizePerPage,
-  preservePerPageForResponse,
+  calculatePagination,
   resolveMessageLimit,
   safelyParseJSON,
   TABLE_MESSAGES,
@@ -13,7 +13,6 @@ import {
   TABLE_THREADS,
 } from '@mastra/core/storage';
 import type {
-  PaginationInfo,
   StorageGetMessagesArg,
   StorageResourceType,
   StorageListMessagesInput,
@@ -106,7 +105,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   }
 
   /**
-   * @deprecated use getMessagesPaginated instead for paginated results.
+   * @deprecated use listMessages instead for paginated results.
    */
   public async getMessages({
     threadId,
@@ -216,24 +215,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       );
     }
 
+    const perPage = normalizePerPage(perPageInput, 40);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
     try {
-      // Determine how many results to return
-      // Default pagination is always 40 unless explicitly specified
-      let perPage = 40;
-      if (perPageInput !== undefined) {
-        if (perPageInput === false) {
-          // perPageInput: false means get ALL messages
-          perPage = Number.MAX_SAFE_INTEGER;
-        } else if (perPageInput === 0) {
-          // perPageInput: 0 means return zero results
-          perPage = 0;
-        } else if (typeof perPageInput === 'number' && perPageInput > 0) {
-          perPage = perPageInput;
-        }
-      }
-
-      const offset = page * perPage;
-
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy);
       const sortOrder = direction === 'ASC' ? 1 : -1;
@@ -258,37 +243,30 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Get total count
       const total = await collection.countDocuments(query);
 
+      const messages: any[] = [];
+
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
-      const sortObj: any = { [field]: sortOrder };
-      let cursor = collection.find(query).sort(sortObj).skip(offset);
+      if (perPage !== 0) {
+        const sortObj: any = { [field]: sortOrder };
+        let cursor = collection.find(query).sort(sortObj).skip(offset);
 
-      // Only apply limit if not unlimited and perPage > 0
-      // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
-      // So we skip limit when perPage === 0 and handle it by returning empty array
-      if (perPageInput !== false && perPage > 0) {
-        cursor = cursor.limit(perPage);
+        // Only apply limit if not unlimited
+        // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
+        if (perPageInput !== false) {
+          cursor = cursor.limit(perPage);
+        }
+
+        const dataResult = await cursor.toArray();
+        messages.push(...dataResult.map((row: any) => this.parseRow(row)));
       }
 
-      const dataResult = await cursor.toArray();
-
-      // If perPage is 0, return empty array regardless of query results
-      if (perPage === 0) {
-        return {
-          messages: [],
-          total,
-          page,
-          perPage: 0,
-          hasMore: false,
-        };
-      }
-      const messages: any[] = dataResult.map((row: any) => this.parseRow(row));
-
-      if (total === 0 && messages.length === 0) {
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total: 0,
           page,
-          perPage,
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
@@ -333,18 +311,16 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore =
-        perPageInput === false ? false : allThreadMessagesReturned ? false : offset + dataResult.length < total;
+      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,
         total,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error) {
-      const errorPerPage = perPageInput === false ? Number.MAX_SAFE_INTEGER : (perPageInput ?? 40);
       const mastraError = new MastraError(
         {
           id: 'MONGODB_STORE_LIST_MESSAGES_FAILED',
@@ -363,106 +339,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         messages: [],
         total: 0,
         page,
-        perPage: errorPerPage,
+        perPage: perPageForResponse,
         hasMore: false,
       };
-    }
-  }
-
-  public async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    const { threadId, resourceId, selectBy } = args;
-    const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
-    const perPage =
-      perPageInput !== undefined ? perPageInput : resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-    const fromDate = dateRange?.start;
-    const toDate = dateRange?.end;
-
-    const messages: MastraDBMessage[] = [];
-
-    if (selectBy?.include?.length) {
-      try {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
-        if (includeMessages) {
-          messages.push(...includeMessages);
-        }
-      } catch (error) {
-        throw new MastraError(
-          {
-            id: 'MONGODB_STORE_GET_MESSAGES_PAGINATED_GET_INCLUDE_MESSAGES_FAILED',
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-            details: { threadId, resourceId: resourceId ?? '' },
-          },
-          error,
-        );
-      }
-    }
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      const currentOffset = page * perPage;
-      const collection = await this.operations.getCollection(TABLE_MESSAGES);
-
-      const query: any = { thread_id: threadId };
-
-      if (fromDate) {
-        query.createdAt = { ...query.createdAt, $gte: fromDate };
-      }
-      if (toDate) {
-        query.createdAt = { ...query.createdAt, $lte: toDate };
-      }
-
-      const total = await collection.countDocuments(query);
-
-      if (total === 0 && messages.length === 0) {
-        return {
-          messages: [],
-          total: 0,
-          page,
-          perPage,
-          hasMore: false,
-        };
-      }
-
-      const excludeIds = messages.map(m => m.id);
-      if (excludeIds.length > 0) {
-        query.id = { $nin: excludeIds };
-      }
-
-      const dataResult = await collection
-        .find(query)
-        .sort({ createdAt: -1 })
-        .skip(currentOffset)
-        .limit(perPage)
-        .toArray();
-
-      messages.push(...dataResult.map((row: any) => this.parseRow(row)));
-
-      const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
-
-      return {
-        messages: list.get.all.db(),
-        total,
-        page,
-        perPage,
-        hasMore: (page + 1) * perPage < total,
-      };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MONGODB_STORE_GET_MESSAGES_PAGINATED_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId, resourceId: resourceId ?? '' },
-        },
-        error,
-      );
-      this.logger?.trackException?.(mastraError);
-      this.logger?.error?.(mastraError.toString());
-      return { messages: [], total: 0, page, perPage, hasMore: false };
     }
   }
 
@@ -792,7 +671,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       }
 
       const perPage = normalizePerPage(perPageInput, 100);
-      const offset = page * perPage;
+      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const { field, direction } = this.parseOrderBy(orderBy);
       const collection = await this.operations.getCollection(TABLE_THREADS);
 
@@ -804,7 +683,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           threads: [],
           total,
           page,
-          perPage: 0,
+          perPage: perPageForResponse,
           hasMore: offset < total,
         };
       }
@@ -812,12 +691,14 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // MongoDB sort: 1 = ASC, -1 = DESC
       const sortOrder = direction === 'ASC' ? 1 : -1;
 
-      const threads = await collection
+      let cursor = collection
         .find(query)
         .sort({ [field]: sortOrder })
-        .skip(offset)
-        .limit(perPage)
-        .toArray();
+        .skip(offset);
+      if (perPageInput !== false) {
+        cursor = cursor.limit(perPage);
+      }
+      const threads = await cursor.toArray();
 
       return {
         threads: threads.map((thread: any) => ({
@@ -830,8 +711,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         })),
         total,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
-        hasMore: offset + perPage < total,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
       throw new MastraError(
