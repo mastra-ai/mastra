@@ -5,13 +5,13 @@ import { z } from 'zod';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions, AgentStreamOptions } from '../agent';
-import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
-import type { TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
 import type { MastraScorers } from '../evals';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { TracingContext, TracingOptions, TracingPolicy } from '../observability';
+import { AISpanType, getOrCreateSpan } from '../observability';
 import type { WorkflowRun } from '../storage';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType } from '../stream/types';
@@ -1247,7 +1247,7 @@ export class Workflow<
   async listWorkflowRuns(args?: {
     fromDate?: Date;
     toDate?: Date;
-    perPage?: number;
+    perPage?: number | false;
     page?: number;
     resourceId?: string;
   }) {
@@ -1646,10 +1646,10 @@ export class Run<
       tracingOptions,
       tracingContext,
       requestContext,
+      mastra: this.#mastra,
     });
 
-    const traceId = getValidTraceId(workflowAISpan);
-
+    const traceId = workflowAISpan?.externalTraceId;
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? {});
 
@@ -2181,8 +2181,6 @@ export class Run<
       | string[];
     label?: string;
     requestContext?: RequestContext;
-    /** @deprecated This property will be removed on November 4th, 2025. Use `retryCount` instead. */
-    runCount?: number;
     retryCount?: number;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -2193,7 +2191,7 @@ export class Run<
     };
     forEachIndex?: number;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    return this._resume({ ...params, retryCount: params.retryCount ?? params.runCount });
+    return this._resume(params);
   }
 
   protected async _resume<TResumeSchema extends z.ZodType<any>>(params: {
@@ -2332,9 +2330,10 @@ export class Run<
       tracingOptions: params.tracingOptions,
       tracingContext: params.tracingContext,
       requestContext: requestContextToUse,
+      mastra: this.#mastra,
     });
 
-    const traceId = getValidTraceId(workflowAISpan);
+    const traceId = workflowAISpan?.externalTraceId;
 
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({

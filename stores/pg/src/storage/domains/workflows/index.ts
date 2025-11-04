@@ -243,7 +243,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       let total = 0;
-      const usePagination = perPage !== undefined && page !== undefined;
+      const usePagination = typeof perPage === 'number' && typeof page === 'number';
       // Only get total count when using pagination
       if (usePagination) {
         const countResult = await this.client.one(
@@ -254,7 +254,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       }
 
       const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
-      const offset = usePagination ? page * normalizedPerPage : undefined;
+      const offset = usePagination ? page! * normalizedPerPage : undefined;
 
       // Get results
       const query = `

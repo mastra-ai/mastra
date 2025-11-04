@@ -426,7 +426,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.messages).toHaveLength(55); // 5 original + 50 extra
         expect(result.total).toBe(55);
         expect(result.hasMore).toBe(false);
-        expect(result.perPage).toBeGreaterThanOrEqual(55); // Should be a very large number
+        expect(result.perPage).toBe(false); // Should preserve false when input is false
       });
 
       it('should use page to skip messages', async () => {

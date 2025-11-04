@@ -5,8 +5,6 @@ import type { Tool } from '@internal/ai-sdk-v4/tool';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
-import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
-import type { AISpan, TracingContext, TracingOptions, TracingProperties } from '../ai-tracing';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraLLMV1 } from '../llm/model';
 import type {
@@ -24,6 +22,8 @@ import type { MastraLanguageModel, TripwireProperties } from '../llm/model/share
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
+import type { AISpan, TracingContext, TracingOptions, TracingProperties } from '../observability';
+import { AISpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream/types';
@@ -239,6 +239,7 @@ export class AgentLegacyHandler {
           tracingOptions,
           tracingContext,
           requestContext,
+          mastra: this.capabilities.mastra,
         });
 
         const innerTracingContext: TracingContext = { currentSpan: agentAISpan };
@@ -946,7 +947,7 @@ export class AgentLegacyHandler {
 
     const llmToUse = llm as MastraLLMV1;
     const beforeResult = await before();
-    const traceId = getValidTraceId(beforeResult.agentAISpan);
+    const traceId = beforeResult.agentAISpan?.externalTraceId;
 
     // Check for tripwire and return early if triggered
     if (beforeResult.tripwire) {
@@ -1237,7 +1238,7 @@ export class AgentLegacyHandler {
     }
 
     const beforeResult = await before();
-    const traceId = getValidTraceId(beforeResult.agentAISpan);
+    const traceId = beforeResult.agentAISpan?.externalTraceId;
 
     // Check for tripwire and return early if triggered
     if (beforeResult.tripwire) {

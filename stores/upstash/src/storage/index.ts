@@ -134,7 +134,7 @@ export class UpstashStore extends MastraStorage {
   }
 
   /**
-   * @deprecated use getMessagesPaginated instead
+   * @deprecated use listMessages instead
    */
   public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessages(args);
@@ -142,12 +142,6 @@ export class UpstashStore extends MastraStorage {
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.listMessagesById({ messageIds });
-  }
-
-  public async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessagesPaginated(args);
   }
 
   async updateWorkflowResults({

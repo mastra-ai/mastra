@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
-import type { TracingContext } from '../../ai-tracing';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
+import type { TracingContext } from '../../observability';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 

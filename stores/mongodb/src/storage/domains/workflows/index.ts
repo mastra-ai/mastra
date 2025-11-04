@@ -149,6 +149,19 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
 
       let cursor = collection.find(query).sort({ createdAt: -1 });
       if (options.page !== undefined && typeof options.perPage === 'number') {
+        // Validate page is non-negative
+        if (options.page < 0) {
+          throw new MastraError(
+            {
+              id: 'STORAGE_MONGODB_INVALID_PAGE',
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              details: { page: options.page },
+            },
+            new Error('page must be >= 0'),
+          );
+        }
+
         total = await collection.countDocuments(query);
         const normalizedPerPage = normalizePerPage(options.perPage, Number.MAX_SAFE_INTEGER);
 
@@ -159,7 +172,8 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
 
         const offset = options.page * normalizedPerPage;
         cursor = cursor.skip(offset);
-        cursor = cursor.limit(normalizedPerPage);
+        // Cap to MongoDB's 32-bit signed integer max to prevent overflow
+        cursor = cursor.limit(Math.min(normalizedPerPage, 2147483647));
       }
 
       const results = await cursor.toArray();

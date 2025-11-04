@@ -9,8 +9,8 @@ import type {
   ToolCallAttributes,
   MCPToolCallAttributes,
   WorkflowRunAttributes,
-} from '@mastra/core/ai-tracing';
-import { AISpanType } from '@mastra/core/ai-tracing';
+} from '@mastra/core/observability';
+import { AISpanType } from '@mastra/core/observability';
 import { SpanKind } from '@opentelemetry/api';
 import type { Attributes } from '@opentelemetry/api';
 import type { InstrumentationScope } from '@opentelemetry/core';

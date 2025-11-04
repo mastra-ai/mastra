@@ -1,7 +1,8 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
+import { calculatePagination, normalizePerPage, ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
+import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
 import type { StoreOperationsUpstash } from '../operations';
 import { processRecord } from '../utils';
@@ -77,17 +78,18 @@ export class ScoresUpstash extends ScoresStorage {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
-    pagination?: { page: number; perPage: number };
+    pagination?: StoragePagination;
   }): Promise<{
     scores: ScoreRowData[];
-    pagination: { total: number; page: number; perPage: number; hasMore: boolean };
+    pagination: PaginationInfo;
   }> {
     const pattern = `${TABLE_SCORERS}:*`;
     const keys = await this.operations.scanKeys(pattern);
+    const { page, perPage: perPageInput } = pagination;
     if (keys.length === 0) {
       return {
         scores: [],
-        pagination: { total: 0, page: pagination.page, perPage: pagination.perPage, hasMore: false },
+        pagination: { total: 0, page, perPage: perPageInput, hasMore: false },
       };
     }
     const pipeline = this.client.pipeline();
@@ -95,7 +97,17 @@ export class ScoresUpstash extends ScoresStorage {
     const results = await pipeline.exec();
     // Filter out nulls and by scorerId
     const filtered = results
-      .map((row: any) => row as Record<string, any> | null)
+      .map((raw: any) => {
+        if (!raw) return null;
+        if (typeof raw === 'string') {
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return null;
+          }
+        }
+        return raw as Record<string, any>;
+      })
       .filter((row): row is Record<string, any> => {
         if (!row || typeof row !== 'object') return false;
         if (row.scorerId !== scorerId) return false;
@@ -104,10 +116,10 @@ export class ScoresUpstash extends ScoresStorage {
         if (source && row.source !== source) return false;
         return true;
       });
+    const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? filtered.length : start + perPage;
     const total = filtered.length;
-    const { page, perPage } = pagination;
-    const start = page * perPage;
-    const end = start + perPage;
     const paged = filtered.slice(start, end);
     const scores = paged.map(row => transformScoreRow(row));
     return {
@@ -115,7 +127,7 @@ export class ScoresUpstash extends ScoresStorage {
       pagination: {
         total,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore: end < total,
       },
     };
@@ -157,17 +169,18 @@ export class ScoresUpstash extends ScoresStorage {
     pagination = { page: 0, perPage: 20 },
   }: {
     runId: string;
-    pagination?: { page: number; perPage: number };
+    pagination?: StoragePagination;
   }): Promise<{
     scores: ScoreRowData[];
-    pagination: { total: number; page: number; perPage: number; hasMore: boolean };
+    pagination: PaginationInfo;
   }> {
     const pattern = `${TABLE_SCORERS}:*`;
     const keys = await this.operations.scanKeys(pattern);
+    const { page, perPage: perPageInput } = pagination;
     if (keys.length === 0) {
       return {
         scores: [],
-        pagination: { total: 0, page: pagination.page, perPage: pagination.perPage, hasMore: false },
+        pagination: { total: 0, page, perPage: perPageInput, hasMore: false },
       };
     }
     const pipeline = this.client.pipeline();
@@ -175,12 +188,22 @@ export class ScoresUpstash extends ScoresStorage {
     const results = await pipeline.exec();
     // Filter out nulls and by runId
     const filtered = results
-      .map((row: any) => row as Record<string, any> | null)
+      .map((raw: any) => {
+        if (!raw) return null;
+        if (typeof raw === 'string') {
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return null;
+          }
+        }
+        return raw as Record<string, any>;
+      })
       .filter((row): row is Record<string, any> => !!row && typeof row === 'object' && row.runId === runId);
     const total = filtered.length;
-    const { page, perPage } = pagination;
-    const start = page * perPage;
-    const end = start + perPage;
+    const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? filtered.length : start + perPage;
     const paged = filtered.slice(start, end);
     const scores = paged.map(row => transformScoreRow(row));
     return {
@@ -188,7 +211,7 @@ export class ScoresUpstash extends ScoresStorage {
       pagination: {
         total,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore: end < total,
       },
     };
@@ -201,17 +224,18 @@ export class ScoresUpstash extends ScoresStorage {
   }: {
     entityId: string;
     entityType?: string;
-    pagination?: { page: number; perPage: number };
+    pagination?: StoragePagination;
   }): Promise<{
     scores: ScoreRowData[];
-    pagination: { total: number; page: number; perPage: number; hasMore: boolean };
+    pagination: PaginationInfo;
   }> {
     const pattern = `${TABLE_SCORERS}:*`;
     const keys = await this.operations.scanKeys(pattern);
+    const { page, perPage: perPageInput } = pagination;
     if (keys.length === 0) {
       return {
         scores: [],
-        pagination: { total: 0, page: pagination.page, perPage: pagination.perPage, hasMore: false },
+        pagination: { total: 0, page, perPage: perPageInput, hasMore: false },
       };
     }
     const pipeline = this.client.pipeline();
@@ -219,7 +243,17 @@ export class ScoresUpstash extends ScoresStorage {
     const results = await pipeline.exec();
 
     const filtered = results
-      .map((row: any) => row as Record<string, any> | null)
+      .map((raw: any) => {
+        if (!raw) return null;
+        if (typeof raw === 'string') {
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return null;
+          }
+        }
+        return raw as Record<string, any>;
+      })
       .filter((row): row is Record<string, any> => {
         if (!row || typeof row !== 'object') return false;
         if (row.entityId !== entityId) return false;
@@ -227,9 +261,9 @@ export class ScoresUpstash extends ScoresStorage {
         return true;
       });
     const total = filtered.length;
-    const { page, perPage } = pagination;
-    const start = page * perPage;
-    const end = start + perPage;
+    const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? filtered.length : start + perPage;
     const paged = filtered.slice(start, end);
     const scores = paged.map(row => transformScoreRow(row));
     return {
@@ -237,7 +271,7 @@ export class ScoresUpstash extends ScoresStorage {
       pagination: {
         total,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore: end < total,
       },
     };
@@ -250,17 +284,18 @@ export class ScoresUpstash extends ScoresStorage {
   }: {
     traceId: string;
     spanId: string;
-    pagination?: { page: number; perPage: number };
+    pagination?: StoragePagination;
   }): Promise<{
     scores: ScoreRowData[];
-    pagination: { total: number; page: number; perPage: number; hasMore: boolean };
+    pagination: PaginationInfo;
   }> {
     const pattern = `${TABLE_SCORERS}:*`;
     const keys = await this.operations.scanKeys(pattern);
+    const { page, perPage: perPageInput } = pagination;
     if (keys.length === 0) {
       return {
         scores: [],
-        pagination: { total: 0, page: pagination.page, perPage: pagination.perPage, hasMore: false },
+        pagination: { total: 0, page, perPage: perPageInput, hasMore: false },
       };
     }
     const pipeline = this.client.pipeline();
@@ -268,7 +303,17 @@ export class ScoresUpstash extends ScoresStorage {
     const results = await pipeline.exec();
     // Filter out nulls and by traceId and spanId
     const filtered = results
-      .map((row: any) => row as Record<string, any> | null)
+      .map((raw: any) => {
+        if (!raw) return null;
+        if (typeof raw === 'string') {
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return null;
+          }
+        }
+        return raw as Record<string, any>;
+      })
       .filter((row): row is Record<string, any> => {
         if (!row || typeof row !== 'object') return false;
         if (row.traceId !== traceId) return false;
@@ -276,9 +321,9 @@ export class ScoresUpstash extends ScoresStorage {
         return true;
       });
     const total = filtered.length;
-    const { page, perPage } = pagination;
-    const start = page * perPage;
-    const end = start + perPage;
+    const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? filtered.length : start + perPage;
     const paged = filtered.slice(start, end);
     const scores = paged.map(row => transformScoreRow(row));
     return {
@@ -286,7 +331,7 @@ export class ScoresUpstash extends ScoresStorage {
       pagination: {
         total,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore: end < total,
       },
     };

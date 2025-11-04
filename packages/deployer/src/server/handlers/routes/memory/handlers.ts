@@ -1,9 +1,9 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type {
-  StorageGetMessagesArg,
-  MastraMessageFormat,
   ThreadOrderBy,
   ThreadSortDirection,
+  StorageOrderBy,
+  StorageListMessagesInput,
 } from '@mastra/core/storage';
 import {
   getMemoryStatusHandler as getOriginalMemoryStatusHandler,
@@ -15,7 +15,7 @@ import {
   updateThreadHandler as getOriginalUpdateThreadHandler,
   deleteThreadHandler as getOriginalDeleteThreadHandler,
   getMessagesHandler as getOriginalGetMessagesHandler,
-  getMessagesPaginatedHandler as getOriginalGetMessagesPaginatedHandler,
+  listMessagesHandler as getOriginalListMessagesHandler,
   getWorkingMemoryHandler as getOriginalGetWorkingMemoryHandler,
   updateWorkingMemoryHandler as getOriginalUpdateWorkingMemoryHandler,
   searchMemoryHandler as getOriginalSearchMemoryHandler,
@@ -25,6 +25,20 @@ import type { Context } from 'hono';
 
 import { handleError } from '../../error';
 import { parseLimit, parsePage, parsePerPage } from '../../utils/query-parsers';
+
+/**
+ * Helper function to parse JSON query parameters
+ * @param value - The query parameter value to parse
+ * @returns Parsed JSON object or undefined if parsing fails or value is undefined
+ */
+function parseJsonParam<T>(value: string | undefined): T | undefined {
+  if (!value) return undefined;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return undefined;
+  }
+}
 
 // Memory handlers
 export async function getMemoryStatusHandler(c: Context) {
@@ -231,31 +245,26 @@ export async function getMessagesHandler(c: Context) {
   }
 }
 
-export async function getMessagesPaginatedHandler(c: Context) {
+export async function listMessagesHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const threadId = c.req.param('threadId');
     const resourceId = c.req.query('resourceId');
-    const format = (c.req.query('format') || 'v1') as MastraMessageFormat;
-    const selectByArgs = c.req.query('selectBy');
+    const page = parsePage(c.req.query('page'));
+    const perPage = parsePerPage(c.req.query('perPage'));
+    const orderBy = parseJsonParam<StorageOrderBy>(c.req.query('orderBy'));
+    const include = parseJsonParam<StorageListMessagesInput['include']>(c.req.query('include'));
+    const filter = parseJsonParam<StorageListMessagesInput['filter']>(c.req.query('filter'));
 
-    let selectBy = {} as StorageGetMessagesArg['selectBy'];
-
-    if (selectByArgs) {
-      try {
-        selectBy = JSON.parse(selectByArgs);
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      } catch (_error) {
-        // swallow
-      }
-    }
-
-    const result = await getOriginalGetMessagesPaginatedHandler({
+    const result = await getOriginalListMessagesHandler({
       mastra,
       threadId,
       resourceId,
-      format,
-      selectBy,
+      page,
+      perPage,
+      orderBy,
+      include,
+      filter,
     });
 
     return c.json(result);
