@@ -3653,7 +3653,7 @@ describe('Validation', () => {
 // Metadata filtering tests for Memory system
 describe('PgVector Metadata Filtering', () => {
   const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
-  const metadataVectorDB = new PgVector({ connectionString });
+  const metadataVectorDB = new PgVector({ connectionString, id: 'pg-metadata-test' });
 
   createVectorTestSuite({
     vector: metadataVectorDB,
