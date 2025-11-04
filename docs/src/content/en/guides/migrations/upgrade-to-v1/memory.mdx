@@ -1,0 +1,81 @@
+---
+title: "Migration: Upgrade to Mastra v1 | Migration Guide"
+description: "Learn how to upgrade through breaking changes in pre-v1 versions of Mastra."
+---
+
+### Changed: Thread Title Generation Location and Default
+
+**Breaking Changes:**
+
+1. `generateTitle` has been moved from `threads.generateTitle` to the top-level of memory options
+2. The default value has changed from `true` to `false`
+3. Using `threads.generateTitle` will now throw an error
+
+**Why these changes?**
+
+- Simplify the API by moving `generateTitle` to the top level where it logically belongs
+- Avoid unexpected LLM API calls and associated costs
+- Give developers explicit control over when title generation occurs
+- Improve predictability of memory behavior
+
+**Migration:**
+
+If your application uses `threads.generateTitle`, you must update it to use the top-level `generateTitle` option:
+
+```typescript
+// Before (v0.22 and earlier)
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      threads: {
+        generateTitle: true, // ❌ This will now throw an error
+      },
+    },
+  }),
+});
+
+// After (v0.23+)
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      generateTitle: true, // ✅ Now at the top level
+    },
+  }),
+});
+```
+
+If your application relied on the old default behavior (automatic title generation), explicitly enable it:
+
+```typescript
+// Before (implicit true in v0.22)
+const agent = new Agent({
+  memory: new Memory({
+    // generateTitle was true by default
+  }),
+});
+
+// After (explicit true in v0.23+)
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      generateTitle: true, // Explicitly enable title generation
+    },
+  }),
+});
+```
+
+You can also customize the model and instructions used for title generation:
+
+```typescript
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      generateTitle: {
+        model: openai("gpt-4o-mini"),
+        instructions:
+          "Generate a concise title (max 5 words) that summarizes the conversation",
+      },
+    },
+  }),
+});
+```

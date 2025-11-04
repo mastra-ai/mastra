@@ -51,9 +51,30 @@ const sidebars = {
       collapsed: false,
       items: [
         {
-          type: "doc",
-          id: "migrations/upgrade-to-v1",
+          type: "category",
           label: "v1.0",
+          items: [
+            {
+              id: "migrations/upgrade-to-v1/overview",
+              type: "doc",
+              label: "Overview",
+            },
+            {
+              id: "migrations/upgrade-to-v1/mastra",
+              type: "doc",
+              label: "Mastra",
+            },
+            {
+              id: "migrations/upgrade-to-v1/agent",
+              type: "doc",
+              label: "Agents",
+            },
+            {
+              id: "migrations/upgrade-to-v1/memory",
+              type: "doc",
+              label: "Memory",
+            },
+          ],
         },
         {
           type: "doc",
