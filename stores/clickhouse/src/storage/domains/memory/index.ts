@@ -383,7 +383,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       const countData = await countResult.json();
       const total = (countData as any).data[0].total;
 
-      if (total === 0 && paginatedCount === 0) {
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && paginatedCount === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total: 0,

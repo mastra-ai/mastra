@@ -393,7 +393,8 @@ export class StoreMemoryLance extends MemoryStorage {
       const paginatedRecords = allRecords.slice(offset, offset + perPage);
       const messages: any[] = paginatedRecords.map((row: any) => this.normalizeMessage(row));
 
-      if (total === 0 && messages.length === 0) {
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total: 0,

@@ -453,7 +453,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const paginatedMessages = allThreadMessages.slice(offset, offset + perPage);
       const paginatedCount = paginatedMessages.length;
 
-      if (total === 0 && paginatedCount === 0) {
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && paginatedCount === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total: 0,

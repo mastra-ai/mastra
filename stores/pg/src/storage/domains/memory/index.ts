@@ -617,7 +617,8 @@ export class MemoryPG extends MemoryStorage {
       const rows = await this.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
       const messages: MessageRowFromDB[] = [...(rows || [])];
 
-      if (total === 0 && messages.length === 0) {
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total: 0,
