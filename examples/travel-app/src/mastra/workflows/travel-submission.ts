@@ -211,10 +211,24 @@ const workflowInputSchema = z.object({
   travelForm: triggerSchema,
 });
 
+const selectionSchema = z.object({
+  ids: z.array(z.string()),
+  reasoning: z.string(),
+  typeSelection: z.array(z.any()).optional(), // Full item objects selected by the agent
+});
+
+const workflowOutputSchema = z.object({
+  outboundFlightSelection: selectionSchema.optional(),
+  returnFlightSelection: selectionSchema.optional(),
+  accommodationSelection: selectionSchema.optional(),
+  attractionSelection: selectionSchema.optional(),
+  airbnbLocationSelection: selectionSchema.optional(), // Only present when airbnb is selected
+});
+
 export const workflow = createWorkflow({
   id: "travel-submission",
   inputSchema: workflowInputSchema,
-  outputSchema: z.any(), // Define the appropriate output schema based on your needs
+  outputSchema: workflowOutputSchema,
 })
   // Run flights in parallel
   .parallel([outboundFlight, returnFlight])
