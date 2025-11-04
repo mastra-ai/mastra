@@ -192,7 +192,7 @@ describe('Agent Memory Tests', () => {
     });
 
     // Verify first thread has messages
-    const thread1Messages = await memory.query({ threadId: thread1Id, resourceId });
+    const thread1Messages = await memory.recall({ threadId: thread1Id, resourceId });
     expect(thread1Messages.messages.length).toBeGreaterThan(0);
 
     // Now create a second thread - this should be able to access memory from thread1

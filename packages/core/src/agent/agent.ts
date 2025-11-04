@@ -1394,12 +1394,19 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     if (!memory) {
       return { messages: [] };
     }
-    return memory.rememberMessages({
+
+    const threadConfig = memory.getMergedThreadConfig(memoryConfig || {});
+    if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
+      return { messages: [] };
+    }
+
+    return memory.recall({
       threadId,
       resourceId,
-      config: memoryConfig,
+      perPage: threadConfig.lastMessages,
+      threadConfig: memoryConfig,
       // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
-      vectorMessageSearch,
+      vectorMessageSearch: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
     });
   }
 
