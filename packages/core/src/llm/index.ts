@@ -19,7 +19,7 @@ import type { SystemModelMessage } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
-import type { TracingContext } from '../ai-tracing';
+import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { Run } from '../run/types';
 import type { CoreTool } from '../tools/types';
