@@ -1938,21 +1938,12 @@ export class Mastra<
    * const tools = await fsServer.listTools();
    * ```
    */
-  public getMCPServer<TMCPServerName extends keyof TMCPServers>(name: TMCPServerName): TMCPServers[TMCPServerName] {
+  public getMCPServer<TMCPServerName extends keyof TMCPServers>(
+    name: TMCPServerName,
+  ): TMCPServers[TMCPServerName] | undefined {
     if (!this.#mcpServers || !this.#mcpServers[name]) {
-      const error = new MastraError({
-        id: 'MASTRA_GET_MCP_SERVER_BY_NAME_NOT_FOUND',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `MCP server with name ${String(name)} not found`,
-        details: {
-          status: 404,
-          mcpServerName: String(name),
-          mcpServers: Object.keys(this.#mcpServers ?? {}).join(', '),
-        },
-      });
-      this.#logger?.trackException(error);
-      throw error;
+      this.#logger?.debug(`MCP server with name ${String(name)} not found`);
+      return undefined as TMCPServers[TMCPServerName] | undefined;
     }
     return this.#mcpServers[name];
   }
