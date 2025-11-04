@@ -77,7 +77,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           writableStream: expect.any(Object),
           resumeData: undefined,
           suspend: expect.any(Function),
-          tracingContext: expect.any(Object),
         },
       );
     });
