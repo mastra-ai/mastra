@@ -1,7 +1,7 @@
 import type { Mastra } from '@mastra/core/mastra';
 import express from 'express';
-import { listAgentsHandler } from '@mastra/server/handlers/agents';
-import { RequestContext } from '@mastra/core/request-context';
+
+import { listAgentsRouteHandler } from './routes/listAgents';
 
 export interface RegisterRoutesOptions {
   prefix?: string;
@@ -11,11 +11,12 @@ export interface RegisterRoutesOptions {
 export const registerRoutes = ({ app, mastra, prefix = '/mastra' }: RegisterRoutesOptions) => {
   const router = express.Router();
 
-  router.get('/agents', (_, res) => {
-    console.log('agents', mastra.listAgents());
-    const agents = listAgentsHandler({ mastra, requestContext: new RequestContext() });
-    res.json(agents);
+  router.use((_, res, next) => {
+    res.locals.mastra = mastra;
+    next();
   });
+
+  router.get('/agents', listAgentsRouteHandler);
 
   app.use(prefix, router);
 };
