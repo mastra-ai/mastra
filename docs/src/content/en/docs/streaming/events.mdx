@@ -94,7 +94,7 @@ Iterate over the `stream` with a `for await` loop to inspect all emitted event c
 ```typescript {5,11} showLineNumbers copy
 const testWorkflow = mastra.getWorkflow("testWorkflow");
 
-const run = await testWorkflow.createRunAsync();
+const run = await testWorkflow.createRun();
 
 const stream = await run.stream({
   inputData: {

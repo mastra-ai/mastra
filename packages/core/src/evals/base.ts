@@ -2,11 +2,11 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { Agent } from '../agent';
 import { tryGenerateWithJsonFallback } from '../agent/utils';
-import { InternalSpans } from '../ai-tracing';
-import type { TracingContext } from '../ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraModelConfig } from '../llm/model/shared.types';
+import type { TracingContext } from '../observability';
+import { InternalSpans } from '../observability';
 import { createWorkflow, createStep } from '../workflows';
 import type { ScoringSamplingConfig, ScorerRunInputForAgent, ScorerRunOutputForAgent } from './types';
 
@@ -377,7 +377,7 @@ class MastraScorer<
     const run = { ...input, runId };
 
     const workflow = this.toMastraWorkflow();
-    const workflowRun = await workflow.createRunAsync();
+    const workflowRun = await workflow.createRun();
     const workflowResult = await workflowRun.start({
       inputData: {
         run,

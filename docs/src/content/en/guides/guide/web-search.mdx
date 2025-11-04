@@ -151,13 +151,13 @@ export const mastra = new Mastra({
 
 <StepItem title="Test your agent">
 
-You can test your agent inside Mastra's [Playground](/docs/getting-started/studio) using the `mastra dev` command:
+You can test your agent with [Studio](/docs/getting-started/studio) using the `mastra dev` command:
 
 ```bash copy
 mastra dev
 ```
 
-Inside Playground navigate to the **"Search Agent"** and ask it: "What happened last week in AI news?"
+Inside Studio navigate to the **"Search Agent"** and ask it: "What happened last week in AI news?"
 
 </StepItem>
 
@@ -222,8 +222,8 @@ export const webSearch = createTool({
       publishedDate: z.string().optional(),
     }),
   ),
-  execute: async ({ context }) => {
-    const { results } = await exa.searchAndContents(context.query, {
+  execute: async (inputData) => {
+    const { results } = await exa.searchAndContents(inputData.query, {
       livecrawl: "always",
       numResults: 2,
     });
@@ -278,13 +278,13 @@ export const mastra = new Mastra({
 
 <StepItem title="Test your agent">
 
-You can test your agent inside Mastra's [Playground](/docs/getting-started/studio) using the `mastra dev` command:
+You can test your agent with [Studio](/docs/getting-started/studio) using the `mastra dev` command:
 
 ```bash copy
 mastra dev
 ```
 
-Inside Playground navigate to the **"Search Agent"** and ask it: "What happened last week in AI news?"
+Inside Studio navigate to the **"Search Agent"** and ask it: "What happened last week in AI news?"
 
 </StepItem>
 

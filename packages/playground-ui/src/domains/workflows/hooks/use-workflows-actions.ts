@@ -13,7 +13,7 @@ export const useExecuteWorkflow = () => {
     mutationFn: async ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => {
       try {
         const workflow = client.getWorkflow(workflowId);
-        const { runId: newRunId } = await workflow.createRunAsync({ runId: prevRunId });
+        const { runId: newRunId } = await workflow.createRun({ runId: prevRunId });
         return { runId: newRunId };
       } catch (error) {
         console.error('Error creating workflow run:', error);

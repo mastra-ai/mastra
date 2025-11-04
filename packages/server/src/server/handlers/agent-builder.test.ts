@@ -378,7 +378,7 @@ describe('Agent Builder Handlers', () => {
     });
 
     it('should get action run successfully', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
 
@@ -422,7 +422,7 @@ describe('Agent Builder Handlers', () => {
     });
 
     it('should get action run execution result successfully', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
       await run.start({ inputData: {} });
@@ -524,7 +524,7 @@ describe('Agent Builder Handlers', () => {
     });
 
     it('should start action run successfully', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
 
@@ -603,7 +603,7 @@ describe('Agent Builder Handlers', () => {
     });
 
     it('should resume action run successfully', async () => {
-      const run = await reusableWorkflow.createRunAsync({
+      const run = await reusableWorkflow.createRun({
         runId: 'test-run',
       });
 
@@ -660,7 +660,7 @@ describe('Agent Builder Handlers', () => {
     });
 
     it('should get action runs successfully (not empty)', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
       await run.start({ inputData: {} });

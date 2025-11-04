@@ -11,6 +11,33 @@ import {
 } from './helpers';
 
 describe('auth', () => {
+  describe('/api route', () => {
+    it('should return 200 for GET /api route without authentication', async () => {
+      const { createHonoServer } = await import('../../index');
+      const { Mastra } = await import('@mastra/core/mastra');
+
+      const mastra = new Mastra({
+        server: {
+          experimental_auth: {
+            authenticateToken: async (token: string) => {
+              if (token === 'valid-token') {
+                return { id: '123', name: 'Test User' };
+              }
+              return null;
+            },
+          },
+        },
+      });
+
+      const app = await createHonoServer(mastra, { tools: {} });
+
+      const req = new Request('http://localhost/api');
+      const res = await app.request(req);
+
+      expect(res.status).toBe(200);
+    });
+  });
+
   describe('authenticationMiddleware', () => {
     it('should return 401 if no token is provided', () => {
       // const context = createMockContext();

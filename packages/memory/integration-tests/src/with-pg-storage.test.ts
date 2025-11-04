@@ -68,7 +68,7 @@ describe('Memory with PostgresStore Integration', () => {
 
     beforeEach(async () => {
       // Clean up any existing threads
-      const { threads } = await memory.listThreadsByResourceId({ resourceId, offset: 0, limit: 10 });
+      const { threads } = await memory.listThreadsByResourceId({ resourceId, page: 0, perPage: 10 });
       await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
 
       // Create a fresh thread for testing
@@ -110,12 +110,8 @@ describe('Memory with PostgresStore Integration', () => {
       const result1 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 0,
-            perPage: 3,
-          },
-        },
+        page: 0,
+        perPage: 3,
       });
 
       expect(result1.messages, 'Page 0 with perPage 3 should return exactly 3 messages').toHaveLength(3);
@@ -130,12 +126,8 @@ describe('Memory with PostgresStore Integration', () => {
       const result2 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 1,
-            perPage: 3,
-          },
-        },
+        page: 1,
+        perPage: 3,
       });
 
       expect(result2.messages, 'Page 1 with perPage 3 should return exactly 3 messages').toHaveLength(3);
@@ -148,12 +140,8 @@ describe('Memory with PostgresStore Integration', () => {
       const result3 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 0,
-            perPage: 1,
-          },
-        },
+        page: 0,
+        perPage: 1,
       });
 
       expect(result3.messages, 'Page 0 with perPage 1 should return exactly 1 message').toHaveLength(1);
@@ -164,12 +152,8 @@ describe('Memory with PostgresStore Integration', () => {
       const result4 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 9,
-            perPage: 1,
-          },
-        },
+        page: 9,
+        perPage: 1,
       });
 
       expect(result4.messages, 'Page 9 with perPage 1 should return exactly 1 message').toHaveLength(1);
@@ -180,12 +164,8 @@ describe('Memory with PostgresStore Integration', () => {
       const result5 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 1,
-            perPage: 5,
-          },
-        },
+        page: 1,
+        perPage: 5,
       });
 
       expect(result5.messages, 'Page 1 with perPage 5 should return exactly 5 messages').toHaveLength(5);
@@ -197,9 +177,7 @@ describe('Memory with PostgresStore Integration', () => {
       const result6 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          last: 5,
-        },
+        perPage: 5,
       });
 
       expect(result6.messages, 'Query with last: 5 should return exactly 5 messages').toHaveLength(5);
@@ -229,12 +207,8 @@ describe('Memory with PostgresStore Integration', () => {
       const result1 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 5,
-            perPage: 2,
-          },
-        },
+        page: 5,
+        perPage: 2,
       });
 
       expect(result1.messages, 'Page beyond available data should return empty array').toHaveLength(0);
@@ -244,12 +218,8 @@ describe('Memory with PostgresStore Integration', () => {
       const result2 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 0,
-            perPage: 10,
-          },
-        },
+        page: 0,
+        perPage: 10,
       });
 
       expect(result2.messages, 'perPage larger than total should return all 3 messages').toHaveLength(3);
@@ -307,9 +277,7 @@ describe('Memory with PostgresStore Integration', () => {
       const result = await hnswMemory.query({
         threadId,
         resourceId,
-        selectBy: {
-          vectorSearchString: 'HNSW test',
-        },
+        vectorSearchString: 'HNSW test',
       });
 
       expect(result.messages).toBeDefined();
@@ -364,9 +332,7 @@ describe('Memory with PostgresStore Integration', () => {
       const result = await ivfflatMemory.query({
         threadId,
         resourceId,
-        selectBy: {
-          vectorSearchString: 'IVFFlat test',
-        },
+        vectorSearchString: 'IVFFlat test',
       });
 
       expect(result.messages).toBeDefined();
@@ -418,9 +384,7 @@ describe('Memory with PostgresStore Integration', () => {
       const result = await flatMemory.query({
         threadId,
         resourceId,
-        selectBy: {
-          vectorSearchString: 'flat scan test',
-        },
+        vectorSearchString: 'flat scan test',
       });
 
       expect(result.messages).toBeDefined();
@@ -494,7 +458,6 @@ describe('Memory with PostgresStore Integration', () => {
 
       // Query should work with new index
       const result = await memory2.query({
-        query: 'configuration',
         threadId,
         resourceId,
       });
@@ -566,7 +529,6 @@ describe('Memory with PostgresStore Integration', () => {
 
       // Query should work with preserved HNSW index
       const result = await memory2.query({
-        query: 'index',
         threadId,
         resourceId,
       });

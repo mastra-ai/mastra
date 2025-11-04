@@ -136,7 +136,7 @@ export type ServerConfig = {
   /**
    * Authentication configuration for the server
    */
-  experimental_auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
+  auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
 
   /**
    * If you want to run `mastra dev` with HTTPS, you can run it with the `--https` flag and provide the key and cert files here.

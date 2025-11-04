@@ -67,7 +67,7 @@ import type { MCPServerPrompts, MCPServerResources, ElicitationActions } from '.
  *   id: 'getWeather',
  *   description: 'Gets the current weather for a location.',
  *   inputSchema: z.object({ location: z.string() }),
- *   execute: async ({ context }) => `Weather in ${context.location} is sunny.`,
+ *   execute: async (inputData) => `Weather in ${inputData.location} is sunny.`,
  * });
  *
  * const server = new MCPServer({
@@ -226,7 +226,7 @@ export class MCPServer extends MCPServerBase {
    *       id: 'getWeather',
    *       description: 'Gets weather',
    *       inputSchema: z.object({ location: z.string() }),
-   *       execute: async ({ context }) => `Sunny in ${context.location}`,
+   *       execute: async (inputData) => `Sunny in ${inputData.location}`,
    *     })
    *   },
    *   agents: { myAgent },
@@ -759,12 +759,12 @@ export class MCPServer extends MCPServerBase {
         inputSchema: z.object({
           message: z.string().describe('The question or input for the agent.'),
         }),
-        execute: async ({ context, requestContext, tracingContext }) => {
+        execute: async (inputData, context) => {
           this.logger.debug(
-            `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${context.message}"`,
+            `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${inputData.message}"`,
           );
           try {
-            const response = await agent.generate(context.message, { requestContext, tracingContext });
+            const response = await agent.generate(inputData.message, context);
             return response;
           } catch (error) {
             this.logger.error(`Error executing agent tool '${agentToolName}' for agent '${agent.name}':`, error);
@@ -832,16 +832,19 @@ export class MCPServer extends MCPServerBase {
         id: workflowToolName,
         description: `Run workflow '${workflowKey}'. Workflow description: ${workflowDescription}`,
         inputSchema: workflow.inputSchema,
-        execute: async ({ context, requestContext, tracingContext }) => {
+        execute: async (inputData, context) => {
           this.logger.debug(
             `Executing workflow tool '${workflowToolName}' for workflow '${workflow.id}' with input:`,
-            context,
+            inputData,
           );
           try {
-            const run = await workflow.createRunAsync({ runId: requestContext?.get('runId') });
+            const run = await workflow.createRun({ runId: context?.requestContext?.get('runId') });
 
-            const response = await run.start({ inputData: context, requestContext, tracingContext });
-
+            const response = await run.start({
+              inputData: inputData,
+              requestContext: context?.requestContext,
+              tracingContext: context?.tracingContext,
+            });
             return response;
           } catch (error) {
             this.logger.error(

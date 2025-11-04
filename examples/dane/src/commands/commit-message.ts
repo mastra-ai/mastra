@@ -17,7 +17,7 @@ export async function commitMessageCommand() {
     // Get the current path
     const currentPath = execSync('pwd', { encoding: 'utf-8' }).trim();
 
-    const run = await workflow.createRunAsync();
+    const run = await workflow.createRun();
     const { start } = run;
 
     const result = await start({

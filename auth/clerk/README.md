@@ -32,7 +32,7 @@ const clerkAuth = new MastraAuthClerk();
 const mastra = new Mastra({
   ...
   server: {
-    experimental_auth: clerkAuth,
+    auth: clerkAuth,
   },
 });
 ```

@@ -7,8 +7,8 @@ export const weatherTool = createTool({
   inputSchema: z.object({
     postalCode: z.string().describe('The location to get the weather for'),
   }),
-  execute: async ({ context }) => {
-    const { postalCode } = context;
+  execute: async input => {
+    const { postalCode } = input;
     return `The weather in ${postalCode} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
   },
 });

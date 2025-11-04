@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { openai } from '@ai-sdk/openai';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
+import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4/model';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
@@ -60,7 +60,7 @@ function runStreamTest(version: 'v1' | 'v2') {
         description: 'Echoes the input string.',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
-        execute: async ({ context }) => ({ output: context.input }),
+        execute: async input => ({ output: input.input }),
       });
 
       const agent = new Agent({
@@ -170,7 +170,7 @@ function runStreamTest(version: 'v1' | 'v2') {
         description: 'Echoes the input string.',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
-        execute: async ({ context }) => ({ output: context.input }),
+        execute: async input => ({ output: input.input }),
       });
 
       const agent = new Agent({
@@ -232,7 +232,7 @@ function runStreamTest(version: 'v1' | 'v2') {
         description: 'Echoes the input string.',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
-        execute: async ({ context }) => ({ output: context.input }),
+        execute: async input => ({ output: input.input }),
       });
 
       const uppercaseTool = createTool({
@@ -240,7 +240,7 @@ function runStreamTest(version: 'v1' | 'v2') {
         description: 'Converts input to uppercase.',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
-        execute: async ({ context }) => ({ output: context.input.toUpperCase() }),
+        execute: async input => ({ output: input.input.toUpperCase() }),
       });
 
       const agent = new Agent({
@@ -765,8 +765,8 @@ function runStreamTest(version: 'v1' | 'v2') {
         inputSchema: z.object({
           postalCode: z.string().describe('The location to get the weather for'),
         }),
-        execute: async ({ context: { postalCode } }) => {
-          return `The weather in ${postalCode} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
+        execute: async input => {
+          return `The weather in ${input.postalCode} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
         },
       });
 

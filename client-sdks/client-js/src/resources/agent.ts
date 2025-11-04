@@ -40,7 +40,6 @@ import { BaseResource } from './base';
 async function executeToolCallAndRespond({
   response,
   params,
-  runId,
   resourceId,
   threadId,
   requestContext,
@@ -48,7 +47,6 @@ async function executeToolCallAndRespond({
 }: {
   params: StreamParams<any>;
   response: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
-  runId?: string;
   resourceId?: string;
   threadId?: string;
   requestContext?: RequestContext<any>;
@@ -70,21 +68,17 @@ async function executeToolCallAndRespond({
       const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
 
       if (clientTool && clientTool.execute) {
-        const result = await clientTool.execute(
-          {
-            context: toolCall?.args,
-            runId,
-            resourceId,
-            threadId,
-            requestContext: requestContext as RequestContext,
-            tracingContext: { currentSpan: undefined },
-            suspend: async () => {},
-          },
-          {
+        const result = await clientTool.execute(toolCall?.args, {
+          requestContext: requestContext as RequestContext,
+          tracingContext: { currentSpan: undefined },
+          agent: {
             messages: (response as unknown as { messages: CoreMessage[] }).messages,
             toolCallId: toolCall?.toolCallId,
+            suspend: async () => {},
+            threadId,
+            resourceId,
           },
-        );
+        });
 
         // Build updated messages from the response, adding the tool result
         // Do NOT re-include the original user message to avoid storage duplicates
@@ -235,7 +229,7 @@ export class Agent extends BaseResource {
       clientTools: processClientTools(params.clientTools),
     };
 
-    const { runId, resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
+    const { resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
 
     const response: GenerateReturn<any, Output, StructuredOutput> = await this.request(
       `/api/agents/${this.agentId}/generate-legacy`,
@@ -261,21 +255,17 @@ export class Agent extends BaseResource {
         const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
 
         if (clientTool && clientTool.execute) {
-          const result = await clientTool.execute(
-            {
-              context: toolCall?.args,
-              runId,
-              resourceId,
-              threadId,
-              requestContext: requestContext as RequestContext,
-              tracingContext: { currentSpan: undefined },
-              suspend: async () => {},
-            },
-            {
+          const result = await clientTool.execute(toolCall?.args, {
+            requestContext: requestContext as RequestContext,
+            tracingContext: { currentSpan: undefined },
+            agent: {
               messages: (response as unknown as { messages: CoreMessage[] }).messages,
               toolCallId: toolCall?.toolCallId,
+              suspend: async () => {},
+              threadId,
+              resourceId,
             },
-          );
+          });
 
           // Build updated messages from the response, adding the tool result
           // Do NOT re-include the original user message to avoid storage duplicates
@@ -341,7 +331,7 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    const { runId, resourceId, threadId, requestContext } = processedParams as StreamParams;
+    const { resourceId, threadId, requestContext } = processedParams as StreamParams;
 
     const response = await this.request<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>(
       `/api/agents/${this.agentId}/generate`,
@@ -355,7 +345,6 @@ export class Agent extends BaseResource {
       return executeToolCallAndRespond({
         response,
         params,
-        runId,
         resourceId,
         threadId,
         requestContext: requestContext as RequestContext<any>,
@@ -1190,22 +1179,18 @@ export class Agent extends BaseResource {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
                 shouldExecuteClientTool = true;
-                const result = await clientTool.execute(
-                  {
-                    context: toolCall?.args,
-                    runId: processedParams.runId,
-                    resourceId: processedParams.resourceId,
-                    threadId: processedParams.threadId,
-                    requestContext: processedParams.requestContext as RequestContext,
-                    // TODO: Pass proper tracing context when client-js supports tracing
-                    tracingContext: { currentSpan: undefined },
-                    suspend: async () => {},
-                  },
-                  {
+                const result = await clientTool.execute(toolCall?.args, {
+                  requestContext: processedParams.requestContext as RequestContext,
+                  // TODO: Pass proper tracing context when client-js supports tracing
+                  tracingContext: { currentSpan: undefined },
+                  agent: {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
                     toolCallId: toolCall?.toolCallId,
+                    suspend: async () => {},
+                    threadId: processedParams.threadId,
+                    resourceId: processedParams.resourceId,
                   },
-                );
+                });
 
                 const lastMessageRaw = messages[messages.length - 1];
                 const lastMessage: UIMessage | undefined =
@@ -1554,22 +1539,18 @@ export class Agent extends BaseResource {
             for (const toolCall of toolCalls) {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
-                const result = await clientTool.execute(
-                  {
-                    context: toolCall?.args,
-                    runId: processedParams.runId,
-                    resourceId: processedParams.resourceId,
-                    threadId: processedParams.threadId,
-                    requestContext: processedParams.requestContext as RequestContext,
-                    // TODO: Pass proper tracing context when client-js supports tracing
-                    tracingContext: { currentSpan: undefined },
-                    suspend: async () => {},
-                  },
-                  {
+                const result = await clientTool.execute(toolCall?.args, {
+                  requestContext: processedParams.requestContext as RequestContext,
+                  // TODO: Pass proper tracing context when client-js supports tracing
+                  tracingContext: { currentSpan: undefined },
+                  agent: {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
                     toolCallId: toolCall?.toolCallId,
+                    suspend: async () => {},
+                    threadId: processedParams.threadId,
+                    resourceId: processedParams.resourceId,
                   },
-                );
+                });
 
                 const lastMessage: UIMessage = JSON.parse(JSON.stringify(messages[messages.length - 1]));
 
@@ -1717,64 +1698,5 @@ export class Agent extends BaseResource {
       method: 'POST',
       body: params,
     });
-  }
-
-  /**
-   * @deprecated generateVNext has been renamed to generate. Please use generate instead.
-   */
-  async generateVNext<OUTPUT extends OutputSchema = undefined>(
-    messages: MessageListInput,
-    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
-  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
-  async generateVNext<OUTPUT extends OutputSchema = undefined>(
-    params: StreamParams<OUTPUT>,
-  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
-  async generateVNext<OUTPUT extends OutputSchema = undefined>(
-    _messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
-    _options?: Omit<StreamParams<OUTPUT>, 'messages'>,
-  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
-    throw new Error('generateVNext has been renamed to generate. Please use generate instead.');
-  }
-
-  /**
-   * @deprecated streamVNext has been renamed to stream. Please use stream instead.
-   */
-  async streamVNext<OUTPUT extends OutputSchema = undefined>(
-    messages: MessageListInput,
-    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
-  ): Promise<
-    Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-      }) => Promise<void>;
-    }
-  >;
-  // Backward compatibility overload
-  async streamVNext<OUTPUT extends OutputSchema = undefined>(
-    params: StreamParams<OUTPUT>,
-  ): Promise<
-    Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-      }) => Promise<void>;
-    }
-  >;
-  async streamVNext<OUTPUT extends OutputSchema = undefined>(
-    _messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
-    _options?: Omit<StreamParams<OUTPUT>, 'messages'>,
-  ): Promise<
-    Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-      }) => Promise<void>;
-    }
-  > {
-    throw new Error('streamVNext has been renamed to stream. Please use stream instead.');
   }
 }

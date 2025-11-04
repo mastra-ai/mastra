@@ -11,6 +11,7 @@ const vectorQueryTool = createVectorQueryTool({
 });
 
 export const ragAgent = new Agent({
+  id: 'rag-agent',
   name: 'RAG Agent',
   instructions:
     'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',

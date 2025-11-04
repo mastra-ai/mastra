@@ -97,17 +97,17 @@ const getTextContent = (message: any): string => {
 export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
   const cleanupAllThreads = async () => {
     let allThreads: any[] = [];
-    let offset = 0;
-    const limit = 100;
+    let page = 0;
+    const perPage = 100;
     while (true) {
       const { threads, hasMore } = await memory.listThreadsByResourceId({
         resourceId,
-        offset,
-        limit,
+        page,
+        perPage,
       });
       allThreads.push(...threads);
       if (!hasMore || threads.length === 0) break;
-      offset += limit;
+      page++;
     }
     await Promise.all(allThreads.map(thread => memory.deleteThread(thread.id)));
   };
@@ -207,9 +207,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const { messages } = await memory.query({
           threadId,
           resourceId,
-          selectBy: {
-            vectorSearchString: content,
-          },
+          vectorSearchString: content,
           threadConfig: {
             semanticRecall: {
               topK: 2,
@@ -674,7 +672,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         // Verify message is deleted
         const remainingMessages = await memory.query({
           threadId: thread.id,
-          selectBy: { last: 10 },
+          perPage: 10,
         });
 
         expect(remainingMessages.messages).toHaveLength(2);
@@ -727,7 +725,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
         const remainingMessages = await memory.query({
           threadId: thread.id,
-          selectBy: { last: 10 },
+          perPage: 10,
         });
 
         expect(remainingMessages.messages).toHaveLength(1);
@@ -752,14 +750,14 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         // Verify first thread has no messages
         const thread1Messages = await memory.query({
           threadId: thread.id,
-          selectBy: { last: 10 },
+          perPage: 10,
         });
         expect(thread1Messages.messages).toHaveLength(0);
 
         // Verify second thread still has its message
         const thread2Messages = await memory.query({
           threadId: otherThread.id,
-          selectBy: { last: 10 },
+          perPage: 10,
         });
         expect(thread2Messages.messages).toHaveLength(1);
         expect(getTextContent(thread2Messages.messages[0])).toBe('Thread 2 message');
@@ -860,8 +858,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       // Get first page
       const result = await memory.listThreadsByResourceId({
         resourceId,
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
@@ -880,8 +878,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       // Empty result set
       const emptyResult = await memory.listThreadsByResourceId({
         resourceId: 'non-existent-resource',
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
@@ -900,8 +898,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
       const lastPageResult = await memory.listThreadsByResourceId({
         resourceId,
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
@@ -923,8 +921,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       // Test second page
       const page2Result = await memory.listThreadsByResourceId({
         resourceId,
-        offset: 7,
-        limit: 7,
+        page: 1,
+        perPage: 7,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
@@ -935,14 +933,55 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       // Test third page (final page)
       const page3Result = await memory.listThreadsByResourceId({
         resourceId,
-        offset: 14,
-        limit: 7,
+        page: 2,
+        perPage: 7,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(page3Result.threads).toHaveLength(1);
       expect(page3Result.page).toBe(2);
       expect(page3Result.hasMore).toBe(false);
+    });
+
+    it('should reject negative page values', async () => {
+      await memory.saveThread({
+        thread: createTestThread('Validation Test Thread'),
+      });
+
+      await expect(
+        memory.listThreadsByResourceId({
+          resourceId,
+          page: -1,
+          perPage: 10,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('should handle perPage edge cases', async () => {
+      await memory.saveThread({
+        thread: createTestThread('perPage Edge Case Thread'),
+      });
+
+      // Test perPage = 0 (should return zero results)
+      const zeroResult = await memory.listThreadsByResourceId({
+        resourceId,
+        page: 0,
+        perPage: 0,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
+      expect(zeroResult.threads).toHaveLength(0);
+      expect(zeroResult.perPage).toBe(0);
+
+      // Test negative perPage (should fall back to default)
+      const negativeResult = await memory.listThreadsByResourceId({
+        resourceId,
+        page: 0,
+        perPage: -5,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
+      expect(negativeResult.threads.length).toBeGreaterThan(0);
+      expect(negativeResult.perPage).toBe(100); // Default for listThreadsByResourceId
     });
   });
 
