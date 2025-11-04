@@ -93,8 +93,8 @@ export function workflowRoute({
       const run = await workflowObj.createRunAsync();
 
       const stream = resumeData
-        ? run.resumeStreamVNext({ resumeData, ...rest })
-        : run.streamVNext({ inputData, ...rest });
+        ? run.resumeStream({ resumeData, ...rest })
+        : run.stream({ inputData, ...rest });
 
       const uiMessageStream = createUIMessageStream({
         execute: async ({ writer }) => {
