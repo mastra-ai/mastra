@@ -5,7 +5,7 @@ import {
   TABLE_SCORERS,
   type MastraStorage,
 } from '@mastra/core/storage';
-import { createMessagesPaginatedTest } from './messages-paginated';
+import { createListMessagesTest } from './messages-paginated';
 import { createThreadsTest } from './threads';
 import { createMessagesUpdateTest } from './messages-update';
 import { createMessagesBulkDeleteTest } from './messages-bulk-delete';
@@ -31,7 +31,7 @@ export function createMemoryTest({ storage }: { storage: MastraStorage }) {
 
   createMessagesListTest({ storage });
 
-  createMessagesPaginatedTest({ storage });
+  createListMessagesTest({ storage });
 
   createMessagesUpdateTest({ storage });
 

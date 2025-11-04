@@ -242,17 +242,10 @@ export class D1Store extends MastraStorage {
   }
 
   /**
-   * @deprecated use getMessagesPaginated instead
+   * @deprecated use listMessages instead
    */
   public async getMessages({ threadId, selectBy }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessages({ threadId, selectBy });
-  }
-
-  public async getMessagesPaginated({
-    threadId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessagesPaginated({ threadId, selectBy });
   }
 
   async updateWorkflowResults({

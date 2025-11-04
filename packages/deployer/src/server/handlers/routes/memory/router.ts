@@ -8,7 +8,7 @@ import {
   getMemoryStatusHandler,
   getMemoryConfigHandler,
   getMessagesHandler,
-  getMessagesPaginatedHandler,
+  listMessagesHandler,
   getThreadByIdHandler,
   listThreadsHandler,
   getWorkingMemoryHandler,
@@ -708,35 +708,67 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
           },
         },
         {
-          name: 'format',
+          name: 'page',
           in: 'query',
           required: false,
-          description: 'Message format to return',
+          description: 'Zero-indexed page number for pagination (default: 0)',
           schema: {
-            type: 'string',
-            enum: ['v1', 'v2'],
-            default: 'v1',
+            type: 'integer',
+            minimum: 0,
+            default: 0,
           },
         },
         {
-          name: 'selectBy',
+          name: 'perPage',
           in: 'query',
           required: false,
-          description: 'JSON string containing selection criteria for messages',
+          description: 'Number of items per page, or "false" to fetch all records (default: 40)',
+          schema: {
+            oneOf: [
+              { type: 'integer', minimum: 0 },
+              { type: 'boolean', enum: [false] },
+            ],
+            default: 40,
+          },
+        },
+        {
+          name: 'orderBy',
+          in: 'query',
+          required: false,
+          description: 'JSON string specifying sort order',
           schema: {
             type: 'string',
-            example:
-              '{"pagination":{"page":0,"perPage":20,"dateRange":{"start":"2024-01-01T00:00:00Z","end":"2024-12-31T23:59:59Z"}},"include":[{"id":"msg-123","withPreviousMessages":5,"withNextMessages":3}]}',
+            example: '{"field":"createdAt","direction":"DESC"}',
+          },
+        },
+        {
+          name: 'include',
+          in: 'query',
+          required: false,
+          description: 'JSON string specifying messages to include with context',
+          schema: {
+            type: 'string',
+            example: '[{"id":"msg-123","withPreviousMessages":5,"withNextMessages":3}]',
+          },
+        },
+        {
+          name: 'filter',
+          in: 'query',
+          required: false,
+          description: 'JSON string specifying filter criteria',
+          schema: {
+            type: 'string',
+            example: '{"dateRange":{"start":"2024-01-01T00:00:00Z","end":"2024-12-31T23:59:59Z"}}',
           },
         },
       ],
       responses: {
         200: {
-          description: 'List of messages',
+          description: 'Paginated list of messages with metadata',
         },
       },
     }),
-    getMessagesPaginatedHandler,
+    listMessagesHandler,
   );
 
   router.get(
