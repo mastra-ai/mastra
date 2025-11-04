@@ -16,18 +16,15 @@ const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
 
   return (msg: MastraMessageV1) => {
     const previousMessage = v1Messages.at(-1);
-    if (
-      msg.role === previousMessage?.role &&
-      Array.isArray(previousMessage.content) &&
-      Array.isArray(msg.content) &&
-      // we were creating new messages for tool calls before and not appending to the assistant message
-      // so don't append here so everything works as before
-      (msg.role !== `assistant` || (msg.role === `assistant` && msg.content.at(-1)?.type !== `tool-call`))
-    ) {
+    if (msg.role === previousMessage?.role && Array.isArray(previousMessage.content) && Array.isArray(msg.content)) {
       for (const part of msg.content) {
         // @ts-ignore needs type gymnastics? msg.content and previousMessage.content are the same type here since both are arrays
         // I'm not sure what's adding `never` to the union but this code definitely works..
         previousMessage.content.push(part);
+      }
+      // Recalculate the type when combining assistant messages
+      if (previousMessage.role === 'assistant' && Array.isArray(previousMessage.content)) {
+        previousMessage.type = previousMessage.content.some((c: any) => c.type === 'tool-call') ? 'tool-call' : 'text';
       }
     } else {
       // When pushing a new message, check if we need to deduplicate the ID

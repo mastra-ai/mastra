@@ -3426,14 +3426,13 @@ describe('MessageList', () => {
       // Now convert back to v1 and see what happens
       const v1Again = newList.get.all.v1();
 
-      // With our improved suffix pattern, messages with __split- suffix should NOT get double-suffixed
-      // Note: v1 tool messages get converted to v2 assistant messages, then split again when converting back
-      expect(v1Again.length).toBe(5); // 5 messages because tool message gets split
+      // With our improved suffix pattern AND combined assistant messages,
+      // assistant tool-call and subsequent text are now combined into one message
+      expect(v1Again.length).toBe(4); // 4 messages because assistant parts are combined
       expect(v1Again[0].id).toBe('user-1');
-      expect(v1Again[1].id).toBe('msg-1');
-      expect(v1Again[2].id).toBe('msg-1__split-1'); // assistant tool-call (preserved)
-      expect(v1Again[3].id).toBe('msg-1__split-1'); // tool result (preserved - no double suffix!)
-      expect(v1Again[4].id).toBe('msg-1__split-2'); // assistant text (preserved)
+      expect(v1Again[1].id).toBe('msg-1'); // assistant with tool-call now combined with text
+      expect(v1Again[2].id).toBe('msg-1__split-1'); // tool result
+      expect(v1Again[3].id).toBe('msg-1__split-2'); // assistant text (now combined with previous assistant)
 
       // Now if we try to convert these v2 messages that came from suffixed v1s
       // We need to check if we get double-suffixed IDs
@@ -3480,7 +3479,8 @@ describe('MessageList', () => {
       const finalV1 = newList.get.all.v1();
 
       // The test shows our fix works! Messages with __split- suffix are not getting double-suffixed
-      expect(finalV1.length).toBeGreaterThanOrEqual(8); // At least 5 existing + 3 new split messages
+      // With combined assistant messages, we now have fewer total messages
+      expect(finalV1.length).toBeGreaterThanOrEqual(5); // At least 4 existing + 1 new message (tool-result and text combined)
 
       // Verify that messages with __split- suffix are preserved (no double-suffixing)
       const splitMessages = finalV1.filter(m => m.id.includes('__split-'));

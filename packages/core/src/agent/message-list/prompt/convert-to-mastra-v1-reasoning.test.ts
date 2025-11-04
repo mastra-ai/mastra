@@ -233,35 +233,33 @@ describe('convertToV1Messages - reasoning and file support', () => {
 
     const result = convertToV1Messages(messages);
 
-    // Should split at tool invocation
-    // 1. Text + file + reasoning + text
-    // 2. Tool call
-    // 3. Tool result
-    // 4. Final text
-    expect(result.length).toBe(4);
+    // With combined assistant messages, content before tool result stays together
+    // 1. Text + file + reasoning + text (all combined, no tool-call since it's a result)
+    // 2. Tool result
+    // 3. Final text
+    expect(result.length).toBe(3);
 
-    // First message: combined content before tool
+    // First message: combined content with tool-call
     expect(result[0].role).toBe('assistant');
-    expect(result[0].type).toBe('text');
+    // With our change, assistant messages are combined, including tool-calls
+    // The type will be 'tool-call' if there's at least one tool-call part
+    expect(result[0].type).toBe('tool-call');
     if (Array.isArray(result[0].content)) {
-      expect(result[0].content.length).toBe(4);
+      expect(result[0].content.length).toBe(5); // text, file, reasoning, text, tool-call
       expect(result[0].content[0].type).toBe('text');
       expect(result[0].content[1].type).toBe('file');
       expect(result[0].content[2].type).toBe('reasoning');
       expect(result[0].content[3].type).toBe('text');
+      expect(result[0].content[4].type).toBe('tool-call');
     }
 
-    // Second message: tool call
-    expect(result[1].role).toBe('assistant');
-    expect(result[1].type).toBe('tool-call');
+    // Second message: tool result
+    expect(result[1].role).toBe('tool');
+    expect(result[1].type).toBe('tool-result');
 
-    // Third message: tool result
-    expect(result[2].role).toBe('tool');
-    expect(result[2].type).toBe('tool-result');
-
-    // Fourth message: text after tool
-    expect(result[3].role).toBe('assistant');
-    expect(result[3].type).toBe('text');
+    // Third message: text after tool
+    expect(result[2].role).toBe('assistant');
+    expect(result[2].type).toBe('text');
   });
 
   it('should handle file attachments in experimental_attachments', () => {
