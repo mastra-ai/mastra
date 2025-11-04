@@ -108,6 +108,7 @@ describe('create mastra', () => {
               "defaultGenerateOptionsLegacy": {},
               "defaultOptions": {},
               "defaultStreamOptionsLegacy": {},
+              "description": "",
               "inputProcessors": [],
               "instructions": "
                 You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
