@@ -1073,7 +1073,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         try {
           // Only add tools that have an id property (ToolAction type)
           if (tool && typeof tool === 'object' && 'id' in tool) {
-            mastra.addTool(tool as any, key);
+            // Use tool's intrinsic ID to avoid collisions across agents
+            const toolKey = typeof (tool as any).id === 'string' ? (tool as any).id : key;
+            mastra.addTool(tool as any, toolKey);
           }
         } catch (error) {
           // Tool might already be registered, that's okay

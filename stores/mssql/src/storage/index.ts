@@ -58,6 +58,9 @@ export class MSSQLStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor(config: MSSQLConfigType) {
+    if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
+      throw new Error('MSSQLStore: id must be provided and cannot be empty.');
+    }
     super({ id: config.id, name: 'MSSQLStore' });
     try {
       if ('connectionString' in config) {

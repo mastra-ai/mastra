@@ -7,7 +7,7 @@ import { Memory } from '@mastra/memory';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
-    id: 'weather-agent-storage',
+    id: 'weather-agent-memory-storage',
     url: 'file:../mastra.db', // Or your database URL
   }),
 });

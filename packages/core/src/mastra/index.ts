@@ -1559,6 +1559,7 @@ export class Mastra<
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
       logger: this.getLogger(),
+      storage: this.getStorage(),
     });
     workflows[workflowKey] = workflow;
   }
@@ -1896,7 +1897,20 @@ export class Mastra<
    * ```
    */
   public addMCPServer<M extends MCPServerBase>(server: M, key?: string): void {
-    const serverKey = key || server.id;
+    const resolvedId = server.id ?? key;
+    if (!resolvedId) {
+      const error = new MastraError({
+        id: 'MASTRA_ADD_MCP_SERVER_MISSING_ID',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'MCP server must expose an id or be registered under one',
+        details: { status: 400 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    const serverKey = key ?? resolvedId;
     const servers = this.#mcpServers as Record<string, MCPServerBase>;
     if (servers[serverKey]) {
       const error = new MastraError({
@@ -1915,7 +1929,9 @@ export class Mastra<
     }
 
     // Initialize the server
-    server.setId(serverKey);
+    if (!server.id) {
+      server.setId(resolvedId);
+    }
     server.__registerMastra(this);
     server.__setLogger(this.getLogger());
     servers[serverKey] = server;
