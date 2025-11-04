@@ -7,7 +7,7 @@ import type { ToolInvocation } from 'ai';
  * Extract text content from MastraDBMessage
  * Matches the logic used in MessageList.mastraDBMessageToAIV4UIMessage
  */
-function getTextContentFromMastraDBMessage(message: MastraDBMessage): string {
+export function getTextContentFromMastraDBMessage(message: MastraDBMessage): string {
   if (typeof message.content.content === 'string' && message.content.content !== '') {
     return message.content.content;
   }
@@ -54,7 +54,7 @@ export const createTestRun = (
   };
 };
 
-export const getUserMessageFromRunInput = (input?: ScorerRunInputForAgent) => {
+export const getUserMessageFromRunInput = (input?: ScorerRunInputForAgent): string | undefined => {
   const message = input?.inputMessages.find(({ role }) => role === 'user');
   return message ? getTextContentFromMastraDBMessage(message) : undefined;
 };
@@ -166,6 +166,31 @@ export const createUIMessage = ({
     createdAt: new Date(),
   };
 };
+
+/**
+ * Helper function to create MastraDBMessage objects for tests
+ * Simpler version of createUIMessage without toolInvocations support
+ */
+export function createTestMessage({
+  content,
+  role,
+  id = 'test-message',
+}: {
+  content: string;
+  role: 'user' | 'assistant' | 'system';
+  id?: string;
+}): MastraDBMessage {
+  return {
+    id,
+    role,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text: content }],
+      content,
+    },
+    createdAt: new Date(),
+  };
+}
 
 export const createAgentTestRun = ({
   inputMessages = [],

@@ -1,32 +1,7 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { createAgentTestRun } from '../../utils';
+import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createCompletenessScorer } from './index';
-
-/**
- * Helper function to create MastraDBMessage objects for tests
- */
-function createTestMessage({
-  content,
-  role,
-  id = 'test-message',
-}: {
-  content: string;
-  role: 'user' | 'assistant' | 'system';
-  id?: string;
-}): MastraDBMessage {
-  return {
-    id,
-    role,
-    content: {
-      format: 2,
-      parts: [{ type: 'text', text: content }],
-      content,
-    },
-    createdAt: new Date(),
-  };
-}
 
 describe('CompletenessMetric', () => {
   let scorer;
@@ -126,8 +101,12 @@ describe('CompletenessMetric', () => {
 
   describe('special cases', () => {
     it('should handle lists and enumerations', async () => {
-      const inputMessages = [createTestMessage({ content: 'apples, oranges, and bananas', role: 'user', id: 'test-input' })];
-      const outputMessages = [createTestMessage({ content: 'apples and bananas', role: 'assistant', id: 'test-output' })];
+      const inputMessages = [
+        createTestMessage({ content: 'apples, oranges, and bananas', role: 'user', id: 'test-input' }),
+      ];
+      const outputMessages = [
+        createTestMessage({ content: 'apples and bananas', role: 'assistant', id: 'test-output' }),
+      ];
 
       const run = createAgentTestRun({ inputMessages, output: outputMessages });
       const result = await scorer.run(run);

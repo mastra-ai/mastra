@@ -1,22 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { createScorer } from '@mastra/core/evals';
 import nlp from 'compromise';
-
-/**
- * Extract text content from MastraDBMessage
- * Matches the logic used in MessageList.mastraDBMessageToAIV4UIMessage
- */
-function getTextContentFromMastraDBMessage(message: MastraDBMessage): string {
-  if (typeof message.content.content === 'string' && message.content.content !== '') {
-    return message.content.content;
-  }
-  if (message.content.parts && Array.isArray(message.content.parts)) {
-    // Return only the last text part like AI SDK does
-    const textParts = message.content.parts.filter(p => p.type === 'text');
-    return textParts.length > 0 ? textParts[textParts.length - 1]?.text || '' : '';
-  }
-  return '';
-}
+import { getTextContentFromMastraDBMessage } from '../../utils';
 
 function normalizeString(str: string): string {
   // Remove diacritics and convert to lowercase
