@@ -285,10 +285,6 @@ export class LanceStorage extends MastraStorage {
     return this.stores.memory.saveMessages(args);
   }
 
-  async getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessagesPaginated(args);
-  }
-
   async updateMessages(_args: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;

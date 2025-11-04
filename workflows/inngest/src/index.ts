@@ -603,7 +603,7 @@ export class InngestWorkflow<
   async listWorkflowRuns(args?: {
     fromDate?: Date;
     toDate?: Date;
-    perPage?: number;
+    perPage?: number | false;
     page?: number;
     resourceId?: string;
   }) {

@@ -4,7 +4,7 @@ import type { WorkflowRunState } from '../workflows';
 
 export type StoragePagination = {
   page: number;
-  perPage: number;
+  perPage: number | false;
 };
 
 export interface StorageColumn {

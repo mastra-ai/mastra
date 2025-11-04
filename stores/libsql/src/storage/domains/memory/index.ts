@@ -4,7 +4,6 @@ import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
-  PaginationInfo,
   StorageGetMessagesArg,
   StorageResourceType,
   StorageListMessagesInput,
@@ -15,7 +14,7 @@ import type {
 import {
   MemoryStorage,
   normalizePerPage,
-  preservePerPageForResponse,
+  calculatePagination,
   resolveMessageLimit,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -108,7 +107,7 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   /**
-   * @deprecated use getMessagesPaginated instead for paginated results.
+   * @deprecated use listMessages instead for paginated results.
    */
   public async getMessages({
     threadId,
@@ -232,24 +231,10 @@ export class MemoryLibSQL extends MemoryStorage {
       );
     }
 
+    const perPage = normalizePerPage(perPageInput, 40);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
     try {
-      // Determine how many results to return
-      // Default pagination is always 40 unless explicitly specified
-      let perPage = 40;
-      if (perPageInput !== undefined) {
-        if (perPageInput === false) {
-          // perPageInput: false means get ALL messages
-          perPage = Number.MAX_SAFE_INTEGER;
-        } else if (perPageInput === 0) {
-          // perPageInput: 0 means return zero results
-          perPage = 0;
-        } else if (typeof perPageInput === 'number' && perPageInput > 0) {
-          perPage = perPageInput;
-        }
-      }
-
-      const offset = page * perPage;
-
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy);
       const orderByStatement = `ORDER BY "${field}" ${direction}`;
@@ -287,18 +272,20 @@ export class MemoryLibSQL extends MemoryStorage {
       const total = Number(countResult.rows?.[0]?.count ?? 0);
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      const limitValue = perPageInput === false ? total : perPage;
       const dataResult = await this.client.execute({
         sql: `SELECT id, content, role, type, "createdAt", "resourceId", "thread_id" FROM ${TABLE_MESSAGES} ${whereClause} ${orderByStatement} LIMIT ? OFFSET ?`,
-        args: [...queryParams, perPage, offset],
+        args: [...queryParams, limitValue, offset],
       });
       const messages: MastraDBMessage[] = (dataResult.rows || []).map((row: any) => this.parseRow(row));
 
-      if (total === 0 && messages.length === 0) {
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total: 0,
           page,
-          perPage,
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
@@ -342,14 +329,13 @@ export class MemoryLibSQL extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore =
-        perPageInput === false ? false : allThreadMessagesReturned ? false : offset + dataResult.rows.length < total;
+      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,
         total,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error) {
@@ -371,109 +357,9 @@ export class MemoryLibSQL extends MemoryStorage {
         messages: [],
         total: 0,
         page,
-        perPage: perPageInput === false ? Number.MAX_SAFE_INTEGER : (perPageInput ?? 40),
+        perPage: perPageForResponse,
         hasMore: false,
       };
-    }
-  }
-
-  public async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    const { threadId, selectBy } = args;
-    const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
-    const perPage =
-      perPageInput !== undefined ? perPageInput : resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-    const fromDate = dateRange?.start;
-    const toDate = dateRange?.end;
-
-    const messages: MastraDBMessage[] = [];
-
-    if (selectBy?.include?.length) {
-      try {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
-        if (includeMessages) {
-          messages.push(...includeMessages);
-        }
-      } catch (error) {
-        throw new MastraError(
-          {
-            id: 'LIBSQL_STORE_GET_MESSAGES_PAGINATED_GET_INCLUDE_MESSAGES_FAILED',
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-            details: { threadId },
-          },
-          error,
-        );
-      }
-    }
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      const currentOffset = page * perPage;
-
-      const conditions: string[] = [`thread_id = ?`];
-      const queryParams: InValue[] = [threadId];
-
-      if (fromDate) {
-        conditions.push(`"createdAt" >= ?`);
-        queryParams.push(fromDate.toISOString());
-      }
-      if (toDate) {
-        conditions.push(`"createdAt" <= ?`);
-        queryParams.push(toDate.toISOString());
-      }
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-      const countResult = await this.client.execute({
-        sql: `SELECT COUNT(*) as count FROM ${TABLE_MESSAGES} ${whereClause}`,
-        args: queryParams,
-      });
-      const total = Number(countResult.rows?.[0]?.count ?? 0);
-
-      if (total === 0 && messages.length === 0) {
-        return {
-          messages: [],
-          total: 0,
-          page,
-          perPage,
-          hasMore: false,
-        };
-      }
-
-      const excludeIds = messages.map(m => m.id);
-      const excludeIdsParam = excludeIds.map((_, idx) => `$${idx + queryParams.length + 1}`).join(', ');
-
-      const dataResult = await this.client.execute({
-        sql: `SELECT id, content, role, type, "createdAt", "resourceId", "thread_id" FROM ${TABLE_MESSAGES} ${whereClause} ${excludeIds.length ? `AND id NOT IN (${excludeIdsParam})` : ''} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
-        args: [...queryParams, ...excludeIds, perPage, currentOffset],
-      });
-
-      messages.push(...(dataResult.rows || []).map((row: any) => this.parseRow(row)));
-
-      const messagesToReturn = new MessageList().add(messages as any, 'memory').get.all.db();
-
-      return {
-        messages: messagesToReturn,
-        total,
-        page,
-        perPage,
-        hasMore: currentOffset + messages.length < total,
-      };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'LIBSQL_STORE_GET_MESSAGES_PAGINATED_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
-        },
-        error,
-      );
-      this.logger?.trackException?.(mastraError);
-      this.logger?.error?.(mastraError.toString());
-      return { messages: [], total: 0, page, perPage, hasMore: false };
     }
   }
 
@@ -879,7 +765,7 @@ export class MemoryLibSQL extends MemoryStorage {
     }
 
     const perPage = normalizePerPage(perPageInput, 100);
-    const offset = page * perPage;
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
@@ -906,14 +792,15 @@ export class MemoryLibSQL extends MemoryStorage {
           threads: [],
           total: 0,
           page,
-          perPage: preservePerPageForResponse(perPageInput, perPage),
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
 
+      const limitValue = perPageInput === false ? total : perPage;
       const dataResult = await this.client.execute({
         sql: `SELECT * ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
-        args: [...queryParams, perPage, offset],
+        args: [...queryParams, limitValue, offset],
       });
 
       const threads = (dataResult.rows || []).map(mapRowToStorageThreadType);
@@ -922,8 +809,8 @@ export class MemoryLibSQL extends MemoryStorage {
         threads,
         total,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
-        hasMore: offset + perPage < total,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
       const mastraError = new MastraError(
@@ -941,7 +828,7 @@ export class MemoryLibSQL extends MemoryStorage {
         threads: [],
         total: 0,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }
