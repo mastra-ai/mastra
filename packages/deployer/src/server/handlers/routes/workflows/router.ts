@@ -5,6 +5,7 @@ import type { BodyLimitOptions } from '../../../types';
 import {
   cancelWorkflowRunHandler,
   createWorkflowRunHandler,
+  executeWorkflowHandler,
   getWorkflowByIdHandler,
   getWorkflowRunByIdHandler,
   getWorkflowRunExecutionResultHandler,
@@ -660,6 +661,71 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     startAsyncWorkflowHandler,
+  );
+
+  router.post(
+    '/:workflowId/execute',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Execute workflow and return final result in one call',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+          description: 'Optional custom run ID (auto-generated if not provided)',
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                inputData: {
+                  type: 'object',
+                  description: 'Input data for the workflow',
+                },
+                requestContext: {
+                  type: 'object',
+                  description: 'Request context for the workflow execution',
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the workflow execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
+              },
+              required: ['inputData'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Complete workflow execution result',
+        },
+        404: {
+          description: 'Workflow not found',
+        },
+      },
+    }),
+    executeWorkflowHandler,
   );
 
   router.post(

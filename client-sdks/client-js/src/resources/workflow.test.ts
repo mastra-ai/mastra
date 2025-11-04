@@ -17,6 +17,18 @@ describe('Workflow (fetch-mocked)', () => {
       if (url.includes('/start-async')) return Promise.resolve(createJsonResponse({ result: 'started-async' }));
       if (url.includes('/resume?runId=')) return Promise.resolve(createJsonResponse({ message: 'resumed' }));
       if (url.includes('/resume-async')) return Promise.resolve(createJsonResponse({ result: 'resumed-async' }));
+      if (url.includes('/execute')) {
+        const urlObj = new URL(url, 'http://localhost');
+        const runId = urlObj.searchParams.get('runId') || 'r-123';
+        return Promise.resolve(
+          createJsonResponse({
+            status: 'success',
+            result: { result: 'executed' },
+            runId,
+            steps: { 'test-step': { status: 'success' } },
+          }),
+        );
+      }
       if (url.includes('/stream?')) {
         const body = Workflow.createRecordStream([
           { type: 'log', payload: { msg: 'hello' } },
@@ -136,6 +148,58 @@ describe('Workflow (fetch-mocked)', () => {
     const options = call[1];
     const body = JSON.parse(options.body);
     expect(body.tracingOptions).toEqual(tracingOptions);
+  });
+
+  it('executes workflow with default runId', async () => {
+    const result = await wf.execute({ inputData: { value: 42 } });
+
+    expect(result.status).toBe('success');
+    expect(result.runId).toBe('r-123');
+
+    const successResult = result as Extract<typeof result, { status: 'success' }>;
+    expect(successResult.result).toBeDefined();
+    expect(successResult.steps).toBeDefined();
+
+    const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/execute'));
+    expect(call).toBeTruthy();
+
+    const url = String(call[0]);
+    expect(url).toContain('/execute');
+    expect(url).not.toContain('runId=');
+
+    const body = JSON.parse(call[1].body);
+    expect(body.inputData).toEqual({ value: 42 });
+    expect(body.requestContext).toBeUndefined();
+    expect(body.runId).toBeUndefined();
+  });
+
+  it('executes workflow with custom runId via query parameter', async () => {
+    const customRunId = 'custom-run-123';
+    const tracingOptions = { metadata: { test: true } };
+    const result = await wf.execute({
+      inputData: { value: 42 },
+      runId: customRunId,
+      tracingOptions,
+    });
+
+    expect(result.status).toBe('success');
+    expect(result.runId).toBe(customRunId);
+
+    const successResult = result as Extract<typeof result, { status: 'success' }>;
+    expect(successResult.result).toBeDefined();
+    expect(successResult.steps).toBeDefined();
+
+    const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/execute'));
+    expect(call).toBeTruthy();
+
+    const url = String(call[0]);
+    expect(url).toContain('/execute?runId=custom-run-123');
+
+    const body = JSON.parse(call[1].body);
+    expect(body.inputData).toEqual({ value: 42 });
+    expect(body.tracingOptions).toEqual(tracingOptions);
+    expect(body.requestContext).toBeUndefined();
+    expect(body.runId).toBeUndefined();
   });
 });
 

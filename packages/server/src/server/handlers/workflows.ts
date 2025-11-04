@@ -215,6 +215,56 @@ export async function startAsyncWorkflowHandler({
   }
 }
 
+/**
+ * Execute workflow and return final result in one call.
+ *
+ * This handler creates a workflow run, executes it, and returns the complete result
+ * including the runId. This provides a better developer experience compared to
+ * startAsyncWorkflowHandler by including all necessary information in a single response.
+ *
+ * This is the recommended handler for simple workflow execution where you want to
+ * create, run, and get results in a single operation.
+ */
+export async function executeWorkflowHandler({
+  mastra,
+  requestContext,
+  workflowId,
+  runId,
+  inputData,
+  tracingOptions,
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
+  inputData?: unknown;
+  requestContext?: RequestContext;
+  tracingOptions?: TracingOptions;
+}) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const _run = await workflow.createRunAsync({ runId });
+    const result = await _run.start({
+      inputData,
+      requestContext,
+      tracingOptions,
+    });
+
+    // Include runId in the result for better developer experience
+    return {
+      ...result,
+      runId: _run.runId,
+    };
+  } catch (error) {
+    return handleError(error, 'Error executing workflow');
+  }
+}
+
 export async function startWorkflowRunHandler({
   mastra,
   requestContext,

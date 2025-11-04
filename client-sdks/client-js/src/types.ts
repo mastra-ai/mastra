@@ -203,6 +203,11 @@ export interface GetWorkflowResponse {
 }
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
+
+export type WorkflowExecutionResult = WorkflowRunResult & {
+  runId: string;
+};
+
 export interface UpsertVectorParams {
   indexName: string;
   vectors: number[][];

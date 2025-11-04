@@ -9,6 +9,7 @@ import {
   listWorkflowsHandler,
   getWorkflowByIdHandler,
   startAsyncWorkflowHandler,
+  executeWorkflowHandler,
   getWorkflowRunByIdHandler,
   createWorkflowRunHandler,
   startWorkflowRunHandler,
@@ -183,6 +184,95 @@ describe('vNext Workflow Handlers', () => {
       });
 
       expect(result.steps['test-step'].status).toEqual('success');
+    });
+  });
+
+  describe('executeWorkflowHandler', () => {
+    it('should throw error when workflowId is not provided', async () => {
+      await expect(
+        executeWorkflowHandler({
+          mastra: mockMastra,
+          runId: 'test-run',
+        }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+    });
+
+    it('should throw error when workflow is not found', async () => {
+      await expect(
+        executeWorkflowHandler({
+          mastra: mockMastra,
+          workflowId: 'non-existent',
+          runId: 'test-run',
+        }),
+      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+    });
+
+    it('should execute workflow successfully without runId', async () => {
+      const result = await executeWorkflowHandler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        inputData: {},
+        tracingOptions,
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.result).toEqual({ result: 'success' });
+      expect(result.input).toEqual({});
+      expect(result.steps['test-step'].status).toEqual('success');
+      expect(result.steps['test-step'].output).toEqual({ result: 'success' });
+
+      expect(result).toHaveProperty('runId');
+      expect(result.runId).toBeDefined();
+      expect(result.runId).not.toBeNull();
+      expect(typeof result.runId).toBe('string');
+      expect(result.runId.length).toBeGreaterThan(0);
+    });
+
+    it('should execute workflow successfully with custom runId', async () => {
+      const customRunId = 'custom-test-run-123';
+      const result = await executeWorkflowHandler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: customRunId,
+        inputData: {},
+        tracingOptions,
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.result).toEqual({ result: 'success' });
+      expect(result.input).toEqual({});
+      expect(result.steps['test-step'].status).toEqual('success');
+      expect(result.steps['test-step'].output).toEqual({ result: 'success' });
+      expect(result.runId).toEqual(customRunId);
+    });
+
+    it('should execute workflow with inputData', async () => {
+      const inputData = { test: 'value', number: 42 };
+      const result = await executeWorkflowHandler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        inputData,
+        tracingOptions,
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.result).toEqual({ result: 'success' });
+      expect(result.input).toEqual(inputData);
+      expect(result.steps['test-step'].status).toEqual('success');
+      expect(result.steps['test-step'].output).toEqual({ result: 'success' });
+    });
+
+    it('should return complete workflow result with all properties', async () => {
+      const result = await executeWorkflowHandler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        inputData: {},
+      });
+
+      expect(result).toHaveProperty('runId');
+      expect(result).toHaveProperty('steps');
+      expect(result).toHaveProperty('status');
+      expect(result.steps['test-step']).toBeDefined();
     });
   });
 
