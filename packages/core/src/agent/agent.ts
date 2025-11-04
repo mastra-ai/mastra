@@ -1484,6 +1484,12 @@ export class Agent<
     mastraProxy?: MastraUnion;
   }) {
     let convertedMemoryTools: Record<string, CoreTool> = {};
+
+    if (this._agentNetworkAppend) {
+      this.logger.debug(`[Agent:${this.name}] - Skipping memory tools (agent network context)`, { runId });
+      return convertedMemoryTools;
+    }
+
     // Get memory tools if available
     const memory = await this.getMemory({ runtimeContext });
     const memoryTools = memory?.getTools?.();

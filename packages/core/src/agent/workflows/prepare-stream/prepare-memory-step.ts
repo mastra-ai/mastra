@@ -174,8 +174,14 @@ export function createPrepareMemoryStep<
               memoryConfig,
               runtimeContext,
             })
-          : [],
-        memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
+          : { messages: [] },
+        memory.getSystemMessage({
+          threadId: threadObject.id,
+          resourceId,
+          memoryConfig: capabilities._agentNetworkAppend
+            ? { ...memoryConfig, workingMemory: { enabled: false } }
+            : memoryConfig,
+        }),
       ]);
 
       capabilities.logger.debug('Fetched messages from memory', {
