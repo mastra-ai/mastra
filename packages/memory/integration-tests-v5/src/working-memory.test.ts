@@ -35,9 +35,13 @@ function getTextContent(message: any): string {
       return message.content.text;
     }
 
-    // Handle nested content property
-    if (message.content.content && typeof message.content.content === 'string') {
-      return message.content.content;
+    // Extract text from parts array
+    if (message.content.parts) {
+      const textParts = message.content.parts
+        .filter((p: any) => p.type === 'text')
+        .map((p: any) => p.text)
+        .join(' ');
+      if (textParts) return textParts;
     }
   }
 

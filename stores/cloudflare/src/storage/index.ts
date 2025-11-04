@@ -298,7 +298,7 @@ export class CloudflareStore extends MastraStorage {
   async updateMessages(args: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
-      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['parts'] };
     })[];
   }): Promise<MastraDBMessage[]> {
     return this.stores.memory.updateMessages(args);

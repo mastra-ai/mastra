@@ -29,9 +29,13 @@ function getTextContent(message: any): string {
   if (message.content?.text) {
     return message.content.text;
   }
-  // Fallback: check if content.content exists (nested structure)
-  if (message.content?.content && typeof message.content.content === 'string') {
-    return message.content.content;
+  // Extract text from parts array
+  if (message.content?.parts) {
+    const textParts = message.content.parts
+      .filter((p: any) => p.type === 'text')
+      .map((p: any) => p.text)
+      .join(' ');
+    if (textParts) return textParts;
   }
   return '';
 }

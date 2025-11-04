@@ -23,37 +23,37 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         createSampleMessageV2({
           threadId: thread.id,
           resourceId: thread.resourceId,
-          content: { content: 'Message 1' },
+          content: { parts: [{ type: 'text', text: 'Message 1' }] },
           createdAt: new Date(now + 1000),
         }),
         createSampleMessageV2({
           threadId: thread.id,
           resourceId: thread.resourceId,
-          content: { content: 'Message 2' },
+          content: { parts: [{ type: 'text', text: 'Message 2' }] },
           createdAt: new Date(now + 2000),
         }),
         createSampleMessageV2({
           threadId: thread.id,
           resourceId: thread.resourceId,
-          content: { content: 'Message 3' },
+          content: { parts: [{ type: 'text', text: 'Message 3' }] },
           createdAt: new Date(now + 3000),
         }),
         createSampleMessageV2({
           threadId: thread.id,
           resourceId: thread.resourceId,
-          content: { content: 'Message 4' },
+          content: { parts: [{ type: 'text', text: 'Message 4' }] },
           createdAt: new Date(now + 4000),
         }),
         createSampleMessageV2({
           threadId: thread.id,
           resourceId: thread.resourceId,
-          content: { content: 'Message 5' },
+          content: { parts: [{ type: 'text', text: 'Message 5' }] },
           createdAt: new Date(now + 5000),
         }),
         createSampleMessageV2({
           threadId: thread2.id,
           resourceId: thread2.resourceId,
-          content: { content: 'Thread2 Message 1' },
+          content: { parts: [{ type: 'text', text: 'Thread2 Message 1' }] },
           createdAt: new Date(now + 6000),
         }),
       ];
@@ -111,7 +111,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       const differentResourceMessage = createSampleMessageV2({
         threadId: thread.id,
         resourceId: 'different-resource',
-        content: { content: 'Different Resource' },
+        content: { parts: [{ type: 'text', text: 'Different Resource' }] },
         createdAt: new Date(),
       });
       await storage.saveMessages({ messages: [differentResourceMessage] });
@@ -136,17 +136,17 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       const dateMessages = [
         createSampleMessageV2({
           threadId: dateThread.id,
-          content: { content: 'Old Message' },
+          content: { parts: [{ type: 'text', text: 'Old Message' }] },
           createdAt: twoDaysAgo,
         }),
         createSampleMessageV2({
           threadId: dateThread.id,
-          content: { content: 'Yesterday Message' },
+          content: { parts: [{ type: 'text', text: 'Yesterday Message' }] },
           createdAt: yesterday,
         }),
         createSampleMessageV2({
           threadId: dateThread.id,
-          content: { content: 'Recent Message' },
+          content: { parts: [{ type: 'text', text: 'Recent Message' }] },
           createdAt: now,
         }),
       ];
@@ -369,7 +369,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       const dateMessages = Array.from({ length: 10 }, (_, i) =>
         createSampleMessageV2({
           threadId: dateThread.id,
-          content: { content: `Message ${i + 1}` },
+          content: { parts: [{ type: 'text', text: `Message ${i + 1}` }] },
           createdAt: new Date(now.getTime() + i * 1000),
         }),
       );
@@ -412,7 +412,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           createSampleMessageV2({
             threadId: thread.id,
             resourceId: thread.resourceId,
-            content: { content: `Extra Message ${i + 1}` },
+            content: { parts: [{ type: 'text', text: `Extra Message ${i + 1}` }] },
             createdAt: new Date(Date.now() + 10000 + i * 1000),
           }),
         );
@@ -484,7 +484,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         const dateMessages = Array.from({ length: 10 }, (_, i) =>
           createSampleMessageV2({
             threadId: dateThread.id,
-            content: { content: `Date Message ${i + 1}` },
+            content: { parts: [{ type: 'text', text: `Date Message ${i + 1}` }] },
             createdAt: new Date(now.getTime() + i * 1000),
           }),
         );
@@ -511,7 +511,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           createSampleMessageV2({
             threadId: thread.id,
             resourceId: 'other-resource',
-            content: { content: `Other ${i + 1}` },
+            content: { parts: [{ type: 'text', text: `Other ${i + 1}` }] },
             createdAt: new Date(Date.now() + 20000 + i * 1000),
           }),
         );

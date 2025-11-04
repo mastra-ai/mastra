@@ -623,14 +623,8 @@ ${workingMemory}`;
         updatedMessages.map(async message => {
           let textForEmbedding: string | null = null;
 
-          if (
-            message.content.content &&
-            typeof message.content.content === 'string' &&
-            message.content.content.trim() !== ''
-          ) {
-            textForEmbedding = message.content.content;
-          } else if (message.content.parts && message.content.parts.length > 0) {
-            // Extract text from all text parts, concatenate
+          // Extract text from parts array for embedding
+          if (message.content.parts && message.content.parts.length > 0) {
             const joined = message.content.parts
               .filter(part => part.type === 'text')
               .map(part => (part as TextPart).text)
@@ -703,9 +697,7 @@ ${workingMemory}`;
 
     const newMessage = { ...message, content: { ...message.content } }; // Deep copy message and content
 
-    if (newMessage.content.content && typeof newMessage.content.content === 'string') {
-      newMessage.content.content = newMessage.content.content.replace(workingMemoryRegex, '').trim();
-    }
+    // Content is now only in parts array, not in a separate content field
 
     if (newMessage.content.parts) {
       newMessage.content.parts = newMessage.content.parts

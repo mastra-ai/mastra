@@ -808,7 +808,7 @@ export class MemoryMSSQL extends MemoryStorage {
       id: string;
       content?: {
         metadata?: MastraMessageContentV2['metadata'];
-        content?: MastraMessageContentV2['content'];
+        content?: MastraMessageContentV2['parts'];
       };
     })[];
   }): Promise<MastraDBMessage[]> {

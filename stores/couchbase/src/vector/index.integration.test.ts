@@ -270,8 +270,10 @@ describe('Integration Testing CouchbaseVector', async () => {
 
         // Check if content field was added for text field
         if (testMetadata[i].text) {
-          expect(result.content).toHaveProperty('content');
-          expect(result.content.content).toEqual(testMetadata[i].text);
+          expect(result.content).toBeDefined();
+          // Text is now stored in parts array
+          const textPart = result.content.parts?.find((p: any) => p.type === 'text');
+          expect(textPart?.text).toEqual(testMetadata[i].text);
         }
       }
 

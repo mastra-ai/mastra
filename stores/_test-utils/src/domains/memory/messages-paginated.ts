@@ -14,7 +14,10 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       resetRole();
       // Create messages sequentially to ensure unique timestamps
       for (let i = 0; i < 15; i++) {
-        const message = createSampleMessageV2({ threadId: thread.id, content: { content: `Message ${i + 1}` } });
+        const message = createSampleMessageV2({
+          threadId: thread.id,
+          content: { parts: [{ type: 'text', text: `Message ${i + 1}` }] },
+        });
         await storage.saveMessages({
           messages: [message],
         });
@@ -70,7 +73,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
         createSampleMessageV2({
           threadId: thread.id,
           createdAt: dayBeforeYesterday,
-          content: { content: 'Message 1' },
+          content: { parts: [{ type: 'text', text: 'Message 1' }] },
         }),
       );
       await new Promise(r => setTimeout(r, 5));
@@ -78,24 +81,40 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
         createSampleMessageV2({
           threadId: thread.id,
           createdAt: dayBeforeYesterday,
-          content: { content: 'Message 2' },
+          content: { parts: [{ type: 'text', text: 'Message 2' }] },
         }),
       );
       await new Promise(r => setTimeout(r, 5));
       messagesToSave.push(
-        createSampleMessageV2({ threadId: thread.id, createdAt: yesterday, content: { content: 'Message 3' } }),
+        createSampleMessageV2({
+          threadId: thread.id,
+          createdAt: yesterday,
+          content: { parts: [{ type: 'text', text: 'Message 3' }] },
+        }),
       );
       await new Promise(r => setTimeout(r, 5));
       messagesToSave.push(
-        createSampleMessageV2({ threadId: thread.id, createdAt: yesterday, content: { content: 'Message 4' } }),
+        createSampleMessageV2({
+          threadId: thread.id,
+          createdAt: yesterday,
+          content: { parts: [{ type: 'text', text: 'Message 4' }] },
+        }),
       );
       await new Promise(r => setTimeout(r, 5));
       messagesToSave.push(
-        createSampleMessageV2({ threadId: thread.id, createdAt: now, content: { content: 'Message 5' } }),
+        createSampleMessageV2({
+          threadId: thread.id,
+          createdAt: now,
+          content: { parts: [{ type: 'text', text: 'Message 5' }] },
+        }),
       );
       await new Promise(r => setTimeout(r, 5));
       messagesToSave.push(
-        createSampleMessageV2({ threadId: thread.id, createdAt: now, content: { content: 'Message 6' } }),
+        createSampleMessageV2({
+          threadId: thread.id,
+          createdAt: now,
+          content: { parts: [{ type: 'text', text: 'Message 6' }] },
+        }),
       );
 
       await storage.saveMessages({ messages: messagesToSave });
@@ -126,8 +145,8 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       await storage.saveThread({ thread });
 
       const messages = [
-        createSampleMessageV2({ threadId: thread.id, content: { content: 'Message 1' } }),
-        createSampleMessageV2({ threadId: thread.id, content: { content: 'Message 2' } }),
+        createSampleMessageV2({ threadId: thread.id, content: { parts: [{ type: 'text', text: 'Message 1' }] } }),
+        createSampleMessageV2({ threadId: thread.id, content: { parts: [{ type: 'text', text: 'Message 2' }] } }),
       ];
 
       // Save messages
@@ -157,17 +176,17 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       const messages = [
         createSampleMessageV2({
           threadId: thread.id,
-          content: { content: 'First' },
+          content: { parts: [{ type: 'text', text: 'First' }] },
           createdAt: new Date(Date.now() + 1),
         }),
         createSampleMessageV2({
           threadId: thread.id,
-          content: { content: 'Second' },
+          content: { parts: [{ type: 'text', text: 'Second' }] },
           createdAt: new Date(Date.now() + 2),
         }),
         createSampleMessageV2({
           threadId: thread.id,
-          content: { content: 'Third' },
+          content: { parts: [{ type: 'text', text: 'Third' }] },
           createdAt: new Date(Date.now() + 3),
         }),
       ];
@@ -180,7 +199,9 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
-        expect(msg.content.content).toBe(messages[idx]?.content.content);
+        expect((msg.content.parts.find((p: any) => p.type === 'text') as any)?.text).toBe(
+          (messages[idx]?.content.parts.find((p: any) => p.type === 'text') as any)?.text,
+        );
       });
     });
 
@@ -189,8 +210,11 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       await storage.saveThread({ thread });
 
       const messages = [
-        createSampleMessageV2({ threadId: thread.id, content: { content: 'Message 1' } }),
-        { ...createSampleMessageV2({ threadId: thread.id, content: { content: 'Message 2' } }), resourceId: null }, // This will cause an error
+        createSampleMessageV2({ threadId: thread.id, content: { parts: [{ type: 'text', text: 'Message 1' }] } }),
+        {
+          ...createSampleMessageV2({ threadId: thread.id, content: { parts: [{ type: 'text', text: 'Message 2' }] } }),
+          resourceId: null,
+        }, // This will cause an error
       ] as MastraDBMessage[];
 
       await expect(storage.saveMessages({ messages })).rejects.toThrow();
@@ -213,51 +237,51 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       const messages: MastraDBMessage[] = [
         createSampleMessageV2({
           threadId: thread.id,
-          content: { content: 'First', parts: [{ type: 'text', text: 'First' }] },
+          content: { parts: [{ type: 'text', text: 'First' }] },
           resourceId: 'cross-thread-resource',
           createdAt: new Date(Date.now() + 1),
         }),
         createSampleMessageV2({
           threadId: thread.id,
-          content: { content: 'Second', parts: [{ type: 'text', text: 'Second' }] },
+          content: { parts: [{ type: 'text', text: 'Second' }] },
           resourceId: 'cross-thread-resource',
           createdAt: new Date(Date.now() + 2),
         }),
         createSampleMessageV2({
           threadId: thread.id,
-          content: { content: 'Third', parts: [{ type: 'text', text: 'Third' }] },
+          content: { parts: [{ type: 'text', text: 'Third' }] },
           resourceId: 'cross-thread-resource',
           createdAt: new Date(Date.now() + 3),
         }),
 
         createSampleMessageV2({
           threadId: thread2.id,
-          content: { content: 'Fourth', parts: [{ type: 'text', text: 'Fourth' }] },
+          content: { parts: [{ type: 'text', text: 'Fourth' }] },
           resourceId: 'cross-thread-resource',
           createdAt: new Date(Date.now() + 4),
         }),
         createSampleMessageV2({
           threadId: thread2.id,
-          content: { content: 'Fifth', parts: [{ type: 'text', text: 'Fifth' }] },
+          content: { parts: [{ type: 'text', text: 'Fifth' }] },
           resourceId: 'cross-thread-resource',
           createdAt: new Date(Date.now() + 5),
         }),
         createSampleMessageV2({
           threadId: thread2.id,
-          content: { content: 'Sixth', parts: [{ type: 'text', text: 'Sixth' }] },
+          content: { parts: [{ type: 'text', text: 'Sixth' }] },
           resourceId: 'cross-thread-resource',
           createdAt: new Date(Date.now() + 6),
         }),
 
         createSampleMessageV2({
           threadId: thread3.id,
-          content: { content: 'Seventh', parts: [{ type: 'text', text: 'Seventh' }] },
+          content: { parts: [{ type: 'text', text: 'Seventh' }] },
           resourceId: 'other-resource',
           createdAt: new Date(Date.now() + 7),
         }),
         createSampleMessageV2({
           threadId: thread3.id,
-          content: { content: 'Eighth', parts: [{ type: 'text', text: 'Eighth' }] },
+          content: { parts: [{ type: 'text', text: 'Eighth' }] },
           resourceId: 'other-resource',
           createdAt: new Date(Date.now() + 8),
         }),
@@ -267,17 +291,23 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
 
       const { messages: retrievedMessages } = await storage.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(3);
-      const contentParts = retrievedMessages.map((m: MastraDBMessage) => m.content.content);
+      const contentParts = retrievedMessages.map(
+        (m: MastraDBMessage) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text,
+      );
       expect(contentParts).toEqual(['First', 'Second', 'Third']);
 
       const { messages: retrievedMessages2 } = await storage.getMessages({ threadId: thread2.id });
       expect(retrievedMessages2).toHaveLength(3);
-      const contentParts2 = retrievedMessages2.map((m: MastraDBMessage) => m.content.content);
+      const contentParts2 = retrievedMessages2.map(
+        (m: MastraDBMessage) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text,
+      );
       expect(contentParts2).toEqual(['Fourth', 'Fifth', 'Sixth']);
 
       const { messages: retrievedMessages3 } = await storage.getMessages({ threadId: thread3.id });
       expect(retrievedMessages3).toHaveLength(2);
-      const contentParts3 = retrievedMessages3.map((m: MastraDBMessage) => m.content.content);
+      const contentParts3 = retrievedMessages3.map(
+        (m: MastraDBMessage) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text,
+      );
       expect(contentParts3).toEqual(['Seventh', 'Eighth']);
 
       const { messages: crossThreadMessages } = await storage.getMessages({
@@ -357,32 +387,32 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       const messages = [
         createSampleMessageV2({
           threadId: thread.id,
-          content: { content: 'A' },
+          content: { parts: [{ type: 'text', text: 'A' }] },
           createdAt: new Date(now.getTime()),
         }),
         createSampleMessageV2({
           threadId: thread.id,
-          content: { content: 'B' },
+          content: { parts: [{ type: 'text', text: 'B' }] },
           createdAt: new Date(now.getTime() + 1000),
         }),
         createSampleMessageV2({
           threadId: thread.id,
-          content: { content: 'C' },
+          content: { parts: [{ type: 'text', text: 'C' }] },
           createdAt: new Date(now.getTime() + 2000),
         }),
         createSampleMessageV2({
           threadId: thread2.id,
-          content: { content: 'D' },
+          content: { parts: [{ type: 'text', text: 'D' }] },
           createdAt: new Date(now.getTime() + 3000),
         }),
         createSampleMessageV2({
           threadId: thread2.id,
-          content: { content: 'E' },
+          content: { parts: [{ type: 'text', text: 'E' }] },
           createdAt: new Date(now.getTime() + 4000),
         }),
         createSampleMessageV2({
           threadId: thread2.id,
-          content: { content: 'F' },
+          content: { parts: [{ type: 'text', text: 'F' }] },
           createdAt: new Date(now.getTime() + 5000),
         }),
       ];
@@ -403,19 +433,21 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       });
 
       // Should include last 2 from thread-one (B, C) and 3 from thread-two (D, E, F via include)
-      expect(result.map((m: any) => m.content.content).sort()).toEqual(['B', 'C', 'D', 'E', 'F']);
+      expect(result.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text).sort()).toEqual(
+        ['B', 'C', 'D', 'E', 'F'],
+      );
       // Should include last 2 from thread-one
       expect(
         result
           .filter((m: any) => m.threadId === thread.id)
-          .map((m: any) => m.content.content)
+          .map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text)
           .sort(),
       ).toEqual(['B', 'C']);
       // Should include 3 from thread-two
       expect(
         result
           .filter((m: any) => m.threadId === thread2.id)
-          .map((m: any) => m.content.content)
+          .map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text)
           .sort(),
       ).toEqual(['D', 'E', 'F']);
     });
@@ -430,7 +462,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       const message = createSampleMessageV2({
         threadId: thread1.id,
         createdAt: new Date(),
-        content: { content: 'Thread1 Content' },
+        content: { parts: [{ type: 'text', text: 'Thread1 Content' }] },
         resourceId: thread1.resourceId,
       });
 
@@ -441,7 +473,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       const conflictingMessage = {
         ...createSampleMessageV2({
           threadId: thread2.id, // different thread
-          content: { content: 'Thread2 Content' },
+          content: { parts: [{ type: 'text', text: 'Thread2 Content' }] },
           resourceId: thread2.resourceId,
         }),
         id: message.id,
@@ -458,7 +490,10 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       expect(thread1Messages.find(m => m.id === message.id)).toBeUndefined();
 
       // Thread 2 should have the message with that id
-      expect(thread2Messages.find(m => m.id === message.id)?.content.content).toBe('Thread2 Content');
+      expect(
+        (thread2Messages.find(m => m.id === message.id)?.content.parts.find((p: any) => p.type === 'text') as any)
+          ?.text,
+      ).toBe('Thread2 Content');
     });
 
     it('should update thread timestamp when saving messages', async () => {
@@ -474,12 +509,12 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       const messages = [
         createSampleMessageV2({
           threadId: thread.id,
-          content: { content: 'Message 1' },
+          content: { parts: [{ type: 'text', text: 'Message 1' }] },
           resourceId: thread.resourceId,
         }),
         createSampleMessageV2({
           threadId: thread.id,
-          content: { content: 'Message 2' },
+          content: { parts: [{ type: 'text', text: 'Message 2' }] },
           resourceId: thread.resourceId,
         }),
       ];
@@ -497,7 +532,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       const baseMessage = createSampleMessageV2({
         threadId: thread.id,
         createdAt: new Date(),
-        content: { content: 'Original' },
+        content: { parts: [{ type: 'text', text: 'Original' }] },
         resourceId: thread.resourceId,
       });
 
@@ -509,7 +544,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
         ...createSampleMessageV2({
           threadId: thread.id,
           createdAt: new Date(),
-          content: { content: 'Updated' },
+          content: { parts: [{ type: 'text', text: 'Updated' }] },
           resourceId: thread.resourceId,
         }),
         id: baseMessage.id,
@@ -525,7 +560,10 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       expect(retrievedMessages.filter(m => m.id === baseMessage.id)).toHaveLength(1);
 
       // The content should be the updated one
-      expect(retrievedMessages.find(m => m.id === baseMessage.id)?.content.content).toBe('Updated');
+      expect(
+        (retrievedMessages.find(m => m.id === baseMessage.id)?.content.parts.find((p: any) => p.type === 'text') as any)
+          ?.text,
+      ).toBe('Updated');
     });
 
     it('should throw error if threadId is an empty string or whitespace only', async () => {
@@ -582,14 +620,14 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
           threadId: threads[0]!.id,
           resourceId,
           content: {
-            content: 'Message 1',
+            parts: [{ type: 'text', text: 'Message 1' }],
           },
         }),
         createSampleMessageV2({
           threadId: threads[0]!.id,
           resourceId,
           content: {
-            content: 'Message 2',
+            parts: [{ type: 'text', text: 'Message 2' }],
           },
         }),
       ];
@@ -599,14 +637,14 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
           threadId: threads[1]!.id,
           resourceId,
           content: {
-            content: 'Message A',
+            parts: [{ type: 'text', text: 'Message A' }],
           },
         }),
         createSampleMessageV2({
           threadId: threads[1]!.id,
           resourceId,
           content: {
-            content: 'Message B',
+            parts: [{ type: 'text', text: 'Message B' }],
           },
         }),
       ];
@@ -616,7 +654,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
           threadId: threads[2]!.id,
           resourceId: resourceId2,
           content: {
-            content: 'The quick brown fox jumps over the lazy dog',
+            parts: [{ type: 'text', text: 'The quick brown fox jumps over the lazy dog' }],
           },
         }),
       ];

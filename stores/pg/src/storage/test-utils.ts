@@ -517,7 +517,7 @@ export function pgTests() {
               threadId: testThreadId,
               resourceId: testResourceId,
               role: 'user',
-              content: { format: 2, parts: [{ type: 'text', text: 'Test' }], content: 'Test' },
+              content: { format: 2, parts: [{ type: 'text', text: 'Test' }] },
               createdAt: messageCreatedAt,
             },
           ],

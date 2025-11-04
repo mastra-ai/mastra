@@ -48,7 +48,7 @@ export abstract class MemoryStorage extends MastraBase {
   abstract updateMessages(args: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
-      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      content?: { metadata?: MastraMessageContentV2['metadata']; parts?: MastraMessageContentV2['parts'] };
     })[];
   }): Promise<MastraDBMessage[]>;
 

@@ -640,10 +640,8 @@ export async function searchMemoryHandler({
 
     // Process each message in the results
     for (const msg of result.messages) {
-      const content =
-        typeof msg.content.content === `string`
-          ? msg.content.content
-          : msg.content.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join(' ') || '';
+      // Extract text content from parts array
+      const content = msg.content.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join(' ') || '';
 
       const msgThreadId = msg.threadId || threadId;
       const thread = threadMap.get(msgThreadId);

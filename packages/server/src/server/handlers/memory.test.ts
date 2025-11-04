@@ -862,8 +862,10 @@ describe('Memory Handlers', () => {
       expect(result.messages[0]?.role).toBe('assistant');
       expect(result.messages[0]?.content.parts).toHaveLength(1);
       expect(result.messages[0]?.content.parts[0]?.type).toBe('tool-invocation');
-      expect(result.messages[0]?.content.toolInvocations).toHaveLength(1);
-      expect(result.messages[0]?.content.toolInvocations?.[0]?.toolName).toBe('searchTool');
+      // Tool invocations are now stored in parts array
+      const toolPart = result.messages[0]?.content.parts.find((p: any) => p.type === 'tool-invocation');
+      expect(toolPart).toBeDefined();
+      expect(toolPart?.toolInvocation?.toolName).toBe('searchTool');
     });
 
     it('should handle multi-part messages (text + images) correctly', async () => {

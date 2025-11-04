@@ -46,8 +46,6 @@ export type MastraMessageContentV2 = {
   format: 2; // format 2 === UIMessage in AI SDK v4
   parts: (UIMessageV4['parts'][number] & { providerMetadata?: AIV5Type.ProviderMetadata })[]; // add optional prov meta for AIV5 - v4 doesn't track this, and we're storing mmv2 in the db, so we need to extend
   experimental_attachments?: UIMessageV4['experimental_attachments'];
-  content?: UIMessageV4['content'];
-  toolInvocations?: UIMessageV4['toolInvocations'];
   reasoning?: UIMessageV4['reasoning'];
   annotations?: UIMessageV4['annotations'];
   metadata?: Record<string, unknown>;
@@ -698,10 +696,7 @@ export class MessageList {
           parts: safeParts,
         };
 
-        // ensure toolInvocations are also updated to only show results
-        if (`toolInvocations` in m && m.toolInvocations) {
-          sanitized.toolInvocations = m.toolInvocations.filter(t => t.state === `result`);
-        }
+        // Tool invocations are now managed in parts array only
 
         return sanitized;
       })
@@ -771,16 +766,13 @@ export class MessageList {
       .experimental_attachments
       ? [...m.content.experimental_attachments]
       : [];
-    const contentString =
-      typeof m.content.content === `string` && m.content.content !== ''
-        ? m.content.content
-        : m.content.parts.reduce((prev, part) => {
-            if (part.type === `text`) {
-              // return only the last text part like AI SDK does
-              return part.text;
-            }
-            return prev;
-          }, '');
+    const contentString = m.content.parts.reduce((prev, part) => {
+      if (part.type === `text`) {
+        // return only the last text part like AI SDK does
+        return part.text;
+      }
+      return prev;
+    }, '');
 
     const parts: MastraMessageContentV2['parts'] = [];
 
@@ -845,7 +837,7 @@ export class MessageList {
       const uiMessage: UIMessageWithMetadata = {
         id: m.id,
         role: m.role,
-        content: m.content.content || contentString,
+        content: contentString,
         createdAt: m.createdAt,
         parts,
         experimental_attachments: experimentalAttachments,
@@ -856,18 +848,21 @@ export class MessageList {
       }
       return uiMessage;
     } else if (m.role === `assistant`) {
-      const isSingleTextContentArray =
-        Array.isArray(m.content.content) && m.content.content.length === 1 && m.content.content[0].type === `text`;
+      // Extract content from parts when possible
+      const extractedContent = m.content.parts.find(p => p.type === 'text')?.text || contentString;
+      const extractedToolInvocations = m.content.parts
+        .filter((p): p is { type: 'tool-invocation'; toolInvocation: any } => p.type === 'tool-invocation')
+        .map(p => p.toolInvocation)
+        .filter(t => t.state === 'result');
 
       const uiMessage: UIMessageWithMetadata = {
         id: m.id,
         role: m.role,
-        content: isSingleTextContentArray ? contentString : m.content.content || contentString,
+        content: extractedContent,
         createdAt: m.createdAt,
         parts,
         reasoning: undefined,
-        toolInvocations:
-          `toolInvocations` in m.content ? m.content.toolInvocations?.filter(t => t.state === 'result') : undefined,
+        toolInvocations: extractedToolInvocations.length > 0 ? extractedToolInvocations : undefined,
       };
       // Preserve metadata if present
       if (m.content.metadata) {
@@ -879,7 +874,7 @@ export class MessageList {
     const uiMessage: UIMessageWithMetadata = {
       id: m.id,
       role: m.role,
-      content: m.content.content || contentString,
+      content: contentString,
       createdAt: m.createdAt,
       parts,
       experimental_attachments: experimentalAttachments,
@@ -898,18 +893,24 @@ export class MessageList {
    * @returns AIV4 CoreMessage with system role
    */
   private static mastraDBMessageSystemToV4Core(message: MastraDBMessage): CoreMessageV4 {
-    if (message.role !== `system` || !message.content.content)
+    // Extract text content from parts
+    const textContent = message.content.parts
+      .filter(p => p.type === 'text')
+      .map(p => p.text)
+      .join('\n');
+
+    if (message.role !== `system` || !textContent)
       throw new MastraError({
         id: 'INVALID_SYSTEM_MESSAGE_FORMAT',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: `Invalid system message format. System messages must include 'role' and 'content' properties. The content should be a string.`,
+        text: `Invalid system message format. System messages must include 'role' and text content in parts.`,
         details: {
           receivedMessage: JSON.stringify(message, null, 2),
         },
       });
 
-    return { role: 'system', content: message.content.content };
+    return { role: 'system', content: textContent };
   }
 
   private getMessageById(id: string) {
@@ -1036,17 +1037,8 @@ export class MessageList {
                   ...part.toolInvocation.args,
                 },
               };
-              if (!latestMessage.content.toolInvocations) {
-                latestMessage.content.toolInvocations = [];
-              }
-              const toolInvocationIndex = latestMessage.content.toolInvocations.findIndex(
-                t => t.toolCallId === existingCallPart.toolInvocation.toolCallId,
-              );
-              if (toolInvocationIndex === -1) {
-                latestMessage.content.toolInvocations.push(existingCallPart.toolInvocation);
-              } else {
-                latestMessage.content.toolInvocations[toolInvocationIndex] = existingCallPart.toolInvocation;
-              }
+              // Tool invocations are now managed only within parts array
+              // No need to maintain a separate toolInvocations array
             }
             // Map the index of the tool call in messageV2 to the index of the tool call in latestMessage
             const existingIndex = latestMessage.content.parts.findIndex(p => p === existingCallPart);
@@ -1068,16 +1060,22 @@ export class MessageList {
       if (latestMessage.createdAt.getTime() < messageV2.createdAt.getTime()) {
         latestMessage.createdAt = messageV2.createdAt;
       }
-      if (!latestMessage.content.content && messageV2.content.content) {
-        latestMessage.content.content = messageV2.content.content;
-      }
-      if (
-        latestMessage.content.content &&
-        messageV2.content.content &&
-        latestMessage.content.content !== messageV2.content.content
-      ) {
-        // Match what AI SDK does - content string is always the latest text part.
-        latestMessage.content.content = messageV2.content.content;
+      // Extract text content from parts for comparison and update
+      const latestTextContent = latestMessage.content.parts.find(p => p.type === 'text')?.text;
+      const messageV2TextContent = messageV2.content.parts.find(p => p.type === 'text')?.text;
+
+      if (!latestTextContent && messageV2TextContent) {
+        // Add text part if it doesn't exist
+        const textPartIndex = latestMessage.content.parts.findIndex(p => p.type === 'text');
+        if (textPartIndex === -1) {
+          latestMessage.content.parts.unshift({ type: 'text', text: messageV2TextContent });
+        }
+      } else if (latestTextContent && messageV2TextContent && latestTextContent !== messageV2TextContent) {
+        // Update existing text part with new content
+        const textPart = latestMessage.content.parts.find(p => p.type === 'text');
+        if (textPart && textPart.type === 'text') {
+          textPart.text = messageV2TextContent;
+        }
       }
 
       // If latest message gets appended to, it should be added to the proper source
@@ -1381,25 +1379,32 @@ export class MessageList {
 
     if (!(message.createdAt instanceof Date)) message.createdAt = new Date(message.createdAt);
 
-    // Fix toolInvocations with empty args by looking in the parts array
-    // This handles messages restored from database where toolInvocations might have lost their args
-    if (message.content.toolInvocations && message.content.parts) {
-      message.content.toolInvocations = message.content.toolInvocations.map(ti => {
-        if (!ti.args || Object.keys(ti.args).length === 0) {
-          // Find the corresponding tool-invocation part with args
+    // Fix tool invocations with empty args in the parts array
+    // This handles messages restored from database where tool invocations might have lost their args
+    if (message.content.parts) {
+      message.content.parts = message.content.parts.map(part => {
+        if (
+          part.type === 'tool-invocation' &&
+          part.toolInvocation &&
+          (!part.toolInvocation.args || Object.keys(part.toolInvocation.args).length === 0)
+        ) {
+          // Find another tool-invocation part with the same toolCallId that has args
           const partWithArgs = message.content.parts.find(
-            part =>
-              part.type === 'tool-invocation' &&
-              part.toolInvocation &&
-              part.toolInvocation.toolCallId === ti.toolCallId &&
-              part.toolInvocation.args &&
-              Object.keys(part.toolInvocation.args).length > 0,
+            otherPart =>
+              otherPart.type === 'tool-invocation' &&
+              otherPart.toolInvocation &&
+              otherPart.toolInvocation.toolCallId === part.toolInvocation.toolCallId &&
+              otherPart.toolInvocation.args &&
+              Object.keys(otherPart.toolInvocation.args).length > 0,
           );
           if (partWithArgs && partWithArgs.type === 'tool-invocation') {
-            return { ...ti, args: partWithArgs.toolInvocation.args };
+            return {
+              ...part,
+              toolInvocation: { ...part.toolInvocation, args: partWithArgs.toolInvocation.args },
+            };
           }
         }
-        return ti;
+        return part;
       });
     }
 
@@ -1415,7 +1420,7 @@ export class MessageList {
       parts: message.parts,
     };
 
-    if (message.toolInvocations) content.toolInvocations = message.toolInvocations;
+    // Tool invocations are now stored only in parts array
     if (message.reasoning) content.reasoning = message.reasoning;
     if (message.annotations) content.annotations = message.annotations;
     if (message.experimental_attachments) {
@@ -1439,7 +1444,6 @@ export class MessageList {
     const id = `id` in coreMessage ? (coreMessage.id as string) : this.newMessageId();
     const parts: UIMessageV4['parts'] = [];
     const experimentalAttachments: UIMessageV4['experimental_attachments'] = [];
-    const toolInvocations: ToolInvocationV4[] = [];
 
     const isSingleTextContent =
       messageSource === `response` &&
@@ -1542,7 +1546,7 @@ export class MessageList {
               type: 'tool-invocation',
               toolInvocation: invocation,
             });
-            toolInvocations.push(invocation);
+            // Tool invocations are now stored only in parts
             break;
 
           case 'reasoning':
@@ -1618,8 +1622,8 @@ export class MessageList {
       parts,
     };
 
-    if (toolInvocations.length) content.toolInvocations = toolInvocations;
-    if (typeof coreMessage.content === `string`) content.content = coreMessage.content;
+    // Tool invocations are now stored only in parts, not in a separate array
+    // Text content is also stored in parts, not in a separate content field
 
     if (experimentalAttachments.length) content.experimental_attachments = experimentalAttachments;
 
@@ -2079,29 +2083,8 @@ export class MessageList {
     if (dbMsg.threadId) metadata.threadId = dbMsg.threadId;
     if (dbMsg.resourceId) metadata.resourceId = dbMsg.resourceId;
 
-    // 1. Handle tool invocations (only if not already in parts array)
-    // Parts array takes precedence because it has providerMetadata
-    const hasToolInvocationParts = dbMsg.content.parts?.some(p => p.type === 'tool-invocation');
-    if (dbMsg.content.toolInvocations && !hasToolInvocationParts) {
-      for (const invocation of dbMsg.content.toolInvocations) {
-        if (invocation.state === 'result') {
-          parts.push({
-            type: `tool-${invocation.toolName}`,
-            toolCallId: invocation.toolCallId,
-            state: 'output-available',
-            input: invocation.args,
-            output: invocation.result,
-          } as unknown as AIV5Type.UIMessage['parts'][number]);
-        } else {
-          parts.push({
-            type: `tool-${invocation.toolName}`,
-            toolCallId: invocation.toolCallId,
-            state: invocation.state === 'call' ? 'input-available' : 'input-streaming',
-            input: invocation.args,
-          } as unknown as AIV5Type.UIMessage['parts'][number]);
-        }
-      }
-    }
+    // Tool invocations are now only stored in parts array
+    // No need to check for separate toolInvocations field
 
     // 2. Check if we have parts with providerMetadata first
     const hasReasoningInParts = dbMsg.content.parts?.some(p => p.type === 'reasoning');
@@ -2291,9 +2274,11 @@ export class MessageList {
       }
     }
 
-    // 5. Handle text content (fallback if no parts)
-    if (dbMsg.content.content && !hasNonToolReasoningParts) {
-      parts.push({ type: 'text', text: dbMsg.content.content });
+    // 5. Text content is now only stored in parts array
+    // Extract text from parts if needed for fallback
+    const textFromParts = dbMsg.content.parts?.find(p => p.type === 'text')?.text;
+    if (textFromParts && !hasNonToolReasoningParts && !parts.some(p => p.type === 'text')) {
+      parts.push({ type: 'text', text: textFromParts });
     }
 
     return {
@@ -2331,36 +2316,12 @@ export class MessageList {
     delete cleanMetadata.resourceId;
 
     // Process parts to build V2 content
-    const toolInvocationParts = parts.filter(p => AIV5.isToolUIPart(p));
     const reasoningParts = parts.filter(p => p.type === 'reasoning');
     const fileParts = parts.filter(p => p.type === 'file');
     const textParts = parts.filter(p => p.type === 'text');
 
-    // Build tool invocations array
-    let toolInvocations: MastraDBMessage['content']['toolInvocations'] = undefined;
-    if (toolInvocationParts.length > 0) {
-      toolInvocations = toolInvocationParts.map(p => {
-        const toolName = getToolName(p);
-        if (p.state === 'output-available') {
-          return {
-            args: p.input,
-            result:
-              typeof p.output === 'object' && p.output && 'value' in p.output
-                ? (p.output as { value: unknown }).value
-                : p.output,
-            toolCallId: p.toolCallId,
-            toolName,
-            state: 'result',
-          } satisfies NonNullable<MastraDBMessage['content']['toolInvocations']>[0];
-        }
-        return {
-          args: p.input,
-          toolCallId: p.toolCallId,
-          toolName,
-          state: 'call',
-        } satisfies NonNullable<MastraDBMessage['content']['toolInvocations']>[0];
-      });
-    }
+    // Tool invocations are now stored directly in parts array
+    // No need to build separate toolInvocations array
 
     // Build reasoning string (AIV4 reasoning is a string, not an array)
     let reasoning: MastraDBMessage['content']['reasoning'] = undefined;
@@ -2377,11 +2338,7 @@ export class MessageList {
       }));
     }
 
-    // Build content from text parts (AIV4 content is a string)
-    let content: MastraDBMessage['content']['content'] = undefined;
-    if (textParts.length > 0) {
-      content = textParts.map(p => p.text).join('');
-    }
+    // Text content is now stored only in parts array, not as separate content field
     // Build V2-compatible parts array
     const v2Parts = parts
       .map(p => {
@@ -2485,10 +2442,8 @@ export class MessageList {
       content: {
         format: 2,
         parts: v2Parts as MastraMessageContentV2['parts'],
-        toolInvocations,
         reasoning,
         experimental_attachments,
-        content,
         metadata: Object.keys(cleanMetadata).length > 0 ? cleanMetadata : undefined,
       },
     };
@@ -2506,7 +2461,6 @@ export class MessageList {
 
     // Process parts to build V2 content structure
     const v2Parts: MastraMessageContentV2['parts'] = [];
-    const toolInvocations: NonNullable<MastraDBMessage['content']['toolInvocations']> = [];
     const reasoningParts: string[] = [];
     const experimental_attachments: NonNullable<MastraDBMessage['content']['experimental_attachments']> = [];
     const textParts: Array<{ text: string; providerMetadata?: Record<string, unknown> }> = [];
@@ -2548,17 +2502,11 @@ export class MessageList {
           ...(hasProviderMetadata && { providerMetadata: providerMetadata as AIV5Type.ProviderMetadata }),
         };
         v2Parts.push(toolInvocationPart);
-        toolInvocations.push({
-          toolCallId: toolCallPart.toolCallId,
-          toolName: toolCallPart.toolName,
-          args: toolCallPart.input,
-          state: 'call',
-        });
+        // Tool invocations are now stored only in parts
         lastPartWasToolResult = false;
       } else if (part.type === 'tool-result') {
         const toolResultPart = part as AIV5Type.ToolResultPart;
-        // Find matching tool call and update it to result state
-        const matchingCall = toolInvocations.find(inv => inv.toolCallId === toolResultPart.toolCallId);
+        // Tool invocations are managed in parts array
 
         // Type guard for tool-invocation parts
         type ToolInvocationPart = Extract<UIMessageV4['parts'][number], { type: 'tool-invocation' }>;
@@ -2569,30 +2517,7 @@ export class MessageList {
             p.toolInvocation.toolCallId === toolResultPart.toolCallId,
         );
 
-        if (matchingCall) {
-          // Update the matching call to result state
-          matchingCall.state = 'result';
-          (matchingCall as ToolInvocationV4 & { result: unknown }).result =
-            typeof toolResultPart.output === 'object' && toolResultPart.output && 'value' in toolResultPart.output
-              ? (toolResultPart.output as { value: unknown }).value
-              : toolResultPart.output;
-        } else {
-          // No matching call, create a result-only invocation
-          // toolResultPart may have toolName at runtime even though it's not in the type
-          type ToolResultWithName = AIV5Type.ToolResultPart & { toolName?: string };
-          const resultPartWithName = toolResultPart as ToolResultWithName;
-
-          toolInvocations.push({
-            toolCallId: toolResultPart.toolCallId,
-            toolName: resultPartWithName.toolName || 'unknown',
-            args: {},
-            result:
-              typeof toolResultPart.output === 'object' && toolResultPart.output && 'value' in toolResultPart.output
-                ? (toolResultPart.output as { value: unknown }).value
-                : toolResultPart.output,
-            state: 'result',
-          });
-        }
+        // Update matching part in v2Parts array if it exists
 
         if (matchingV2Part && matchingV2Part.type === 'tool-invocation') {
           // Update the matching part to result state
@@ -2725,11 +2650,7 @@ export class MessageList {
       }
     }
 
-    // Build V2 content string
-    let contentString: MastraDBMessage['content']['content'] = undefined;
-    if (textParts.length > 0) {
-      contentString = textParts.map(p => p.text).join('\n');
-    }
+    // Text content is now stored only in parts array
 
     // Store original content in metadata for round-trip
     const metadata: Record<string, unknown> = {};
@@ -2747,10 +2668,8 @@ export class MessageList {
       content: {
         format: 2,
         parts: v2Parts,
-        toolInvocations: toolInvocations.length > 0 ? toolInvocations : undefined,
         reasoning: reasoningParts.length > 0 ? reasoningParts.join('\n') : undefined,
         experimental_attachments: experimental_attachments.length > 0 ? experimental_attachments : undefined,
-        content: contentString,
         metadata,
       },
     };

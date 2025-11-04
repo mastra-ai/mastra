@@ -21,7 +21,7 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
       const messages = Array.from({ length: 5 }, (_, index) => {
         const msg = createSampleMessageV2({
           threadId: thread.id,
-          content: { content: `Message ${index}` },
+          content: { parts: [{ type: 'text', text: `Message ${index}` }] },
         });
         msg.id = `msg-${index}`;
         return msg;
@@ -62,7 +62,7 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
       const messages = Array.from({ length: 3 }, (_, index) => {
         const msg = createSampleMessageV2({
           threadId: thread.id,
-          content: { content: `Message ${index}` },
+          content: { parts: [{ type: 'text', text: `Message ${index}` }] },
         });
         msg.id = `bulk-msg-${index}`;
         return msg;
@@ -92,7 +92,7 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
       const messages1 = Array.from({ length: 2 }, (_, index) => {
         const msg = createSampleMessageV2({
           threadId: 'bulk-thread-1',
-          content: { content: `Thread 1 Message ${index}` },
+          content: { parts: [{ type: 'text', text: `Thread 1 Message ${index}` }] },
         });
         msg.id = `bulk-thread1-msg-${index}`;
         return msg;
@@ -100,7 +100,7 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
       const messages2 = Array.from({ length: 2 }, (_, index) => {
         const msg = createSampleMessageV2({
           threadId: 'bulk-thread-2',
-          content: { content: `Thread 2 Message ${index}` },
+          content: { parts: [{ type: 'text', text: `Thread 2 Message ${index}` }] },
         });
         msg.id = `bulk-thread2-msg-${index}`;
         return msg;
@@ -132,7 +132,7 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
       const messages = Array.from({ length: 100 }, (_, index) => {
         const msg = createSampleMessageV2({
           threadId: thread.id,
-          content: { content: `Message ${index}` },
+          content: { parts: [{ type: 'text', text: `Message ${index}` }] },
         });
         msg.id = `large-batch-msg-${index}`;
         // Alternate between user and assistant roles
@@ -178,7 +178,7 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
       const messages = Array.from({ length: 3 }, (_, index) => {
         const msg = createSampleMessageV2({
           threadId: thread.id,
-          content: { content: `Message ${index}` },
+          content: { parts: [{ type: 'text', text: `Message ${index}` }] },
         });
         msg.id = `mixed-msg-${index}`;
         return msg;

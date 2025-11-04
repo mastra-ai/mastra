@@ -989,7 +989,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
       threadId?: string;
-      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['parts'] };
     })[];
   }): Promise<MastraDBMessage[]> {
     const { messages } = args;

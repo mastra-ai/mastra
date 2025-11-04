@@ -134,7 +134,10 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       // Create and save a message to the thread
-      const message = createSampleMessageV2({ threadId: thread.id, content: { content: 'Test message' } });
+      const message = createSampleMessageV2({
+        threadId: thread.id,
+        content: { parts: [{ type: 'text', text: 'Test message' }] },
+      });
       await storage.saveMessages({ messages: [message] });
 
       // Retrieve the thread again and check that updatedAt was updated
@@ -170,7 +173,6 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         content: {
           format: 2,
           parts: [{ type: 'text', text: stringifiedContent }],
-          content: stringifiedContent, // This is the stringified JSON that user passed
         },
         createdAt: new Date(),
       };
@@ -188,12 +190,14 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       expect(typeof retrievedMessage.content).toBe('object');
       expect(retrievedMessage.content.format).toBe(2);
 
-      // CRITICAL: The content.content should still be the original stringified JSON
-      // NOT double-nested like: { content: '{"format":2,"parts":[...],"content":"{\\"userInput\\":\\"test data\\"}"}' }
-      expect(retrievedMessage.content.content).toBe(stringifiedContent);
+      // CRITICAL: The content should now be stored in parts array
+      // Find the text part that contains the stringified content
+      const textPart = retrievedMessage.content.parts.find((p: any) => p.type === 'text');
+      expect(textPart).toBeDefined();
+      expect((textPart as any)?.text).toBe(stringifiedContent);
 
       // Verify the content can be parsed as the original JSON
-      const parsedContent = JSON.parse(retrievedMessage.content.content as string);
+      const parsedContent = JSON.parse((textPart as any)?.text as string);
       expect(parsedContent).toEqual({ userInput: 'test data', metadata: { key: 'value' } });
 
       // Additional check: ensure the message doesn't have the "Found unhandled message" structure

@@ -63,7 +63,7 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
     const message = messages[i];
     const isLastMessage = i === messages.length - 1;
     if (!message?.content) continue;
-    const { content, experimental_attachments: inputAttachments = [], parts: inputParts } = message.content;
+    const { experimental_attachments: inputAttachments = [], parts: inputParts } = message.content;
     const { role } = message;
 
     const fields = {
@@ -88,10 +88,13 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
 
     switch (role) {
       case 'user': {
-        if (parts == null) {
-          const userContent = experimental_attachments
-            ? [{ type: 'text', text: content || '' }, ...attachmentsToParts(experimental_attachments)]
-            : { type: 'text', text: content || '' };
+        if (parts == null || parts.length === 0) {
+          // Extract text content from parts if available
+          const textContent = inputParts?.find(p => p.type === 'text')?.text || '';
+          const userContent =
+            experimental_attachments.length > 0
+              ? [{ type: 'text', text: textContent }, ...attachmentsToParts(experimental_attachments)]
+              : { type: 'text', text: textContent };
           pushOrCombine({
             role: 'user',
             ...fields,
@@ -115,11 +118,8 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
             ...fields,
             type: 'text',
             content:
-              Array.isArray(userContent) &&
-              userContent.length === 1 &&
-              userContent[0]?.type === `text` &&
-              typeof content !== `undefined`
-                ? content
+              Array.isArray(userContent) && userContent.length === 1 && userContent[0]?.type === `text`
+                ? userContent[0].text
                 : userContent,
           });
         }
@@ -252,95 +252,33 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
 
           processBlock();
 
-          // Check if there are toolInvocations that weren't processed from parts
-          const toolInvocations = message.content.toolInvocations;
-          if (toolInvocations && toolInvocations.length > 0) {
-            // Find tool invocations that weren't already processed from parts
-            const processedToolCallIds = new Set<string>();
-            for (const part of message.content.parts) {
-              if (part.type === 'tool-invocation' && part.toolInvocation.toolCallId) {
-                processedToolCallIds.add(part.toolInvocation.toolCallId);
-              }
-            }
-
-            const unprocessedToolInvocations = toolInvocations.filter(
-              ti => !processedToolCallIds.has(ti.toolCallId) && ti.toolName !== 'updateWorkingMemory',
-            );
-
-            if (unprocessedToolInvocations.length > 0) {
-              // Group by step, handling undefined steps
-              const invocationsByStep = new Map<number, typeof unprocessedToolInvocations>();
-
-              for (const inv of unprocessedToolInvocations) {
-                const step = inv.step ?? 0;
-                if (!invocationsByStep.has(step)) {
-                  invocationsByStep.set(step, []);
-                }
-                invocationsByStep.get(step)!.push(inv);
-              }
-
-              // Process each step
-              const sortedSteps = Array.from(invocationsByStep.keys()).sort((a, b) => a - b);
-
-              for (const step of sortedSteps) {
-                const stepInvocations = invocationsByStep.get(step)!;
-
-                // Create tool-call message for all invocations (calls and results)
-                pushOrCombine({
-                  role: 'assistant',
-                  ...fields,
-                  type: 'tool-call',
-                  content: [
-                    ...stepInvocations.map(({ toolCallId, toolName, args }) => ({
-                      type: 'tool-call' as const,
-                      toolCallId,
-                      toolName,
-                      args,
-                    })),
-                  ],
-                });
-
-                // Only create tool-result message if there are actual results
-                const invocationsWithResults = stepInvocations.filter(ti => ti.state === 'result' && 'result' in ti);
-
-                if (invocationsWithResults.length > 0) {
-                  pushOrCombine({
-                    role: 'tool',
-                    ...fields,
-                    type: 'tool-result',
-                    content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
-                      const { toolCallId, toolName, result } = toolInvocation;
-                      return {
-                        type: 'tool-result',
-                        toolCallId,
-                        toolName,
-                        result,
-                      };
-                    }),
-                  });
-                }
-              }
-            }
-          }
+          // Tool invocations are now only stored in parts array
+          // No need to check for separate toolInvocations field
 
           break;
         }
 
-        const toolInvocations = message.content.toolInvocations;
+        // Extract tool invocations from parts
+        const partsArray = (message.content as any).parts || [];
+        const toolInvocationParts = partsArray.filter(
+          (p: any) => p.type === 'tool-invocation' && p.toolInvocation?.toolName !== 'updateWorkingMemory',
+        ) as any[];
 
-        if (toolInvocations == null || toolInvocations.length === 0) {
-          pushOrCombine({ role: 'assistant', ...fields, content: content || '', type: 'text' });
+        // Extract text content from parts
+        const textContent = partsArray.find((p: any) => p.type === 'text')?.text || '';
+
+        if (toolInvocationParts.length === 0) {
+          pushOrCombine({ role: 'assistant', ...fields, content: textContent, type: 'text' });
           break;
         }
 
-        const maxStep = toolInvocations.reduce((max, toolInvocation) => {
-          return Math.max(max, toolInvocation.step ?? 0);
+        const maxStep = toolInvocationParts.reduce((max: number, part: any) => {
+          const step = part.toolInvocation?.step ?? 0;
+          return Math.max(max, step);
         }, 0);
 
         for (let i = 0; i <= maxStep; i++) {
-          const stepInvocations = toolInvocations.filter(
-            toolInvocation => (toolInvocation.step ?? 0) === i && toolInvocation.toolName !== 'updateWorkingMemory',
-          );
+          const stepInvocations = toolInvocationParts.filter((part: any) => (part.toolInvocation?.step ?? 0) === i);
 
           if (stepInvocations.length === 0) {
             continue;
@@ -352,26 +290,28 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
             ...fields,
             type: 'tool-call',
             content: [
-              ...(isLastMessage && content && i === 0 ? [{ type: 'text' as const, text: content }] : []),
-              ...stepInvocations.map(({ toolCallId, toolName, args }) => ({
+              ...(isLastMessage && textContent && i === 0 ? [{ type: 'text' as const, text: textContent }] : []),
+              ...stepInvocations.map((part: any) => ({
                 type: 'tool-call' as const,
-                toolCallId,
-                toolName,
-                args,
+                toolCallId: part.toolInvocation.toolCallId,
+                toolName: part.toolInvocation.toolName,
+                args: part.toolInvocation.args,
               })),
             ],
           });
 
           // Only create tool-result message if there are actual results
-          const invocationsWithResults = stepInvocations.filter(ti => ti.state === 'result' && 'result' in ti);
+          const invocationsWithResults = stepInvocations.filter(
+            (part: any) => part.toolInvocation.state === 'result' && 'result' in part.toolInvocation,
+          );
 
           if (invocationsWithResults.length > 0) {
             pushOrCombine({
               role: 'tool',
               ...fields,
               type: 'tool-result',
-              content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
-                const { toolCallId, toolName, result } = toolInvocation;
+              content: invocationsWithResults.map((part: any): ToolResultPart => {
+                const { toolCallId, toolName, result } = part.toolInvocation;
                 return {
                   type: 'tool-result',
                   toolCallId,
@@ -383,8 +323,8 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
           }
         }
 
-        if (content && !isLastMessage) {
-          pushOrCombine({ role: 'assistant', ...fields, type: 'text', content: content || '' });
+        if (textContent && !isLastMessage) {
+          pushOrCombine({ role: 'assistant', ...fields, type: 'text', content: textContent });
         }
 
         break;

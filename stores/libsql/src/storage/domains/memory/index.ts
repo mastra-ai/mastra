@@ -452,7 +452,7 @@ export class MemoryLibSQL extends MemoryStorage {
   }: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
-      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      content?: { metadata?: MastraMessageContentV2['metadata']; parts?: MastraMessageContentV2['parts'] };
     })[];
   }): Promise<MastraDBMessage[]> {
     if (messages.length === 0) {

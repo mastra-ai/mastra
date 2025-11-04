@@ -306,7 +306,7 @@ export class ClickhouseStore extends MastraStorage {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
       threadId?: string;
-      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['parts'] };
     })[];
   }): Promise<MastraDBMessage[]> {
     return this.stores.memory.updateMessages(args);

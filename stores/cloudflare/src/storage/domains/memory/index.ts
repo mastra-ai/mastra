@@ -1088,7 +1088,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       threadId?: string;
       content?: {
         metadata?: MastraMessageContentV2['metadata'];
-        content?: MastraMessageContentV2['content'];
+        content?: MastraMessageContentV2['parts'];
       };
     })[];
   }): Promise<MastraDBMessage[]> {
@@ -1139,10 +1139,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
               },
             };
           }
-          if (content.content !== undefined) {
+          if (content.parts !== undefined) {
             updatedMessage.content = {
               ...updatedMessage.content,
-              content: content.content,
+              parts: content.parts,
             };
           }
         }

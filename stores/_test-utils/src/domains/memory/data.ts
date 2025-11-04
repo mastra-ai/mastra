@@ -81,6 +81,10 @@ export const createSampleMessageV2 = ({
   createdAt?: Date;
   thread?: StorageThreadType;
 }): MastraDBMessage => {
+  // Generate default text content if no parts provided
+  const defaultTextContent = `Sample content ${randomUUID()}`;
+  const defaultParts = content?.parts || [{ type: 'text' as const, text: defaultTextContent }];
+
   return {
     id: randomUUID(),
     threadId,
@@ -89,9 +93,11 @@ export const createSampleMessageV2 = ({
     createdAt: createdAt || new Date(),
     content: {
       format: 2,
-      parts: content?.parts || [{ type: 'text', text: content?.content ?? '' }],
-      content: content?.content || `Sample content ${randomUUID()}`,
-      ...content,
+      parts: defaultParts,
+      reasoning: content?.reasoning,
+      experimental_attachments: content?.experimental_attachments,
+      annotations: content?.annotations,
+      metadata: content?.metadata,
     },
   };
 };

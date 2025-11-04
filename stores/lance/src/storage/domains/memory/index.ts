@@ -734,7 +734,7 @@ export class StoreMemoryLance extends MemoryStorage {
     messages: Partial<Omit<MastraDBMessage, 'createdAt'>> &
       {
         id: string;
-        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['parts'] };
       }[];
   }): Promise<MastraDBMessage[]> {
     const { messages } = args;
@@ -787,10 +787,7 @@ export class StoreMemoryLance extends MemoryStorage {
             };
           }
 
-          // Update content string if provided
-          if (updates.content.content !== undefined) {
-            newContent.content = updates.content.content;
-          }
+          // Text content is now stored in parts array, not as separate content field
 
           // Update parts if provided (only if it exists in the content type)
           if ('parts' in updates.content && updates.content.parts !== undefined) {

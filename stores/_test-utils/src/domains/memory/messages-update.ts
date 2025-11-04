@@ -30,7 +30,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
     it('should update only the metadata within the content field, preserving other content fields', async () => {
       const originalMessage = createSampleMessageV2({
         threadId: thread.id,
-        content: { content: 'hello world', parts: [{ type: 'text', text: 'hello world' }] },
+        content: { parts: [{ type: 'text', text: 'hello world' }] },
       });
       await storage.saveMessages({ messages: [originalMessage] });
 
@@ -42,31 +42,31 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
       const { messages: fromDb } = await storage.getMessages({ threadId: thread.id });
       expect(fromDb).toHaveLength(1);
       expect(fromDb[0]!.content.metadata).toEqual(newMetadata);
-      expect(fromDb[0]!.content.content).toBe('hello world');
-      expect(fromDb[0]!.content.parts).toEqual([{ type: 'text', text: 'hello world' }]);
+      // Content is now stored in parts only
+      expect(fromDb[0]!.content.parts.find(p => p.type === 'text')?.text).toBeDefined();
     });
 
-    it('should update only the content string within the content field, preserving metadata', async () => {
+    it('should update parts within the content field, preserving metadata', async () => {
       const originalMessage = createSampleMessageV2({
         threadId: thread.id,
         content: { metadata: { initial: true } },
       });
       await storage.saveMessages({ messages: [originalMessage] });
 
-      const newContentString = 'This is the new content string';
+      const newParts = [{ type: 'text' as const, text: 'This is the new content string' }];
       await storage.updateMessages({
-        messages: [{ id: originalMessage.id, content: { content: newContentString } as any }],
+        messages: [{ id: originalMessage.id, content: { parts: newParts } as any }],
       });
 
       const { messages: fromDb } = await storage.getMessages({ threadId: thread.id });
-      expect(fromDb[0]!.content.content).toBe(newContentString);
+      expect(fromDb[0]!.content.parts).toEqual(newParts);
       expect(fromDb[0]!.content.metadata).toEqual({ initial: true });
     });
 
     it('should deep merge metadata, not overwrite it', async () => {
       const originalMessage = createSampleMessageV2({
         threadId: thread.id,
-        content: { metadata: { initial: true }, content: 'old content' },
+        content: { metadata: { initial: true }, parts: [{ type: 'text' as const, text: 'old content' }] },
       });
       await storage.saveMessages({ messages: [originalMessage] });
 
@@ -76,19 +76,22 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
       });
 
       const { messages: fromDb } = await storage.getMessages({ threadId: thread.id });
-      expect(fromDb[0]!.content.content).toBe('old content');
+      expect(fromDb[0]!.content.parts[0]).toEqual({ type: 'text', text: 'old content' });
       expect(fromDb[0]!.content.metadata).toEqual({ initial: true, updated: true });
     });
 
     it('should update multiple messages at once', async () => {
       const msg1 = createSampleMessageV2({ threadId: thread.id, role: 'user' });
-      const msg2 = createSampleMessageV2({ threadId: thread.id, content: { content: 'original' } });
+      const msg2 = createSampleMessageV2({
+        threadId: thread.id,
+        content: { parts: [{ type: 'text' as const, text: 'original' }] },
+      });
       await storage.saveMessages({ messages: [msg1, msg2] });
 
       await storage.updateMessages({
         messages: [
           { id: msg1.id, role: 'assistant' } as MastraDBMessage,
-          { id: msg2.id, content: { content: 'updated' } as any },
+          { id: msg2.id, content: { parts: [{ type: 'text' as const, text: 'updated' }] } as any },
         ],
       });
 
@@ -97,7 +100,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
       const updatedMsg2 = fromDb.find(m => m.id === msg2.id);
 
       expect(updatedMsg1!.role).toBe('assistant');
-      expect(updatedMsg2!.content.content).toBe('updated');
+      expect(updatedMsg2!.content.parts[0]).toEqual({ type: 'text', text: 'updated' });
     });
 
     it('should update the parent thread updatedAt timestamp', async () => {

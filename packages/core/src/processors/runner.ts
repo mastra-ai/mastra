@@ -341,10 +341,7 @@ export class ProcessorRunner {
 
       // Add system messages using addSystem
       for (const sysMsg of systemMessages) {
-        messageList.addSystem(
-          (sysMsg.content.content as string) ||
-            sysMsg.content.parts.map(p => (p.type === 'text' ? p.text : '')).join('\n'),
-        );
+        messageList.addSystem(sysMsg.content.parts.map(p => (p.type === 'text' ? p.text : '')).join('\n'));
       }
 
       // Add non-system messages normally
