@@ -627,7 +627,6 @@
       "apiKeyHeader": "Authorization",
       "name": "OpenCode Zen",
       "models": [
-        "an-gbt",
         "big-pickle",
         "claude-3-5-haiku",
         "claude-haiku-4-5",
@@ -1720,7 +1719,6 @@
       "zai-org/GLM-4.6"
     ],
     "opencode": [
-      "an-gbt",
       "big-pickle",
       "claude-3-5-haiku",
       "claude-haiku-4-5",
