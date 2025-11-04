@@ -827,8 +827,9 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         }
       }
 
-      // If perPage is 0, return empty array immediately
-      if (perPage === 0) {
+      // If perPage is 0 AND there are no include messages, return empty array immediately
+      // When include is provided, we still need to return those messages even with perPage: 0
+      if (perPage === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total,

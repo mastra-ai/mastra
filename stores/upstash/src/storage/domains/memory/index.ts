@@ -616,9 +616,14 @@ export class StoreMemoryUpstash extends MemoryStorage {
         }
       }
 
-      // Final sort to maintain order
+      // Use MessageList for proper deduplication and format conversion
+      const list = new MessageList().add(allMessages, 'memory');
+      let finalMessages = list.get.all.db();
+
+      // Sort all messages (paginated + included) for final output - must be done AFTER MessageList
+      // because MessageList.get.all.db() sorts by createdAt ASC internally
       if (orderBy) {
-        allMessages.sort((a, b) => {
+        finalMessages = finalMessages.sort((a, b) => {
           const aValue = getFieldValue(a);
           const bValue = getFieldValue(b);
           return direction === 'ASC' ? aValue - bValue : bValue - aValue;
@@ -630,16 +635,12 @@ export class StoreMemoryUpstash extends MemoryStorage {
           messageIdToPosition.set(id as string, index);
         });
 
-        allMessages.sort((a, b) => {
+        finalMessages = finalMessages.sort((a, b) => {
           const aPos = messageIdToPosition.get(a.id) ?? Number.MAX_SAFE_INTEGER;
           const bPos = messageIdToPosition.get(b.id) ?? Number.MAX_SAFE_INTEGER;
           return aPos - bPos;
         });
       }
-
-      // Use MessageList for proper deduplication and format conversion
-      const list = new MessageList().add(allMessages, 'memory');
-      const finalMessages = list.get.all.db();
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
