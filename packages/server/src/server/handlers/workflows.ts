@@ -688,7 +688,7 @@ export async function listWorkflowRunsHandler({
 }: WorkflowContext & {
   fromDate?: Date;
   toDate?: Date;
-  perPage?: number;
+  perPage?: number | false;
   page?: number;
   resourceId?: string;
 }): Promise<WorkflowRuns> {
@@ -698,8 +698,8 @@ export async function listWorkflowRunsHandler({
     }
 
     // Validate pagination parameters
-    if (perPage !== undefined && (!Number.isInteger(perPage) || perPage <= 0)) {
-      throw new HTTPException(400, { message: 'perPage must be a positive integer' });
+    if (perPage !== undefined && perPage !== false && (!Number.isInteger(perPage) || perPage <= 0)) {
+      throw new HTTPException(400, { message: 'perPage must be a positive integer or false' });
     }
     if (page !== undefined && (!Number.isInteger(page) || page < 0)) {
       throw new HTTPException(400, { message: 'page must be a non-negative integer' });

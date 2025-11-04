@@ -42,7 +42,7 @@ export async function listScoresByRunIdHandler(c: Context) {
   const mastra = c.get('mastra');
   const runId = c.req.param('runId');
   const page = parsePage(c.req.query('page'));
-  const perPage = parsePerPage(c.req.query('perPage'), 10) as number;
+  const perPage = parsePerPage(c.req.query('perPage'), 10);
   const pagination: StoragePagination = { page, perPage };
 
   try {
@@ -62,7 +62,7 @@ export async function listScoresByScorerIdHandler(c: Context) {
   const mastra = c.get('mastra');
   const scorerId = c.req.param('scorerId');
   const page = parsePage(c.req.query('page'));
-  const perPage = parsePerPage(c.req.query('perPage'), 10) as number;
+  const perPage = parsePerPage(c.req.query('perPage'), 10);
   const entityId = c.req.query('entityId');
   const entityType = c.req.query('entityType');
   const pagination: StoragePagination = { page, perPage };
@@ -87,7 +87,7 @@ export async function listScoresByEntityIdHandler(c: Context) {
   const entityId = c.req.param('entityId');
   const entityType = c.req.param('entityType');
   const page = parsePage(c.req.query('page'));
-  const perPage = parsePerPage(c.req.query('perPage'), 10) as number;
+  const perPage = parsePerPage(c.req.query('perPage'), 10);
 
   const pagination: StoragePagination = { page, perPage };
 

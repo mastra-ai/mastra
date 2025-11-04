@@ -39,8 +39,9 @@ export function parsePerPage(
   defaultValue: number = 100,
   max: number = 1000,
 ): number | false {
+  const normalized = (value || '').trim().toLowerCase();
   // Handle explicit false to bypass pagination
-  if (value?.toLowerCase() === 'false') {
+  if (normalized === 'false') {
     return false;
   }
   const parsed = parseInt(value || String(defaultValue), 10);

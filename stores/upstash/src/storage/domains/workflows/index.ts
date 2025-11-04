@@ -264,7 +264,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       const total = runs.length;
 
       // Apply pagination if requested
-      if (perPage !== undefined && page !== undefined) {
+      if (typeof perPage === 'number' && typeof page === 'number') {
         const normalizedPerPage = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
         const offset = page * normalizedPerPage;
         runs = runs.slice(offset, offset + normalizedPerPage);
