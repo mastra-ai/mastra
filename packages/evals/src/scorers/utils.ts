@@ -169,16 +169,24 @@ export const createUIMessage = ({
 
 /**
  * Helper function to create MastraDBMessage objects for tests
- * Simpler version of createUIMessage without toolInvocations support
+ * Supports optional tool invocations for testing tool call scenarios
  */
 export function createTestMessage({
   content,
   role,
   id = 'test-message',
+  toolInvocations = [],
 }: {
   content: string;
   role: 'user' | 'assistant' | 'system';
   id?: string;
+  toolInvocations?: Array<{
+    toolCallId: string;
+    toolName: string;
+    args: Record<string, any>;
+    result: Record<string, any>;
+    state: any;
+  }>;
 }): MastraDBMessage {
   return {
     id,
@@ -187,6 +195,15 @@ export function createTestMessage({
       format: 2,
       parts: [{ type: 'text', text: content }],
       content,
+      ...(toolInvocations.length > 0 && {
+        toolInvocations: toolInvocations.map(ti => ({
+          toolCallId: ti.toolCallId,
+          toolName: ti.toolName,
+          args: ti.args,
+          result: ti.result,
+          state: ti.state,
+        })),
+      }),
     },
     createdAt: new Date(),
   };
