@@ -1,0 +1,33 @@
+{
+  "name": "examples-express-adapter",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "mastra": "latest",
+    "@mastra/core": "latest",
+    "@mastra/express-adapter": "latest",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.57",
+    "@types/express": "^5.0.5",
+    "dotenv": "^17.0.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/server": "link:../../packages/server",
+      "@mastra/express-adapter": "link:../../adapters/express"
+    }
+  }
+}

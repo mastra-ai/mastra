@@ -1,0 +1,24 @@
+{
+  "name": "@mastra/express-adapter",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "keywords": [],
+  "scripts": {
+    "build": "tsc"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@mastra/server": "workspace:*",
+    "@mastra/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.5",
+    "express": "^5.1.0"
+  },
+  "peerDependencies": {
+    "express": "^5.1.0"
+  }
+}
