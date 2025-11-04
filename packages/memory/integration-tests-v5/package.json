@@ -13,6 +13,7 @@
     "dev": "mastra dev"
   },
   "dependencies": {
+    "@mastra/ai-sdk": "latest",
     "@mastra/fastembed": "latest",
     "@mastra/libsql": "latest",
     "@mastra/memory": "latest",
@@ -41,6 +42,7 @@
   },
   "pnpm": {
     "overrides": {
+      "@mastra/ai-sdk": "link:../../../client-sdks/ai-sdk",
       "@mastra/core": "link:../../core",
       "mastra": "link:../../cli",
       "@mastra/memory": "link:../../memory",

@@ -193,7 +193,7 @@ export class LibSQLStore extends MastraStorage {
   }
 
   /**
-   * @deprecated use getMessagesPaginated instead for paginated results.
+   * @deprecated use listMessages instead for paginated results.
    */
   public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessages(args);
@@ -201,12 +201,6 @@ export class LibSQLStore extends MastraStorage {
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.listMessagesById({ messageIds });
-  }
-
-  public async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessagesPaginated(args);
   }
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
@@ -341,11 +335,11 @@ export class LibSQLStore extends MastraStorage {
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    perPage,
+    page,
     resourceId,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
+    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, perPage, page, resourceId });
   }
 
   async getWorkflowRunById({

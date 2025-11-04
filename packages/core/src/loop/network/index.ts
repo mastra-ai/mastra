@@ -4,8 +4,8 @@ import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
 import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
-import type { TracingContext } from '../../ai-tracing/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
@@ -716,7 +716,7 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
-      const run = await wf.createRunAsync({ runId });
+      const run = await wf.createRun({ runId });
       const toolData = {
         name: wf.name,
         args: inputData,
@@ -1155,23 +1155,20 @@ export async function networkLoop<
     inputSchema: networkWorkflow.outputSchema,
     outputSchema: networkWorkflow.outputSchema,
     execute: async ({ inputData, writer }) => {
-      if (maxIterations && inputData.iteration >= maxIterations) {
-        await writer?.write({
-          type: 'network-execution-event-finish',
-          payload: {
-            ...inputData,
-            completionReason: `Max iterations reached: ${maxIterations}`,
-          },
-          from: ChunkFrom.NETWORK,
-          runId,
-        });
-        return {
-          ...inputData,
-          completionReason: `Max iterations reached: ${maxIterations}`,
-        };
-      }
+      const finalData = {
+        ...inputData,
+        ...(maxIterations && inputData.iteration >= maxIterations
+          ? { completionReason: `Max iterations reached: ${maxIterations}` }
+          : {}),
+      };
+      await writer?.write({
+        type: 'network-execution-event-finish',
+        payload: finalData,
+        from: ChunkFrom.NETWORK,
+        runId,
+      });
 
-      return inputData;
+      return finalData;
     },
   });
 
@@ -1208,7 +1205,7 @@ export async function networkLoop<
     .then(finalStep)
     .commit();
 
-  const run = await mainWorkflow.createRunAsync({
+  const run = await mainWorkflow.createRun({
     runId,
   });
 

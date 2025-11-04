@@ -21,7 +21,7 @@ const messageStep = new Step({
   execute: async () => {
     const content = await input({
       message: '\n You:',
-      validate: input => input.trim().length > 0 || 'Message cannot be empty',
+      validate: input => inputData.trim().length > 0 || 'Message cannot be empty',
     });
 
     return { message: content };

@@ -1,4 +1,5 @@
 import type { StepResult, WorkflowRunState } from '../../../workflows';
+import { normalizePerPage } from '../../base';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../constants';
 import type { StorageWorkflowRun, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
 import type { StoreOperations } from '../operations';
@@ -178,10 +179,14 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    perPage,
+    page,
     resourceId,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
+    if (page !== undefined && page < 0) {
+      throw new Error('page must be >= 0');
+    }
+
     let runs = Array.from(this.collection.values());
 
     if (workflowName) runs = runs.filter((run: any) => run.workflow_name === workflowName);
@@ -204,9 +209,12 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     runs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     // Apply pagination
-    if (limit !== undefined && offset !== undefined) {
+    if (perPage !== undefined && page !== undefined) {
+      // Use MAX_SAFE_INTEGER as default to maintain "no pagination" behavior when undefined
+      const normalizedPerPage = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
+      const offset = page * normalizedPerPage;
       const start = offset;
-      const end = start + limit;
+      const end = start + normalizedPerPage;
       runs = runs.slice(start, end);
     }
 

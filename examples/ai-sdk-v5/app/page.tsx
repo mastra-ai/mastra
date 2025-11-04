@@ -53,7 +53,7 @@ export default function Chat() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (input.trim()) {
+          if (inputData.trim()) {
             sendMessage({ text: input });
             setInput("");
           }

@@ -1,4 +1,4 @@
-import type { TracingOptions } from '@mastra/core/ai-tracing';
+import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
@@ -89,7 +89,7 @@ export function workflowRoute({
         throw new Error(`Workflow ${workflowToUse} not found`);
       }
 
-      const run = await workflowObj.createRunAsync();
+      const run = await workflowObj.createRun();
       const stream = run.streamVNext({ inputData, ...rest });
 
       const uiMessageStream = createUIMessageStream({

@@ -2,7 +2,7 @@ import { convertMessages } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
-import type { StorageGetMessagesArg, StorageOrderBy } from '@mastra/core/storage';
+import type { StorageListMessagesInput, StorageOrderBy } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
@@ -106,12 +106,12 @@ export async function listThreadsHandler({
   agentId,
   resourceId,
   requestContext,
-  offset,
-  limit,
+  page,
+  perPage,
   orderBy,
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'requestContext'> & {
-  offset: number;
-  limit: number;
+  page: number;
+  perPage: number | false;
   orderBy?: StorageOrderBy;
 }) {
   try {
@@ -125,8 +125,8 @@ export async function listThreadsHandler({
 
     const result = await memory.listThreadsByResourceId({
       resourceId: resourceId!,
-      offset,
-      limit,
+      page,
+      perPage,
       orderBy,
     });
     return result;
@@ -307,13 +307,16 @@ export async function deleteThreadHandler({
   }
 }
 
-export async function getMessagesPaginatedHandler({
+export async function listMessagesHandler({
   mastra,
   threadId,
   resourceId,
-  selectBy,
-  format,
-}: StorageGetMessagesArg & Pick<MemoryContext, 'mastra'>) {
+  perPage,
+  page,
+  orderBy,
+  include,
+  filter,
+}: Pick<MemoryContext, 'mastra'> & StorageListMessagesInput) {
   try {
     validateBody({ threadId });
 
@@ -329,7 +332,15 @@ export async function getMessagesPaginatedHandler({
       throw new HTTPException(404, { message: 'Thread not found' });
     }
 
-    const result = await storage.getMessagesPaginated({ threadId: threadId!, resourceId, selectBy, format });
+    const result = await storage.listMessages({
+      threadId: threadId!,
+      resourceId,
+      perPage,
+      page,
+      orderBy,
+      include,
+      filter,
+    });
     return result;
   } catch (error) {
     return handleError(error, 'Error getting messages');
@@ -569,8 +580,8 @@ export async function searchMemoryHandler({
     if (!threadId) {
       const { threads } = await memory.listThreadsByResourceId({
         resourceId,
-        offset: 0,
-        limit: 1,
+        page: 0,
+        perPage: 1,
         orderBy: { field: 'updatedAt', direction: 'DESC' },
       });
 

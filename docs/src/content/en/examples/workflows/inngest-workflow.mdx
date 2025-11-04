@@ -381,7 +381,7 @@ const srv = serve({
 });
 
 const workflow = mastra.getWorkflow("activityPlanningWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 // Start the workflow with the required input data (city name)
 // This will trigger the workflow steps and stream the result to the console

@@ -12,7 +12,7 @@ import {
   saveMessagesHandler,
   createThreadHandler,
   getMessagesHandler,
-  getMessagesPaginatedHandler,
+  listMessagesHandler,
   deleteMessagesHandler,
 } from './memory';
 
@@ -118,8 +118,8 @@ describe('Memory Handlers', () => {
           mastra,
           resourceId: 'test-resource',
           agentId: 'test-agent',
-          offset: 0,
-          limit: 10,
+          page: 0,
+          perPage: 10,
           orderBy: { field: 'createdAt', direction: 'DESC' },
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
@@ -134,8 +134,8 @@ describe('Memory Handlers', () => {
         listThreadsHandler({
           mastra,
           agentId: 'test-agent',
-          offset: 0,
-          limit: 10,
+          page: 0,
+          perPage: 10,
           orderBy: { field: 'createdAt', direction: 'DESC' },
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Argument "resourceId" is required' }));
@@ -155,8 +155,8 @@ describe('Memory Handlers', () => {
         mastra,
         resourceId: 'test-resource',
         agentId: 'test-agent',
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
@@ -168,8 +168,8 @@ describe('Memory Handlers', () => {
 
       expect(spy).toBeCalledWith({
         resourceId: 'test-resource',
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
     });
@@ -189,16 +189,16 @@ describe('Memory Handlers', () => {
         mastra,
         resourceId: 'test-resource',
         agentId: 'test-agent',
-        offset: 0,
-        limit: 20,
+        page: 0,
+        perPage: 20,
         orderBy: { field: 'updatedAt', direction: 'ASC' },
       });
 
       expect(result.threads).toHaveLength(1);
       expect(spy).toHaveBeenCalledWith({
         resourceId: 'test-resource',
-        offset: 0,
-        limit: 20,
+        page: 0,
+        perPage: 20,
         orderBy: { field: 'updatedAt', direction: 'ASC' },
       });
     });
@@ -220,16 +220,16 @@ describe('Memory Handlers', () => {
         mastra,
         resourceId: 'test-resource',
         agentId: 'test-agent',
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
         orderBy: { field: 'updatedAt', direction: 'DESC' },
       });
 
       expect(result.threads).toHaveLength(2);
       expect(spy).toHaveBeenCalledWith({
         resourceId: 'test-resource',
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
         orderBy: { field: 'updatedAt', direction: 'DESC' },
       });
     });
@@ -247,8 +247,8 @@ describe('Memory Handlers', () => {
         mastra,
         resourceId: 'non-existent-resource',
         agentId: 'test-agent',
-        offset: 0,
-        limit: 10,
+        page: 0,
+        perPage: 10,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
@@ -998,13 +998,13 @@ describe('Memory Handlers', () => {
     });
   });
 
-  describe('getMessagesPaginatedHandler', () => {
+  describe('listMessagesHandler', () => {
     it('should throw error when threadId is not provided', async () => {
       const mastra = new Mastra({
         logger: false,
         storage,
       });
-      await expect(getMessagesPaginatedHandler({ mastra, threadId: undefined as any })).rejects.toThrow(
+      await expect(listMessagesHandler({ mastra, threadId: undefined as any })).rejects.toThrow(
         new HTTPException(400, { message: 'Argument "threadId" is required' }),
       );
     });
@@ -1013,7 +1013,7 @@ describe('Memory Handlers', () => {
       const mastra = new Mastra({
         logger: false,
       });
-      await expect(getMessagesPaginatedHandler({ mastra, threadId: 'test-thread' })).rejects.toThrow(
+      await expect(listMessagesHandler({ mastra, threadId: 'test-thread' })).rejects.toThrow(
         new HTTPException(400, { message: 'Storage is not initialized' }),
       );
     });
@@ -1024,7 +1024,7 @@ describe('Memory Handlers', () => {
         storage,
       });
       storage.getThreadById = vi.fn().mockResolvedValue(null);
-      await expect(getMessagesPaginatedHandler({ mastra, threadId: 'non-existent' })).rejects.toThrow(
+      await expect(listMessagesHandler({ mastra, threadId: 'non-existent' })).rejects.toThrow(
         new HTTPException(404, { message: 'Thread not found' }),
       );
     });
@@ -1054,22 +1054,29 @@ describe('Memory Handlers', () => {
       });
 
       storage.getThreadById = vi.fn().mockResolvedValue(createThread({}));
-      storage.getMessagesPaginated = vi.fn().mockResolvedValue(mockResult);
+      storage.listMessages = vi.fn().mockResolvedValue(mockResult);
 
-      const result = await getMessagesPaginatedHandler({
+      const result = await listMessagesHandler({
         mastra,
         threadId: 'test-thread',
         resourceId: 'test-resource',
-        format: 'v1',
+        perPage: 10,
+        page: 0,
+        orderBy: undefined,
+        include: undefined,
+        filter: undefined,
       });
 
       expect(result).toEqual(mockResult);
       expect(storage.getThreadById).toHaveBeenCalledWith({ threadId: 'test-thread' });
-      expect(storage.getMessagesPaginated).toHaveBeenCalledWith({
+      expect(storage.listMessages).toHaveBeenCalledWith({
         threadId: 'test-thread',
         resourceId: 'test-resource',
-        selectBy: undefined,
-        format: 'v1',
+        perPage: 10,
+        page: 0,
+        orderBy: undefined,
+        include: undefined,
+        filter: undefined,
       });
     });
   });

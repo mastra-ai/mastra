@@ -95,11 +95,14 @@ export type ProviderModelsMap = {
     'nvidia/llama-3.1-nemotron-ultra-253b-v1',
     'nvidia/llama-embed-nemotron-8b',
     'nvidia/nemoretriever-ocr-v1',
+    'nvidia/nvidia-nemotron-nano-9b-v2',
     'nvidia/parakeet-tdt-0.6b-v2',
     'openai/gpt-oss-120b',
     'openai/whisper-large-v3',
     'qwen/qwen3-235b-a22b',
     'qwen/qwen3-coder-480b-a35b-instruct',
+    'qwen/qwen3-next-80b-a3b-instruct',
+    'qwen/qwen3-next-80b-a3b-thinking',
   ];
   readonly upstage: readonly ['solar-mini', 'solar-pro2'];
   readonly groq: readonly [
@@ -457,7 +460,6 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.6',
   ];
   readonly opencode: readonly [
-    'an-gbt',
     'big-pickle',
     'claude-3-5-haiku',
     'claude-haiku-4-5',
