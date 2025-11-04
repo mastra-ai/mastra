@@ -270,15 +270,16 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
     const runId = 'test-run-id';
     const snapshot = {
       runId,
+      status: 'success' as WorkflowRunState['status'],
       value: {},
       context: {},
       activePaths: [],
+      activeStepsPath: {},
       suspendedPaths: {},
       resumeLabels: {},
       serializedStepGraph: [],
       waitingPaths: {},
       timestamp: Date.now(),
-      status: 'success' as WorkflowRunState['status'],
     };
     await storage.persistWorkflowSnapshot({
       workflowName,
@@ -301,15 +302,16 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
     const runId = 'test-run-id-2';
     const snapshot = {
       runId,
+      status: 'success' as WorkflowRunState['status'],
       value: {},
       context: {},
       activePaths: [],
+      activeStepsPath: {},
       suspendedPaths: {},
       resumeLabels: {},
       serializedStepGraph: [],
       waitingPaths: {},
       timestamp: Date.now(),
-      status: 'success' as WorkflowRunState['status'],
     };
     await storage.persistWorkflowSnapshot({
       workflowName,
