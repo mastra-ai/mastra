@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
-import { getAllAITracing, setupAITracing, shutdownAITracingRegistry } from '../ai-tracing';
-import type { ObservabilityRegistryConfig } from '../ai-tracing';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
@@ -15,6 +13,8 @@ import { AvailableHooks, registerHook } from '../hooks';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
+import { initObservability } from '../observability';
+import type { ObservabilityEntrypoint, ObservabilityRegistryConfig } from '../observability';
 import type { Processor } from '../processors';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
@@ -221,6 +221,7 @@ export class Mastra<
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
+  #observability: ObservabilityEntrypoint;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
   #serverMiddleware: Array<{
@@ -398,9 +399,7 @@ export class Mastra<
       storage = augmentWithInit(storage);
     }
 
-    if (config?.observability) {
-      setupAITracing(config.observability);
-    }
+    this.#observability = initObservability({ config: config?.observability, logger: this.#logger });
 
     this.#storage = storage;
 
@@ -472,55 +471,11 @@ export class Mastra<
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
 
     /*
-      Register Mastra instance with AI tracing exporters and initialize them
+      Register mastra on Observability exporters and other items that require it
     */
-    if (config?.observability) {
-      this.registerAITracingExporters();
-      this.initAITracingExporters();
-    }
+    this.#observability.registerMastra({ mastra: this });
 
     this.setLogger({ logger });
-  }
-
-  /**
-   * Register this Mastra instance with AI tracing exporters that need it
-   */
-  private registerAITracingExporters(): void {
-    const allTracingInstances = getAllAITracing();
-    allTracingInstances.forEach(tracing => {
-      const exporters = tracing.getExporters();
-      exporters.forEach(exporter => {
-        // Check if exporter has __registerMastra method
-        if ('__registerMastra' in exporter && typeof (exporter as any).__registerMastra === 'function') {
-          (exporter as any).__registerMastra(this);
-        }
-      });
-    });
-  }
-
-  /**
-   * Initialize all AI tracing exporters after registration is complete
-   */
-  private initAITracingExporters(): void {
-    const allTracingInstances = getAllAITracing();
-
-    allTracingInstances.forEach(tracing => {
-      const config = tracing.getConfig();
-      const exporters = tracing.getExporters();
-      exporters.forEach(exporter => {
-        // Initialize exporter if it has an init method
-        if ('init' in exporter && typeof exporter.init === 'function') {
-          try {
-            exporter.init(config);
-          } catch (error) {
-            this.#logger?.warn('Failed to initialize AI tracing exporter', {
-              exporterName: exporter.name,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        }
-      });
-    });
   }
 
   /**
@@ -1667,11 +1622,7 @@ export class Mastra<
       });
     }
 
-    // Set logger for AI tracing instances
-    const allTracingInstances = getAllAITracing();
-    allTracingInstances.forEach(instance => {
-      instance.__setLogger(this.#logger);
-    });
+    this.#observability.setLogger({ logger: this.#logger });
   }
 
   /**
@@ -1741,6 +1692,10 @@ export class Mastra<
    */
   public getStorage() {
     return this.#storage;
+  }
+
+  get observability(): ObservabilityEntrypoint {
+    return this.#observability;
   }
 
   public getServerMiddleware() {
@@ -2146,9 +2101,9 @@ export class Mastra<
    * ```
    */
   async shutdown(): Promise<void> {
-    // Shutdown AI tracing registry and all instances
-    await shutdownAITracingRegistry();
     await this.stopEventEngine();
+    // Shutdown observability registry, exporters, etc...
+    await this.#observability.shutdown();
 
     this.#logger?.info('Mastra shutdown completed');
   }

@@ -412,16 +412,17 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         }
       });
 
-      if (perPage !== undefined && page !== undefined) {
+      const usePagination = typeof perPage === 'number' && typeof page === 'number';
+      if (usePagination) {
         const countQuery = `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`;
         const countResult = await request.query(countQuery);
         total = Number(countResult.recordset[0]?.count || 0);
       }
 
       let query = `SELECT * FROM ${tableName} ${whereClause} ORDER BY [seq_id] DESC`;
-      if (perPage !== undefined && page !== undefined) {
+      if (usePagination) {
         const normalizedPerPage = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
-        const offset = page * normalizedPerPage;
+        const offset = page! * normalizedPerPage;
         query += ` OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
         request.input('perPage', normalizedPerPage);
         request.input('offset', offset);

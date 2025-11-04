@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import { ScoresStorage } from '@mastra/core/storage';
+import { ScoresStorage, calculatePagination, normalizePerPage } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
 
@@ -166,22 +166,22 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
       // Sort by createdAt DESC (newest first)
       allScores.sort((a: ScoreRowData, b: ScoreRowData) => b.createdAt.getTime() - a.createdAt.getTime());
 
-      // Apply pagination in memory
-      const startIndex = pagination.page * pagination.perPage;
-      const endIndex = startIndex + pagination.perPage;
-      const paginatedScores = allScores.slice(startIndex, endIndex);
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      // Calculate pagination info
+      // Apply pagination in memory
       const total = allScores.length;
-      const hasMore = endIndex < total;
+      const end = perPageInput === false ? allScores.length : start + perPage;
+      const paginatedScores = allScores.slice(start, end);
 
       return {
         scores: paginatedScores,
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
       };
     } catch (error) {
@@ -224,22 +224,22 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
       // Sort by createdAt DESC (newest first)
       allScores.sort((a: ScoreRowData, b: ScoreRowData) => b.createdAt.getTime() - a.createdAt.getTime());
 
-      // Apply pagination in memory
-      const startIndex = pagination.page * pagination.perPage;
-      const endIndex = startIndex + pagination.perPage;
-      const paginatedScores = allScores.slice(startIndex, endIndex);
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      // Calculate pagination info
+      // Apply pagination in memory
       const total = allScores.length;
-      const hasMore = endIndex < total;
+      const end = perPageInput === false ? allScores.length : start + perPage;
+      const paginatedScores = allScores.slice(start, end);
 
       return {
         scores: paginatedScores,
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
       };
     } catch (error) {
@@ -280,22 +280,22 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
       // Sort by createdAt DESC (newest first)
       allScores.sort((a: ScoreRowData, b: ScoreRowData) => b.createdAt.getTime() - a.createdAt.getTime());
 
-      // Apply pagination in memory
-      const startIndex = pagination.page * pagination.perPage;
-      const endIndex = startIndex + pagination.perPage;
-      const paginatedScores = allScores.slice(startIndex, endIndex);
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      // Calculate pagination info
+      // Apply pagination in memory
       const total = allScores.length;
-      const hasMore = endIndex < total;
+      const end = perPageInput === false ? allScores.length : start + perPage;
+      const paginatedScores = allScores.slice(start, end);
 
       return {
         scores: paginatedScores,
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
       };
     } catch (error) {
@@ -333,22 +333,22 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
       // Sort by createdAt DESC (newest first)
       allScores.sort((a: ScoreRowData, b: ScoreRowData) => b.createdAt.getTime() - a.createdAt.getTime());
 
-      // Apply pagination in memory
-      const startIndex = pagination.page * pagination.perPage;
-      const endIndex = startIndex + pagination.perPage;
-      const paginatedScores = allScores.slice(startIndex, endIndex);
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      // Calculate pagination info
+      // Apply pagination in memory
       const total = allScores.length;
-      const hasMore = endIndex < total;
+      const end = perPageInput === false ? allScores.length : start + perPage;
+      const paginatedScores = allScores.slice(start, end);
 
       return {
         scores: paginatedScores,
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
       };
     } catch (error) {

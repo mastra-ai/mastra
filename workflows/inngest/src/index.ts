@@ -2,10 +2,10 @@ import { randomUUID } from 'crypto';
 import { ReadableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
-import { AISpanType, wrapMastra } from '@mastra/core/ai-tracing';
-import type { TracingContext, TracingOptions } from '@mastra/core/ai-tracing';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
+import { AISpanType, wrapMastra } from '@mastra/core/observability';
+import type { TracingContext, TracingOptions } from '@mastra/core/observability';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import { ChunkFrom, WorkflowRunOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
@@ -603,7 +603,7 @@ export class InngestWorkflow<
   async listWorkflowRuns(args?: {
     fromDate?: Date;
     toDate?: Date;
-    perPage?: number;
+    perPage?: number | false;
     page?: number;
     resourceId?: string;
   }) {

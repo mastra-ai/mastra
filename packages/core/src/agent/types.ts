@@ -3,7 +3,6 @@ import type { ToolSet } from '@internal/ai-sdk-v4/tool';
 import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
-import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type {
   CoreMessage,
@@ -26,6 +25,7 @@ import type { ProviderOptions } from '../llm/model/provider-options';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
+import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../observability';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
