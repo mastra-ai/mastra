@@ -27,6 +27,12 @@ import { Mastra as MastraApp2 } from '@mastra/core';
 
 import { Agent as MastraAgent2 } from '@mastra/core/agent';
 import { createWorkflow as defineWorkflow } from '@mastra/core/workflows';
+import type { Agent as TypeAgent } from '@mastra/core/agent';
+import { createTool as createTool2 } from '@mastra/core/tools';
+import { Agent as ValueAgent } from '@mastra/core/agent';
+import type { Tool } from '@mastra/core/tools';
+import type { Agent as TypeOnlyAgent } from '@mastra/core/agent';
+import type { Workflow as TypeOnlyWorkflow } from '@mastra/core/workflows';
 
 // Should not affect other packages
 import { Mastra as MastraOther } from 'some-other-package';

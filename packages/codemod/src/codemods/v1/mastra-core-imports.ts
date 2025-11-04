@@ -69,9 +69,10 @@ export default createTransformer((fileInfo, api, options, context) => {
     .forEach(importPath => {
       const node = importPath.node;
       const specifiers = node.specifiers || [];
+      const declarationImportKind = node.importKind || 'value';
 
       // Categorize specifiers into those that stay vs those that move
-      const { remainingSpecifiers, importsToMove } = categorizeImports(specifiers);
+      const { remainingSpecifiers, importsToMove } = categorizeImports(specifiers, declarationImportKind);
 
       // Early return: No imports to move
       if (importsToMove.length === 0) return;
@@ -95,9 +96,15 @@ export default createTransformer((fileInfo, api, options, context) => {
 /**
  * Categorize import specifiers into those that stay vs those that move
  */
-function categorizeImports(specifiers: any[]) {
+function categorizeImports(specifiers: any[], declarationImportKind: 'type' | 'typeof' | 'value') {
   const remainingSpecifiers: any[] = [];
-  const importsToMove: Array<{ subpath: string; localName: string; importedName: string }> = [];
+  const importsToMove: Array<{
+    subpath: string;
+    localName: string;
+    importedName: string;
+    importKind: 'type' | 'typeof' | 'value';
+    isDeclarationType: boolean;
+  }> = [];
 
   specifiers.forEach(specifier => {
     // Keep default and namespace imports as-is
@@ -109,12 +116,25 @@ function categorizeImports(specifiers: any[]) {
     const imported = specifier.imported;
     const importedName = getImportedName(imported);
     const localName = specifier.local?.name || importedName;
+    const specifierImportKind = specifier.importKind || 'value';
+
+    // Determine effective importKind:
+    // - If declaration is "import type {}", use 'type' for all specifiers
+    // - Otherwise, use the specifier's own importKind
+    const effectiveImportKind = declarationImportKind !== 'value' ? declarationImportKind : specifierImportKind;
+    const isDeclarationType = declarationImportKind !== 'value';
 
     // Check if this import should be moved to a subpath
     const newSubpath = EXPORT_TO_SUBPATH[importedName];
 
     if (newSubpath) {
-      importsToMove.push({ subpath: newSubpath, localName, importedName });
+      importsToMove.push({
+        subpath: newSubpath,
+        localName,
+        importedName,
+        importKind: effectiveImportKind,
+        isDeclarationType,
+      });
     } else {
       // This import stays at '@mastra/core' (e.g., Mastra, Config)
       remainingSpecifiers.push(specifier);
@@ -136,32 +156,61 @@ function getImportedName(imported: any): string {
 }
 
 /**
- * Group imports by their target subpath
+ * Group imports by their target subpath and importKind
  */
-function groupImportsBySubpath(importsToMove: Array<{ subpath: string; localName: string; importedName: string }>) {
-  const groupedImports = new Map<string, Array<{ localName: string; importedName: string }>>();
+function groupImportsBySubpath(
+  importsToMove: Array<{
+    subpath: string;
+    localName: string;
+    importedName: string;
+    importKind: 'type' | 'typeof' | 'value';
+    isDeclarationType: boolean;
+  }>,
+) {
+  const groupedImports = new Map<
+    string,
+    Array<{
+      localName: string;
+      importedName: string;
+      importKind: 'type' | 'typeof' | 'value';
+      isDeclarationType: boolean;
+    }>
+  >();
 
-  importsToMove.forEach(({ subpath, localName, importedName }) => {
-    if (!groupedImports.has(subpath)) {
-      groupedImports.set(subpath, []);
+  importsToMove.forEach(({ subpath, localName, importedName, importKind, isDeclarationType }) => {
+    // Create a key that includes both subpath and importKind to ensure separate import declarations
+    const key = `${subpath}::${importKind}::${isDeclarationType}`;
+    if (!groupedImports.has(key)) {
+      groupedImports.set(key, []);
     }
-    groupedImports.get(subpath)!.push({ localName, importedName });
+    groupedImports.get(key)!.push({ localName, importedName, importKind, isDeclarationType });
   });
 
   return groupedImports;
 }
 
 /**
- * Create new import declarations for each subpath
+ * Create new import declarations for each subpath and importKind
  */
 function createNewImports(
   j: any,
-  groupedImports: Map<string, Array<{ localName: string; importedName: string }>>,
+  groupedImports: Map<
+    string,
+    Array<{
+      localName: string;
+      importedName: string;
+      importKind: 'type' | 'typeof' | 'value';
+      isDeclarationType: boolean;
+    }>
+  >,
   context: any,
 ) {
   const newImports: any[] = [];
 
-  groupedImports.forEach((imports, subpath) => {
+  groupedImports.forEach((imports, key) => {
+    // Extract subpath, importKind, and isDeclarationType from the composite key
+    const [subpath, importKind, isDeclarationTypeStr] = key.split('::');
+
     const newSpecifiers = imports.map(({ localName, importedName }) => {
       if (localName === importedName) {
         // import { Agent } from '@mastra/core/agent'
@@ -170,14 +219,24 @@ function createNewImports(
         // import { Agent as MastraAgent } from '@mastra/core/agent'
         return j.importSpecifier(j.identifier(importedName), j.identifier(localName));
       }
+      // Note: We don't set importKind on specifiers since we're creating
+      // separate import declarations for each importKind. All specifiers in a type
+      // import group will be in an "import type" declaration.
     });
 
     const newImport = j.importDeclaration(newSpecifiers, j.stringLiteral(subpath));
+
+    // Set importKind on declaration if this is a type import (either declaration-level or inline)
+    if (importKind !== 'value') {
+      newImport.importKind = importKind;
+    }
+
     newImports.push(newImport);
 
     // Log which imports were moved to which subpath
     const importList = imports.map(i => i.importedName).join(', ');
-    context.messages.push(`Moved imports to '${subpath}': ${importList}`);
+    const kindLabel = importKind !== 'value' ? ` (${importKind})` : '';
+    context.messages.push(`Moved imports to '${subpath}'${kindLabel}: ${importList}`);
   });
 
   return newImports;

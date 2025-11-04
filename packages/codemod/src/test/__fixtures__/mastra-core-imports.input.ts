@@ -29,6 +29,13 @@ import { Mastra as MastraApp2, Agent as MastraAgent2 } from '@mastra/core';
 // Workflow with alias
 import { createWorkflow as defineWorkflow } from '@mastra/core';
 
+// Type imports (inline)
+import { type Agent as TypeAgent, createTool as createTool2 } from '@mastra/core';
+import { Agent as ValueAgent, type Tool } from '@mastra/core';
+
+// Type-only imports
+import type { Agent as TypeOnlyAgent, Workflow as TypeOnlyWorkflow } from '@mastra/core';
+
 // Should not affect other packages
 import { Mastra as MastraOther } from 'some-other-package';
 import { Agent as AgentOther } from 'another-package';
