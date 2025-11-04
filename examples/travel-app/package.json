@@ -66,6 +66,7 @@
     "overrides": {
       "@mastra/core": "link:../../packages/core",
       "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/loggers": "link:../../packages/loggers",
       "@mastra/memory": "link:../../packages/memory",
       "@mastra/pg": "link:../../stores/pg"
     }
