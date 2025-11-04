@@ -16,6 +16,7 @@ let allPackages = await globby(
     '!**/integration-tests/**',
     '!**/integration-tests-v5/**',
     '!./packages/_config/**',
+    '!./packages/codemod/**',
     '!./e2e-tests/**',
     '!**/mcp-docs-server/**',
     '!**/mcp-registry-registry/**',
