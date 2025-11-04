@@ -1,16 +1,26 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
+// const WeatherQuerySchema = z.union([z.number(), z.object({ prefix: z.string(), value: z.number() })]);
+const zodOrderedWeatherQuery = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('byCity'), city: z.string() }).extend({ order: z.number() }),
+  z.object({ type: z.literal('byCoords'), lat: z.number(), lon: z.number() }).extend({ order: z.number() }),
+]);
+//   .default({ type: 'byCity', city: 'New York' });
+
+// const zodOrderedWeatherQuery = WeatherQuerySchema.and(z.object({ order: z.number() }));
+
 const stepOne = createStep({
   id: 'stepOne',
   inputSchema: z.object({
     inputValue: z.number(),
+    zodOrderedWeatherQuery,
   }),
   outputSchema: z.object({
     doubledValue: z.number(),
   }),
   execute: async ({ inputData }) => {
-    await new Promise(resolve => setTimeout(resolve, 10_000));
+    // await new Promise(resolve => setTimeout(resolve, 10_000));
     const doubledValue = inputData.inputValue * 2;
     return { doubledValue };
   },
@@ -71,6 +81,7 @@ export const nestedWorkflow = createWorkflow({
   id: 'data-processing',
   inputSchema: z.object({
     inputValue: z.number(),
+    zodOrderedWeatherQuery,
   }),
   outputSchema: z.object({
     isEven: z.boolean(),
@@ -86,6 +97,7 @@ export const myWorkflowX = createWorkflow({
   id: 'my-workflow',
   inputSchema: z.object({
     inputValue: z.number(),
+    zodOrderedWeatherQuery,
   }),
   outputSchema: z.object({
     isEven: z.boolean(),
