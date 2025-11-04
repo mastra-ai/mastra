@@ -91,5 +91,8 @@
     "vitest": "^3.2.4",
     "@internal/types-builder": "workspace:*",
     "zod": "^3.25.76"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

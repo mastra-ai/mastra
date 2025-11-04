@@ -64,5 +64,8 @@
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
-  "homepage": "https://mastra.ai"
+  "homepage": "https://mastra.ai",
+  "engines": {
+    "node": ">=22.13.0"
+  }
 }
