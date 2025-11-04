@@ -620,7 +620,7 @@ ${workingMemory}`;
     if (this.vector && config.semanticRecall) {
       let indexName: Promise<string>;
       await Promise.all(
-        updatedMessages.map(async message => {
+        result.messages.map(async message => {
           let textForEmbedding: string | null = null;
 
           // Extract text from parts array for embedding
