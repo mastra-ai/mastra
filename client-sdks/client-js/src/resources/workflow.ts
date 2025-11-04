@@ -360,38 +360,9 @@ export class Workflow extends BaseResource {
   }
 
   /**
-   * Execute workflow and return final result in one call.
-   *
-   * This is the recommended method for simple workflow execution. It creates a run,
-   * executes the workflow, and returns the complete result in a single API call.
-   *
-   * This method runs the workflow in the same process and awaits completion before
-   * returning, making it ideal for synchronous use cases where you need immediate results.
-   *
-   * @param params - Execution parameters
-   * @param params.inputData - Input data for the workflow
-   * @param params.requestContext - Optional request context
-   * @param params.tracingOptions - Optional tracing configuration
-   * @param params.runId - Optional custom run ID (auto-generated if not provided)
-   * @returns Promise containing complete workflow execution result with status, result, runId, and steps
-   *
-   * @example
-   * // Simple execution
-   * const result = await workflow.execute({
-   *   inputData: { value: 42 }
-   * });
-   * console.log(result.status);  // 'success'
-   * console.log(result.runId);   // 'generated-run-id'
-   * console.log(result.result);  // Final workflow output
-   *
-   * @example
-   * // With custom runId and tracing
-   * const result = await workflow.execute({
-   *   inputData: { value: 42 },
-   *   runId: 'custom-run-id',
-   *   tracingOptions: { metadata: { source: 'api' } }
-   * });
-   * console.log(result.runId);   // 'custom-run-id'
+   * Executes a workflow and returns the complete result in a single call
+   * @param params - Object containing the optional runId, inputData, requestContext and tracingOptions
+   * @returns Promise containing the workflow execution result with status, result, runId, and steps
    */
   execute(params: {
     inputData: Record<string, any>;

@@ -215,16 +215,6 @@ export async function startAsyncWorkflowHandler({
   }
 }
 
-/**
- * Execute workflow and return final result in one call.
- *
- * This handler creates a workflow run, executes it, and returns the complete result
- * including the runId. This provides a better developer experience compared to
- * startAsyncWorkflowHandler by including all necessary information in a single response.
- *
- * This is the recommended handler for simple workflow execution where you want to
- * create, run, and get results in a single operation.
- */
 export async function executeWorkflowHandler({
   mastra,
   requestContext,
