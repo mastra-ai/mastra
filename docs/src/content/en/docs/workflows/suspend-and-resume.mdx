@@ -5,15 +5,7 @@ description: "Suspend and resume in Mastra workflows allows you to pause executi
 
 # Suspend & Resume
 
-Workflows can be paused at any step, with their current state persisted as a [snapshot](./snapshots) in storage. Execution can then be resumed from this saved snapshot when ready. Persisting the snapshot ensures the workflow state is maintained across sessions, deployments, and server restarts, essential for workflows that may remain suspended while awaiting external input or resources.
-
-Common scenarios for suspending workflows include:
-
-- Waiting for human approval or input
-- Pausing until external API resources become available
-- Collecting additional data needed for later steps
-- Rate limiting or throttling expensive operations
-- Handling event-driven processes with external triggers
+Workflows can be paused at any step to collect additional data, wait for API callbacks, throttle expensive operations, or wait for [Human in the Loop](./human-in-the-loop) input. When a workflow is suspended, its current state can be persisted as a [snapshot](./snapshots) and later resumed from the same point. Snapshots are stored in the configured storage system and persist across deployments and application restarts.
 
 > **New to suspend and resume?** Watch these official video tutorials:
 >
