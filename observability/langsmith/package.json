@@ -31,7 +31,8 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "langsmith": ">=0.3.72"
+    "langsmith": ">=0.3.72",
+    "@mastra/observability": "workspace:*"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^2.0.35",

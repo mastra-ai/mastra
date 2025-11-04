@@ -3,7 +3,6 @@ import { MastraBase } from '../../../base';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import type {
   StorageGetMessagesArg,
-  PaginationInfo,
   StorageResourceType,
   ThreadOrderBy,
   ThreadSortDirection,
@@ -63,8 +62,6 @@ export abstract class MemoryStorage extends MastraBase {
   abstract listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput>;
-
-  abstract getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }>;
 
   async getResourceById(_: { resourceId: string }): Promise<StorageResourceType | null> {
     throw new Error(

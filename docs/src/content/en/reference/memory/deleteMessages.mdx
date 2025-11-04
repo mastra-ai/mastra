@@ -47,7 +47,7 @@ import { MastraDBMessage } from "@mastra/core";
 const agent = mastra.getAgent("agent");
 const memory = await agent.getMemory();
 
-const { messages } = await memory!.query({ threadId: "thread-123" });
+const { messages } = await memory!.recall({ threadId: "thread-123" });
 
 const messageIds = messages.map(
   (message: MastraDBMessage) => message.id,
@@ -58,5 +58,5 @@ await memory?.deleteMessages([...messageIds]);
 ## Related
 
 - [Memory Class Reference](/reference/memory/memory-class)
-- [query](/reference/memory/query)
+- [recall](/reference/memory/recall)
 - [Getting Started with Memory](/docs/memory/overview)

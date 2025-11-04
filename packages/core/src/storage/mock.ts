@@ -251,14 +251,6 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.memory.deleteMessages(messageIds);
   }
 
-  async getMessagesPaginated({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessagesPaginated({ threadId, resourceId, selectBy });
-  }
-
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     return this.stores.scores.getScoreById({ id });
   }

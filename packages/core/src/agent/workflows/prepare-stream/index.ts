@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { InternalSpans } from '../../../ai-tracing';
-import type { AISpan, AISpanType } from '../../../ai-tracing';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
+import type { AISpan, AISpanType } from '../../../observability';
+import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';

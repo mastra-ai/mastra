@@ -9,7 +9,7 @@ import { toAISdkStream } from '@mastra/ai-sdk';
 import { Agent, MessageList } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { DefaultChatTransport, isToolUIPart } from 'ai';
+import { DefaultChatTransport, isToolUIPart, lastAssistantMessageIsCompleteWithToolCalls } from 'ai';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { memory, weatherAgent } from './mastra/agents/weather';
@@ -55,7 +55,7 @@ describe('Memory Streaming Tests', () => {
     });
 
     const threadId = randomUUID();
-    const resourceId = 'test-resource';
+    const resourceId = randomUUID();
 
     // First weather check
     const stream1 = await agent.stream('what is the weather in LA?', {
@@ -129,7 +129,7 @@ describe('Memory Streaming Tests', () => {
     });
 
     const agentMemory = (await agent.getMemory())!;
-    const { messages } = await agentMemory.query({ threadId });
+    const { messages } = await agentMemory.recall({ threadId });
 
     console.log('Custom IDs: ', customIds);
     console.log('Messages: ', messages);
@@ -200,7 +200,7 @@ describe('Memory Streaming Tests', () => {
       const { result } = renderHook(() => {
         const chat = useChat({
           transport: new DefaultChatTransport({
-            api: `http://localhost:${port}/api/agents/test/stream/ui`,
+            api: `http://localhost:${port}/chat`,
             prepareSendMessagesRequest({ messages }) {
               return {
                 body: {
@@ -265,16 +265,15 @@ describe('Memory Streaming Tests', () => {
         threadId,
         resourceId,
       });
-      await weatherAgent.generate(`LA weather`, { threadId, resourceId });
 
       const agentMemory = (await weatherAgent.getMemory())!;
-      const dbMessages = (await agentMemory.query({ threadId })).messages;
+      const dbMessages = (await agentMemory.recall({ threadId })).messages;
       const initialMessages = dbMessages.map(m => MessageList.mastraDBMessageToAIV5UIMessage(m));
       const state = { clipboard: '' };
       const { result } = renderHook(() => {
         const chat = useChat({
           transport: new DefaultChatTransport({
-            api: `http://localhost:${port}/api/agents/test/stream/ui`,
+            api: `http://localhost:${port}/chat`,
             prepareSendMessagesRequest({ messages }) {
               return {
                 body: {
@@ -293,11 +292,18 @@ describe('Memory Streaming Tests', () => {
             error = e;
             console.error('useChat error:', error);
           },
-          onToolCall: async ({ toolCall }) => {
-            console.log(toolCall);
+          sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+          onToolCall: ({ toolCall }) => {
+            if (toolCall.dynamic) {
+              return;
+            }
             if (toolCall.toolName === `clipboard`) {
-              await new Promise(res => setTimeout(res, 10));
-              return state.clipboard as any as void;
+              chat.addToolResult({
+                state: 'output-available',
+                toolCallId: toolCall.toolCallId,
+                tool: toolCall.toolName,
+                output: state.clipboard,
+              });
             }
           },
         });
@@ -369,6 +375,15 @@ describe('Memory Streaming Tests', () => {
         message: 'whats in my clipboard now?',
         responseContains: [state.clipboard],
       });
+
+      const messagesResult = await agentMemory.recall({ threadId, resourceId });
+
+      const clipboardToolInvocation = messagesResult.messages.filter(
+        m =>
+          m.role === 'assistant' &&
+          m.content.parts.some(p => p.type === 'tool-invocation' && p.toolInvocation.toolName === 'clipboard'),
+      );
+      expect(clipboardToolInvocation.length).toBeGreaterThan(0);
     });
   });
 });

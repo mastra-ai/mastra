@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { openai } from '@ai-sdk/openai';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
+import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4/model';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
@@ -681,7 +681,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       const threadId = '1';
       const resourceId = '2';
       // @ts-ignore
-      mockMemory.rememberMessages = async function rememberMessages() {
+      mockMemory.recall = async function recall() {
         const list = new MessageList({ threadId, resourceId }).add(
           [
             { role: `user`, content: `hello!`, threadId, resourceId },
@@ -689,7 +689,8 @@ function runStreamTest(version: 'v1' | 'v2') {
           ],
           `memory`,
         );
-        return { messages: list.get.remembered.aiV4.core(), messagesV2: list.get.remembered.db() };
+        const remembered = list.get.remembered.db();
+        return { messages: remembered };
       };
 
       mockMemory.getThreadById = async function getThreadById() {
@@ -733,26 +734,32 @@ function runStreamTest(version: 'v1' | 'v2') {
       let request;
       if (version === 'v1') {
         request = JSON.parse((await result.request).body).messages;
-        // Expect 3 messages: 2 system messages (instructions + remembered), 1 user message
-        expect(request).toHaveLength(3);
-        expect(request[0].role).toBe('system');
-        expect(request[0].content).toBe('test!');
-        expect(request[1].role).toBe('system');
-        expect(request[1].content).toContain('remembered from a different conversation');
-        expect(request[1].content).toContain('hello!');
-        expect(request[1].content).toContain('hi, how are you?');
-        expect(request[2]).toEqual({ role: 'user', content: "I'm good, how are you?" });
+        expect(request).toEqual([
+          {
+            role: 'system',
+            content: 'test!',
+          },
+          {
+            role: 'user',
+            content: 'hello!',
+          },
+          { role: 'assistant', content: 'hi, how are you?' },
+          { role: 'user', content: "I'm good, how are you?" },
+        ]);
       } else {
         request = (await result.request).body.input;
-        // Expect 3 messages: 2 system messages (instructions + remembered), 1 user message
-        expect(request).toHaveLength(3);
-        expect(request[0].role).toBe('system');
-        expect(request[0].content).toBe('test!');
-        expect(request[1].role).toBe('system');
-        expect(request[1].content).toContain('remembered from a different conversation');
-        expect(request[1].content).toContain('hello!');
-        expect(request[1].content).toContain('hi, how are you?');
-        expect(request[2]).toEqual({ role: 'user', content: [{ type: 'input_text', text: "I'm good, how are you?" }] });
+        expect(request).toEqual([
+          {
+            role: 'system',
+            content: 'test!',
+          },
+          {
+            role: 'user',
+            content: [{ type: 'input_text', text: 'hello!' }],
+          },
+          { role: 'assistant', content: [{ type: 'output_text', text: 'hi, how are you?' }] },
+          { role: 'user', content: [{ type: 'input_text', text: "I'm good, how are you?" }] },
+        ]);
       }
     });
 
@@ -858,24 +865,14 @@ function runStreamTest(version: 'v1' | 'v2') {
           },
         });
 
-        // request.body.input contains the actual API request format (OpenAI's function_call format)
-        // not the AI SDK v5 abstraction (tool-call format)
-        // Note: There are duplicate function_call messages in the request
         expect(secondResponse.request.body.input).toEqual([
           expect.objectContaining({ role: 'system' }),
           expect.objectContaining({ role: 'user' }),
-          expect.objectContaining({
-            type: 'function_call',
-            name: 'get_weather',
-          }),
-          expect.objectContaining({
-            type: 'function_call',
-            name: 'get_weather',
-          }),
-          expect.objectContaining({
-            type: 'function_call_output',
-            call_id: expect.any(String),
-          }),
+          // After PR changes: sanitizeV5UIMessages filters out input-available tool parts
+          // and keeps only output-available parts. When convertToModelMessages processes
+          // an output-available tool part, it generates both function_call and function_call_output
+          expect.objectContaining({ type: 'function_call', name: 'get_weather' }),
+          expect.objectContaining({ type: 'function_call_output' }),
           expect.objectContaining({ role: 'assistant' }),
           expect.objectContaining({ role: 'user' }),
         ]);
