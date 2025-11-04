@@ -7,6 +7,9 @@ import { createTransformer } from '../lib/create-transformer';
 export default createTransformer((fileInfo, api, options, context) => {
   const { j, root } = context;
 
+  // Track whether RuntimeContext was imported from @mastra/core/runtime-context
+  let hasRuntimeContextImport = false;
+
   // 1. Update import declarations from runtime-context to request-context
   root.find(j.ImportDeclaration).forEach(importPath => {
     const node = importPath.node;
@@ -23,6 +26,7 @@ export default createTransformer((fileInfo, api, options, context) => {
       if (specifier.type === 'ImportSpecifier') {
         const imported = specifier.imported;
         if (imported.type === 'Identifier' && imported.name === 'RuntimeContext') {
+          hasRuntimeContextImport = true;
           imported.name = 'RequestContext';
           context.messages.push(`Updated import: RuntimeContext → RequestContext from '@mastra/core/request-context'`);
         }
@@ -30,25 +34,27 @@ export default createTransformer((fileInfo, api, options, context) => {
     });
   });
 
-  // 2. Rename all RuntimeContext type/class references to RequestContext
-  const runtimeContextCount = root.find(j.Identifier, { name: 'RuntimeContext' }).length;
-  if (runtimeContextCount > 0) {
-    root.find(j.Identifier, { name: 'RuntimeContext' }).forEach(path => {
-      path.node.name = 'RequestContext';
-    });
-    context.hasChanges = true;
-    context.messages.push(`Renamed ${runtimeContextCount} RuntimeContext type references to RequestContext`);
-  }
+  // 2. Only rename RuntimeContext type/class references if it was imported from Mastra
+  if (hasRuntimeContextImport) {
+    const runtimeContextCount = root.find(j.Identifier, { name: 'RuntimeContext' }).length;
+    if (runtimeContextCount > 0) {
+      root.find(j.Identifier, { name: 'RuntimeContext' }).forEach(path => {
+        path.node.name = 'RequestContext';
+      });
+      context.hasChanges = true;
+      context.messages.push(`Renamed ${runtimeContextCount} RuntimeContext type references to RequestContext`);
+    }
 
-  // 3. Rename all runtimeContext variable/parameter identifiers to requestContext
-  const runtimeContextVarCount = root.find(j.Identifier, { name: 'runtimeContext' }).length;
-  if (runtimeContextVarCount > 0) {
-    root.find(j.Identifier, { name: 'runtimeContext' }).forEach(path => {
-      path.node.name = 'requestContext';
-    });
-    context.hasChanges = true;
-    context.messages.push(
-      `Renamed ${runtimeContextVarCount} runtimeContext variable/parameter references to requestContext`,
-    );
+    // 3. Only rename runtimeContext variable/parameter identifiers if RuntimeContext was imported from Mastra
+    const runtimeContextVarCount = root.find(j.Identifier, { name: 'runtimeContext' }).length;
+    if (runtimeContextVarCount > 0) {
+      root.find(j.Identifier, { name: 'runtimeContext' }).forEach(path => {
+        path.node.name = 'requestContext';
+      });
+      context.hasChanges = true;
+      context.messages.push(
+        `Renamed ${runtimeContextVarCount} runtimeContext variable/parameter references to requestContext`,
+      );
+    }
   }
 });

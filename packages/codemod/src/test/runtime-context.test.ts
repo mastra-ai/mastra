@@ -6,4 +6,8 @@ describe('runtime-context', () => {
   it('transforms correctly', () => {
     testTransform(transformer, 'runtime-context');
   });
+
+  it('does not rename RuntimeContext class if not imported from Mastra', () => {
+    testTransform(transformer, 'runtime-context-no-import');
+  });
 });
