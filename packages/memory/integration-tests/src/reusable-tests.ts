@@ -140,6 +140,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           threadId: thread.id,
           resourceId,
           perPage: 10,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
         });
         expect(result.messages).toHaveLength(10); // lastMessages is set to 10
         expect(getTextContent(result.messages[0])).toBe('Message 6'); // First message
@@ -149,6 +150,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           threadId: thread.id,
           resourceId,
           perPage: 15,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
         });
         expect(result2.messages).toHaveLength(15); // lastMessages is set to 10
         expect(getTextContent(result2.messages[0])).toBe('Message 1'); // First message

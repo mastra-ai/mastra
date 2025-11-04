@@ -129,7 +129,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       expect(caught).toBe(true);
 
       // After interruption, check what was saved
-      let result = await mockMemory.query({
+      let result = await mockMemory.recall({
         threadId: 'thread-partial-rescue',
         resourceId: 'resource-partial-rescue',
       });
@@ -201,7 +201,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       await stream.consumeStream();
 
       expect(saveCallCount).toBeGreaterThan(1);
-      const result = await mockMemory.query({
+      const result = await mockMemory.recall({
         threadId: 'thread-echo',
         resourceId: 'resource-echo',
       });
@@ -281,7 +281,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       await stream.consumeStream();
 
       expect(saveCallCount).toBeGreaterThan(1);
-      const result = await mockMemory.query({
+      const result = await mockMemory.recall({
         threadId: 'thread-multi',
         resourceId: 'resource-multi',
       });
@@ -324,7 +324,7 @@ function runStreamTest(version: 'v1' | 'v2') {
 
       await stream.consumeStream();
 
-      const result = await mockMemory.query({ threadId: 'thread-1', resourceId: 'resource-1' });
+      const result = await mockMemory.recall({ threadId: 'thread-1', resourceId: 'resource-1' });
       const messages = result.messages;
       // Check that the last message matches the expected final output
       expect(
@@ -435,7 +435,7 @@ function runStreamTest(version: 'v1' | 'v2') {
 
       expect(saveCallCount).toBe(1);
 
-      const result = await mockMemory.query({ threadId: 'thread-2', resourceId: 'resource-2' });
+      const result = await mockMemory.recall({ threadId: 'thread-2', resourceId: 'resource-2' });
       const messages = result.messages;
       expect(messages.length).toBe(1);
       expect(messages[0].role).toBe('user');
@@ -479,7 +479,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       });
 
       expect(saveCallCount).toBe(0);
-      const result = await mockMemory.query({ threadId: 'thread-3', resourceId: 'resource-3' });
+      const result = await mockMemory.recall({ threadId: 'thread-3', resourceId: 'resource-3' });
       const messages = result.messages;
       expect(messages.length).toBe(0);
     });

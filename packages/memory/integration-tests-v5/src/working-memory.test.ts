@@ -1566,8 +1566,8 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
     id: 'get-weather',
     description: 'Get current weather for a city',
     inputSchema: z.object({ city: z.string() }),
-    execute: async ({ context }) => {
-      return { city: context.city, temp: 68, condition: 'partly cloudy' };
+    execute: async inputData => {
+      return { city: inputData.city, temp: 68, condition: 'partly cloudy' };
     },
   });
 

@@ -777,7 +777,7 @@ describe('Memory Handlers', () => {
       });
 
       vi.spyOn(mockMemory, 'getThreadById');
-      vi.spyOn(mockMemory, 'query');
+      vi.spyOn(mockMemory, 'recall');
 
       const result = await listMessagesHandler({ mastra, threadId, resourceId: 'test-resource' });
 
@@ -853,7 +853,7 @@ describe('Memory Handlers', () => {
       });
 
       vi.spyOn(mockMemory, 'getThreadById');
-      vi.spyOn(mockMemory, 'query');
+      vi.spyOn(mockMemory, 'recall');
 
       const result = await listMessagesHandler({ mastra, threadId, resourceId: 'test-resource' });
 
@@ -905,7 +905,7 @@ describe('Memory Handlers', () => {
       });
 
       vi.spyOn(mockMemory, 'getThreadById');
-      vi.spyOn(mockMemory, 'query');
+      vi.spyOn(mockMemory, 'recall');
 
       const result = await listMessagesHandler({ mastra, threadId, resourceId: 'test-resource' });
 
@@ -982,7 +982,7 @@ describe('Memory Handlers', () => {
       });
 
       vi.spyOn(mockMemory, 'getThreadById');
-      vi.spyOn(mockMemory, 'query');
+      vi.spyOn(mockMemory, 'recall');
 
       const result = await listMessagesHandler({
         mastra,
