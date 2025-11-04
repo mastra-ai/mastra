@@ -77,15 +77,17 @@ async function main() {
             Issue Title: ${issue.data.title}
             Issue Body: ${issue.data.body}
         `,
-    output: {
-      type: 'object',
-      properties: {
-        assignee: { type: 'string' },
-        reason: { type: 'string' },
-        product_area: { type: 'string' },
-        github_username: { type: 'string' },
+    structuredOutput: {
+      schema: {
+        type: 'object',
+        properties: {
+          assignee: { type: 'string' },
+          reason: { type: 'string' },
+          product_area: { type: 'string' },
+          github_username: { type: 'string' },
+        },
+        required: ['assignee', 'reason', 'product_area', 'github_username'],
       },
-      required: ['assignee', 'reason', 'product_area', 'github_username'],
     },
   });
 
