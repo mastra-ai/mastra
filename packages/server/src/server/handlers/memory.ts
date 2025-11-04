@@ -379,7 +379,7 @@ export async function getMessagesHandler({
 
     const result = await memory.recall({
       threadId: threadId,
-      ...(limit && { selectBy: { last: limit } }),
+      ...(limit && { perPage: limit }),
     });
     const uiMessages = convertMessages(result.messages).to('AIV5.UI');
     return { messages: result.messages, uiMessages };
