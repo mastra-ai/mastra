@@ -406,32 +406,47 @@ const aiSdkStream = toAISdkStream(stream, { from: "agent" }); // ✅ Explicit co
 
 **Working with AI SDK UI components:**
 
-The `@mastra/ai-sdk` package provides utilities for seamless integration with Vercel AI SDK. For streaming responses in API routes:
+The `@mastra/ai-sdk` package provides the `chatRoute()` utility for seamless integration with Vercel AI SDK. Instead of manually handling stream conversion, register a chat route in your Mastra server configuration:
 
 ```typescript
-import { toAISdkStream } from "@mastra/ai-sdk";
-import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
+// src/mastra/index.ts
+import { Mastra } from "@mastra/core";
+import { chatRoute } from "@mastra/ai-sdk";
 
-export async function POST(req: Request) {
-  const { messages } = await req.json();
-  const agent = mastra.getAgent("weatherAgent");
-  const stream = await agent.stream(messages);
-
-  const uiMessageStream = createUIMessageStream({
-    execute: async ({ writer }) => {
-      for await (const part of toAISdkStream(stream, { from: "agent" })!) {
-        writer.write(part);
-      }
-    },
-  });
-
-  return createUIMessageStreamResponse({ stream: uiMessageStream });
-}
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: "/chat",
+        agent: "weatherAgent", // Fixed agent
+      }),
+      // Or use dynamic agents:
+      chatRoute({
+        path: "/chat/:agentId", // Dynamic agent ID
+      }),
+    ],
+  },
+});
 ```
 
-**Note:** The `/api/agents/:agentId/stream/ui` HTTP endpoint has also been deprecated. Use the standard `/api/agents/:agentId/stream` endpoint with `@mastra/ai-sdk` transformations instead.
+Then use the `useChat()` hook in your frontend:
 
-Learn more in the [Using Vercel AI SDK documentation](/docs/frameworks/agentic-uis/ai-sdk).
+```typescript
+import { useChat } from "ai/react";
+import { DefaultChatTransport } from "ai";
+
+const { messages, sendMessage } = useChat({
+  transport: new DefaultChatTransport({
+    api: "http://localhost:4111/chat/weatherAgent",
+  }),
+});
+```
+
+**Advanced: Manual transformation**
+
+If you need more control over the stream conversion, you can manually transform streams using `toAISdkStream`. See the [Using Vercel AI SDK documentation](/docs/frameworks/agentic-uis/ai-sdk) for details.
+
+**Note:** The `/api/agents/:agentId/stream/ui` HTTP endpoint has also been deprecated. Use the standard `/api/agents/:agentId/stream` endpoint with `@mastra/ai-sdk` transformations instead.
 
 
 ### Changed: `RuntimeContext` renamed to `RequestContext`
