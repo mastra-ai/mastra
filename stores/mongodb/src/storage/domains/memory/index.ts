@@ -243,29 +243,22 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Get total count
       const total = await collection.countDocuments(query);
 
-      // If perPage is 0, return early to avoid fetching documents
-      if (perPage === 0) {
-        return {
-          messages: [],
-          total,
-          page,
-          perPage: perPageForResponse,
-          hasMore: offset < total,
-        };
-      }
+      const messages: any[] = [];
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
-      const sortObj: any = { [field]: sortOrder };
-      let cursor = collection.find(query).sort(sortObj).skip(offset);
+      if (perPage !== 0) {
+        const sortObj: any = { [field]: sortOrder };
+        let cursor = collection.find(query).sort(sortObj).skip(offset);
 
-      // Only apply limit if not unlimited
-      // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
-      if (perPageInput !== false) {
-        cursor = cursor.limit(perPage);
+        // Only apply limit if not unlimited
+        // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
+        if (perPageInput !== false) {
+          cursor = cursor.limit(perPage);
+        }
+
+        const dataResult = await cursor.toArray();
+        messages.push(...dataResult.map((row: any) => this.parseRow(row)));
       }
-
-      const dataResult = await cursor.toArray();
-      const messages: any[] = dataResult.map((row: any) => this.parseRow(row));
 
       if (total === 0 && messages.length === 0) {
         return {

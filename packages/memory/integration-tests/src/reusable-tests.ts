@@ -725,7 +725,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
         const remainingMessages = await memory.query({
           threadId: thread.id,
-          selectBy: { last: 10 },
+          perPage: 10,
         });
 
         expect(remainingMessages.messages).toHaveLength(1);
