@@ -1,12 +1,12 @@
-import type { TracingOptions } from '@mastra/core/ai-tracing';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { TracingOptions } from '@mastra/core/observability';
+import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
-import { toAISdkFormat } from './to-ai-sdk-format';
+import { toAISdkV5Stream } from './convert-streams';
 
 type WorkflowRouteBody = {
   inputData?: Record<string, any>;
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
 };
 
@@ -45,7 +45,7 @@ export function workflowRoute({
               type: 'object',
               properties: {
                 inputData: { type: 'object', additionalProperties: true },
-                runtimeContext: { type: 'object', additionalProperties: true },
+                requestContext: { type: 'object', additionalProperties: true },
                 tracingOptions: { type: 'object', additionalProperties: true },
               },
             },
@@ -89,12 +89,12 @@ export function workflowRoute({
         throw new Error(`Workflow ${workflowToUse} not found`);
       }
 
-      const run = await workflowObj.createRunAsync();
+      const run = await workflowObj.createRun();
       const stream = run.streamVNext({ inputData, ...rest });
 
       const uiMessageStream = createUIMessageStream({
         execute: async ({ writer }) => {
-          for await (const part of toAISdkFormat(stream, { from: 'workflow' })) {
+          for await (const part of toAISdkV5Stream(stream, { from: 'workflow' })) {
             writer.write(part);
           }
         },

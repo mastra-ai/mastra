@@ -3,8 +3,8 @@ title: "Templates | Getting Started | Mastra Docs"
 description: Pre-built project structures that demonstrate common Mastra use cases and patterns
 ---
 
-import { Callout } from "nextra/components";
-import { Tabs, Tab } from "@/components/tabs";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # Templates
 
@@ -14,27 +14,27 @@ Templates are pre-built Mastra projects that demonstrate specific use cases and 
 
 Install a template using the `create-mastra` command:
 
-<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
-  <Tab>
+<Tabs>
+  <TabItem value="npm" label="npm">
     ```bash copy
     npx create-mastra@latest --template template-name
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
     ```bash copy
     yarn dlx create-mastra@latest --template template-name
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
     ```bash copy
     pnpm create mastra@latest --template template-name
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="bun" label="bun">
     ```bash copy
     bun create mastra@latest --template template-name
     ```
-  </Tab>
+  </TabItem>
 </Tabs>
 
 For example, to create a text-to-SQL application:
@@ -48,14 +48,17 @@ npx create-mastra@latest --template text-to-sql
 After installation:
 
 1. **Navigate to your project**:
+
    ```bash copy
    cd your-project-name
    ```
 
 2. **Configure environment variables**:
+
    ```bash copy
    cp .env.example .env
    ```
+
    Edit `.env` with your API keys as specified in the template's README.
 
 3. **Start development**:
@@ -63,8 +66,8 @@ After installation:
    npm run dev
    ```
 
-<Callout type="info">
-  Each template includes a comprehensive README with specific setup instructions and usage examples.
-</Callout>
+:::info
+Each template includes a comprehensive README with specific setup instructions and usage examples.
+:::
 
-For detailed information on creating templates, see the [Templates Reference](/reference/templates).
+For detailed information on creating templates, see the [Templates Reference](/reference/templates/overview).

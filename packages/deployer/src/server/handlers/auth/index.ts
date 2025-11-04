@@ -5,7 +5,7 @@ import { canAccessPublicly, checkRules, isProtectedPath, isDevPlaygroundRequest 
 
 export const authenticationMiddleware = async (c: ContextWithMastra, next: Next) => {
   const mastra = c.get('mastra');
-  const authConfig = mastra.getServer()?.experimental_auth;
+  const authConfig = mastra.getServer()?.auth;
   const customRouteAuthConfig = c.get('customRouteAuthConfig');
 
   if (!authConfig) {
@@ -56,7 +56,7 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
     }
 
     // Store user in context
-    c.get('runtimeContext').set('user', user);
+    c.get('requestContext').set('user', user);
 
     return next();
   } catch (err) {
@@ -67,7 +67,7 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
 
 export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) => {
   const mastra = c.get('mastra');
-  const authConfig = mastra.getServer()?.experimental_auth;
+  const authConfig = mastra.getServer()?.auth;
   const customRouteAuthConfig = c.get('customRouteAuthConfig');
 
   if (!authConfig) {
@@ -92,7 +92,7 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
     return next();
   }
 
-  const user = c.get('runtimeContext').get('user');
+  const user = c.get('requestContext').get('user');
 
   if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
     try {

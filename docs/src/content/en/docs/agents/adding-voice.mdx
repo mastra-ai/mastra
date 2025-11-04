@@ -1,3 +1,7 @@
+---
+title: "Adding Voice to Agents | Agents | Mastra Docs"
+---
+
 # Adding Voice to Agents
 
 Mastra agents can be enhanced with voice capabilities, allowing them to speak responses and listen to user input. You can configure an agent to use either a single voice provider or combine multiple providers for different operations.
@@ -18,7 +22,8 @@ const voice = new OpenAIVoice();
 
 // Create an agent with voice capabilities
 export const agent = new Agent({
-  name: "Agent",
+  id: "voice-agent",
+  name: "Voice Agent",
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
   model: openai("gpt-4o"),
   voice,
@@ -106,7 +111,8 @@ const voice = new OpenAIRealtimeVoice({
 
 // Create an agent with speech-to-speech voice capabilities
 export const agent = new Agent({
-  name: "Agent",
+  id: "speech-to-speech-agent",
+  name: "Speech-to-Speech Agent",
   instructions: `You are a helpful assistant with speech-to-speech capabilities.`,
   model: openai("gpt-4o"),
   tools: {
@@ -163,7 +169,7 @@ The following files are created:
 - **hybrid-question.mp3** – Hybrid agent's spoken question.
 - **unified-response.mp3** – Unified agent's spoken response.
 
-```typescript filename="src/test-voice-agents.ts" showLineNumbers copy
+```typescript title="src/test-voice-agents.ts" showLineNumbers copy
 import "dotenv/config";
 
 import path from "path";
@@ -171,11 +177,14 @@ import { createReadStream } from "fs";
 import { Agent } from "@mastra/core/agent";
 import { CompositeVoice } from "@mastra/core/voice";
 import { OpenAIVoice } from "@mastra/voice-openai";
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { openai } from "@ai-sdk/openai";
 
 // Saves an audio stream to a file in the audio directory, creating the directory if it doesn't exist.
-export const saveAudioToFile = async (audio: NodeJS.ReadableStream, filename: string): Promise<void> => {
+export const saveAudioToFile = async (
+  audio: NodeJS.ReadableStream,
+  filename: string,
+): Promise<void> => {
   const audioDir = path.join(process.cwd(), "audio");
   const filePath = path.join(audioDir, filename);
 
@@ -190,39 +199,43 @@ export const saveAudioToFile = async (audio: NodeJS.ReadableStream, filename: st
 };
 
 // Saves an audio stream to a file in the audio directory, creating the directory if it doesn't exist.
-export const convertToText = async (input: string | NodeJS.ReadableStream): Promise<string> => {
+export const convertToText = async (
+  input: string | NodeJS.ReadableStream,
+): Promise<string> => {
   if (typeof input === "string") {
     return input;
   }
 
   const chunks: Buffer[] = [];
   return new Promise((resolve, reject) => {
-    input.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-    input.on("error", reject);
-    input.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+    inputData.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    inputData.on("error", reject);
+    inputData.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
   });
 };
 
 export const hybridVoiceAgent = new Agent({
-  name: "hybrid-voice-agent",
+  id: "hybrid-voice-agent",
+  name: "Hybrid Voice Agent",
   model: openai("gpt-4o"),
   instructions: "You can speak and listen using different providers.",
   voice: new CompositeVoice({
     input: new OpenAIVoice(),
-    output: new OpenAIVoice()
-  })
+    output: new OpenAIVoice(),
+  }),
 });
- 
+
 export const unifiedVoiceAgent = new Agent({
-  name: "unified-voice-agent",
+  id: "unified-voice-agent",
+  name: "Unified Voice Agent",
   instructions: "You are an agent with both STT and TTS capabilities.",
   model: openai("gpt-4o"),
-  voice: new OpenAIVoice()
+  voice: new OpenAIVoice(),
 });
 
 export const mastra = new Mastra({
   // ...
-  agents: { hybridVoiceAgent, unifiedVoiceAgent }
+  agents: { hybridVoiceAgent, unifiedVoiceAgent },
 });
 
 const hybridVoiceAgent = mastra.getAgent("hybridVoiceAgent");
@@ -234,7 +247,9 @@ const hybridSpoken = await hybridVoiceAgent.voice.speak(question);
 
 await saveAudioToFile(hybridSpoken!, "hybrid-question.mp3");
 
-const audioStream = createReadStream(path.join(process.cwd(), "audio", "hybrid-question.mp3"));
+const audioStream = createReadStream(
+  path.join(process.cwd(), "audio", "hybrid-question.mp3"),
+);
 const unifiedHeard = await unifiedVoiceAgent.voice.listen(audioStream);
 
 const inputText = await convertToText(unifiedHeard!);
@@ -257,7 +272,8 @@ import { PlayAIVoice } from "@mastra/voice-playai";
 import { openai } from "@ai-sdk/openai";
 
 export const agent = new Agent({
-  name: "Agent",
+  id: "voice-agent",
+  name: "Voice Agent",
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
   model: openai("gpt-4o"),
 

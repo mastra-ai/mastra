@@ -11,7 +11,6 @@ This tutorial shows how to set up Keywords AI tracing with [Mastra](https://mast
 
 To help you get started quickly, we’ve provided a pre-built example. You can find the code [on GitHub](https://github.com/Keywords-AI/keywordsai-example-projects/tree/main/mastra-ai-weather-agent).
 
-
 ## Setup
 
 Here's the tutorial about the Mastra Weather Agent example.
@@ -30,7 +29,7 @@ Copy the example environment file and add your API keys:
 cp .env.local.example .env.local
 ```
 
-Update .env.local with your credentials: 
+Update .env.local with your credentials:
 
 ```bash .env.local copy
 OPENAI_API_KEY=your-openai-api-key
@@ -42,9 +41,9 @@ KEYWORDSAI_BASE_URL=https://api.keywordsai.co
 
 Configure with KeywordsAI telemetry in `src/mastra/index.ts`:
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" showLineNumbers copy
 
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { KeywordsAIExporter } from "@keywordsai/exporter-vercel";
 
 telemetry: {
@@ -66,7 +65,8 @@ telemetry: {
 ```bash copy
 mastra dev
 ```
-This opens the Mastra playground where you can interact with the weather agent.
+
+This opens Studio where you can interact with the weather agent.
 
 ## Observability
 

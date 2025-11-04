@@ -1,7 +1,7 @@
-import type { TextStreamPart } from 'ai';
+import type { TextStreamPart } from '@internal/ai-sdk-v4/model';
 import type { z } from 'zod';
-import type { TracingPolicy, TracingProperties } from '../ai-tracing';
 import type { Mastra } from '../mastra';
+import type { TracingPolicy, TracingProperties } from '../observability';
 import type { WorkflowStreamEvent } from '../stream/types';
 import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';
@@ -149,41 +149,6 @@ export type StreamEvent =
 
 export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending' | 'canceled';
 
-export type WatchEvent = {
-  type: 'watch';
-  payload: {
-    currentStep?: {
-      id: string;
-      status: WorkflowRunStatus;
-      output?: Record<string, any>;
-      resumePayload?: Record<string, any>;
-      payload?: Record<string, any>;
-      error?: string | Error;
-    };
-    workflowState: {
-      status: WorkflowRunStatus;
-      steps: Record<
-        string,
-        {
-          status: WorkflowRunStatus;
-          output?: Record<string, any>;
-          payload?: Record<string, any>;
-          resumePayload?: Record<string, any>;
-          error?: string | Error;
-          startedAt: number;
-          endedAt: number;
-          suspendedAt?: number;
-          resumedAt?: number;
-        }
-      >;
-      result?: Record<string, any>;
-      payload?: Record<string, any>;
-      error?: string | Error;
-    };
-  };
-  eventTimestamp: Date;
-};
-
 // Type to get the inferred type at a specific path in a Zod schema
 export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
   T extends z.ZodObject<infer Shape>
@@ -198,13 +163,34 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
         : never
     : never;
 
+export interface WorkflowState {
+  status: WorkflowRunStatus;
+  steps: Record<
+    string,
+    {
+      status: WorkflowRunStatus;
+      output?: Record<string, any>;
+      payload?: Record<string, any>;
+      resumePayload?: Record<string, any>;
+      error?: string | Error;
+      startedAt: number;
+      endedAt: number;
+      suspendedAt?: number;
+      resumedAt?: number;
+    }
+  >;
+  result?: Record<string, any>;
+  payload?: Record<string, any>;
+  error?: string | Error;
+}
+
 export interface WorkflowRunState {
   // Core state info
   runId: string;
   status: WorkflowRunStatus;
   result?: Record<string, any>;
   error?: string | Error;
-  runtimeContext?: Record<string, any>;
+  requestContext?: Record<string, any>;
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];
@@ -250,11 +236,11 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | { type: 'waitForEvent'; event: string; step: Step; timeout?: number }
   | {
       type: 'parallel';
-      steps: StepFlowEntry[];
+      steps: { type: 'step'; step: Step }[];
     }
   | {
       type: 'conditional';
-      steps: StepFlowEntry[];
+      steps: { type: 'step'; step: Step }[];
       conditions: ConditionFunction<any, any, any, any, TEngineType>[];
       serializedConditions: { id: string; fn: string }[];
     }
@@ -307,11 +293,17 @@ export type SerializedStepFlowEntry =
     }
   | {
       type: 'parallel';
-      steps: SerializedStepFlowEntry[];
+      steps: {
+        type: 'step';
+        step: SerializedStep;
+      }[];
     }
   | {
       type: 'conditional';
-      steps: SerializedStepFlowEntry[];
+      steps: {
+        type: 'step';
+        step: SerializedStep;
+      }[];
       serializedConditions: { id: string; fn: string }[];
     }
   | {

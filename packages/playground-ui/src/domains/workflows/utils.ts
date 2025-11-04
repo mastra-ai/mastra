@@ -1,7 +1,5 @@
 import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
 
-import { WorkflowWatchResult } from '@mastra/client-js';
-import { StreamChunk } from '@/types';
 import { WorkflowRunStreamResult } from './context/workflow-run-context';
 
 export function convertWorkflowRunStateToStreamResult(runState: WorkflowRunState): WorkflowRunStreamResult {

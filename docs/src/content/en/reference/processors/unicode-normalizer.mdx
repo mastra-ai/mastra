@@ -88,15 +88,14 @@ const processor = new UnicodeNormalizer({
 
 ## Extended usage example
 
-```typescript filename="src/mastra/agents/normalized-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
+```typescript title="src/mastra/agents/normalized-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { UnicodeNormalizer } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "normalized-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new UnicodeNormalizer({
       stripControlChars: true,
@@ -111,4 +110,4 @@ export const agent = new Agent({
 
 ## Related
 
-- [Input Processors](../../docs/agents/input-processors.mdx)
+- [Guardrails](/docs/agents/guardrails)

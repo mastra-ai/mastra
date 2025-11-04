@@ -1124,14 +1124,14 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
         tools: {
           tool1: tool({
             inputSchema: z.object({ value: z.string() }),
-            execute: async (input, options) => {
-              console.info('TOOL 1', input, options);
+            execute: async (inputData, options) => {
+              console.info('TOOL 1', inputData, options);
 
-              expect(input).toStrictEqual({ value: 'value' });
+              expect(inputData).toStrictEqual({ value: 'value' });
               expect(options.messages).toStrictEqual([
                 { role: 'user', content: [{ type: 'text', text: 'test-input' }] },
               ]);
-              return `${input.value}-result`;
+              return `${inputData.value}-result`;
             },
           }),
         },

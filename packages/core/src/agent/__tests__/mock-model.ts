@@ -1,6 +1,72 @@
-import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import { openai as openai_v4 } from '@ai-sdk/openai';
+import { openai as openai_v5 } from '@ai-sdk/openai-v5';
+import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+
+export function getOpenAIModel(version: 'v1' | 'v2') {
+  if (version === 'v1') {
+    return openai_v4('gpt-4o-mini');
+  }
+  return openai_v5('gpt-4o-mini');
+}
+
+export function getSingleDummyResponseModel(version: 'v1' | 'v2') {
+  if (version === 'v1') {
+    return new MockLanguageModelV1({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: `Dummy response`,
+      }),
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: [{ type: 'text-delta', textDelta: 'Dummy response' }],
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+  } else {
+    return new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [
+          {
+            type: 'text',
+            text: 'Dummy response',
+          },
+        ],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          {
+            type: 'stream-start',
+            warnings: [],
+          },
+          {
+            type: 'response-metadata',
+            id: 'id-0',
+            modelId: 'mock-model-id',
+            timestamp: new Date(0),
+          },
+          { type: 'text-start', id: '1' },
+          { type: 'text-delta', id: '1', delta: 'Dummy response' },
+          { type: 'text-end', id: '1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+  }
+}
 
 export function getDummyResponseModel(version: 'v1' | 'v2') {
   if (version === 'v1') {
@@ -63,7 +129,7 @@ export function getDummyResponseModel(version: 'v1' | 'v2') {
           ...Array.from({ length: 10 }, (_, count) => ({
             type: 'text-delta' as const,
             id: '1',
-            delta: `Dummy response ${count} `,
+            delta: `Dummy response ${count}`,
           })),
           { type: 'text-end', id: '1' },
           {

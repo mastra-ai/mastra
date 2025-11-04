@@ -1,3 +1,12 @@
+import type { CoreMessage } from '@internal/ai-sdk-v4/message';
+import type {
+  LanguageModelV1 as LanguageModel,
+  StreamObjectOnFinishCallback,
+  StreamTextOnFinishCallback,
+} from '@internal/ai-sdk-v4/model';
+import { generateObject, generateText, Output, streamObject, streamText } from '@internal/ai-sdk-v4/model';
+import type { Schema } from '@internal/ai-sdk-v4/schema';
+import type { JSONSchema7 } from '@mastra/schema-compat';
 import {
   AnthropicSchemaCompatLayer,
   applyCompatLayer,
@@ -6,18 +15,16 @@ import {
   MetaSchemaCompatLayer,
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
+  jsonSchema,
 } from '@mastra/schema-compat';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import type { CoreMessage, LanguageModel, Schema, StreamObjectOnFinishCallback, StreamTextOnFinishCallback } from 'ai';
-import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
-import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from '../../action';
-import { AISpanType } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
+import { AISpanType } from '../../observability';
 import { delay, isZodType } from '../../utils';
 
 import type {
@@ -102,7 +109,7 @@ export class MastraLLMV1 extends MastraBase {
     }
 
     return applyCompatLayer({
-      schema: schema as any,
+      schema: schema as Schema | ZodSchema,
       compatLayers: schemaCompatLayers,
       mode: 'aiSdkSchema',
     });
@@ -119,7 +126,7 @@ export class MastraLLMV1 extends MastraBase {
     experimental_output,
     threadId,
     resourceId,
-    runtimeContext,
+    requestContext,
     tracingContext,
     ...rest
   }: GenerateTextWithMessagesArgs<Tools, Z>): Promise<GenerateTextResult<Tools, Z>> {
@@ -293,7 +300,7 @@ export class MastraLLMV1 extends MastraBase {
     runId,
     threadId,
     resourceId,
-    runtimeContext,
+    requestContext,
     tracingContext,
     ...rest
   }: GenerateObjectWithMessagesArgs<Z>): Promise<GenerateObjectResult<Z>> {
@@ -424,7 +431,7 @@ export class MastraLLMV1 extends MastraBase {
     experimental_output,
     threadId,
     resourceId,
-    runtimeContext,
+    requestContext,
     tracingContext,
     ...rest
   }: StreamTextWithMessagesArgs<Tools, Z>): StreamTextResult<Tools, Z> {
@@ -623,7 +630,7 @@ export class MastraLLMV1 extends MastraBase {
   __streamObject<T extends ZodSchema | JSONSchema7>({
     messages,
     runId,
-    runtimeContext,
+    requestContext,
     threadId,
     resourceId,
     onFinish,

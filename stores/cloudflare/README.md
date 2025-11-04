@@ -25,7 +25,6 @@ const store = new CloudflareStore({
     threads: THREADS_KV_NAMESPACE,
     messages: MESSAGES_KV_NAMESPACE,
     workflow_snapshot: WORKFLOW_KV_NAMESPACE,
-    evals: EVALS_KV_NAMESPACE,
     traces: TRACES_KV_NAMESPACE,
   },
   keyPrefix: 'myapp_', // Optional
@@ -97,7 +96,7 @@ const messages = await store.getMessages({ threadId: 'thread-123' });
 
 - `saveThread(thread)`: Create or update a thread
 - `getThreadById({ threadId })`: Get a thread by ID
-- `getThreadsByResourceId({ resourceId })`: Fetch all threads associated with a resource.
+- `listThreadsByResourceId({ resourceId, offset, limit, orderBy? })`: List paginated threads for a resource
 - `updateThread({ id, title, metadata })`: Update thread title and metadata
 - `deleteThread({ threadId })`: Delete a thread and its messages
 

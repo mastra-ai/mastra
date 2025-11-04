@@ -28,6 +28,7 @@ export const memory = new Memory({
 });
 
 export const assistantAgent = new Agent({
+  id: 'personal-assistant',
   name: 'Personal Assistant',
   instructions: `You are a helpful personal assistant with persistent memory across ALL conversations.
 

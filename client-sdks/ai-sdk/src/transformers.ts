@@ -4,7 +4,7 @@ import type { WorkflowRunStatus, WorkflowStepStatus } from '@mastra/core/workflo
 import type { InferUIMessageChunk, UIMessage } from 'ai';
 import type { ZodType } from 'zod';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
-import { isDataChunkType } from './utils';
+import { isDataChunkType, safeParseErrorObject } from './utils';
 
 type LanguageModelV2Usage = {
   /**
@@ -141,7 +141,7 @@ export function AgentNetworkToAISDKTransformer() {
   });
 }
 
-export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>() {
+export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>(lastMessageId?: string) {
   let bufferedSteps = new Map<string, any>();
 
   return new TransformStream<ChunkType<TOutput>, object>({
@@ -154,9 +154,9 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>() {
         sendSources: false,
         sendStart: true,
         sendFinish: true,
-        responseMessageId: chunk.runId,
-        onError() {
-          return 'Error';
+        responseMessageId: lastMessageId,
+        onError(error) {
+          return safeParseErrorObject(error);
         },
       });
 

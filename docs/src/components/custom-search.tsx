@@ -1,9 +1,6 @@
-"use client";
-
 import { useVirtualizer } from "@tanstack/react-virtual";
-import cn from "clsx";
+import { cn } from "../css/utils";
 import { BookOpen, Code2, FileText, Lightbulb, Search } from "lucide-react";
-import { useRouter } from "next/navigation";
 import type { FC, SyntheticEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -12,7 +9,11 @@ import {
   useAlgoliaSearch,
 } from "../hooks/use-algolia-search";
 import { EmptySearch } from "./empty-search";
-import { BurgerIcon } from "./svgs/Icons";
+import { BurgerIcon } from "./search-icons";
+import { useHistory } from "@docusaurus/router";
+import { CancelIcon } from "./copy-page-icons";
+import { Button } from "./ui/button";
+
 // Custom hook for responsive design
 const useMediaQuery = (query: string): boolean => {
   const [matches, setMatches] = useState(false);
@@ -88,7 +89,7 @@ export const CustomSearch: FC<SearchProps> = ({
     isLoadingMore,
   } = useAlgoliaSearch(300, searchOptions);
 
-  const router = useRouter();
+  const history = useHistory();
   const inputRef = useRef<HTMLInputElement>(null!);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -158,12 +159,11 @@ export const CustomSearch: FC<SearchProps> = ({
     inputRef.current.blur();
     const [url, hash] = searchResult.url.split("#");
     const isSamePathname = location.pathname === url;
-    // `useHash` hook doesn't work with NextLink, and clicking on search
-    // result from same page doesn't scroll to the heading
+    // Handle same-page navigation by scrolling to hash
     if (isSamePathname) {
       location.href = `#${hash}`;
     } else {
-      router.push(searchResult.url);
+      history.push(searchResult.url);
     }
     closeModal();
     setSearch("");
@@ -258,7 +258,7 @@ export const CustomSearch: FC<SearchProps> = ({
     const link = emptyStateLinks[index];
     if (link) {
       inputRef.current.blur();
-      router.push(link);
+      history.push(link);
       closeModal();
     }
   };
@@ -292,22 +292,21 @@ export const CustomSearch: FC<SearchProps> = ({
 
   return (
     <div className={cn("overflow-hidden w-full max-h-[600px]")}>
-      {/* header */}
       <div
         className={cn(
           className,
-          "flex items-center p-2 w-full border-b border-neutral-200 dark:border-neutral-800 md:p-4 gap-[14px]",
+          "flex items-center p-2 w-full border-b border-(--border)/50 dark:border-(--border) md:p-4 gap-[14px]",
         )}
       >
         <span className="relative" onClick={() => inputRef.current.focus()}>
-          <Search className="w-4 h-4 md:w-5 md:h-5 dark:text-icons-3 text-[var(--light-color-accent-3)]" />
+          <Search className="w-4 h-4 md:w-5 md:h-5 dark:text-(--mastra-icons-7) text-(--mastra-icons-7)" />
         </span>
         <input
           ref={inputRef}
           spellCheck={false}
           className={cn(
             "x:[&::-webkit-search-cancel-button]:appearance-none",
-            "outline-none caret-[var(--light-green-accent-2)] dark:caret-accent-green dark:text-icons-6 text-[var(--light-color-text-4)] focus:outline-none w-full placeholder:text-icons-4 dark:placeholder:text-icons-2 placeholder:text-small md:placeholder:text-base placeholder:font-medium",
+            "outline-none caret-(--mastra-green-accent-3) dark:caret-(--mastra-green-accent-2) dark:text-white text-(--mastra-text-tertiary) focus:outline-none w-full placeholder:text-icons-4 dark:placeholder:text-icons-2 placeholder:text-small md:placeholder:text-base placeholder:font-medium",
           )}
           autoComplete="off"
           type="search"
@@ -317,6 +316,14 @@ export const CustomSearch: FC<SearchProps> = ({
           value={search}
           placeholder={placeholder}
         />
+
+        <Button
+          variant="ghost"
+          onClick={closeModal}
+          className="p-0 h-7 w-8 hover:bg-(--mastra-surface-2)  rounded-full flex items-center justify-center hover:text-(--mastra-icons-8)"
+        >
+          <CancelIcon className="w-4 h-4 dark:text-white text-(--mastra-icons-7)" />
+        </Button>
       </div>
 
       <div className={cn("relative overflow-hidden p-1.5 h-[400px]")}>
@@ -377,28 +384,28 @@ export const CustomSearch: FC<SearchProps> = ({
                         className={cn(
                           "flex flex-col gap-1 p-2 rounded-md cursor-pointer",
                           isSelected
-                            ? "dark:bg-surface-5 bg-[var(--light-color-surface-2)]"
-                            : "bg-[var(--light-color-surface-15)] dark:bg-surface-4",
+                            ? "dark:bg-surface-5 bg-(--mastra-surface-2)"
+                            : "bg-(--ifm-background-color) dark:bg-surface-4",
                         )}
                         onClick={() => handleSelect(subResult)}
                         onMouseEnter={() => setSelectedIndex(virtualItem.index)}
                       >
-                        <span className="pl-7 text-xs font-medium capitalize text-icons-3">
+                        <span className="pl-7 text-xs font-medium capitalize text-(--mastra-icons-3)">
                           {subResult.section}
                         </span>
                         <div className="flex gap-2 items-center">
-                          <IconComponent className="w-4 h-4 md:w-5 md:h-5 text-icons-3 shrink-0" />
+                          <IconComponent className="w-4 h-4 text-(--mastra-icons-3) shrink-0" />
                           <span
-                            className="text-sm font-medium truncate dark:text-icons-6 text-[var(--light-color-text-4)] [&_mark]:text-accent-green-2 dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
+                            className="text-sm font-medium truncate dark:text-white text-(--mastra-text-tertiary) [&_mark]:text-(--mastra-green-accent-3)! [&_mark]:bg-transparent"
                             dangerouslySetInnerHTML={{
                               __html: subResult.title,
                             }}
                           />
                         </div>
-                        <div className="ml-2 flex items-center gap-2 truncate border-l-2 dark:border-borders-2 border-[var(--light-border-code)] pl-4">
-                          <BurgerIcon className="w-3 h-3 md:w-3.5 md:h-3.5 shrink-0 text-icons-3" />
+                        <div className="ml-2 flex items-center gap-2 truncate border-l-2 dark:border-borders-2 border-(--border-code) pl-4">
+                          <BurgerIcon className="w-3 h-3 md:w-3.5 md:h-3.5 shrink-0 text-(--mastra-icons-3)" />
                           <div
-                            className="text-sm font-normal truncate text-icons-3 [&_mark]:text-accent-green-2 dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
+                            className="text-sm font-normal truncate text-(--mastra-icons-3) [&_mark]:text-(--mastra-green-accent-3) dark:[&_mark]:text-(--mastra-green-accent-2) [&_mark]:bg-transparent"
                             dangerouslySetInnerHTML={{
                               __html: subResult.excerpt,
                             }}

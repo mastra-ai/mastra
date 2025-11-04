@@ -12,6 +12,7 @@ const memory = new Memory({
 });
 
 export const educationalImageAgent = new Agent({
+  id: 'educational-image-agent',
   name: 'Educational Image Creator',
   description:
     'An AI agent specialized in generating visual learning aids and educational images for flash cards using DALL-E 3',

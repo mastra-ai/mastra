@@ -15,6 +15,7 @@ const memory = new Memory({
 });
 
 export const sqlAgent = new Agent({
+  id: 'sql-agent',
   name: 'SQL Agent',
   instructions: `You are an advanced PostgreSQL database assistant with comprehensive capabilities for database management and querying. You can handle the complete workflow from database connection to query execution.
 

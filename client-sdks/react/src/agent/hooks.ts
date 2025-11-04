@@ -4,7 +4,7 @@ import { UIMessage } from '@ai-sdk/react';
 import { MastraUIMessage } from '../lib/ai-sdk';
 import { MastraClient } from '@mastra/client-js';
 import { CoreUserMessage } from '@mastra/core/llm';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useRef, useState } from 'react';
 import { toUIMessage } from '@/lib/ai-sdk';
@@ -19,7 +19,7 @@ export interface MastraChatProps {
 
 interface SharedArgs {
   coreUserMessages: CoreUserMessage[];
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   threadId?: string;
   modelSettings?: ModelSettings;
   signal?: AbortSignal;
@@ -57,7 +57,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
 
   const generate = async ({
     coreUserMessages,
-    runtimeContext,
+    requestContext,
     threadId,
     modelSettings,
     signal,
@@ -100,7 +100,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
         topP,
       },
       instructions,
-      runtimeContext,
+      requestContext,
       ...(threadId ? { threadId, resourceId: agentId } : {}),
       providerOptions: providerOptions as any,
     });
@@ -120,7 +120,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
     }
   };
 
-  const stream = async ({ coreUserMessages, runtimeContext, threadId, onChunk, modelSettings, signal }: StreamArgs) => {
+  const stream = async ({ coreUserMessages, requestContext, threadId, onChunk, modelSettings, signal }: StreamArgs) => {
     const {
       frequencyPenalty,
       presencePenalty,
@@ -162,7 +162,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
         topP,
       },
       instructions,
-      runtimeContext,
+      requestContext,
       ...(threadId ? { threadId, resourceId: agentId } : {}),
       providerOptions: providerOptions as any,
       requireToolApproval,
@@ -186,7 +186,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
 
   const network = async ({
     coreUserMessages,
-    runtimeContext,
+    requestContext,
     threadId,
     onNetworkChunk,
     modelSettings,
@@ -219,7 +219,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
         topP,
       },
       runId: agentId,
-      runtimeContext,
+      requestContext,
       ...(threadId ? { thread: threadId, resourceId: agentId } : {}),
     });
 

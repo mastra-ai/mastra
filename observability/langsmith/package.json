@@ -31,7 +31,8 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "langsmith": ">=0.3.72"
+    "langsmith": ">=0.3.72",
+    "@mastra/observability": "workspace:*"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^2.0.35",
@@ -48,7 +49,7 @@
     "zod": "^3.25.76"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <2.0.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

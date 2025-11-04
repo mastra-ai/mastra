@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { Agent } from '@mastra/core/agent';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { createTool } from '@mastra/core/tools';
@@ -107,9 +107,9 @@ export const startWeatherTool = createTool({
   outputSchema: z.object({
     runId: z.string(),
   }),
-  execute: async ({ context }) => {
+  execute: async () => {
     const workflow = mastra.getWorkflow('weatherWorkflowWithSuspend');
-    const run = await workflow.createRunAsync();
+    const run = await workflow.createRun();
     await run.start({
       inputData: {},
     });
@@ -128,15 +128,15 @@ export const resumeWeatherTool = createTool({
     city: z.string().describe('City name'),
   }),
   outputSchema: forecastSchema,
-  execute: async ({ context }) => {
+  execute: async input => {
     const workflow = mastra.getWorkflow('weatherWorkflowWithSuspend');
-    const run = await workflow.createRunAsync({
-      runId: context.runId,
+    const run = await workflow.createRun({
+      runId: inputData.runId,
     });
     const result = await run.resume({
       step: 'fetch-weather',
       resumeData: {
-        city: context.city,
+        city: inputData.city,
       },
     });
     return result.result;
@@ -144,12 +144,13 @@ export const resumeWeatherTool = createTool({
 });
 
 export const weatherAgentWithWorkflow = new Agent({
-  name: 'Weather Agent with Workflow',
+  id: 'weather-agent-with-workflow',
+  name: 'Weather Agent With Workflow',
   instructions: `You are a helpful weather assistant that provides accurate weather information.
 
 Your primary function is to help users get weather details for specific locations. When responding:
 - Always ask for a location if none is provided
-- If the location name isn’t in English, please translate it
+- If the location name isn't in English, please translate it
 - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
 - Include relevant details like humidity, wind conditions, and precipitation
 - Keep responses concise but informative

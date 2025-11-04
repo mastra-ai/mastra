@@ -42,11 +42,11 @@ export abstract class OpenAPIToolset {
         inputSchema: schemas[key] || z.object({}),
         description: comment || fallbackComment,
         // documentation: doc || fallbackComment,
-        execute: async ({ context }) => {
+        execute: async input => {
           const client = await this.getApiClient();
           const value = client[key as keyof typeof client];
           return (value as any)({
-            ...(context as any),
+            ...(input as any),
           });
         },
       });

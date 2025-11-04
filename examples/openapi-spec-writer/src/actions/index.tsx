@@ -26,7 +26,7 @@ export async function generateOpenApiSpec({
   try {
     const openApiSpecGenWorkflow = await mastra
       .getWorkflow("openApiSpecGenWorkflow")
-      .createRunAsync();
+      .createRun();
     const res = await openApiSpecGenWorkflow.start({
       triggerData: {
         url,
@@ -39,7 +39,7 @@ export async function generateOpenApiSpec({
     )?.output?.mergedSpec;
 
     const logs =
-      (await mastra.getLogsByRunId({
+      (await mastra.listLogsByRunId({
         runId: res.runId,
         transportId: "upstash",
       })) || [];
@@ -48,7 +48,7 @@ export async function generateOpenApiSpec({
   } catch (error: unknown) {
     const { runId, message } = error as { runId: string; message: string };
     const logs =
-      (await mastra.getLogsByRunId({ runId, transportId: "upstash" })) || [];
+      (await mastra.listLogsByRunId({ runId, transportId: "upstash" })) || [];
     return { message: "failed", data: message, logs };
   }
 }
@@ -65,7 +65,7 @@ export async function makeMastraPR({
   try {
     const makePRToMastraWorkflow = await mastra
       .getWorkflow("makePRToMastraWorkflow")
-      .createRunAsync();
+      .createRun();
     const res = await makePRToMastraWorkflow.start({
       triggerData: {
         integration_name: integrationName,
@@ -83,7 +83,7 @@ export async function makeMastraPR({
     const pr_url = prUrl;
 
     const logs =
-      (await mastra.getLogsByRunId({
+      (await mastra.listLogsByRunId({
         runId: res.runId,
         transportId: "upstash",
       })) || [];
@@ -92,7 +92,7 @@ export async function makeMastraPR({
   } catch (error: unknown) {
     const { runId, message } = error as { runId: string; message: string };
     const logs =
-      (await mastra.getLogsByRunId({ runId, transportId: "upstash" })) || [];
+      (await mastra.listLogsByRunId({ runId, transportId: "upstash" })) || [];
     return { message: "failed", data: message, logs };
   }
 }

@@ -1,5 +1,5 @@
 ---
-title: Speech-to-Text (STT) in Mastra | Mastra Docs
+title: "Speech-to-Text (STT) | Voice | Mastra Docs"
 description: Overview of Speech-to-Text capabilities in Mastra, including configuration, usage, and integration with voice providers.
 ---
 
@@ -61,6 +61,7 @@ import { getMicrophoneStream } from "@mastra/node-audio";
 const voice = new OpenAIVoice();
 
 const agent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that provides recommendations based on user input.",
@@ -83,4 +84,4 @@ const { text } = await agent.generate(
 console.log(`Recommendation: ${text}`);
 ```
 
-Check out the [Adding Voice to Agents](../agents/adding-voice.mdx) documentation to learn how to use STT in an agent.
+Check out the [Adding Voice to Agents](/docs/agents/adding-voice) documentation to learn how to use STT in an agent.

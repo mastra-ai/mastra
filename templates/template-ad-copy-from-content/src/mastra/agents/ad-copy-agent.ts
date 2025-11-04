@@ -16,6 +16,7 @@ const memory = new Memory({
 });
 
 export const adCopyAgent = new Agent({
+  id: 'ad-copy-agent',
   name: 'Ad Copy Generation Agent',
   description: 'An agent that generates compelling ad copy and promotional images from text content or PDF documents',
   instructions: `

@@ -1,9 +1,7 @@
 ---
-title: "Overview"
+title: "Scorers overview | Scorers | Mastra Docs"
 description: Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
 ---
-
-import { Callout } from "nextra/components";
 
 # Scorers overview
 
@@ -37,26 +35,26 @@ npm install @mastra/evals@latest
 
 You can add built-in scorers to your agents to automatically evaluate their outputs. See the [full list of built-in scorers](/docs/scorers/off-the-shelf-scorers) for all available options.
 
-```typescript filename="src/mastra/agents/evaluated-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/evaluated-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
-import { 
+import {
   createAnswerRelevancyScorer,
-  createToxicityScorer 
-} from "@mastra/evals/scorers/llm";
+  createToxicityScorer,
+} from "@mastra/evals/scorers/prebuilt";
 
 export const evaluatedAgent = new Agent({
   // ...
   scorers: {
     relevancy: {
       scorer: createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") }),
-      sampling: { type: "ratio", rate: 0.5 }
+      sampling: { type: "ratio", rate: 0.5 },
     },
     safety: {
       scorer: createToxicityScorer({ model: openai("gpt-4o-mini") }),
-      sampling: { type: "ratio", rate: 1 }
-    }
-  }
+      sampling: { type: "ratio", rate: 1 },
+    },
+  },
 });
 ```
 
@@ -64,7 +62,7 @@ export const evaluatedAgent = new Agent({
 
 You can also add scorers to individual workflow steps to evaluate outputs at specific points in your process:
 
-```typescript filename="src/mastra/workflows/content-generation.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/content-generation.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 import { customStepScorer } from "../scorers/custom-step-scorer";
@@ -92,8 +90,9 @@ export const contentWorkflow = createWorkflow({ ... })
 **Asynchronous execution**: Live evaluations run in the background without blocking your agent responses or workflow execution. This ensures your AI systems maintain their performance while still being monitored.
 
 **Sampling control**: The `sampling.rate` parameter (0-1) controls what percentage of outputs get scored:
+
 - `1.0`: Score every single response (100%)
-- `0.5`: Score half of all responses (50%) 
+- `0.5`: Score half of all responses (50%)
 - `0.1`: Score 10% of responses
 - `0.0`: Disable scoring
 
@@ -103,13 +102,15 @@ export const contentWorkflow = createWorkflow({ ... })
 
 In addition to live evaluations, you can use scorers to evaluate historical traces from your agent interactions and workflows. This is particularly useful for analyzing past performance, debugging issues, or running batch evaluations.
 
-<Callout type="info">
+:::info
+
 **Observability Required**
 
-To score traces, you must first configure observability in your Mastra instance to collect trace data. See [AI Tracing documentation](../observability/ai-tracing) for setup instructions.
-</Callout>
+To score traces, you must first configure observability in your Mastra instance to collect trace data. See [AI Tracing documentation](../observability/ai-tracing/overview) for setup instructions.
 
-### Scoring traces with the playground
+:::
+
+### Scoring traces with Studio
 
 To score traces, you first need to register your scorers with your Mastra instance:
 
@@ -118,21 +119,21 @@ const mastra = new Mastra({
   // ...
   scorers: {
     answerRelevancy: myAnswerRelevancyScorer,
-    responseQuality: myResponseQualityScorer
-  }
+    responseQuality: myResponseQualityScorer,
+  },
 });
 ```
 
-Once registered, you can score traces interactively within the Mastra playground under the Observability section. This provides a user-friendly interface for running scorers against historical traces.
+Once registered, you can score traces interactively within Studio under the Observability section. This provides a user-friendly interface for running scorers against historical traces.
 
 ## Testing scorers locally
 
-Mastra provides a CLI command `mastra dev` to test your scorers. The playground includes a scorers section where you can run individual scorers against test inputs and view detailed results.
+Mastra provides a CLI command `mastra dev` to test your scorers. Studio includes a scorers section where you can run individual scorers against test inputs and view detailed results.
 
-For more details, see the [Local Dev Playground](/docs/server-db/local-dev-playground) docs.
+For more details, see [Studio](/docs/getting-started/studio) docs.
 
 ## Next steps
 
 - Learn how to create your own scorers in the [Creating Custom Scorers](/docs/scorers/custom-scorers) guide
 - Explore built-in scorers in the [Off-the-shelf Scorers](/docs/scorers/off-the-shelf-scorers) section
-- Test scorers with the [Local Dev Playground](/docs/server-db/local-dev-playground)
+- Test scorers with [Studio](/docs/getting-started/studio)

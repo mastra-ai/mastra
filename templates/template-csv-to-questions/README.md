@@ -104,7 +104,7 @@ const questions = await generateQuestions(summary); // Much better!
 ```typescript
 import { mastra } from './src/mastra/index';
 
-const run = await mastra.getWorkflow('csvToQuestionsWorkflow').createRunAsync();
+const run = await mastra.getWorkflow('csvToQuestionsWorkflow').createRun();
 
 // Using a CSV URL
 const result = await run.start({
@@ -258,6 +258,7 @@ You can customize the question generation by modifying the agents:
 
 ```typescript
 export const textQuestionAgent = new Agent({
+  id: 'generate-questions-agent',
   name: 'Generate questions from text agent',
   instructions: `
     // Customize instructions here for different question types
