@@ -286,18 +286,7 @@ export interface UpdateMemoryThreadParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export interface GetMemoryThreadMessagesParams {
-  /**
-   * Limit the number of messages to retrieve (default: 40)
-   */
-  limit?: number;
-}
-
 export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'>;
-
-export interface GetMemoryThreadMessagesResponse {
-  messages: MastraDBMessage[];
-}
 
 export type ListMemoryThreadMessagesResponse = StorageListMessagesOutput;
 

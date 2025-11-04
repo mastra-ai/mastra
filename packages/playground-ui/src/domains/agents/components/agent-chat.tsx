@@ -21,7 +21,7 @@ export const AgentChat = ({
 }: Omit<ChatProps, 'initialMessages' | 'initialLegacyMessages'> & { messageId?: string }) => {
   const { settings } = useAgentSettings();
   const { requestContext } = usePlaygroundStore();
-  const { data: messages, isLoading: isMessagesLoading } = useAgentMessages({
+  const { data, isLoading: isMessagesLoading } = useAgentMessages({
     agentId: agentId,
     threadId: threadId ?? '',
     memory: memory ?? false,
@@ -29,7 +29,7 @@ export const AgentChat = ({
 
   // Handle scrolling to message after navigation
   useEffect(() => {
-    if (messageId && messages && !isMessagesLoading) {
+    if (messageId && data && !isMessagesLoading) {
       // Small delay to ensure DOM is ready
       setTimeout(() => {
         const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
@@ -42,7 +42,7 @@ export const AgentChat = ({
         }
       }, 100);
     }
-  }, [messageId, messages, isMessagesLoading]);
+  }, [messageId, data, isMessagesLoading]);
 
   if (isMessagesLoading) {
     return null;
@@ -54,7 +54,7 @@ export const AgentChat = ({
       agentName={agentName}
       modelVersion={modelVersion}
       threadId={threadId}
-      initialMessages={messages?.messages ? (toAISdkV5Messages(messages.messages) as MastraUIMessage[]) : []}
+      initialMessages={data?.messages ? (toAISdkV5Messages(data.messages) as MastraUIMessage[]) : []}
       memory={memory}
       refreshThreadList={refreshThreadList}
       settings={settings}
