@@ -160,7 +160,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
     try {
       // Determine sort field and direction
-      const { field, direction } = this.parseOrderBy(orderBy);
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       const sortOrder = direction === 'ASC' ? 1 : -1;
 
       const collection = await this.operations.getCollection(TABLE_MESSAGES);

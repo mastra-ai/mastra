@@ -860,7 +860,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         resourceId,
         page: 0,
         perPage: 10,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(result.threads).toHaveLength(10);
@@ -880,7 +879,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         resourceId: 'non-existent-resource',
         page: 0,
         perPage: 10,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(emptyResult.threads).toHaveLength(0);
@@ -900,7 +898,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         resourceId,
         page: 0,
         perPage: 10,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(lastPageResult.threads).toHaveLength(5);
@@ -923,7 +920,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         resourceId,
         page: 1,
         perPage: 7,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(page2Result.threads).toHaveLength(7);
@@ -935,7 +931,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         resourceId,
         page: 2,
         perPage: 7,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(page3Result.threads).toHaveLength(1);
@@ -953,7 +948,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           resourceId,
           page: -1,
           perPage: 10,
-          orderBy: { field: 'createdAt', direction: 'DESC' },
         }),
       ).rejects.toThrow();
     });
@@ -968,7 +962,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         resourceId,
         page: 0,
         perPage: 0,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
       expect(zeroResult.threads).toHaveLength(0);
       expect(zeroResult.perPage).toBe(0);
@@ -978,7 +971,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         resourceId,
         page: 0,
         perPage: -5,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
       expect(negativeResult.threads.length).toBeGreaterThan(0);
       expect(negativeResult.perPage).toBe(100); // Default for listThreadsByResourceId

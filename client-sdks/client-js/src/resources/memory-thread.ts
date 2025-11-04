@@ -2,10 +2,8 @@ import type { RequestContext } from '@mastra/core/di';
 import type { StorageThreadType } from '@mastra/core/memory';
 
 import type {
-  GetMemoryThreadMessagesResponse,
   ClientOptions,
   UpdateMemoryThreadParams,
-  GetMemoryThreadMessagesParams,
   ListMemoryThreadMessagesParams,
   ListMemoryThreadMessagesResponse,
 } from '../types';

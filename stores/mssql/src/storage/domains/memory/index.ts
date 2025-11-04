@@ -501,7 +501,7 @@ export class MemoryMSSQL extends MemoryStorage {
 
     try {
       // Determine sort field and direction
-      const { field, direction } = this.parseOrderBy(orderBy);
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       const orderByStatement = `ORDER BY [${field}] ${direction}`;
 
       const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;

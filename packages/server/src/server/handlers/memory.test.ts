@@ -119,7 +119,6 @@ describe('Memory Handlers', () => {
           agentId: 'test-agent',
           page: 0,
           perPage: 10,
-          orderBy: { field: 'createdAt', direction: 'DESC' },
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
     });
@@ -135,7 +134,6 @@ describe('Memory Handlers', () => {
           agentId: 'test-agent',
           page: 0,
           perPage: 10,
-          orderBy: { field: 'createdAt', direction: 'DESC' },
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Argument "resourceId" is required' }));
     });
@@ -156,7 +154,6 @@ describe('Memory Handlers', () => {
         agentId: 'test-agent',
         page: 0,
         perPage: 10,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(result.total).toEqual(1);
@@ -169,7 +166,7 @@ describe('Memory Handlers', () => {
         resourceId: 'test-resource',
         page: 0,
         perPage: 10,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
+        orderBy: undefined,
       });
     });
 
@@ -248,7 +245,6 @@ describe('Memory Handlers', () => {
         agentId: 'test-agent',
         page: 0,
         perPage: 10,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(result.threads).toHaveLength(0);
@@ -471,7 +467,6 @@ describe('Memory Handlers', () => {
         mastra,
         threadId,
         resourceId,
-        orderBy: { field: 'createdAt', direction: 'ASC' },
       });
 
       // Verify both messages are returned
@@ -993,7 +988,6 @@ describe('Memory Handlers', () => {
         mastra,
         threadId,
         resourceId: 'test-resource',
-        orderBy: { field: 'createdAt', direction: 'ASC' },
       });
 
       expect(result.messages).toHaveLength(3);

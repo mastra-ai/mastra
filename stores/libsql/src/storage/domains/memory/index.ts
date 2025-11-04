@@ -170,7 +170,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
     try {
       // Determine sort field and direction
-      const { field, direction } = this.parseOrderBy(orderBy);
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       const orderByStatement = `ORDER BY "${field}" ${direction}`;
 
       // Build WHERE conditions

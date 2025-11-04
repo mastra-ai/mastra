@@ -300,7 +300,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       }
 
       // Determine sort field and direction
-      const { field, direction } = this.parseOrderBy(orderBy);
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
       this.logger.debug('Getting messages with listMessages', {
         threadId,

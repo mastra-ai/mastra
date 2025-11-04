@@ -103,7 +103,7 @@ export class InMemoryMemory extends MemoryStorage {
 
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
-    const { field, direction } = this.parseOrderBy(orderBy);
+    const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 40)
     const perPage = normalizePerPage(perPageInput, 40);

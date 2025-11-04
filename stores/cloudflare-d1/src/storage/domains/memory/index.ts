@@ -680,7 +680,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       }
 
       // Build ORDER BY clause
-      const { field, direction } = this.parseOrderBy(orderBy);
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       query += ` ORDER BY "${field}" ${direction}`;
 
       // Apply pagination

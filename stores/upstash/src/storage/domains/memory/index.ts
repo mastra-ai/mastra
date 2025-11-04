@@ -563,7 +563,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       }
 
       // Determine sort field and direction, default to DESC (newest first)
-      const { field, direction } = this.parseOrderBy(orderBy);
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
       // Type-safe field accessor helper
       const getFieldValue = (msg: MastraDBMessage): number => {
