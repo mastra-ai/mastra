@@ -39,8 +39,6 @@ const step1 = createStep({
 });
 ```
 
-> See [Calling Agents](/examples/agents/calling-agents) for more examples.
-
 ### Agents as steps
 
 Compose an agent as a step using `createStep()` when you don't need to modify the agent call. Use `.map()` to transform the previous step's output into a `prompt` the agent can use.
@@ -66,7 +64,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> See [Input Data Mapping](./input-data-mapping) for more information.
+> See [.map()](/reference/workflows/workflow-methods/map) for more information.
 
 Mastra agents use a default schema that expects a `prompt` string as input and returns a `text` string as output:
 
@@ -110,8 +108,6 @@ const step2 = createStep({
   },
 });
 ```
-
-> See [Calling Tools](/examples/workflows_legacy/using-a-tool-as-a-step) for more examples.
 
 ### Tools as steps
 
