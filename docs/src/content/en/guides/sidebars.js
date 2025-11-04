@@ -89,6 +89,21 @@ const sidebars = {
               type: "doc",
               label: "Workflows",
             },
+            {
+              id: "migrations/upgrade-to-v1/storage",
+              type: "doc",
+              label: "Storage",
+            },
+            {
+              id: "migrations/upgrade-to-v1/evals",
+              type: "doc",
+              label: "Evals",
+            },
+            {
+              id: "migrations/upgrade-to-v1/client",
+              type: "doc",
+              label: "Client SDK",
+            },
           ],
         },
         {

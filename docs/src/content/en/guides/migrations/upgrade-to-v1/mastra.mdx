@@ -19,6 +19,15 @@ All Mastra packages have a peer dependency on `@mastra/core` so your package man
 
 ## Migrate to v1.0.0-beta
 
+### Changed: getAgents -> listAgents
+### Changed: getWorkflows -> listWorkflows
+### Changed: getScorers -> listScorers
+### Changed: getTools -> listTools
+### Changed: getLogs -> listLogs
+### Changed: getLogsByRunId -> listLogsByRunId
+### Changed: getLogTransports -> listLogTransports
+
+
 ### Changed: `@mastra/core` subpath imports
 
 The `@mastra/core` package no longer allows top-level imports except for `Mastra` and `type Config`. You must use subpath imports for all other imports.
