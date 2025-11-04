@@ -1259,6 +1259,11 @@
       "source": "/:path(ja)?/templates/olde-maps-ai-directions-assistant",
       "destination": "/:path/docs/getting-started/templates",
       "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/workflows/input-data-mapping",
+      "destination": "/:path/docs/workflows/control-flow",
+      "permanent": true
     }
   ]
 }
