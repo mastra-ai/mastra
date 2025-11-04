@@ -3,24 +3,24 @@
 @custom-variant dark (&:is([data-theme="dark"] *));
 
 @font-face {
-  font-display: swap; 
-  font-family: 'Geist Mono';
+  font-display: swap;
+  font-family: "Geist Mono";
   font-style: normal;
   font-weight: 300 900;
-  src: url('/static/fonts/GeistMonoVF.ttf') format('truetype');
+  src: url("/static/fonts/GeistMonoVF.ttf") format("truetype");
 }
 
 @font-face {
   font-display: swap;
-  font-family: 'Inter';
+  font-family: "Inter";
   font-style: normal;
   font-weight: 300 900;
-  src: url('/static/fonts/InterVariable.ttf') format('truetype');
+  src: url("/static/fonts/InterVariable.ttf") format("truetype");
 }
 
 @font-face {
-  font-family: 'Roboto';
-  src: local('Inter'); /* Redirect to your actual font */
+  font-family: "Roboto";
+  src: local("Inter"); /* Redirect to your actual font */
   font-display: swap;
 }
 
@@ -75,7 +75,8 @@
   /* Border width */
   --border-sm: 0.5px;
   /* Fonts */
-  --ifm-font-family-base: "Inter", -apple-system, BlinkMacSystemFont,'Segoe UI', sans-serif;
+  --ifm-font-family-base:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --ifm-font-family-monospace: "Geist Mono", "SF Mono", Monaco, monospace;
   --ifm-h1-font-size: 2.25rem;
   --ifm-h2-font-size: 1.8rem;
@@ -1325,9 +1326,4 @@ p {
 [class*="Kapa"],
 [class*="roboto" i] {
   font-family: var(--ifm-font-family-base) !important;
-}
-
-/* Prevent any Roboto font from being applied */
-* {
-  font-family: var(--ifm-font-family-base);
 }
