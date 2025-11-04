@@ -1,8 +1,8 @@
 import type { CoreMessage, CoreSystemMessage } from '@internal/ai-sdk-v4/message';
 import { z } from 'zod';
 import type { UIMessageWithMetadata } from '../agent';
-import { AISpanType } from '../ai-tracing';
-import type { TracingContext } from '../ai-tracing';
+import { AISpanType } from '../observability';
+import type { TracingContext } from '../observability';
 
 export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
 

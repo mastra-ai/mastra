@@ -6,8 +6,6 @@ import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
-import { AISpanType, getOrCreateSpan } from '../ai-tracing';
-import type { TracingContext, TracingProperties } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
@@ -28,6 +26,8 @@ import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
+import type { TracingContext, TracingProperties } from '../observability';
+import { AISpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext } from '../request-context';
@@ -1231,6 +1231,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     mastraProxy?: MastraUnion;
   }) {
     let convertedMemoryTools: Record<string, CoreTool> = {};
+
+    if (this._agentNetworkAppend) {
+      this.logger.debug(`[Agent:${this.name}] - Skipping memory tools (agent network context)`, { runId });
+      return convertedMemoryTools;
+    }
+
     // Get memory tools if available
     const memory = await this.getMemory({ requestContext });
     const memoryTools = memory?.listTools?.();
@@ -1791,7 +1797,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 resourceId,
               });
 
-              const run = await workflow.createRunAsync();
+              const run = await workflow.createRun();
 
               let result: any;
               if (methodType === 'generate' || methodType === 'generateLegacy') {
@@ -2305,6 +2311,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingOptions: options.tracingOptions,
       tracingContext: options.tracingContext,
       requestContext,
+      mastra: this.#mastra,
     });
 
     const memory = await this.getMemory({ requestContext });
@@ -2359,7 +2366,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       toolCallId: options.toolCallId,
     });
 
-    const run = await executionWorkflow.createRunAsync();
+    const run = await executionWorkflow.createRun();
     const result = await run.start({ tracingContext: { currentSpan: agentAISpan } });
 
     return result;

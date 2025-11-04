@@ -1,7 +1,7 @@
 import type { ToolInvocation } from '@internal/ai-sdk-v4/tool';
 import type { UIMessageWithMetadata } from '../../agent';
 import { convertMessages } from '../../agent/message-list/utils/convert-messages';
-import { AISpanType } from '../../ai-tracing';
+import { AISpanType } from '../../observability';
 import type { AISpanRecord, AITraceRecord } from '../../storage';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../types';
 

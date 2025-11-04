@@ -1,5 +1,5 @@
-import { AISpanType } from '@mastra/core/ai-tracing';
 import type { Mastra } from '@mastra/core/mastra';
+import { AISpanType } from '@mastra/core/observability';
 import type { AITracesPaginatedArg, StoragePagination } from '@mastra/core/storage';
 import {
   getAITraceHandler as getOriginalAITraceHandler,

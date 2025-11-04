@@ -342,7 +342,7 @@ export class EventedWorkflow<
     this.executionEngine.__registerMastra(mastra);
   }
 
-  async createRunAsync(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
+  async createRun(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters

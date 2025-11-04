@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { TracingContext } from '../../ai-tracing';
-import { AISpanType } from '../../ai-tracing/types';
 import type { IMastraLogger } from '../../logger';
+import type { TracingContext } from '../../observability';
+import { AISpanType } from '../../observability';
 import type { AISpanRecord, AITraceRecord, MastraStorage } from '../../storage';
 import type { MastraScorer } from '../base';
 

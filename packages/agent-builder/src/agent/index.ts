@@ -31,7 +31,7 @@ import type { AgentBuilderConfig, GenerateAgentOptions } from '../types';
 // - Block: removing files, downgrading deps, changing TS target/module, modifying CI/CD secrets
 //
 // Usage with Mastra templates (see https://mastra.ai/api/templates.json):
-//   const run = await agentBuilderTemplateWorkflow.createRunAsync();
+//   const run = await agentBuilderTemplateWorkflow.createRun();
 //   const result = await run.start({
 //     inputData: {
 //       repo: 'https://github.com/mastra-ai/template-pdf-questions',

@@ -79,7 +79,7 @@ const myWorkflow = new Workflow({
 // Run steps sequentially.
 myWorkflow.step(copywriterStep).then(editorStep).commit();
 
-const run = await myWorkflow.createRunAsync();
+const run = await myWorkflow.createRun();
 const { runId, start } = run;
 
 const res = await start({

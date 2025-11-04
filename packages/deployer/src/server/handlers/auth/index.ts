@@ -5,7 +5,7 @@ import { canAccessPublicly, checkRules, isProtectedPath, isDevPlaygroundRequest 
 
 export const authenticationMiddleware = async (c: ContextWithMastra, next: Next) => {
   const mastra = c.get('mastra');
-  const authConfig = mastra.getServer()?.experimental_auth;
+  const authConfig = mastra.getServer()?.auth;
   const customRouteAuthConfig = c.get('customRouteAuthConfig');
 
   if (!authConfig) {
@@ -67,7 +67,7 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
 
 export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) => {
   const mastra = c.get('mastra');
-  const authConfig = mastra.getServer()?.experimental_auth;
+  const authConfig = mastra.getServer()?.auth;
   const customRouteAuthConfig = c.get('customRouteAuthConfig');
 
   if (!authConfig) {

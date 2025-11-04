@@ -94,8 +94,8 @@ export class MastraClient extends BaseResource {
     const queryParams = new URLSearchParams({
       resourceId: params.resourceId,
       agentId: params.agentId,
-      ...(params.offset !== undefined && { offset: params.offset.toString() }),
-      ...(params.limit !== undefined && { limit: params.limit.toString() }),
+      ...(params.page !== undefined && { page: params.page.toString() }),
+      ...(params.perPage !== undefined && { perPage: params.perPage.toString() }),
       ...(params.orderBy && { orderBy: params.orderBy }),
       ...(params.sortDirection && { sortDirection: params.sortDirection }),
     });
@@ -377,16 +377,16 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves a list of available MCP servers.
-   * @param params - Optional parameters for pagination (limit, offset).
+   * @param params - Optional parameters for pagination (perPage, page).
    * @returns Promise containing the list of MCP servers and pagination info.
    */
-  public getMcpServers(params?: { limit?: number; offset?: number }): Promise<McpServerListResponse> {
+  public getMcpServers(params?: { perPage?: number; page?: number }): Promise<McpServerListResponse> {
     const searchParams = new URLSearchParams();
-    if (params?.limit !== undefined) {
-      searchParams.set('limit', String(params.limit));
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
     }
-    if (params?.offset !== undefined) {
-      searchParams.set('offset', String(params.offset));
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
     }
     const queryString = searchParams.toString();
     return this.request(`/api/mcp/v0/servers${queryString ? `?${queryString}` : ''}`);

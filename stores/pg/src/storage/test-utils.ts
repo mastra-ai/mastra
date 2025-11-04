@@ -456,10 +456,9 @@ export function pgTests() {
         expect(messagesByIdResult.messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
         expect(messagesByIdResult.messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
 
-        // Test getMessagesPaginated
-        const messagesPaginated = await store.getMessagesPaginated({
+        // Test listMessages
+        const messagesPaginated = await store.listMessages({
           threadId: testThreadId,
-          format: 'v2',
         });
         expect(messagesPaginated.messages.length).toBe(1);
         expect(messagesPaginated.messages[0]?.createdAt).toBeInstanceOf(Date);
@@ -493,8 +492,8 @@ export function pgTests() {
         expect(messagesByIdResult.messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messagesByIdResult.messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
 
-        // Test getMessagesPaginated
-        const messagesPaginated = await store.getMessagesPaginated({
+        // Test listMessages
+        const messagesPaginated = await store.listMessages({
           threadId: testThreadId,
         });
         expect(messagesPaginated.messages.length).toBe(1);
