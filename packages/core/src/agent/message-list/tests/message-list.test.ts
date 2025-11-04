@@ -310,16 +310,7 @@ describe('MessageList', () => {
         },
       ]);
 
-      // Check toolInvocations array has correct args (should be fixed by hydration)
-      expect(v2Messages[0].content.toolInvocations).toEqual([
-        {
-          state: 'result',
-          toolCallId: 'call-123',
-          toolName: 'searchTool',
-          args: { query: 'mastra framework' },
-          result: { results: ['result1', 'result2'] },
-        },
-      ]);
+      // toolInvocations field was deprecated and removed - tool invocations are only in parts array now
 
       // Check UI messages preserve args
       const uiMessages = list.get.all.ui();
@@ -392,19 +383,7 @@ describe('MessageList', () => {
         },
       ]);
 
-      // Check toolInvocations array has correct args
-      expect(assistantV2Message.content.toolInvocations).toEqual([
-        {
-          state: 'result',
-          toolCallId: 'toolu_01Y9o5yfKqKvdueRhupfT9Jf',
-          toolName: 'weatherTool',
-          args: { location: 'Paris' },
-          result: {
-            temperature: 24.3,
-            conditions: 'Partly cloudy',
-          },
-        },
-      ]);
+      // toolInvocations array was deprecated and removed - tool invocations are only in parts array now
 
       // Check that the args are preserved in the final UI messages
       const uiMessages = list.get.all.ui();
