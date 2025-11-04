@@ -1,6 +1,6 @@
 import type { CoreMessage, CoreSystemMessage } from '@internal/ai-sdk-v4/message';
 import { z } from 'zod';
-import type { UIMessageWithMetadata } from '../agent';
+import type { MastraDBMessage, UIMessageWithMetadata } from '../agent';
 import { AISpanType } from '../observability';
 import type { TracingContext } from '../observability';
 
@@ -110,13 +110,13 @@ export type ScorerOptions = {
 };
 
 export type ScorerRunInputForAgent = {
-  inputMessages: UIMessageWithMetadata[];
-  rememberedMessages: UIMessageWithMetadata[];
+  inputMessages: MastraDBMessage[];
+  rememberedMessages: MastraDBMessage[];
   systemMessages: CoreMessage[];
   taggedSystemMessages: Record<string, CoreSystemMessage[]>;
 };
 
-export type ScorerRunOutputForAgent = UIMessageWithMetadata[];
+export type ScorerRunOutputForAgent = MastraDBMessage[];
 
 export const saveScorePayloadSchema = z.object({
   runId: z.string(),
