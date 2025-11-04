@@ -8,10 +8,11 @@ import {
   TABLE_THREADS,
   resolveMessageLimit,
   TABLE_MESSAGES,
+  normalizePerPage,
+  calculatePagination,
 } from '@mastra/core/storage';
 import type {
   StorageGetMessagesArg,
-  PaginationInfo,
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
@@ -75,8 +76,23 @@ export class StoreMemoryUpstash extends MemoryStorage {
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset = 0, limit = 100, orderBy } = args;
+    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
       let allThreads: StorageThreadType[] = [];
@@ -103,15 +119,16 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const sortedThreads = this.sortThreads(allThreads, field, direction);
 
       const total = sortedThreads.length;
-      const end = offset + limit;
+      // When perPage is false (get all), ignore page offset
+      const end = perPageInput === false ? total : offset + perPage;
       const paginatedThreads = sortedThreads.slice(offset, end);
-      const hasMore = offset + limit < total;
+      const hasMore = perPageInput === false ? false : end < total;
 
       return {
         threads: paginatedThreads,
         total,
-        page: limit > 0 ? Math.floor(offset / limit) : 0,
-        perPage: limit,
+        page,
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error) {
@@ -122,8 +139,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             resourceId,
-            page: limit > 0 ? Math.floor(offset / limit) : 0,
-            perPage: limit,
+            page,
+            perPage,
           },
         },
         error,
@@ -133,8 +150,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
       return {
         threads: [],
         total: 0,
-        page: limit > 0 ? Math.floor(offset / limit) : 0,
-        perPage: limit,
+        page,
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }
@@ -433,7 +450,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
   }
 
   /**
-   * @deprecated use getMessagesPaginated instead
+   * @deprecated use listMessages instead
    */
   public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     const { threadId, resourceId, selectBy } = args;
@@ -566,7 +583,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
     if (!threadId.trim()) {
       throw new MastraError(
@@ -581,25 +598,22 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
 
     const threadMessagesKey = getThreadMessagesKey(threadId);
+    const perPage = normalizePerPage(perPageInput, 40);
+    // When perPage is false (get all), ignore page offset
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      // Determine how many results to return
-      // Default pagination is always 40 unless explicitly specified
-      let perPage = 40;
-      if (limit !== undefined) {
-        if (limit === false) {
-          // limit: false means get ALL messages
-          perPage = Number.MAX_SAFE_INTEGER;
-        } else if (limit === 0) {
-          // limit: 0 means return zero results
-          perPage = 0;
-        } else if (typeof limit === 'number' && limit > 0) {
-          perPage = limit;
-        }
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_UPSTASH_LIST_MESSAGES_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
       }
-
-      // Convert offset to page for pagination metadata
-      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
 
       // Get included messages with context if specified
       let includedMessages: MastraDBMessage[] = [];
@@ -616,7 +630,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
           messages: [],
           total: 0,
           page,
-          perPage,
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
@@ -668,33 +682,18 @@ export class StoreMemoryUpstash extends MemoryStorage {
         return 0;
       };
 
-      // Sort messages by their position in the sorted set (or by orderBy if specified)
-      if (orderBy) {
-        messagesData.sort((a, b) => {
-          const aValue = getFieldValue(a);
-          const bValue = getFieldValue(b);
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        });
-      } else {
-        // Default: sort by position in sorted set
-        // Build Map for O(1) lookups instead of O(n) indexOf
-        const messageIdToPosition = new Map<string, number>();
-        allMessageIds.forEach((id, index) => {
-          messageIdToPosition.set(id as string, index);
-        });
-
-        messagesData.sort((a, b) => {
-          const aPos = messageIdToPosition.get(a.id) ?? Number.MAX_SAFE_INTEGER;
-          const bPos = messageIdToPosition.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-          return aPos - bPos;
-        });
-      }
+      // Sort messages by orderBy field and direction (defaults to createdAt DESC)
+      messagesData.sort((a, b) => {
+        const aValue = getFieldValue(a);
+        const bValue = getFieldValue(b);
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
 
       const total = messagesData.length;
 
       // Apply pagination
       const start = offset;
-      const end = limit === false ? total : start + perPage;
+      const end = perPageInput === false ? total : start + perPage;
       const paginatedMessages = messagesData.slice(start, end);
 
       // Combine paginated messages with included messages, deduplicating
@@ -747,13 +746,13 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = limit === false ? false : allThreadMessagesReturned ? false : end < total;
+      const hasMore = perPageInput !== false && !allThreadMessagesReturned && end < total;
 
       return {
         messages: finalMessages,
         total,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error) {
@@ -774,105 +773,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
       return {
         messages: [],
         total: 0,
-        page: Math.floor(offset / (limit === false ? Number.MAX_SAFE_INTEGER : limit || 40)),
-        perPage: limit === false ? Number.MAX_SAFE_INTEGER : limit || 40,
-        hasMore: false,
-      };
-    }
-  }
-
-  public async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    const { threadId, resourceId, selectBy } = args;
-    const { page = 0, perPage = 40, dateRange } = selectBy?.pagination || {};
-    const fromDate = dateRange?.start;
-    const toDate = dateRange?.end;
-    const threadMessagesKey = getThreadMessagesKey(threadId);
-    const messages: MastraDBMessage[] = [];
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      const includedMessages = await this._getIncludedMessages(threadId, selectBy);
-      messages.push(...includedMessages);
-
-      const allMessageIds = await this.client.zrange(
-        threadMessagesKey,
-        args?.selectBy?.last ? -args.selectBy.last : 0,
-        -1,
-      );
-      if (allMessageIds.length === 0) {
-        return {
-          messages: [],
-          total: 0,
-          page,
-          perPage,
-          hasMore: false,
-        };
-      }
-
-      // Use pipeline to fetch all messages efficiently
-      const pipeline = this.client.pipeline();
-      allMessageIds.forEach(id => pipeline.get(getMessageKey(threadId, id as string)));
-      const results = await pipeline.exec();
-
-      // Process messages and apply filters - handle undefined results from pipeline
-      let messagesData = results
-        .filter((msg): msg is MastraDBMessage & { _index?: number } => msg !== null)
-        .map(msg => this.parseStoredMessage(msg));
-
-      // Apply date filters if provided
-      if (fromDate) {
-        messagesData = messagesData.filter(msg => msg && new Date(msg.createdAt).getTime() >= fromDate.getTime());
-      }
-
-      if (toDate) {
-        messagesData = messagesData.filter(msg => msg && new Date(msg.createdAt).getTime() <= toDate.getTime());
-      }
-
-      // Sort messages by their position in the sorted set
-      messagesData.sort((a, b) => allMessageIds.indexOf(a!.id) - allMessageIds.indexOf(b!.id));
-
-      const total = messagesData.length;
-
-      const start = page * perPage;
-      const end = start + perPage;
-      const hasMore = end < total;
-      const paginatedMessages = messagesData.slice(start, end);
-
-      messages.push(...paginatedMessages);
-
-      const list = new MessageList().add(messages as any, 'memory');
-      const finalMessages = list.get.all.db();
-
-      return {
-        messages: finalMessages,
-        total,
         page,
-        perPage,
-        hasMore,
-      };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_MESSAGES_PAGINATED_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            threadId,
-            resourceId: resourceId ?? '',
-          },
-        },
-        error,
-      );
-      this.logger.error(mastraError.toString());
-      this.logger?.trackException(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }

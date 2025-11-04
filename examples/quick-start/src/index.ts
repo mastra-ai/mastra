@@ -18,7 +18,7 @@ const main = async () => {
 
     console.log(res.species);
 
-    const run = await mastra.getWorkflow('logCatWorkflow').createRunAsync();
+    const run = await mastra.getWorkflow('logCatWorkflow').createRun();
     const { start } = run;
 
     await start({ triggerData: { name: res.species } });

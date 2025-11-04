@@ -1,9 +1,9 @@
 import type { MastraMessageContentV2, MastraDBMessage } from '../agent';
-import type { TracingStrategy } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../evals';
 import type { StorageThreadType } from '../memory/types';
+import type { TracingStrategy } from '../observability';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 
 import {
@@ -58,6 +58,45 @@ export function serializeDate(date: Date | string | undefined): string | undefin
   if (!date) return undefined;
   const dateObj = ensureDate(date);
   return dateObj?.toISOString();
+}
+
+/**
+ * Normalizes perPage input for pagination queries.
+ *
+ * @param perPageInput - The raw perPage value from the user
+ * @param defaultValue - The default perPage value to use when undefined (typically 40 for messages, 100 for threads)
+ * @returns A numeric perPage value suitable for queries (false becomes MAX_SAFE_INTEGER, negative values fall back to default)
+ */
+export function normalizePerPage(perPageInput: number | false | undefined, defaultValue: number): number {
+  if (perPageInput === false) {
+    return Number.MAX_SAFE_INTEGER; // Get all results
+  } else if (perPageInput === 0) {
+    return 0; // Return zero results
+  } else if (typeof perPageInput === 'number' && perPageInput > 0) {
+    return perPageInput; // Valid positive number
+  }
+  // For undefined, negative, or other invalid values, use default
+  return defaultValue;
+}
+
+/**
+ * Calculates pagination offset and prepares perPage value for response.
+ * When perPage is false (fetch all), offset is always 0 regardless of page.
+ *
+ * @param page - The page number (0-indexed)
+ * @param perPageInput - The original perPage input (number, false for all, or undefined)
+ * @param normalizedPerPage - The normalized perPage value (from normalizePerPage)
+ * @returns Object with offset for query and perPage for response
+ */
+export function calculatePagination(
+  page: number,
+  perPageInput: number | false | undefined,
+  normalizedPerPage: number,
+): { offset: number; perPage: number | false } {
+  return {
+    offset: perPageInput === false ? 0 : page * normalizedPerPage,
+    perPage: perPageInput === false ? false : normalizedPerPage,
+  };
 }
 
 export function resolveMessageLimit({
@@ -513,8 +552,6 @@ export abstract class MastraStorage extends MastraBase {
   }
 
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
-
-  abstract getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }>;
 
   /**
    * OBSERVABILITY

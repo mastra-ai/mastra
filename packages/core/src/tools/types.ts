@@ -10,8 +10,8 @@ import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/proto
 import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/types.js';
 
 import type { MastraUnion } from '../action';
-import type { TracingContext } from '../ai-tracing';
 import type { Mastra } from '../mastra';
+import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
 import type { ToolStream } from './stream';

@@ -35,7 +35,7 @@ describe('auth middleware integration tests', () => {
   const createMastraWithRoutes = (routes: any[]) => {
     return new Mastra({
       server: {
-        experimental_auth: authConfig,
+        auth: authConfig,
         apiRoutes: routes,
       },
     });

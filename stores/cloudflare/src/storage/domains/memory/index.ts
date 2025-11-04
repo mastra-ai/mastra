@@ -3,7 +3,6 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
-  PaginationInfo,
   StorageGetMessagesArg,
   StorageResourceType,
   StorageListMessagesInput,
@@ -14,6 +13,8 @@ import type {
 import {
   ensureDate,
   MemoryStorage,
+  normalizePerPage,
+  calculatePagination,
   resolveMessageLimit,
   serializeDate,
   TABLE_MESSAGES,
@@ -67,7 +68,23 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
-      const { resourceId, offset = 0, limit = 100, orderBy } = args;
+      const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+      const perPage = normalizePerPage(perPageInput, 100);
+
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_CLOUDFLARE_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
+      // When perPage is false (get all), ignore page offset
+      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const { field, direction } = this.parseOrderBy(orderBy);
 
       // List all keys in the threads table
@@ -94,14 +111,14 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       });
 
       // Apply pagination
-      const end = offset + limit;
+      const end = perPageInput === false ? threads.length : offset + perPage;
       const paginatedThreads = threads.slice(offset, end);
 
       return {
-        page: limit > 0 ? Math.floor(offset / limit) : 0,
-        perPage: limit,
+        page,
+        perPage: perPageForResponse,
         total: threads.length,
-        hasMore: offset + limit < threads.length,
+        hasMore: perPageInput === false ? false : offset + perPage < threads.length,
         threads: paginatedThreads,
       };
     } catch (error) {
@@ -782,7 +799,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
     if (!threadId.trim()) {
       throw new MastraError(
@@ -796,24 +813,22 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       );
     }
 
-    try {
-      // Determine how many results to return
-      // Default pagination is always 40 unless explicitly specified
-      let perPage = 40;
-      if (limit !== undefined) {
-        if (limit === false) {
-          // limit: false means get ALL messages
-          perPage = Number.MAX_SAFE_INTEGER;
-        } else if (limit === 0) {
-          // limit: 0 means return zero results
-          perPage = 0;
-        } else if (typeof limit === 'number' && limit > 0) {
-          perPage = limit;
-        }
-      }
+    const perPage = normalizePerPage(perPageInput, 40);
+    // When perPage is false (get all), ignore page offset
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      // Convert offset to page for pagination metadata
-      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
+    try {
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_CLOUDFLARE_LIST_MESSAGES_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
 
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -915,8 +930,8 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           messages: [],
           total,
           page,
-          perPage: 0,
-          hasMore: false,
+          perPage: perPageForResponse,
+          hasMore: offset < total,
         };
       }
 
@@ -979,12 +994,13 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         });
       }
 
-      if (total === 0 && filteredMessages.length === 0) {
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && filteredMessages.length === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total: 0,
           page,
-          perPage,
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
@@ -1020,7 +1036,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
 
       let hasMore: boolean;
-      if (limit === false || allThreadMessagesReturned) {
+      if (perPageInput === false || allThreadMessagesReturned) {
         hasMore = false;
       } else if (direction === 'ASC') {
         // ASC: check if there are more messages after the current window
@@ -1035,7 +1051,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         messages: finalMessages,
         total,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error: any) {
@@ -1059,65 +1075,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       return {
         messages: [],
         total: 0,
-        page: Math.floor(offset / (limit === false ? Number.MAX_SAFE_INTEGER : limit || 40)),
-        perPage: limit === false ? Number.MAX_SAFE_INTEGER : limit || 40,
+        page,
+        perPage: perPageForResponse,
         hasMore: false,
       };
-    }
-  }
-
-  async getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    const { threadId, resourceId, selectBy } = args;
-    const { page = 0, perPage = 100 } = selectBy?.pagination || {};
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      // Get all messages for the thread
-      const result = await this.getMessages({ threadId, selectBy });
-      const messages = result.messages;
-
-      // Apply date filtering if specified
-      let filteredMessages = messages;
-      if (selectBy?.pagination?.dateRange) {
-        const { start: dateStart, end: dateEnd } = selectBy.pagination.dateRange;
-        filteredMessages = messages.filter(message => {
-          const messageDate = new Date(message.createdAt);
-          if (dateStart && messageDate < dateStart) return false;
-          if (dateEnd && messageDate > dateEnd) return false;
-          return true;
-        });
-      }
-
-      // Apply pagination
-      const start = page * perPage;
-      const end = start + perPage;
-      const paginatedMessages = filteredMessages.slice(start, end);
-
-      return {
-        page,
-        perPage,
-        total: filteredMessages.length,
-        hasMore: start + perPage < filteredMessages.length,
-        messages: paginatedMessages,
-      };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'CLOUDFLARE_STORAGE_GET_MESSAGES_PAGINATED_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          text: 'Failed to get messages with pagination',
-          details: {
-            threadId,
-            resourceId: resourceId ?? '',
-          },
-        },
-        error,
-      );
-      this.logger?.trackException?.(mastraError);
-      this.logger?.error?.(mastraError.toString());
-      return { messages: [], total: 0, page, perPage: perPage || 40, hasMore: false };
     }
   }
 

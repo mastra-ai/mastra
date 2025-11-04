@@ -2,9 +2,8 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
-import { MemoryStorage, resolveMessageLimit } from '@mastra/core/storage';
+import { MemoryStorage, normalizePerPage, calculatePagination, resolveMessageLimit } from '@mastra/core/storage';
 import type {
-  PaginationInfo,
   StorageGetMessagesArg,
   StorageResourceType,
   StorageListMessagesInput,
@@ -358,7 +357,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
     if (!threadId.trim()) {
       throw new MastraError(
@@ -372,24 +371,22 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       );
     }
 
-    try {
-      // Determine how many results to return
-      // Default pagination is always 40 unless explicitly specified
-      let perPage = 40;
-      if (limit !== undefined) {
-        if (limit === false) {
-          // limit: false means get ALL messages
-          perPage = Number.MAX_SAFE_INTEGER;
-        } else if (limit === 0) {
-          // limit: 0 means return zero results
-          perPage = 0;
-        } else if (typeof limit === 'number' && limit > 0) {
-          perPage = limit;
-        }
-      }
+    const perPage = normalizePerPage(perPageInput, 40);
+    // When perPage is false (get all), ignore page offset
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      // Convert offset to page for pagination metadata
-      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
+    try {
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_DYNAMODB_LIST_MESSAGES_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
 
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -397,7 +394,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       this.logger.debug('Getting messages with listMessages', {
         threadId,
         resourceId,
-        limit,
+        perPageInput,
         offset,
         perPage,
         page,
@@ -456,12 +453,13 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const paginatedMessages = allThreadMessages.slice(offset, offset + perPage);
       const paginatedCount = paginatedMessages.length;
 
-      if (total === 0 && paginatedCount === 0) {
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && paginatedCount === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total: 0,
           page,
-          perPage,
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
@@ -506,13 +504,16 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = limit === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
+      let hasMore = false;
+      if (perPageInput !== false && !allThreadMessagesReturned) {
+        hasMore = offset + paginatedCount < total;
+      }
 
       return {
         messages: finalMessages,
         total,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error: any) {
@@ -533,8 +534,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       return {
         messages: [],
         total: 0,
-        page: Math.floor(offset / (limit === false ? Number.MAX_SAFE_INTEGER : limit || 40)),
-        perPage: limit === false ? Number.MAX_SAFE_INTEGER : limit || 40,
+        page,
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }
@@ -629,13 +630,29 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset = 0, limit = 100, orderBy } = args;
+    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_DYNAMODB_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
+    // When perPage is false (get all), ignore page offset
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
 
     this.logger.debug('Getting threads by resource ID with pagination', {
       resourceId,
-      page: limit > 0 ? Math.floor(offset / limit) : 0,
-      perPage: limit,
+      page,
+      perPage,
       field,
       direction,
     });
@@ -651,18 +668,18 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const allThreads = this.transformAndSortThreads(results.data, field, direction);
 
       // Apply pagination in memory
-      const endIndex = offset + limit;
+      const endIndex = offset + perPage;
       const paginatedThreads = allThreads.slice(offset, endIndex);
 
       // Calculate pagination info
       const total = allThreads.length;
-      const hasMore = offset + limit < total;
+      const hasMore = offset + perPage < total;
 
       return {
         threads: paginatedThreads,
         total,
-        page: limit > 0 ? Math.floor(offset / limit) : 0,
-        perPage: limit,
+        page,
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error) {
@@ -671,122 +688,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           id: 'DYNAMODB_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId, page: limit > 0 ? Math.floor(offset / limit) : 0, perPage: limit },
+          details: { resourceId, page, perPage },
         },
         error,
       );
-    }
-  }
-
-  async getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    const { threadId, resourceId, selectBy } = args;
-    const { page = 0, perPage = 40, dateRange } = selectBy?.pagination || {};
-    const fromDate = dateRange?.start;
-    const toDate = dateRange?.end;
-    const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
-
-    this.logger.debug('Getting messages with pagination', { threadId, page, perPage, fromDate, toDate, limit });
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      let messages: MastraDBMessage[] = [];
-
-      // Handle include messages first
-      if (selectBy?.include?.length) {
-        const includeMessages = await this._getIncludedMessages(threadId, selectBy);
-        if (includeMessages) {
-          messages.push(...includeMessages);
-        }
-      }
-
-      // Get remaining messages only if limit is not 0
-      if (limit !== 0) {
-        // Query messages by thread ID using the GSI
-        const query = this.service.entities.message.query.byThread({ entity: 'message', threadId });
-
-        // Get messages from the main thread
-        let results;
-        if (limit !== Number.MAX_SAFE_INTEGER && limit > 0) {
-          // Use limit in query to get only the last N messages
-          results = await query.go({ limit, order: 'desc' });
-          // Reverse the results since we want ascending order
-          results.data = results.data.reverse();
-        } else {
-          // Get all messages
-          results = await query.go();
-        }
-
-        let allThreadMessages = results.data
-          .map((data: any) => this.parseMessageData(data))
-          .filter((msg: any): msg is MastraDBMessage => 'content' in msg);
-
-        // Sort by createdAt ASC to get proper order
-        allThreadMessages.sort((a: MastraDBMessage, b: MastraDBMessage) => {
-          const timeA = a.createdAt.getTime();
-          const timeB = b.createdAt.getTime();
-          if (timeA === timeB) {
-            return a.id.localeCompare(b.id);
-          }
-          return timeA - timeB;
-        });
-
-        // Exclude already included messages
-        const excludeIds = messages.map(m => m.id);
-        if (excludeIds.length > 0) {
-          allThreadMessages = allThreadMessages.filter((msg: MastraDBMessage) => !excludeIds.includes(msg.id));
-        }
-
-        messages.push(...allThreadMessages);
-      }
-
-      // Sort all messages by createdAt (oldest first for final result)
-      messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-      // Apply date filtering if needed
-      if (fromDate || toDate) {
-        messages = messages.filter(msg => {
-          const createdAt = new Date(msg.createdAt).getTime();
-          if (fromDate && createdAt < new Date(fromDate).getTime()) return false;
-          if (toDate && createdAt > new Date(toDate).getTime()) return false;
-          return true;
-        });
-      }
-
-      // Save total before pagination
-      const total = messages.length;
-
-      // Apply offset-based pagination in memory
-      const start = page * perPage;
-      const end = start + perPage;
-      const paginatedMessages = messages.slice(start, end);
-      const hasMore = end < total;
-
-      const list = new MessageList({ threadId, resourceId }).add(
-        paginatedMessages as (MastraMessageV1 | MastraDBMessage)[],
-        'memory',
-      );
-
-      return {
-        messages: list.get.all.db(),
-        total,
-        page,
-        perPage,
-        hasMore,
-      };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'STORAGE_DYNAMODB_STORE_GET_MESSAGES_PAGINATED_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId, resourceId: resourceId ?? '' },
-        },
-        error,
-      );
-      this.logger?.trackException?.(mastraError);
-      this.logger?.error?.(mastraError.toString());
-      return { messages: [], total: 0, page, perPage, hasMore: false };
     }
   }
 

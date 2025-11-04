@@ -1,5 +1,5 @@
-import type { TracingContext } from '../ai-tracing/types';
 import { AvailableHooks, executeHook } from '../hooks';
+import type { TracingContext } from '../observability';
 import type { MastraScorerEntry } from './base';
 import type { ScoringEntityType, ScoringHookInput, ScoringSource } from './types';
 
