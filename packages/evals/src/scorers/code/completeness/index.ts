@@ -1,5 +1,22 @@
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { createScorer } from '@mastra/core/evals';
 import nlp from 'compromise';
+
+/**
+ * Extract text content from MastraDBMessage
+ * Matches the logic used in MessageList.mastraDBMessageToAIV4UIMessage
+ */
+function getTextContentFromMastraDBMessage(message: MastraDBMessage): string {
+  if (typeof message.content.content === 'string' && message.content.content !== '') {
+    return message.content.content;
+  }
+  if (message.content.parts && Array.isArray(message.content.parts)) {
+    // Return only the last text part like AI SDK does
+    const textParts = message.content.parts.filter(p => p.type === 'text');
+    return textParts.length > 0 ? textParts[textParts.length - 1]?.text || '' : '';
+  }
+  return '';
+}
 
 function normalizeString(str: string): string {
   // Remove diacritics and convert to lowercase
@@ -83,17 +100,24 @@ export function createCompletenessScorer() {
     .preprocess(async ({ run }) => {
       const isInputInvalid =
         !run.input ||
-        run.input.inputMessages.some((i: { content: string }) => i.content === null || i.content === undefined);
+        run.input.inputMessages.some((i: MastraDBMessage) => {
+          const content = getTextContentFromMastraDBMessage(i);
+          return content === null || content === undefined;
+        });
 
       const isOutputInvalid =
-        !run.output || run.output.some((i: { content: string }) => i.content === null || i.content === undefined);
+        !run.output ||
+        run.output.some((i: MastraDBMessage) => {
+          const content = getTextContentFromMastraDBMessage(i);
+          return content === null || content === undefined;
+        });
 
       if (isInputInvalid || isOutputInvalid) {
         throw new Error('Inputs cannot be null or undefined');
       }
 
-      const input = run.input?.inputMessages.map((i: { content: string }) => i.content).join(', ') || '';
-      const output = run.output?.map(({ content }: { content: string }) => content).join(', ') || '';
+      const input = run.input?.inputMessages.map(i => getTextContentFromMastraDBMessage(i)).join(', ') || '';
+      const output = run.output?.map(i => getTextContentFromMastraDBMessage(i)).join(', ') || '';
 
       const inputToProcess = input;
       const outputToProcess = output;
