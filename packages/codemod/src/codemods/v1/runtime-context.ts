@@ -1,0 +1,54 @@
+import { createTransformer } from '../lib/create-transformer';
+
+/**
+ * The `RuntimeContext` class has been renamed to `RequestContext`, and all parameter names have been updated from `runtimeContext` to `requestContext` across all APIs.
+ */
+
+export default createTransformer((fileInfo, api, options, context) => {
+  const { j, root } = context;
+
+  // 1. Update import declarations from runtime-context to request-context
+  root.find(j.ImportDeclaration).forEach(importPath => {
+    const node = importPath.node;
+
+    // Only process imports from @mastra/core/runtime-context
+    if (node.source.value !== '@mastra/core/runtime-context') return;
+
+    // Update the import path
+    node.source.value = '@mastra/core/request-context';
+    context.hasChanges = true;
+
+    // Update RuntimeContext to RequestContext in import specifiers
+    node.specifiers?.forEach(specifier => {
+      if (specifier.type === 'ImportSpecifier') {
+        const imported = specifier.imported;
+        if (imported.type === 'Identifier' && imported.name === 'RuntimeContext') {
+          imported.name = 'RequestContext';
+          context.messages.push(`Updated import: RuntimeContext → RequestContext from '@mastra/core/request-context'`);
+        }
+      }
+    });
+  });
+
+  // 2. Rename all RuntimeContext type/class references to RequestContext
+  const runtimeContextCount = root.find(j.Identifier, { name: 'RuntimeContext' }).length;
+  if (runtimeContextCount > 0) {
+    root.find(j.Identifier, { name: 'RuntimeContext' }).forEach(path => {
+      path.node.name = 'RequestContext';
+    });
+    context.hasChanges = true;
+    context.messages.push(`Renamed ${runtimeContextCount} RuntimeContext type references to RequestContext`);
+  }
+
+  // 3. Rename all runtimeContext variable/parameter identifiers to requestContext
+  const runtimeContextVarCount = root.find(j.Identifier, { name: 'runtimeContext' }).length;
+  if (runtimeContextVarCount > 0) {
+    root.find(j.Identifier, { name: 'runtimeContext' }).forEach(path => {
+      path.node.name = 'requestContext';
+    });
+    context.hasChanges = true;
+    context.messages.push(
+      `Renamed ${runtimeContextVarCount} runtimeContext variable/parameter references to requestContext`,
+    );
+  }
+});

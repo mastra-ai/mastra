@@ -66,9 +66,9 @@ export default createTransformer((fileInfo, api, options, context) => {
     .find(j.ImportDeclaration, {
       source: { value: '@mastra/core' },
     })
-    .forEach(path => {
-      const importDeclaration = path.node;
-      const specifiers = importDeclaration.specifiers || [];
+    .forEach(importPath => {
+      const node = importPath.node;
+      const specifiers = node.specifiers || [];
 
       // Track which imports should stay and which should be moved
       // Use an array to maintain order
@@ -127,20 +127,33 @@ export default createTransformer((fileInfo, api, options, context) => {
           const newImport = j.importDeclaration(newSpecifiers, j.stringLiteral(subpath));
 
           newImports.push(newImport);
+
+          // Log which imports were moved to which subpath
+          const importList = imports.map(i => i.importedName).join(', ');
+          context.messages.push(`Moved imports to '${subpath}': ${importList}`);
         });
 
         // Insert new imports in reverse order so they appear in correct order
         newImports.reverse().forEach(newImport => {
-          j(path).insertAfter(newImport);
+          j(importPath).insertAfter(newImport);
         });
 
         // Update or remove the original import
         if (remainingSpecifiers.length > 0) {
           // Keep the original import with only the remaining specifiers
-          importDeclaration.specifiers = remainingSpecifiers;
+          node.specifiers = remainingSpecifiers;
+          const remainingList = remainingSpecifiers
+            .filter(s => s.type === 'ImportSpecifier')
+            .map(s => (s as any).imported?.name || (s as any).local?.name)
+            .filter(Boolean)
+            .join(', ');
+          if (remainingList) {
+            context.messages.push(`Kept at '@mastra/core': ${remainingList}`);
+          }
         } else {
           // Remove the original import entirely
-          j(path).remove();
+          j(importPath).remove();
+          context.messages.push(`Removed original '@mastra/core' import (all imports moved to subpaths)`);
         }
       }
     });
