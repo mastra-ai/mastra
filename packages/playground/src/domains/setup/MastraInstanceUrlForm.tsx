@@ -17,7 +17,7 @@ export const MastraInstanceUrlForm = ({ onSetUrl }: MastraInstanceUrlFormProps) 
     <div className="flex flex-col h-screen w-full items-center justify-center bg-surface1">
       <LogoWithoutText className="size-32" />
       <form onSubmit={handleSubmit} className="max-w-md w-full mx-auto px-4 pt-4 space-y-4">
-        <InputField name="url" label="Mastra instance URL" />
+        <InputField name="url" label="Mastra instance URL" placeholder="e.g: http://localhost:4111" required />
 
         <Button type="submit" variant="light" className="w-full" size="lg">
           <Icon>
