@@ -625,7 +625,7 @@ export async function searchMemoryHandler({
     // The Memory class handles scope (thread vs resource) internally
     const threadConfig = memory.getMergedThreadConfig(config || {});
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
-      return { messages: [] };
+      return { results: [], count: 0, query: searchQuery };
     }
 
     const result = await memory.recall({
