@@ -213,10 +213,6 @@ export type AgentGenerateOptions<
   clientTools?: ToolsInput;
   /** Additional context messages to include */
   context?: CoreMessage[];
-  /**
-   * @deprecated Use the `memory` property instead for all memory-related options.
-   */
-  memoryOptions?: MemoryConfig;
   /** New memory options (preferred) */
   memory?: AgentMemoryOption;
   /** Unique ID for this generation run */

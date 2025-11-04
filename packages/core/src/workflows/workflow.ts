@@ -2181,8 +2181,6 @@ export class Run<
       | string[];
     label?: string;
     requestContext?: RequestContext;
-    /** @deprecated This property will be removed on November 4th, 2025. Use `retryCount` instead. */
-    runCount?: number;
     retryCount?: number;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -2193,7 +2191,7 @@ export class Run<
     };
     forEachIndex?: number;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    return this._resume({ ...params, retryCount: params.retryCount ?? params.runCount });
+    return this._resume(params);
   }
 
   protected async _resume<TResumeSchema extends z.ZodType<any>>(params: {

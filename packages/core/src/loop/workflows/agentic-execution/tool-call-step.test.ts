@@ -29,7 +29,6 @@ describe('createToolCallStep tool approval workflow', () => {
     requestContext: new RequestContext(),
     state: {},
     setState: vi.fn(),
-    runCount: 1,
     retryCount: 1,
     tracingContext: {} as any,
     getInitData: vi.fn(),
