@@ -682,7 +682,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             id: thread.id,
             resourceId: thread.resourceId,
             title: thread.title,
-            metadata: thread.metadata,
+            // Ensure metadata is always a valid JSON string, default to '{}'
+            metadata:
+              thread.metadata && typeof thread.metadata === 'object'
+                ? JSON.stringify(thread.metadata)
+                : thread.metadata || '{}',
             createdAt: thread.createdAt,
             updatedAt: new Date().toISOString(),
           })),
@@ -739,9 +743,19 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         return null;
       }
 
+      // Safely parse metadata, defaulting to {} for empty/invalid values
+      let parsedMetadata: Record<string, unknown> = {};
+      const metadataValue = thread.metadata as any;
+      if (typeof metadataValue === 'string') {
+        const trimmed = metadataValue.trim();
+        parsedMetadata = trimmed === '' ? {} : JSON.parse(trimmed);
+      } else if (metadataValue && typeof metadataValue === 'object') {
+        parsedMetadata = metadataValue;
+      }
+
       return {
         ...thread,
-        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+        metadata: parsedMetadata,
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
       };
@@ -765,6 +779,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         values: [
           {
             ...thread,
+            // Ensure metadata is always a valid JSON string, default to '{}'
+            metadata:
+              thread.metadata && typeof thread.metadata === 'object'
+                ? JSON.stringify(thread.metadata)
+                : thread.metadata || '{}',
             createdAt: thread.createdAt.toISOString(),
             updatedAt: thread.updatedAt.toISOString(),
           },
@@ -829,7 +848,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             id: updatedThread.id,
             resourceId: updatedThread.resourceId,
             title: updatedThread.title,
-            metadata: updatedThread.metadata,
+            // Ensure metadata is always a valid JSON string, default to '{}'
+            metadata:
+              updatedThread.metadata && typeof updatedThread.metadata === 'object'
+                ? JSON.stringify(updatedThread.metadata)
+                : updatedThread.metadata || '{}',
             createdAt: updatedThread.createdAt,
             updatedAt: updatedThread.updatedAt.toISOString(),
           },
@@ -963,7 +986,21 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       });
 
       const rows = await dataResult.json();
-      const threads = transformRows<StorageThreadType>(rows.data);
+      const threads = transformRows<StorageThreadType>(rows.data).map(thread => {
+        // Safely parse metadata, defaulting to {} for empty/invalid values
+        let parsedMetadata: Record<string, unknown> = {};
+        const metadataValue = thread.metadata as any;
+        if (typeof metadataValue === 'string') {
+          const trimmed = metadataValue.trim();
+          parsedMetadata = trimmed === '' ? {} : JSON.parse(trimmed);
+        } else if (metadataValue && typeof metadataValue === 'object') {
+          parsedMetadata = metadataValue;
+        }
+        return {
+          ...thread,
+          metadata: parsedMetadata,
+        };
+      });
 
       return {
         threads,
@@ -1283,7 +1320,13 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                   id: existingThread.id,
                   resourceId: existingThread.resourceId,
                   title: existingThread.title,
-                  metadata: existingThread.metadata,
+                  // Ensure metadata is always a valid JSON string, default to '{}'
+                  metadata:
+                    existingThread.metadata && typeof existingThread.metadata === 'string'
+                      ? existingThread.metadata || '{}'
+                      : typeof existingThread.metadata === 'object'
+                        ? JSON.stringify(existingThread.metadata)
+                        : '{}',
                   createdAt: existingThread.createdAt,
                   updatedAt: now,
                 },
