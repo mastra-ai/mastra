@@ -327,14 +327,14 @@ export abstract class MastraMemory extends MastraBase {
    * Retrieves messages for a specific thread with optional semantic recall
    * @param threadId - The unique identifier of the thread
    * @param resourceId - Optional resource ID for validation
-   * @param vectorMessageSearch - Optional search string for semantic recall
+   * @param vectorSearchString - Optional search string for semantic recall
    * @param config - Optional memory configuration
    * @returns Promise resolving to array of messages in mastra-db format
    */
   abstract recall(
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfig;
-      vectorMessageSearch?: string;
+      vectorSearchString?: string;
     },
   ): Promise<{ messages: MastraDBMessage[] }>;
 

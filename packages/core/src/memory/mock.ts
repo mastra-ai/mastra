@@ -50,9 +50,7 @@ export class MockMemory extends MastraMemory {
     return this.storage.listThreadsByResourceId(args);
   }
 
-  async recall(
-    args: StorageListMessagesInput & { threadConfig?: MemoryConfig; vectorMessageSearch?: string },
-  ): Promise<{
+  async recall(args: StorageListMessagesInput & { threadConfig?: MemoryConfig; vectorSearchString?: string }): Promise<{
     messages: MastraDBMessage[];
   }> {
     // Get raw messages from storage

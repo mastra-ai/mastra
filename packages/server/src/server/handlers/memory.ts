@@ -633,7 +633,7 @@ export async function searchMemoryHandler({
       resourceId,
       perPage: threadConfig.lastMessages,
       threadConfig: config,
-      vectorMessageSearch: threadConfig.semanticRecall && searchQuery ? searchQuery : undefined,
+      vectorSearchString: threadConfig.semanticRecall && searchQuery ? searchQuery : undefined,
     });
 
     // Get all threads to build context and show which thread each message is from

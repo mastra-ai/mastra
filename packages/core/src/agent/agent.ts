@@ -1406,7 +1406,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       perPage: threadConfig.lastMessages,
       threadConfig: memoryConfig,
       // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
-      vectorMessageSearch: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
+      vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
     });
   }
 
