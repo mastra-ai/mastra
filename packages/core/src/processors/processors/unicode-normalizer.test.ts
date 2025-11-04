@@ -269,7 +269,7 @@ describe('UnicodeNormalizer', () => {
       const result = normalizer.processInput({ messages: [message], abort: mockAbort });
 
       expect(result[0].content.parts?.[0]).toEqual({ type: 'text', text: 'part text' });
-      expect(result[0].content.content).toBe('content text');
+      // Content field was deprecated and removed - text is only in parts array now
     });
 
     it('should preserve message metadata', () => {

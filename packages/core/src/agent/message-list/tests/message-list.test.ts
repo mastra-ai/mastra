@@ -188,7 +188,6 @@ describe('MessageList', () => {
         createdAt: expect.any(Date),
         content: {
           format: 2,
-          content: 'Hello from Core!',
           parts: [{ type: 'text', text: 'Hello from Core!' }],
         },
         threadId,
@@ -2374,7 +2373,7 @@ describe('MessageList', () => {
         id: 'msg-5',
         role: 'assistant',
         createdAt: new Date(),
-        content: { format: 2, parts: [], toolInvocations: [] },
+        content: { format: 2, parts: [] },
         threadId,
         resourceId,
       } satisfies MastraDBMessage;
