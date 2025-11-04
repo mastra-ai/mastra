@@ -4,6 +4,11 @@ import process from 'process';
 
 const baseUrl = process.env.MASTRA_DEPLOYMENT_URL || 'https://mastra.ai'; //'localhost:3000';
 
+// Strip locale pattern from URL for validation
+const stripLocalePattern = url => {
+  return url.replace(/^\/:[^/]+\//, '/');
+};
+
 const loadRedirects = async () => {
   process.chdir('docs');
 
@@ -25,7 +30,7 @@ const checkRedirects = async () => {
   for (const redirect of redirects) {
     if (!redirect || typeof redirect !== 'object') continue;
 
-    const { source, destination } = redirect;
+    const { source } = redirect;
     if (!source) continue;
 
     if (sourceMap.has(source)) {
@@ -53,16 +58,16 @@ const checkRedirects = async () => {
       continue;
     }
 
-    const destinationUrl = `${baseUrl}${destination}`;
-    let destinationOk = true;
+    const cleanDestination = stripLocalePattern(destination);
+    const destinationUrl = `${baseUrl}${cleanDestination}`;
+    let destinationOk = false;
 
-    // WORKAROUND FOR NOW, WILL FOLLOW UP WITH A PROPER FIX
-    // try {
-    //   const destRes = await fetch(destinationUrl, { redirect: 'follow' });
-    //   destinationOk = destRes.status !== 404;
-    // } catch {
-    //   destinationOk = false;
-    // }
+    try {
+      const destRes = await fetch(destinationUrl, { redirect: 'follow' });
+      destinationOk = destRes.status !== 404;
+    } catch {
+      destinationOk = false;
+    }
 
     if (destinationOk) {
       console.log('├──OK──', destinationUrl);
