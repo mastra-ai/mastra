@@ -2,4 +2,4 @@
 '@mastra/ai-sdk': patch
 ---
 
-AI SDK workflowRoute, suspended steps & resume
+Add support for suspend/resume in AI SDK workflowRoute
