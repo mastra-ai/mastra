@@ -437,7 +437,8 @@ serve(async (req) => {
 });
 ```
 
-<Callout type="info">
+:::info
+
 **When to use `serverless: true`**
 
 Use `serverless: true` when deploying to environments where each request runs in a fresh, stateless execution context:
@@ -462,7 +463,8 @@ The serverless mode disables session management and creates fresh server instanc
 - **Prompt list change notifications** - `prompts.notifyListChanged()` requires persistent connections to push updates to clients
 
 These features work normally in long-lived server environments (Node.js servers, Docker containers, etc.).
-</Callout>
+
+:::
 
 Here are the details for the values needed by the `startHTTP` method:
 
