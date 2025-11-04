@@ -1,20 +1,16 @@
 ---
-title: "Reference: Memory.query() | Memory | Mastra Docs"
-description: "Documentation for the `Memory.query()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search."
+title: "Reference: Memory.recall() | Memory | Mastra Docs"
+description: "Documentation for the `Memory.recall()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search."
 ---
 
-# Memory.query()
+# Memory.recall()
 
-:::warning[Deprecated]
-The `Memory.query()` method has been renamed to [`Memory.recall()`](/reference/memory/recall). This page is kept for reference, but please use `recall()` in new code. See the [migration guide](/guides/migrations/upgrade-to-v1#removed-memoryremembermessages-and-renamed-memoryquery-to-memoryrecall) for details.
-:::
-
-the `.query()` method retrieves messages from a specific thread, with support for pagination, filtering options, and semantic search.
+the `.recall()` method retrieves messages from a specific thread, with support for pagination, filtering options, and semantic search.
 
 ## Usage Example
 
 ```typescript copy
-await memory?.query({ threadId: "user-123" });
+await memory?.recall({ threadId: "user-123" });
 ```
 
 ## Parameters
@@ -46,7 +42,7 @@ await memory?.query({ threadId: "user-123" });
       name: "perPage",
       type: "number | false",
       description:
-        "Number of messages to retrieve per page. Set to false to fetch all messages without pagination.",
+        "Number of messages to retrieve per page. Set to false to fetch all messages without pagination. If not provided, defaults to threadConfig.lastMessages.",
       isOptional: true,
     },
     {
@@ -96,7 +92,7 @@ await memory?.query({ threadId: "user-123" });
       name: "lastMessages",
       type: "number | false",
       description:
-        "Number of most recent messages to retrieve. Set to false to disable.",
+        "Number of most recent messages to retrieve. Set to false to disable. When perPage is not explicitly provided, this value is used as the default.",
       isOptional: true,
       defaultValue: "10",
     },
@@ -149,7 +145,7 @@ const agent = mastra.getAgent("agent");
 const memory = await agent.getMemory();
 
 // Retrieve messages with pagination
-const { messages } = await memory!.query({
+const { messages } = await memory!.recall({
   threadId: "thread-123",
   perPage: 50,
   vectorSearchString: "What messages are there?",
@@ -171,7 +167,7 @@ const { messages } = await memory!.query({
 console.log(messages); // MastraDBMessage[]
 
 // Fetch all messages without pagination
-const allMessages = await memory!.query({
+const allMessages = await memory!.recall({
   threadId: "thread-123",
   perPage: false, // Fetch all
 });

@@ -448,7 +448,7 @@ describe('Memory Handlers', () => {
 
       const saveSpy = vi.spyOn(mockMemory, 'saveMessages');
       vi.spyOn(mockMemory, 'getThreadById');
-      vi.spyOn(mockMemory, 'query');
+      vi.spyOn(mockMemory, 'recall');
 
       // Save both messages
       const saveResponse = await saveMessagesHandler({
@@ -779,7 +779,7 @@ describe('Memory Handlers', () => {
       });
 
       vi.spyOn(mockMemory, 'getThreadById');
-      vi.spyOn(mockMemory, 'query');
+      vi.spyOn(mockMemory, 'recall');
 
       const result = await getMessagesHandler({ mastra, threadId, agentId: 'test-agent' });
 
@@ -854,7 +854,7 @@ describe('Memory Handlers', () => {
       });
 
       vi.spyOn(mockMemory, 'getThreadById');
-      vi.spyOn(mockMemory, 'query');
+      vi.spyOn(mockMemory, 'recall');
 
       const result = await getMessagesHandler({ mastra, threadId, agentId: 'test-agent' });
 
@@ -905,7 +905,7 @@ describe('Memory Handlers', () => {
       });
 
       vi.spyOn(mockMemory, 'getThreadById');
-      vi.spyOn(mockMemory, 'query');
+      vi.spyOn(mockMemory, 'recall');
 
       const result = await getMessagesHandler({ mastra, threadId, agentId: 'test-agent' });
 
@@ -981,7 +981,7 @@ describe('Memory Handlers', () => {
       });
 
       vi.spyOn(mockMemory, 'getThreadById');
-      vi.spyOn(mockMemory, 'query');
+      vi.spyOn(mockMemory, 'recall');
 
       const result = await getMessagesHandler({ mastra, threadId, agentId: 'test-agent' });
 
