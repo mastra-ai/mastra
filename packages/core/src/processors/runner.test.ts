@@ -306,10 +306,10 @@ describe('ProcessorRunner', () => {
 
       const assistantMessage = messages.find(m => m.role === 'assistant');
       expect(assistantMessage).toBeDefined();
-      expect(assistantMessage!.content).toHaveLength(3);
-      expect((assistantMessage!.content[0] as TextPart).text).toBe('initial response');
-      expect((assistantMessage!.content[1] as TextPart).text).toBe('extra message A');
-      expect((assistantMessage!.content[2] as TextPart).text).toBe('extra message B');
+      expect(assistantMessage!.content.parts).toHaveLength(3);
+      expect((assistantMessage!.content.parts[0] as TextPart).text).toBe('initial response');
+      expect((assistantMessage!.content.parts[1] as TextPart).text).toBe('extra message A');
+      expect((assistantMessage!.content.parts[2] as TextPart).text).toBe('extra message B');
     });
 
     it('should abort if tripwire is triggered in output processor', async () => {
@@ -380,10 +380,10 @@ describe('ProcessorRunner', () => {
 
       const assistantMessage = messages.find(m => m.role === 'assistant');
       expect(assistantMessage).toBeDefined();
-      expect(assistantMessage!.content).toHaveLength(3);
-      expect((assistantMessage!.content[0] as TextPart).text).toBe('initial response');
-      expect((assistantMessage!.content[1] as TextPart).text).toBe('message from processor 1');
-      expect((assistantMessage!.content[2] as TextPart).text).toBe('message from processor 3');
+      expect(assistantMessage!.content.parts).toHaveLength(3);
+      expect((assistantMessage!.content.parts[0] as TextPart).text).toBe('initial response');
+      expect((assistantMessage!.content.parts[1] as TextPart).text).toBe('message from processor 1');
+      expect((assistantMessage!.content.parts[2] as TextPart).text).toBe('message from processor 3');
     });
   });
 
