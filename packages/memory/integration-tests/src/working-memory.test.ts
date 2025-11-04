@@ -246,9 +246,9 @@ describe('Working Memory Tests', () => {
 
       await memory.saveMessages({ messages });
 
-      const remembered = await memory.rememberMessages({
+      const remembered = await memory.recall({
         threadId: thread.id,
-        config: { lastMessages: 10 },
+        perPage: 10,
       });
 
       // Working memory tags should be stripped from the messages
@@ -395,7 +395,7 @@ describe('Working Memory Tests', () => {
         expect(workingMemory).toContain('**Location**: Vancouver Island');
       }
 
-      const history = await memory.query({
+      const history = await memory.recall({
         threadId: thread.id,
         resourceId,
         perPage: 20,

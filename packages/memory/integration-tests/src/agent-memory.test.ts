@@ -40,9 +40,9 @@ describe('Agent Memory Tests', () => {
       }),
     });
     const agentMemory = (await mastra.getAgent('agent').getMemory())!;
-    await expect(agentMemory.query({ threadId: '1' })).resolves.not.toThrow();
+    await expect(agentMemory.recall({ threadId: '1' })).resolves.not.toThrow();
     const agentMemory2 = (await agent.getMemory())!;
-    await expect(agentMemory2.query({ threadId: '1' })).resolves.not.toThrow();
+    await expect(agentMemory2.recall({ threadId: '1' })).resolves.not.toThrow();
   });
 
   it('should inherit storage from Mastra instance when workingMemory is enabled', async () => {
@@ -197,7 +197,7 @@ describe('Agent Memory Tests', () => {
     });
 
     // Verify first thread has messages
-    const thread1Messages = await memory.query({ threadId: thread1Id, resourceId });
+    const thread1Messages = await memory.recall({ threadId: thread1Id, resourceId });
     expect(thread1Messages.messages.length).toBeGreaterThan(0);
 
     // Now create a second thread - this should be able to access memory from thread1
@@ -286,7 +286,7 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.recall({ threadId });
       const userMessages = messages
         .filter((m: any) => m.role === 'user')
         .map((m: any) => {
@@ -318,7 +318,7 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.recall({ threadId });
       const userMessages = messages
         .filter((m: any) => m.role === 'user')
         .map((m: any) => m.content.parts?.find((p: any) => p.type === 'text')?.text || '');
@@ -351,7 +351,7 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.recall({ threadId });
 
       // Assert that the context messages are NOT saved
       const savedContextMessages = messages.filter((m: any) => {
@@ -405,7 +405,7 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.recall({ threadId });
 
       // Check that all user messages were saved
       const savedUserMessages = messages.filter((m: any) => m.role === 'user');
@@ -598,7 +598,7 @@ describe('Agent with message processors', () => {
 
     // Check that tool calls were saved to memory
     const agentMemory = (await memoryProcessorAgent.getMemory())!;
-    const { messages: messagesFromMemory } = await agentMemory.query({ threadId });
+    const { messages: messagesFromMemory } = await agentMemory.recall({ threadId });
     const toolMessages = messagesFromMemory.filter(
       m => m.role === 'tool' || (m.role === 'assistant' && typeof m.content !== 'string'),
     );
