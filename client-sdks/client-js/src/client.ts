@@ -137,7 +137,7 @@ export class MastraClient extends BaseResource {
     return new MemoryThread(this.options, threadId, agentId);
   }
 
-  public getThreadMessages(
+  public listThreadMessages(
     threadId: string,
     opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, any> } = {},
   ): Promise<GetMemoryThreadMessagesResponse> {
