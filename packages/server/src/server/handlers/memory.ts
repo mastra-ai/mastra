@@ -377,9 +377,9 @@ export async function getMessagesHandler({
       throw new HTTPException(404, { message: 'Thread not found' });
     }
 
-    const result = await memory.query({
+    const result = await memory.recall({
       threadId: threadId,
-      ...(limit && { selectBy: { last: limit } }),
+      ...(limit && { perPage: limit }),
     });
     const uiMessages = convertMessages(result.messages).to('AIV5.UI');
     return { messages: result.messages, uiMessages };
@@ -621,13 +621,19 @@ export async function searchMemoryHandler({
           : { ...config.semanticRecall, messageRange: 0 };
     }
 
-    // Single call to rememberMessages - just like the agent does
+    // Single call to recall - just like the agent does
     // The Memory class handles scope (thread vs resource) internally
-    const result = await memory.rememberMessages({
+    const threadConfig = memory.getMergedThreadConfig(config || {});
+    if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
+      return { results: [], count: 0, query: searchQuery };
+    }
+
+    const result = await memory.recall({
       threadId,
       resourceId,
-      vectorMessageSearch: searchQuery,
-      config,
+      perPage: threadConfig.lastMessages,
+      threadConfig: config,
+      vectorSearchString: threadConfig.semanticRecall && searchQuery ? searchQuery : undefined,
     });
 
     // Get all threads to build context and show which thread each message is from
@@ -647,7 +653,7 @@ export async function searchMemoryHandler({
       const thread = threadMap.get(msgThreadId);
 
       // Get thread messages for context
-      const threadMessages = (await memory.query({ threadId: msgThreadId })).messages;
+      const threadMessages = (await memory.recall({ threadId: msgThreadId })).messages;
       const messageIndex = threadMessages.findIndex(m => m.id === msg.id);
 
       const searchResult: SearchResult = {

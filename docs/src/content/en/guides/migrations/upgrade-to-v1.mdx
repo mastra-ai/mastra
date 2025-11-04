@@ -19,6 +19,57 @@ All Mastra packages have a peer dependency on `@mastra/core` so your package man
 
 ## Migrate to v1.0.0-beta
 
+### Removed: Memory.rememberMessages() and Renamed: Memory.query() to Memory.recall()
+
+**Breaking Changes:**
+
+1. `Memory.rememberMessages()` method has been removed
+2. `Memory.query()` has been renamed to `Memory.recall()`
+3. Parameter `vectorMessageSearch` is now `vectorSearchString`
+
+**Why these changes?**
+
+- "Remember" could imply persisting data, not just retrieving, which was confusing
+- `query` and `rememberMessages` performed the same function - consolidating to one method simplifies the API
+- `recall` better describes the action of retrieving messages from memory
+- `vectorSearchString` is more consistent with the rest of the codebase
+
+**Migration:**
+
+If you were using `rememberMessages()`, switch to `recall()`:
+
+```typescript
+// Before
+const { messages } = await memory.rememberMessages({
+  threadId,
+  resourceId,
+});
+
+// After
+const { messages } = await memory.recall({
+  threadId,
+  resourceId,
+});
+```
+
+If you were using `query()`, rename it to `recall()`:
+
+```typescript
+// Before
+const { messages } = await memory.query({
+  threadId,
+  vectorMessageSearch: "What did we discuss?",
+  threadConfig: { semanticRecall: true },
+});
+
+// After
+const { messages } = await memory.recall({
+  threadId,
+  vectorSearchString: "What did we discuss?",
+  threadConfig: { semanticRecall: true },
+});
+```
+
 ### Changed: Thread Title Generation Location and Default
 
 **Breaking Changes:**
@@ -187,7 +238,7 @@ The storage format (`MastraMessageV2`) and all public APIs remain unchanged.
 - `agent.speak()` → `agent.voice.speak()`
 - `agent.getSpeakers()` → `agent.voice.getSpeakers()`
 - `agent.listen` → `agent.voice.listen()`
-- `agent.fetchMemory` → `(await agent.getMemory()).query()`
+- `agent.fetchMemory` → `(await agent.getMemory()).recall()`
 - `agent.toStep` → Add agent directly to the step, workflows handle the transformation
 - `getDefaultGenerateOptions()` → `getDefaultGenerateOptionsLegacy()`
 - `getDefaultStreamOptions()` → `getDefaultStreamOptionsLegacy()`
@@ -602,14 +653,14 @@ function yourCustomFunction(input: MastraDBMessage) {}
 
 #### 2. Update Memory Method Return Types
 
-The `rememberMessages` method now returns an object wrapper for consistency between all methods:
+The `recall` method (previously `rememberMessages`) now returns an object wrapper for consistency between all methods:
 
 ```typescript
 // Before
 const messages = await memory.rememberMessages({ threadId, resourceId });
 
 // After
-const { messages } = await memory.rememberMessages({ threadId, resourceId });
+const { messages } = await memory.recall({ threadId, resourceId });
 ```
 
 #### 4. Update AI SDK Format Conversion
@@ -641,7 +692,7 @@ const messages = await memory.getMessages({ threadId, format: "v2" });
 const uiMessages = await memory.getMessages({ threadId, format: "ui" });
 
 // After
-const result = await memory.query({ threadId });
+const result = await memory.recall({ threadId });
 const messages = result.messages; // Always MastraDBMessage[]
 
 // Use conversion functions for AI SDK formats

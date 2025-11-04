@@ -687,7 +687,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       const threadId = '1';
       const resourceId = '2';
       // @ts-ignore
-      mockMemory.rememberMessages = async function rememberMessages() {
+      mockMemory.recall = async function recall() {
         const list = new MessageList({ threadId, resourceId }).add(
           [
             { role: `user`, content: `hello!`, threadId, resourceId },

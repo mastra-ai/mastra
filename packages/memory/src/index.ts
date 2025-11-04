@@ -99,15 +99,18 @@ export class Memory extends MastraMemory {
     }
   }
 
-  async query(
+  async recall(
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfig;
       vectorSearchString?: string;
     },
   ): Promise<{ messages: MastraDBMessage[] }> {
-    const { threadId, resourceId, perPage, page, orderBy, threadConfig, vectorSearchString, filter } = args;
+    const { threadId, resourceId, perPage: perPageArg, page, orderBy, threadConfig, vectorSearchString, filter } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
+
+    // Use perPage from args if provided, otherwise use threadConfig.lastMessages
+    const perPage = perPageArg !== undefined ? perPageArg : config.lastMessages;
 
     const vectorResults: {
       id: string;
@@ -116,7 +119,7 @@ export class Memory extends MastraMemory {
       vector?: number[];
     }[] = [];
 
-    this.logger.debug(`Memory query() with:`, {
+    this.logger.debug(`Memory recall() with:`, {
       threadId,
       perPage,
       page,
@@ -215,34 +218,6 @@ export class Memory extends MastraMemory {
     const messages = list.get.all.db();
 
     return { messages };
-  }
-
-  async rememberMessages(args: {
-    threadId: string;
-    resourceId?: string;
-    vectorMessageSearch?: string;
-    config?: MemoryConfig;
-  }): Promise<{ messages: MastraDBMessage[] }> {
-    const { threadId, resourceId, vectorMessageSearch, config } = args;
-
-    const threadConfig = this.getMergedThreadConfig(config || {});
-    if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, threadConfig);
-
-    if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
-      return { messages: [] };
-    }
-
-    const messagesResult = await this.query({
-      resourceId,
-      threadId,
-      perPage: threadConfig.lastMessages,
-      vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
-      threadConfig: config,
-    });
-
-    // Always return mastra-db format (V2) in object wrapper for consistency
-    this.logger.debug(`Remembered message history includes ${messagesResult.messages.length} messages.`);
-    return messagesResult;
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
