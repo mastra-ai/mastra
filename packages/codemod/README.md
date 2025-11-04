@@ -34,6 +34,7 @@ npx @mastra/codemod v1/mastra-core-imports .
 | Codemod                  | Description                                                                                                                                      |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `v1/mastra-core-imports` | Updates all imports from `@mastra/core` to use the new subpath imports. For v1, all exports except `Mastra` and `Config` have moved to subpaths. |
+| `v1/runtime-context`     | Update `RuntimeContext` to `RequestContext` and rename all instances of parameter names.                                                         |
 
 ## CLI Options
 
