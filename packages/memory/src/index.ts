@@ -13,7 +13,6 @@ import type {
   StorageListThreadsByResourceIdOutput,
   StorageListThreadsByResourceIdInput,
   StorageListMessagesInput,
-  StorageOrderBy,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
