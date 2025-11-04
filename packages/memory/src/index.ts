@@ -105,10 +105,22 @@ export class Memory extends MastraMemory {
       vectorMessageSearch?: string;
     },
   ): Promise<{ messages: MastraDBMessage[] }> {
-    const { threadId, resourceId, perPage, page, orderBy, threadConfig, vectorMessageSearch, filter } = args;
+    const {
+      threadId,
+      resourceId,
+      perPage: perPageArg,
+      page,
+      orderBy,
+      threadConfig,
+      vectorMessageSearch,
+      filter,
+    } = args;
     const vectorSearchString = vectorMessageSearch; // For backward compatibility with internal logic
     const config = this.getMergedThreadConfig(threadConfig || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
+
+    // Use perPage from args if provided, otherwise derive from threadConfig.lastMessages
+    const perPage = perPageArg !== undefined ? perPageArg : config.lastMessages;
 
     const vectorResults: {
       id: string;
