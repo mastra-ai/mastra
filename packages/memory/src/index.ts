@@ -10,9 +10,9 @@ import type {
   MessageDeleteInput,
 } from '@mastra/core/memory';
 import type {
-  StorageGetMessagesArg,
   StorageListThreadsByResourceIdOutput,
   StorageListThreadsByResourceIdInput,
+  StorageListMessagesInput,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -100,11 +100,12 @@ export class Memory extends MastraMemory {
   }
 
   async query(
-    args: StorageGetMessagesArg & {
+    args: StorageListMessagesInput & {
       threadConfig?: MemoryConfig;
+      vectorSearchString?: string;
     },
   ): Promise<{ messages: MastraDBMessage[] }> {
-    const { threadId, resourceId, selectBy, threadConfig } = args;
+    const { threadId, resourceId, perPage, page, orderBy, threadConfig, vectorSearchString, filter } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
@@ -117,7 +118,9 @@ export class Memory extends MastraMemory {
 
     this.logger.debug(`Memory query() with:`, {
       threadId,
-      selectBy,
+      perPage,
+      page,
+      orderBy,
       threadConfig,
     });
 
@@ -142,15 +145,15 @@ export class Memory extends MastraMemory {
       config.semanticRecall === true;
 
     // Guard: If resource-scoped semantic recall is enabled but no resourceId is provided, throw an error
-    if (resourceScope && !resourceId && config?.semanticRecall && selectBy?.vectorSearchString) {
+    if (resourceScope && !resourceId && config?.semanticRecall && vectorSearchString) {
       throw new Error(
         `Memory error: Resource-scoped semantic recall is enabled but no resourceId was provided. ` +
           `Either provide a resourceId or explicitly set semanticRecall.scope to 'thread'.`,
       );
     }
 
-    if (config?.semanticRecall && selectBy?.vectorSearchString && this.vector) {
-      const { embeddings, dimension } = await this.embedMessageContent(selectBy.vectorSearchString!);
+    if (config?.semanticRecall && vectorSearchString && this.vector) {
+      const { embeddings, dimension } = await this.embedMessageContent(vectorSearchString!);
       const { indexName } = await this.createEmbeddingIndex(dimension, config);
 
       await Promise.all(
@@ -180,59 +183,31 @@ export class Memory extends MastraMemory {
     }
 
     // Get raw messages from storage
-    // Use paginated method when pagination is requested
-    let rawMessages;
-    if (selectBy?.pagination) {
-      const paginatedResult = await this.storage.listMessages({
-        threadId,
-        resourceId,
-        ...selectBy,
-        ...(vectorResults?.length
-          ? {
-              include: vectorResults.map(r => ({
-                id: r.metadata?.message_id,
-                threadId: r.metadata?.thread_id,
-                withNextMessages:
-                  typeof vectorConfig.messageRange === 'number'
-                    ? vectorConfig.messageRange
-                    : vectorConfig.messageRange.after,
-                withPreviousMessages:
-                  typeof vectorConfig.messageRange === 'number'
-                    ? vectorConfig.messageRange
-                    : vectorConfig.messageRange.before,
-              })),
-            }
-          : {}),
-      });
-      rawMessages = paginatedResult.messages;
-    } else {
-      // Fall back to regular getMessages for backward compatibility
-      const result = await this.storage.getMessages({
-        threadId,
-        resourceId,
-        selectBy: {
-          ...selectBy,
-          ...(vectorResults?.length
-            ? {
-                include: vectorResults.map(r => ({
-                  id: r.metadata?.message_id,
-                  threadId: r.metadata?.thread_id,
-                  withNextMessages:
-                    typeof vectorConfig.messageRange === 'number'
-                      ? vectorConfig.messageRange
-                      : vectorConfig.messageRange.after,
-                  withPreviousMessages:
-                    typeof vectorConfig.messageRange === 'number'
-                      ? vectorConfig.messageRange
-                      : vectorConfig.messageRange.before,
-                })),
-              }
-            : {}),
-        },
-        threadConfig: config,
-      });
-      rawMessages = result.messages;
-    }
+    const paginatedResult = await this.storage.listMessages({
+      threadId,
+      resourceId,
+      perPage,
+      page,
+      orderBy,
+      filter,
+      ...(vectorResults?.length
+        ? {
+            include: vectorResults.map(r => ({
+              id: r.metadata?.message_id,
+              threadId: r.metadata?.thread_id,
+              withNextMessages:
+                typeof vectorConfig.messageRange === 'number'
+                  ? vectorConfig.messageRange
+                  : vectorConfig.messageRange.after,
+              withPreviousMessages:
+                typeof vectorConfig.messageRange === 'number'
+                  ? vectorConfig.messageRange
+                  : vectorConfig.messageRange.before,
+            })),
+          }
+        : {}),
+    });
+    const rawMessages = paginatedResult.messages;
 
     const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
 
@@ -260,10 +235,8 @@ export class Memory extends MastraMemory {
     const messagesResult = await this.query({
       resourceId,
       threadId,
-      selectBy: {
-        last: threadConfig.lastMessages,
-        vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
-      },
+      perPage: threadConfig.lastMessages,
+      vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
       threadConfig: config,
     });
 

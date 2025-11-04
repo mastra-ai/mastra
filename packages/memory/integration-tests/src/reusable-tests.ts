@@ -207,9 +207,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const { messages } = await memory.query({
           threadId,
           resourceId,
-          selectBy: {
-            vectorSearchString: content,
-          },
+          vectorSearchString: content,
           threadConfig: {
             semanticRecall: {
               topK: 2,
@@ -674,7 +672,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         // Verify message is deleted
         const remainingMessages = await memory.query({
           threadId: thread.id,
-          selectBy: { last: 10 },
+          perPage: 10,
         });
 
         expect(remainingMessages.messages).toHaveLength(2);
@@ -752,14 +750,14 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         // Verify first thread has no messages
         const thread1Messages = await memory.query({
           threadId: thread.id,
-          selectBy: { last: 10 },
+          perPage: 10,
         });
         expect(thread1Messages.messages).toHaveLength(0);
 
         // Verify second thread still has its message
         const thread2Messages = await memory.query({
           threadId: otherThread.id,
-          selectBy: { last: 10 },
+          perPage: 10,
         });
         expect(thread2Messages.messages).toHaveLength(1);
         expect(getTextContent(thread2Messages.messages[0])).toBe('Thread 2 message');

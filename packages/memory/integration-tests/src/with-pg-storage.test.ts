@@ -307,9 +307,7 @@ describe('Memory with PostgresStore Integration', () => {
       const result = await hnswMemory.query({
         threadId,
         resourceId,
-        selectBy: {
-          vectorSearchString: 'HNSW test',
-        },
+        vectorSearchString: 'HNSW test',
       });
 
       expect(result.messages).toBeDefined();
@@ -418,9 +416,7 @@ describe('Memory with PostgresStore Integration', () => {
       const result = await flatMemory.query({
         threadId,
         resourceId,
-        selectBy: {
-          vectorSearchString: 'flat scan test',
-        },
+        vectorSearchString: 'flat scan test',
       });
 
       expect(result.messages).toBeDefined();
@@ -494,7 +490,6 @@ describe('Memory with PostgresStore Integration', () => {
 
       // Query should work with new index
       const result = await memory2.query({
-        query: 'configuration',
         threadId,
         resourceId,
       });
@@ -566,7 +561,6 @@ describe('Memory with PostgresStore Integration', () => {
 
       // Query should work with preserved HNSW index
       const result = await memory2.query({
-        query: 'index',
         threadId,
         resourceId,
       });
