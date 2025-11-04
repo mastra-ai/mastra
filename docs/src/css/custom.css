@@ -1327,3 +1327,30 @@ p {
 [class*="roboto" i] {
   font-family: var(--ifm-font-family-base) !important;
 }
+
+table {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+thead tr {
+  border: none;
+}
+
+thead th {
+  border: none;
+}
+
+table tbody tr {
+  border-color: var(--border);
+  background: none;
+}
+
+table tbody tr:nth-child(even) {
+  background: none;
+}
+
+tbody td {
+  border: none;
+  background: none;
+}
