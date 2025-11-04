@@ -274,13 +274,6 @@ export abstract class MastraMemory extends MastraBase {
     return this.applyProcessors(messages, { processors: processors || this.processors, ...opts });
   }
 
-  abstract rememberMessages(args: {
-    threadId: string;
-    resourceId?: string;
-    vectorMessageSearch?: string;
-    config?: MemoryConfig;
-  }): Promise<{ messages: MastraDBMessage[] }>;
-
   estimateTokens(text: string): number {
     return Math.ceil(text.split(' ').length * 1.3);
   }
@@ -331,11 +324,14 @@ export abstract class MastraMemory extends MastraBase {
   }): Promise<{ messages: MastraDBMessage[] }>;
 
   /**
-   * Retrieves all messages for a specific thread
+   * Retrieves messages for a specific thread with optional semantic recall
    * @param threadId - The unique identifier of the thread
+   * @param resourceId - Optional resource ID for validation
+   * @param vectorSearchString - Optional search string for semantic recall
+   * @param config - Optional memory configuration
    * @returns Promise resolving to array of messages in mastra-db format
    */
-  abstract query(
+  abstract recall(
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfig;
       vectorSearchString?: string;

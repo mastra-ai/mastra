@@ -444,7 +444,7 @@ describe('Memory Handlers', () => {
 
       const saveSpy = vi.spyOn(mockMemory, 'saveMessages');
       vi.spyOn(mockMemory, 'getThreadById');
-      vi.spyOn(mockMemory, 'query');
+      vi.spyOn(mockMemory, 'recall');
 
       // Save both messages
       const saveResponse = await saveMessagesHandler({

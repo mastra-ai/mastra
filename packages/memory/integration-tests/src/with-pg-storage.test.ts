@@ -107,7 +107,7 @@ describe('Memory with PostgresStore Integration', () => {
 
       // Test 1: Query with pagination - page 0, perPage 3
       console.log('Testing pagination: page 0, perPage 3');
-      const result1 = await memory.query({
+      const result1 = await memory.recall({
         threadId,
         resourceId,
         page: 0,
@@ -124,7 +124,7 @@ describe('Memory with PostgresStore Integration', () => {
 
       // Test 2: Query with pagination - page 1, perPage 3
       console.log('Testing pagination: page 1, perPage 3');
-      const result2 = await memory.query({
+      const result2 = await memory.recall({
         threadId,
         resourceId,
         page: 1,
@@ -139,7 +139,7 @@ describe('Memory with PostgresStore Integration', () => {
 
       // Test 3: Query with pagination - page 0, perPage 1
       console.log('Testing pagination: page 0, perPage 1 (original bug report)');
-      const result3 = await memory.query({
+      const result3 = await memory.recall({
         threadId,
         resourceId,
         page: 0,
@@ -152,7 +152,7 @@ describe('Memory with PostgresStore Integration', () => {
 
       // Test 4: Query with pagination - page 9, perPage 1 (last page)
       console.log('Testing pagination: page 9, perPage 1 (last page)');
-      const result4 = await memory.query({
+      const result4 = await memory.recall({
         threadId,
         resourceId,
         page: 9,
@@ -165,7 +165,7 @@ describe('Memory with PostgresStore Integration', () => {
 
       // Test 5: Query with pagination - page 1, perPage 5 (partial last page)
       console.log('Testing pagination: page 1, perPage 5 (partial last page)');
-      const result5 = await memory.query({
+      const result5 = await memory.recall({
         threadId,
         resourceId,
         page: 1,
@@ -179,7 +179,7 @@ describe('Memory with PostgresStore Integration', () => {
 
       // Test 6: Query without pagination should still work
       console.log('Testing query without pagination (backward compatibility)');
-      const result6 = await memory.query({
+      const result6 = await memory.recall({
         threadId,
         resourceId,
         perPage: 5,
@@ -210,7 +210,7 @@ describe('Memory with PostgresStore Integration', () => {
 
       // Test: Page beyond available data
       console.log('Testing pagination beyond available data');
-      const result1 = await memory.query({
+      const result1 = await memory.recall({
         threadId,
         resourceId,
         page: 5,
@@ -221,7 +221,7 @@ describe('Memory with PostgresStore Integration', () => {
 
       // Test: perPage larger than total messages
       console.log('Testing perPage larger than total messages');
-      const result2 = await memory.query({
+      const result2 = await memory.recall({
         threadId,
         resourceId,
         page: 0,
@@ -280,7 +280,7 @@ describe('Memory with PostgresStore Integration', () => {
       });
 
       // Query to verify the index works
-      const result = await hnswMemory.query({
+      const result = await hnswMemory.recall({
         threadId,
         resourceId,
         vectorSearchString: 'HNSW test',
@@ -335,7 +335,7 @@ describe('Memory with PostgresStore Integration', () => {
       });
 
       // Query to verify the index works
-      const result = await ivfflatMemory.query({
+      const result = await ivfflatMemory.recall({
         threadId,
         resourceId,
         vectorSearchString: 'IVFFlat test',
@@ -387,7 +387,7 @@ describe('Memory with PostgresStore Integration', () => {
       });
 
       // Query to verify the index works
-      const result = await flatMemory.query({
+      const result = await flatMemory.recall({
         threadId,
         resourceId,
         vectorSearchString: 'flat scan test',
@@ -463,7 +463,7 @@ describe('Memory with PostgresStore Integration', () => {
       });
 
       // Query should work with new index
-      const result = await memory2.query({
+      const result = await memory2.recall({
         threadId,
         resourceId,
       });
@@ -534,7 +534,7 @@ describe('Memory with PostgresStore Integration', () => {
       });
 
       // Query should work with preserved HNSW index
-      const result = await memory2.query({
+      const result = await memory2.recall({
         threadId,
         resourceId,
       });

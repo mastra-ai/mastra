@@ -40,28 +40,13 @@ export class MockMemory extends MastraMemory {
     return this.storage.saveMessages({ messages: dbMessages });
   }
 
-  async rememberMessages(args: {
-    threadId: string;
-    resourceId?: string;
-    vectorMessageSearch?: string;
-    config?: MemoryConfig;
-  }): Promise<{ messages: MastraDBMessage[] }> {
-    // Query all messages from storage and return them
-    const listMessagesArgs: StorageListMessagesInput = { threadId: args.threadId };
-    if (args.resourceId !== undefined) {
-      listMessagesArgs.resourceId = args.resourceId;
-    }
-    const result = await this.storage.listMessages(listMessagesArgs);
-    return { messages: result.messages };
-  }
-
   async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     return this.storage.listThreadsByResourceId(args);
   }
 
-  async query(args: StorageListMessagesInput & { threadConfig?: MemoryConfig }): Promise<{
+  async recall(args: StorageListMessagesInput & { threadConfig?: MemoryConfig; vectorSearchString?: string }): Promise<{
     messages: MastraDBMessage[];
   }> {
     // Get raw messages from storage
