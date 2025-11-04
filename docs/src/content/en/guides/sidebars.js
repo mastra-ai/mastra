@@ -104,6 +104,11 @@ const sidebars = {
               type: "doc",
               label: "Client SDK",
             },
+            {
+              id: "migrations/upgrade-to-v1/voice",
+              type: "doc",
+              label: "Voice",
+            },
           ],
         },
         {
