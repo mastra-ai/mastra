@@ -1264,6 +1264,11 @@
       "source": "/:path(ja)?/docs/workflows/input-data-mapping",
       "destination": "/:path/docs/workflows/control-flow",
       "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/server-db/request-context",
+      "destination": "/:path/docs/server-db/runtime-context",
+      "permanent": true
     }
   ]
 }

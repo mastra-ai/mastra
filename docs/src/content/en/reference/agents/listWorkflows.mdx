@@ -19,7 +19,7 @@ await agent.listWorkflows();
   content={[
     {
       name: "options",
-      type: "{ requestContext?: RequestContext }",
+      type: "{ runtimeContext?: RuntimeContext }",
       isOptional: true,
       defaultValue: "{}",
       description: "Optional configuration object containing request context.",
@@ -44,7 +44,7 @@ await agent.listWorkflows();
 
 ```typescript copy
 await agent.listWorkflows({
-  requestContext: new RequestContext(),
+  runtimeContext: new RuntimeContext(),
 });
 ```
 
@@ -53,10 +53,10 @@ await agent.listWorkflows({
 <PropertiesTable
   content={[
     {
-      name: "requestContext",
-      type: "RequestContext",
+      name: "runtimeContext",
+      type: "RuntimeContext",
       isOptional: true,
-      defaultValue: "new RequestContext()",
+      defaultValue: "new RuntimeContext()",
       description:
         "Request Context for dependency injection and contextual information.",
     },
