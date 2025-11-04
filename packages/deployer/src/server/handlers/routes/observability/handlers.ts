@@ -72,10 +72,8 @@ export async function getAITracesPaginatedHandler(c: Context) {
 
     const result = await getOriginalAITracesPaginatedHandler({
       mastra,
-      body: {
-        pagination,
-        filters,
-      },
+      pagination,
+      filters,
     });
 
     return c.json(result);

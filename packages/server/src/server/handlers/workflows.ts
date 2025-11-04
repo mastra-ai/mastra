@@ -7,6 +7,7 @@ import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import { handleError } from './error';
+import { parsePerPage } from './utils';
 
 export interface WorkflowContext extends Context {
   workflowId?: string;
@@ -680,22 +681,27 @@ export async function resumeStreamWorkflowHandler({
 export async function listWorkflowRunsHandler({
   mastra,
   workflowId,
-  fromDate,
-  toDate,
-  perPage,
-  page,
+  fromDate: fromDateRaw,
+  toDate: toDateRaw,
+  perPage: perPageRaw,
+  page: pageRaw,
   resourceId,
 }: WorkflowContext & {
-  fromDate?: Date;
-  toDate?: Date;
-  perPage?: number | false;
-  page?: number;
+  fromDate?: string;
+  toDate?: string;
+  perPage?: string;
+  page?: string;
   resourceId?: string;
 }): Promise<WorkflowRuns> {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
     }
+
+    const fromDate = fromDateRaw ? new Date(fromDateRaw) : undefined;
+    const toDate = toDateRaw ? new Date(toDateRaw) : undefined;
+    const perPage = perPageRaw !== undefined ? parsePerPage(perPageRaw) : undefined;
+    const page = pageRaw ? Number(pageRaw) : undefined;
 
     // Validate pagination parameters
     if (perPage !== undefined && perPage !== false && (!Number.isInteger(perPage) || perPage <= 0)) {

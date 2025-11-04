@@ -8,7 +8,9 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
     res.setHeader('Content-Type', 'text/plain');
     res.setHeader('Transfer-Encoding', 'chunked');
 
-    const readableStream = result.fullStream;
+    const streamMode: 'data' | 'plain' = result instanceof ReadableStream ? 'plain' : 'data';
+
+    const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
 
     try {
@@ -17,8 +19,11 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
         if (done) break;
 
         if (value) {
-          console.log('WRITING', JSON.stringify(value));
-          res.write(`data: ${JSON.stringify(value)}\n\n`);
+          if (streamMode === 'data') {
+            res.write(`data: ${JSON.stringify(value)}\n\n`);
+          } else {
+            res.write(JSON.stringify(value) + '\x1E');
+          }
         }
       }
     } catch (error) {
@@ -28,10 +33,14 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
     }
   }
 
-  async getParams(route: ServerRoute, request: Request): Promise<Record<string, unknown>> {
+  async getParams(
+    route: ServerRoute,
+    request: Request,
+  ): Promise<{ urlParams: Record<string, string>; queryParams: Record<string, string>; body: unknown }> {
     const urlParams = request.params;
+    const queryParams = request.query;
     const body = await request.body;
-    return { ...urlParams, body };
+    return { urlParams, queryParams: queryParams as Record<string, string>, body };
   }
 
   async sendResponse(route: ServerRoute, response: Response, result: unknown): Promise<void> {
@@ -48,8 +57,27 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
     console.log('registering route', route);
     app[route.method.toLowerCase() as keyof Application](route.path, async (req: Request, res: Response) => {
       const params = await this.getParams(route, req);
+
+      if (params.queryParams) {
+        try {
+          params.queryParams = await this.parseQueryParams(route, params.queryParams as Record<string, string>);
+        } catch (error) {
+          console.error('Error parsing query params', error);
+          return res.status(500).json({ error: 'Internal server error' });
+        }
+      }
+
+      const handlerParams = {
+        ...params.urlParams,
+        ...params.queryParams,
+        body: params.body,
+        ...(typeof params.body === 'object' ? params.body : {}),
+        requestContext: res.locals.requestContext,
+        mastra: this.mastra,
+      };
+
       console.dir({ params }, { depth: null });
-      const result = await route.handler({ ...params, requestContext: res.locals.requestContext, mastra: this.mastra });
+      const result = await route.handler(handlerParams);
       console.dir({ result }, { depth: null });
       await this.sendResponse(route, res, result);
     });

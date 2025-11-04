@@ -6,7 +6,8 @@ import { handleError } from './error';
 
 interface ObservabilityContext extends Context {
   traceId?: string;
-  body?: AITracesPaginatedArg;
+  pagination?: AITracesPaginatedArg['pagination'];
+  filters?: AITracesPaginatedArg['filters'];
 }
 
 interface ScoreTracesContext extends Context {
@@ -51,18 +52,12 @@ export async function getAITraceHandler({ mastra, traceId }: ObservabilityContex
  * Get paginated AI traces with filtering and pagination
  * Returns only root spans (parent spans) for pagination, not child spans
  */
-export async function getAITracesPaginatedHandler({ mastra, body }: ObservabilityContext) {
+export async function getAITracesPaginatedHandler({ mastra, pagination, filters }: ObservabilityContext) {
   try {
     const storage = mastra.getStorage();
     if (!storage) {
       throw new HTTPException(500, { message: 'Storage is not available' });
     }
-
-    if (!body) {
-      throw new HTTPException(400, { message: 'Request body is required' });
-    }
-
-    const { filters, pagination } = body;
 
     if (pagination?.page && pagination.page < 0) {
       throw new HTTPException(400, { message: 'Page must be a non-negative integer' });
