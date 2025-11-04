@@ -209,7 +209,7 @@ function createNewImports(
 
   groupedImports.forEach((imports, key) => {
     // Extract subpath, importKind, and isDeclarationType from the composite key
-    const [subpath, importKind, isDeclarationTypeStr] = key.split('::');
+    const [subpath, importKind] = key.split('::');
 
     const newSpecifiers = imports.map(({ localName, importedName }) => {
       if (localName === importedName) {
