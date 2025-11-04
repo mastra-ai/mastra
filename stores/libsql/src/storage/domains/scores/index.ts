@@ -2,7 +2,13 @@ import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
-import { TABLE_SCORERS, ScoresStorage, safelyParseJSON } from '@mastra/core/storage';
+import {
+  TABLE_SCORERS,
+  ScoresStorage,
+  calculatePagination,
+  normalizePerPage,
+  safelyParseJSON,
+} from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsLibSQL } from '../operations';
 
@@ -23,17 +29,30 @@ export class ScoresLibSQL extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      // Fetch one extra row to detect if there are more results (only when perPage is a number)
+      const limitValue = perPageInput === false ? Number.MAX_SAFE_INTEGER : perPage + 1;
+
       const result = await this.client.execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE runId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
-        args: [runId, pagination.perPage + 1, pagination.page * pagination.perPage],
+        args: [runId, limitValue, start],
       });
+
+      const hasMore = perPageInput === false ? false : (result.rows?.length ?? 0) > perPage;
+      const scores =
+        result.rows?.slice(0, perPageInput === false ? undefined : perPage).map(row => this.transformScoreRow(row)) ??
+        [];
+
       return {
-        scores: result.rows?.slice(0, pagination.perPage).map(row => this.transformScoreRow(row)) ?? [],
+        scores,
         pagination: {
           total: result.rows?.length ?? 0,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: result.rows?.length > pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore,
         },
       };
     } catch (error) {
@@ -62,6 +81,10 @@ export class ScoresLibSQL extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const conditions: string[] = [];
       const queryParams: InValue[] = [];
 
@@ -87,18 +110,26 @@ export class ScoresLibSQL extends ScoresStorage {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
+      // Fetch one extra row to detect if there are more results (only when perPage is a number)
+      const limitValue = perPageInput === false ? Number.MAX_SAFE_INTEGER : perPage + 1;
+
       const result = await this.client.execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
-        args: [...queryParams, pagination.perPage + 1, pagination.page * pagination.perPage],
+        args: [...queryParams, limitValue, start],
       });
 
+      const hasMore = perPageInput === false ? false : (result.rows?.length ?? 0) > perPage;
+      const scores =
+        result.rows?.slice(0, perPageInput === false ? undefined : perPage).map(row => this.transformScoreRow(row)) ??
+        [];
+
       return {
-        scores: result.rows?.slice(0, pagination.perPage).map(row => this.transformScoreRow(row)) ?? [],
+        scores,
         pagination: {
           total: result.rows?.length ?? 0,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: result.rows?.length > pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore,
         },
       };
     } catch (error) {
@@ -222,17 +253,30 @@ export class ScoresLibSQL extends ScoresStorage {
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      // Fetch one extra row to detect if there are more results (only when perPage is a number)
+      const limitValue = perPageInput === false ? Number.MAX_SAFE_INTEGER : perPage + 1;
+
       const result = await this.client.execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE entityId = ? AND entityType = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
-        args: [entityId, entityType, pagination.perPage + 1, pagination.page * pagination.perPage],
+        args: [entityId, entityType, limitValue, start],
       });
+
+      const hasMore = perPageInput === false ? false : (result.rows?.length ?? 0) > perPage;
+      const scores =
+        result.rows?.slice(0, perPageInput === false ? undefined : perPage).map(row => this.transformScoreRow(row)) ??
+        [];
+
       return {
-        scores: result.rows?.slice(0, pagination.perPage).map(row => this.transformScoreRow(row)) ?? [],
+        scores,
         pagination: {
           total: result.rows?.length ?? 0,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: result.rows?.length > pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore,
         },
       };
     } catch (error) {
@@ -257,6 +301,10 @@ export class ScoresLibSQL extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const countSQLResult = await this.client.execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ?`,
         args: [traceId, spanId],
@@ -264,20 +312,25 @@ export class ScoresLibSQL extends ScoresStorage {
 
       const total = Number(countSQLResult.rows?.[0]?.count ?? 0);
 
+      // Fetch one extra row to detect if there are more results (only when perPage is a number)
+      const limitValue = perPageInput === false ? Number.MAX_SAFE_INTEGER : perPage + 1;
+
       const result = await this.client.execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
-        args: [traceId, spanId, pagination.perPage + 1, pagination.page * pagination.perPage],
+        args: [traceId, spanId, limitValue, start],
       });
 
-      const hasMore = result.rows?.length > pagination.perPage;
-      const scores = result.rows?.slice(0, pagination.perPage).map(row => this.transformScoreRow(row)) ?? [];
+      const hasMore = perPageInput === false ? false : (result.rows?.length ?? 0) > perPage;
+      const scores =
+        result.rows?.slice(0, perPageInput === false ? undefined : perPage).map(row => this.transformScoreRow(row)) ??
+        [];
 
       return {
         scores,
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
+          page,
+          perPage: perPageForResponse,
           hasMore,
         },
       };

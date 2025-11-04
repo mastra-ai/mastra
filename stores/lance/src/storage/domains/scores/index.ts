@@ -2,7 +2,7 @@ import type { Connection } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
+import { ScoresStorage, TABLE_SCORERS, calculatePagination, normalizePerPage } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import { getTableSchema, processResultWithTypeConversion } from '../utils';
 
@@ -108,10 +108,11 @@ export class StoreScoresLance extends ScoresStorage {
     source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const table = await this.client.openTable(TABLE_SCORERS);
-      // Use zero-based pagination (default page = 0)
-      const { page = 0, perPage = 10 } = pagination || {};
-      const offset = page * perPage;
 
       let query = table.query().where(`\`scorerId\` = '${scorerId}'`);
 
@@ -126,25 +127,38 @@ export class StoreScoresLance extends ScoresStorage {
         query = query.where(`\`entityType\` = '${entityType}'`);
       }
 
-      query = query.limit(perPage);
-      if (offset > 0) query.offset(offset);
-      const records = await query.toArray();
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
-      const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
-
+      // Get total count first
       let totalQuery = table.query().where(`\`scorerId\` = '${scorerId}'`);
       if (source) {
         totalQuery = totalQuery.where(`\`source\` = '${source}'`);
       }
+      if (entityId) {
+        totalQuery = totalQuery.where(`\`entityId\` = '${entityId}'`);
+      }
+      if (entityType) {
+        totalQuery = totalQuery.where(`\`entityType\` = '${entityType}'`);
+      }
       const allRecords = await totalQuery.toArray();
       const total = allRecords.length;
+
+      const end = perPageInput === false ? total : start + perPage;
+
+      // For perPage: false, don't use limit/offset, just get all records
+      if (perPageInput !== false) {
+        query = query.limit(perPage);
+        if (start > 0) query = query.offset(start);
+      }
+
+      const records = await query.toArray();
+      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
+      const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
 
       return {
         pagination: {
           page,
-          perPage,
+          perPage: perPageForResponse,
           total,
-          hasMore: offset + scores.length < total,
+          hasMore: end < total,
         },
         scores,
       };
@@ -170,24 +184,37 @@ export class StoreScoresLance extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const table = await this.client.openTable(TABLE_SCORERS);
-      const { page = 0, perPage = 10 } = pagination || {};
-      const offset = page * perPage;
-      // Query for scores with the given runId
-      const query = table.query().where(`\`runId\` = '${runId}'`).limit(perPage);
-      if (offset > 0) query.offset(offset);
-      const records = await query.toArray();
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
-      const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
+
       // Get total count for pagination
       const allRecords = await table.query().where(`\`runId\` = '${runId}'`).toArray();
       const total = allRecords.length;
+
+      const end = perPageInput === false ? total : start + perPage;
+
+      // Query for scores with the given runId
+      let query = table.query().where(`\`runId\` = '${runId}'`);
+
+      // For perPage: false, don't use limit/offset
+      if (perPageInput !== false) {
+        query = query.limit(perPage);
+        if (start > 0) query = query.offset(start);
+      }
+
+      const records = await query.toArray();
+      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
+      const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
+
       return {
         pagination: {
           page,
-          perPage,
+          perPage: perPageForResponse,
           total,
-          hasMore: offset + scores.length < total,
+          hasMore: end < total,
         },
         scores,
       };
@@ -215,30 +242,40 @@ export class StoreScoresLance extends ScoresStorage {
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const table = await this.client.openTable(TABLE_SCORERS);
-      const { page = 0, perPage = 10 } = pagination || {};
-      const offset = page * perPage;
-      // Query for scores with the given entityId and entityType
-      const query = table
-        .query()
-        .where(`\`entityId\` = '${entityId}' AND \`entityType\` = '${entityType}'`)
-        .limit(perPage);
-      if (offset > 0) query.offset(offset);
-      const records = await query.toArray();
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
-      const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
+
       // Get total count for pagination
       const allRecords = await table
         .query()
         .where(`\`entityId\` = '${entityId}' AND \`entityType\` = '${entityType}'`)
         .toArray();
       const total = allRecords.length;
+
+      const end = perPageInput === false ? total : start + perPage;
+
+      // Query for scores with the given entityId and entityType
+      let query = table.query().where(`\`entityId\` = '${entityId}' AND \`entityType\` = '${entityType}'`);
+
+      // For perPage: false, don't use limit/offset
+      if (perPageInput !== false) {
+        query = query.limit(perPage);
+        if (start > 0) query = query.offset(start);
+      }
+
+      const records = await query.toArray();
+      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
+      const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
+
       return {
         pagination: {
           page,
-          perPage,
+          perPage: perPageForResponse,
           total,
-          hasMore: offset + scores.length < total,
+          hasMore: end < total,
         },
         scores,
       };
@@ -266,27 +303,37 @@ export class StoreScoresLance extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const table = await this.client.openTable(TABLE_SCORERS);
-      const { page = 0, perPage = 10 } = pagination || {};
-      const offset = page * perPage;
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      // Query for scores with the given traceId and spanId
-      const query = table.query().where(`\`traceId\` = '${traceId}' AND \`spanId\` = '${spanId}'`).limit(perPage);
-      if (offset > 0) query.offset(offset);
-      const records = await query.toArray();
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
-      const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
+      const table = await this.client.openTable(TABLE_SCORERS);
 
       // Get total count for pagination
       const allRecords = await table.query().where(`\`traceId\` = '${traceId}' AND \`spanId\` = '${spanId}'`).toArray();
       const total = allRecords.length;
 
+      const end = perPageInput === false ? total : start + perPage;
+
+      // Query for scores with the given traceId and spanId
+      let query = table.query().where(`\`traceId\` = '${traceId}' AND \`spanId\` = '${spanId}'`);
+
+      // For perPage: false, don't use limit/offset
+      if (perPageInput !== false) {
+        query = query.limit(perPage);
+        if (start > 0) query = query.offset(start);
+      }
+
+      const records = await query.toArray();
+      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
+      const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
+
       return {
         pagination: {
           page,
-          perPage,
+          perPage: perPageForResponse,
           total,
-          hasMore: offset + scores.length < total,
+          hasMore: end < total,
         },
         scores,
       };

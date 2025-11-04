@@ -57,7 +57,7 @@ export class ScoresInMemory extends ScoresStorage {
     const { page, perPage: perPageInput } = pagination;
     const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-    const end = perPageInput === false ? scores.length : (page + 1) * perPage;
+    const end = perPageInput === false ? scores.length : start + perPage;
 
     return {
       scores: scores.slice(start, end),
@@ -82,7 +82,7 @@ export class ScoresInMemory extends ScoresStorage {
     const { page, perPage: perPageInput } = pagination;
     const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER); // false → MAX_SAFE_INTEGER
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-    const end = perPageInput === false ? scores.length : (page + 1) * perPage;
+    const end = perPageInput === false ? scores.length : start + perPage;
 
     return {
       scores: scores.slice(start, end),
@@ -113,7 +113,7 @@ export class ScoresInMemory extends ScoresStorage {
     const { page, perPage: perPageInput } = pagination;
     const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-    const end = perPageInput === false ? scores.length : (page + 1) * perPage;
+    const end = perPageInput === false ? scores.length : start + perPage;
 
     return {
       scores: scores.slice(start, end),
@@ -143,7 +143,7 @@ export class ScoresInMemory extends ScoresStorage {
     const { page, perPage: perPageInput } = pagination;
     const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-    const end = perPageInput === false ? scores.length : (page + 1) * perPage;
+    const end = perPageInput === false ? scores.length : start + perPage;
 
     return {
       scores: scores.slice(start, end),

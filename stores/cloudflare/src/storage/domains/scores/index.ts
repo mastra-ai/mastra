@@ -1,7 +1,13 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
-import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
+import {
+  ScoresStorage,
+  TABLE_SCORERS,
+  calculatePagination,
+  normalizePerPage,
+  safelyParseJSON,
+} from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import type { StoreOperationsCloudflare } from '../operations';
 
@@ -155,16 +161,19 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         return dateB - dateA;
       });
 
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const total = scores.length;
-      const start = pagination.page * pagination.perPage;
-      const end = start + pagination.perPage;
+      const end = perPageInput === false ? scores.length : start + perPage;
       const pagedScores = scores.slice(start, end);
 
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
+          page,
+          perPage: perPageForResponse,
           hasMore: end < total,
         },
         scores: pagedScores,
@@ -210,16 +219,19 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         return dateB - dateA;
       });
 
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const total = scores.length;
-      const start = pagination.page * pagination.perPage;
-      const end = start + pagination.perPage;
+      const end = perPageInput === false ? scores.length : start + perPage;
       const pagedScores = scores.slice(start, end);
 
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
+          page,
+          perPage: perPageForResponse,
           hasMore: end < total,
         },
         scores: pagedScores,
@@ -267,16 +279,19 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         return dateB - dateA;
       });
 
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const total = scores.length;
-      const start = pagination.page * pagination.perPage;
-      const end = start + pagination.perPage;
+      const end = perPageInput === false ? scores.length : start + perPage;
       const pagedScores = scores.slice(start, end);
 
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
+          page,
+          perPage: perPageForResponse,
           hasMore: end < total,
         },
         scores: pagedScores,
@@ -324,16 +339,19 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         return dateB - dateA;
       });
 
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const total = scores.length;
-      const start = pagination.page * pagination.perPage;
-      const end = start + pagination.perPage;
+      const end = perPageInput === false ? scores.length : start + perPage;
       const pagedScores = scores.slice(start, end);
 
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
+          page,
+          perPage: perPageForResponse,
           hasMore: end < total,
         },
         scores: pagedScores,
