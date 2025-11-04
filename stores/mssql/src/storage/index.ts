@@ -14,10 +14,10 @@ import type {
   WorkflowRuns,
   StoragePagination,
   StorageDomains,
-  AISpanRecord,
+  SpanRecord,
   AITraceRecord,
   AITracesPaginatedArg,
-  UpdateAISpanRecord,
+  UpdateSpanRecord,
   CreateIndexOptions,
   IndexInfo,
   StorageIndexStats,
@@ -396,7 +396,7 @@ export class MSSQLStore extends MastraStorage {
   }
 
   /**
-   * AI Tracing / Observability
+   * Tracing / Observability
    */
   private getObservabilityStore(): ObservabilityMSSQL {
     if (!this.stores.observability) {
@@ -410,44 +410,42 @@ export class MSSQLStore extends MastraStorage {
     return this.stores.observability as ObservabilityMSSQL;
   }
 
-  async createAISpan(span: AISpanRecord): Promise<void> {
-    return this.getObservabilityStore().createAISpan(span);
+  async createSpan(span: SpanRecord): Promise<void> {
+    return this.getObservabilityStore().createSpan(span);
   }
 
-  async updateAISpan({
+  async updateSpan({
     spanId,
     traceId,
     updates,
   }: {
     spanId: string;
     traceId: string;
-    updates: Partial<UpdateAISpanRecord>;
+    updates: Partial<UpdateSpanRecord>;
   }): Promise<void> {
-    return this.getObservabilityStore().updateAISpan({ spanId, traceId, updates });
+    return this.getObservabilityStore().updateSpan({ spanId, traceId, updates });
   }
 
   async getAITrace(traceId: string): Promise<AITraceRecord | null> {
     return this.getObservabilityStore().getAITrace(traceId);
   }
 
-  async getAITracesPaginated(
-    args: AITracesPaginatedArg,
-  ): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
+  async getAITracesPaginated(args: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     return this.getObservabilityStore().getAITracesPaginated(args);
   }
 
-  async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
-    return this.getObservabilityStore().batchCreateAISpans(args);
+  async batchCreateSpans(args: { records: SpanRecord[] }): Promise<void> {
+    return this.getObservabilityStore().batchCreateSpans(args);
   }
 
-  async batchUpdateAISpans(args: {
+  async batchUpdateSpans(args: {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<UpdateAISpanRecord>;
+      updates: Partial<UpdateSpanRecord>;
     }[];
   }): Promise<void> {
-    return this.getObservabilityStore().batchUpdateAISpans(args);
+    return this.getObservabilityStore().batchUpdateSpans(args);
   }
 
   async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {

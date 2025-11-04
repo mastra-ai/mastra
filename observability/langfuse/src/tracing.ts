@@ -1,5 +1,5 @@
 /**
- * Langfuse Exporter for Mastra AI Tracing
+ * Langfuse Exporter for Mastra Tracing
  *
  * This exporter sends tracing data to Langfuse for AI observability.
  * Root spans start traces in Langfuse.
@@ -12,8 +12,8 @@
  * - Adapts to v5 streaming protocol changes
  */
 
-import type { AITracingEvent, AnyExportedAISpan, ModelGenerationAttributes } from '@mastra/core/observability';
-import { AISpanType } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
@@ -134,7 +134,7 @@ export class LangfuseExporter extends BaseExporter {
     });
   }
 
-  protected async _exportEvent(event: AITracingEvent): Promise<void> {
+  protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
     if (event.exportedSpan.isEvent) {
       await this.handleEventSpan(event.exportedSpan);
       return;
@@ -158,7 +158,7 @@ export class LangfuseExporter extends BaseExporter {
     }
   }
 
-  private async handleSpanStarted(span: AnyExportedAISpan): Promise<void> {
+  private async handleSpanStarted(span: AnyExportedSpan): Promise<void> {
     if (span.isRootSpan) {
       this.initTrace(span);
     }
@@ -177,13 +177,13 @@ export class LangfuseExporter extends BaseExporter {
     const payload = this.buildSpanPayload(span, true);
 
     const langfuseSpan =
-      span.type === AISpanType.MODEL_GENERATION ? langfuseParent.generation(payload) : langfuseParent.span(payload);
+      span.type === SpanType.MODEL_GENERATION ? langfuseParent.generation(payload) : langfuseParent.span(payload);
 
     traceData.spans.set(span.id, langfuseSpan);
     traceData.activeSpans.add(span.id); // Track as active
   }
 
-  private async handleSpanUpdateOrEnd(span: AnyExportedAISpan, isEnd: boolean): Promise<void> {
+  private async handleSpanUpdateOrEnd(span: AnyExportedSpan, isEnd: boolean): Promise<void> {
     const method = isEnd ? 'handleSpanEnd' : 'handleSpanUpdate';
 
     const traceData = this.getTraceData({ span, method });
@@ -234,7 +234,7 @@ export class LangfuseExporter extends BaseExporter {
     }
   }
 
-  private async handleEventSpan(span: AnyExportedAISpan): Promise<void> {
+  private async handleEventSpan(span: AnyExportedSpan): Promise<void> {
     if (span.isRootSpan) {
       this.logger.debug('Langfuse exporter: Creating trace', {
         traceId: span.traceId,
@@ -268,7 +268,7 @@ export class LangfuseExporter extends BaseExporter {
     }
   }
 
-  private initTrace(span: AnyExportedAISpan): void {
+  private initTrace(span: AnyExportedSpan): void {
     const trace = this.client.trace(this.buildTracePayload(span));
     this.traceMap.set(span.traceId, {
       trace,
@@ -279,7 +279,7 @@ export class LangfuseExporter extends BaseExporter {
     });
   }
 
-  private getTraceData(options: { span: AnyExportedAISpan; method: string }): TraceData | undefined {
+  private getTraceData(options: { span: AnyExportedSpan; method: string }): TraceData | undefined {
     const { span, method } = options;
 
     if (this.traceMap.has(span.traceId)) {
@@ -299,7 +299,7 @@ export class LangfuseExporter extends BaseExporter {
 
   private getLangfuseParent(options: {
     traceData: TraceData;
-    span: AnyExportedAISpan;
+    span: AnyExportedSpan;
     method: string;
   }): LangfuseParent | undefined {
     const { traceData, span, method } = options;
@@ -325,7 +325,7 @@ export class LangfuseExporter extends BaseExporter {
     });
   }
 
-  private buildTracePayload(span: AnyExportedAISpan): Record<string, any> {
+  private buildTracePayload(span: AnyExportedSpan): Record<string, any> {
     const payload: Record<string, any> = {
       id: span.traceId,
       name: span.name,
@@ -404,7 +404,7 @@ export class LangfuseExporter extends BaseExporter {
     return Object.keys(normalized).length > 0 ? normalized : undefined;
   }
 
-  private buildSpanPayload(span: AnyExportedAISpan, isCreate: boolean): Record<string, any> {
+  private buildSpanPayload(span: AnyExportedSpan, isCreate: boolean): Record<string, any> {
     const payload: Record<string, any> = {};
 
     if (isCreate) {
@@ -422,7 +422,7 @@ export class LangfuseExporter extends BaseExporter {
     // Strip special fields from metadata if used in top-level keys
     const attributesToOmit: string[] = [];
 
-    if (span.type === AISpanType.MODEL_GENERATION) {
+    if (span.type === SpanType.MODEL_GENERATION) {
       const modelAttr = attributes as ModelGenerationAttributes;
 
       if (modelAttr.model !== undefined) {

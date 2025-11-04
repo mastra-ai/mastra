@@ -1,9 +1,14 @@
 /**
- * OpenTelemetry AI Tracing Exporter for Mastra
+ * OpenTelemetry Tracing Exporter for Mastra
  */
 
-import type { AITracingEvent, AnyExportedAISpan, InitExporterOptions, TracingConfig } from '@mastra/core/observability';
-import { AITracingEventType } from '@mastra/core/observability';
+import type {
+  TracingEvent,
+  AnyExportedSpan,
+  InitExporterOptions,
+  ObservabilityInstanceConfig,
+} from '@mastra/core/observability';
+import { TracingEventType } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
 import { resourceFromAttributes } from '@opentelemetry/resources';
@@ -24,7 +29,7 @@ import type { OtelExporterConfig } from './types.js';
 
 export class OtelExporter extends BaseExporter {
   private config: OtelExporterConfig;
-  private tracingConfig?: TracingConfig;
+  private tracingConfig?: ObservabilityInstanceConfig;
   private spanConverter: SpanConverter;
   private processor?: BatchSpanProcessor;
   private exporter?: SpanExporter;
@@ -147,7 +152,7 @@ export class OtelExporter extends BaseExporter {
   private async setupProcessor() {
     if (this.processor || this.isSetup) return;
 
-    // Create resource with service name from TracingConfig
+    // Create resource with service name from ObservabilityInstanceConfig
     let resource = resourceFromAttributes({
       [ATTR_SERVICE_NAME]: this.tracingConfig?.serviceName || 'mastra-service',
       [ATTR_SERVICE_VERSION]: '1.0.0',
@@ -164,7 +169,7 @@ export class OtelExporter extends BaseExporter {
       );
     }
 
-    // Store the resource in the genai span converter
+    // Store the resource in the genSpan converter
     this.spanConverter = new SpanConverter(resource);
 
     // Always use BatchSpanProcessor for production
@@ -188,10 +193,10 @@ export class OtelExporter extends BaseExporter {
     this.isSetup = true;
   }
 
-  protected async _exportEvent(event: AITracingEvent): Promise<void> {
+  protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
     // Only process SPAN_ENDED events for OTEL
     // OTEL expects complete spans with start and end times
-    if (event.type !== AITracingEventType.SPAN_ENDED) {
+    if (event.type !== TracingEventType.SPAN_ENDED) {
       return;
     }
 
@@ -199,7 +204,7 @@ export class OtelExporter extends BaseExporter {
     await this.exportSpan(span);
   }
 
-  private async exportSpan(span: AnyExportedAISpan): Promise<void> {
+  private async exportSpan(span: AnyExportedSpan): Promise<void> {
     // Ensure exporter is set up
     if (!this.isSetup) {
       await this.setup();

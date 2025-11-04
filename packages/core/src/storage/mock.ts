@@ -16,7 +16,7 @@ import { WorkflowsInMemory } from './domains/workflows';
 import type { InMemoryWorkflows } from './domains/workflows/inmemory';
 
 import type {
-  AISpanRecord,
+  SpanRecord,
   AITraceRecord,
   PaginationInfo,
   StorageColumn,
@@ -310,30 +310,30 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
-  async createAISpan(span: AISpanRecord): Promise<void> {
-    return this.stores.observability!.createAISpan(span);
+  async createSpan(span: SpanRecord): Promise<void> {
+    return this.stores.observability!.createSpan(span);
   }
 
-  async updateAISpan(params: {
+  async updateSpan(params: {
     spanId: string;
     traceId: string;
-    updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+    updates: Partial<Omit<SpanRecord, 'spanId' | 'traceId'>>;
   }): Promise<void> {
-    return this.stores.observability!.updateAISpan(params);
+    return this.stores.observability!.updateSpan(params);
   }
 
   async getAITrace(traceId: string): Promise<AITraceRecord | null> {
     return this.stores.observability!.getAITrace(traceId);
   }
 
-  async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
-    return this.stores.observability!.batchCreateAISpans(args);
+  async batchCreateSpans(args: { records: SpanRecord[] }): Promise<void> {
+    return this.stores.observability!.batchCreateSpans(args);
   }
 
-  async batchUpdateAISpans(args: {
-    records: { traceId: string; spanId: string; updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>> }[];
+  async batchUpdateSpans(args: {
+    records: { traceId: string; spanId: string; updates: Partial<Omit<SpanRecord, 'spanId' | 'traceId'>> }[];
   }): Promise<void> {
-    return this.stores.observability!.batchUpdateAISpans(args);
+    return this.stores.observability!.batchUpdateSpans(args);
   }
 
   async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {

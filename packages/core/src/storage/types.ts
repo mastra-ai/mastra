@@ -1,5 +1,5 @@
 import type { MastraDBMessage, StorageThreadType } from '../memory/types';
-import type { AISpanType } from '../observability';
+import type { SpanType } from '../observability';
 import type { WorkflowRunState } from '../workflows';
 
 export type StoragePagination = {
@@ -162,13 +162,13 @@ export type ThreadOrderBy = 'createdAt' | 'updatedAt';
 
 export type ThreadSortDirection = 'ASC' | 'DESC';
 
-export interface AISpanRecord {
+export interface SpanRecord {
   traceId: string;
   spanId: string;
   parentSpanId: string | null;
   name: string;
   scope: Record<string, any> | null;
-  spanType: AISpanType;
+  spanType: SpanType;
   attributes: Record<string, any> | null;
   metadata: Record<string, any> | null;
   links: any;
@@ -182,18 +182,18 @@ export interface AISpanRecord {
   isEvent: boolean;
 }
 
-export type CreateAISpanRecord = Omit<AISpanRecord, 'createdAt' | 'updatedAt'>;
-export type UpdateAISpanRecord = Omit<CreateAISpanRecord, 'spanId' | 'traceId'>;
+export type CreateSpanRecord = Omit<SpanRecord, 'createdAt' | 'updatedAt'>;
+export type UpdateSpanRecord = Omit<CreateSpanRecord, 'spanId' | 'traceId'>;
 
 export interface AITraceRecord {
   traceId: string;
-  spans: AISpanRecord[];
+  spans: SpanRecord[];
 }
 
 export interface AITracesPaginatedArg {
   filters?: {
     name?: string;
-    spanType?: AISpanType;
+    spanType?: SpanType;
     entityId?: string;
     entityType?: 'agent' | 'workflow';
   };

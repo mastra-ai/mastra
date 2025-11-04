@@ -1,9 +1,9 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { AI_SPAN_SCHEMA, ObservabilityStorage, TABLE_AI_SPANS } from '@mastra/core/storage';
 import type {
-  AISpanRecord,
-  CreateAISpanRecord,
-  UpdateAISpanRecord,
+  SpanRecord,
+  CreateSpanRecord,
+  UpdateSpanRecord,
   AITraceRecord,
   AITracesPaginatedArg,
   PaginationInfo,
@@ -18,7 +18,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     this.operations = operations;
   }
 
-  async createAISpan(span: CreateAISpanRecord): Promise<void> {
+  async createSpan(span: CreateSpanRecord): Promise<void> {
     try {
       // Explicitly set createdAt/updatedAt timestamps
       const now = new Date().toISOString();
@@ -48,7 +48,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
 
   async getAITrace(traceId: string): Promise<AITraceRecord | null> {
     try {
-      const spans = await this.operations.loadMany<AISpanRecord>({
+      const spans = await this.operations.loadMany<SpanRecord>({
         tableName: TABLE_AI_SPANS,
         whereClause: { sql: ' WHERE traceId = ?', args: [traceId] },
         orderBy: 'startedAt DESC',
@@ -60,7 +60,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
 
       return {
         traceId,
-        spans: spans.map(span => transformFromSqlRow<AISpanRecord>({ tableName: TABLE_AI_SPANS, sqlRow: span })),
+        spans: spans.map(span => transformFromSqlRow<SpanRecord>({ tableName: TABLE_AI_SPANS, sqlRow: span })),
       };
     } catch (error) {
       throw new MastraError(
@@ -77,14 +77,14 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     }
   }
 
-  async updateAISpan({
+  async updateSpan({
     spanId,
     traceId,
     updates,
   }: {
     spanId: string;
     traceId: string;
-    updates: Partial<UpdateAISpanRecord>;
+    updates: Partial<UpdateSpanRecord>;
   }): Promise<void> {
     try {
       await this.operations.update({
@@ -111,7 +111,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
   async getAITracesPaginated({
     filters,
     pagination,
-  }: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
+  }: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     const page = pagination?.page ?? 0;
     const perPage = pagination?.perPage ?? 10;
     const { entityId, entityType, ...actualFilters } = filters || {};
@@ -187,7 +187,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     }
 
     try {
-      const spans = await this.operations.loadMany<AISpanRecord>({
+      const spans = await this.operations.loadMany<SpanRecord>({
         tableName: TABLE_AI_SPANS,
         whereClause: {
           sql: actualWhereClause,
@@ -205,7 +205,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
           perPage,
           hasMore: spans.length === perPage,
         },
-        spans: spans.map(span => transformFromSqlRow<AISpanRecord>({ tableName: TABLE_AI_SPANS, sqlRow: span })),
+        spans: spans.map(span => transformFromSqlRow<SpanRecord>({ tableName: TABLE_AI_SPANS, sqlRow: span })),
       };
     } catch (error) {
       throw new MastraError(
@@ -219,7 +219,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     }
   }
 
-  async batchCreateAISpans(args: { records: CreateAISpanRecord[] }): Promise<void> {
+  async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
     try {
       // Use single timestamp for all records in the batch
       const now = new Date().toISOString();
@@ -243,11 +243,11 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     }
   }
 
-  async batchUpdateAISpans(args: {
+  async batchUpdateSpans(args: {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<UpdateAISpanRecord>;
+      updates: Partial<UpdateSpanRecord>;
     }[];
   }): Promise<void> {
     try {

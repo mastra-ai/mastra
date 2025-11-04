@@ -1,17 +1,15 @@
 import { RequestContext } from '@mastra/core/di';
 import { MastraError } from '@mastra/core/error';
-import { AISpanType, SamplingStrategyType, AITracingEventType } from '@mastra/core/observability';
+import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
 import type {
-  AITracingEvent,
-  AITracingExporter,
+  TracingEvent,
+  ObservabilityExporter,
   ModelGenerationAttributes,
-  AITracing,
-  ExportedAISpan,
+  ObservabilityInstance,
+  ExportedSpan,
 } from '@mastra/core/observability';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { clearAITracingRegistry } from './registry';
-import { DefaultAITracing } from './tracers';
+import { DefaultObservabilityInstance } from './instances';
 
 // Custom matchers for OpenTelemetry ID validation
 expect.extend({
@@ -73,11 +71,11 @@ const mockConsole = {
 vi.stubGlobal('console', mockConsole);
 
 // Test exporter for capturing events
-class TestExporter implements AITracingExporter {
+class TestExporter implements ObservabilityExporter {
   name = 'test-exporter';
-  events: AITracingEvent[] = [];
+  events: TracingEvent[] = [];
 
-  async exportEvent(event: AITracingEvent): Promise<void> {
+  async exportTracingEvent(event: TracingEvent): Promise<void> {
     this.events.push(event);
   }
 
@@ -90,22 +88,19 @@ class TestExporter implements AITracingExporter {
   }
 }
 
-describe('AI Tracing', () => {
+describe('Tracing', () => {
   let testExporter: TestExporter;
 
   beforeEach(() => {
     vi.resetAllMocks();
 
-    // Clear registry
-    clearAITracingRegistry();
-
     // Reset test exporter
     testExporter = new TestExporter();
   });
 
-  describe('DefaultAITracing', () => {
+  describe('DefaultObservabilityInstance', () => {
     it('should create and start spans with type safety', () => {
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -114,7 +109,7 @@ describe('AI Tracing', () => {
 
       // Agent span
       const agentSpan = tracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-123',
@@ -125,7 +120,7 @@ describe('AI Tracing', () => {
 
       expect(agentSpan.id).toBeValidSpanId();
       expect(agentSpan.name).toBe('test-agent');
-      expect(agentSpan.type).toBe(AISpanType.AGENT_RUN);
+      expect(agentSpan.type).toBe(SpanType.AGENT_RUN);
       expect(agentSpan.attributes?.agentId).toBe('agent-123');
       expect(agentSpan.startTime).toBeInstanceOf(Date);
       expect(agentSpan.endTime).toBeUndefined();
@@ -133,7 +128,7 @@ describe('AI Tracing', () => {
     });
 
     it('should create child spans with different types', () => {
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -141,13 +136,13 @@ describe('AI Tracing', () => {
       });
 
       const agentSpan = tracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         name: 'parent-agent',
         attributes: { agentId: 'agent-123' },
       });
 
       const toolSpan = agentSpan.createChildSpan({
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         name: 'child-tool',
         attributes: {
           toolId: 'tool-456',
@@ -156,13 +151,13 @@ describe('AI Tracing', () => {
       });
 
       expect(toolSpan.id).toBeValidSpanId();
-      expect(toolSpan.type).toBe(AISpanType.TOOL_CALL);
+      expect(toolSpan.type).toBe(SpanType.TOOL_CALL);
       expect(toolSpan.attributes?.toolId).toBe('tool-456');
       expect(toolSpan.traceId).toBe(agentSpan.traceId); // Child spans inherit trace ID
     });
 
     it('should correctly set parent relationships and isRootSpan property', () => {
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -171,7 +166,7 @@ describe('AI Tracing', () => {
 
       // Create root span
       const rootSpan = tracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         name: 'root-agent',
         attributes: { agentId: 'agent-123' },
       });
@@ -182,7 +177,7 @@ describe('AI Tracing', () => {
 
       // Create child span
       const childSpan = rootSpan.createChildSpan({
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         name: 'child-llm',
         attributes: {
           model: 'gpt-4',
@@ -196,7 +191,7 @@ describe('AI Tracing', () => {
 
       // Create grandchild span
       const grandchildSpan = childSpan.createChildSpan({
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         name: 'grandchild-tool',
         attributes: {
           toolId: 'calculator',
@@ -209,7 +204,7 @@ describe('AI Tracing', () => {
     });
 
     it('should maintain consistent traceId across span hierarchy', () => {
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -218,14 +213,14 @@ describe('AI Tracing', () => {
 
       // Create root span
       const rootSpan = tracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         name: 'root-agent',
         attributes: { agentId: 'agent-123' },
       });
 
       // Create child span
       const childSpan = rootSpan.createChildSpan({
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         name: 'child-llm',
         attributes: {
           model: 'gpt-4',
@@ -235,7 +230,7 @@ describe('AI Tracing', () => {
 
       // Create grandchild span
       const grandchildSpan = childSpan.createChildSpan({
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         name: 'grandchild-tool',
         attributes: {
           toolId: 'calculator',
@@ -254,7 +249,7 @@ describe('AI Tracing', () => {
     });
 
     it('should emit events throughout span lifecycle', () => {
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -262,14 +257,14 @@ describe('AI Tracing', () => {
       });
 
       const span = tracing.startSpan({
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         name: 'test-llm',
         attributes: { model: 'gpt-4', provider: 'openai' },
       });
 
       // Should emit span_started
       expect(testExporter.events).toHaveLength(1);
-      expect(testExporter.events[0].type).toBe(AITracingEventType.SPAN_STARTED);
+      expect(testExporter.events[0].type).toBe(TracingEventType.SPAN_STARTED);
       expect(testExporter.events[0].exportedSpan.id).toBe(span.id);
 
       // Update span - cast to LLM attributes type for usage field
@@ -277,7 +272,7 @@ describe('AI Tracing', () => {
 
       // Should emit span_updated
       expect(testExporter.events).toHaveLength(2);
-      expect(testExporter.events[1].type).toBe(AITracingEventType.SPAN_UPDATED);
+      expect(testExporter.events[1].type).toBe(TracingEventType.SPAN_UPDATED);
       expect((testExporter.events[1].exportedSpan.attributes as ModelGenerationAttributes).usage?.totalTokens).toBe(
         100,
       );
@@ -287,7 +282,7 @@ describe('AI Tracing', () => {
 
       // Should emit span_ended
       expect(testExporter.events).toHaveLength(3);
-      expect(testExporter.events[2].type).toBe(AITracingEventType.SPAN_ENDED);
+      expect(testExporter.events[2].type).toBe(TracingEventType.SPAN_ENDED);
       expect(testExporter.events[2].exportedSpan.endTime).toBeInstanceOf(Date);
       expect((testExporter.events[2].exportedSpan.attributes as ModelGenerationAttributes).usage?.totalTokens).toBe(
         150,
@@ -295,7 +290,7 @@ describe('AI Tracing', () => {
     });
 
     it('should handle errors with default endSpan=true', () => {
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -303,7 +298,7 @@ describe('AI Tracing', () => {
       });
 
       const span = tracing.startSpan({
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         name: 'error-tool',
         attributes: { toolId: 'failing-tool' },
       });
@@ -326,11 +321,11 @@ describe('AI Tracing', () => {
 
       // Should emit span_ended
       expect(testExporter.events).toHaveLength(2); // start + end
-      expect(testExporter.events[1].type).toBe(AITracingEventType.SPAN_ENDED);
+      expect(testExporter.events[1].type).toBe(TracingEventType.SPAN_ENDED);
     });
 
     it('should handle errors with explicit endSpan=false', () => {
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -338,7 +333,7 @@ describe('AI Tracing', () => {
       });
 
       const span = tracing.startSpan({
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         name: 'recoverable-tool',
         attributes: { toolId: 'retry-tool' },
       });
@@ -353,13 +348,13 @@ describe('AI Tracing', () => {
 
       // Should emit span_updated (not ended)
       expect(testExporter.events).toHaveLength(2); // start + update
-      expect(testExporter.events[1].type).toBe(AITracingEventType.SPAN_UPDATED);
+      expect(testExporter.events[1].type).toBe(TracingEventType.SPAN_UPDATED);
     });
   });
 
   describe('Sampling Strategies', () => {
     it('should always sample with ALWAYS strategy', () => {
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -367,7 +362,7 @@ describe('AI Tracing', () => {
       });
 
       const span = tracing.startSpan({
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         name: 'test-span',
         attributes: {},
       });
@@ -377,7 +372,7 @@ describe('AI Tracing', () => {
     });
 
     it('should never sample with NEVER strategy', () => {
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.NEVER },
@@ -385,7 +380,7 @@ describe('AI Tracing', () => {
       });
 
       const span = tracing.startSpan({
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         name: 'test-span',
         attributes: {},
       });
@@ -399,7 +394,7 @@ describe('AI Tracing', () => {
       const mockRandom = vi.spyOn(Math, 'random');
 
       // Test probability = 0.5
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.RATIO, probability: 0.5 },
@@ -409,7 +404,7 @@ describe('AI Tracing', () => {
       // First call: random = 0.3 < 0.5 -> should sample
       mockRandom.mockReturnValueOnce(0.3);
       const span1 = tracing.startSpan({
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         name: 'test-1',
         attributes: {},
       });
@@ -418,7 +413,7 @@ describe('AI Tracing', () => {
       // Second call: random = 0.8 > 0.5 -> should not sample
       mockRandom.mockReturnValueOnce(0.8);
       const span2 = tracing.startSpan({
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         name: 'test-2',
         attributes: {},
       });
@@ -432,7 +427,7 @@ describe('AI Tracing', () => {
         return false;
       };
 
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.CUSTOM, sampler: shouldSample },
@@ -440,7 +435,7 @@ describe('AI Tracing', () => {
       });
 
       const span = tracing.startSpan({
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         name: 'test-span',
       });
 
@@ -449,7 +444,7 @@ describe('AI Tracing', () => {
     });
 
     it('should handle invalid ratio probability', () => {
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.RATIO, probability: 1.5 }, // Invalid > 1
@@ -457,7 +452,7 @@ describe('AI Tracing', () => {
       });
 
       const span = tracing.startSpan({
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         name: 'test-span',
         attributes: {},
       });
@@ -467,7 +462,7 @@ describe('AI Tracing', () => {
     });
 
     it('should handle parent relationships correctly in NoOp spans', () => {
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.NEVER }, // Force NoOp spans
@@ -476,7 +471,7 @@ describe('AI Tracing', () => {
 
       // Create root NoOp span
       const rootSpan = tracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         name: 'no-op-root',
         attributes: { agentId: 'agent-123' },
       });
@@ -488,7 +483,7 @@ describe('AI Tracing', () => {
 
       // Create child NoOp span
       const childSpan = rootSpan.createChildSpan({
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         name: 'no-op-child',
         attributes: { toolId: 'tool-456' },
       });
@@ -505,13 +500,13 @@ describe('AI Tracing', () => {
 
   describe('Exporter Behavior', () => {
     it('should handle exporter errors gracefully', async () => {
-      const failingExporter: AITracingExporter = {
+      const failingExporter: ObservabilityExporter = {
         name: 'failing-exporter',
-        exportEvent: vi.fn().mockRejectedValue(new Error('Export failed')),
+        exportTracingEvent: vi.fn().mockRejectedValue(new Error('Export failed')),
         shutdown: vi.fn().mockResolvedValue(undefined),
       };
 
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -519,7 +514,7 @@ describe('AI Tracing', () => {
       });
 
       tracing.startSpan({
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         name: 'test-span',
         attributes: {},
       });
@@ -529,17 +524,17 @@ describe('AI Tracing', () => {
 
       // Should continue with other exporters despite failure
       expect(testExporter.events).toHaveLength(1);
-      expect(failingExporter.exportEvent).toHaveBeenCalled();
+      expect(failingExporter.exportTracingEvent).toHaveBeenCalled();
     });
 
     it('should shutdown all components', async () => {
       const mockExporter = {
         name: 'mock-exporter',
-        exportEvent: vi.fn(),
+        exportTracingEvent: vi.fn(),
         shutdown: vi.fn().mockResolvedValue(undefined),
       };
 
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -554,7 +549,7 @@ describe('AI Tracing', () => {
 
   describe('Type Safety', () => {
     it('should enforce correct attribute types for different span types', () => {
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -563,7 +558,7 @@ describe('AI Tracing', () => {
 
       // Agent attributes
       const agentSpan = tracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         name: 'agent-test',
         attributes: {
           agentId: 'agent-123',
@@ -576,7 +571,7 @@ describe('AI Tracing', () => {
 
       // LLM attributes
       const llmSpan = tracing.startSpan({
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         name: 'llm-test',
         attributes: {
           model: 'gpt-4',
@@ -590,7 +585,7 @@ describe('AI Tracing', () => {
 
       // Tool attributes
       const toolSpan = tracing.startSpan({
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         name: 'tool-test',
         attributes: {
           toolId: 'calculator',
@@ -603,12 +598,12 @@ describe('AI Tracing', () => {
   });
 
   describe('Event Spans', () => {
-    let aiTracing: AITracing;
+    let observability: ObservabilityInstance;
     let testExporter: TestExporter;
 
     beforeEach(() => {
       testExporter = new TestExporter();
-      aiTracing = new DefaultAITracing({
+      observability = new DefaultObservabilityInstance({
         serviceName: 'test-event-spans',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -617,8 +612,8 @@ describe('AI Tracing', () => {
     });
 
     it('should create event spans with isEvent=true and no input', () => {
-      const rootSpan = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-123',
@@ -626,7 +621,7 @@ describe('AI Tracing', () => {
       });
 
       const eventSpan = rootSpan.createEventSpan({
-        type: AISpanType.MODEL_CHUNK,
+        type: SpanType.MODEL_CHUNK,
         name: 'llm chunk: text-delta',
         output: 'Hello world',
         attributes: {
@@ -652,8 +647,8 @@ describe('AI Tracing', () => {
     });
 
     it('should emit only span_ended event on creation (no span_started)', () => {
-      const rootSpan = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-123',
@@ -664,7 +659,7 @@ describe('AI Tracing', () => {
       testExporter.events = [];
 
       const eventSpan = rootSpan.createEventSpan({
-        type: AISpanType.MODEL_CHUNK,
+        type: SpanType.MODEL_CHUNK,
         name: 'llm chunk: text-delta',
         output: 'Hello',
         attributes: {
@@ -674,15 +669,15 @@ describe('AI Tracing', () => {
 
       // Should have emitted exactly one event: span_ended
       expect(testExporter.events).toHaveLength(1);
-      expect(testExporter.events[0].type).toBe(AITracingEventType.SPAN_ENDED);
+      expect(testExporter.events[0].type).toBe(TracingEventType.SPAN_ENDED);
       expect(testExporter.events[0].exportedSpan).toStrictEqual(eventSpan.exportSpan());
 
       rootSpan.end();
     });
 
     it('should have endTime undefined for event spans', () => {
-      const rootSpan = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-123',
@@ -690,7 +685,7 @@ describe('AI Tracing', () => {
       });
 
       const eventSpan = rootSpan.createEventSpan({
-        type: AISpanType.MODEL_CHUNK,
+        type: SpanType.MODEL_CHUNK,
         name: 'llm chunk: text-delta',
         output: 'Hello',
         attributes: {
@@ -706,8 +701,8 @@ describe('AI Tracing', () => {
     });
 
     it('should never emit span_started or span_updated events for event spans', () => {
-      const rootSpan = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-123',
@@ -718,7 +713,7 @@ describe('AI Tracing', () => {
       testExporter.events = [];
 
       const eventSpan = rootSpan.createEventSpan({
-        type: AISpanType.MODEL_CHUNK,
+        type: SpanType.MODEL_CHUNK,
         name: 'llm chunk: text-delta',
         output: 'Hello',
         attributes: {
@@ -737,19 +732,19 @@ describe('AI Tracing', () => {
 
       // Should still only have the initial span_ended event
       expect(testExporter.events).toHaveLength(1);
-      expect(testExporter.events[0].type).toBe(AITracingEventType.SPAN_ENDED);
+      expect(testExporter.events[0].type).toBe(TracingEventType.SPAN_ENDED);
 
       // Event should not include any span_started or span_updated events
       const eventTypes = testExporter.events.map(e => e.type);
-      expect(eventTypes).not.toContain(AITracingEventType.SPAN_STARTED);
-      expect(eventTypes).not.toContain(AITracingEventType.SPAN_UPDATED);
+      expect(eventTypes).not.toContain(TracingEventType.SPAN_STARTED);
+      expect(eventTypes).not.toContain(TracingEventType.SPAN_UPDATED);
 
       rootSpan.end();
     });
 
     it('should support all span types as event spans', () => {
-      const rootSpan = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-123',
@@ -758,7 +753,7 @@ describe('AI Tracing', () => {
 
       // Test different span types as events
       const llmChunkEvent = rootSpan.createEventSpan({
-        type: AISpanType.MODEL_CHUNK,
+        type: SpanType.MODEL_CHUNK,
         name: 'llm chunk event',
         output: 'chunk data',
         attributes: {
@@ -767,7 +762,7 @@ describe('AI Tracing', () => {
       });
 
       const toolCallEvent = rootSpan.createEventSpan({
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         name: 'tool call event',
         output: { result: 'success' },
         attributes: {
@@ -777,7 +772,7 @@ describe('AI Tracing', () => {
       });
 
       const genericEvent = rootSpan.createEventSpan({
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         name: 'generic event',
         output: 'generic output',
         attributes: {},
@@ -789,16 +784,16 @@ describe('AI Tracing', () => {
       expect(genericEvent.isEvent).toBe(true);
 
       // All should have proper type safety
-      expect(llmChunkEvent.type).toBe(AISpanType.MODEL_CHUNK);
-      expect(toolCallEvent.type).toBe(AISpanType.TOOL_CALL);
-      expect(genericEvent.type).toBe(AISpanType.GENERIC);
+      expect(llmChunkEvent.type).toBe(SpanType.MODEL_CHUNK);
+      expect(toolCallEvent.type).toBe(SpanType.TOOL_CALL);
+      expect(genericEvent.type).toBe(SpanType.GENERIC);
 
       rootSpan.end();
     });
 
     it('should maintain proper span hierarchy with event spans', () => {
-      const rootSpan = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-123',
@@ -806,7 +801,7 @@ describe('AI Tracing', () => {
       });
 
       const llmSpan = rootSpan.createChildSpan({
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         name: 'llm generation',
         attributes: {
           model: 'gpt-4',
@@ -815,7 +810,7 @@ describe('AI Tracing', () => {
       });
 
       const eventSpan1 = llmSpan.createEventSpan({
-        type: AISpanType.MODEL_CHUNK,
+        type: SpanType.MODEL_CHUNK,
         name: 'chunk 1',
         output: 'Hello',
         attributes: {
@@ -824,7 +819,7 @@ describe('AI Tracing', () => {
       });
 
       const eventSpan2 = llmSpan.createEventSpan({
-        type: AISpanType.MODEL_CHUNK,
+        type: SpanType.MODEL_CHUNK,
         name: 'chunk 2',
         output: ' world',
         attributes: {
@@ -854,8 +849,8 @@ describe('AI Tracing', () => {
     });
 
     it('should handle metadata correctly in event spans', () => {
-      const rootSpan = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-123',
@@ -863,7 +858,7 @@ describe('AI Tracing', () => {
       });
 
       const eventSpan = rootSpan.createEventSpan({
-        type: AISpanType.MODEL_CHUNK,
+        type: SpanType.MODEL_CHUNK,
         name: 'llm chunk with metadata',
         output: 'Hello world',
         attributes: {
@@ -887,8 +882,8 @@ describe('AI Tracing', () => {
     });
 
     it('should preserve event span properties in exports', () => {
-      const rootSpan = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-123',
@@ -899,7 +894,7 @@ describe('AI Tracing', () => {
       testExporter.events = [];
 
       rootSpan.createEventSpan({
-        type: AISpanType.MODEL_CHUNK,
+        type: SpanType.MODEL_CHUNK,
         name: 'exported event span',
         output: { text: 'Hello', chunkSize: 5 },
         attributes: {
@@ -915,11 +910,11 @@ describe('AI Tracing', () => {
       // Should have exported the event span
       expect(testExporter.events).toHaveLength(1);
       const exportedEvent = testExporter.events[0];
-      const exportedSpan = exportedEvent.exportedSpan as ExportedAISpan<AISpanType.MODEL_CHUNK>;
+      const exportedSpan = exportedEvent.exportedSpan as ExportedSpan<SpanType.MODEL_CHUNK>;
 
       // Verify exported span properties
       expect(exportedSpan.isEvent).toBe(true);
-      expect(exportedSpan.type).toBe(AISpanType.MODEL_CHUNK);
+      expect(exportedSpan.type).toBe(SpanType.MODEL_CHUNK);
       expect(exportedSpan.name).toBe('exported event span');
       expect(exportedSpan.output).toEqual({ text: 'Hello', chunkSize: 5 });
       expect(exportedSpan.input).toBeUndefined();
@@ -933,8 +928,8 @@ describe('AI Tracing', () => {
     });
 
     it('should handle error scenarios gracefully for event spans', () => {
-      const rootSpan = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-123',
@@ -943,7 +938,7 @@ describe('AI Tracing', () => {
 
       // Create event span with error
       const eventSpan = rootSpan.createEventSpan({
-        type: AISpanType.MODEL_CHUNK,
+        type: SpanType.MODEL_CHUNK,
         name: 'error event span',
         output: null,
         attributes: {
@@ -977,7 +972,7 @@ describe('AI Tracing', () => {
 
   describe('External Trace and Parent Span IDs', () => {
     it('should accept external trace ID for root spans', () => {
-      const aiTracing = new DefaultAITracing({
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -986,8 +981,8 @@ describe('AI Tracing', () => {
 
       const traceId = '0123456789abcdef0123456789abcdef';
 
-      const span = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'agent with external trace',
         attributes: {
           agentId: 'agent-1',
@@ -1003,7 +998,7 @@ describe('AI Tracing', () => {
     });
 
     it('should accept external parent span ID for root spans', () => {
-      const aiTracing = new DefaultAITracing({
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -1013,8 +1008,8 @@ describe('AI Tracing', () => {
       const traceId = '0123456789abcdef0123456789abcdef';
       const parentSpanId = '0123456789abcdef';
 
-      const span = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'agent with external parent',
         attributes: {
           agentId: 'agent-1',
@@ -1030,21 +1025,21 @@ describe('AI Tracing', () => {
       span.end();
 
       // Verify it's exported correctly
-      const endEvent = testExporter.events.find(e => e.type === AITracingEventType.SPAN_ENDED);
+      const endEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_ENDED);
       expect(endEvent).toBeDefined();
       expect(endEvent?.exportedSpan.parentSpanId).toBe(parentSpanId);
     });
 
     it('should log error and generate new trace ID for invalid trace ID', () => {
-      const aiTracing = new DefaultAITracing({
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
-      const span = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'agent with invalid trace',
         attributes: {
           agentId: 'agent-1',
@@ -1063,7 +1058,7 @@ describe('AI Tracing', () => {
     });
 
     it('should log error and generate new trace ID for trace ID that is too long', () => {
-      const aiTracing = new DefaultAITracing({
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -1072,8 +1067,8 @@ describe('AI Tracing', () => {
 
       const tooLongTraceId = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0';
 
-      const span = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'agent with too long trace',
         attributes: {
           agentId: 'agent-1',
@@ -1092,7 +1087,7 @@ describe('AI Tracing', () => {
     });
 
     it('should log error and ignore invalid parent span ID', () => {
-      const aiTracing = new DefaultAITracing({
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -1101,8 +1096,8 @@ describe('AI Tracing', () => {
 
       const validTraceId = '0123456789abcdef0123456789abcdef';
 
-      const span = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'agent with invalid parent',
         attributes: {
           agentId: 'agent-1',
@@ -1124,7 +1119,7 @@ describe('AI Tracing', () => {
     });
 
     it('should log error and ignore parent span ID that is too long', () => {
-      const aiTracing = new DefaultAITracing({
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -1134,8 +1129,8 @@ describe('AI Tracing', () => {
       const validTraceId = '0123456789abcdef0123456789abcdef';
       const tooLongParentSpanId = '0123456789abcdef0123456789abcdef';
 
-      const span = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'agent with too long parent',
         attributes: {
           agentId: 'agent-1',
@@ -1157,7 +1152,7 @@ describe('AI Tracing', () => {
     });
 
     it('should accept shorter trace and span IDs', () => {
-      const aiTracing = new DefaultAITracing({
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -1167,8 +1162,8 @@ describe('AI Tracing', () => {
       const shortTraceId = 'abc123'; // 6 chars
       const shortSpanId = 'def456'; // 6 chars
 
-      const span = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'agent with short IDs',
         attributes: {
           agentId: 'agent-1',
@@ -1184,7 +1179,7 @@ describe('AI Tracing', () => {
     });
 
     it('should create child spans with inherited trace ID from external trace', () => {
-      const aiTracing = new DefaultAITracing({
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -1193,8 +1188,8 @@ describe('AI Tracing', () => {
 
       const traceId = 'fedcba9876543210fedcba9876543210';
 
-      const rootSpan = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'root with external trace',
         attributes: {
           agentId: 'agent-1',
@@ -1203,7 +1198,7 @@ describe('AI Tracing', () => {
       });
 
       const childSpan = rootSpan.createChildSpan({
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         name: 'child llm call',
         attributes: {
           model: 'gpt-4',
@@ -1219,7 +1214,7 @@ describe('AI Tracing', () => {
     });
 
     it('should allow parent span ID without trace ID (generates new trace)', () => {
-      const aiTracing = new DefaultAITracing({
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -1228,8 +1223,8 @@ describe('AI Tracing', () => {
 
       const parentSpanId = 'fedcba9876543210';
 
-      const span = aiTracing.startSpan({
-        type: AISpanType.WORKFLOW_RUN,
+      const span = observability.startSpan({
+        type: SpanType.WORKFLOW_RUN,
         name: 'workflow with external parent only',
         attributes: {
           workflowId: 'workflow-1',
@@ -1246,15 +1241,15 @@ describe('AI Tracing', () => {
     });
 
     it('should ignore external IDs when span has a parent object', () => {
-      const aiTracing = new DefaultAITracing({
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
-      const rootSpan = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'root span',
         attributes: {
           agentId: 'agent-1',
@@ -1262,7 +1257,7 @@ describe('AI Tracing', () => {
       });
 
       const childSpan = rootSpan.createChildSpan({
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         name: 'child span',
         attributes: {
           model: 'gpt-4',
@@ -1279,8 +1274,8 @@ describe('AI Tracing', () => {
   });
   describe('TraceState and metadata extraction from RequestContext', () => {
     it('should extract metadata from RequestContext using configured keys', () => {
-      // Create AI tracing with configured metadata keys
-      const aiTracing = new DefaultAITracing({
+      // Create tracing with configured metadata keys
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
         name: 'test',
         requestContextKeys: ['userId', 'environment'],
@@ -1294,8 +1289,8 @@ describe('AI Tracing', () => {
       requestContext.set('otherData', 'not-extracted');
 
       // Start span with request context
-      const span = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-1',
@@ -1313,7 +1308,7 @@ describe('AI Tracing', () => {
     });
 
     it('should merge configured keys with per-request keys', () => {
-      const aiTracing = new DefaultAITracing({
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
         name: 'test',
         requestContextKeys: ['userId', 'environment'],
@@ -1325,8 +1320,8 @@ describe('AI Tracing', () => {
       requestContext.set('environment', 'production');
       requestContext.set('experimentId', 'exp-789');
 
-      const span = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-1',
@@ -1348,7 +1343,7 @@ describe('AI Tracing', () => {
     });
 
     it('should support nested value extraction using dot notation', () => {
-      const aiTracing = new DefaultAITracing({
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
         name: 'test',
         requestContextKeys: ['user.id', 'session.data.experimentId'],
@@ -1359,8 +1354,8 @@ describe('AI Tracing', () => {
       requestContext.set('user', { id: 'user-456', name: 'Test User' });
       requestContext.set('session', { data: { experimentId: 'exp-999' } });
 
-      const span = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-1',
@@ -1378,7 +1373,7 @@ describe('AI Tracing', () => {
     });
 
     it('should inherit TraceState in child spans', () => {
-      const aiTracing = new DefaultAITracing({
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
         name: 'test',
         requestContextKeys: ['userId'],
@@ -1390,8 +1385,8 @@ describe('AI Tracing', () => {
       requestContext.set('toolData', 'tool-specific');
 
       // Create root span
-      const rootSpan = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-1',
@@ -1401,7 +1396,7 @@ describe('AI Tracing', () => {
 
       // Create child span - should inherit TraceState
       const childSpan = rootSpan.createChildSpan({
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         name: 'tool-call',
         attributes: {
           toolId: 'tool-1',
@@ -1416,7 +1411,7 @@ describe('AI Tracing', () => {
     });
 
     it('should extract metadata in child spans when requestContext is passed', () => {
-      const aiTracing = new DefaultAITracing({
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
         name: 'test',
         requestContextKeys: ['userId', 'sessionId'],
@@ -1429,8 +1424,8 @@ describe('AI Tracing', () => {
       requestContext.set('requestId', 'request-789');
 
       // Create root span with RequestContext
-      const rootSpan = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-1',
@@ -1446,7 +1441,7 @@ describe('AI Tracing', () => {
 
       // Create child span WITH requestContext passed
       const childSpan = rootSpan.createChildSpan({
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         name: 'tool-call',
         attributes: {
           toolId: 'tool-1',
@@ -1463,7 +1458,7 @@ describe('AI Tracing', () => {
 
       // Create another child WITHOUT requestContext
       const childSpanNoContext = rootSpan.createChildSpan({
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         name: 'llm-call',
         attributes: {
           model: 'gpt-4',
@@ -1478,7 +1473,7 @@ describe('AI Tracing', () => {
     });
 
     it('should prioritize explicit metadata over extracted metadata', () => {
-      const aiTracing = new DefaultAITracing({
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
         name: 'test',
         requestContextKeys: ['userId'],
@@ -1488,8 +1483,8 @@ describe('AI Tracing', () => {
       const requestContext = new RequestContext();
       requestContext.set('userId', 'user-from-context');
 
-      const span = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-1',
@@ -1511,15 +1506,15 @@ describe('AI Tracing', () => {
     });
 
     it('should handle missing RequestContext gracefully', () => {
-      const aiTracing = new DefaultAITracing({
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
         name: 'test',
         requestContextKeys: ['userId'],
         exporters: [testExporter],
       });
 
-      const span = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-1',
@@ -1534,7 +1529,7 @@ describe('AI Tracing', () => {
     });
 
     it('should skip undefined values in RequestContext', () => {
-      const aiTracing = new DefaultAITracing({
+      const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
         name: 'test',
         requestContextKeys: ['userId', 'missingKey'],
@@ -1545,8 +1540,8 @@ describe('AI Tracing', () => {
       requestContext.set('userId', 'user-123');
       // missingKey is not set
 
-      const span = aiTracing.startSpan({
-        type: AISpanType.AGENT_RUN,
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
         name: 'test-agent',
         attributes: {
           agentId: 'agent-1',

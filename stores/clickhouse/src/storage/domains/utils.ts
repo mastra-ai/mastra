@@ -17,7 +17,7 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_THREADS]: `ReplacingMergeTree()`,
   [TABLE_SCORERS]: `MergeTree()`,
   [TABLE_RESOURCES]: `ReplacingMergeTree()`,
-  // TODO: verify this is the correct engine for ai spans when implementing clickhouse storage
+  // TODO: verify this is the correct engine for Spans when implementing clickhouse storage
   [TABLE_AI_SPANS]: `ReplacingMergeTree()`,
 };
 

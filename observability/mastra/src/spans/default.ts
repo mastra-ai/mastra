@@ -1,19 +1,19 @@
 import { MastraError } from '@mastra/core/error';
 import type {
-  AISpanType,
-  AITracing,
+  SpanType,
+  ObservabilityInstance,
   EndSpanOptions,
   ErrorSpanOptions,
   UpdateSpanOptions,
   CreateSpanOptions,
 } from '@mastra/core/observability';
-import { BaseAISpan, deepClean } from './base';
+import { BaseSpan, deepClean } from './base';
 
-export class DefaultAISpan<TType extends AISpanType> extends BaseAISpan<TType> {
+export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
   public id: string;
   public traceId: string;
 
-  constructor(options: CreateSpanOptions<TType>, aiTracing: AITracing) {
+  constructor(options: CreateSpanOptions<TType>, aiTracing: ObservabilityInstance) {
     super(options, aiTracing);
     this.id = generateSpanId();
 

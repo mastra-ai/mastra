@@ -1,151 +1,134 @@
 import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
-import { AISpanType, SamplingStrategyType, AITracingEventType } from '@mastra/core/observability';
+import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
 import type {
-  AISpan,
+  Span,
   CreateSpanOptions,
   ConfigSelector,
   ConfigSelectorOptions,
-  TracingConfig,
+  ObservabilityInstanceConfig,
 } from '@mastra/core/observability';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DefaultObservability } from './default';
 import { CloudExporter, DefaultExporter } from './exporters';
-import {
-  clearAITracingRegistry,
-  getAITracing,
-  registerAITracing,
-  unregisterAITracing,
-  hasAITracing,
-  getDefaultAITracing,
-  getSelectedAITracing,
-  setupAITracingRegistry,
-  shutdownAITracingRegistry,
-  setSelector,
-} from './registry';
+import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
 import { SensitiveDataFilter } from './span_processors';
-import { BaseAITracing, DefaultAITracing } from './tracers';
 
-describe('AI Tracing Registry', () => {
+describe('Observability Registry', () => {
+  let observability = new DefaultObservability({});
+
   beforeEach(() => {
     vi.resetAllMocks();
     // Clear registry
-    clearAITracingRegistry();
+    observability.clear();
   });
 
   afterEach(async () => {
-    await shutdownAITracingRegistry();
+    await observability.shutdown();
   });
 
   describe('Registry', () => {
     it('should register and retrieve tracing instances', () => {
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'registry-test',
         name: 'registry-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      registerAITracing('my-tracing', tracing);
-
-      expect(getAITracing('my-tracing')).toBe(tracing);
+      observability.registerInstance('my-tracing', tracing);
+      expect(observability.getInstance('my-tracing')).toBe(tracing);
     });
 
     it('should clear registry', () => {
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'registry-test',
         name: 'registry-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
-      registerAITracing('test', tracing);
+      observability.registerInstance('test', tracing);
 
-      clearAITracingRegistry();
+      observability.clear();
 
-      expect(getAITracing('test')).toBeUndefined();
+      expect(observability.getInstance('test')).toBeUndefined();
     });
 
     it('should handle multiple instances', () => {
-      const tracing1 = new DefaultAITracing({
+      const tracing1 = new DefaultObservabilityInstance({
         serviceName: 'test-1',
         name: 'instance-1',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
-      const tracing2 = new DefaultAITracing({
+      const tracing2 = new DefaultObservabilityInstance({
         serviceName: 'test-2',
         name: 'instance-2',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      registerAITracing('first', tracing1);
-      registerAITracing('second', tracing2);
+      observability.registerInstance('first', tracing1);
+      observability.registerInstance('second', tracing2);
 
-      expect(getAITracing('first')).toBe(tracing1);
-      expect(getAITracing('second')).toBe(tracing2);
+      expect(observability.getInstance('first')).toBe(tracing1);
+      expect(observability.getInstance('second')).toBe(tracing2);
     });
 
     it('should prevent duplicate registration', () => {
-      const tracing1 = new DefaultAITracing({
+      const tracing1 = new DefaultObservabilityInstance({
         serviceName: 'test-1',
         name: 'instance-1',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
-      const tracing2 = new DefaultAITracing({
+      const tracing2 = new DefaultObservabilityInstance({
         serviceName: 'test-2',
         name: 'instance-2',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      registerAITracing('duplicate', tracing1);
+      observability.registerInstance('duplicate', tracing1);
 
       expect(() => {
-        registerAITracing('duplicate', tracing2);
-      }).toThrow("AI Tracing instance 'duplicate' already registered");
+        observability.registerInstance('duplicate', tracing2);
+      }).toThrow("Tracing instance 'duplicate' already registered");
     });
 
     it('should unregister instances correctly', () => {
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-1',
         name: 'instance-1',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      registerAITracing('test', tracing);
-      expect(getAITracing('test')).toBe(tracing);
+      observability.registerInstance('test', tracing);
+      expect(observability.getInstance('test')).toBe(tracing);
 
-      expect(unregisterAITracing('test')).toBe(true);
-      expect(getAITracing('test')).toBeUndefined();
+      expect(observability.unregisterInstance('test')).toBe(true);
+      expect(observability.getInstance('test')).toBeUndefined();
     });
 
     it('should return false when unregistering non-existent instance', () => {
-      expect(unregisterAITracing('non-existent')).toBe(false);
+      expect(observability.unregisterInstance('non-existent')).toBe(false);
     });
 
-    it('should handle hasAITracing checks correctly', () => {
-      const enabledTracing = new DefaultAITracing({
+    it('should handle observability.hasInstance checks correctly', () => {
+      const enabledTracing = new DefaultObservabilityInstance({
         serviceName: 'enabled-test',
         name: 'enabled-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
-      const disabledTracing = new DefaultAITracing({
-        serviceName: 'disabled-test',
-        name: 'disabled-instance',
-        sampling: { type: SamplingStrategyType.NEVER },
-      });
 
-      registerAITracing('enabled', enabledTracing);
-      registerAITracing('disabled', disabledTracing);
+      observability.registerInstance('enabled', enabledTracing);
 
-      expect(hasAITracing('enabled')).toBe(true);
-      expect(hasAITracing('disabled')).toBe(false);
-      expect(hasAITracing('non-existent')).toBe(false);
+      expect(observability.hasInstance('enabled')).toBe(true);
+      expect(observability.hasInstance('non-existent')).toBe(false);
     });
 
     it('should access tracing config through registry', () => {
-      const tracing = new DefaultAITracing({
+      const tracing = new DefaultObservabilityInstance({
         serviceName: 'config-test',
         name: 'config-instance',
         sampling: { type: SamplingStrategyType.RATIO, probability: 0.5 },
       });
 
-      registerAITracing('config-test', tracing);
-      const retrieved = getAITracing('config-test');
+      observability.registerInstance('config-test', tracing);
+      const retrieved = observability.getInstance('config-test');
 
       expect(retrieved).toBeDefined();
       expect(retrieved!.getConfig().serviceName).toBe('config-test');
@@ -153,19 +136,19 @@ describe('AI Tracing Registry', () => {
     });
 
     it('should use selector function when provided', () => {
-      const tracing1 = new DefaultAITracing({
+      const tracing1 = new DefaultObservabilityInstance({
         serviceName: 'console-tracing',
         name: 'console-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
-      const tracing2 = new DefaultAITracing({
+      const tracing2 = new DefaultObservabilityInstance({
         serviceName: 'langfuse-tracing',
         name: 'langfuse-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      registerAITracing('console', tracing1);
-      registerAITracing('langfuse', tracing2);
+      observability.registerInstance('console', tracing1);
+      observability.registerInstance('langfuse', tracing2);
 
       const selector: ConfigSelector = (context, _availableTracers) => {
         // For testing, we'll simulate routing based on request context
@@ -174,7 +157,7 @@ describe('AI Tracing Registry', () => {
         return undefined; // Fall back to default
       };
 
-      setSelector(selector);
+      observability.setConfigSelector(selector);
 
       const prodOptions: ConfigSelectorOptions = {
         requestContext: { environment: 'production' } as any,
@@ -184,94 +167,94 @@ describe('AI Tracing Registry', () => {
         requestContext: { environment: 'development' } as any,
       };
 
-      expect(getSelectedAITracing(prodOptions)).toBe(tracing2); // langfuse
-      expect(getSelectedAITracing(devOptions)).toBe(tracing1); // console
+      expect(observability.getSelectedInstance(prodOptions)).toBe(tracing2); // langfuse
+      expect(observability.getSelectedInstance(devOptions)).toBe(tracing1); // console
     });
 
     it('should fall back to default when selector returns invalid name', () => {
-      const tracing1 = new DefaultAITracing({
+      const tracing1 = new DefaultObservabilityInstance({
         serviceName: 'default-tracing',
         name: 'default-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      registerAITracing('default', tracing1, true); // Explicitly set as default
+      observability.registerInstance('default', tracing1, true); // Explicitly set as default
 
       const selector: ConfigSelector = (_context, _availableTracers) => 'non-existent';
-      setSelector(selector);
+      observability.setConfigSelector(selector);
 
       const options: ConfigSelectorOptions = {
         requestContext: undefined,
       };
 
-      expect(getSelectedAITracing(options)).toBe(tracing1); // Falls back to default
+      expect(observability.getSelectedInstance(options)).toBe(tracing1); // Falls back to default
     });
 
     it('should handle default tracing behavior', () => {
-      const tracing1 = new DefaultAITracing({
+      const tracing1 = new DefaultObservabilityInstance({
         serviceName: 'first-tracing',
         name: 'first-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
-      const tracing2 = new DefaultAITracing({
+      const tracing2 = new DefaultObservabilityInstance({
         serviceName: 'second-tracing',
         name: 'second-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
       // First registered becomes default automatically
-      registerAITracing('first', tracing1);
-      registerAITracing('second', tracing2);
+      observability.registerInstance('first', tracing1);
+      observability.registerInstance('second', tracing2);
 
-      expect(getDefaultAITracing()).toBe(tracing1);
+      expect(observability.getDefaultInstance()).toBe(tracing1);
 
       // Explicitly set second as default
-      registerAITracing('third', tracing2, true);
-      expect(getDefaultAITracing()).toBe(tracing2);
+      observability.registerInstance('third', tracing2, true);
+      expect(observability.getDefaultInstance()).toBe(tracing2);
     });
   });
 
   describe('Mastra Integration', () => {
-    it('should configure AI tracing with simple config', async () => {
-      const tracingConfig: TracingConfig = {
+    it('should configure tracing with simple config', async () => {
+      const tracingConfig: ObservabilityInstanceConfig = {
         serviceName: 'test-service',
         name: 'test-instance',
         exporters: [],
       };
 
-      setupAITracingRegistry({
+      observability = new DefaultObservability({
         configs: {
           test: tracingConfig,
         },
       });
 
-      // Verify AI tracing was registered and set as default
-      const tracing = getAITracing('test');
+      // Verify tracing was registered and set as default
+      const tracing = observability.getInstance('test');
       expect(tracing).toBeDefined();
       expect(tracing?.getConfig().serviceName).toBe('test-service');
       expect(tracing?.getConfig().sampling?.type).toBe(SamplingStrategyType.ALWAYS); // Should default to ALWAYS
-      expect(getDefaultAITracing()).toBe(tracing); // First one becomes default
+      expect(observability.getDefaultInstance()).toBe(tracing); // First one becomes default
     });
 
     it('should use ALWAYS sampling by default when sampling is not specified', async () => {
-      const tracingConfig: TracingConfig = {
+      const tracingConfig: ObservabilityInstanceConfig = {
         serviceName: 'default-sampling-test',
         name: 'default-sampling-instance',
       };
 
-      setupAITracingRegistry({
+      observability = new DefaultObservability({
         configs: {
           test: tracingConfig,
         },
       });
 
-      const tracing = getAITracing('test');
+      const tracing = observability.getInstance('test');
       expect(tracing?.getConfig().sampling?.type).toBe(SamplingStrategyType.ALWAYS);
     });
 
-    it('should configure AI tracing with custom implementation', async () => {
-      class CustomAITracing extends BaseAITracing {
-        protected createSpan<TType extends AISpanType>(options: CreateSpanOptions<TType>): AISpan<TType> {
+    it('should configure tracing with custom implementation', async () => {
+      class CustomObservabilityInstance extends BaseObservabilityInstance {
+        protected createSpan<TType extends SpanType>(options: CreateSpanOptions<TType>): Span<TType> {
           // Custom implementation - just return a mock span for testing
           return {
             id: 'custom-span-id',
@@ -292,43 +275,43 @@ describe('AI Tracing Registry', () => {
             get isRootSpan() {
               return !options.parent;
             },
-          } as AISpan<TType>;
+          } as Span<TType>;
         }
       }
 
-      const customInstance = new CustomAITracing({
+      const customInstance = new CustomObservabilityInstance({
         serviceName: 'custom-service',
         name: 'custom-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      setupAITracingRegistry({
+      observability = new DefaultObservability({
         configs: {
           custom: customInstance,
         },
       });
 
       // Verify custom implementation was registered
-      const tracing = getAITracing('custom');
+      const tracing = observability.getInstance('custom');
       expect(tracing).toBeDefined();
       expect(tracing).toBe(customInstance);
       expect(tracing?.getConfig().serviceName).toBe('custom-service');
     });
 
     it('should support mixed configuration (config + instance)', async () => {
-      class CustomAITracing extends BaseAITracing {
-        protected createSpan<TType extends AISpanType>(_options: CreateSpanOptions<TType>): AISpan<TType> {
-          return {} as AISpan<TType>; // Mock implementation
+      class CustomObservabilityInstance extends BaseObservabilityInstance {
+        protected createSpan<TType extends SpanType>(_options: CreateSpanOptions<TType>): Span<TType> {
+          return {} as Span<TType>; // Mock implementation
         }
       }
 
-      const customInstance = new CustomAITracing({
+      const customInstance = new CustomObservabilityInstance({
         serviceName: 'custom-service',
         name: 'custom-instance',
         sampling: { type: SamplingStrategyType.NEVER },
       });
 
-      setupAITracingRegistry({
+      observability = new DefaultObservability({
         configs: {
           standard: {
             serviceName: 'standard-service',
@@ -339,11 +322,11 @@ describe('AI Tracing Registry', () => {
       });
 
       // Verify both instances were registered
-      const standardTracing = getAITracing('standard');
-      const customTracing = getAITracing('custom');
+      const standardTracing = observability.getInstance('standard');
+      const customTracing = observability.getInstance('custom');
 
       expect(standardTracing).toBeDefined();
-      expect(standardTracing).toBeInstanceOf(DefaultAITracing);
+      expect(standardTracing).toBeInstanceOf(DefaultObservabilityInstance);
       expect(standardTracing?.getConfig().serviceName).toBe('standard-service');
 
       expect(customTracing).toBeDefined();
@@ -354,9 +337,9 @@ describe('AI Tracing Registry', () => {
     it('should handle registry shutdown during Mastra shutdown', async () => {
       let shutdownCalled = false;
 
-      class TestAITracing extends BaseAITracing {
-        protected createSpan<TType extends AISpanType>(_options: CreateSpanOptions<TType>): AISpan<TType> {
-          return {} as AISpan<TType>;
+      class TestInstance extends BaseObservabilityInstance {
+        protected createSpan<TType extends SpanType>(_options: CreateSpanOptions<TType>): Span<TType> {
+          return {} as Span<TType>;
         }
 
         async shutdown(): Promise<void> {
@@ -365,49 +348,26 @@ describe('AI Tracing Registry', () => {
         }
       }
 
-      const testInstance = new TestAITracing({
+      const testInstance = new TestInstance({
         serviceName: 'test-service',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      setupAITracingRegistry({
+      observability = new DefaultObservability({
         configs: {
           test: testInstance,
         },
       });
 
       // Verify instance is registered
-      expect(getAITracing('test')).toBe(testInstance);
+      expect(observability.getInstance('test')).toBe(testInstance);
 
       // Shutdown should call instance shutdown and clear registry
-      await shutdownAITracingRegistry();
+      await observability.shutdown();
 
       expect(shutdownCalled).toBe(true);
-      expect(getAITracing('test')).toBeUndefined();
-    });
-
-    it('should prevent duplicate registration across multiple Mastra instances', () => {
-      const tracingConfig: TracingConfig = {
-        serviceName: 'test-service',
-        name: 'test-instance',
-        sampling: { type: SamplingStrategyType.ALWAYS },
-      };
-
-      setupAITracingRegistry({
-        configs: {
-          duplicate: tracingConfig,
-        },
-      });
-
-      // Attempting to register the same name should throw
-      expect(() => {
-        setupAITracingRegistry({
-          configs: {
-            duplicate: tracingConfig,
-          },
-        });
-      }).toThrow("AI Tracing instance 'duplicate' already registered");
+      expect(observability.getInstance('test')).toBeUndefined();
     });
 
     it('should support selector function configuration', async () => {
@@ -417,7 +377,7 @@ describe('AI Tracing Registry', () => {
         return undefined; // Use default
       };
 
-      setupAITracingRegistry({
+      observability = new DefaultObservability({
         configs: {
           console: {
             serviceName: 'console-service',
@@ -449,16 +409,16 @@ describe('AI Tracing Registry', () => {
       };
 
       // Verify selector routes correctly
-      expect(getSelectedAITracing(agentOptions)).toBe(getAITracing('langfuse'));
-      expect(getSelectedAITracing(workflowOptions)).toBe(getAITracing('datadog'));
-      expect(getSelectedAITracing(genericOptions)).toBe(getDefaultAITracing()); // Falls back to default (console)
+      expect(observability.getSelectedInstance(agentOptions)).toBe(observability.getInstance('langfuse'));
+      expect(observability.getSelectedInstance(workflowOptions)).toBe(observability.getInstance('datadog'));
+      expect(observability.getSelectedInstance(genericOptions)).toBe(observability.getDefaultInstance()); // Falls back to default (console)
     });
   });
 
-  describe('setupAITracingRegistry edge cases', () => {
+  describe('observability = new DefaultObservability edge cases', () => {
     it('should handle config.configs being undefined', () => {
       expect(() => {
-        setupAITracingRegistry({
+        observability = new DefaultObservability({
           default: { enabled: false },
           // configs is undefined
         });
@@ -467,7 +427,7 @@ describe('AI Tracing Registry', () => {
 
     it('should handle config.configs being empty array', () => {
       expect(() => {
-        setupAITracingRegistry({
+        observability = new DefaultObservability({
           default: { enabled: false },
           configs: [] as any, // Empty array instead of object
         });
@@ -476,20 +436,20 @@ describe('AI Tracing Registry', () => {
 
     it('should handle config.configs being undefined with default enabled', () => {
       expect(() => {
-        setupAITracingRegistry({
+        observability = new DefaultObservability({
           default: { enabled: true },
           // configs is undefined - should not throw "Cannot read properties of undefined"
         });
       }).not.toThrow();
 
       // Should still create the default instance
-      const defaultInstance = getAITracing('default');
+      const defaultInstance = observability.getInstance('default');
       expect(defaultInstance).toBeDefined();
     });
 
     it('should handle empty configs object', () => {
       expect(() => {
-        setupAITracingRegistry({
+        observability = new DefaultObservability({
           default: { enabled: false },
           configs: {}, // Empty object
         });
@@ -500,7 +460,7 @@ describe('AI Tracing Registry', () => {
       const selector: ConfigSelector = () => undefined;
 
       expect(() => {
-        setupAITracingRegistry({
+        observability = new DefaultObservability({
           configSelector: selector,
           // No default, no configs
         });
@@ -509,7 +469,7 @@ describe('AI Tracing Registry', () => {
 
     it('should handle config with null configs property', () => {
       expect(() => {
-        setupAITracingRegistry({
+        observability = new DefaultObservability({
           default: { enabled: true },
           configs: null as any, // null instead of undefined or object
         });
@@ -522,7 +482,7 @@ describe('AI Tracing Registry', () => {
       // when config.configs is undefined but config.default is enabled
 
       expect(() => {
-        setupAITracingRegistry({
+        observability = new DefaultObservability({
           default: { enabled: true },
           // configs intentionally undefined to test the original bug
         });
@@ -535,7 +495,7 @@ describe('AI Tracing Registry', () => {
       // when trying to do Object.entries(config.configs)
 
       expect(() => {
-        setupAITracingRegistry({
+        observability = new DefaultObservability({
           default: { enabled: false },
           // configs intentionally undefined to test the original bug
         });
@@ -544,19 +504,19 @@ describe('AI Tracing Registry', () => {
 
     it('should handle when entire config is undefined', () => {
       expect(() => {
-        setupAITracingRegistry(undefined as any);
+        observability = new DefaultObservability(undefined as any);
       }).not.toThrow();
     });
 
     it('should handle when entire config is empty object', () => {
       expect(() => {
-        setupAITracingRegistry({});
+        observability = new DefaultObservability({});
       }).not.toThrow();
     });
 
     it('should handle when default property is undefined', () => {
       expect(() => {
-        setupAITracingRegistry({
+        observability = new DefaultObservability({
           default: undefined,
           configs: {
             test: {
@@ -570,7 +530,7 @@ describe('AI Tracing Registry', () => {
 
     it('should handle when default property is empty object', () => {
       expect(() => {
-        setupAITracingRegistry({
+        observability = new DefaultObservability({
           default: {} as any,
           configs: {
             test: {
@@ -584,7 +544,7 @@ describe('AI Tracing Registry', () => {
 
     it('should handle when default property is null', () => {
       expect(() => {
-        setupAITracingRegistry({
+        observability = new DefaultObservability({
           default: null as any,
           configs: {
             test: {
@@ -598,7 +558,7 @@ describe('AI Tracing Registry', () => {
 
     it('should handle when default.enabled is undefined', () => {
       expect(() => {
-        setupAITracingRegistry({
+        observability = new DefaultObservability({
           default: { enabled: undefined } as any,
           configs: {
             test: {
@@ -612,7 +572,7 @@ describe('AI Tracing Registry', () => {
 
     it('should handle completely minimal config', () => {
       expect(() => {
-        setupAITracingRegistry({
+        observability = new DefaultObservability({
           default: undefined,
           configs: undefined,
           configSelector: undefined,
@@ -632,33 +592,34 @@ describe('AI Tracing Registry', () => {
     });
 
     it('should create default config when enabled', async () => {
-      setupAITracingRegistry({
+      observability = new DefaultObservability({
         default: { enabled: true },
         configs: {},
       });
 
-      const defaultInstance = getAITracing('default');
+      const defaultInstance = observability.getInstance('default');
       expect(defaultInstance).toBeDefined();
       expect(defaultInstance?.getConfig().serviceName).toBe('mastra');
       expect(defaultInstance?.getConfig().sampling.type).toBe(SamplingStrategyType.ALWAYS);
 
       // Verify it's set as the default
-      expect(getDefaultAITracing()).toBe(defaultInstance);
+      expect(observability.getDefaultInstance()).toBe(defaultInstance);
 
       // Verify exporters
       const exporters = defaultInstance?.getExporters();
       expect(exporters).toHaveLength(2);
+      console.log(exporters);
       expect(exporters?.[0]).toBeInstanceOf(DefaultExporter);
       expect(exporters?.[1]).toBeInstanceOf(CloudExporter);
 
       // Verify processors
-      const processors = defaultInstance?.getProcessors();
+      const processors = defaultInstance?.getSpanOutputProcessors();
       expect(processors).toHaveLength(1);
       expect(processors?.[0]).toBeInstanceOf(SensitiveDataFilter);
     });
 
     it('should not create default config when disabled', async () => {
-      setupAITracingRegistry({
+      observability = new DefaultObservability({
         default: { enabled: false },
         configs: {
           custom: {
@@ -668,16 +629,16 @@ describe('AI Tracing Registry', () => {
         },
       });
 
-      const defaultInstance = getAITracing('default');
+      const defaultInstance = observability.getInstance('default');
       expect(defaultInstance).toBeUndefined();
 
       // Custom config should be the default
-      const customInstance = getAITracing('custom');
-      expect(getDefaultAITracing()).toBe(customInstance);
+      const customInstance = observability.getInstance('custom');
+      expect(observability.getDefaultInstance()).toBe(customInstance);
     });
 
     it('should not create default config when default property is not provided', async () => {
-      setupAITracingRegistry({
+      observability = new DefaultObservability({
         configs: {
           custom: {
             serviceName: 'custom-service',
@@ -686,13 +647,13 @@ describe('AI Tracing Registry', () => {
         },
       });
 
-      const defaultInstance = getAITracing('default');
+      const defaultInstance = observability.getInstance('default');
       expect(defaultInstance).toBeUndefined();
     });
 
     it('should throw error when custom config named "default" conflicts with default config', () => {
       expect(() => {
-        setupAITracingRegistry({
+        observability = new DefaultObservability({
           default: { enabled: true },
           configs: {
             default: {
@@ -705,7 +666,7 @@ describe('AI Tracing Registry', () => {
     });
 
     it('should allow custom config named "default" when default config is disabled', async () => {
-      setupAITracingRegistry({
+      observability = new DefaultObservability({
         default: { enabled: false },
         configs: {
           default: {
@@ -715,13 +676,13 @@ describe('AI Tracing Registry', () => {
         },
       });
 
-      const defaultInstance = getAITracing('default');
+      const defaultInstance = observability.getInstance('default');
       expect(defaultInstance).toBeDefined();
       expect(defaultInstance?.getConfig().serviceName).toBe('my-custom-default');
     });
 
     it('should work with both default and custom configs', async () => {
-      setupAITracingRegistry({
+      observability = new DefaultObservability({
         default: { enabled: true },
         configs: {
           custom1: {
@@ -736,19 +697,19 @@ describe('AI Tracing Registry', () => {
       });
 
       // Default config should exist
-      const defaultInstance = getAITracing('default');
+      const defaultInstance = observability.getInstance('default');
       expect(defaultInstance).toBeDefined();
       expect(defaultInstance?.getConfig().serviceName).toBe('mastra');
 
       // Default should be the default instance
-      expect(getDefaultAITracing()).toBe(defaultInstance);
+      expect(observability.getDefaultInstance()).toBe(defaultInstance);
 
       // Custom configs should also exist
-      const custom1 = getAITracing('custom1');
+      const custom1 = observability.getInstance('custom1');
       expect(custom1).toBeDefined();
       expect(custom1?.getConfig().serviceName).toBe('custom-service-1');
 
-      const custom2 = getAITracing('custom2');
+      const custom2 = observability.getInstance('custom2');
       expect(custom2).toBeDefined();
       expect(custom2?.getConfig().serviceName).toBe('custom-service-2');
     });
@@ -759,7 +720,7 @@ describe('AI Tracing Registry', () => {
         return 'custom';
       };
 
-      setupAITracingRegistry({
+      observability = new DefaultObservability({
         default: { enabled: true },
         configs: {
           custom: {
@@ -779,10 +740,10 @@ describe('AI Tracing Registry', () => {
       };
 
       // Should route to default config
-      expect(getSelectedAITracing(defaultOptions)).toBe(getAITracing('default'));
+      expect(observability.getSelectedInstance(defaultOptions)).toBe(observability.getInstance('default'));
 
       // Should route to custom config
-      expect(getSelectedAITracing(customOptions)).toBe(getAITracing('custom'));
+      expect(observability.getSelectedInstance(customOptions)).toBe(observability.getInstance('custom'));
     });
 
     it('should handle CloudExporter gracefully when token is missing', async () => {
@@ -803,7 +764,7 @@ describe('AI Tracing Registry', () => {
       // Verify warning message was logged with new exporter name
       expect(infoSpy).toHaveBeenCalledWith(
         expect.stringContaining(
-          'mastra-cloud-ai-tracing-exporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set',
+          'mastra-cloud-observability-exporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set',
         ),
       );
       expect(infoSpy).toHaveBeenCalledWith(
@@ -812,12 +773,12 @@ describe('AI Tracing Registry', () => {
 
       // Verify exporter is disabled but doesn't throw
       const event = {
-        type: AITracingEventType.SPAN_ENDED,
+        type: TracingEventType.SPAN_ENDED,
         span: {
           id: 'test-span',
           traceId: 'test-trace',
           name: 'test',
-          type: AISpanType.GENERIC,
+          type: SpanType.GENERIC,
           startTime: new Date(),
           endTime: new Date(),
         } as any,
@@ -827,7 +788,7 @@ describe('AI Tracing Registry', () => {
       };
 
       // Should not throw when exporting
-      await expect(exporter.exportEvent(event)).resolves.not.toThrow();
+      await expect(exporter.exportTracingEvent(event)).resolves.not.toThrow();
 
       // Restore mocks
       infoSpy.mockRestore();
