@@ -3,12 +3,12 @@ import { join } from 'path';
 import { config } from 'dotenv';
 import { logger } from '../../utils/logger';
 
-interface PlaygroundOptions {
+interface StudioOptions {
   env?: string;
   port?: string;
 }
 
-export async function playground(options: PlaygroundOptions = {}) {
+export async function studio(options: StudioOptions = {}) {
   // Load environment variables from .env files
   config({ path: [options.env || '.env.production', '.env'] });
 
@@ -25,7 +25,7 @@ export async function playground(options: PlaygroundOptions = {}) {
     });
 
     server.on('spawn', () => {
-      logger.info(`Mastra playground running on http://localhost:${port}`);
+      logger.info(`Mastra Studio running on http://localhost:${port}`);
     });
 
     server.on('exit', code => {
@@ -51,7 +51,7 @@ export async function playground(options: PlaygroundOptions = {}) {
       process.exit(0);
     });
   } catch (error: any) {
-    logger.error(`Failed to start Mastra server: ${error.message}`);
+    logger.error(`Failed to start Mastra Studio: ${error.message}`);
     process.exit(1);
   }
 }

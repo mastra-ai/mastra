@@ -15,7 +15,7 @@ import { listScorers } from './commands/actions/list-scorers';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
-import { playground } from './commands/playground/playground';
+import { studio } from './commands/studio';
 import { parseComponents, parseLlmProvider, parseMcp } from './commands/utils';
 
 const mastraPkg = pkgJson as PackageJson;
@@ -131,11 +131,11 @@ program
   .action(startProject);
 
 program
-  .command('playground')
-  .description('Start the Mastra playground')
-  .option('-p, --port <port>', 'Port to run the playground on (default: 3000)')
-  .option('-e, --env <env>', 'Custom env file to include in the playground')
-  .action(playground);
+  .command('studio')
+  .description('Start the Mastra studio')
+  .option('-p, --port <port>', 'Port to run the studio on (default: 3000)')
+  .option('-e, --env <env>', 'Custom env file to include in the studio')
+  .action(studio);
 
 const scorersCommand = program.command('scorers').description('Manage scorers for evaluating AI outputs');
 
