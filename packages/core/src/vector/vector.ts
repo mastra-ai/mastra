@@ -20,6 +20,14 @@ export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
   id: string;
 
   constructor({ id }: { id: string }) {
+    if (!id || typeof id !== 'string' || id.trim() === '') {
+      throw new MastraError({
+        id: 'VECTOR_INVALID_ID',
+        text: 'Vector id must be provided and cannot be empty',
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+      });
+    }
     super({ name: 'MastraVector', component: 'VECTOR' });
     this.id = id;
   }

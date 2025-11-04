@@ -119,6 +119,9 @@ export abstract class MastraStorage extends MastraBase {
   stores?: StorageDomains;
 
   constructor({ id, name }: { id: string; name: string }) {
+    if (!id || typeof id !== 'string' || id.trim() === '') {
+      throw new Error(`${name}: id must be provided and cannot be empty.`);
+    }
     super({
       component: 'STORAGE',
       name,

@@ -565,6 +565,7 @@ describe('Working Memory Tests', () => {
       beforeEach(async () => {
         const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
         storage = new LibSQLStore({
+          id: 'test-storage',
           url: `file:${dbPath}`,
         });
         vector = new LibSQLVector({
