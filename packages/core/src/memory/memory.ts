@@ -7,7 +7,7 @@ import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
 import type {
   MastraStorage,
-  StorageGetMessagesArg,
+  StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
 } from '../storage';
@@ -336,8 +336,9 @@ export abstract class MastraMemory extends MastraBase {
    * @returns Promise resolving to array of messages in mastra-db format
    */
   abstract query(
-    args: StorageGetMessagesArg & {
+    args: StorageListMessagesInput & {
       threadConfig?: MemoryConfig;
+      vectorSearchString?: string;
     },
   ): Promise<{ messages: MastraDBMessage[] }>;
 

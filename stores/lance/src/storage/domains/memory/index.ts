@@ -7,13 +7,11 @@ import {
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
-  resolveMessageLimit,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
 } from '@mastra/core/storage';
 import type {
-  StorageGetMessagesArg,
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
@@ -192,83 +190,6 @@ export class StoreMemoryLance extends MemoryStorage {
             })()
           : message.content,
     };
-  }
-
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    threadConfig,
-  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      if (threadConfig) {
-        throw new Error('ThreadConfig is not supported by LanceDB storage');
-      }
-      const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
-      const table = await this.client.openTable(TABLE_MESSAGES);
-
-      let allRecords: any[] = [];
-
-      // Handle selectBy.include for cross-thread context retrieval
-      if (selectBy?.include && selectBy.include.length > 0) {
-        // Get all unique thread IDs from include items
-        const threadIds = [...new Set(selectBy.include.map(item => item.threadId))];
-
-        // Fetch all messages from all relevant threads
-        for (const threadId of threadIds) {
-          const threadQuery = table.query().where(`thread_id = '${threadId}'`);
-          let threadRecords = await threadQuery.toArray();
-          allRecords.push(...threadRecords);
-        }
-      } else {
-        // Regular single-thread query
-        let query = table.query().where(`\`thread_id\` = '${threadId}'`);
-        allRecords = await query.toArray();
-      }
-
-      // Sort the records chronologically
-      allRecords.sort((a, b) => {
-        const dateA = new Date(a.createdAt).getTime();
-        const dateB = new Date(b.createdAt).getTime();
-        return dateA - dateB; // Ascending order
-      });
-
-      // Process the include.withPreviousMessages and include.withNextMessages if specified
-      if (selectBy?.include && selectBy.include.length > 0) {
-        allRecords = this.processMessagesWithContext(allRecords, selectBy.include);
-      }
-
-      // If we're fetching the last N messages, take only the last N after sorting
-      if (limit !== Number.MAX_SAFE_INTEGER) {
-        allRecords = allRecords.slice(-limit);
-      }
-
-      const messages = processResultWithTypeConversion(
-        allRecords,
-        await getTableSchema({ tableName: TABLE_MESSAGES, client: this.client }),
-      );
-
-      const list = new MessageList({ threadId, resourceId }).add(
-        messages.map(this.normalizeMessage) as (MastraMessageV1 | MastraDBMessage)[],
-        'memory',
-      );
-      return { messages: list.get.all.db() };
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: 'LANCE_STORE_GET_MESSAGES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            threadId,
-            resourceId: resourceId ?? '',
-          },
-        },
-        error,
-      );
-    }
   }
 
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {

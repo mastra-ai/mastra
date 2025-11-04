@@ -2,7 +2,6 @@ import type { MastraMessageContentV2 } from '../../../agent';
 import { MastraBase } from '../../../base';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import type {
-  StorageGetMessagesArg,
   StorageResourceType,
   ThreadOrderBy,
   ThreadSortDirection,
@@ -36,8 +35,6 @@ export abstract class MemoryStorage extends MastraBase {
   }): Promise<StorageThreadType>;
 
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
-
-  abstract getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }>;
 
   abstract listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
 

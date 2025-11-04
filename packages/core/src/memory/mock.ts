@@ -3,7 +3,6 @@ import { MastraMemory } from '../memory';
 import type { StorageThreadType, MastraDBMessage, MemoryConfig, MessageDeleteInput } from '../memory';
 import { InMemoryStore } from '../storage';
 import type {
-  StorageGetMessagesArg,
   StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
@@ -23,10 +22,6 @@ export class MockMemory extends MastraMemory {
 
   async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
     return this.storage.saveThread({ thread });
-  }
-
-  async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.storage.getMessages(args);
   }
 
   async saveMessages({
@@ -56,7 +51,7 @@ export class MockMemory extends MastraMemory {
     if (args.resourceId !== undefined) {
       getMessagesArgs.resourceId = args.resourceId;
     }
-    const result = await this.storage.getMessages(getMessagesArgs);
+    const result = await this.storage.listMessages(getMessagesArgs);
     return { messages: result.messages };
   }
 
@@ -66,14 +61,17 @@ export class MockMemory extends MastraMemory {
     return this.storage.listThreadsByResourceId(args);
   }
 
-  async query(args: StorageGetMessagesArg & { threadConfig?: MemoryConfig }): Promise<{
+  async query(args: StorageListMessagesInput & { threadConfig?: MemoryConfig }): Promise<{
     messages: MastraDBMessage[];
   }> {
     // Get raw messages from storage
-    const result = await this.storage.getMessages({
+    const result = await this.storage.listMessages({
       threadId: args.threadId,
       resourceId: args.resourceId,
-      selectBy: args.selectBy,
+      perPage: args.perPage,
+      page: args.page,
+      orderBy: args.orderBy,
+      filter: args.filter,
     });
 
     return result;

@@ -130,24 +130,6 @@ export type StorageListThreadsByResourceIdOutput = PaginationInfo & {
   threads: StorageThreadType[];
 };
 
-export type StorageGetMessagesArg = {
-  threadId: string;
-  resourceId?: string;
-  selectBy?: {
-    vectorSearchString?: string;
-    last?: number | false;
-    include?: {
-      id: string;
-      threadId?: string;
-      withPreviousMessages?: number;
-      withNextMessages?: number;
-    }[];
-    pagination?: PaginationArgs;
-  };
-  threadConfig?: MemoryConfig;
-  format?: MastraMessageFormat;
-};
-
 export type StorageResourceType = {
   id: string;
   workingMemory?: string;

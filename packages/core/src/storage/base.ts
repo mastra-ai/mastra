@@ -21,7 +21,6 @@ import type { ScoresStorage, StoreOperations, WorkflowsStorage, MemoryStorage, O
 import type {
   PaginationInfo,
   StorageColumn,
-  StorageGetMessagesArg,
   StorageResourceType,
   StoragePagination,
   WorkflowRun,
@@ -99,18 +98,6 @@ export function calculatePagination(
   };
 }
 
-export function resolveMessageLimit({
-  last,
-  defaultLimit,
-}: {
-  last: number | false | undefined;
-  defaultLimit: number;
-}): number {
-  // TODO: Figure out consistent default limit for all stores as some stores use 40 and some use no limit (Number.MAX_SAFE_INTEGER)
-  if (typeof last === 'number') return Math.max(0, last);
-  if (last === false) return 0;
-  return defaultLimit;
-}
 export abstract class MastraStorage extends MastraBase {
   protected hasInitialized: null | Promise<boolean> = null;
   protected shouldCacheInit = true;
@@ -152,23 +139,6 @@ export abstract class MastraStorage extends MastraBase {
 
   protected serializeDate(date: Date | string | undefined): string | undefined {
     return serializeDate(date);
-  }
-
-  /**
-   * Resolves limit for how many messages to fetch
-   *
-   * @param last The number of messages to fetch
-   * @param defaultLimit The default limit to use if last is not provided
-   * @returns The resolved limit
-   */
-  protected resolveMessageLimit({
-    last,
-    defaultLimit,
-  }: {
-    last: number | false | undefined;
-    defaultLimit: number;
-  }): number {
-    return resolveMessageLimit({ last, defaultLimit });
   }
 
   protected getSqlType(type: StorageColumn['type']): string {
@@ -275,8 +245,6 @@ export abstract class MastraStorage extends MastraBase {
         `To use per-resource working memory, switch to one of these supported storage adapters.`,
     );
   }
-
-  abstract getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }>;
 
   abstract saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }>;
 

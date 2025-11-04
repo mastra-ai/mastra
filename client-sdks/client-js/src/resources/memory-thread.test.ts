@@ -111,7 +111,7 @@ describe('MemoryThread', () => {
     });
   });
 
-  describe('getMessages', () => {
+  describe('listMessages', () => {
     it('should retrieve thread messages', async () => {
       const mockMessages = {
         messages: [
@@ -126,7 +126,7 @@ describe('MemoryThread', () => {
 
       mockFetchResponse(mockMessages);
 
-      const result = await thread.getMessages();
+      const result = await thread.listMessages();
 
       expect(global.fetch).toHaveBeenCalledWith(
         `http://localhost:4111/api/memory/threads/${threadId}/messages?agentId=${agentId}`,
@@ -147,7 +147,7 @@ describe('MemoryThread', () => {
 
       mockFetchResponse(mockMessages);
 
-      const result = await thread.getMessages({ limit: 5 });
+      const result = await thread.listMessages({ perPage: 5 });
 
       expect(global.fetch).toHaveBeenCalledWith(
         `http://localhost:4111/api/memory/threads/${threadId}/messages?agentId=${agentId}&limit=5`,

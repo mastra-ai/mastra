@@ -4308,7 +4308,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(caught).toBe(true);
 
         // After interruption, check what was saved
-        const result = await mockMemory.getMessages({
+        const result = await mockMemory.listMessages({
           threadId: 'thread-partial-rescue-generate',
           resourceId: 'resource-partial-rescue-generate',
         });
@@ -4376,7 +4376,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }
 
         expect(saveCallCount).toBeGreaterThan(1);
-        const result = await mockMemory.getMessages({
+        const result = await mockMemory.listMessages({
           threadId: 'thread-echo-generate',
           resourceId: 'resource-echo-generate',
         });

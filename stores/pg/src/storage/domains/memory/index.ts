@@ -6,13 +6,11 @@ import {
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
-  resolveMessageLimit,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
 } from '@mastra/core/storage';
 import type {
-  StorageGetMessagesArg,
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
@@ -337,14 +335,13 @@ export class MemoryPG extends MemoryStorage {
 
   private async _getIncludedMessages({
     threadId,
-    selectBy,
+    include,
   }: {
     threadId: string;
-    selectBy: StorageGetMessagesArg['selectBy'];
+    include: StorageListMessagesInput['include'];
   }) {
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
-    const include = selectBy?.include;
     if (!include) return null;
 
     const unionQueries: string[] = [];
@@ -422,90 +419,6 @@ export class MemoryPG extends MemoryStorage {
       resourceId: normalized.resourceId,
       ...(normalized.type && normalized.type !== 'v2' ? { type: normalized.type } : {}),
     } satisfies MastraDBMessage;
-  }
-
-  /**
-   * @deprecated use listMessages instead
-   */
-  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    const { threadId, resourceId, selectBy } = args;
-    const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
-    const orderByStatement = `ORDER BY "createdAt" DESC`;
-    const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      let rows: any[] = [];
-      const include = selectBy?.include || [];
-
-      if (include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
-        if (includeMessages) {
-          rows.push(...includeMessages);
-        }
-      }
-
-      const excludeIds = rows.map(m => m.id);
-      const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
-      let paramIdx = 1;
-      const queryParams: any[] = [threadId];
-      let query = `${selectStatement} FROM ${tableName} WHERE thread_id = $${paramIdx++}`;
-
-      if (resourceId) {
-        query += ` AND "resourceId" = $${paramIdx++}`;
-        queryParams.push(resourceId);
-      }
-
-      if (excludeIds.length) {
-        const excludeIdsParam = excludeIds.map(() => `$${paramIdx++}`).join(', ');
-        query += ` AND id NOT IN (${excludeIdsParam})`;
-        queryParams.push(...excludeIds);
-      }
-
-      query += ` ${orderByStatement} LIMIT $${paramIdx}`;
-      queryParams.push(limit);
-      const remainingRows = await this.client.manyOrNone(query, queryParams);
-      rows.push(...remainingRows);
-
-      const fetchedMessages = (rows || []).map((row: MessageRowFromDB) => {
-        const message = this.normalizeMessageRow(row);
-        if (typeof message.content === 'string') {
-          try {
-            message.content = JSON.parse(message.content);
-          } catch {
-            /* ignore */
-          }
-        }
-        if (message.type === 'v2') delete message.type;
-        return message as MastraMessageV1;
-      });
-
-      // Sort all messages by creation date
-      const sortedMessages = fetchedMessages.sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-      );
-
-      const list = new MessageList();
-      list.add(sortedMessages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
-      return { messages: list.get.all.db() };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_MESSAGES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            threadId,
-            resourceId: resourceId ?? '',
-          },
-        },
-        error,
-      );
-      this.logger?.error?.(mastraError.toString());
-      this.logger?.trackException(mastraError);
-      return { messages: [] };
-    }
   }
 
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
@@ -631,8 +544,7 @@ export class MemoryPG extends MemoryStorage {
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const selectBy = { include };
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
+        const includeMessages = await this._getIncludedMessages({ threadId, include });
         if (includeMessages) {
           // Deduplicate: only add messages that aren't already in the paginated results
           for (const includeMsg of includeMessages) {

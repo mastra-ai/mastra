@@ -63,23 +63,6 @@ export class MemoryThread extends BaseResource {
   }
 
   /**
-   * Retrieves messages associated with the thread (always returns mastra-db format)
-   * @param params - Optional parameters including limit for number of messages to retrieve and request context
-   * @returns Promise containing thread messages in mastra-db format
-   */
-  getMessages(
-    params?: GetMemoryThreadMessagesParams & { requestContext?: RequestContext | Record<string, any> },
-  ): Promise<GetMemoryThreadMessagesResponse> {
-    const query = new URLSearchParams({
-      agentId: this.agentId,
-      ...(params?.limit ? { limit: params.limit.toString() } : {}),
-    });
-    return this.request(
-      `/api/memory/threads/${this.threadId}/messages?${query.toString()}${requestContextQueryString(params?.requestContext, '&')}`,
-    );
-  }
-
-  /**
    * Retrieves paginated messages associated with the thread with filtering and ordering options
    * @param params - Pagination parameters including page, perPage, orderBy, filter, include options, and request context
    * @returns Promise containing paginated thread messages with pagination metadata (total, page, perPage, hasMore)
@@ -101,7 +84,7 @@ export class MemoryThread extends BaseResource {
 
     const query = new URLSearchParams(queryParams);
     return this.request(
-      `/api/memory/threads/${this.threadId}/messages/paginated?${query.toString()}${requestContextQueryString(requestContext, '&')}`,
+      `/api/memory/threads/${this.threadId}/messages?${query.toString()}${requestContextQueryString(requestContext, '&')}`,
     );
   }
 
