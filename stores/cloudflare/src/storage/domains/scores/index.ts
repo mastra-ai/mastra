@@ -357,7 +357,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         scores: pagedScores,
       };
     } catch (error) {
-      throw new MastraError(
+      const mastraError = new MastraError(
         {
           id: 'CLOUDFLARE_STORAGE_SCORES_GET_SCORES_BY_SPAN_FAILED',
           domain: ErrorDomain.STORAGE,
@@ -366,6 +366,9 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         },
         error,
       );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
+      return { pagination: { total: 0, page: 0, perPage: 100, hasMore: false }, scores: [] };
     }
   }
 }

@@ -55,7 +55,7 @@ export class Workflow extends BaseResource {
     if (params?.perPage !== null && params?.perPage !== undefined) {
       if (params.perPage === false) {
         searchParams.set('perPage', 'false');
-      } else if (!isNaN(Number(params.perPage))) {
+      } else if (typeof params.perPage === 'number' && params.perPage > 0 && Number.isInteger(params.perPage)) {
         searchParams.set('perPage', String(params.perPage));
       }
     }

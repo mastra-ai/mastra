@@ -171,7 +171,7 @@ export class ScoresStorageD1 extends ScoresStorage {
           pagination: {
             total: 0,
             page,
-            perPage: perPageInput,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
@@ -245,7 +245,7 @@ export class ScoresStorageD1 extends ScoresStorage {
           pagination: {
             total: 0,
             page,
-            perPage: perPageInput,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
@@ -319,7 +319,7 @@ export class ScoresStorageD1 extends ScoresStorage {
           pagination: {
             total: 0,
             page,
-            perPage: perPageInput,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
@@ -394,15 +394,15 @@ export class ScoresStorageD1 extends ScoresStorage {
           pagination: {
             total: 0,
             page,
-            perPage: perPageInput,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
 
-      // Fetch one extra row to detect if there are more results (only when perPage is a number)
-      const limitValue = perPageInput === false ? total : perPage + 1;
+      const end = perPageInput === false ? total : start + perPage;
+      const limitValue = perPageInput === false ? total : perPage;
 
       // Get paginated results
       const selectQuery = createSqlBuilder()
@@ -416,17 +416,14 @@ export class ScoresStorageD1 extends ScoresStorage {
 
       const { sql, params } = selectQuery.build();
       const results = await this.operations.executeQuery({ sql, params });
-      const rows = Array.isArray(results) ? results : [];
-
-      const hasMore = perPageInput === false ? false : rows.length > perPage;
-      const scores = rows.slice(0, perPageInput === false ? undefined : perPage).map(transformScoreRow);
+      const scores = Array.isArray(results) ? results.map(transformScoreRow) : [];
 
       return {
         pagination: {
           total,
           page,
           perPage: perPageForResponse,
-          hasMore,
+          hasMore: end < total,
         },
         scores,
       };

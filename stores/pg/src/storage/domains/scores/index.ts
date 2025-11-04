@@ -110,19 +110,20 @@ export class ScoresPG extends ScoresStorage {
         queryParams,
       );
       const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       if (total?.count === '0' || !total?.count) {
         return {
           pagination: {
             total: 0,
             page,
-            perPage: perPageInput,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
-      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
-      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? Number(total?.count) : perPage;
       const end = perPageInput === false ? Number(total?.count) : start + perPage;
       const result = await this.client.manyOrNone<ScoreRowData>(

@@ -328,20 +328,20 @@ export class ScoresMSSQL extends ScoresStorage {
 
       const total = totalResult.recordset[0]?.count || 0;
       const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       if (total === 0) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
-
-      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
-      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
@@ -398,20 +398,20 @@ export class ScoresMSSQL extends ScoresStorage {
       const total = totalResult.recordset[0]?.count || 0;
       const { page, perPage: perPageInput } = pagination;
 
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       if (total === 0) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
-
-      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
-      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 

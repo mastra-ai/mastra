@@ -360,18 +360,15 @@ export class ScoresLibSQL extends ScoresStorage {
 
       const total = Number(countSQLResult.rows?.[0]?.count ?? 0);
 
-      // Fetch one extra row to detect if there are more results (only when perPage is a number)
-      const limitValue = perPageInput === false ? Number.MAX_SAFE_INTEGER : perPage + 1;
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.client.execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [traceId, spanId, limitValue, start],
       });
 
-      const hasMore = perPageInput === false ? false : (result.rows?.length ?? 0) > perPage;
-      const scores =
-        result.rows?.slice(0, perPageInput === false ? undefined : perPage).map(row => this.transformScoreRow(row)) ??
-        [];
+      const scores = result.rows?.map(row => this.transformScoreRow(row)) ?? [];
 
       return {
         scores,
@@ -379,7 +376,7 @@ export class ScoresLibSQL extends ScoresStorage {
           total,
           page,
           perPage: perPageForResponse,
-          hasMore,
+          hasMore: end < total,
         },
       };
     } catch (error) {
