@@ -1,0 +1,139 @@
+#### Tool execute signature
+
+**Breaking Change:**
+
+The tool `execute` function signature has been updated to use separate `input` and `context` parameters instead of a single destructured object.
+
+```typescript
+// Before
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async ({ context }) => {
+    return getWeather(context.location);
+  },
+});
+
+// After
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async (inputData) => {
+    return getWeather(inputData.location);
+  },
+});
+```
+
+**Accessing execution context:**
+
+Context properties like `mastra`, `requestContext`, `agent`, `workflow`, and `mcp` are now passed as the second parameter:
+
+```typescript
+// Before
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async ({ context, requestContext, mastra }) => {
+    const userTier = requestContext.get("userTier");
+    const location = context.location;
+    return getWeather(location, userTier);
+  },
+});
+
+// After
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async (inputData, context) => {
+    const userTier = context?.requestContext?.get("userTier");
+    return getWeather(inputData.location, userTier);
+  },
+});
+```
+
+**Agent-specific context:**
+
+Agent-specific properties like `toolCallId`, `messages`, `suspend`, and `resumeData` are nested under `context.agent`:
+
+```typescript
+// After
+export const suspendableTool = createTool({
+  id: "suspendable-tool",
+  suspendSchema: z.object({
+    message: z.string(),
+  }),
+  resumeSchema: z.object({
+    approval: z.boolean(),
+  }),
+  execute: async (inputData, context) => {
+    if (!context?.agent?.resumeData) {
+      return await context?.agent?.suspend({
+        message: "Waiting for approval",
+      });
+    }
+
+    if (context.agent.resumeData.approval) {
+      return { success: true };
+    }
+  },
+});
+```
+
+**Workflow-specific context:**
+
+Workflow-specific properties like `workflowId`, `runId`, `state`, and `setState` are nested under `context.workflow`:
+
+```typescript
+// After
+export const workflowTool = createTool({
+  id: "workflow-tool",
+  execute: async (inputData, context) => {
+    const currentState = context?.workflow?.state;
+    context?.workflow?.setState({ step: "completed" });
+    return { result: "done" };
+  },
+});
+```
+
+**MCP tools:**
+
+MCP-specific properties `elicitation` and `extra` are nested under `context.mcp`:
+
+```typescript
+export const accountBalance = createTool({
+  id: "account-balance",
+  description: "Fetches the current account balance for a given account",
+  inputSchema: z.object({
+    accountId: z.string(),
+  }),
+  outputSchema: z.object({
+    balance: z.number(),
+  }),
+  execute: async (inputData, context) => {
+    if (context?.mcp) {
+      await checkAuth(context.mcp.extra.authInfo);
+
+      const result = await context.mcp.elicitation.sendRequest({
+        message: `Is it ok to fetch the account balance for account ${inputData.accountId}?`,
+        requestedSchema: {
+          type: "object",
+          properties: {
+            confirm: { type: "boolean" },
+          },
+          required: ["confirm"],
+        },
+      });
+
+      if (result.action === "accept") {
+        return {
+          balance: getAccountBalance(inputData.accountId),
+        };
+      }
+    }
+  },
+});
+```
+
+### Removed: MCP Classes
+
+`@mastra/mcp` - `0.14.0`
+
+- Removed `MastraMCPClient` class. Use [`MCPClient`](/reference/tools/mcp-client) class instead.
+- Removed `MCPConfigurationOptions` type. Use [`MCPClientOptions`](/reference/tools/mcp-client#mcpclientoptions) type instead. The API is identical.
+- Removed `MCPConfiguration` class. Use [`MCPClient`](/reference/tools/mcp-client) class instead.
