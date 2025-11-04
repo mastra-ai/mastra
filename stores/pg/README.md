@@ -115,26 +115,32 @@ const store = new PostgresStore({
 
 // Create a thread
 await store.saveThread({
-  id: 'thread-123',
-  resourceId: 'resource-456',
-  title: 'My Thread',
-  metadata: { key: 'value' },
+  thread: {
+    id: 'thread-123',
+    resourceId: 'resource-456',
+    title: 'My Thread',
+    metadata: { key: 'value' },
+    createdAt: new Date(),
+  },
 });
 
 // Add messages to thread
-await store.saveMessages([
-  {
-    id: 'msg-789',
-    threadId: 'thread-123',
-    role: 'user',
-    type: 'text',
-    content: [{ type: 'text', text: 'Hello' }],
-  },
-]);
+await store.saveMessages({
+  messages: [
+    {
+      id: 'msg-789',
+      threadId: 'thread-123',
+      role: 'user',
+      content: { content: 'Hello' },
+      resourceId: 'resource-456',
+      createdAt: new Date(),
+    },
+  ],
+});
 
 // Query threads and messages
-const savedThread = await store.getThread('thread-123');
-const messages = await store.getMessages('thread-123');
+const savedThread = await store.getThreadById({ threadId: 'thread-123' });
+const messages = await store.listMessages({ threadId: 'thread-123' });
 ```
 
 ## Configuration
@@ -329,12 +335,55 @@ The system automatically detects configuration changes and only rebuilds indexes
 
 ## Storage Methods
 
-- `saveThread(thread)`: Create or update a thread
-- `getThread(threadId)`: Get a thread by ID
-- `deleteThread(threadId)`: Delete a thread and its messages
-- `saveMessages(messages)`: Save multiple messages in a transaction
-- `getMessages(threadId)`: Get all messages for a thread
+### Thread Operations
+
+- `saveThread({ thread })`: Create or update a thread
+- `getThreadById({ threadId })`: Get a thread by ID
+- `updateThread({ id, title, metadata })`: Update thread title and/or metadata
+- `deleteThread({ threadId })`: Delete a thread and its messages
+- `listThreadsByResourceId({ resourceId, offset, limit, orderBy? })`: List paginated threads for a resource
+
+### Message Operations
+
+- `saveMessages({ messages })`: Save multiple messages in a transaction
+- `listMessages({ threadId, resourceId?, perPage?, page?, orderBy?, filter? })`: Get messages for a thread with pagination
+- `listMessagesById({ messageIds })`: Get specific messages by their IDs
+- `updateMessages({ messages })`: Update existing messages
 - `deleteMessages(messageIds)`: Delete specific messages
+
+### Resource Operations
+
+- `getResourceById({ resourceId })`: Get a resource by ID
+- `saveResource({ resource })`: Create or save a resource
+- `updateResource({ resourceId, workingMemory })`: Update resource working memory
+
+### Workflow Operations
+
+- `persistWorkflowSnapshot({ workflowName, runId, snapshot })`: Save workflow state
+- `loadWorkflowSnapshot({ workflowName, runId })`: Load workflow state
+- `listWorkflowRuns({ workflowName, pagination })`: List workflow runs with pagination
+- `getWorkflowRunById({ workflowName, runId })`: Get a specific workflow run
+- `updateWorkflowState({ workflowName, runId, state })`: Update workflow state
+- `updateWorkflowResults({ workflowName, runId, results })`: Update workflow results
+
+### AI Observability Operations
+
+- `createAISpan(span)`: Create a single AI span
+- `batchCreateAISpans({ records })`: Create multiple AI spans
+- `updateAISpan({ traceId, spanId, updates })`: Update an AI span
+- `batchUpdateAISpans({ updates })`: Update multiple AI spans
+- `getAITrace(traceId)`: Get an AI trace by ID
+- `getAITracesPaginated({ ...filters, pagination })`: Get paginated AI traces with filtering
+- `batchDeleteAITraces({ traceIds })`: Delete multiple AI traces
+
+### Evaluation/Scoring Operations
+
+- `getScoreById({ id })`: Get a score by ID
+- `saveScore(score)`: Save an evaluation score
+- `listScoresByScorerId({ scorerId, pagination })`: List scores by scorer with pagination
+- `listScoresByRunId({ runId, pagination })`: List scores by run with pagination
+- `listScoresByEntityId({ entityId, entityType, pagination })`: List scores by entity with pagination
+- `listScoresBySpan({ traceId, spanId, pagination })`: List scores by span with pagination
 
 ## Index Management
 
