@@ -1,4 +1,5 @@
-import type { ScoreRowData, ScoringSource } from '../../../scores/types';
+import type { ScoreRowData, ScoringSource } from '../../../evals/types';
+import { calculatePagination, normalizePerPage } from '../../base';
 import type { PaginationInfo, StoragePagination } from '../../types';
 import { ScoresStorage } from './base';
 
@@ -22,7 +23,7 @@ export class ScoresInMemory extends ScoresStorage {
     return { score: newScore };
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     pagination,
     entityId,
@@ -53,18 +54,23 @@ export class ScoresInMemory extends ScoresStorage {
       return baseFilter;
     });
 
+    const { page, perPage: perPageInput } = pagination;
+    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? scores.length : start + perPage;
+
     return {
-      scores: scores.slice(pagination.page * pagination.perPage, (pagination.page + 1) * pagination.perPage),
+      scores: scores.slice(start, end),
       pagination: {
         total: scores.length,
-        page: pagination.page,
-        perPage: pagination.perPage,
-        hasMore: scores.length > (pagination.page + 1) * pagination.perPage,
+        page: page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : scores.length > end,
       },
     };
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -72,18 +78,24 @@ export class ScoresInMemory extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     const scores = Array.from(this.scores.values()).filter(score => score.runId === runId);
+
+    const { page, perPage: perPageInput } = pagination;
+    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER); // false → MAX_SAFE_INTEGER
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? scores.length : start + perPage;
+
     return {
-      scores: scores.slice(pagination.page * pagination.perPage, (pagination.page + 1) * pagination.perPage),
+      scores: scores.slice(start, end),
       pagination: {
         total: scores.length,
-        page: pagination.page,
-        perPage: pagination.perPage,
-        hasMore: scores.length > (pagination.page + 1) * pagination.perPage,
+        page: page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : scores.length > end,
       },
     };
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -98,18 +110,23 @@ export class ScoresInMemory extends ScoresStorage {
       return baseFilter;
     });
 
+    const { page, perPage: perPageInput } = pagination;
+    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? scores.length : start + perPage;
+
     return {
-      scores: scores.slice(pagination.page * pagination.perPage, (pagination.page + 1) * pagination.perPage),
+      scores: scores.slice(start, end),
       pagination: {
         total: scores.length,
-        page: pagination.page,
-        perPage: pagination.perPage,
-        hasMore: scores.length > (pagination.page + 1) * pagination.perPage,
+        page: page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : scores.length > end,
       },
     };
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,
@@ -122,13 +139,19 @@ export class ScoresInMemory extends ScoresStorage {
       score => score.traceId === traceId && score.spanId === spanId,
     );
     scores.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const { page, perPage: perPageInput } = pagination;
+    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? scores.length : start + perPage;
+
     return {
-      scores: scores.slice(pagination.page * pagination.perPage, (pagination.page + 1) * pagination.perPage),
+      scores: scores.slice(start, end),
       pagination: {
         total: scores.length,
-        page: pagination.page,
-        perPage: pagination.perPage,
-        hasMore: scores.length > (pagination.page + 1) * pagination.perPage,
+        page: page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : scores.length > end,
       },
     };
   }

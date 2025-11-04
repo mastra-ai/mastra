@@ -1,9 +1,12 @@
 ---
-title: "Getting Started with Mastra and Next.js | Mastra Guides"
+title: "Integrate Mastra in your Next.js project | Frameworks | Mastra Docs"
 description: A step-by-step guide to integrating Mastra with Next.js.
 ---
 
-import { Callout, Steps, Tabs } from "nextra/components";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
 
 # Integrate Mastra in your Next.js project
 
@@ -15,54 +18,64 @@ Mastra integrates with Next.js, making it easy to:
 
 Use this guide to scaffold and integrate Mastra with your Next.js project.
 
-<Tabs items={["App Router", "Pages Router"]}>
-  <Tabs.Tab>
+<Tabs>
+  <TabItem value="app-router" label="App Router">
 
-<Callout type="warning">
-  This guide assumes you're using the Next.js App Router at the root of your
-  project, e.g., `app` rather than `src/app`.
-</Callout>
+:::warning
+
+This guide assumes you're using the Next.js App Router at the root of your project, e.g., `app` rather than `src/app`.
+
+:::
 
 <Steps>
-## Integrate Mastra
+
+<StepItem>
 
 To integrate Mastra into your project, you have two options:
 
-### 1. Use the One-Liner
+- Use the One-Liner
 
-Run the following command to quickly scaffold the default Weather agent with sensible defaults:
+  Run the following command to quickly scaffold the default Weather agent with sensible defaults:
 
-```bash copy
-npx mastra@latest init --dir . --components agents,tools --example --llm openai
-```
+  ```bash copy
+  npx mastra@latest init --dir . --components agents,tools --example --llm openai
+  ```
 
-> See [mastra init](/reference/cli/init) for more information.
+  > See [mastra init](/reference/cli/create-mastra) for more information.
 
-### 2. Use the Interactive CLI
+- Use the Interactive CLI
 
-If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
+  If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
 
-```bash copy
-npx mastra@latest init
-```
+  ```bash copy
+  npx mastra@latest init
+  ```
 
-<Callout type="warning">
-By default, `mastra init` suggests `src` as the install location. If you're using the App Router at the root of your project (e.g., `app`, not `src/app`), enter `.` when prompted:
-</Callout>
+  :::warning
 
-## Set Up API Key
+  By default, `mastra init` suggests `src` as the install location. If you're using the App Router at the root of your project (e.g., `app`, not `src/app`), enter `.` when prompted:
 
-```bash filename=".env" copy
+  :::
+
+</StepItem>
+
+<StepItem>
+
+Set Up API Key
+
+```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
-> Each LLM provider uses a different env var. See [Model Capabilities](/docs/getting-started/model-capability) for more information.
+> Each LLM provider uses a different env var. See [Model Capabilities](https://sdk.vercel.ai/providers) for more information.
 
-## Configure Next.js
+</StepItem>
+
+<StepItem>
 
 Add to your `next.config.ts`:
 
-```typescript filename="next.config.ts" showLineNumbers copy
+```typescript title="next.config.ts" showLineNumbers copy
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -72,11 +85,15 @@ const nextConfig: NextConfig = {
 export default nextConfig;
 ```
 
-## Start Next.js Dev Server
+</StepItem>
+
+<StepItem>
 
 You can start your Next.js app in the usual way.
 
-## Create Test Directory
+</StepItem>
+
+<StepItem>
 
 Create a new directory that will contain a Page, Action, and Form for testing purposes.
 
@@ -84,7 +101,9 @@ Create a new directory that will contain a Page, Action, and Form for testing pu
 mkdir app/test
 ```
 
-### Create Test Action
+</StepItem>
+
+<StepItem>
 
 Create a new Action, and add the example code:
 
@@ -92,7 +111,7 @@ Create a new Action, and add the example code:
 touch app/test/action.ts
 ```
 
-```typescript filename="app/test/action.ts" showLineNumbers copy
+```typescript title="app/test/action.ts" showLineNumbers copy
 "use server";
 
 import { mastra } from "../../mastra";
@@ -107,7 +126,9 @@ export async function getWeatherInfo(formData: FormData) {
 }
 ```
 
-### Create Test Form
+</StepItem>
+
+<StepItem>
 
 Create a new Form component, and add the example code:
 
@@ -115,7 +136,7 @@ Create a new Form component, and add the example code:
 touch app/test/form.tsx
 ```
 
-```typescript filename="app/test/form.tsx" showLineNumbers copy
+```typescript title="app/test/form.tsx" showLineNumbers copy
 "use client";
 
 import { useState } from "react";
@@ -141,7 +162,9 @@ export function Form() {
 }
 ```
 
-### Create Test Page
+</StepItem>
+
+<StepItem>
 
 Create a new Page, and add the example code:
 
@@ -149,7 +172,7 @@ Create a new Page, and add the example code:
 touch app/test/page.tsx
 ```
 
-```typescript filename="app/test/page.tsx" showLineNumbers copy
+```typescript title="app/test/page.tsx" showLineNumbers copy
 import { Form } from "./form";
 
 export default async function Page() {
@@ -178,56 +201,68 @@ Agent response: The current weather in London is as follows:
 Let me know if you need more information!
 ```
 
+</StepItem>
+
   </Steps>
-  </Tabs.Tab>
+  </TabItem>
 
-  <Tabs.Tab>
+  <TabItem value="pages-router" label="Pages Router">
 
-<Callout type="warning">
-  This guide assumes you're using the Next.js Pages Router at the root of your
-  project, e.g., `pages` rather than `src/pages`.
-</Callout>
+:::warning
+
+This guide assumes you're using the Next.js Pages Router at the root of your project, e.g., `pages` rather than `src/pages`.
+
+:::
 
 <Steps>
-## Integrate Mastra
+
+<StepItem>
 
 To integrate Mastra into your project, you have two options:
 
-### 1. Use the One-Liner
+- Use the One-Liner
 
-Run the following command to quickly scaffold the default Weather agent with sensible defaults:
+  Run the following command to quickly scaffold the default Weather agent with sensible defaults:
 
-```bash copy
-npx mastra@latest init --dir . --components agents,tools --example --llm openai
-```
+  ```bash copy
+  npx mastra@latest init --dir . --components agents,tools --example --llm openai
+  ```
 
-> See [mastra init](/reference/cli/init) for more information.
+  > See [mastra init](/reference/cli/create-mastra) for more information.
 
-### 2. Use the Interactive CLI
+- Use the Interactive CLI
 
-If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
+  If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
 
-```bash copy
-npx mastra@latest init
-```
+  ```bash copy
+  npx mastra@latest init
+  ```
 
-<Callout type="warning">
-By default, `mastra init` suggests `src` as the install location. If you're using the Pages Router at the root of your project (e.g., `pages`, not `src/pages`), enter `.` when prompted:
-</Callout>
+  :::warning
 
-## Set Up API Key
+  By default, `mastra init` suggests `src` as the install location. If you're using the Pages Router at the root of your project (e.g., `pages`, not `src/pages`), enter `.` when prompted:
 
-```bash filename=".env" copy
+  :::
+
+</StepItem>
+
+<StepItem>
+
+Set Up API Key
+
+```bash title=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
-> Each LLM provider uses a different env var. See [Model Capabilities](/docs/getting-started/model-capability) for more information.
+> Each LLM provider uses a different env var. See [Model Capabilities](https://sdk.vercel.ai/providers) for more information.
 
-## Configure Next.js
+</StepItem>
+
+<StepItem>
 
 Add to your `next.config.ts`:
 
-```typescript filename="next.config.ts" showLineNumbers copy
+```typescript title="next.config.ts" showLineNumbers copy
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -237,11 +272,15 @@ const nextConfig: NextConfig = {
 export default nextConfig;
 ```
 
-## Start Next.js Dev Server
+</StepItem>
+
+<StepItem>
 
 You can start your Next.js app in the usual way.
 
-## Create Test API Route
+</StepItem>
+
+<StepItem>
 
 Create a new API Route, and add the example code:
 
@@ -249,7 +288,7 @@ Create a new API Route, and add the example code:
 touch pages/api/test.ts
 ```
 
-```typescript filename="pages/api/test.ts" showLineNumbers copy
+```typescript title="pages/api/test.ts" showLineNumbers copy
 import type { NextApiRequest, NextApiResponse } from "next";
 
 import { mastra } from "../../mastra";
@@ -267,7 +306,9 @@ export default async function getWeatherInfo(
 }
 ```
 
-## Create Test Page
+</StepItem>
+
+<StepItem>
 
 Create a new Page, and add the example code:
 
@@ -275,7 +316,7 @@ Create a new Page, and add the example code:
 touch pages/test.tsx
 ```
 
-```typescript filename="pages/test.tsx" showLineNumbers copy
+```typescript title="pages/test.tsx" showLineNumbers copy
 import { useState } from "react";
 
 export default function Test() {
@@ -326,11 +367,13 @@ Agent response: The current weather in London is as follows:
 Let me know if you need more information!
 ```
 
+</StepItem>
+
   </Steps>
-  </Tabs.Tab>
+  </TabItem>
 </Tabs>
 
 ## Next Steps
 
 - [Deployment | With Next.js on Vercel](/docs/deployment/web-framework#with-nextjs-on-vercel)
-- [Monorepo Deployment](../../deployment/monorepo.mdx)
+- [Monorepo Deployment](../../deployment/monorepo)

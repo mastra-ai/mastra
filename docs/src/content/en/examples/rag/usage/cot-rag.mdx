@@ -3,7 +3,7 @@ title: "Example: Chain of Thought Prompting | RAG | Mastra Docs"
 description: Example of implementing a RAG system in Mastra with chain-of-thought reasoning using OpenAI and PGVector.
 ---
 
-import { GithubLink } from "@/components/github-link";
+import GithubLink from "@site/src/components/GithubLink";
 
 # Chain of Thought Prompting
 
@@ -27,7 +27,7 @@ The system implements RAG using Mastra and OpenAI with chain-of-thought promptin
 
 Make sure to set up your environment variables:
 
-```bash filename=".env"
+```bash title=".env"
 OPENAI_API_KEY=your_openai_api_key_here
 POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```
@@ -36,7 +36,7 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 
 Then, import the necessary dependencies:
 
-```typescript copy showLineNumbers filename="index.ts"
+```typescript copy showLineNumbers title="index.ts"
 import { openai } from "@ai-sdk/openai";
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
@@ -49,7 +49,7 @@ import { embedMany } from "ai";
 
 Using createVectorQueryTool imported from @mastra/rag, you can create a tool that can query the vector database.
 
-```typescript copy showLineNumbers{8} filename="index.ts"
+```typescript copy showLineNumbers{8} title="index.ts"
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
@@ -61,8 +61,9 @@ const vectorQueryTool = createVectorQueryTool({
 
 Set up the Mastra agent with chain-of-thought prompting instructions:
 
-```typescript copy showLineNumbers{14} filename="index.ts"
+```typescript copy showLineNumbers{14} title="index.ts"
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context.
 Follow these steps for each response:
@@ -95,7 +96,7 @@ Remember: Explain how you're using the retrieved information to reach your concl
 
 Instantiate PgVector and Mastra with all components:
 
-```typescript copy showLineNumbers{36} filename="index.ts"
+```typescript copy showLineNumbers{36} title="index.ts"
 const pgVector = new PgVector({
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
@@ -111,7 +112,7 @@ const agent = mastra.getAgent("ragAgent");
 
 Create a document and process it into chunks:
 
-```typescript copy showLineNumbers{44} filename="index.ts"
+```typescript copy showLineNumbers{44} title="index.ts"
 const doc = MDocument.fromText(
   `The Impact of Climate Change on Global Agriculture...`,
 );
@@ -128,7 +129,7 @@ const chunks = await doc.chunk({
 
 Generate embeddings for the chunks and store them in the vector database:
 
-```typescript copy showLineNumbers{55} filename="index.ts"
+```typescript copy showLineNumbers{55} title="index.ts"
 const { embeddings } = await embedMany({
   values: chunks.map((chunk) => chunk.text),
   model: openai.embedding("text-embedding-3-small"),
@@ -150,7 +151,7 @@ await vectorStore.upsert({
 
 Try different queries to see how the agent breaks down its reasoning:
 
-```typescript copy showLineNumbers{83} filename="index.ts"
+```typescript copy showLineNumbers{83} title="index.ts"
 const answerOne = await agent.generate(
   "What are the main adaptation strategies for farmers?",
 );

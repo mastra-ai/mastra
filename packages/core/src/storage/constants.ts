@@ -1,7 +1,6 @@
 import type { StorageColumn } from './types';
 
 export const TABLE_WORKFLOW_SNAPSHOT = 'mastra_workflow_snapshot';
-export const TABLE_EVALS = 'mastra_evals';
 export const TABLE_MESSAGES = 'mastra_messages';
 export const TABLE_THREADS = 'mastra_threads';
 export const TABLE_TRACES = 'mastra_traces';
@@ -11,7 +10,6 @@ export const TABLE_AI_SPANS = 'mastra_ai_spans';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
-  | typeof TABLE_EVALS
   | typeof TABLE_MESSAGES
   | typeof TABLE_THREADS
   | typeof TABLE_TRACES
@@ -43,7 +41,7 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   input: { type: 'jsonb' },
   output: { type: 'jsonb' }, // MESSAGE OUTPUT
   additionalContext: { type: 'jsonb', nullable: true }, // DATA FROM THE CONTEXT PARAM ON AN AGENT
-  runtimeContext: { type: 'jsonb', nullable: true }, // THE EVALUATE RUNTIME CONTEXT FOR THE RUN
+  requestContext: { type: 'jsonb', nullable: true }, // THE EVALUATE Request Context FOR THE RUN
   /**
    * Things you can evaluate
    */
@@ -98,43 +96,6 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     },
   },
   [TABLE_SCORERS]: SCORERS_SCHEMA,
-  [TABLE_EVALS]: {
-    input: {
-      type: 'text',
-    },
-    output: {
-      type: 'text',
-    },
-    result: {
-      type: 'jsonb',
-    },
-    agent_name: {
-      type: 'text',
-    },
-    metric_name: {
-      type: 'text',
-    },
-    instructions: {
-      type: 'text',
-    },
-    test_info: {
-      type: 'jsonb',
-      nullable: true,
-    },
-    global_run_id: {
-      type: 'text',
-    },
-    run_id: {
-      type: 'text',
-    },
-    created_at: {
-      type: 'timestamp',
-    },
-    createdAt: {
-      type: 'timestamp',
-      nullable: true,
-    },
-  },
   [TABLE_THREADS]: {
     id: { type: 'text', nullable: false, primaryKey: true },
     resourceId: { type: 'text', nullable: false },

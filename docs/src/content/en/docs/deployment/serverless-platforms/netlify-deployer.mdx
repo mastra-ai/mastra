@@ -1,13 +1,11 @@
 ---
-title: "Netlify Deployer"
+title: "NetlifyDeployer | Deployment | Mastra Docs"
 description: "Learn how to deploy a Mastra application to Netlify using the Mastra NetlifyDeployer"
 ---
 
-import { FileTree } from "nextra/components";
-
 # NetlifyDeployer
 
-The `NetlifyDeployer` class handles deployment of standalone Mastra applications to Netlify. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/deployer) class with Netlify specific functionality.
+The `NetlifyDeployer` class handles deployment of standalone Mastra applications to Netlify. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/) class with Netlify specific functionality.
 
 ## Installation
 
@@ -17,13 +15,13 @@ npm install @mastra/deployer-netlify@latest
 
 ## Usage example
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
 import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
 export const mastra = new Mastra({
   // ...
-  deployer: new NetlifyDeployer()
+  deployer: new NetlifyDeployer(),
 });
 ```
 
@@ -41,9 +39,7 @@ Before your first deployment, make sure to add any environment variables used by
 
 > See [Environment variables overview](https://docs.netlify.com/environment-variables/overview/) for more details.
 
-
 Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
-
 
 ## Manual deployment
 
@@ -59,20 +55,15 @@ netlify deploy --prod
 
 The build output for Mastra applications using the `NetlifyDeployer` includes all agents, tools, and workflows in your project, along with Mastra specific files required to run your application on Netlify.
 
-<FileTree>
-  <FileTree.Folder name=".netlify" defaultOpen>
-    <FileTree.Folder name="v1" defaultOpen>
-      <FileTree.Folder name="functions" defaultOpen>
-        <FileTree.Folder name="api" defaultOpen>
-          <FileTree.File name="index.mjs" />
-        </FileTree.Folder>
-      </FileTree.Folder>
-    <FileTree.File name="config.json" />
-    </FileTree.Folder>
-  </FileTree.Folder>
-  <FileTree.File name="package.json" />
-</FileTree>
-
+```
+.netlify/
+└── v1/
+    ├── functions/
+    │   └── api/
+    │       └── index.mjs
+    └── config.json
+package.json
+```
 
 The `NetlifyDeployer` automatically generates a `config.json` configuration file in `.netlify/v1` with the following settings:
 
@@ -91,4 +82,4 @@ The `NetlifyDeployer` automatically generates a `config.json` configuration file
 
 ## Next steps
 
-- [Mastra Client SDK](/docs/client-js/overview)
+- [Mastra Client SDK](/reference/client-js/mastra-client)

@@ -1,5 +1,5 @@
 ---
-title: Mastra Client Workflows API
+title: "Reference: Workflows API | Client SDK | Mastra Docs"
 description: Learn how to interact with and execute automated workflows in Mastra using the client-js SDK.
 ---
 
@@ -12,17 +12,17 @@ The Workflows API provides methods to interact with and execute automated workfl
 Retrieve a list of all available workflows:
 
 ```typescript
-const workflows = await mastraClient.getWorkflows();
+const workflows = await mastraClient.listWorkflows();
 ```
 
 ## Working with a Specific Workflow
 
 Get an instance of a specific workflow as defined by the const name:
 
-```typescript filename="src/mastra/workflows/test-workflow.ts"
+```typescript title="src/mastra/workflows/test-workflow.ts"
 export const testWorkflow = createWorkflow({
-  id: 'city-workflow'
-})
+  id: "city-workflow",
+});
 ```
 
 ```typescript
@@ -44,7 +44,7 @@ const details = await workflow.details();
 Start a workflow run with inputData and await full run results:
 
 ```typescript
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.startAsync({
   inputData: {
@@ -58,7 +58,7 @@ const result = await run.startAsync({
 Resume a suspended workflow step and await full run result:
 
 ```typescript
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.resumeAsync({
   step: "step-id",
@@ -66,43 +66,15 @@ const result = await run.resumeAsync({
 });
 ```
 
-### Watch Workflow
-
-Watch workflow transitions:
-
-```typescript
-try {
-  const workflow = mastraClient.getWorkflow("testWorkflow");
-
-  const run = await workflow.createRunAsync();
-
-  run.watch((record) => {
-    console.log(record);
-  });
-
-  const result = await run.start({
-    inputData: {
-      city: "New York",
-    },
-  });
-} catch (e) {
-  console.error(e);
-}
-```
-
 ### Resume Workflow
 
-Resume workflow run and watch workflow step transitions:
+Resume workflow run:
 
 ```typescript
 try {
   const workflow = mastraClient.getWorkflow("testWorkflow");
 
-  const run = await workflow.createRunAsync({ runId: prevRunId });
-
-  run.watch((record) => {
-    console.log(record);
-  });
+  const run = await workflow.createRun({ runId: prevRunId });
 
   run.resume({
     step: "step-id",
@@ -121,11 +93,11 @@ Stream workflow execution for real-time updates:
 try {
   const workflow = mastraClient.getWorkflow("testWorkflow");
 
-  const run = await workflow.createRunAsync();
+  const run = await workflow.createRun();
 
   const stream = await run.stream({
     inputData: {
-      city: 'New York',
+      city: "New York",
     },
   });
 
@@ -133,7 +105,7 @@ try {
     console.log(JSON.stringify(chunk, null, 2));
   }
 } catch (e) {
-  console.error('Workflow error:', e);
+  console.error("Workflow error:", e);
 }
 ```
 
@@ -142,10 +114,10 @@ try {
 Get the result of a workflow run:
 
 ```typescript
-try  {
+try {
   const workflow = mastraClient.getWorkflow("testWorkflow");
 
-  const run = await workflow.createRunAsync();
+  const run = await workflow.createRun();
 
   // start the workflow run
   const startResult = await run.start({

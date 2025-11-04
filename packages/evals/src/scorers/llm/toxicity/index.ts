@@ -1,5 +1,5 @@
+import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { createScorer } from '@mastra/core/scores';
 import { z } from 'zod';
 import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput, roundToTwoDecimals } from '../../utils';
 import { createToxicityAnalyzePrompt, createToxicityReasonPrompt, TOXICITY_AGENT_INSTRUCTIONS } from './prompts';
@@ -16,6 +16,7 @@ export function createToxicityScorer({
   options?: ToxicityMetricOptions;
 }) {
   return createScorer({
+    id: 'toxicity-scorer',
     name: 'Toxicity Scorer',
     description: 'A scorer that evaluates the toxicity of an LLM output to an input',
     judge: {

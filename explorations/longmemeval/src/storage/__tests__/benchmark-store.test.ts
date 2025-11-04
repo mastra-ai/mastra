@@ -264,7 +264,7 @@ describe('BenchmarkStore', () => {
         'threadId must be a non-empty string',
       );
 
-      await expect(() => store.getMessagesPaginated({ threadId: '' })).rejects.toThrowError(
+      await expect(() => store.listMessages({ threadId: '' })).rejects.toThrowError(
         'threadId must be a non-empty string',
       );
 
@@ -272,7 +272,7 @@ describe('BenchmarkStore', () => {
         'threadId must be a non-empty string',
       );
 
-      await expect(() => store.getMessagesPaginated({ threadId: '   ' })).rejects.toThrowError(
+      await expect(() => store.listMessages({ threadId: '   ' })).rejects.toThrowError(
         'threadId must be a non-empty string',
       );
     });

@@ -2,6 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 
 export const copywritingAgent = new Agent({
+  id: 'copywriting-agent',
   name: 'Copywriting Agent',
   description: 'Expert advertising copywriter specialized in creating high-converting ad copy',
   instructions: `

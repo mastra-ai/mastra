@@ -1,10 +1,9 @@
 ---
-title: Mastra Cloud
+title: "Mastra Cloud | Mastra Cloud | Mastra Docs"
 description: Deployment and monitoring service for Mastra applications
 ---
 
-import { MastraCloudCallout } from '@/components/mastra-cloud-callout'
-import { FileTree } from "nextra/components";
+import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
 
 # Mastra Cloud
 
@@ -16,7 +15,7 @@ import { FileTree } from "nextra/components";
 
 Deploy and manage your applications with automated builds, organized projects, and no additional configuration.
 
-![Platform features](/image/mastra-cloud/mastra-cloud-platform-features.jpg)
+![Platform features](/img/mastra-cloud/mastra-cloud-platform-features.jpg)
 
 Key features:
 
@@ -26,33 +25,28 @@ Mastra Cloud supports zero-config deployment, continuous integration with GitHub
 
 Monitor and debug your applications with detailed output logs, deployment state, and interactive tools.
 
-![Project dashboard](/image/mastra-cloud/mastra-cloud-project-dashboard.jpg)
+![Project dashboard](/img/mastra-cloud/mastra-cloud-project-dashboard.jpg)
 
 Key features:
 
-The Project Dashboard gives you an overview of your application's status and deployments, with access to logs and a built-in playground for testing agents and workflows.
+The Project Dashboard gives you an overview of your application's status and deployments, with access to logs and a Studio for testing agents and workflows.
 
 ## Project structure
 
 Use a standard Mastra project structure for proper detection and deployment.
 
-<FileTree>
-  <FileTree.Folder name="src" defaultOpen>
-    <FileTree.Folder name="mastra" defaultOpen>
-      <FileTree.Folder name="agents" defaultOpen>
-        <FileTree.File name="agent-name.ts" />
-      </FileTree.Folder>
-      <FileTree.Folder name="tools" defaultOpen>
-        <FileTree.File name="tool-name.ts" />
-      </FileTree.Folder>
-      <FileTree.Folder name="workflows" defaultOpen>
-        <FileTree.File name="workflow-name.ts" />
-      </FileTree.Folder>
-      <FileTree.File name="index.ts" />
-    </FileTree.Folder>
-  </FileTree.Folder>
-  <FileTree.File name="package.json" />
-</FileTree>
+```shell
+src
+└── mastra
+    ├── agents
+    │   └── agent-name.ts
+    ├── tools
+    │   └── tool-name.ts
+    ├── workflows
+    │   └── workflow-name.ts
+    └── index.ts
+package.json
+```
 
 Mastra Cloud scans your repository for:
 

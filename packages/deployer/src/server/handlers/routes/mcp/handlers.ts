@@ -1,4 +1,4 @@
-import type { Mastra } from '@mastra/core';
+import type { Mastra } from '@mastra/core/mastra';
 import type { MCPServerBase, ServerInfo, ServerDetailInfo } from '@mastra/core/mcp';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context } from 'hono';
@@ -266,10 +266,10 @@ export const executeMcpServerToolHandler = async (c: Context) => {
   try {
     const body = await c.req.json();
     const args = body?.data;
-    const runtimeContext = body?.runtimeContext; // Optional
+    const requestContext = body?.requestContext; // Optional
 
     // The executeTool method in MCPServer is now responsible for arg validation
-    const result = await server.executeTool(toolId, args, runtimeContext);
+    const result = await server.executeTool(toolId, args, requestContext);
     return c.json({ result }); // Or return result directly if it's already the desired JSON structure
   } catch (error: any) {
     c.get('logger')?.error(`Error executing tool '${toolId}' on server '${serverId}':`, { error: error.message });

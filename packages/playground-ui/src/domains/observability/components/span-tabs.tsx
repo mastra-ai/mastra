@@ -11,13 +11,13 @@ import {
 import { TraceSpanUsage } from './trace-span-usage';
 import { SpanDetails } from './span-details';
 import { CircleGaugeIcon } from 'lucide-react';
-import { GetScoresResponse } from '@mastra/client-js';
-import { AISpanRecord } from '@mastra/core';
+import { ListScoresResponse } from '@mastra/client-js';
+import { AISpanRecord } from '@mastra/core/storage';
 
 type SpanTabsProps = {
   trace?: AISpanRecord;
   span?: AISpanRecord;
-  spanScoresData?: GetScoresResponse | null;
+  spanScoresData?: ListScoresResponse | null;
   onSpanScoresPageChange?: (page: number) => void;
   isLoadingSpanScoresData?: boolean;
   spanInfo?: KeyValueListItemData[];

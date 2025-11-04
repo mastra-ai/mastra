@@ -1,9 +1,9 @@
 ---
-title: "Configuration | AI Tracing | Reference"
+title: "Reference: Configuration | Observability | Mastra Docs"
 description: AI Tracing configuration types and registry functions
 ---
 
-import { PropertiesTable } from "@/components/properties-table";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Configuration
 
@@ -91,10 +91,10 @@ interface TracingConfig {
 
 ```typescript
 type SamplingStrategy =
-  | { type: 'always' }
-  | { type: 'never' }
-  | { type: 'ratio', probability: number }
-  | { type: 'custom', sampler: (options?: TracingOptions) => boolean };
+  | { type: "always" }
+  | { type: "never" }
+  | { type: "ratio"; probability: number }
+  | { type: "custom"; sampler: (options?: TracingOptions) => boolean };
 ```
 
 ## ConfigSelector
@@ -102,7 +102,7 @@ type SamplingStrategy =
 ```typescript
 type ConfigSelector = (
   options: ConfigSelectorOptions,
-  availableConfigs: Map<string, AITracing>
+  availableConfigs: Map<string, AITracing>,
 ) => string | undefined;
 ```
 
@@ -111,7 +111,7 @@ type ConfigSelector = (
 ```typescript
 interface ConfigSelectorOptions {
   metadata?: Record<string, any>;
-  runtimeContext?: Map<string, any>;
+  requestContext?: Map<string, any>;
 }
 ```
 
@@ -120,7 +120,7 @@ interface ConfigSelectorOptions {
 ## setupAITracing
 
 ```typescript
-function setupAITracing(config: ObservabilityRegistryConfig): void
+function setupAITracing(config: ObservabilityRegistryConfig): void;
 ```
 
 Initializes AI tracing from configuration. Called automatically by Mastra constructor.
@@ -131,8 +131,8 @@ Initializes AI tracing from configuration. Called automatically by Mastra constr
 function registerAITracing(
   name: string,
   instance: AITracing,
-  isDefault?: boolean
-): void
+  isDefault?: boolean,
+): void;
 ```
 
 Registers a tracing config in the global registry.
@@ -140,7 +140,7 @@ Registers a tracing config in the global registry.
 ## getAITracing
 
 ```typescript
-function getAITracing(name: string): AITracing | undefined
+function getAITracing(name: string): AITracing | undefined;
 ```
 
 Retrieves a tracing config by name.
@@ -148,7 +148,7 @@ Retrieves a tracing config by name.
 ## getDefaultAITracing
 
 ```typescript
-function getDefaultAITracing(): AITracing | undefined
+function getDefaultAITracing(): AITracing | undefined;
 ```
 
 Returns the default tracing config.
@@ -157,8 +157,8 @@ Returns the default tracing config.
 
 ```typescript
 function getSelectedAITracing(
-  options: ConfigSelectorOptions
-): AITracing | undefined
+  options: ConfigSelectorOptions,
+): AITracing | undefined;
 ```
 
 Returns the tracing config selected by the config selector or default.
@@ -166,7 +166,7 @@ Returns the tracing config selected by the config selector or default.
 ## setSelector
 
 ```typescript
-function setSelector(selector: ConfigSelector): void
+function setSelector(selector: ConfigSelector): void;
 ```
 
 Sets the global config selector function.
@@ -174,7 +174,7 @@ Sets the global config selector function.
 ## unregisterAITracing
 
 ```typescript
-function unregisterAITracing(name: string): boolean
+function unregisterAITracing(name: string): boolean;
 ```
 
 Removes a tracing config from the registry.
@@ -182,7 +182,7 @@ Removes a tracing config from the registry.
 ## shutdownAITracingRegistry
 
 ```typescript
-async function shutdownAITracingRegistry(): Promise<void>
+async function shutdownAITracingRegistry(): Promise<void>;
 ```
 
 Shuts down all tracing configs and clears the registry.
@@ -190,7 +190,7 @@ Shuts down all tracing configs and clears the registry.
 ## clearAITracingRegistry
 
 ```typescript
-function clearAITracingRegistry(): void
+function clearAITracingRegistry(): void;
 ```
 
 Clears all configs without shutdown.
@@ -198,7 +198,7 @@ Clears all configs without shutdown.
 ## getAllAITracing
 
 ```typescript
-function getAllAITracing(): ReadonlyMap<string, AITracing>
+function getAllAITracing(): ReadonlyMap<string, AITracing>;
 ```
 
 Returns all registered tracing configs.
@@ -206,7 +206,7 @@ Returns all registered tracing configs.
 ## hasAITracing
 
 ```typescript
-function hasAITracing(name: string): boolean
+function hasAITracing(name: string): boolean;
 ```
 
 Checks if a tracing instance exists and is enabled.
@@ -214,19 +214,23 @@ Checks if a tracing instance exists and is enabled.
 ## See Also
 
 ### Documentation
+
 - [AI Tracing Overview](/docs/observability/ai-tracing/overview) - Concepts and usage guide
 - [Sampling Strategies](/docs/observability/ai-tracing/overview#sampling-strategies) - Sampling configuration details
 - [Multi-Config Setup](/docs/observability/ai-tracing/overview#multi-config-setup) - Using multiple configurations
 
 ### Reference
-- [AITracing Classes](/reference/observability/ai-tracing/ai-tracing) - Core tracing classes
+
+- [AITracing Classes](/reference/observability/ai-tracing/) - Core tracing classes
 - [Interfaces](/reference/observability/ai-tracing/interfaces) - Type definitions
 - [Span Reference](/reference/observability/ai-tracing/span) - Span lifecycle
 
 ### Examples
+
 - [Basic AI Tracing](/examples/observability/basic-ai-tracing) - Getting started
 
 ### Exporters
+
 - [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - Storage configuration
 - [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - Cloud setup
 - [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust integration

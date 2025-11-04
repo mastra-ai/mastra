@@ -1,4 +1,4 @@
-import type { AISpanType } from '@mastra/core/ai-tracing';
+import type { AISpanType } from '@mastra/core/observability';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
 
@@ -239,11 +239,11 @@ describe('Observability Methods', () => {
     });
   });
 
-  describe('getScoresBySpan()', () => {
+  describe('listScoresBySpan()', () => {
     it('should fetch scores by trace ID and span ID without pagination', async () => {
       mockSuccessfulResponse();
 
-      await client.getScoresBySpan({
+      await client.listScoresBySpan({
         traceId: 'trace-123',
         spanId: 'span-456',
       });
@@ -259,7 +259,7 @@ describe('Observability Methods', () => {
     it('should fetch scores by trace ID and span ID with pagination', async () => {
       mockSuccessfulResponse();
 
-      await client.getScoresBySpan({
+      await client.listScoresBySpan({
         traceId: 'trace-123',
         spanId: 'span-456',
         page: 2,
@@ -277,7 +277,7 @@ describe('Observability Methods', () => {
     it('should properly encode trace ID and span ID in URL', async () => {
       mockSuccessfulResponse();
 
-      await client.getScoresBySpan({
+      await client.listScoresBySpan({
         traceId: 'trace with spaces',
         spanId: 'span/with/slashes',
       });
@@ -295,7 +295,7 @@ describe('Observability Methods', () => {
       (global.fetch as any).mockResolvedValueOnce(errorResponse);
 
       await expect(
-        client.getScoresBySpan({
+        client.listScoresBySpan({
           traceId: 'invalid-trace',
           spanId: 'invalid-span',
         }),

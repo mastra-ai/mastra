@@ -9,6 +9,23 @@ import { getResuableTests } from './reusable-tests';
 
 dotenv.config({ path: '.env.test' });
 
+// Helper function to extract text content from MastraDBMessage
+function getTextContent(message: any): string {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+  if (message.content?.parts && Array.isArray(message.content.parts)) {
+    return message.content.parts.map((p: any) => p.text || '').join('');
+  }
+  if (message.content?.text) {
+    return message.content.text;
+  }
+  if (typeof message.content?.content === 'string') {
+    return message.content.content;
+  }
+  return '';
+}
+
 // Ensure environment variables are set
 if (!process.env.DB_URL) {
   console.warn('DB_URL not set, using default local PostgreSQL connection');
@@ -51,7 +68,7 @@ describe('Memory with PostgresStore Integration', () => {
 
     beforeEach(async () => {
       // Clean up any existing threads
-      const threads = await memory.getThreadsByResourceId({ resourceId });
+      const { threads } = await memory.listThreadsByResourceId({ resourceId, page: 0, perPage: 10 });
       await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
 
       // Create a fresh thread for testing
@@ -76,9 +93,11 @@ describe('Memory with PostgresStore Integration', () => {
           id: randomUUID(),
           threadId,
           resourceId,
-          content: `Message ${i + 1}`,
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: `Message ${i + 1}` }],
+          },
           role: 'user' as const,
-          type: 'text' as const,
           createdAt: new Date(Date.now() + i * 1000), // Ensure different timestamps
         });
       }
@@ -91,102 +110,80 @@ describe('Memory with PostgresStore Integration', () => {
       const result1 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 0,
-            perPage: 3,
-          },
-        },
+        page: 0,
+        perPage: 3,
       });
 
       expect(result1.messages, 'Page 0 with perPage 3 should return exactly 3 messages').toHaveLength(3);
       // Database orders by createdAt DESC (newest first), so page 0 gets the 3 newest messages
       // But MessageList sorts them chronologically (oldest to newest) for display
-      expect(result1.messages[0].content).toBe('Message 8');
-      expect(result1.messages[1].content).toBe('Message 9');
-      expect(result1.messages[2].content).toBe('Message 10');
+      expect(getTextContent(result1.messages[0])).toBe('Message 8');
+      expect(getTextContent(result1.messages[1])).toBe('Message 9');
+      expect(getTextContent(result1.messages[2])).toBe('Message 10');
 
       // Test 2: Query with pagination - page 1, perPage 3
       console.log('Testing pagination: page 1, perPage 3');
       const result2 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 1,
-            perPage: 3,
-          },
-        },
+        page: 1,
+        perPage: 3,
       });
 
       expect(result2.messages, 'Page 1 with perPage 3 should return exactly 3 messages').toHaveLength(3);
-      expect(result2.messages[0].content).toBe('Message 5');
-      expect(result2.messages[1].content).toBe('Message 6');
-      expect(result2.messages[2].content).toBe('Message 7');
+      expect(getTextContent(result2.messages[0])).toBe('Message 5');
+      expect(getTextContent(result2.messages[1])).toBe('Message 6');
+      expect(getTextContent(result2.messages[2])).toBe('Message 7');
 
       // Test 3: Query with pagination - page 0, perPage 1
       console.log('Testing pagination: page 0, perPage 1 (original bug report)');
       const result3 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 0,
-            perPage: 1,
-          },
-        },
+        page: 0,
+        perPage: 1,
       });
 
       expect(result3.messages, 'Page 0 with perPage 1 should return exactly 1 message').toHaveLength(1);
-      expect(result3.messages[0].content).toBe('Message 10');
+      expect(getTextContent(result3.messages[0])).toBe('Message 10');
 
       // Test 4: Query with pagination - page 9, perPage 1 (last page)
       console.log('Testing pagination: page 9, perPage 1 (last page)');
       const result4 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 9,
-            perPage: 1,
-          },
-        },
+        page: 9,
+        perPage: 1,
       });
 
       expect(result4.messages, 'Page 9 with perPage 1 should return exactly 1 message').toHaveLength(1);
-      expect(result4.messages[0].content).toBe('Message 1');
+      expect(getTextContent(result4.messages[0])).toBe('Message 1');
 
       // Test 5: Query with pagination - page 1, perPage 5 (partial last page)
       console.log('Testing pagination: page 1, perPage 5 (partial last page)');
       const result5 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 1,
-            perPage: 5,
-          },
-        },
+        page: 1,
+        perPage: 5,
       });
 
       expect(result5.messages, 'Page 1 with perPage 5 should return exactly 5 messages').toHaveLength(5);
-      expect(result5.messages[0].content).toBe('Message 1');
-      expect(result5.messages[4].content).toBe('Message 5');
+      expect(getTextContent(result5.messages[0])).toBe('Message 1');
+      expect(getTextContent(result5.messages[4])).toBe('Message 5');
 
       // Test 6: Query without pagination should still work
       console.log('Testing query without pagination (backward compatibility)');
       const result6 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          last: 5,
-        },
+        perPage: 5,
       });
 
       expect(result6.messages, 'Query with last: 5 should return exactly 5 messages').toHaveLength(5);
       // Should return the 5 most recent messages
-      expect(result6.messages[0].content).toBe('Message 6');
-      expect(result6.messages[4].content).toBe('Message 10');
+      expect(getTextContent(result6.messages[0])).toBe('Message 6');
+      expect(getTextContent(result6.messages[4])).toBe('Message 10');
     });
 
     it('should handle edge cases with pagination', async () => {
@@ -210,12 +207,8 @@ describe('Memory with PostgresStore Integration', () => {
       const result1 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 5,
-            perPage: 2,
-          },
-        },
+        page: 5,
+        perPage: 2,
       });
 
       expect(result1.messages, 'Page beyond available data should return empty array').toHaveLength(0);
@@ -225,12 +218,8 @@ describe('Memory with PostgresStore Integration', () => {
       const result2 = await memory.query({
         threadId,
         resourceId,
-        selectBy: {
-          pagination: {
-            page: 0,
-            perPage: 10,
-          },
-        },
+        page: 0,
+        perPage: 10,
       });
 
       expect(result2.messages, 'perPage larger than total should return all 3 messages').toHaveLength(3);
@@ -288,9 +277,7 @@ describe('Memory with PostgresStore Integration', () => {
       const result = await hnswMemory.query({
         threadId,
         resourceId,
-        selectBy: {
-          vectorSearchString: 'HNSW test',
-        },
+        vectorSearchString: 'HNSW test',
       });
 
       expect(result.messages).toBeDefined();
@@ -345,9 +332,7 @@ describe('Memory with PostgresStore Integration', () => {
       const result = await ivfflatMemory.query({
         threadId,
         resourceId,
-        selectBy: {
-          vectorSearchString: 'IVFFlat test',
-        },
+        vectorSearchString: 'IVFFlat test',
       });
 
       expect(result.messages).toBeDefined();
@@ -399,9 +384,7 @@ describe('Memory with PostgresStore Integration', () => {
       const result = await flatMemory.query({
         threadId,
         resourceId,
-        selectBy: {
-          vectorSearchString: 'flat scan test',
-        },
+        vectorSearchString: 'flat scan test',
       });
 
       expect(result.messages).toBeDefined();
@@ -475,7 +458,6 @@ describe('Memory with PostgresStore Integration', () => {
 
       // Query should work with new index
       const result = await memory2.query({
-        query: 'configuration',
         threadId,
         resourceId,
       });
@@ -547,7 +529,6 @@ describe('Memory with PostgresStore Integration', () => {
 
       // Query should work with preserved HNSW index
       const result = await memory2.query({
-        query: 'index',
         threadId,
         resourceId,
       });

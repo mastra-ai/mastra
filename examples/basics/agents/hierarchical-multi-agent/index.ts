@@ -1,9 +1,12 @@
 import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
-import { Agent, createTool, Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
+import { Agent } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 const copywriterAgent = new Agent({
+  id: 'copywriter',
   name: 'Copywriter',
   instructions: 'You are a copywriter agent that writes blog post copy.',
   model: anthropic('claude-3-5-sonnet-20241022'),
@@ -18,8 +21,8 @@ const copywriterTool = createTool({
   outputSchema: z.object({
     copy: z.string().describe('Blog post copy'),
   }),
-  execute: async ({ context }) => {
-    const result = await copywriterAgent.generate(`Create a blog post about ${context.topic}`);
+  execute: async (input, context) => {
+    const result = await copywriterAgent.generate(`Create a blog post about ${input.topic}`);
     console.log('copywriter result', result.text);
     return {
       copy: result.text,
@@ -28,6 +31,7 @@ const copywriterTool = createTool({
 });
 
 const editorAgent = new Agent({
+  id: 'editor',
   name: 'Editor',
   instructions: 'You are an editor agent that edits blog post copy.',
   model: openai('gpt-4o-mini'),
@@ -42,9 +46,9 @@ const editorTool = createTool({
   outputSchema: z.object({
     copy: z.string().describe('Edited blog post copy'),
   }),
-  execute: async ({ context }) => {
+  execute: async (input, context) => {
     const result = await editorAgent.generate(
-      `Edit the following blog post only returning the edited copy: ${context.copy}`,
+      `Edit the following blog post only returning the edited copy: ${input.copy}`,
     );
     console.log('editor result', result.text);
     return {
@@ -54,7 +58,8 @@ const editorTool = createTool({
 });
 
 const publisherAgent = new Agent({
-  name: 'publisherAgent',
+  id: 'publisher-agent',
+  name: 'Publisher Agent',
   instructions:
     'You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.',
   model: anthropic('claude-3-5-sonnet-20241022'),

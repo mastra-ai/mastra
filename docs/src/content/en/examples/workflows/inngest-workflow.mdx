@@ -1,5 +1,5 @@
 ---
-title: "Inngest Workflow | Workflows | Mastra Docs"
+title: "Example: Inngest Workflow | Workflows | Mastra Docs"
 description: Example of building an inngest workflow with Mastra
 ---
 
@@ -23,12 +23,13 @@ Alternatively, you can use the Inngest CLI for local development by following th
 
 Define a planning agent which leverages an LLM call to plan activities given a location and corresponding weather conditions.
 
-```ts showLineNumbers copy filename="agents/planning-agent.ts"
+```ts showLineNumbers copy title="agents/planning-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
 // Create a new planning agent that uses the OpenAI model
 const planningAgent = new Agent({
+  id: "planning-agent",
   name: "planningAgent",
   model: openai("gpt-4o"),
   instructions: `
@@ -81,7 +82,7 @@ export { planningAgent };
 
 Define the activity planner workflow with 3 steps: one to fetch the weather via a network call, one to plan activities, and another to plan only indoor activities.
 
-```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
+```ts showLineNumbers copy title="workflows/inngest-workflow.ts"
 import { init } from "@mastra/inngest";
 import { Inngest } from "inngest";
 import { z } from "zod";
@@ -128,7 +129,7 @@ const forecastSchema = z.object({
 
 #### Step 1: Fetch weather data for a given city
 
-```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
+```ts showLineNumbers copy title="workflows/inngest-workflow.ts"
 const fetchWeather = createStep({
   id: "fetch-weather",
   description: "Fetches weather forecast for a given city",
@@ -188,7 +189,7 @@ const fetchWeather = createStep({
 
 #### Step 2: Suggest activities (indoor or outdoor) based on weather
 
-```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
+```ts showLineNumbers copy title="workflows/inngest-workflow.ts"
 const planActivities = createStep({
   id: "plan-activities",
   description: "Suggests activities based on weather conditions",
@@ -235,7 +236,7 @@ const planActivities = createStep({
 
 #### Step 3: Suggest indoor activities only (for rainy weather)
 
-```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
+```ts showLineNumbers copy title="workflows/inngest-workflow.ts"
 const planIndoorActivities = createStep({
   id: "plan-indoor-activities",
   description: "Suggests indoor activities based on weather conditions",
@@ -280,7 +281,7 @@ const planIndoorActivities = createStep({
 
 ## Define the activity planner workflow
 
-```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
+```ts showLineNumbers copy title="workflows/inngest-workflow.ts"
 const activityPlanningWorkflow = createWorkflow({
   id: "activity-planning-workflow-step2-if-else",
   inputSchema: z.object({
@@ -317,14 +318,14 @@ export { activityPlanningWorkflow };
 
 Register the agents and workflow with the mastra instance. This allows access to the agents within the workflow.
 
-```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from "@mastra/core/mastra";
+```ts showLineNumbers copy title="index.ts"
+import { Mastra } from "@mastra/core";
 import { serve as inngestServe } from "@mastra/inngest";
 import { PinoLogger } from "@mastra/loggers";
 import { Inngest } from "inngest";
 import { activityPlanningWorkflow } from "./workflows/inngest-workflow";
 import { planningAgent } from "./agents/planning-agent";
-import { realtimeMiddleware } from "@inngest/realtime";
+import { realtimeMiddleware } from "@inngest/realtime/middleware";
 
 // Create an Inngest instance for workflow orchestration and event handling
 const inngest = new Inngest({
@@ -363,13 +364,10 @@ export const mastra = new Mastra({
 
 Here, we'll get the activity planner workflow from the mastra instance, then create a run and execute the created run with the required inputData.
 
-```ts showLineNumbers copy filename="exec.ts"
+```ts showLineNumbers copy title="exec.ts"
 import { mastra } from "./";
 import { serve } from "@hono/node-server";
-import {
-  createHonoServer,
-  getToolExports,
-} from "@mastra/deployer/server";
+import { createHonoServer, getToolExports } from "@mastra/deployer/server";
 import { tools } from "#tools";
 
 const app = await createHonoServer(mastra, {
@@ -383,7 +381,7 @@ const srv = serve({
 });
 
 const workflow = mastra.getWorkflow("activityPlanningWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 // Start the workflow with the required input data (city name)
 // This will trigger the workflow steps and stream the result to the console
@@ -406,14 +404,14 @@ Control how many workflow instances can run simultaneously:
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
-  id: 'user-processing-workflow',
+  id: "user-processing-workflow",
   inputSchema: z.object({ userId: z.string() }),
   outputSchema: z.object({ result: z.string() }),
   steps: [processUserStep],
   // Limit to 10 concurrent executions, scoped by user ID
-  concurrency: { 
-    limit: 10, 
-    key: 'event.data.userId' // Per-user concurrency
+  concurrency: {
+    limit: 10,
+    key: "event.data.userId", // Per-user concurrency
   },
 });
 ```
@@ -424,14 +422,14 @@ Limit the number of workflow executions within a time period:
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
-  id: 'api-sync-workflow',
+  id: "api-sync-workflow",
   inputSchema: z.object({ endpoint: z.string() }),
   outputSchema: z.object({ status: z.string() }),
   steps: [apiSyncStep],
   // Maximum 1000 executions per hour
-  rateLimit: { 
-    period: '1h', 
-    limit: 1000
+  rateLimit: {
+    period: "1h",
+    limit: 1000,
   },
 });
 ```
@@ -442,15 +440,15 @@ Ensure minimum time between workflow executions:
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
-  id: 'email-notification-workflow',
+  id: "email-notification-workflow",
   inputSchema: z.object({ organizationId: z.string(), message: z.string() }),
   outputSchema: z.object({ sent: z.boolean() }),
   steps: [sendEmailStep],
   // Only one execution per 10 seconds per organization
-  throttle: { 
-    period: '10s', 
+  throttle: {
+    period: "10s",
     limit: 1,
-    key: 'event.data.organizationId'
+    key: "event.data.organizationId",
   },
 });
 ```
@@ -461,14 +459,14 @@ Delay execution until no new events arrive within a time window:
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
-  id: 'search-index-workflow',
+  id: "search-index-workflow",
   inputSchema: z.object({ documentId: z.string() }),
   outputSchema: z.object({ indexed: z.boolean() }),
   steps: [indexDocumentStep],
   // Wait 5 seconds of no updates before indexing
-  debounce: { 
-    period: '5s', 
-    key: 'event.data.documentId'
+  debounce: {
+    period: "5s",
+    key: "event.data.documentId",
   },
 });
 ```
@@ -479,13 +477,16 @@ Set execution priority for workflows:
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
-  id: 'order-processing-workflow',
-  inputSchema: z.object({ orderId: z.string(), priority: z.number().optional() }),
+  id: "order-processing-workflow",
+  inputSchema: z.object({
+    orderId: z.string(),
+    priority: z.number().optional(),
+  }),
   outputSchema: z.object({ processed: z.boolean() }),
   steps: [processOrderStep],
   // Higher priority orders execute first
-  priority: { 
-    run: 'event.data.priority ?? 50' // Dynamic priority, default 50
+  priority: {
+    run: "event.data.priority ?? 50", // Dynamic priority, default 50
   },
 });
 ```
@@ -496,40 +497,34 @@ You can combine multiple flow control features:
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
-  id: 'comprehensive-workflow',
-  inputSchema: z.object({ 
-    userId: z.string(), 
+  id: "comprehensive-workflow",
+  inputSchema: z.object({
+    userId: z.string(),
     organizationId: z.string(),
-    priority: z.number().optional() 
+    priority: z.number().optional(),
   }),
   outputSchema: z.object({ result: z.string() }),
   steps: [comprehensiveStep],
   // Multiple flow control features
-  concurrency: { 
-    limit: 5, 
-    key: 'event.data.userId' 
+  concurrency: {
+    limit: 5,
+    key: "event.data.userId",
   },
-  rateLimit: { 
-    period: '1m', 
-    limit: 100 
+  rateLimit: {
+    period: "1m",
+    limit: 100,
   },
-  throttle: { 
-    period: '10s', 
+  throttle: {
+    period: "10s",
     limit: 1,
-    key: 'event.data.organizationId' 
+    key: "event.data.organizationId",
   },
-  priority: { 
-    run: 'event.data.priority ?? 0' 
-  }
+  priority: {
+    run: "event.data.priority ?? 0",
+  },
 });
 ```
 
 All flow control features are optional. If not specified, workflows run with Inngest's default behavior. Flow control configuration is validated by Inngest's native implementation, ensuring compatibility and correctness.
 
 For detailed information about flow control options and their behavior, see the [Inngest Flow Control documentation](https://www.inngest.com/docs/guides/flow-control).
-
-## Workflows (Legacy)
-
-The following links provide example documentation for legacy workflows:
-
-- [Creating a Simple Workflow (Legacy)](/examples/workflows_legacy/creating-a-workflow)
