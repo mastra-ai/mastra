@@ -8,6 +8,7 @@ export const SelectField: React.FC<AutoFormFieldProps> = ({ field, inputProps, e
   return (
     <Select
       {...props}
+      value={value}
       onValueChange={value => {
         const syntheticEvent = {
           target: {
